@@ -44,13 +44,15 @@ pub struct LinkConfig {
     pub pulse: Pulse,
     /// What the daemon says about terminals, on the link's thread, in arrival order.
     pub terminals: TerminalSink,
-    /// Every message that answers a request by its `request_id`, on the link's thread.
+    /// Every message that answers a request by its `request_id`, and every `command_error`, on
+    /// the link's thread.
     pub replies: ReplySink,
 }
 
 /// A daemon message that names the request it answers.
 #[derive(Debug, Clone)]
 pub struct Reply {
+    /// Empty for a `command_error`, which names only its command.
     pub request_id: String,
     pub event: String,
     pub body: serde_json::Value,
@@ -264,13 +266,13 @@ struct Header {
 }
 
 impl Header {
-    /// The request this message answers: its `request_id`, for `spawn_result` and
-    /// `rename_result` the session id the request named, and for `pty_input_probe_result` the
-    /// input's `probe_id`. The arrangement a spawn changes carries that id too, ahead of
-    /// `spawn_result`, and answers nothing.
+    /// The request this message answers: its `request_id`, for `spawn_result`,
+    /// `rename_result` and `reload_session_result` the session id the request named, and for
+    /// `pty_input_probe_result` the input's `probe_id`. The arrangement a spawn changes carries
+    /// that id too, ahead of `spawn_result`, and answers nothing.
     fn answers(&self) -> Option<String> {
         match self.event.as_str() {
-            "spawn_result" | "rename_result" => self.id.clone(),
+            "spawn_result" | "rename_result" | "reload_session_result" => self.id.clone(),
             "pty_input_probe_result" => self.probe_id.clone(),
             "profile_arrangement_changed" => None,
             _ => self.request_id.clone(),
@@ -398,11 +400,12 @@ impl Task {
             eprintln!("attn-app: dropped a daemon message that is not a JSON object");
             return None;
         };
-        if let Some(request_id) = header.answers().filter(|id| !id.is_empty())
+        let request_id = header.answers().filter(|id| !id.is_empty());
+        if (request_id.is_some() || header.event == "command_error")
             && let Ok(body) = serde_json::from_str(text)
         {
             (self.config.replies)(Reply {
-                request_id,
+                request_id: request_id.unwrap_or_default(),
                 event: header.event.clone(),
                 body,
             });

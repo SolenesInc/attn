@@ -672,7 +672,9 @@ fn pop_out_button(desktop: &str, leaf: &str, popped: bool, cx: &TileCx) -> El {
         .font(type_::LABEL)
         .color(cx.t.text_secondary)
         .px(space::S1)
-        .on_press(move |state: &mut State| super::windows::toggle_leaf(state, &desktop, &leaf_id))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::windows::toggle_leaf(state, &desktop, &leaf_id, tx)
+        })
 }
 
 /// The settling violet, which the Tauri app keeps out of its theme so packaged apps match.

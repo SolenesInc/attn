@@ -6,6 +6,7 @@ use rune::tok::{space, type_};
 use rune::{El, Side, TextEdit, Tx, col, row, text, text_input};
 
 use crate::State;
+use crate::requests::Refused;
 
 pub const MENU: &str = "session.menu";
 pub const RENAME_FIELD: &str = "session.rename.field";
@@ -164,24 +165,31 @@ const FALLBACK_SIZE: (u16, u16) = (80, 24);
 const MIN_COLS: u16 = 20;
 const MIN_ROWS: u16 = 8;
 
-fn reload(state: &mut State) {
+fn reload(state: &mut State, tx: &mut Tx) {
     if let Some(session) = target(state) {
-        reload_session(state, &session.id);
+        reload_session(state, &session.id, tx);
     }
 }
 
-pub(crate) fn reload_session(state: &mut State, session: &str) {
+pub(crate) fn reload_session(state: &mut State, session: &str, tx: &mut Tx) {
     let (cols, rows) = state
         .terminals
         .size(session)
         .filter(|&(cols, rows)| cols >= MIN_COLS && rows >= MIN_ROWS)
         .unwrap_or(FALLBACK_SIZE);
-    let _ = state.daemon.send(&ReloadSessionMessage {
+    let reload = ReloadSessionMessage {
         id: session.into(),
         cols: i64::from(cols),
         rows: i64::from(rows),
         ..ReloadSessionMessage::new()
-    });
+    };
+    state.act_as(
+        session.into(),
+        &reload,
+        Refused::Prefixed("Failed to reload session"),
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// Ends the agent's session, as the Tauri app's Close session does: a crew member is
@@ -281,10 +289,7 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> El {
         )
         .child(item("rename", attn_ui::icon::PENCIL, "Rename session".into()).on_press_tx(rename))
         .child(divider())
-        .child(
-            item("reload", "↻", "Reload session".into())
-                .on_press(|state: &mut State| reload(state)),
-        )
+        .child(item("reload", "↻", "Reload session".into()).on_press_tx(reload))
         .children((!chief).then(|| item("close", "×", "Close session".into()).on_press_tx(close)))
 }
 

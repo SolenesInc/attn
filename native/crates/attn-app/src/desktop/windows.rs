@@ -8,6 +8,7 @@ use rune::{El, Tx, col};
 
 use super::layout::{Direction, Frame, Node};
 use crate::action::Action;
+use crate::requests::Refused;
 use crate::{State, Update};
 
 /// The smallest window a tile pops out into, in points.
@@ -15,20 +16,20 @@ const MIN_WIDTH: f64 = 320.0;
 const MIN_HEIGHT: f64 = 200.0;
 
 /// Pops the current desktop's active tile out, or brings it back when it is out.
-pub(crate) fn toggle(state: &mut State) {
+pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
     let Some(desktop) = state.facts.current_desktop() else {
         return;
     };
     let leaf = state.window.desk.acting_leaf(desktop);
     let desktop = desktop.id.clone();
-    toggle_leaf(state, &desktop, &leaf);
+    toggle_leaf(state, &desktop, &leaf, tx);
 }
 
-pub(crate) fn toggle_leaf(state: &mut State, desktop: &str, leaf: &str) {
+pub(crate) fn toggle_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     if is_popped(state, desktop, leaf) {
-        bring_back(state, desktop, leaf);
+        bring_back(state, desktop, leaf, tx);
     } else if pops_out(state, desktop, leaf) {
-        pop_out(state, desktop, leaf);
+        pop_out(state, desktop, leaf, tx);
     }
 }
 
@@ -59,32 +60,45 @@ fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
 }
 
 /// Asks the daemon to pop `leaf` out into a window over where the tile shows now.
-fn pop_out(state: &State, desktop: &str, leaf: &str) {
+fn pop_out(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     let Some(&[x, y, w, h]) = state.window.desk.rects.get(&format!("tile.{leaf}")) else {
         return;
     };
     let (left, top) = crate::frame::main_content_origin();
-    let _ = state.daemon.send(&DesktopPopOutLeafMessage {
-        request_id: super::request_id(),
-        desktop_id: desktop.to_owned(),
-        leaf_id: leaf.to_owned(),
-        frame: TileWindowFrame {
-            x: left + f64::from(x),
-            y: top + f64::from(y),
-            width: f64::from(w).max(MIN_WIDTH),
-            height: f64::from(h).max(MIN_HEIGHT),
+    let frame = TileWindowFrame {
+        x: left + f64::from(x),
+        y: top + f64::from(y),
+        width: f64::from(w).max(MIN_WIDTH),
+        height: f64::from(h).max(MIN_HEIGHT),
+    };
+    let (desktop_id, leaf_id) = (desktop.to_owned(), leaf.to_owned());
+    state.act(
+        |request_id| DesktopPopOutLeafMessage {
+            request_id,
+            desktop_id,
+            leaf_id,
+            frame,
+            ..DesktopPopOutLeafMessage::new()
         },
-        ..DesktopPopOutLeafMessage::new()
-    });
+        Refused::Prefixed("Could not pop the tile out"),
+        |_, _, _| {},
+        tx,
+    );
 }
 
-pub(crate) fn bring_back(state: &State, desktop: &str, leaf: &str) {
-    let _ = state.daemon.send(&DesktopBringBackLeafMessage {
-        request_id: super::request_id(),
-        desktop_id: desktop.to_owned(),
-        leaf_id: leaf.to_owned(),
-        ..DesktopBringBackLeafMessage::new()
-    });
+pub(crate) fn bring_back(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    let (desktop_id, leaf_id) = (desktop.to_owned(), leaf.to_owned());
+    state.act(
+        |request_id| DesktopBringBackLeafMessage {
+            request_id,
+            desktop_id,
+            leaf_id,
+            ..DesktopBringBackLeafMessage::new()
+        },
+        Refused::Prefixed("Could not bring the tile back"),
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// Hands a window a change to run on its own state, as `bind`'s `deliver` does.
@@ -306,7 +320,7 @@ pub(crate) fn forward(state: &mut State, action: Action) -> bool {
 fn run_from(state: &mut State, desktop: &str, leaf: &str, action: Action, tx: &mut Tx) {
     use Action::*;
     match action {
-        TilePopOut | SessionClose | TerminalClose => bring_back(state, desktop, leaf),
+        TilePopOut | SessionClose | TerminalClose => bring_back(state, desktop, leaf, tx),
         TerminalSplitVertical => {
             super::actions::split_at(state, desktop, leaf, Direction::Vertical, tx)
         }
@@ -433,9 +447,9 @@ pub fn on_close(state: &mut State, _: &mut Tx) {
     if tile.quitting {
         return;
     }
-    let key = tile.key.clone();
-    bring_back(state, &tile.desktop, &tile.leaf);
-    (tile.main)(Box::new(move |state: &mut State, _: &mut Tx| {
+    let (key, desktop, leaf) = (tile.key.clone(), tile.desktop.clone(), tile.leaf.clone());
+    (tile.main)(Box::new(move |state: &mut State, tx: &mut Tx| {
+        bring_back(state, &desktop, &leaf, tx);
         forget(state, &key)
     }));
 }

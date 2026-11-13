@@ -988,6 +988,51 @@ fn a_row_s_actions_menu_marks_priority_reloads_and_closes_the_agent() {
 }
 
 #[test]
+fn a_close_or_reload_the_daemon_refuses_shows_its_reason_in_the_notice() {
+    let mut world = World::start(
+        Daemon::scripted().state(queue(one_desktop(vec![turn("a", 30), turn("b", 20)]))),
+    );
+    world.daemon.on("unregister", |_| {
+        serde_json::json!({
+            "event": "command_error",
+            "cmd": "unregister",
+            "success": false,
+            "error": "session a is running a delegation",
+        })
+    });
+    world.daemon.on("reload_session", |r| {
+        serde_json::json!({
+            "event": "reload_session_result",
+            "id": r["id"],
+            "success": false,
+            "error": "the harness is not installed",
+        })
+    });
+    let notice = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+    };
+
+    actions_for(&mut world, "queue-turn.a");
+    world.gesture(|app| app.click(Target::key("session.menu.close")));
+    world.settle();
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Could not close that session: session a is running a delegation")
+    );
+
+    actions_for(&mut world, "queue-turn.b");
+    world.gesture(|app| app.click(Target::key("session.menu.reload")));
+    world.settle();
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Failed to reload session: the harness is not installed")
+    );
+}
+
+#[test]
 fn closing_the_agent_on_screen_in_queue_flow_opens_the_next_turn() {
     let mut world = World::start(
         Daemon::scripted().state(queue(one_desktop(vec![turn("a", 30), turn("b", 20)]))),
@@ -1294,6 +1339,64 @@ fn opening_an_agent_from_its_row_hands_the_keyboard_to_its_terminal() {
         .collect();
     assert_eq!(typed, [("r-b".to_owned(), "x".to_owned())]);
     assert_eq!(reached(&world), None, "the list lets go of the keyboard");
+}
+
+#[test]
+fn a_show_the_daemon_refuses_says_why_and_leaves_the_window_where_it_was() {
+    let with_terminals = |active: &str| {
+        let mut message = queue(one_desktop(vec![turn("a", 60), turn("b", 30)]));
+        let desktops = message.desktops.as_mut().expect("one desktop");
+        for pane in desktops.iter_mut().flat_map(|d| &mut d.panes) {
+            pane.runtime_id = format!("r-{}", pane.session_id);
+        }
+        desktops[0].active_pane_id = active.into();
+        message
+    };
+    let mut world = World::start(Daemon::scripted().state(with_terminals("p0")));
+    world.daemon.on("desktop_show_session", |r| {
+        let refused = r["session_id"] == "b";
+        serde_json::json!({
+            "event": "profile_action_result",
+            "request_id": r["request_id"],
+            "action": "desktop_show_session",
+            "success": !refused,
+            "error": if refused { "the daemon is shutting down" } else { "" },
+        })
+    });
+    let notice = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+    };
+    let home = |world: &World| world.screen().find(Target::key("home")).is_some();
+    assert!(home(&world));
+
+    world.gesture(|app| app.click(Target::key("queue-turn.b")));
+    world.settle();
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Could not show that agent: the daemon is shutting down")
+    );
+    assert!(home(&world), "a show refused from home goes back home");
+
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    world.settle();
+    world.gesture(|app| app.click(Target::key("queue-turn.b")));
+    world.settle();
+    assert!(!home(&world));
+    world.gesture(|app| app.type_text("x"));
+    let typed: Vec<String> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|m| m["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(
+        typed,
+        ["r-a"],
+        "the keyboard goes back to the agent on screen"
+    );
 }
 
 #[test]

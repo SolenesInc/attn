@@ -162,7 +162,7 @@ fn column_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
             }
             if !drag.active {
                 if d.clicks == 2 {
-                    clear_beside(state, &drag);
+                    clear_beside(state, &drag, tx);
                 }
                 return;
             }
@@ -185,7 +185,7 @@ fn column_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
                         ..DesktopSetWantedColsMessage::new()
                     },
                     move |state: &mut State, answer, tx: &mut Tx| {
-                        if let Some(error) = super::shelf::refusal(answer) {
+                        if let Err(error) = answer.outcome() {
                             let row = state.window.desk.row_mut(&desktop);
                             row.pending_widths.retain(|(l, _)| *l != refused);
                             row.pending_widths
@@ -231,13 +231,13 @@ fn follow_column(state: &mut State, drag: &ColumnDrag, x: f32) -> Vec<(String, u
 }
 
 /// A double click on a column divider forgets the dragged widths of the columns either side.
-fn clear_beside(state: &mut State, drag: &ColumnDrag) {
+fn clear_beside(state: &mut State, drag: &ColumnDrag, tx: &mut Tx) {
     let leaves: Vec<String> = drag.start.screen[drag.divider..=drag.divider + 1]
         .iter()
         .filter(|c| c.wanted_cols.is_some())
         .map(|c| c.first().to_owned())
         .collect();
-    super::shelf::clear_widths(state, &drag.desktop, &leaves);
+    super::shelf::clear_widths(state, &drag.desktop, &leaves, tx);
 }
 
 fn ratio_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, drag: &RatioDrag) {

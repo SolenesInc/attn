@@ -10,26 +10,29 @@ use super::layout::{self, Direction, LeafKind, Node, Toward, View};
 use super::{Visit, leaf_ids};
 use crate::State;
 use crate::action::Action;
+use crate::requests::Refused;
 
 /// Runs a desktop or tile action; false when `action` is not one.
 pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
     use Action::*;
     match action {
-        GoToDesktop { desktop } => set_current(state, desktop),
+        GoToDesktop { desktop } => set_current(state, desktop, Refused::Quiet, tx),
         OpenTile { desktop, tile } => show_leaf(state, desktop, tile, tx),
         ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
-        MoveWithDelegates { desktop } => move_with_delegates(state, desktop),
+        MoveWithDelegates { desktop } => move_with_delegates(state, desktop, tx),
         DesktopSelect1 | DesktopSelect2 | DesktopSelect3 | DesktopSelect4 | DesktopSelect5
         | DesktopSelect6 | DesktopSelect7 | DesktopSelect8 | DesktopSelect9 => {
-            select_slot(state, slot_of(action))
+            select_slot(state, slot_of(action), tx)
         }
         DesktopSend1 | DesktopSend2 | DesktopSend3 | DesktopSend4 | DesktopSend5 | DesktopSend6
-        | DesktopSend7 | DesktopSend8 | DesktopSend9 => send_to_slot(state, slot_of(action), true),
+        | DesktopSend7 | DesktopSend8 | DesktopSend9 => {
+            send_to_slot(state, slot_of(action), true, tx)
+        }
         DesktopSendStay1 | DesktopSendStay2 | DesktopSendStay3 | DesktopSendStay4
         | DesktopSendStay5 | DesktopSendStay6 | DesktopSendStay7 | DesktopSendStay8
-        | DesktopSendStay9 => send_to_slot(state, slot_of(action), false),
-        SessionPrev => step_desktop(state, -1),
-        SessionNext => step_desktop(state, 1),
+        | DesktopSendStay9 => send_to_slot(state, slot_of(action), false, tx),
+        SessionPrev => step_desktop(state, -1, tx),
+        SessionNext => step_desktop(state, 1, tx),
         TerminalFocusLeft => focus_toward(state, Toward::Left, tx),
         TerminalFocusRight => focus_toward(state, Toward::Right, tx),
         TerminalFocusUp => focus_toward(state, Toward::Up, tx),
@@ -38,7 +41,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         TerminalSplitHorizontal => split(state, Direction::Horizontal, tx),
         TerminalToggleZoom => toggle_view(state, false),
         TerminalToggleMaximize => toggle_view(state, true),
-        SessionClose | TerminalClose => close(state),
+        SessionClose | TerminalClose => close(state, tx),
         SessionHistoryBack => walk_history(state, -1, tx),
         SessionHistoryForward => walk_history(state, 1, tx),
         ShelfCarryLeft => super::shelf::carry(state, -1, tx),
@@ -47,7 +50,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShelfFewerTiles => super::shelf::step_width(state, true, tx),
         ShelfMoreTiles => super::shelf::step_width(state, false, tx),
         DesktopOverview => super::overview::toggle(state, tx),
-        TilePopOut => super::windows::toggle(state),
+        TilePopOut => super::windows::toggle(state, tx),
         TerminalFind => find(state, tx),
         _ => return false,
     }
@@ -113,21 +116,27 @@ fn slot_desktop_id(profile: &str, slot: u32) -> String {
     format!("{profile}/desktop_{slot}")
 }
 
-fn set_current(state: &State, desktop: &str) {
+fn set_current(state: &mut State, desktop: &str, refused: Refused, tx: &mut Tx) {
     let Some(profile_id) = profile(state) else {
         return;
     };
-    let _ = state.daemon.send(&DesktopSetCurrentMessage {
-        request_id: super::request_id(),
-        profile_id,
-        desktop_id: desktop.to_owned(),
-        ..DesktopSetCurrentMessage::new()
-    });
+    let desktop_id = desktop.to_owned();
+    state.act(
+        |request_id| DesktopSetCurrentMessage {
+            request_id,
+            profile_id,
+            desktop_id,
+            ..DesktopSetCurrentMessage::new()
+        },
+        refused,
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// Goes to the desktop on `slot`, creating it when missing. The current desktop's own digit
 /// goes back to the desktop shown before it.
-fn select_slot(state: &mut State, slot: u32) {
+fn select_slot(state: &mut State, slot: u32, tx: &mut Tx) {
     let Some(profile_id) = profile(state) else {
         return;
     };
@@ -137,13 +146,18 @@ fn select_slot(state: &mut State, slot: u32) {
         .iter()
         .find(|d| d.shortcut_slot == Some(slot as i64))
     else {
-        let _ = state.daemon.send(&DesktopCreateMessage {
-            request_id: super::request_id(),
-            profile_id: profile_id.clone(),
-            shortcut_slot: Some(slot as i64),
-            ..DesktopCreateMessage::new()
-        });
-        set_current(state, &slot_desktop_id(&profile_id, slot));
+        let made = slot_desktop_id(&profile_id, slot);
+        state.act(
+            |request_id| DesktopCreateMessage {
+                request_id,
+                profile_id,
+                shortcut_slot: Some(slot as i64),
+                ..DesktopCreateMessage::new()
+            },
+            Refused::Bare,
+            move |state, _, tx| set_current(state, &made, Refused::Bare, tx),
+            tx,
+        );
         return;
     };
     let current = facts.current_desktop().map(|d| d.id.as_str());
@@ -152,12 +166,12 @@ fn select_slot(state: &mut State, slot: u32) {
         Some(previous) if current == Some(&target.id) => previous.to_owned(),
         _ => target.id.clone(),
     };
-    set_current(state, &to);
+    set_current(state, &to, Refused::Bare, tx);
 }
 
 /// Moves the active tile to the desktop on `slot`, creating it when missing, and shows it
 /// there when `follow`.
-fn send_to_slot(state: &mut State, slot: u32, follow: bool) {
+fn send_to_slot(state: &mut State, slot: u32, follow: bool, tx: &mut Tx) {
     let Some(profile_id) = profile(state) else {
         return;
     };
@@ -168,16 +182,24 @@ fn send_to_slot(state: &mut State, slot: u32, follow: bool) {
     if source.shortcut_slot == Some(slot as i64) || leaf.is_empty() {
         return;
     }
-    let _ = state.daemon.send(&DesktopMoveLeafMessage {
-        request_id: super::request_id(),
-        source_desktop_id: source.id.clone(),
-        target_shortcut_slot: Some(slot as i64),
-        leaf_id: leaf,
-        ..DesktopMoveLeafMessage::new()
-    });
-    if follow {
-        set_current(state, &slot_desktop_id(&profile_id, slot));
-    }
+    let source_desktop_id = source.id.clone();
+    let target = slot_desktop_id(&profile_id, slot);
+    state.act(
+        |request_id| DesktopMoveLeafMessage {
+            request_id,
+            source_desktop_id,
+            target_shortcut_slot: Some(slot as i64),
+            leaf_id: leaf,
+            ..DesktopMoveLeafMessage::new()
+        },
+        Refused::Bare,
+        move |state, _, tx| {
+            if follow {
+                set_current(state, &target, Refused::Bare, tx);
+            }
+        },
+        tx,
+    );
 }
 
 fn ordered_desktops(state: &State) -> Vec<&Desktop> {
@@ -187,7 +209,7 @@ fn ordered_desktops(state: &State) -> Vec<&Desktop> {
 }
 
 /// Moves the active tile and its delegates to `desktop`, without following them.
-fn move_with_delegates(state: &State, desktop: &str) {
+fn move_with_delegates(state: &mut State, desktop: &str, tx: &mut Tx) {
     let Some(source) = state.facts.current_desktop() else {
         return;
     };
@@ -195,18 +217,25 @@ fn move_with_delegates(state: &State, desktop: &str) {
     if leaf.is_empty() || source.id == desktop {
         return;
     }
-    let _ = state.daemon.send(&DesktopMoveLeafMessage {
-        request_id: super::request_id(),
-        source_desktop_id: source.id.clone(),
-        target_desktop_id: Some(desktop.to_owned()),
-        leaf_id: leaf,
-        with_delegates: Some(true),
-        ..DesktopMoveLeafMessage::new()
-    });
+    let source_desktop_id = source.id.clone();
+    let target_desktop_id = Some(desktop.to_owned());
+    state.act(
+        |request_id| DesktopMoveLeafMessage {
+            request_id,
+            source_desktop_id,
+            target_desktop_id,
+            leaf_id: leaf,
+            with_delegates: Some(true),
+            ..DesktopMoveLeafMessage::new()
+        },
+        Refused::Prefixed("Could not move that pane"),
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// Steps to the next or previous desktop in the profile's order, round the end.
-fn step_desktop(state: &mut State, step: i32) {
+fn step_desktop(state: &mut State, step: i32, tx: &mut Tx) {
     let desktops = ordered_desktops(state);
     let Some(current) = state.facts.current_desktop() else {
         return;
@@ -216,7 +245,7 @@ fn step_desktop(state: &mut State, step: i32) {
         return;
     };
     let to = desktops[((at as i32 + step + n) % n) as usize].id.clone();
-    set_current(state, &to);
+    set_current(state, &to, Refused::Bare, tx);
 }
 
 /// Shows the oldest document that arrived unseen on the current desktop. Returns whether
@@ -239,12 +268,18 @@ pub(crate) fn show_unseen(state: &mut State, tx: &mut Tx) -> bool {
 pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     give_keyboard(state, desktop, leaf, tx);
     state.window.desk.pick(desktop, leaf);
-    let _ = state.daemon.send(&DesktopShowLeafMessage {
-        request_id: super::request_id(),
-        desktop_id: desktop.to_owned(),
-        leaf_id: leaf.to_owned(),
-        ..DesktopShowLeafMessage::new()
-    });
+    let (desktop_id, leaf_id) = (desktop.to_owned(), leaf.to_owned());
+    state.act(
+        |request_id| DesktopShowLeafMessage {
+            request_id,
+            desktop_id,
+            leaf_id,
+            ..DesktopShowLeafMessage::new()
+        },
+        Refused::Prefixed("Could not show that leaf"),
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// A tile the window took: it holds the keyboard and becomes the active tile of the current
@@ -278,7 +313,7 @@ fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
     };
     let desk = &state.window.desk;
     let Some((tree, plan)) = desk.plan(&state.facts, desktop) else {
-        return step_desktop(state, edge);
+        return step_desktop(state, edge, tx);
     };
     let active = desktop.active_pane_id.as_str();
     let row_state = desk.row(&desktop.id);
@@ -305,7 +340,7 @@ fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
     let desktop = desktop.id.clone();
     match next {
         Some(leaf) => show_leaf(state, &desktop, &leaf, tx),
-        None => step_desktop(state, edge),
+        None => step_desktop(state, edge, tx),
     }
 }
 
@@ -354,7 +389,7 @@ pub(super) fn split_at(
         return;
     };
     let id = uuid::Uuid::new_v4().to_string();
-    let _ = state.daemon.send(&SpawnSessionMessage {
+    let spawn = SpawnSessionMessage {
         id: id.clone(),
         cwd: base.directory.clone(),
         host: base.host.clone().filter(|h| !h.is_empty()),
@@ -375,7 +410,8 @@ pub(super) fn split_at(
         spawned_from: Some(base.id.clone()),
         profile_id,
         ..SpawnSessionMessage::new()
-    });
+    };
+    state.act_as(id.clone(), &spawn, Refused::Bare, |_, _, _| {}, tx);
     state.window.desk.split = Some(id);
 }
 
@@ -431,40 +467,54 @@ pub(crate) fn escape(state: &mut State) -> bool {
 
 /// Closes the active tile, or the one shown alone: a document or browser tile leaves the
 /// desktop, a terminal tile ends its terminal, and on an empty desktop the desktop closes.
-fn close(state: &mut State) {
+fn close(state: &mut State, tx: &mut Tx) {
     let Some(desktop) = state.facts.current_desktop() else {
         return;
     };
-    let tree = Node::parse(&desktop.tree_json);
-    let Some(tree) = tree else {
-        let _ = state.daemon.send(&DesktopCloseMessage {
-            request_id: super::request_id(),
-            desktop_id: desktop.id.clone(),
-            expected_revision: desktop.revision,
-            ..DesktopCloseMessage::new()
-        });
+    let desktop_id = desktop.id.clone();
+    let Some(tree) = Node::parse(&desktop.tree_json) else {
+        let expected_revision = desktop.revision;
+        state.act(
+            |request_id| DesktopCloseMessage {
+                request_id,
+                desktop_id,
+                expected_revision,
+                ..DesktopCloseMessage::new()
+            },
+            Refused::Bare,
+            |_, _, _| {},
+            tx,
+        );
         return;
     };
     let Some(Node::Leaf(leaf)) = tree.find_leaf(&state.window.desk.acting_leaf(desktop)) else {
         return;
     };
-    match leaf.kind {
-        LeafKind::Tile { .. } => {
-            let _ = state.daemon.send(&DesktopRemoveLeafMessage {
-                request_id: super::request_id(),
-                desktop_id: desktop.id.clone(),
-                leaf_id: leaf.id.clone(),
+    let (leaf_id, kind) = (leaf.id.clone(), leaf.kind.clone());
+    let refused = Refused::Prefixed("Could not close that tile");
+    match kind {
+        LeafKind::Tile { .. } => state.act(
+            |request_id| DesktopRemoveLeafMessage {
+                request_id,
+                desktop_id,
+                leaf_id,
                 ..DesktopRemoveLeafMessage::new()
-            });
-        }
-        LeafKind::Pane => {
-            let _ = state.daemon.send(&DesktopCloseTileMessage {
-                request_id: super::request_id(),
-                desktop_id: desktop.id.clone(),
-                tile_id: leaf.id.clone(),
+            },
+            refused,
+            |_, _, _| {},
+            tx,
+        ),
+        LeafKind::Pane => state.act(
+            |request_id| DesktopCloseTileMessage {
+                request_id,
+                desktop_id,
+                tile_id: leaf_id,
                 ..DesktopCloseTileMessage::new()
-            });
-        }
+            },
+            refused,
+            |_, _, _| {},
+            tx,
+        ),
     }
 }
 

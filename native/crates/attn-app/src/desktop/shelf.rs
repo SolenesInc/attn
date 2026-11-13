@@ -2,8 +2,7 @@
 //! chips in the title bar either side of a dot per column on screen.
 
 use attn_protocol::{
-    Desktop, DesktopMoveLeafMessage, DesktopSetWantedColsMessage, ProfileActionResultMessage,
-    SetSettingMessage,
+    Desktop, DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage,
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
@@ -788,26 +787,12 @@ pub(crate) fn send_move_then(
             activate: (!activate).then_some(false),
             ..DesktopMoveLeafMessage::new()
         },
-        move |state: &mut State, answer, tx: &mut Tx| match refusal(answer) {
-            Some(error) => refused_move(state, &desktop, &moved, what, &error, tx),
-            None => then(state, tx),
+        move |state: &mut State, answer, tx: &mut Tx| match answer.outcome() {
+            Err(error) => refused_move(state, &desktop, &moved, what, &error, tx),
+            Ok(_) => then(state, tx),
         },
         tx,
     );
-}
-
-/// Why the daemon did not do what it was asked, or `None` when it did.
-pub(crate) fn refusal(answer: crate::requests::Answer) -> Option<String> {
-    let result: Option<ProfileActionResultMessage> = answer.parse();
-    match result {
-        Some(r) if r.success => None,
-        failed => Some(
-            failed
-                .and_then(|r| r.error)
-                .filter(|e| !e.is_empty())
-                .unwrap_or_else(|| "the daemon did not answer".into()),
-        ),
-    }
 }
 
 /// The daemon refused to move `leaf`: the row shows what it showed before, and the keyboard
@@ -906,19 +891,34 @@ pub(crate) fn clear_dragged_widths(state: &mut State, desktop: &str, tx: &mut Tx
             .notify("This desktop has no dragged widths.".into(), tx);
         return;
     }
-    clear_widths(state, desktop, &leaves);
+    clear_widths(state, desktop, &leaves, tx);
 }
 
-pub(crate) fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) {
+pub(crate) fn clear_widths(state: &mut State, desktop: &str, leaves: &[String], tx: &mut Tx) {
     for leaf in leaves {
-        let _ = state.daemon.send(&DesktopSetWantedColsMessage {
-            request_id: super::request_id(),
-            desktop_id: desktop.to_owned(),
-            leaf_id: leaf.clone(),
-            cols: 0,
-            area_cols: 0,
-            ..DesktopSetWantedColsMessage::new()
-        });
+        let (desktop_id, leaf_id) = (desktop.to_owned(), leaf.clone());
+        let (row_of, cleared) = (desktop.to_owned(), leaf.clone());
+        state.ask(
+            |request_id| DesktopSetWantedColsMessage {
+                request_id,
+                desktop_id,
+                leaf_id,
+                cols: 0,
+                area_cols: 0,
+                ..DesktopSetWantedColsMessage::new()
+            },
+            move |state: &mut State, answer, tx: &mut Tx| {
+                if let Err(error) = answer.outcome() {
+                    let row = state.window.desk.row_mut(&row_of);
+                    row.pending_widths
+                        .retain(|(leaf, cols)| !(*leaf == cleared && *cols == 0));
+                    state
+                        .window
+                        .notify(format!("Could not save that width: {error}"), tx);
+                }
+            },
+            tx,
+        );
     }
     let row = state.window.desk.row_mut(desktop);
     row.pending_widths
@@ -1129,7 +1129,7 @@ pub(crate) fn step_width(state: &mut State, fewer: bool, tx: &mut Tx) {
         NarrowestStep::ClearThenStep { cols, clear, .. } => (cols, clear),
     };
     let id = desktop.id.clone();
-    clear_widths(state, &id, &clear);
+    clear_widths(state, &id, &clear, tx);
     if cols != current {
         let _ = state.daemon.send(&SetSettingMessage {
             key: "narrowest_tile_cols".into(),
@@ -1305,7 +1305,7 @@ fn settle_desktop(state: &mut State, id: &str, tx: &mut Tx) {
     row_mut.returns = returns;
     row_mut.shown = seen;
     if let Some((_, clear)) = reveal {
-        clear_widths(state, id, &clear);
+        clear_widths(state, id, &clear, tx);
     }
     flash_leaves(state, id, flash, tx);
 }

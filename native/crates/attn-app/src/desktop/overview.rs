@@ -10,6 +10,7 @@ use rune::{El, Key, KeyEvent, Tx, col, el, row, text};
 
 use super::layout::{Direction, LeafKind, Node};
 use crate::State;
+use crate::requests::Refused;
 use crate::shell::Layer;
 
 const GRID_COLUMNS: usize = 3;
@@ -62,19 +63,13 @@ fn send(state: &mut State, desktop: &str, tx: &mut Tx) {
         ..DesktopMoveLeafMessage::new()
     };
     close(state, tx);
-    state.ask(
+    state.act(
         move |id| DesktopMoveLeafMessage {
             request_id: id,
             ..message
         },
-        |state: &mut State, answer, tx: &mut Tx| {
-            let result: Option<ProfileActionResultMessage> = answer.parse();
-            if let Some(error) = failure(result) {
-                state
-                    .window
-                    .notify(format!("Could not move that pane: {error}"), tx);
-            }
-        },
+        Refused::Prefixed("Could not move that pane"),
+        |_, _, _| {},
         tx,
     );
 }
@@ -86,43 +81,23 @@ fn create(state: &mut State, tx: &mut Tx) {
         return;
     }
     close(state, tx);
-    state.ask(
+    state.act(
         |id| DesktopCreateMessage {
             request_id: id,
             profile_id: profile,
             ..DesktopCreateMessage::new()
         },
-        |state: &mut State, answer, tx: &mut Tx| {
-            let result: Option<ProfileActionResultMessage> = answer.parse();
-            let made = result
-                .as_ref()
-                .filter(|r| r.success)
-                .and_then(|r| r.desktops.as_ref()?.first())
-                .map(|d| d.id.clone());
-            match made {
-                Some(desktop) => crate::sidebar::open_desktop(state, &desktop, tx),
-                None => {
-                    let error = failure(result).unwrap_or_default();
-                    state
-                        .window
-                        .notify(format!("Could not create a desktop: {error}"), tx);
-                }
+        Refused::Prefixed("Could not create a desktop"),
+        |state: &mut State, reply, tx: &mut Tx| {
+            let made = reply
+                .parse::<ProfileActionResultMessage>()
+                .and_then(|r| r.desktops?.into_iter().next());
+            if let Some(desktop) = made {
+                crate::sidebar::open_desktop(state, &desktop.id, tx);
             }
         },
         tx,
     );
-}
-
-fn failure(result: Option<ProfileActionResultMessage>) -> Option<String> {
-    match result {
-        Some(r) if r.success => None,
-        failed => Some(
-            failed
-                .and_then(|r| r.error)
-                .filter(|e| !e.is_empty())
-                .unwrap_or_else(|| "the daemon did not answer".into()),
-        ),
-    }
 }
 
 /// Arrows move the focused card, Return switches to it and Shift-Return sends the active tile

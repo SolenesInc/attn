@@ -148,6 +148,16 @@ fn sent(world: &World, cmd: &str) -> Vec<Value> {
         .collect()
 }
 
+/// The answer to a command the daemon did.
+fn done(r: &Request) -> Value {
+    serde_json::json!({
+        "event": "profile_action_result",
+        "request_id": r["request_id"],
+        "action": r["cmd"],
+        "success": true,
+    })
+}
+
 fn json(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
 }
@@ -218,6 +228,7 @@ fn a_digit_goes_to_its_desktop_creates_a_missing_one_and_goes_back_from_the_curr
         "the current desktop's digit goes back"
     );
 
+    world.daemon.on("desktop_create", done);
     press(&mut world, Action::DesktopSelect4);
     assert_eq!(
         sent(&world, "desktop_create"),
@@ -341,6 +352,7 @@ fn a_tile_column_takes_its_most_recently_used_tile_when_arrows_reach_it() {
 fn send_moves_the_active_tile_to_a_desktop_and_follows_it_only_when_asked() {
     let tree = row([pane("a"), pane("b")]);
     let mut world = start(vec![desktop(1, "b", Some(tree))]);
+    world.daemon.on("desktop_move_leaf", done);
 
     press(&mut world, Action::DesktopSendStay3);
     press(&mut world, Action::DesktopSend3);
@@ -379,6 +391,29 @@ fn split_opens_a_shell_beside_or_below_the_active_terminal_in_its_folder() {
     }
     assert!(sent(&world, "desktop_show_session").is_empty());
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_split_the_daemon_refuses_by_command_shows_its_reason_once() {
+    let mut world = start(vec![desktop(1, "a", Some(pane("a")))]);
+    world.daemon.on("spawn_session", |_| {
+        json(
+            r#"{"event":"command_error","cmd":"spawn_session","success":false,"error":"the daemon is recovering"}"#,
+        )
+    });
+
+    press(&mut world, Action::TerminalSplitVertical);
+    world.settle();
+    assert_eq!(notice(&world).as_deref(), Some("the daemon is recovering"));
+
+    world.advance(Duration::from_secs(6));
+    world.daemon.disconnect();
+    world.settle();
+    assert_eq!(
+        notice(&world),
+        None,
+        "the refused split waits for nothing more"
+    );
 }
 
 #[test]

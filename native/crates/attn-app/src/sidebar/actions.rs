@@ -343,7 +343,7 @@ pub(crate) fn advance(state: &mut State, tx: &mut Tx) {
     };
     match to {
         Some(Some(id)) if tx.focused().is_none() => open_agent(state, &id, tx),
-        Some(Some(id)) => show_agent(state, &id),
+        Some(Some(id)) => show_agent(state, &id, tx),
         Some(None) => state.window.go_home_following(),
         None => {}
     }

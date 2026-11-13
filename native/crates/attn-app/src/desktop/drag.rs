@@ -833,27 +833,22 @@ fn to_desktop(
             with_delegates: with_delegates.then_some(true),
             ..DesktopMoveLeafMessage::new()
         },
-        move |state: &mut State, answer, tx: &mut Tx| {
-            let result: Option<ProfileActionResultMessage> = answer.parse();
-            match result {
-                Some(r) if r.success => {
-                    let made = r.desktops.iter().flatten().find(|d| d.id != from);
-                    if let Some(desktop) = made.filter(|_| new) {
-                        crate::sidebar::open_desktop(state, &desktop.id.clone(), tx);
-                    }
+        move |state: &mut State, answer, tx: &mut Tx| match answer.outcome() {
+            Ok(reply) => {
+                let made = reply
+                    .parse::<ProfileActionResultMessage>()
+                    .and_then(|r| r.desktops?.into_iter().find(|d| d.id != from));
+                if let Some(desktop) = made.filter(|_| new) {
+                    crate::sidebar::open_desktop(state, &desktop.id, tx);
                 }
-                failed => {
-                    let error = failed
-                        .and_then(|r| r.error)
-                        .filter(|e| !e.is_empty())
-                        .unwrap_or_else(|| "the daemon did not answer".into());
-                    let what = if new {
-                        "Could not move that pane to a new desktop"
-                    } else {
-                        "Could not move that pane"
-                    };
-                    state.window.notify(format!("{what}: {error}"), tx);
-                }
+            }
+            Err(error) => {
+                let what = if new {
+                    "Could not move that pane to a new desktop"
+                } else {
+                    "Could not move that pane"
+                };
+                state.window.notify(format!("{what}: {error}"), tx);
             }
         },
         tx,

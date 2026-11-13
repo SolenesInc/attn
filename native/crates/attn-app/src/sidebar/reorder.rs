@@ -1,8 +1,11 @@
 use attn_protocol::DesktopReorderMessage;
 
+use rune::Tx;
+
+use super::ROW_HEIGHT;
 use super::model::Line;
-use super::{ROW_HEIGHT, request_id};
 use crate::State;
+use crate::requests::Refused;
 
 /// Points the pointer travels before a press on a desktop becomes a drag, as in the Tauri app.
 const THRESHOLD: f32 = 6.0;
@@ -58,7 +61,7 @@ pub fn seam_on(state: &State, lines: &[Line], index: usize) -> Option<Seam> {
 
 /// The drag on desktop `desktop`'s row: past the threshold it follows the pointer from seam
 /// to seam, and the release moves the desktop there.
-pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag) {
+pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx) {
     let home = state.window.view == crate::shell::View::Home;
     let lines = super::model::desktop_lines(&state.facts, home, &[]);
     let Some(index) = headers(&lines)
@@ -88,13 +91,18 @@ pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag) {
             }
             let order: Vec<&str> = headers(&lines).into_iter().map(|(_, id)| id).collect();
             if let Some((previous, next)) = placement(&order, &reorder.desktop, reorder.seam) {
-                let _ = state.daemon.send(&DesktopReorderMessage {
-                    request_id: request_id("desktop_reorder"),
-                    desktop_id: reorder.desktop,
-                    previous_desktop_id: previous,
-                    next_desktop_id: next,
-                    ..DesktopReorderMessage::new()
-                });
+                state.act(
+                    |request_id| DesktopReorderMessage {
+                        request_id,
+                        desktop_id: reorder.desktop,
+                        previous_desktop_id: previous,
+                        next_desktop_id: next,
+                        ..DesktopReorderMessage::new()
+                    },
+                    Refused::Bare,
+                    |_, _, _| {},
+                    tx,
+                );
             }
         }
     }

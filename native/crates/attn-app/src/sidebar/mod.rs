@@ -10,7 +10,6 @@ pub(crate) mod width;
 
 use std::cell::Cell;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
@@ -80,7 +79,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
             let under = tile_header_of(state, session);
             session_menu::rename_session(state, session, under, tx)
         }
-        Action::ReloadSession { session } => session_menu::reload_session(state, session),
+        Action::ReloadSession { session } => session_menu::reload_session(state, session, tx),
         Action::WakeSession { session } => actions::wake(state, session),
         Action::SessionPriority => actions::priority_key(state, tx),
         Action::SessionSnooze => actions::snooze_key(state, tx),
@@ -112,11 +111,6 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
 /// change is reused and not counted.
 pub fn rows_built() -> usize {
     ROWS_BUILT.with(Cell::get)
-}
-
-fn request_id(cmd: &str) -> String {
-    static NEXT: AtomicU64 = AtomicU64::new(1);
-    format!("{cmd}-native-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
 /// The element whose desktops take a dragged tile: the queue bar in queue flow with the
@@ -353,8 +347,8 @@ fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
         .radius(4.0)
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &id, tx))
-        .on_drag(move |state: &mut State, d: &mut rune::Drag, _: &mut Tx| {
-            reorder::drag(state, &dragged, d)
+        .on_drag(move |state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
+            reorder::drag(state, &dragged, d, tx)
         })
         .child(
             text(desktop.number.to_string())
@@ -611,21 +605,50 @@ pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
     if let Some((desktop, leaf)) = pane_of(state, session) {
         crate::desktop::give_keyboard(state, &desktop, &leaf, tx);
     }
-    show_agent(state, session);
+    show_agent(state, session, tx);
 }
 
-/// Shows the agent where it is and leaves the keyboard where it was.
-pub(crate) fn show_agent(state: &mut State, session: &str) {
-    if let Some((desktop, leaf)) = pane_of(state, session) {
-        state.window.desk.pick(&desktop, &leaf);
+/// Shows the agent where it is and leaves the keyboard where it was. A show the daemon refuses
+/// says why and undoes what the window did ahead of it: the window goes back home when it came
+/// from there, and the keyboard back to the agent on screen when it went to this one.
+pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
+    let shown = pane_of(state, session);
+    if let Some((desktop, leaf)) = &shown {
+        state.window.desk.pick(desktop, leaf);
     }
+    let from_home = state.window.view == View::Home;
     state.window.view = View::Desktop;
     state.window.follow_next_turn = false;
-    let _ = state.daemon.send(&DesktopShowSessionMessage {
-        request_id: request_id("desktop_show_session"),
-        session_id: session.into(),
-        ..DesktopShowSessionMessage::new()
-    });
+    let session_id = session.to_owned();
+    state.ask(
+        |request_id| DesktopShowSessionMessage {
+            request_id,
+            session_id,
+            ..DesktopShowSessionMessage::new()
+        },
+        move |state: &mut State, answer, tx: &mut Tx| {
+            let Err(reason) = answer.outcome() else {
+                return;
+            };
+            state
+                .window
+                .notify(format!("Could not show that agent: {reason}"), tx);
+            if from_home && state.window.view == View::Desktop {
+                state.window.go_home();
+            }
+            let keyboard_went_there = shown.is_some_and(|(desktop, pane)| {
+                state
+                    .window
+                    .keyboard
+                    .as_ref()
+                    .is_some_and(|k| k.desktop == desktop && k.pane == pane)
+            });
+            if keyboard_went_there {
+                keyboard_to_screen(state, tx);
+            }
+        },
+        tx,
+    );
 }
 
 fn pane_of(state: &State, session: &str) -> Option<(String, String)> {

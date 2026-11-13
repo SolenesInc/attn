@@ -322,6 +322,36 @@ fn close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop() {
 }
 
 #[test]
+fn a_close_the_daemon_refuses_or_that_cannot_be_sent_shows_why_in_the_notice() {
+    let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.daemon.on("desktop_close_tile", |r| {
+        serde_json::json!({
+            "event": "profile_action_result",
+            "request_id": r["request_id"],
+            "action": "desktop_close_tile",
+            "success": false,
+            "error": "the terminal is still starting",
+        })
+    });
+
+    press(&mut world, &Action::TerminalClose);
+    world.settle();
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Could not close that tile: the terminal is still starting")
+    );
+
+    world.daemon.refuse_connections(true);
+    world.daemon.disconnect();
+    world.settle();
+    press(&mut world, &Action::TerminalClose);
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Could not close that tile: not connected to the daemon")
+    );
+}
+
+#[test]
 fn when_the_keyboards_tile_closes_the_keyboard_goes_to_the_tile_the_daemon_shows_next() {
     let three = vec![pane("t1", "r1"), pane("t2", "r2"), pane("t3", "r3")];
     let mut world =
