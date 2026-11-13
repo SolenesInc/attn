@@ -1,13 +1,14 @@
 //! A document tile's header controls for its marks, as the Tauri tile header has them: a note on
-//! the whole document, the review notes, and sending them to the session the tile is bound to
-//! or to another session on its desktop.
+//! the whole document, the review notes, and sending them: a file's to the session the tile is
+//! bound to or to another session on its desktop, a seed's to the session tending it or as a
+//! note on the seed.
 
 use attn_protocol::{Desktop, DesktopUpdateTileMessage, MarkdownAnnotation, Session};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{Cx, El, Key, KeyEvent, Tx, col, el, row, text};
 
-use super::drafts::{self, Sent};
+use super::drafts::{self, Sent, To};
 use crate::State;
 
 /// How long "Sent ✓" shows before Send comes back, as the Tauri header shows it.
@@ -46,8 +47,37 @@ fn destination<'a>(
         .find(|s| s.id == id)
 }
 
+/// Whose marks a document tile holds, and where they go.
+pub(crate) enum Kind {
+    /// A markdown file's, sent to the session the tile is bound to.
+    File { bound: Option<String> },
+    /// A seed's, sent to the session tending it, or as a note on the seed when none does.
+    Seed { id: String, tender: Option<String> },
+}
+
+impl Kind {
+    /// Seed `seed`'s, going to its tender while it is claimed.
+    pub(crate) fn seed(seed: &attn_protocol::Seed) -> Kind {
+        Kind::Seed {
+            id: seed.id.clone(),
+            tender: seed
+                .claimed
+                .then(|| seed.tender.as_ref().and_then(|t| t.session_id.clone()))
+                .flatten()
+                .filter(|s| !s.is_empty()),
+        }
+    }
+
+    fn bound(&self) -> Option<&str> {
+        match self {
+            Kind::File { bound } => bound.as_deref(),
+            Kind::Seed { .. } => None,
+        }
+    }
+}
+
 /// The header controls of document tile `tile` on `desktop` for its marks of document `uri`,
-/// bound to `bound`; `send_key` names the send key.
+/// going where `kind` says; `send_key` names the send key.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn controls(
     (drafts, readings): (&super::Drafts, &super::Readings),
@@ -55,19 +85,20 @@ pub(crate) fn controls(
     desktop: &Desktop,
     tile: &str,
     uri: &str,
-    bound: Option<&str>,
+    kind: &Kind,
     send_key: Option<&str>,
     t: &Tokens,
 ) -> El {
     let count = drafts.get(uri).map_or(0, |d| d.marks.len());
     let reading = readings.tiles.get(tile);
     let sent = reading.and_then(|r| r.sent.clone());
-    let to = destination(readings, desktop, sessions, tile, bound);
+    let to = destination(readings, desktop, sessions, tile, kind.bound());
     let name = to.map_or_else(
         || "No session".to_owned(),
         crate::sidebar::model::display_name,
     );
     let any = !desktop_sessions(desktop, sessions).is_empty();
+    let noting = matches!(kind, Kind::Seed { tender: None, .. });
     let small = |part: &str, label: String| {
         text(label)
             .key(key(tile, part))
@@ -91,9 +122,12 @@ pub(crate) fn controls(
             .help("Show review notes")
             .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &notes_tile, tx)),
     ];
+    let done = |noted: bool| if noted { "Noted ✓" } else { "Sent ✓" };
     let status = match &sent {
-        Some(Sent::Done { kept, .. }) if *kept > 0 => Some(format!("Sent ✓ — {kept} still here")),
-        Some(Sent::Done { .. }) => Some("Sent ✓".to_owned()),
+        Some(Sent::Done { kept, noted, .. }) if *kept > 0 => {
+            Some(format!("{} — {kept} still here", done(*noted)))
+        }
+        Some(Sent::Done { noted, .. }) => Some(done(*noted).to_owned()),
         Some(Sent::Skipped) => Some("Target is waiting for approval — not sent".to_owned()),
         Some(Sent::Warning(why) | Sent::Failed(why)) => Some(why.clone()),
         Some(Sent::Sending) | None => None,
@@ -114,7 +148,8 @@ pub(crate) fn controls(
             .label(label)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle_menu(state, &tile, tx))
     };
-    if count == 0 && sent.is_none() {
+    if count == 0 && sent.is_none() && matches!(kind, Kind::Seed { .. }) {
+    } else if count == 0 && sent.is_none() {
         let tile_menu = tile.to_owned();
         parts.push(
             small(
@@ -128,11 +163,13 @@ pub(crate) fn controls(
         );
     } else {
         let action = match &sent {
+            Some(Sent::Sending) if noting => "Noting…".to_owned(),
             Some(Sent::Sending) => "Sending…".to_owned(),
-            Some(Sent::Done { .. }) => "Sent ✓".to_owned(),
+            Some(Sent::Done { noted, .. }) => done(*noted).to_owned(),
             Some(Sent::Skipped) => "Approval needed".to_owned(),
             Some(Sent::Warning(_)) => "Needs attention".to_owned(),
             Some(Sent::Failed(_)) => "Send failed".to_owned(),
+            None if noting => format!("Note on seed {count}"),
             None => format!("Send {count}"),
         };
         let quiet = matches!(sent, Some(Sent::Sending | Sent::Done { .. }));
@@ -140,18 +177,32 @@ pub(crate) fn controls(
             sent,
             Some(Sent::Skipped | Sent::Warning(_) | Sent::Failed(_))
         );
-        let label = if quiet {
+        let label = if quiet || matches!(kind, Kind::Seed { .. }) {
             action
         } else {
             format!("{action} to {name}")
         };
         let label = if problem { format!("! {label}") } else { label };
-        let title = match (to, send_key) {
-            (Some(_), Some(chord)) => format!("Send annotations to {name} ({chord})"),
-            (Some(_), None) => format!("Send annotations to {name}"),
-            (None, _) => "Choose a session before sending annotations".to_owned(),
+        let chord = send_key
+            .map(|chord| format!(" ({chord})"))
+            .unwrap_or_default();
+        let title = match (kind, to) {
+            (
+                Kind::Seed {
+                    tender: Some(_), ..
+                },
+                _,
+            ) => {
+                format!("Send annotations to the tending session{chord}")
+            }
+            (Kind::Seed { tender: None, .. }, _) => {
+                format!("Leave annotations as a note on the seed{chord}")
+            }
+            (Kind::File { .. }, Some(_)) => format!("Send annotations to {name}{chord}"),
+            (Kind::File { .. }, None) => "Choose a session before sending annotations".to_owned(),
         };
-        let disabled = matches!(sent, Some(Sent::Sending)) || count == 0 || to.is_none();
+        let nowhere = matches!(kind, Kind::File { .. }) && to.is_none();
+        let disabled = matches!(sent, Some(Sent::Sending)) || count == 0 || nowhere;
         let send_tile = tile.to_owned();
         parts.push(
             small("send", label)
@@ -165,8 +216,12 @@ pub(crate) fn controls(
                 .disabled(disabled)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &send_tile, tx)),
         );
-        if any {
-            parts.push(caret("Change annotation destination"));
+        match kind {
+            Kind::File { .. } if any => parts.push(caret("Change annotation destination")),
+            Kind::Seed {
+                tender: Some(_), ..
+            } => parts.push(caret("More annotation destinations")),
+            _ => {}
         }
     }
     row()
@@ -176,52 +231,114 @@ pub(crate) fn controls(
         .children(parts)
 }
 
-/// The desktop document tile `tile` is on, the session it is bound to, and its document.
-fn tile_of<'a>(state: &'a State, tile: &str) -> Option<(&'a Desktop, Option<String>, String)> {
-    let (at, content) = state
+/// A document tile: the desktop it is on, its document, and where its marks go.
+struct Tiled<'a> {
+    desktop: &'a Desktop,
+    uri: String,
+    kind: Kind,
+}
+
+/// Document tile `tile`, a markdown file's or a seed's, where a desktop shows it.
+fn tile_of<'a>(state: &'a State, tile: &str) -> Option<Tiled<'a>> {
+    if let Some((at, content)) = state
         .facts
         .tile_contents
         .tiles
         .iter()
-        .find(|(k, c)| k.tile == tile && c.message.tile_kind == "markdown")?;
-    let desktop = state.facts.desktops.iter().find(|d| d.id == at.desktop)?;
-    let host = content.message.host.clone().filter(|h| !h.is_empty());
-    let uri = drafts::Source {
-        path: content.message.path.clone(),
-        host,
+        .find(|(k, c)| k.tile == tile && c.message.tile_kind == "markdown")
+    {
+        let desktop = state.facts.desktops.iter().find(|d| d.id == at.desktop)?;
+        let uri = drafts::Source::File {
+            path: content.message.path.clone(),
+            host: content.message.host.clone().filter(|h| !h.is_empty()),
+        }
+        .uri();
+        let bound = crate::desktop::tile_session(desktop, tile);
+        return Some(Tiled {
+            desktop,
+            uri,
+            kind: Kind::File { bound },
+        });
     }
-    .uri();
-    Some((desktop, crate::desktop::tile_session(desktop, tile), uri))
+    state.facts.desktops.iter().find_map(|desktop| {
+        let id = crate::sidebar::model::leaves(&desktop.tree_json)
+            .into_iter()
+            .find_map(|leaf| match leaf {
+                crate::sidebar::model::Leaf::Tile { id, kind, params }
+                    if id == tile && kind == "seed" && !params.is_empty() =>
+                {
+                    Some(params)
+                }
+                _ => None,
+            })?;
+        let seed =
+            crate::garden::shown_seed(&state.window.garden, crate::garden::seeds(state), &id)?;
+        Some(Tiled {
+            desktop,
+            uri: drafts::Source::Seed(id).uri(),
+            kind: Kind::seed(seed),
+        })
+    })
 }
 
 /// Sends tile `tile`'s marks to where its header says.
 pub(crate) fn send(state: &mut State, tile: &str, tx: &mut Tx) {
-    let Some((desktop, bound, uri)) = tile_of(state, tile) else {
+    let Some(tiled) = tile_of(state, tile) else {
         return;
     };
-    let Some(to) = destination(
-        &state.readings,
-        desktop,
-        &state.facts.sessions,
-        tile,
-        bound.as_deref(),
-    )
-    .map(|s| s.id.clone()) else {
+    let to = match &tiled.kind {
+        Kind::File { bound } => destination(
+            &state.readings,
+            tiled.desktop,
+            &state.facts.sessions,
+            tile,
+            bound.as_deref(),
+        )
+        .map(|s| To::Session(s.id.clone())),
+        Kind::Seed {
+            tender: Some(session),
+            ..
+        } => Some(To::Session(session.clone())),
+        Kind::Seed { id, tender: None } => Some(To::Seed(id.clone())),
+    };
+    if let Some(to) = to {
+        let uri = tiled.uri;
+        deliver(state, tile, &uri, to, tx);
+    }
+}
+
+/// Leaves seed tile `tile`'s marks as a note on its seed.
+fn note_on_seed(state: &mut State, tile: &str, tx: &mut Tx) {
+    if let Some(r) = state.readings.tiles.get_mut(tile) {
+        r.menu = false;
+    }
+    state.readings.revision += 1;
+    let Some(Tiled {
+        uri,
+        kind: Kind::Seed { id, .. },
+        ..
+    }) = tile_of(state, tile)
+    else {
         return;
     };
+    deliver(state, tile, &uri, To::Seed(id), tx);
+    tx.focus(key(tile, "send"), false);
+}
+
+fn deliver(state: &mut State, tile: &str, uri: &str, to: To, tx: &mut Tx) {
     let busy = state
         .readings
         .tiles
         .get(tile)
         .is_some_and(|r| r.sent == Some(Sent::Sending));
-    if busy || state.drafts.get(&uri).is_none_or(|d| d.marks.is_empty()) {
+    if busy || state.drafts.get(uri).is_none_or(|d| d.marks.is_empty()) {
         return;
     }
     set_sent(state, tile, Some(Sent::Sending));
     let tile = tile.to_owned();
     drafts::submit(
         state,
-        &uri,
+        uri,
         to,
         move |state, sent, tx| {
             let sent = match sent {
@@ -265,7 +382,7 @@ pub(crate) fn expire(state: &mut State, now: f64) -> bool {
         .iter()
         .filter(|(tile, r)| {
             r.picked.is_some()
-                && tile_of(state, tile).is_some_and(|(_, bound, _)| bound == r.picked)
+                && tile_of(state, tile).is_some_and(|d| d.kind.bound() == r.picked.as_deref())
         })
         .map(|(tile, _)| tile.clone())
         .collect();
@@ -305,10 +422,10 @@ fn toggle_menu(state: &mut State, tile: &str, tx: &mut Tx) {
 /// Binds tile `tile` to session `session`: sends go there at once, and back to where they went
 /// when the desktop refuses.
 fn retarget(state: &mut State, tile: &str, session: &str, tx: &mut Tx) {
-    let Some((desktop, _, _)) = tile_of(state, tile) else {
+    let Some(tiled) = tile_of(state, tile) else {
         return;
     };
-    let desktop_id = desktop.id.clone();
+    let desktop_id = tiled.desktop.id.clone();
     let reading = state.readings.tiles.entry(tile.to_owned()).or_default();
     reading.menu = false;
     reading.sent = None;
@@ -340,29 +457,32 @@ fn retarget(state: &mut State, tile: &str, session: &str, tx: &mut Tx) {
 pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
     let mut out = Vec::new();
     for (tile, reading) in &state.readings.tiles {
-        let Some((desktop, bound, uri)) = tile_of(state, tile) else {
+        let Some(Tiled { desktop, uri, kind }) = tile_of(state, tile) else {
             continue;
         };
         if reading.menu
             && let Some(at) = cx.layout(&key(tile, "controls"))
         {
-            let current = destination(
-                &state.readings,
-                desktop,
-                &state.facts.sessions,
-                tile,
-                bound.as_deref(),
-            )
-            .map(|s| s.id.clone());
-            out.push(
-                menu(
-                    tile,
-                    desktop_sessions(desktop, &state.facts.sessions),
-                    current.as_deref(),
-                    t,
-                )
-                .absolute((at[0] + at[2] - MENU_W).max(8.0), at[1] + at[3] + 4.0),
-            );
+            let shown = match &kind {
+                Kind::File { bound } => {
+                    let current = destination(
+                        &state.readings,
+                        desktop,
+                        &state.facts.sessions,
+                        tile,
+                        bound.as_deref(),
+                    )
+                    .map(|s| s.id.clone());
+                    menu(
+                        tile,
+                        desktop_sessions(desktop, &state.facts.sessions),
+                        current.as_deref(),
+                        t,
+                    )
+                }
+                Kind::Seed { .. } => seed_menu(tile, t),
+            };
+            out.push(shown.absolute((at[0] + at[2] - MENU_W).max(8.0), at[1] + at[3] + 4.0));
         }
         if reading.notes
             && let Some(at) = cx.layout(&format!("tile.{tile}"))
@@ -433,6 +553,50 @@ fn menu(tile: &str, sessions: Vec<&Session>, current: Option<&str>, t: &Tokens) 
         .border(1.0, t.border)
         .on_press(|_: &mut State| {})
         .children(items)
+}
+
+/// A seed tile's other destination under its send button: a note on the seed.
+fn seed_menu(tile: &str, t: &Tokens) -> El {
+    let (pressed, keyed) = (tile.to_owned(), tile.to_owned());
+    let item = row()
+        .key(key(tile, "send.menu.0"))
+        .role("menuitem")
+        .label("Note on seed")
+        .focusable(true)
+        .items_center()
+        .px(8.0)
+        .py(4.0)
+        .radius(5.0)
+        .child(
+            text("Note on seed")
+                .font(type_::LABEL)
+                .color(t.text_primary),
+        )
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| note_on_seed(state, &pressed, tx))
+        .on_key(
+            move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| match ev.key {
+                Key::Enter => {
+                    note_on_seed(state, &keyed, tx);
+                    true
+                }
+                Key::Escape => {
+                    toggle_menu(state, &keyed, tx);
+                    true
+                }
+                _ => false,
+            },
+        );
+    col()
+        .key(key(tile, "send.menu.list"))
+        .role("menu")
+        .label("More annotation destinations")
+        .w(MENU_W)
+        .padding(4.0)
+        .radius(8.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .on_press(|_: &mut State| {})
+        .child(item)
 }
 
 fn menu_key(
@@ -526,7 +690,7 @@ fn notes(
                         r.notes = false;
                     }
                     let uri = state.readings.tiles.get(&overall).map(|r| r.uri.clone());
-                    if let Some(uri) = uri.or_else(|| tile_of(state, &overall).map(|(_, _, u)| u)) {
+                    if let Some(uri) = uri.or_else(|| tile_of(state, &overall).map(|d| d.uri)) {
                         super::annotating::compose_overall(state, &overall, &uri, tx);
                     }
                 }),
@@ -668,7 +832,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
 
 /// Takes marks `ids` off tile `tile`'s document.
 fn remove(state: &mut State, tile: &str, ids: &[String], tx: &mut Tx) {
-    let Some((_, _, uri)) = tile_of(state, tile) else {
+    let Some(Tiled { uri, .. }) = tile_of(state, tile) else {
         return;
     };
     let now = tx.clock();
@@ -697,7 +861,7 @@ fn clear_all(state: &mut State, tile: &str, tx: &mut Tx) {
     if let Some(r) = state.readings.tiles.get_mut(tile) {
         r.clearing = None;
     }
-    let Some((_, _, uri)) = tile_of(state, tile) else {
+    let Some(Tiled { uri, .. }) = tile_of(state, tile) else {
         return;
     };
     let ids: Vec<String> = state

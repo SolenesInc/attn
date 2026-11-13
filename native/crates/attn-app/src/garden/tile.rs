@@ -23,7 +23,14 @@ pub(crate) struct Reads<'a> {
 
 /// The seed a tile holds, as the garden's page shows it: the garden's copy when the daemon's
 /// document has not come yet, and a way to the garden when the garden holds the seed.
-pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Tokens) -> El {
+pub(crate) fn body(
+    desktop: &str,
+    leaf: &str,
+    id: &str,
+    reads: &Reads,
+    drafts: Option<&crate::markdown::Drafts>,
+    t: &Tokens,
+) -> El {
     let prefix = format!("seed-tile.{leaf}");
     let view = format!("{prefix}.viewport");
     let (document, error) = super::reading(reads.garden, id);
@@ -41,6 +48,7 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
         seeds: reads.seeds,
         chief: reads.chief,
         readings: reads.readings,
+        drafts,
         now_ms: reads.now_ms,
         t,
     };

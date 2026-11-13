@@ -60,7 +60,7 @@ pub(crate) fn body(
         host: host.to_owned(),
         name: crate::desktop::outpost_name(host, outposts),
     });
-    let uri = drafts::Source {
+    let uri = drafts::Source::File {
         path: content.path.clone(),
         host: outpost.as_ref().map(|o| o.host.clone()),
     }
@@ -137,6 +137,33 @@ pub(crate) struct Marking {
     tile: String,
     uri: String,
     highlights: Vec<(Vec<std::ops::Range<usize>>, rune_kit::Highlight)>,
+}
+
+/// The reader of seed `seed`'s body in tile `tile`, with the marks `drafts` hold on it, where
+/// people mark it as they mark a file: the reader, keyed so its marks' toolbar and comment box
+/// find their passage, then those, placed over it.
+pub(crate) fn seed_reader(
+    (drafts, readings): (&Drafts, &Readings),
+    tile: &str,
+    seed: &str,
+    version: impl std::hash::Hash,
+    read: impl FnOnce(Option<Marking>) -> El,
+    t: &Tokens,
+) -> (El, Vec<El>) {
+    let uri = drafts::Source::Seed(seed.to_owned()).uri();
+    let highlights = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
+    let reading = memo(
+        annotating::root_key(tile),
+        (version, highlights.clone()),
+        || {
+            read(Some(Marking {
+                tile: tile.to_owned(),
+                uri,
+                highlights,
+            }))
+        },
+    );
+    (reading, annotating::in_document(readings, tile, 0.0, t))
 }
 
 /// `source` as a document at `document.path` reads: its links go where the reader sends them,

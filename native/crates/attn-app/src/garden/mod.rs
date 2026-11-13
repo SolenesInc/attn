@@ -368,6 +368,18 @@ pub(super) fn missing<'a>(garden: &'a Garden, id: &str) -> Option<&'a HashSet<St
 }
 
 /// The shown seed's document as the daemon last answered it, and the error of its last read.
+/// Seed `id` as its tile shows it: the daemon's document of it, else the garden's copy.
+pub(crate) fn shown_seed<'a>(
+    garden: &'a Garden,
+    seeds: &'a [Arc<Seed>],
+    id: &str,
+) -> Option<&'a Seed> {
+    let (document, _) = reading(garden, id);
+    document
+        .map(|d| &d.seed)
+        .or_else(|| seeds.iter().find(|s| s.id == id).map(|s| s.as_ref()))
+}
+
 pub(crate) fn reading<'a>(
     garden: &'a Garden,
     id: &str,

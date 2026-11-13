@@ -20,6 +20,8 @@ pub(super) struct Sheet<'a> {
     pub(super) seeds: &'a [Arc<Seed>],
     pub(super) chief: bool,
     pub(super) readings: &'a crate::markdown::Readings,
+    /// The marks people make on the seed's body, in a tile that takes them.
+    pub(super) drafts: Option<&'a crate::markdown::Drafts>,
     pub(super) now_ms: i64,
     pub(super) t: &'a Tokens,
 }
@@ -135,29 +137,47 @@ impl Sheet<'_> {
         let key = self.key("plan");
         let t = *self.t;
         let kept = self.readings.kept(&view);
+        let read = {
+            let (body, view, kept) = (body.clone(), view.clone(), kept.clone());
+            move |marking| {
+                crate::markdown::reader(
+                    &body,
+                    crate::markdown::Document {
+                        path: String::new(),
+                        session: None,
+                        outpost: None,
+                        view,
+                    },
+                    std::rc::Rc::default(),
+                    kept,
+                    marking,
+                    &t,
+                )
+            }
+        };
+        let plan = |reading: El| {
+            col()
+                .key(key)
+                .role("document")
+                .label("Plan")
+                .w_full()
+                .child(reading)
+        };
+        if let (Go::Tile { tile, .. }, Some(drafts)) = (&self.go, self.drafts) {
+            let (reading, over) = crate::markdown::seed_reader(
+                (drafts, self.readings),
+                tile,
+                &here.id,
+                (&body, &view, &kept, t),
+                read,
+                &t,
+            );
+            return plan(reading).children(over);
+        }
         memo(
             self.key(&format!("plan.{}", here.id)),
             (body.clone(), view.clone(), kept.clone(), t),
-            move || {
-                col()
-                    .key(key)
-                    .role("document")
-                    .label("Plan")
-                    .w_full()
-                    .child(crate::markdown::reader(
-                        &body,
-                        crate::markdown::Document {
-                            path: String::new(),
-                            session: None,
-                            outpost: None,
-                            view,
-                        },
-                        std::rc::Rc::default(),
-                        kept,
-                        None,
-                        &t,
-                    ))
-            },
+            move || plan(read(None)),
         )
     }
 

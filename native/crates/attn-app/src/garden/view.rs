@@ -1062,6 +1062,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         seeds: super::seeds(state),
         chief: model::has_chief(&state.facts.sessions, &state.facts.profiles.selected),
         readings: &state.readings,
+        drafts: None,
         now_ms: state.window.now_ms,
         t,
     };

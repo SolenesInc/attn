@@ -27,6 +27,8 @@ struct Kept {
     bound: Option<&'static str>,
     /// The tile shows in its own window.
     popped: bool,
+    /// The tile shows seed `s-plan` instead of the file, tended by the session named, if any.
+    seed: Option<Option<&'static str>>,
 }
 
 type Shared = Arc<Mutex<Kept>>;
@@ -63,19 +65,39 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
             row(vec![
                 pane("a"),
                 pane("b"),
-                json!({
-                    "type": "tile",
-                    "tile_id": "m",
-                    "tile_kind": "markdown",
-                    "tile_params": json!({ "path": PLAN }).to_string(),
-                    "tile_session_id": kept.bound.unwrap_or("s-a"),
-                    "window": kept.popped.then(|| json!({"x": 60.0, "y": 60.0, "width": 900.0, "height": 700.0})),
-                }),
+                match kept.seed {
+                    Some(_) => json!({
+                        "type": "tile",
+                        "tile_id": "m",
+                        "tile_kind": "seed",
+                        "tile_params": "s-plan",
+                    }),
+                    None => json!({
+                        "type": "tile",
+                        "tile_id": "m",
+                        "tile_kind": "markdown",
+                        "tile_params": json!({ "path": PLAN }).to_string(),
+                        "tile_session_id": kept.bound.unwrap_or("s-a"),
+                        "window": kept.popped.then(|| json!({"x": 60.0, "y": 60.0, "width": 900.0, "height": 700.0})),
+                    }),
+                },
             ]),
             1,
         )]),
+        seeds: kept.seed.map(|tender| vec![plan_seed(doc, tender)]),
         ..InitialStateMessage::new()
     });
+    if kept.seed.is_some() {
+        let (doc, tender) = (doc.to_owned(), kept.seed.flatten());
+        daemon.on("seed_document_get", move |r| {
+            json!({
+                "event": "seed_document_get_result",
+                "request_id": r["request_id"],
+                "success": true,
+                "document": { "seed": plan_seed(&doc, tender), "notes": [], "notes_total": 0, "children": [] },
+            })
+        });
+    }
     let kept = Arc::new(Mutex::new(kept));
     let draft = |kept: &Kept, r: &Value, event: &str, success: bool| {
         json!({
@@ -121,7 +143,10 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
     let sending = kept.clone();
     daemon.on("markdown_annotations_submit", move |r| {
         let mut kept = sending.lock().unwrap();
-        let (status, error) = kept.submit.unwrap_or(("delivered", None));
+        let (status, error) = match r["target_seed_id"].as_str() {
+            Some(_) => ("noted", None),
+            None => kept.submit.unwrap_or(("delivered", None)),
+        };
         let went = matches!(status, "delivered" | "noted");
         if went {
             kept.marks.clear();
@@ -145,11 +170,33 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
     daemon.on("desktop_update_tile", |r| {
         json!({ "event": "desktop_update_tile_result", "request_id": r["request_id"], "success": r["tile_session_id"] != "s-refused" })
     });
+    let seed = kept.lock().unwrap().seed.is_some();
     let mut world = World::start_sized(daemon, (2400.0, 900.0));
     world.open_desktop();
-    world.daemon.emit(content(doc));
+    if !seed {
+        world.daemon.emit(content(doc));
+    }
     world.settle();
     (world, kept)
+}
+
+/// Seed `s-plan`, whose body is `body`, tended by session `tender` when there is one.
+fn plan_seed(body: &str, tender: Option<&str>) -> attn_protocol::Seed {
+    attn_protocol::Seed {
+        profile_id: "work".into(),
+        id: "s-plan".into(),
+        title: "Plan".into(),
+        body: body.into(),
+        status: "planted".into(),
+        claimed: tender.is_some(),
+        tender: tender.map(|session| attn_protocol::PartyView {
+            name: "Agent b".into(),
+            session_id: Some(session.into()),
+            ..attn_protocol::PartyView::default()
+        }),
+        rev: 1,
+        ..attn_protocol::Seed::default()
+    }
 }
 
 fn desktop(tree: Value, revision: i64) -> Desktop {
@@ -1260,4 +1307,90 @@ fn the_toolbar_and_the_comment_box_move_with_their_passage_when_the_document_scr
     moved(&mut world, "toolbar");
     click(&mut world, "toolbar.comment");
     moved(&mut world, "composer");
+}
+
+#[test]
+fn a_seeds_marks_go_to_its_tender_or_onto_the_seed_as_a_note() {
+    let (mut world, kept) = start_with(
+        DOC,
+        Kept {
+            seed: Some(None),
+            ..Kept::default()
+        },
+    );
+    select(&mut world, "b1", 10..21);
+    assert!(
+        toolbar(&world),
+        "a passage of the seed's body opens the toolbar"
+    );
+    click(&mut world, "toolbar.delete");
+    pause(&mut world);
+    let saved = world.daemon.sent_of("markdown_annotations_save");
+    assert_eq!(
+        (
+            saved[0]["document_uri"].as_str(),
+            saved[0]["source_kind"].as_str(),
+            saved[0]["seed_id"].as_str()
+        ),
+        (Some("attn://seed/s-plan"), Some("seed"), Some("s-plan"))
+    );
+    assert_eq!(
+        marks(&kept)[0]["anchor"]["exact"].as_str(),
+        Some("tile layout")
+    );
+    assert_eq!(
+        label_of(&world, "send").as_deref(),
+        Some("Note on seed 1"),
+        "a seed nobody tends offers only the note"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.m.document.send.menu"))
+            .is_none()
+    );
+    click(&mut world, "send");
+    let submitted = world.daemon.sent_of("markdown_annotations_submit");
+    assert_eq!(
+        (
+            submitted[0]["target_seed_id"].as_str(),
+            submitted[0]["target_session_id"].as_str()
+        ),
+        (Some("s-plan"), None)
+    );
+    assert_eq!(label_of(&world, "send").as_deref(), Some("Noted ✓"));
+
+    let (mut world, _) = start_with(
+        DOC,
+        Kept {
+            seed: Some(Some("s-b")),
+            ..Kept::default()
+        },
+    );
+    select(&mut world, "b1", 10..21);
+    click(&mut world, "toolbar.delete");
+    assert_eq!(label_of(&world, "send").as_deref(), Some("Send 1"));
+    click(&mut world, "send");
+    let submitted = world.daemon.sent_of("markdown_annotations_submit");
+    assert_eq!(
+        submitted[0]["target_session_id"].as_str(),
+        Some("s-b"),
+        "a tended seed's marks go to its tender"
+    );
+    assert_eq!(label_of(&world, "send").as_deref(), Some("Sent ✓"));
+
+    world.advance(Duration::from_secs(5));
+    world.settle();
+    select(&mut world, "b1", 10..21);
+    click(&mut world, "toolbar.delete");
+    click(&mut world, "send.menu");
+    world.gesture(|app| app.click(Target::role("menu-item").name("Note on seed")));
+    world.settle();
+    let submitted = world.daemon.sent_of("markdown_annotations_submit");
+    assert_eq!(
+        submitted.last().unwrap()["target_seed_id"].as_str(),
+        Some("s-plan"),
+        "or onto the seed from the menu"
+    );
+    assert_eq!(label_of(&world, "send").as_deref(), Some("Noted ✓"));
 }

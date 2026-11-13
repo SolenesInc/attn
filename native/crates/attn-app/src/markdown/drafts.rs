@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
-use attn_client::Connection;
+use attn_client::{Connection, Facts};
 use attn_protocol::{
     MarkdownAnnotation, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage,
     MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage,
@@ -25,31 +25,33 @@ const SAVE_PAUSE: f64 = 0.5;
 const READ_RETRY: f64 = 2.0;
 const SAVE_RETRY: f64 = 5.0;
 
-/// The document a draft belongs to, as the daemon names it.
+/// The document a draft belongs to, as the daemon names it: a markdown file, on the outpost
+/// `host` names or on this machine, or a seed's body.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct Source {
-    pub(crate) path: String,
-    /// The outpost the file is on; none on this machine.
-    pub(crate) host: Option<String>,
+pub(crate) enum Source {
+    File { path: String, host: Option<String> },
+    Seed(String),
 }
 
 impl Source {
     /// The document's address, the Tauri reader's `documentSource.ts` form.
     pub(crate) fn uri(&self) -> String {
-        match &self.host {
-            None => format!("attn://file/{}", encode(&self.path)),
-            Some(host) => format!("attn://file/{}?host={}", encode(&self.path), encode(host)),
+        match self {
+            Source::File { path, host: None } => format!("attn://file/{}", encode(path)),
+            Source::File {
+                path,
+                host: Some(host),
+            } => format!("attn://file/{}?host={}", encode(path), encode(host)),
+            Source::Seed(id) => format!("attn://seed/{}", encode(id)),
         }
     }
 
     /// The source's kind, path, host and seed as the draft commands name them.
     fn fields(&self) -> (String, Option<String>, Option<String>, Option<String>) {
-        (
-            "file".into(),
-            Some(self.path.clone()),
-            self.host.clone(),
-            None,
-        )
+        match self {
+            Source::File { path, host } => ("file".into(), Some(path.clone()), host.clone(), None),
+            Source::Seed(id) => ("seed".into(), None, None, Some(id.clone())),
+        }
     }
 }
 
@@ -64,6 +66,13 @@ fn encode(s: &str) -> String {
         }
     }
     out
+}
+
+/// Where a send goes: to a session, or as a note on a seed.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum To {
+    Session(String),
+    Seed(String),
 }
 
 /// How the last send went.
@@ -217,51 +226,35 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     if state.facts.connection != Connection::Connected {
         return false;
     }
-    let shown: Vec<(Source, &attn_client::TileContent)> = state
-        .facts
-        .tile_contents
-        .tiles
-        .values()
-        .filter(|c| c.message.tile_kind == "markdown" && !c.message.path.is_empty())
-        .map(|c| {
-            let host = c.message.host.clone().filter(|h| !h.is_empty());
-            (
-                Source {
-                    path: c.message.path.clone(),
-                    host,
-                },
-                c,
-            )
-        })
-        .collect();
+    let shown = shown(&state.facts, &state.window.garden);
     let drafts = &mut state.drafts;
     let before = drafts.drafts.len();
     drafts.drafts.retain(|uri, d| {
         d.save_due.is_some() || d.saving || shown.iter().any(|(s, _)| s.uri() == *uri)
     });
     let mut changed = drafts.drafts.len() != before;
-    for (source, content) in shown {
+    for (source, document) in shown {
         let draft = drafts.drafts.entry(source.uri()).or_insert_with(|| {
             changed = true;
             Draft::new(source)
         });
-        let generation = content.message.annotations_generation;
-        if generation.is_some_and(|g| g > draft.generation) && !draft.reading && draft.hydrated {
+        if document.generation.is_some_and(|g| g > draft.generation)
+            && !draft.reading
+            && draft.hydrated
+        {
             draft.read_due = Some(now);
         }
-        let readable = content.message.error.as_deref().is_none_or(str::is_empty);
-        if readable
+        if let Some(text) = document.text
             && draft
                 .passages
                 .as_ref()
-                .is_none_or(|(revision, _)| *revision != content.revision)
+                .is_none_or(|(revision, _)| *revision != document.revision)
         {
-            let source = &content.message.content;
             draft.passages = Some((
-                content.revision,
+                document.revision,
                 Rc::new(Passages::read(
-                    source,
-                    &super::read_as(source),
+                    text,
+                    &super::read_as(text),
                     &rune_kit::Kit::neutral(true),
                 )),
             ));
@@ -304,6 +297,68 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         tx.wake_at(wake);
     }
     changed
+}
+
+/// A document a tile shows: its text while it reads, which changes with `revision`, and the
+/// generation of its draft the daemon last named.
+struct Shown<'a> {
+    text: Option<&'a str>,
+    revision: u64,
+    generation: Option<i64>,
+}
+
+/// The documents the window's tiles show, markdown files and seeds, by their sources.
+fn shown<'a>(facts: &'a Facts, garden: &'a crate::garden::Garden) -> Vec<(Source, Shown<'a>)> {
+    let files = facts
+        .tile_contents
+        .tiles
+        .values()
+        .filter(|c| c.message.tile_kind == "markdown" && !c.message.path.is_empty())
+        .map(|c| {
+            let readable = c.message.error.as_deref().is_none_or(str::is_empty);
+            (
+                Source::File {
+                    path: c.message.path.clone(),
+                    host: c.message.host.clone().filter(|h| !h.is_empty()),
+                },
+                Shown {
+                    text: readable.then_some(c.message.content.as_str()),
+                    revision: c.revision,
+                    generation: c.message.annotations_generation,
+                },
+            )
+        });
+    let seeds = facts
+        .desktops
+        .iter()
+        .flat_map(|d| crate::sidebar::model::leaves(&d.tree_json))
+        .filter_map(|leaf| match leaf {
+            crate::sidebar::model::Leaf::Tile { kind, params, .. }
+                if kind == "seed" && !params.is_empty() =>
+            {
+                Some(params)
+            }
+            _ => None,
+        })
+        .map(|id| {
+            let seed =
+                crate::garden::shown_seed(garden, facts.garden.of(&facts.profiles.selected), &id);
+            (
+                Source::Seed(id),
+                Shown {
+                    text: seed.map(|s| s.body.as_str()),
+                    revision: seed.map_or(0, |s| s.rev as u64),
+                    generation: None,
+                },
+            )
+        });
+    let mut out: Vec<(Source, Shown<'a>)> = Vec::new();
+    for (source, document) in files.chain(seeds) {
+        if !out.iter().any(|(s, _)| *s == source) {
+            out.push((source, document));
+        }
+    }
+    out
 }
 
 fn fetch(state: &mut State, uri: &str, tx: &mut Tx) {
@@ -409,11 +464,11 @@ pub(crate) fn save_now(state: &mut State, uri: &str, tx: &mut Tx) {
     save(state, uri, true, tx);
 }
 
-/// Sends document `uri`'s draft to session `session`, telling `done` how it went.
+/// Sends document `uri`'s draft where `to` says, telling `done` how it went.
 pub(crate) fn submit(
     state: &mut State,
     uri: &str,
-    session: String,
+    to: To,
     done: impl FnOnce(&mut State, Sent, &mut Tx) + 'static,
     tx: &mut Tx,
 ) {
@@ -432,7 +487,10 @@ pub(crate) fn submit(
     let draft = &state.drafts.drafts[uri];
     let (source_kind, path, host, seed_id) = draft.source.fields();
     let orphaned_ids = Some(draft.orphans.clone()).filter(|o| !o.is_empty());
-    let target_session_id = Some(session);
+    let (target_session_id, target_seed_id) = match to {
+        To::Session(id) => (Some(id), None),
+        To::Seed(id) => (None, Some(id)),
+    };
     let (document_uri, uri) = (uri.to_owned(), uri.to_owned());
     state.ask(
         move |request_id| MarkdownAnnotationsSubmitMessage {
@@ -443,6 +501,7 @@ pub(crate) fn submit(
             host,
             seed_id,
             target_session_id,
+            target_seed_id,
             orphaned_ids,
             ..MarkdownAnnotationsSubmitMessage::new()
         },

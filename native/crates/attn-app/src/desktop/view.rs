@@ -790,6 +790,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 &leaf.id,
                 params.as_deref().unwrap_or(""),
                 cx.seeds,
+                cx.annotates.then_some(cx.marks.0),
                 t,
             ),
             &holder,
@@ -850,39 +851,63 @@ fn holds_a_seed(desktop: &Desktop) -> bool {
         .any(|l| matches!(l, crate::sidebar::model::Leaf::Tile { kind, .. } if kind == "seed"))
 }
 
-/// A document tile's controls for its marks, once its document reads.
+/// A document tile's controls for its marks, once its document reads: a markdown file's, or a
+/// seed's.
 fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
-    let LeafKind::Tile { kind, session, .. } = &leaf.kind else {
+    let LeafKind::Tile {
+        kind,
+        session,
+        params,
+        ..
+    } = &leaf.kind
+    else {
         return None;
     };
-    if kind != "markdown" || !cx.annotates {
+    if !cx.annotates {
         return None;
     }
-    let content = cx.contents.get(&attn_client::TileKey {
-        desktop: cx.desktop.id.clone(),
-        tile: leaf.id.clone(),
-    })?;
-    if content
-        .message
-        .error
-        .as_deref()
-        .is_some_and(|e| !e.is_empty())
-        || content.message.path.is_empty()
-    {
-        return None;
-    }
-    let uri = crate::markdown::drafts::Source {
-        path: content.message.path.clone(),
-        host: content.message.host.clone().filter(|h| !h.is_empty()),
-    }
-    .uri();
+    let (uri, to) = match kind.as_str() {
+        "markdown" => {
+            let content = cx.contents.get(&attn_client::TileKey {
+                desktop: cx.desktop.id.clone(),
+                tile: leaf.id.clone(),
+            })?;
+            if content
+                .message
+                .error
+                .as_deref()
+                .is_some_and(|e| !e.is_empty())
+                || content.message.path.is_empty()
+            {
+                return None;
+            }
+            let uri = crate::markdown::drafts::Source::File {
+                path: content.message.path.clone(),
+                host: content.message.host.clone().filter(|h| !h.is_empty()),
+            }
+            .uri();
+            (
+                uri,
+                crate::markdown::sending::Kind::File {
+                    bound: session.clone(),
+                },
+            )
+        }
+        "seed" => {
+            let id = params.as_deref().filter(|p| !p.is_empty())?;
+            let seed = crate::garden::shown_seed(cx.seeds.garden, cx.seeds.seeds, id)?;
+            let uri = crate::markdown::drafts::Source::Seed(id.to_owned()).uri();
+            (uri, crate::markdown::sending::Kind::seed(seed))
+        }
+        _ => return None,
+    };
     Some(crate::markdown::sending::controls(
         cx.marks,
         cx.sessions,
         cx.desktop,
         &leaf.id,
         &uri,
-        session.as_deref(),
+        &to,
         cx.keys.send_marks.as_deref(),
         cx.t,
     ))
