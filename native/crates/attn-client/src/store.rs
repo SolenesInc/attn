@@ -30,7 +30,7 @@ pub struct Facts {
 /// Document tiles' contents by desktop and tile.
 #[derive(Clone, Default)]
 pub struct TileContents {
-    /// Rises with every content the daemon sends, so a view can key a `memo` on it.
+    /// Rises with every change to the tiles, so a view can key a `memo` on it.
     pub revision: u64,
     pub tiles: BTreeMap<TileKey, TileContent>,
 }
@@ -53,6 +53,7 @@ impl TileContents {
         }
         let mut kept = self.clone();
         kept.tiles.retain(|k, _| holds_tile(desktops, k));
+        kept.revision += 1;
         Some(kept)
     }
 }

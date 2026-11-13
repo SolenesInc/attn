@@ -1,7 +1,8 @@
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage,
-    OpenMarkdownResultMessage, OutpostInfo, Profile, Session, TileAssetReadResultMessage,
+    OpenMarkdownResultMessage, OutpostInfo, Profile, ProfileArrangementChangedMessage, Session,
+    TileAssetReadResultMessage,
 };
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Target, World, key_event};
@@ -44,29 +45,47 @@ fn start_with_state(tree: serde_json::Value, extra: InitialStateMessage) -> Worl
             profile_id: "work".into(),
             ..Session::default()
         }]),
-        desktops: Some(vec![Desktop {
-            id: DESKTOP.into(),
-            profile_id: "work".into(),
-            name: "Desktop 1".into(),
-            shortcut_slot: Some(1),
-            order_key: "1".into(),
-            tree_json: tree.to_string(),
-            active_pane_id: "a".into(),
-            panes: vec![DesktopPane {
-                desktop_id: DESKTOP.into(),
-                pane_id: "a".into(),
-                runtime_id: "r-a".into(),
-                session_id: "s-a".into(),
-                kind: "agent".into(),
-                ..DesktopPane::default()
-            }],
-            revision: 1,
-        }]),
+        desktops: Some(vec![desktop(tree, 1)]),
         ..extra
     });
     let mut world = World::start_sized(daemon, (1600.0, 900.0));
     world.open_desktop();
     world
+}
+
+fn desktop(tree: serde_json::Value, revision: i64) -> Desktop {
+    Desktop {
+        id: DESKTOP.into(),
+        profile_id: "work".into(),
+        name: "Desktop 1".into(),
+        shortcut_slot: Some(1),
+        order_key: "1".into(),
+        tree_json: tree.to_string(),
+        active_pane_id: "a".into(),
+        panes: vec![DesktopPane {
+            desktop_id: DESKTOP.into(),
+            pane_id: "a".into(),
+            runtime_id: "r-a".into(),
+            session_id: "s-a".into(),
+            kind: "agent".into(),
+            ..DesktopPane::default()
+        }],
+        revision,
+    }
+}
+
+fn arrange(world: &mut World, tree: serde_json::Value, revision: i64) {
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            current_desktop_id: DESKTOP.into(),
+            ..Profile::default()
+        },
+        desktops: vec![desktop(tree, revision)],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
 }
 
 fn content(text: &str) -> DesktopTileContentMessage {
@@ -500,6 +519,48 @@ fn a_documents_local_images_show_through_the_daemon_and_open_larger() {
     world.daemon.emit(content("# No pictures now"));
     world.settle();
     assert_eq!(world.daemon.sent_of("tile_asset_read").len(), 2);
+    rest(&mut world);
+}
+
+/// An 8×2 green PNG.
+const GREEN: &str = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAACCAIAAADq9gq6AAAAEElEQVR4nGNg+M+AHeGSAACOsQ/xb1SVcwAAAABJRU5ErkJggg==";
+
+#[test]
+fn a_reopened_document_shows_its_image_as_the_file_is_now() {
+    let mut world = start();
+    let file = std::sync::Arc::new(std::sync::Mutex::new(RED));
+    let on_disk = file.clone();
+    world.daemon.on("tile_asset_read", move |r| {
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            data_uri: Some(format!("data:image/png;base64,{}", on_disk.lock().unwrap())),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    let chart_shape = |world: &World| {
+        let [_, _, w, h] = world
+            .screen()
+            .bounds(Target::role("image").name("chart"))
+            .unwrap();
+        w / h
+    };
+    world.daemon.emit(content("![chart](chart.png)"));
+    world.settle();
+    assert_eq!(chart_shape(&world), 4.0 / 3.0);
+
+    arrange(&mut world, row(vec![pane("a")]), 2);
+    *file.lock().unwrap() = GREEN;
+    arrange(
+        &mut world,
+        row(vec![pane("a"), document_tile("m", PLAN)]),
+        3,
+    );
+    world.daemon.emit(content("![chart](chart.png)"));
+    world.settle();
+
+    assert_eq!(chart_shape(&world), 4.0);
     rest(&mut world);
 }
 
