@@ -4,14 +4,15 @@ item	statement	native_test	reason
 31	Option-modified letter shortcuts (⌥⌘N, the new session dialog's ⌥T, ⌥Q and ⌥1–⌥9) fire through AppKit despite macOS dead-key reporting		gap: s-70656g
 41	A terminal whose pane is no longer drawn detaches from its stream	attn-app/tests/wire/terminal.rs::a_terminal_no_longer_drawn_is_detached	
 41	Hidden tiles release GPU memory and return with one repaint; many tiles never fail		gap: s-gjttf8
-42	Cell metrics give the same rows and cols as the Tauri build for the same window and font size		gap: s-rzb1xd
+42	Cell metrics give the same rows and cols as the Tauri build for the same window and font size		gap: s-b43v66
 43	An emoji ZWJ, flag, skin-tone or keycap sequence takes one cell, as grapheme clustering (DECSET 2027) stays on through a program's reset or DECRST	attn-app/tests/wire/terminal.rs::an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_turns_clustering_off	
 43	Such a sequence draws as a single glyph on macOS		gap: s-916dgb
 44	A Private Use Area icon (Nerd Font) draws from the fonts the native app bundles	live:s-916dgb/live-shot2.png	
 44	It draws on the first frame, with no fallback glyph before the fonts load		gap: s-916dgb
 45	Kitty image placements draw where the worker placed them, from pixels pulled once per image, and no client parses kitty escapes	attn-app/tests/wire/terminal_kitty.rs::a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive	
 46	Terminal input latency is measured natively		gap: s-c6b9zk
-92	Linux gives the same grid geometry as macOS for the same window and font size		gap: s-rzb1xd
+92	On Linux a lone shell tile gives 34x105 at 1200x800 and 38x132 at 1440x900 with a 9x21 cell at 14 pt	live:s-rzb1xd/grid-linux.tgz	
+92	On macOS a lone shell tile gives the same 34x105 and 38x132, with the same 9x21 cell from Menlo	live:s-rzb1xd/grid-mac-measure.tgz	
 30	⌘C, from the keyboard or the native Edit menu, copies the terminal's selection	attn-app/tests/wire/terminal_view.rs::a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again	
 30	⌘C copies a selected command block's text	attn-app/tests/wire/terminal_blocks.rs::a_click_selects_the_command_block_under_it_and_the_copy_keys_copy_it_whole_or_its_command	
 30	⇧⌘C copies the terminal's selection as Markdown, keeping bold, italic, strikethrough, underline and colored inline code	attn-app/tests/wire/terminal_view.rs::the_copy_command_key_copies_a_selection_as_markdown_with_its_styles	
