@@ -281,23 +281,29 @@ pub struct PlacedSplit {
     pub id: String,
     pub direction: Direction,
     pub rect: [f32; 4],
-    /// The gap between its two sides, which drags its ratio.
+    /// The strip over the line between its two sides, which drags its ratio.
     pub divider: [f32; 4],
 }
 
-/// Lays `tree` out in a box `size` points large: each split gives its first side its ratio of
-/// the room a `gap`-point divider leaves, and its second side the rest. `ratio` is the share
-/// each split shows.
-pub fn place(tree: &Node, size: (f32, f32), gap: f32, ratio: &dyn Fn(&Split) -> f32) -> Placement {
+/// Lays `tree` out in a box `size` points large, as the Tauri app does: each split gives its
+/// first side its ratio of the room and its second side the rest, touching, with a
+/// `divider`-point strip centred over the line between them. `ratio` is the share each split
+/// shows.
+pub fn place(
+    tree: &Node,
+    size: (f32, f32),
+    divider: f32,
+    ratio: &dyn Fn(&Split) -> f32,
+) -> Placement {
     let mut out = Placement::default();
-    place_into(tree, [0.0, 0.0, size.0, size.1], gap, ratio, &mut out);
+    place_into(tree, [0.0, 0.0, size.0, size.1], divider, ratio, &mut out);
     out
 }
 
 fn place_into(
     node: &Node,
     rect: [f32; 4],
-    gap: f32,
+    strip: f32,
     ratio: &dyn Fn(&Split) -> f32,
     out: &mut Placement,
 ) {
@@ -309,19 +315,19 @@ fn place_into(
     let share = ratio(split).clamp(0.001, 0.999);
     let (a, divider, b) = match split.direction {
         Direction::Vertical => {
-            let first = (w - gap).max(0.0) * share;
+            let first = w * share;
             (
                 [x, y, first, h],
-                [x + first, y, gap, h],
-                [x + first + gap, y, (w - gap).max(0.0) - first, h],
+                [x + first - strip / 2.0, y, strip, h],
+                [x + first, y, w - first, h],
             )
         }
         Direction::Horizontal => {
-            let first = (h - gap).max(0.0) * share;
+            let first = h * share;
             (
                 [x, y, w, first],
-                [x, y + first, w, gap],
-                [x, y + first + gap, w, (h - gap).max(0.0) - first],
+                [x, y + first - strip / 2.0, w, strip],
+                [x, y + first, w, h - first],
             )
         }
     };
@@ -331,8 +337,8 @@ fn place_into(
         rect,
         divider,
     });
-    place_into(&split.children[0], a, gap, ratio, out);
-    place_into(&split.children[1], b, gap, ratio, out);
+    place_into(&split.children[0], a, strip, ratio, out);
+    place_into(&split.children[1], b, strip, ratio, out);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

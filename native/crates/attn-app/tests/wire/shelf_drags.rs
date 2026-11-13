@@ -12,14 +12,14 @@ use attn_testkit::{Answer, Daemon, Request, Target, World, key_event, message};
 use rune::KeyPlatform;
 use serde_json::Value;
 
-/// The sidebar and the gaps around the tile area, in points: a 1600-point window has 1348
+/// The sidebar beside the tile area, in points: a 1600-point window has 1360
 /// for tiles.
-const BESIDE_TILES: f32 = 252.0;
-/// The title bar and the gaps above and below the tile area, in points: a 900-point window
-/// has tiles 856 tall.
-const ABOVE_TILES: f32 = 44.0;
+const BESIDE_TILES: f32 = 240.0;
+/// The title bar above the tile area, in points: a 900-point window
+/// has tiles 868 tall.
+const ABOVE_TILES: f32 = 32.0;
 
-/// A window whose tile area is `area` points wide and 856 tall. A terminal column is 9
+/// A window whose tile area is `area` points wide and 868 tall. A terminal column is 9
 /// points, so the narrowest width steps are 57 cols at 513px, 66 at 594, 76 at 684, 86 at
 /// 774, 100 at 900, 120 at 1080 and 150 at 1350.
 fn window(area: f32) -> (f32, f32) {
@@ -390,6 +390,22 @@ fn a_refused_bring_says_the_keys_typed_for_it_were_not_delivered_and_sends_none(
         "{said:?}"
     );
     assert!(typed(&world).is_empty(), "{:?}", typed(&world));
+    rest(&mut world);
+}
+
+#[test]
+fn a_stacks_divider_whose_tile_closes_mid_drag_lets_go_so_the_next_header_drag_moves_its_tile() {
+    let stack = [below(pane("a"), pane("c")), pane("b")];
+    let mut world = start(TWO_FIT, None, vec![tiles("a", stack)]);
+    let (x, y) = divider_at(&world, "horizontal:a");
+    world.gesture(|app| app.drag_from((x, y), (x, y + 100.0)));
+    becomes(&mut world, tiles("a", panes(["a", "b"])));
+    world.gesture(|app| app.release((x, y + 100.0)));
+
+    let to = in_tile(&world, "b", 0.5, 0.97);
+    drag(&mut world, "tile.a.header", to);
+
+    assert_eq!(moves(&world).len(), 1, "{:?}", moves(&world));
     rest(&mut world);
 }
 

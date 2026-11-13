@@ -10,7 +10,10 @@ use crate::State;
 use crate::shell::Holder;
 use crate::terminal::{Release, Terminals, accelerator};
 
-pub(super) const GAP: f32 = 6.0;
+/// The strip over the line between two tiles that drags it, as wide as the Tauri app's.
+pub(super) const DIVIDER_PX: f32 = 9.0;
+/// How far a tile shown alone sits in from the tile area's edges, as in the Tauri app.
+pub(super) const ALONE_INSET: f32 = 10.0;
 const HEADER_PX: f32 = 2.0 * space::S1 + 18.0;
 const SUBLINE_PX: f32 = 15.0;
 const AGENT_HEADER_PX: f32 = HEADER_PX + SUBLINE_PX;
@@ -95,6 +98,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         state.terminals.filter_panels(),
         state.terminals.annotation_layers(),
         stale_builds(&facts.sessions, desk),
+        desk.held_split().map(str::to_owned),
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -113,20 +117,21 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         })
     });
     moves_with_the_row(col().key("tiles"))
-        .on_drag(super::divider::area_gesture)
+        .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
+            super::drag::gesture(state, d, tx, super::drag::Owner::Tiles)
+        })
         .role("main")
         .label("Tiles")
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .padding(GAP)
         .on_layout_tx(|state: &mut State, [x, y, w, h], tx: &mut Tx| {
             let px_per_col = state.terminals.metrics().cell_w;
             let area = Some(Area {
-                x: x + GAP,
-                y: y + GAP,
-                w: w - 2.0 * GAP,
-                h: h - 2.0 * GAP,
+                x,
+                y,
+                w,
+                h,
                 px_per_col,
             });
             if state.window.desk.area == area {
@@ -241,8 +246,9 @@ fn screen(
                     t,
                     scale,
                 };
-                let placed = desk.placement(&rendered);
-                laid_out(&rendered, &placed, &cx)
+                let placed = desk.placement(&rendered, cx.focused.is_some());
+                let held = desk.held_divider(&placed);
+                laid_out(&rendered, &placed, held, &cx)
             }
         },
     }
@@ -306,7 +312,12 @@ struct TileCx<'a> {
 
 /// The screen's tiles and dividers as siblings pinned where `placed` lays them, so a tile that
 /// moves to another split stays the same element and springs to its new place.
-fn laid_out(rendered: &Node, placed: &super::layout::Placement, cx: &TileCx) -> El {
+fn laid_out(
+    rendered: &Node,
+    placed: &super::layout::Placement,
+    held: Option<(String, Direction, [f32; 4])>,
+    cx: &TileCx,
+) -> El {
     let leaves = rendered.leaves();
     let tiles = placed.leaves.iter().filter_map(|(id, rect)| {
         let leaf = leaves.iter().find(|l| l.id == *id)?;
@@ -315,7 +326,9 @@ fn laid_out(rendered: &Node, placed: &super::layout::Placement, cx: &TileCx) -> 
     let dividers = placed
         .splits
         .iter()
-        .map(|s| pinned(divider(s.id.clone(), s.direction, cx), s.divider));
+        .map(|s| (s.id.clone(), s.direction, s.divider, cx.dividers))
+        .chain(held.map(|(id, direction, rect)| (id, direction, rect, true)))
+        .map(|(id, direction, rect, live)| pinned(divider(id, direction, live), rect));
     el().w_full().h_full().children(tiles).children(dividers)
 }
 
@@ -323,16 +336,23 @@ fn pinned(child: El, [x, y, w, h]: [f32; 4]) -> El {
     child.pin(Some(x), Some(y), None, None).w(w).h(h)
 }
 
-/// The gap between a split's two sides, which drags the split's ratio, or between screen
-/// columns their widths. The tile area runs the drag, so it outlives the divider moving.
-fn divider(split: String, direction: Direction, cx: &TileCx) -> El {
+/// The strip over the line between a split's two sides, which drags the split's ratio, or
+/// between screen columns their widths; a `live` one takes drags.
+fn divider(split: String, direction: Direction, live: bool) -> El {
     let key = format!("divider.{split}");
     let bar = rune::el();
-    if !cx.dividers {
+    if !live {
         return bar;
     }
     bar.key(key)
+        .paint_order(1)
         .role("separator")
+        .on_drag({
+            let split = split.clone();
+            move |state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
+                super::divider::gesture(state, d, tx, &split, direction)
+            }
+        })
         .cursor(match direction {
             Direction::Vertical => rune::Cursor::ResizeColumn,
             Direction::Horizontal => rune::Cursor::ResizeRow,
@@ -465,7 +485,6 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             }
             rects.insert(recorded.clone(), rect);
         })
-        .radius(6.0)
         .fill(t.bg_tile)
         .border(
             1.0,

@@ -15,9 +15,9 @@ use serde_json::Value;
 
 use super::queue::ago;
 
-/// The sidebar and the gaps around the tile area, in points: a 1600-point window has 1348
+/// The sidebar beside the tile area, in points: a 1600-point window has 1360
 /// for tiles.
-const BESIDE_TILES: f32 = 252.0;
+const BESIDE_TILES: f32 = 240.0;
 
 /// A window whose tile area is `area` points wide. A terminal column is 9 points, so the
 /// narrowest width steps are 57 cols at 513px, 66 at 594, 76 at 684, 86 at 774, 100 at 900,
@@ -28,6 +28,9 @@ fn window(area: f32) -> (f32, f32) {
 
 /// Two tiles fit at 57 and 66 cols, one from 76.
 const TWO_FIT: f32 = 1348.0;
+/// How far a tile shown alone sits in from each edge of the tile area, as the Tauri app's
+/// focus mode pads it.
+const ALONE_INSET: f32 = 10.0;
 /// Three tiles fit at 57 and 66 cols, two at 76 to 100.
 const THREE_FIT: f32 = 1848.0;
 /// Four tiles fit at 57 cols, three at 66 and 76, two at 86 and 100, one from 120.
@@ -130,6 +133,12 @@ fn start_with(
     desktops: Vec<Desktop>,
     waiting: &[&str],
 ) -> World {
+    let mut world = World::start_sized(daemon(narrowest, desktops, waiting), window(area));
+    world.open_desktop();
+    world
+}
+
+fn daemon(narrowest: Option<&str>, desktops: Vec<Desktop>, waiting: &[&str]) -> Daemon {
     let sessions = desktops
         .iter()
         .flat_map(|d| d.panes.iter())
@@ -180,9 +189,7 @@ fn start_with(
                 ..RecordCommandUsageResultMessage::new()
             })
         });
-    let mut world = World::start_sized(daemon, window(area));
-    world.open_desktop();
-    world
+    daemon
 }
 
 fn start(area: f32, narrowest: Option<&str>, desktops: Vec<Desktop>) -> World {
@@ -1167,7 +1174,7 @@ const ALONE: &str = "a tile is shown alone|a tile shown alone returns";
 const BY_DESIGN: &str = "showing a tile alone and returning it land at once, as in the Tauri app";
 
 const LANDS_AT_ONCE: &[AllowRow] = &[
-    AllowRow::new("jump", "tile.a", ALONE, BY_DESIGN).max(14),
+    AllowRow::new("jump", "tile.a", ALONE, BY_DESIGN).max(22),
     AllowRow::new("pop-in", "tile.", ALONE, BY_DESIGN).max(2),
     AllowRow::new("pop-out", "tile.", ALONE, BY_DESIGN).max(2),
     AllowRow::new("pop-in", "divider.", ALONE, BY_DESIGN).max(1),
@@ -1276,9 +1283,11 @@ fn lands_at_once(rec: &Recording, leaf: &str) -> bool {
 #[test]
 fn showing_a_tile_alone_and_returning_it_land_in_the_frame_of_the_key() {
     let alone = focusing(false);
-    assert!(lands_at_once(&alone, "a") && looks_of(&alone, "a")[0].0[2] == TWO_FIT);
+    assert!(
+        lands_at_once(&alone, "a") && looks_of(&alone, "a")[0].0[2] == TWO_FIT - 2.0 * ALONE_INSET
+    );
     let returned = focusing(true);
-    assert!(lands_at_once(&returned, "a") && looks_of(&returned, "a")[0].0[2] < TWO_FIT / 2.0);
+    assert!(lands_at_once(&returned, "a") && looks_of(&returned, "a")[0].0[2] == TWO_FIT / 2.0);
 }
 
 #[test]
@@ -1309,5 +1318,20 @@ fn a_tile_opened_while_another_shows_alone_and_an_agent_opened_from_home_land_at
         app.click(Target::key("sidebar.session.s-b"))
     });
     assert!(lands_at_once(&opened, "b"), "{:?}", looks_of(&opened, "b"));
+    rest(&mut world);
+}
+
+#[test]
+fn one_shell_tile_in_a_1200_by_800_window_gets_the_grid_the_tauri_app_gives_it() {
+    let mut shell = desktop(1, "a", pane("a"));
+    shell.panes[0].kind = "shell".into();
+    let mut world = World::start_sized(daemon(None, vec![shell], &[]), (1200.0, 800.0));
+    world.open_desktop();
+    let sized = world.daemon.sent_of("pty_resize");
+    let last = sized.last().expect("the app sized the terminal");
+    assert_eq!(
+        (last["cols"].as_u64(), last["rows"].as_u64()),
+        (Some(106), Some(34))
+    );
     rest(&mut world);
 }

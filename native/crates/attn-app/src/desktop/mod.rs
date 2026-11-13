@@ -194,12 +194,43 @@ impl Desk {
     }
 
     /// Where the tile area lays out `rendered`, the screen it shows, from the area's top left
-    /// corner: each split at the ratio this window shows.
-    pub(crate) fn placement(&self, rendered: &Node) -> layout::Placement {
+    /// corner: each split at the ratio this window shows, and a tile shown alone inset as the
+    /// Tauri app's focus mode insets it.
+    pub(crate) fn placement(&self, rendered: &Node, alone: bool) -> layout::Placement {
         let (w, h) = self.area.map_or((0.0, 0.0), |a| (a.w, a.h));
-        layout::place(rendered, (w, h), view::GAP, &|split| {
-            self.ratios.get(&split.id).map_or(split.ratio, |o| o.ratio)
-        })
+        let inset = if alone { view::ALONE_INSET } else { 0.0 };
+        let mut placed = layout::place(
+            rendered,
+            ((w - 2.0 * inset).max(0.0), (h - 2.0 * inset).max(0.0)),
+            view::DIVIDER_PX,
+            &|split| self.ratios.get(&split.id).map_or(split.ratio, |o| o.ratio),
+        );
+        for (_, rect) in &mut placed.leaves {
+            rect[0] += inset;
+            rect[1] += inset;
+        }
+        placed
+    }
+
+    /// The split whose divider a drag holds.
+    pub(crate) fn held_split(&self) -> Option<&str> {
+        let column = self.column_drag.as_ref().map(|d| d.split.as_str());
+        column.or(self.ratio_drag.as_ref().map(|d| d.split.as_str()))
+    }
+
+    /// The divider a drag holds after the screen stops showing it, where it was last drawn
+    /// from the area's top left corner, so it stays under the hand until the release.
+    pub(crate) fn held_divider(
+        &self,
+        placed: &layout::Placement,
+    ) -> Option<(String, layout::Direction, [f32; 4])> {
+        let split = self.held_split()?;
+        if placed.splits.iter().any(|s| s.id == split) {
+            return None;
+        }
+        let area = self.area?;
+        let ([x, y, w, h], direction) = *self.dividers.get(split)?;
+        Some((split.to_owned(), direction, [x - area.x, y - area.y, w, h]))
     }
 
     pub(crate) fn row_mut(&mut self, desktop: &str) -> &mut RowState {

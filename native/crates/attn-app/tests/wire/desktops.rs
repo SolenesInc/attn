@@ -1297,7 +1297,7 @@ fn fewer_and_more_tiles_step_the_narrowest_width_and_say_where_they_stop() {
     assert_eq!(
         notice(&world).as_deref(),
         Some(
-            "3 tiles at the narrowest width (57 cols, 513px) need 1539px. Tiles have 1348px here. Closing the sidebar would make room."
+            "3 tiles at the narrowest width (57 cols, 513px) need 1539px. Tiles have 1360px here. Closing the sidebar would make room."
         )
     );
     assert_eq!(sent(&world, "set_setting").len(), 1);
@@ -1941,8 +1941,8 @@ fn dragging_a_column_divider_widens_one_column_at_its_neighbours_cost_and_saves_
     assert_eq!(
         sent(&world, "desktop_set_wanted_cols"),
         [
-            json(r#"{"desktop_id":"work/desktop_1","leaf_id":"a","cols":80,"area_cols":149}"#),
-            json(r#"{"desktop_id":"work/desktop_1","leaf_id":"b","cols":69,"area_cols":149}"#),
+            json(r#"{"desktop_id":"work/desktop_1","leaf_id":"a","cols":81,"area_cols":151}"#),
+            json(r#"{"desktop_id":"work/desktop_1","leaf_id":"b","cols":70,"area_cols":151}"#),
         ]
     );
     assert!(width(&world, "a") > width(&world, "b") + 90.0);

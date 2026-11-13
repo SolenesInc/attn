@@ -164,7 +164,8 @@ impl Daemon {
         daemon.on("pty_resize", move |request| {
             let id = request["id"].as_str().unwrap_or_default().to_owned();
             let size = (request["cols"].clone(), request["rows"].clone());
-            resized.lock().unwrap().insert(id, size);
+            resized.lock().unwrap().insert(id.clone(), size.clone());
+            json!({"event": "pty_resized", "id": id, "cols": size.0, "rows": size.1})
         });
         daemon.on("attach_session", move |request| {
             let size = sizes

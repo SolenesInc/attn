@@ -177,6 +177,7 @@ fn a_snapshot_in_this_builds_format_restores_the_screen_and_the_stream_continues
             ..attached()
         })
     });
+    daemon.on("pty_resize", |_| ());
     let mut world = World::start(daemon);
     world.open_desktop();
     assert_eq!(row(&mut world, 0), "restored");

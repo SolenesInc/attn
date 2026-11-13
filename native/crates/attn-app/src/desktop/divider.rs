@@ -17,6 +17,8 @@ const RATIO_SAME: f32 = 0.005;
 #[derive(Clone, Debug)]
 pub(crate) struct ColumnDrag {
     pub desktop: String,
+    /// The split whose divider the pointer took.
+    pub split: String,
     divider: usize,
     start: ColumnDragStart,
     start_x: f32,
@@ -58,47 +60,32 @@ fn column_divider(state: &State, desktop: &str, split: &str) -> Option<(usize, C
 #[derive(Clone, Debug)]
 pub(crate) struct RatioDrag {
     desktop: String,
-    split: String,
+    /// The split whose divider the pointer took.
+    pub split: String,
     direction: Direction,
 }
 
-/// How far either side of a divider a press still takes it, as the Tauri app's 9 point strip.
-const HIT_SLOP: f32 = 1.5;
-
-/// The divider under `at` on the current desktop's screen.
-fn hit(state: &State, [x, y]: [f32; 2]) -> Option<(String, String, Direction)> {
-    let facts = &state.facts;
-    let desk = &state.window.desk;
-    let desktop = facts.current_desktop()?;
-    let (tree, plan) = desk.plan(facts, desktop)?;
-    let view = desk.row(&desktop.id).view;
-    if view != layout::View::Normal {
-        return None;
-    }
-    let rendered = plan.rendered(&tree, &view, &desktop.active_pane_id);
-    desk.dividers.iter().find_map(|(split, (r, direction))| {
-        let inside = x >= r[0] - HIT_SLOP
-            && x <= r[0] + r[2] + HIT_SLOP
-            && y >= r[1] - HIT_SLOP
-            && y <= r[1] + r[3] + HIT_SLOP;
-        (inside && rendered.split_ratio(split).is_some())
-            .then(|| (desktop.id.clone(), split.clone(), *direction))
-    })
-}
-
-/// Runs a press in the tile area: a divider's or a header's. The area, which stays put
-/// whatever the screen shows, follows the drag to its end.
-pub(crate) fn area_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
+/// Runs a drag on the divider of `split`, which holds the drag to its end.
+pub(crate) fn gesture(
+    state: &mut State,
+    d: &mut Drag,
+    tx: &mut Tx,
+    split: &str,
+    direction: Direction,
+) {
     if d.phase == Phase::Down {
-        let Some((desktop, split, direction)) = hit(state, d.window_point()) else {
-            super::drag::gesture(state, d, tx, super::drag::Owner::Tiles);
+        let desk = &mut state.window.desk;
+        desk.column_drag = None;
+        desk.ratio_drag = None;
+        let Some(desktop) = state.facts.current_desktop().map(|d| d.id.clone()) else {
             return;
         };
-        match column_divider(state, &desktop, &split) {
+        match column_divider(state, &desktop, split) {
             Some((divider, start)) => {
                 let row = state.window.desk.row(&desktop);
                 state.window.desk.column_drag = Some(ColumnDrag {
                     desktop,
+                    split: split.to_owned(),
                     divider,
                     start,
                     start_x: d.window_point()[0],
@@ -111,7 +98,7 @@ pub(crate) fn area_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
             None => {
                 let drag = RatioDrag {
                     desktop,
-                    split,
+                    split: split.to_owned(),
                     direction,
                 };
                 ratio_gesture(state, d, tx, &drag);
@@ -127,8 +114,6 @@ pub(crate) fn area_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
         if d.phase == Phase::Up {
             state.window.desk.ratio_drag = None;
         }
-    } else {
-        super::drag::gesture(state, d, tx, super::drag::Owner::Tiles);
     }
 }
 
@@ -247,8 +232,9 @@ fn split_rect(state: &State, desktop: &str, split: &str) -> Option<[f32; 4]> {
     let area = desk.area?;
     let shown = facts.desktops.iter().find(|d| d.id == desktop)?;
     let (tree, plan) = desk.plan(facts, shown)?;
-    let rendered = plan.rendered(&tree, &desk.row(desktop).view, &shown.active_pane_id);
-    let placed = desk.placement(&rendered);
+    let view = desk.row(desktop).view;
+    let rendered = plan.rendered(&tree, &view, &shown.active_pane_id);
+    let placed = desk.placement(&rendered, matches!(view, layout::View::Focused(_)));
     let [x, y, w, h] = placed.splits.into_iter().find(|s| s.id == split)?.rect;
     Some([area.x + x, area.y + y, w, h])
 }
