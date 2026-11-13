@@ -6,17 +6,17 @@ members = ["crates/*"]
 edition = "2024"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/SolenesInc/rune", rev = "c8a8b35d89aaa0f903f0ebc44284518469f903dc" }
-rune-kit = { git = "https://github.com/SolenesInc/rune", rev = "c8a8b35d89aaa0f903f0ebc44284518469f903dc" }
-rune-mac = { git = "https://github.com/SolenesInc/rune", rev = "c8a8b35d89aaa0f903f0ebc44284518469f903dc" }
+rune = { git = "https://github.com/SolenesInc/rune", rev = "86a77ddc41d6fc881ed236b5692c0f916155d07a" }
+rune-kit = { git = "https://github.com/SolenesInc/rune", rev = "86a77ddc41d6fc881ed236b5692c0f916155d07a" }
+rune-mac = { git = "https://github.com/SolenesInc/rune", rev = "86a77ddc41d6fc881ed236b5692c0f916155d07a" }
 
 # Rune's own [patch.crates-io], repeated: cargo ignores a dependency's [patch].
 # Keep this list equal to Rune's at the pinned rev.
 [patch.crates-io]
-wgpu-hal = { git = "https://github.com/SolenesInc/rune", rev = "c8a8b35d89aaa0f903f0ebc44284518469f903dc" }
-winit = { git = "https://github.com/SolenesInc/rune", rev = "c8a8b35d89aaa0f903f0ebc44284518469f903dc" }
-parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "c8a8b35d89aaa0f903f0ebc44284518469f903dc" }
-accesskit_windows = { git = "https://github.com/SolenesInc/rune", rev = "c8a8b35d89aaa0f903f0ebc44284518469f903dc" }
+wgpu-hal = { git = "https://github.com/SolenesInc/rune", rev = "86a77ddc41d6fc881ed236b5692c0f916155d07a" }
+winit = { git = "https://github.com/SolenesInc/rune", rev = "86a77ddc41d6fc881ed236b5692c0f916155d07a" }
+parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "86a77ddc41d6fc881ed236b5692c0f916155d07a" }
+accesskit_windows = { git = "https://github.com/SolenesInc/rune", rev = "86a77ddc41d6fc881ed236b5692c0f916155d07a" }
 
 # Named instances' app: release, with the app's own crate unoptimized, so an
 # edit to it rebuilds fast. What ships is always release.
