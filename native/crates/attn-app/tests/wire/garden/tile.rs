@@ -48,7 +48,7 @@ fn profile() -> Profile {
 
 /// A desktop holding an agent beside a tile of seed `id`, over a garden of `seeds`, with a
 /// daemon that answers reads through `read`.
-fn start(
+pub(super) fn start(
     id: &str,
     seeds: Vec<Seed>,
     read: impl Fn(&Request) -> Value + Send + Sync + 'static,
@@ -64,7 +64,12 @@ fn start(
     world
 }
 
-fn document(request: &Request, seed: Seed, children: Vec<Seed>, notes: &[&str]) -> Value {
+pub(super) fn document(
+    request: &Request,
+    seed: Seed,
+    children: Vec<Seed>,
+    notes: &[&str],
+) -> Value {
     message(SeedDocumentGetResultMessage {
         request_id: request["request_id"].as_str().unwrap().into(),
         success: true,
@@ -107,7 +112,7 @@ fn titled(world: &World, key: &str) -> Option<String> {
     world.screen().get(Target::key(key)).name
 }
 
-fn cache() -> Seed {
+pub(super) fn cache() -> Seed {
     with(seed("s-cache1", "Cache store migration"), |s| {
         s.body = "Move the cache to Postgres.".into()
     })

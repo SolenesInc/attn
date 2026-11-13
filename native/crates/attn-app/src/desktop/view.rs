@@ -840,6 +840,7 @@ fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
             &state.facts.sessions,
             &state.facts.profiles.selected,
         ),
+        zoom: crate::garden::zoom(state),
     }
 }
 

@@ -15,7 +15,7 @@ use rune::{TextEdit, Tx};
 use crate::State;
 use crate::action::Action;
 use crate::shell::Layer;
-pub(crate) use appearance::text_scale;
+pub(crate) use appearance::{garden_scale, text_scale};
 pub(crate) use sections::Section;
 pub(crate) use view::dialog;
 

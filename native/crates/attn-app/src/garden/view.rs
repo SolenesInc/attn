@@ -255,7 +255,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         .h_full()
         .fill(t.bg_panel)
         .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
-        .child(body(state, t))
+        .child(super::zoomed(super::zoom(state), body(state, t)))
 }
 
 /// The garden holding the window, over everything, below the title bar.
@@ -268,7 +268,11 @@ pub(crate) fn frame_layer(state: &State, t: &Tokens) -> Option<El> {
     } else {
         body(state, t)
     };
-    Some(full_frame(state, t, content))
+    Some(full_frame(
+        state,
+        t,
+        super::zoomed(super::zoom(state), content),
+    ))
 }
 
 pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {

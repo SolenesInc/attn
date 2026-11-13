@@ -18,13 +18,31 @@ use attn_protocol::{
     FsExistsMessage, FsExistsResultMessage, Seed, SeedDocument, SeedDocumentGetMessage,
     SeedDocumentGetResultMessage,
 };
-use rune::{Key, KeyEvent, TextEdit, Tx};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col};
 
 use crate::State;
 use crate::shell::Drawer;
 
 pub(crate) use tile::{Reads as TileReads, body as tile_body, climb as climb_tile};
 pub(crate) use view::{frame_layer, panel};
+
+/// How many times its size the garden draws inside a window the app's text size already
+/// zooms: its own size over the app's.
+pub(crate) fn zoom(state: &State) -> f32 {
+    let settings = &state.facts.settings;
+    crate::settings::garden_scale(settings) / crate::settings::text_scale(settings)
+}
+
+/// `content` at `zoom` times its size: laid out in a `1 / zoom` share of the box it fills and
+/// drawn from the box's top-left corner, so it fills the box again.
+pub(crate) fn zoomed(zoom: f32, content: El) -> El {
+    col()
+        .w_frac(zoom.recip())
+        .h_frac(zoom.recip())
+        .origin(0.0, 0.0)
+        .scale(zoom)
+        .child(content)
+}
 
 /// How many garden rows this thread has built, memo misses only: a row whose seed and look did
 /// not change is reused and not counted.

@@ -16,6 +16,7 @@ mod board;
 mod checks;
 mod continuation;
 mod handover;
+mod scale;
 mod tile;
 
 const PROFILE: &str = "work";

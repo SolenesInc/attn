@@ -18,6 +18,7 @@ pub(crate) struct Reads<'a> {
     pub(crate) readings: &'a crate::markdown::Readings,
     pub(crate) now_ms: i64,
     pub(crate) chief: bool,
+    pub(crate) zoom: f32,
 }
 
 /// The seed a tile holds, as the garden's page shows it: the garden's copy when the daemon's
@@ -50,7 +51,8 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
             (false, Some(error)) => error.to_owned(),
             (false, None) => "Loading seed…".to_owned(),
         };
-        return col().w_full().grow(1.0).child(sheet.note("missing", words));
+        let note = col().w_full().grow(1.0).child(sheet.note("missing", words));
+        return super::zoomed(reads.zoom, note);
     };
     let to_garden = match held {
         Some(_) => {
@@ -106,7 +108,7 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
         .children(sheet.seeds("related", "Related", related))
         .children(sheet.artifacts(document))
         .child(sheet.log(document, error));
-    super::view::scroll(&view, page)
+    super::zoomed(reads.zoom, super::view::scroll(&view, page))
 }
 
 /// Escape in a seed tile that holds the keyboard climbs to its seed's plot; false when the

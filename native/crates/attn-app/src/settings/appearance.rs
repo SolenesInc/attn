@@ -32,6 +32,11 @@ pub(crate) fn text_scale(settings: &BTreeMap<String, String>) -> f32 {
     stored_scale(settings, UI_SCALE).unwrap_or(1.0)
 }
 
+/// The garden's text size: its own `gardenScale`, or the app's while it has none.
+pub(crate) fn garden_scale(settings: &BTreeMap<String, String>) -> f32 {
+    stored_scale(settings, GARDEN_SCALE).unwrap_or_else(|| text_scale(settings))
+}
+
 fn tenths(scale: f32) -> f32 {
     (scale * 10.0).round() / 10.0
 }
@@ -72,8 +77,7 @@ fn format_scale(scale: f32) -> String {
 }
 
 fn garden_step(state: &mut State, by: f32) {
-    let settings = &state.facts.settings;
-    let from = stored_scale(settings, GARDEN_SCALE).unwrap_or_else(|| text_scale(settings));
+    let from = garden_scale(&state.facts.settings);
     store(state, GARDEN_SCALE, format_scale(clamp(from + by)));
 }
 
