@@ -1,0 +1,710 @@
+//! A document tile's header controls for its marks, as the Tauri tile header has them: a note on
+//! the whole document, the review notes, and sending them to the session the tile is bound to
+//! or to another session on its desktop.
+
+use attn_protocol::{Desktop, DesktopUpdateTileMessage, MarkdownAnnotation, Session};
+use attn_ui::Tokens;
+use rune::tok::{space, type_};
+use rune::{Cx, El, Key, KeyEvent, Tx, col, el, row, text};
+
+use super::drafts::{self, Sent};
+use crate::State;
+
+/// How long "Sent ✓" shows before Send comes back, as the Tauri header shows it.
+pub(crate) const SENT_SECONDS: f64 = 4.0;
+/// How long "Clear all" waits for its confirmation.
+const CLEAR_SECONDS: f64 = 3.0;
+const MENU_W: f32 = 260.0;
+const NOTES_W: f32 = 360.0;
+
+fn key(tile: &str, part: &str) -> String {
+    format!("tile.{tile}.document.{part}")
+}
+
+/// The sessions on `desktop` a tile on it can send to, in pane order.
+fn desktop_sessions<'a>(desktop: &Desktop, sessions: &'a [Session]) -> Vec<&'a Session> {
+    desktop
+        .panes
+        .iter()
+        .filter_map(|p| sessions.iter().find(|s| s.id == p.session_id))
+        .collect()
+}
+
+/// Where tile `tile` sends: the session picked here until the desktop says it is bound to it,
+/// else the session it is bound to, while that session is on the desktop.
+fn destination<'a>(
+    readings: &super::Readings,
+    desktop: &Desktop,
+    sessions: &'a [Session],
+    tile: &str,
+    bound: Option<&str>,
+) -> Option<&'a Session> {
+    let picked = readings.tiles.get(tile).and_then(|r| r.picked.as_deref());
+    let id = picked.or(bound)?;
+    desktop_sessions(desktop, sessions)
+        .into_iter()
+        .find(|s| s.id == id)
+}
+
+/// The header controls of document tile `tile` on `desktop` for its marks of document `uri`,
+/// bound to `bound`; `send_key` names the send key.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn controls(
+    (drafts, readings): (&super::Drafts, &super::Readings),
+    sessions: &[Session],
+    desktop: &Desktop,
+    tile: &str,
+    uri: &str,
+    bound: Option<&str>,
+    send_key: Option<&str>,
+    t: &Tokens,
+) -> El {
+    let count = drafts.get(uri).map_or(0, |d| d.marks.len());
+    let reading = readings.tiles.get(tile);
+    let sent = reading.and_then(|r| r.sent.clone());
+    let to = destination(readings, desktop, sessions, tile, bound);
+    let name = to.map_or_else(
+        || "No session".to_owned(),
+        crate::sidebar::model::display_name,
+    );
+    let any = !desktop_sessions(desktop, sessions).is_empty();
+    let small = |part: &str, label: String| {
+        text(label)
+            .key(key(tile, part))
+            .role("button")
+            .font(type_::LABEL)
+            .color(t.text_secondary)
+            .px(space::S1)
+            .py(2.0)
+            .radius(5.0)
+    };
+    let (overall_tile, overall_uri) = (tile.to_owned(), uri.to_owned());
+    let notes_tile = tile.to_owned();
+    let mut parts = vec![
+        small("overall", "Overall note".into())
+            .help("Add an overall note")
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                super::annotating::compose_overall(state, &overall_tile, &overall_uri, tx)
+            }),
+        small("notes", format!("{} {count}", attn_ui::icon::COMMENT))
+            .label(format!("Notes {count}"))
+            .help("Show review notes")
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &notes_tile, tx)),
+    ];
+    let status = match &sent {
+        Some(Sent::Done { kept, .. }) if *kept > 0 => Some(format!("Sent ✓ — {kept} still here")),
+        Some(Sent::Done { .. }) => Some("Sent ✓".to_owned()),
+        Some(Sent::Skipped) => Some("Target is waiting for approval — not sent".to_owned()),
+        Some(Sent::Warning(why) | Sent::Failed(why)) => Some(why.clone()),
+        Some(Sent::Sending) | None => None,
+    };
+    parts.extend(status.map(|s| {
+        text(s)
+            .key(key(tile, "send.status"))
+            .role("status")
+            .font(type_::LABEL)
+            .color(t.text_tertiary)
+            .single_line()
+            .truncate()
+            .max_w(220.0)
+    }));
+    let caret = |label: &str| {
+        let tile = tile.to_owned();
+        small("send.menu", attn_ui::icon::CARET_DOWN.into())
+            .label(label)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle_menu(state, &tile, tx))
+    };
+    if count == 0 && sent.is_none() {
+        let tile_menu = tile.to_owned();
+        parts.push(
+            small(
+                "send.to",
+                format!("To {name} {}", attn_ui::icon::CARET_DOWN),
+            )
+            .label(format!("Annotation destination: {name}"))
+            .help(format!("Annotations will be sent to {name}"))
+            .disabled(!any)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle_menu(state, &tile_menu, tx)),
+        );
+    } else {
+        let action = match &sent {
+            Some(Sent::Sending) => "Sending…".to_owned(),
+            Some(Sent::Done { .. }) => "Sent ✓".to_owned(),
+            Some(Sent::Skipped) => "Approval needed".to_owned(),
+            Some(Sent::Warning(_)) => "Needs attention".to_owned(),
+            Some(Sent::Failed(_)) => "Send failed".to_owned(),
+            None => format!("Send {count}"),
+        };
+        let quiet = matches!(sent, Some(Sent::Sending | Sent::Done { .. }));
+        let problem = matches!(
+            sent,
+            Some(Sent::Skipped | Sent::Warning(_) | Sent::Failed(_))
+        );
+        let label = if quiet {
+            action
+        } else {
+            format!("{action} to {name}")
+        };
+        let label = if problem { format!("! {label}") } else { label };
+        let title = match (to, send_key) {
+            (Some(_), Some(chord)) => format!("Send annotations to {name} ({chord})"),
+            (Some(_), None) => format!("Send annotations to {name}"),
+            (None, _) => "Choose a session before sending annotations".to_owned(),
+        };
+        let disabled = matches!(sent, Some(Sent::Sending)) || count == 0 || to.is_none();
+        let send_tile = tile.to_owned();
+        parts.push(
+            small("send", label)
+                .color(if disabled {
+                    t.text_muted
+                } else {
+                    t.text_primary
+                })
+                .fill(t.bg_button)
+                .help(title)
+                .disabled(disabled)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &send_tile, tx)),
+        );
+        if any {
+            parts.push(caret("Change annotation destination"));
+        }
+    }
+    row()
+        .key(key(tile, "controls"))
+        .items_center()
+        .gap(2.0)
+        .children(parts)
+}
+
+/// The desktop document tile `tile` is on, the session it is bound to, and its document.
+fn tile_of<'a>(state: &'a State, tile: &str) -> Option<(&'a Desktop, Option<String>, String)> {
+    let (at, content) = state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .find(|(k, c)| k.tile == tile && c.message.tile_kind == "markdown")?;
+    let desktop = state.facts.desktops.iter().find(|d| d.id == at.desktop)?;
+    let host = content.message.host.clone().filter(|h| !h.is_empty());
+    let uri = drafts::Source {
+        path: content.message.path.clone(),
+        host,
+    }
+    .uri();
+    Some((desktop, crate::desktop::tile_session(desktop, tile), uri))
+}
+
+/// Sends tile `tile`'s marks to where its header says.
+pub(crate) fn send(state: &mut State, tile: &str, tx: &mut Tx) {
+    let Some((desktop, bound, uri)) = tile_of(state, tile) else {
+        return;
+    };
+    let Some(to) = destination(
+        &state.readings,
+        desktop,
+        &state.facts.sessions,
+        tile,
+        bound.as_deref(),
+    )
+    .map(|s| s.id.clone()) else {
+        return;
+    };
+    let busy = state
+        .readings
+        .tiles
+        .get(tile)
+        .is_some_and(|r| r.sent == Some(Sent::Sending));
+    if busy || state.drafts.get(&uri).is_none_or(|d| d.marks.is_empty()) {
+        return;
+    }
+    set_sent(state, tile, Some(Sent::Sending));
+    let tile = tile.to_owned();
+    drafts::submit(
+        state,
+        &uri,
+        to,
+        move |state, sent, tx| {
+            let sent = match sent {
+                Sent::Done { noted, kept, .. } => {
+                    let until = tx.clock() + SENT_SECONDS;
+                    tx.wake_at(until);
+                    Sent::Done { noted, kept, until }
+                }
+                other => other,
+            };
+            set_sent(state, &tile, Some(sent));
+        },
+        tx,
+    );
+}
+
+/// The send key: the marks of the document tile that holds the keyboard go. True when one
+/// did.
+pub(crate) fn send_key(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(tile) = state.window.keyboard.as_ref().map(|h| h.pane.clone()) else {
+        return false;
+    };
+    if tile_of(state, &tile).is_none() {
+        return false;
+    }
+    send(state, &tile, tx);
+    true
+}
+
+fn set_sent(state: &mut State, tile: &str, sent: Option<Sent>) {
+    let reading = state.readings.tiles.entry(tile.to_owned()).or_default();
+    reading.sent = sent;
+    state.readings.revision += 1;
+}
+
+/// Lets "Sent ✓" go when its time is up. True when one went.
+pub(crate) fn expire(state: &mut State, now: f64) -> bool {
+    let caught_up: Vec<String> = state
+        .readings
+        .tiles
+        .iter()
+        .filter(|(tile, r)| {
+            r.picked.is_some()
+                && tile_of(state, tile).is_some_and(|(_, bound, _)| bound == r.picked)
+        })
+        .map(|(tile, _)| tile.clone())
+        .collect();
+    let mut went = false;
+    for (tile, reading) in state.readings.tiles.iter_mut() {
+        if caught_up.contains(tile) {
+            reading.picked = None;
+            went = true;
+        }
+        if matches!(reading.sent, Some(Sent::Done { until, .. }) if until <= now) {
+            reading.sent = None;
+            went = true;
+        }
+        if reading.clearing.is_some_and(|until| until <= now) {
+            reading.clearing = None;
+            went = true;
+        }
+    }
+    if went {
+        state.readings.revision += 1;
+    }
+    went
+}
+
+fn toggle_menu(state: &mut State, tile: &str, tx: &mut Tx) {
+    let reading = state.readings.tiles.entry(tile.to_owned()).or_default();
+    reading.menu = !reading.menu;
+    let open = reading.menu;
+    state.readings.revision += 1;
+    if open {
+        tx.focus(key(tile, "send.menu.0"), false);
+    } else {
+        tx.focus(key(tile, "send.menu"), false);
+    }
+}
+
+/// Binds tile `tile` to session `session`: sends go there at once, and back to where they went
+/// when the desktop refuses.
+fn retarget(state: &mut State, tile: &str, session: &str, tx: &mut Tx) {
+    let Some((desktop, _, _)) = tile_of(state, tile) else {
+        return;
+    };
+    let desktop_id = desktop.id.clone();
+    let reading = state.readings.tiles.entry(tile.to_owned()).or_default();
+    reading.menu = false;
+    reading.sent = None;
+    reading.picked = Some(session.to_owned());
+    state.readings.revision += 1;
+    tx.focus(key(tile, "send"), false);
+    let (tile_id, tile, session_id) = (tile.to_owned(), tile.to_owned(), session.to_owned());
+    state.ask(
+        move |request_id| DesktopUpdateTileMessage {
+            request_id,
+            desktop_id,
+            tile_id,
+            tile_session_id: Some(session_id),
+            ..DesktopUpdateTileMessage::new()
+        },
+        move |state, answer, _| {
+            let took = answer.outcome().is_ok();
+            if !took && let Some(reading) = state.readings.tiles.get_mut(&tile) {
+                reading.picked = None;
+                state.readings.revision += 1;
+            }
+        },
+        tx,
+    );
+}
+
+/// The desktop's session list under tile `tile`'s send button, and the review notes over its
+/// document, when open.
+pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
+    let mut out = Vec::new();
+    for (tile, reading) in &state.readings.tiles {
+        let Some((desktop, bound, uri)) = tile_of(state, tile) else {
+            continue;
+        };
+        if reading.menu
+            && let Some(at) = cx.layout(&key(tile, "controls"))
+        {
+            let current = destination(
+                &state.readings,
+                desktop,
+                &state.facts.sessions,
+                tile,
+                bound.as_deref(),
+            )
+            .map(|s| s.id.clone());
+            out.push(
+                menu(
+                    tile,
+                    desktop_sessions(desktop, &state.facts.sessions),
+                    current.as_deref(),
+                    t,
+                )
+                .absolute((at[0] + at[2] - MENU_W).max(8.0), at[1] + at[3] + 4.0),
+            );
+        }
+        if reading.notes
+            && let Some(at) = cx.layout(&format!("tile.{tile}"))
+        {
+            let marks = state
+                .drafts
+                .get(&uri)
+                .map(|d| (d.marks.clone(), d.orphans.clone()))
+                .unwrap_or_default();
+            out.push(
+                notes(tile, marks, reading, t)
+                    .absolute((at[0] + at[2] - NOTES_W - 12.0).max(8.0), at[1] + 40.0),
+            );
+        }
+    }
+    out
+}
+
+fn menu(tile: &str, sessions: Vec<&Session>, current: Option<&str>, t: &Tokens) -> El {
+    let count = sessions.len();
+    let items = sessions.into_iter().enumerate().map(|(i, s)| {
+        let picked = current == Some(s.id.as_str());
+        let name = crate::sidebar::model::display_name(s);
+        let approval = s.state == "pending_approval";
+        let (pressed, keyed, session) = (tile.to_owned(), tile.to_owned(), s.id.clone());
+        let session_key = session.clone();
+        row()
+            .key(key(tile, &format!("send.menu.{i}")))
+            .role("menuitemradio")
+            .label(name.clone())
+            .checked(picked)
+            .focusable(true)
+            .items_center()
+            .gap(6.0)
+            .px(8.0)
+            .py(4.0)
+            .radius(5.0)
+            .child(
+                text(if picked { "✓" } else { " " })
+                    .font(type_::LABEL)
+                    .w(12.0)
+                    .color(t.text_secondary),
+            )
+            .child(
+                text(name)
+                    .font(type_::LABEL)
+                    .color(t.text_primary)
+                    .single_line()
+                    .truncate()
+                    .grow(1.0),
+            )
+            .children(approval.then(|| text("approval").font(type_::LABEL).color(t.warning)))
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                retarget(state, &pressed, &session, tx)
+            })
+            .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                menu_key(state, &keyed, i, count, &session_key, ev, tx)
+            })
+    });
+    col()
+        .key(key(tile, "send.menu.list"))
+        .role("menu")
+        .label("Send annotations to session")
+        .w(MENU_W)
+        .padding(4.0)
+        .radius(8.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .on_press(|_: &mut State| {})
+        .children(items)
+}
+
+fn menu_key(
+    state: &mut State,
+    tile: &str,
+    at: usize,
+    count: usize,
+    session: &str,
+    ev: &KeyEvent,
+    tx: &mut Tx,
+) -> bool {
+    match ev.key {
+        Key::Down => tx.focus(key(tile, &format!("send.menu.{}", (at + 1) % count)), false),
+        Key::Up => tx.focus(
+            key(tile, &format!("send.menu.{}", (at + count - 1) % count)),
+            false,
+        ),
+        Key::Enter => retarget(state, tile, session, tx),
+        Key::Escape => toggle_menu(state, tile, tx),
+        _ => return false,
+    }
+    true
+}
+
+fn open_notes(state: &mut State, tile: &str, tx: &mut Tx) {
+    let reading = state.readings.tiles.entry(tile.to_owned()).or_default();
+    reading.notes = !reading.notes;
+    state.readings.revision += 1;
+    if reading.notes {
+        tx.focus(key(tile, "notes.close"), false);
+    }
+}
+
+/// Escape with the review notes open closes them. True when it took the key.
+pub(crate) fn escape(state: &mut State, tx: &mut Tx) -> bool {
+    let open = state
+        .readings
+        .tiles
+        .iter()
+        .find(|(_, r)| r.notes || r.menu)
+        .map(|(t, _)| t.clone());
+    let Some(tile) = open else { return false };
+    let reading = state.readings.tiles.get_mut(&tile).expect("found above");
+    if reading.menu {
+        toggle_menu(state, &tile, tx);
+    } else {
+        reading.notes = false;
+        state.readings.revision += 1;
+    }
+    true
+}
+
+fn notes(
+    tile: &str,
+    (mut marks, orphans): (Vec<MarkdownAnnotation>, Vec<String>),
+    reading: &super::annotating::Reading,
+    t: &Tokens,
+) -> El {
+    super::marks::reading_order(&mut marks);
+    let count = marks.len();
+    let (closed, overall, cleared) = (tile.to_owned(), tile.to_owned(), tile.to_owned());
+    let arming = reading.clearing.is_some();
+    let head = row()
+        .items_center()
+        .gap(6.0)
+        .child(
+            text("Review notes")
+                .font(type_::LABEL)
+                .color(t.text_primary)
+                .grow(1.0),
+        )
+        .child(
+            text(count.to_string())
+                .key(key(tile, "notes.close"))
+                .role("button")
+                .label("Close review notes")
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .px(6.0)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &closed, tx)),
+        )
+        .child(
+            text("+ Overall note")
+                .key(key(tile, "notes.overall"))
+                .role("button")
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .px(6.0)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    if let Some(r) = state.readings.tiles.get_mut(&overall) {
+                        r.notes = false;
+                    }
+                    let uri = state.readings.tiles.get(&overall).map(|r| r.uri.clone());
+                    if let Some(uri) = uri.or_else(|| tile_of(state, &overall).map(|(_, _, u)| u)) {
+                        super::annotating::compose_overall(state, &overall, &uri, tx);
+                    }
+                }),
+        )
+        .children((count > 0).then(|| {
+            text(if arming { "Confirm?" } else { "Clear all" })
+                .key(key(tile, "notes.clear"))
+                .role("button")
+                .font(type_::LABEL)
+                .color(t.error)
+                .px(6.0)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| clear_all(state, &cleared, tx))
+        }));
+    let body: Vec<El> = if marks.is_empty() {
+        vec![
+            text("No annotations yet.")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+            text("Select text in the document to comment, redline, or quick-label it.")
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .wrap(),
+        ]
+    } else {
+        marks
+            .iter()
+            .map(|m| {
+                card(
+                    tile,
+                    m,
+                    orphans.contains(&m.id),
+                    reading.selected.as_deref() == Some(&m.id),
+                    t,
+                )
+            })
+            .collect()
+    };
+    col()
+        .key(key(tile, "notes.dialog"))
+        .role("dialog")
+        .label("Review notes")
+        .w(NOTES_W)
+        .max_h(480.0)
+        .gap(8.0)
+        .padding(10.0)
+        .radius(8.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .on_press(|_: &mut State| {})
+        .child(head)
+        .child(
+            col()
+                .gap(6.0)
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                })
+                .children(body),
+        )
+}
+
+fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: &Tokens) -> El {
+    let label =
+        mark.quick_label_id
+            .as_deref()
+            .map(|id| match crate::annotations::label_by_id(id) {
+                Some(l) => format!("{} {}", l.emoji, l.text),
+                None => id.to_owned(),
+            });
+    let badge = label.unwrap_or_else(|| mark.r#type.clone());
+    let quote = mark
+        .anchor
+        .as_ref()
+        .map(|a| format!("\u{201c}{}\u{201d}", a.exact));
+    let line = mark
+        .anchor
+        .as_ref()
+        .filter(|_| orphan)
+        .map(|a| format!("~line {} (moved)", a.start_line));
+    let (opened, removed, id, gone) = (
+        tile.to_owned(),
+        tile.to_owned(),
+        mark.id.clone(),
+        mark.id.clone(),
+    );
+    col()
+        .key(key(tile, &format!("notes.card.{}", mark.id)))
+        .role("button")
+        .label(quote.clone().unwrap_or_else(|| badge.clone()))
+        .checked(selected)
+        .gap(4.0)
+        .padding(8.0)
+        .radius(6.0)
+        .fill(if selected {
+            t.accent.alpha(0.12)
+        } else {
+            t.bg_panel
+        })
+        .border(1.0, t.border)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            if let Some(r) = state.readings.tiles.get_mut(&opened) {
+                r.notes = false;
+            }
+            super::annotating::focus(state, &opened, &id, tx);
+        })
+        .child(
+            row()
+                .items_center()
+                .gap(6.0)
+                .child(text(badge).font(type_::LABEL).color(t.text_secondary))
+                .children(orphan.then(|| text("⚠ moved").font(type_::LABEL).color(t.warning)))
+                .child(el().grow(1.0))
+                .child(
+                    text(attn_ui::icon::CLOSE)
+                        .key(key(tile, &format!("notes.remove.{}", mark.id)))
+                        .role("button")
+                        .label("Remove annotation")
+                        .font(type_::LABEL)
+                        .color(t.text_tertiary)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            remove(state, &removed, std::slice::from_ref(&gone), tx)
+                        }),
+                ),
+        )
+        .children(quote.map(|q| {
+            text(q)
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .wrap()
+                .max_lines(3)
+        }))
+        .children(line.map(|l| text(l).font(type_::LABEL).color(t.warning)))
+        .children(
+            mark.text
+                .clone()
+                .filter(|s| !s.is_empty())
+                .map(|c| text(c).font(type_::BODY).color(t.text_primary).wrap()),
+        )
+}
+
+/// Takes marks `ids` off tile `tile`'s document.
+fn remove(state: &mut State, tile: &str, ids: &[String], tx: &mut Tx) {
+    let Some((_, _, uri)) = tile_of(state, tile) else {
+        return;
+    };
+    let now = tx.clock();
+    if let Some(draft) = state.drafts.get_mut(&uri) {
+        draft.marks.retain(|m| !ids.contains(&m.id));
+        draft.changed(now);
+        tx.wake_at(now);
+    }
+}
+
+fn clear_all(state: &mut State, tile: &str, tx: &mut Tx) {
+    let arming = state
+        .readings
+        .tiles
+        .get(tile)
+        .is_some_and(|r| r.clearing.is_some());
+    if !arming {
+        let until = tx.clock() + CLEAR_SECONDS;
+        if let Some(r) = state.readings.tiles.get_mut(tile) {
+            r.clearing = Some(until);
+        }
+        state.readings.revision += 1;
+        tx.wake_at(until);
+        return;
+    }
+    if let Some(r) = state.readings.tiles.get_mut(tile) {
+        r.clearing = None;
+    }
+    let Some((_, _, uri)) = tile_of(state, tile) else {
+        return;
+    };
+    let ids: Vec<String> = state
+        .drafts
+        .get(&uri)
+        .map(|d| d.marks.iter().map(|m| m.id.clone()).collect())
+        .unwrap_or_default();
+    remove(state, tile, &ids, tx);
+    drafts::save_now(state, &uri, tx);
+}

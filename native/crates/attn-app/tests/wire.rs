@@ -12,6 +12,7 @@ mod wire {
     mod keys;
     mod ledger;
     mod markdown;
+    mod markdown_annotations;
     mod opener;
     mod palette;
     mod picker;

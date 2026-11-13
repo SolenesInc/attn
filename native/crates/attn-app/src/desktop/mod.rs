@@ -2,7 +2,7 @@
 //! and what the window does to it.
 
 mod actions;
-mod annotating;
+pub(crate) mod annotating;
 pub(crate) mod arrival;
 mod chain;
 mod close;
@@ -450,6 +450,18 @@ pub(crate) fn leaf_ids(desktop: &Desktop) -> Vec<String> {
     Node::parse(&desktop.tree_json)
         .map(|tree| tree.leaves().into_iter().map(|l| l.id.clone()).collect())
         .unwrap_or_default()
+}
+
+/// The session tile `tile` on `desktop` is bound to.
+pub(crate) fn tile_session(desktop: &Desktop, tile: &str) -> Option<String> {
+    let tree = Node::parse(&desktop.tree_json)?;
+    tree.leaves()
+        .into_iter()
+        .find(|l| l.id == tile)
+        .and_then(|l| match &l.kind {
+            layout::LeafKind::Tile { session, .. } => session.clone(),
+            layout::LeafKind::Pane => None,
+        })
 }
 
 /// The agents whose tiles this window shows: none at home, else the current desktop's

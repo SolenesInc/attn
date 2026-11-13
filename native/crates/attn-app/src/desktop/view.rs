@@ -125,6 +125,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     .is_some_and(holds_a_seed)
                     .then_some(state.window.now_ms / 60_000),
             ),
+            (state.drafts.revision, state.readings.revision),
         ),
     );
     let launcher = desktop
@@ -138,7 +139,12 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 facts,
                 (&settles, &keys, &sublines),
                 holder.as_ref(),
-                (&state.terminals, &state.pictures, &seed_reads(state)),
+                (
+                    &state.terminals,
+                    &state.pictures,
+                    &seed_reads(state),
+                    (&state.drafts, &state.readings),
+                ),
                 (t, scale),
             ))
         })
@@ -336,6 +342,7 @@ struct HeaderKeys {
     pop_out: Option<String>,
     focus: Option<String>,
     send_annotations: Option<String>,
+    send_marks: Option<String>,
 }
 
 fn header_keys(state: &State) -> HeaderKeys {
@@ -345,6 +352,7 @@ fn header_keys(state: &State) -> HeaderKeys {
     HeaderKeys {
         keep: key_of(&crate::action::Action::SessionCancelCountdown),
         pop_out: key_of(&crate::action::Action::TilePopOut),
+        send_marks: key_of(&crate::action::Action::MarkdownSendAnnotations),
         focus: key_of(&crate::action::Action::TerminalToggleMaximize),
         send_annotations: key_of(&crate::action::Action::TerminalSendAnnotations),
     }
@@ -388,6 +396,8 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         contents: &state.facts.tile_contents,
         outposts: &state.facts.outposts,
         pictures: &state.pictures,
+        marks: (&state.drafts, &state.readings),
+        annotates: false,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
         shared: &super::shared_conversation::notices(
             &state.facts.sessions,
@@ -414,10 +424,11 @@ fn screen(
     facts: &attn_client::Facts,
     (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
-    (terminals, pictures, seeds): (
+    (terminals, pictures, seeds, marks): (
         &Terminals,
         &crate::markdown::Pictures,
         &crate::garden::TileReads,
+        (&crate::markdown::Drafts, &crate::markdown::Readings),
     ),
     (t, scale): (&Tokens, f32),
 ) -> El {
@@ -464,6 +475,8 @@ fn screen(
                     contents: &facts.tile_contents,
                     outposts: &facts.outposts,
                     pictures,
+                    marks,
+                    annotates: true,
                     stale: &stale,
                     shared: &shared,
                     t,
@@ -536,6 +549,9 @@ struct TileCx<'a> {
     contents: &'a attn_client::TileContents,
     outposts: &'a [attn_protocol::OutpostInfo],
     pictures: &'a crate::markdown::Pictures,
+    marks: (&'a crate::markdown::Drafts, &'a crate::markdown::Readings),
+    /// Whether its document tiles take annotations, which a tile window's do not.
+    annotates: bool,
     /// Sessions whose terminal runs an older build, with the notice still up.
     stale: &'a [String],
     /// Sessions whose conversation another terminal also has open, with where it is.
@@ -760,7 +776,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     session.as_deref(),
                     cx.contents.get(&key),
                     cx.outposts,
-                    cx.pictures,
+                    (cx.pictures, cx.marks.0, cx.marks.1, cx.annotates),
                     t,
                 ),
                 &holder,
@@ -816,6 +832,7 @@ fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
         garden: &state.window.garden,
         seeds: crate::garden::seeds(state),
         sessions: &state.facts.sessions,
+        readings: &state.readings,
         now_ms: state.window.now_ms,
     }
 }
@@ -824,6 +841,44 @@ fn holds_a_seed(desktop: &Desktop) -> bool {
     crate::sidebar::model::leaves(&desktop.tree_json)
         .iter()
         .any(|l| matches!(l, crate::sidebar::model::Leaf::Tile { kind, .. } if kind == "seed"))
+}
+
+/// A document tile's controls for its marks, once its document reads.
+fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
+    let LeafKind::Tile { kind, session, .. } = &leaf.kind else {
+        return None;
+    };
+    if kind != "markdown" || !cx.annotates {
+        return None;
+    }
+    let content = cx.contents.get(&attn_client::TileKey {
+        desktop: cx.desktop.id.clone(),
+        tile: leaf.id.clone(),
+    })?;
+    if content
+        .message
+        .error
+        .as_deref()
+        .is_some_and(|e| !e.is_empty())
+        || content.message.path.is_empty()
+    {
+        return None;
+    }
+    let uri = crate::markdown::drafts::Source {
+        path: content.message.path.clone(),
+        host: content.message.host.clone().filter(|h| !h.is_empty()),
+    }
+    .uri();
+    Some(crate::markdown::sending::controls(
+        cx.marks,
+        cx.sessions,
+        cx.desktop,
+        &leaf.id,
+        &uri,
+        session.as_deref(),
+        cx.keys.send_marks.as_deref(),
+        cx.t,
+    ))
 }
 
 fn header_height(agent: bool) -> f32 {
@@ -967,6 +1022,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
             t,
         ))
     }));
+    let headline = headline.children(document_controls(leaf, cx));
     let pops_out = matches!(leaf.kind, LeafKind::Tile { .. });
     let headline = headline
         .children(pops_out.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))

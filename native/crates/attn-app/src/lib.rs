@@ -57,6 +57,8 @@ pub struct State {
     pub window: Window,
     pub terminals: Terminals,
     pub pictures: markdown::Pictures,
+    pub drafts: markdown::Drafts,
+    pub readings: markdown::Readings,
     pub opener: opener::Opener,
     daemon: Commands,
     requests: requests::Requests,
@@ -234,6 +236,9 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let launched = picker::follow(state, tx);
     let browsed = browsed | opener::browse_due(state, tx);
     let pictured = markdown::follow_images(state, now, tx);
+    let drafted = markdown::drafts::follow(state, now, tx)
+        | markdown::annotating::expire(state, now)
+        | markdown::sending::expire(state, now);
     let aged = state.age_wake.is_some_and(|at| now >= at);
     if aged {
         state.tick(tx);
@@ -248,6 +253,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         || browsed
         || launched
         || pictured
+        || drafted
         || drains
         || expired
 }

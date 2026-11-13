@@ -15,6 +15,7 @@ pub(crate) struct Reads<'a> {
     pub(crate) garden: &'a Garden,
     pub(crate) seeds: &'a [Arc<Seed>],
     pub(crate) sessions: &'a [Session],
+    pub(crate) readings: &'a crate::markdown::Readings,
     pub(crate) now_ms: i64,
 }
 
@@ -34,6 +35,7 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
             tile: leaf.to_owned(),
         },
         names: &names,
+        readings: reads.readings,
         now_ms: reads.now_ms,
         t,
     };

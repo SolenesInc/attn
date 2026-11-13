@@ -360,18 +360,35 @@ fn chip(id: &str, part: &str, glyph: &str, label: &str, t: &Tokens) -> El {
 
 /// The list of every label the popup does not show, numbered for the digit keys.
 fn picker(id: &str, t: &Tokens) -> El {
+    let id = id.to_owned();
+    label_list(
+        &format!("terminal.{id}.annotation"),
+        move |state: &mut State, label, tx: &mut Tx| {
+            draft::pick_label(state, &id, label, tx);
+        },
+        t,
+    )
+}
+
+/// The labels a mark's quick row does not show, in their groups and numbered for the digit
+/// keys, as `{key}.picker` with each label `{key}.pick.{id}`; `on_pick` hears the one pressed.
+pub(crate) fn label_list(
+    key: &str,
+    on_pick: impl Fn(&mut State, &'static str, &mut Tx) + Clone + 'static,
+    t: &Tokens,
+) -> El {
     let mut index = 0;
     let groups: Vec<El> = annotations::picker_groups()
         .into_iter()
         .map(|group| {
             col().gap(1.0).children(group.into_iter().map(|label| {
                 index += 1;
-                pick(id, &label, index, t)
+                pick(key, &label, index, on_pick.clone(), t)
             }))
         })
         .collect();
     col()
-        .key(format!("terminal.{id}.annotation.picker"))
+        .key(format!("{key}.picker"))
         .mt(4.0)
         .padding(4.0)
         .gap(4.0)
@@ -381,15 +398,21 @@ fn picker(id: &str, t: &Tokens) -> El {
         .children(groups)
 }
 
-fn pick(id: &str, label: &QuickLabel, index: usize, t: &Tokens) -> El {
-    let (pressed, picked) = (id.to_owned(), label.id);
+fn pick(
+    key: &str,
+    label: &QuickLabel,
+    index: usize,
+    on_pick: impl Fn(&mut State, &'static str, &mut Tx) + 'static,
+    t: &Tokens,
+) -> El {
+    let picked = label.id;
     let digit = if index == 10 {
         "0".to_owned()
     } else {
         index.to_string()
     };
     row()
-        .key(format!("terminal.{id}.annotation.pick.{}", label.id))
+        .key(format!("{key}.pick.{}", label.id))
         .role("button")
         .label(label.text)
         .items_center()
@@ -405,9 +428,7 @@ fn pick(id: &str, label: &QuickLabel, index: usize, t: &Tokens) -> El {
                 .grow(1.0),
         )
         .children((index <= 10).then(|| text(digit).font(type_::LABEL).color(t.text_tertiary)))
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            draft::pick_label(state, &pressed, picked, tx);
-        })
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| on_pick(state, picked, tx))
 }
 
 fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Tokens) -> El {

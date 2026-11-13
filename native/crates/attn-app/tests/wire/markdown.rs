@@ -330,7 +330,7 @@ fn a_fragment_link_brings_its_heading_to_the_top_and_repeated_headings_count_up(
     world.settle();
     let screen = world.screen();
     let headings: Vec<_> = screen
-        .children(Target::key("tile.m.document"))
+        .descendants(Target::key("tile.m.document"))
         .into_iter()
         .filter(|n| n.role == "heading")
         .map(|n| n.key.unwrap_or_default())
@@ -644,4 +644,72 @@ fn a_documents_front_matter_shows_as_a_card_of_its_top_level_fields() {
             .is_none()
     );
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_details_block_opens_as_its_tag_says_and_a_press_on_its_summary_opens_or_closes_it_through_edits()
+ {
+    let mut world = start();
+    let doc = |lead: &str| {
+        content(&format!(
+            "{lead}<details>\n<summary>More</summary>\n\nHidden body\n\n</details>\n\n\
+             <details open>\n<summary>Open one</summary>\n\nShown body\n\n</details>\n"
+        ))
+    };
+    world.daemon.emit(doc(""));
+    world.settle();
+    let says = |world: &World, words: &str| shown(world).iter().any(|t| t == words);
+    assert!(!says(&world, "Hidden body") && says(&world, "Shown body"));
+
+    let press = |world: &mut World, summary: &str| {
+        let [x, y, _, h] = world
+            .screen()
+            .bounds(Target::role("button").name(summary))
+            .unwrap();
+        world.gesture(|app| app.click_at((x + 4.0, y + h / 2.0)));
+    };
+    press(&mut world, "More");
+    press(&mut world, "Open one");
+    assert!(says(&world, "Hidden body") && !says(&world, "Shown body"));
+
+    world.daemon.emit(doc("A new opening line.\n\n"));
+    world.settle();
+    assert!(says(&world, "A new opening line."));
+    assert!(
+        says(&world, "Hidden body") && !says(&world, "Shown body"),
+        "an edit above the blocks keeps what was opened and closed"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_diagram_that_draws_without_a_statement_it_cannot_read_says_which() {
+    let mut world = start();
+    world.daemon.emit(content(
+        "```mermaid\nflowchart LR\n  A --> B\n  this is %%% nonsense\n```\n\n\
+         ```mermaid\nflowchart LR\n  C --> D\n```\n",
+    ));
+    world.settle();
+    let shown = shown(&world);
+    assert!(shown.iter().any(|t| t == "D"), "{shown:?}");
+    let said: Vec<_> = shown
+        .iter()
+        .skip_while(|t| *t != "This diagram leaves out what it cannot read:")
+        .take(2)
+        .collect();
+    assert_eq!(
+        said,
+        [
+            "This diagram leaves out what it cannot read:",
+            "this is %%% nonsense"
+        ]
+    );
+    assert_eq!(
+        shown
+            .iter()
+            .filter(|t| t.starts_with("This diagram leaves out"))
+            .count(),
+        1
+    );
+    rest(&mut world);
 }

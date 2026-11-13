@@ -64,6 +64,10 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         DesktopOverview => super::overview::toggle(state, tx),
         TilePopOut => super::windows::toggle(state, tx),
         TerminalFind => find(state, tx),
+        MarkdownSendAnnotations => {
+            crate::markdown::sending::send_key(state, tx);
+            return true;
+        }
         TerminalSendAnnotations => {
             crate::annotations::draft::send_key(state, tx);
             return true;

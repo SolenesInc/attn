@@ -384,6 +384,8 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .child(body);
     crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
         .children(layers(state, &t))
+        .children(crate::markdown::annotating::layers(state, cx, &t))
+        .children(crate::markdown::sending::layers(state, cx, &t))
 }
 
 /// The band the window drags by, over which the window's own controls sit; what it holds

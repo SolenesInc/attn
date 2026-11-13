@@ -16,6 +16,7 @@ pub(super) struct Sheet<'a> {
     pub(super) view: String,
     pub(super) go: Go,
     pub(super) names: &'a SessionNames,
+    pub(super) readings: &'a crate::markdown::Readings,
     pub(super) now_ms: i64,
     pub(super) t: &'a Tokens,
 }
@@ -128,9 +129,10 @@ impl Sheet<'_> {
         let view = self.view.clone();
         let key = self.key("plan");
         let t = *self.t;
+        let folds = self.readings.folds(&view);
         memo(
             self.key(&format!("plan.{}", here.id)),
-            (body.clone(), view.clone(), t),
+            (body.clone(), view.clone(), folds.clone(), t),
             move || {
                 col()
                     .key(key)
@@ -146,6 +148,8 @@ impl Sheet<'_> {
                             view,
                         },
                         std::rc::Rc::default(),
+                        folds,
+                        None,
                         &t,
                     ))
             },
