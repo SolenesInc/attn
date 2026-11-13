@@ -176,7 +176,7 @@ fn the_critical_strip_follows_the_broadcast_and_opens_the_panel() {
     assert!(!has(&world, STRIP));
 
     broadcast(&mut world, 1, 1, Some("Plugin stopped"));
-    assert_eq!(words(&world, STRIP), Vec::<String>::new());
+    assert_eq!(value(&world, STRIP), "");
     assert_eq!(
         name(&world, STRIP),
         "1 unread critical notification: Plugin stopped. Open notifications."
@@ -187,6 +187,7 @@ fn the_critical_strip_follows_the_broadcast_and_opens_the_panel() {
         name(&world, STRIP),
         "3 unread critical notifications, newest: Ticket sync failed. Open notifications."
     );
+    assert_eq!(value(&world, STRIP), "3");
 
     broadcast(&mut world, 1, 1, Some(""));
     assert_eq!(
@@ -500,4 +501,21 @@ fn the_palette_opens_the_panel_and_escape_hands_the_keyboard_back() {
     escape(&mut world);
     assert!(!has(&world, PANEL));
     assert_eq!(name(&world, BELL), "Show Notifications");
+}
+
+#[test]
+fn an_open_panel_reads_the_feed_again_after_the_daemon_restarts() {
+    let (mut world, feed) = start_on(
+        one_desktop(vec![session("s1", "idle")]),
+        vec![notification("old", "info", "Before the restart")],
+    );
+    open(&mut world);
+    assert!(has(&world, &row("old")));
+
+    *feed.lock().unwrap() = vec![notification("new", "warning", "After the restart")];
+    world.reconnect();
+
+    assert!(has(&world, PANEL));
+    assert!(has(&world, &row("new")));
+    assert!(!has(&world, &row("old")));
 }

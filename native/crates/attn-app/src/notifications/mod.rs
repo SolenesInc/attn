@@ -145,10 +145,7 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     if !is_open(state) || !connected {
         return;
     }
-    let panel = &state.window.notifications;
-    let stale = panel.seen != state.facts.notifications.changes;
-    let unread = panel.list.is_none() && panel.error.is_none();
-    if stale || (unread && !was_connected) {
+    if !was_connected || state.window.notifications.seen != state.facts.notifications.changes {
         read(state, tx);
     }
 }

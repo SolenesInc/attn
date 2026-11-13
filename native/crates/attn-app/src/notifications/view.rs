@@ -66,6 +66,8 @@ pub(crate) fn critical_strip(counts: &Notifications, t: &Tokens) -> Option<El> {
     } else {
         format!("{count} unread critical notifications, newest: {title}. Open notifications.")
     };
+    let badge = (count > 1).then(|| count.to_string());
+    let shown = badge.clone();
     let t = *t;
     Some(
         Button::new(name)
@@ -84,15 +86,12 @@ pub(crate) fn critical_strip(counts: &Notifications, t: &Tokens) -> Option<El> {
                             .truncate()
                             .grow(1.0),
                     )
-                    .children((count > 1).then(|| {
-                        text(count.to_string())
-                            .font(type_::MONO_CAPTION)
-                            .color(t.error)
-                    }))
+                    .children(shown.map(|n| text(n).font(type_::MONO_CAPTION).color(t.error)))
             })
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::open(state, tx))
             .build(&attn_ui::kit(&t))
             .key("sidebar.critical")
+            .a11y_value(badge.unwrap_or_default())
             .w_full()
             .fill(t.error.alpha(0.12)),
     )
