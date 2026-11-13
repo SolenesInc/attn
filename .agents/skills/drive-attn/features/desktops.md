@@ -131,6 +131,28 @@ Preconditions:
 - **Shelf motion.** `pnpm --dir app run real-app:scenario-shelf-motion` traces every frame of a slide, an open, a close and a carry with terminals streaming, through `bridge motion_trace_start '{"trace":"<name>"}'` and `motion_trace_stop`, into `motion_frame` entries in `terminal-diagnostics.jsonl`. It writes `motion-summary.json` to its run folder. `-- --measure` adds `top` over the app and its WebKit helpers at idle and during moves, mid-flight screenshots, and first paint on the fold path. `bridge motion_at_rest` reports what is left after a move. `e2e/row-motion.spec.ts` covers `prefers-reduced-motion`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `wsctl list` before and after each move, `bridge get_state` after each switch, `bridge get_session_ui_state '{"sessionId":"desk-shell"}'` after split, zoom and focus, and `./attn agent peek desk-agent` after each agent move. Capture `bridge capture_screenshot '{"path":"<P>/desktops-split.png"}'` with the splits and `<P>/desktops-overview.png` with the overview open, `<P>` written out. Name each file for its way in, such as `desktops-send-stay-state.json`.
 
+### In the native app
+
+The native app (`native/`) lays a desktop's tiles out in the row with the shelf, splits them, drags dividers and headers, zooms and focuses the active tile, walks tile history, pops tiles out into windows of their own, and switches desktops. It marks the active tile with the spotlight and veils inactive agents. `bridge` reaches its own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Keys differ by platform: on Linux, ⌘<n> is `mod+shift+<n>`, zoom `mod+alt+z`, focus `mod+alt+enter`, and history `mod+shift+[` and `mod+shift+]`. On macOS they are `mod+<n>`, `mod+shift+z`, `mod+shift+enter`, `mod+[` and `mod+]`.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'` so the display outlives each step.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"sidebar"}}'`.
+- Two tiles at the default narrowest width need about 1200px of tile area, and the window opens at 1200px. On Linux, widen it with `xdotool windowsize <id> 1600 1000`, `<id>` being `windows[0].id` from `bridge native_windows`.
+- Session ids are spent once removed, so give each run's shells new ids, such as `left-$(date +%s)`.
+
+Steps:
+
+- **A desktop of its own.** Press ⌘3 with `bridge key`: `bridge wait '{"target":{"key":"launcher.path.field"}}'` answers on the new empty desktop, and `bridge state '{"of":"desktops"}'` lists a desktop with slot 3.
+- **Two shells side by side.** Run `wsctl add-session --cwd $P --agent shell --label left --id <left> --place`, then the same for `<right>`. Press `sidebar.session.<right>`. The panes in `bridge state '{"of":"desktops"}'` give each shell's `pane_id`, `<L>` and `<R>`, and `bridge wait` on `tile.<L>` and `tile.<R>` answers with boxes side by side.
+- **Spotlight and veil.** With `<R>` active, `bridge find` answers for `tile.<R>.spotlight.top`, the corner mark, and `tile.<L>.veil`, the veil over the left body. `bridge shot` shows the right header lighter with orange corners, the left text dimmed, and no borders.
+- **Divider.** Run `bridge drag '{"target":{"key":"divider.row:<L>"},"by":[90,0]}'`: the receipt's `landed` names the divider, and `wsctl list` gives both leaves `wanted_cols`, the left one wider.
+- **Zoom and focus.** Press zoom: `bridge wait` on `tile.<R>` answers wider than twice `tile.<L>`. Press it again and the widths return. Press focus: `bridge wait '{"target":{"key":"tile.<L>"},"gone":true}'` matches and the shot shows `<R>` alone with an orange border. Press focus again and `tile.<L>` is back.
+- **Tile history.** Press `tile.<L>.header`, then history back: `active_pane_id` in `bridge state '{"of":"desktops"}'` is `<R>`. History forward makes it `<L>` again, and each landing rings its tile once.
+- **Clean up.** `wsctl rm-session --id <left>` and `--id <right>`, then `./attn instance stop-app`. The daemon sweeps the empty desktop 3.
+- **Proof.** Keep each `bridge` answer and both shots. The `native-desktop-tiles` scenario runs the shells, divider, zoom, focus and history steps.
+
 ## Contexts
 
 - **Durability across restarts**: desktops, their names, slots, order, tiles and active tile are the daemon's records and come back after any restart, with every terminal in its tile. Tile history belongs to a window and starts empty in a new window.
@@ -144,9 +166,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/desktop_*_wire_test.go`, `internal/daemon/launch_desktop_wire_test.go`, `internal/daemon/terminal_move_wire_test.go`, `internal/daemon/desktop_tiles_protocol_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/desktops.rs`, `shelf_layout.rs` and `shelf_drags.rs` (the native app), `internal/daemon/desktop_*_wire_test.go`, `internal/daemon/launch_desktop_wire_test.go`, `internal/daemon/terminal_move_wire_test.go`, `internal/daemon/desktop_tiles_protocol_test.go`.
 - Stack: `cmd/attnd/launch_desktop_stack_test.go`, `cmd/attnd/terminal_move_stack_test.go`, `scripts/verify-terminal-move.sh`, `app/e2e/desktop-sessions.spec.ts`, `app/e2e/tile-header.spec.ts`, `app/e2e/agent-header.spec.ts`, `app/e2e/pane-focus-ring.spec.ts`, `app/e2e/split-paint.spec.ts`.
-- Scenario: `shelf-layout`, `title-bar`, `shelf-moves`, `shelf-drags`, `shelf-drop-beside`, `shelf-motion`, `shelf-peek`, `desktop-switching`, `desktop-order`, `desktop-splits`, `close-desktop`, `empty-desktop-keys`, `close-pane-nonblocking`, `desktop-close-one-session-keeps-selection`, `desktop-migration`, `launch-desktops`, `move-with-delegates`.
+- Scenario: `native-desktop-tiles` (the native app), `shelf-layout`, `title-bar`, `shelf-moves`, `shelf-drags`, `shelf-drop-beside`, `shelf-motion`, `shelf-peek`, `desktop-switching`, `desktop-order`, `desktop-splits`, `close-desktop`, `empty-desktop-keys`, `close-pane-nonblocking`, `desktop-close-one-session-keeps-selection`, `desktop-migration`, `launch-desktops`, `move-with-delegates`.
 - Kernel: `internal/layouttree/*_test.go`, `app/src/components/SessionTerminalDesktop/rowLayout.test.ts`.
 - App wire: `app/src/App.shelfLayout.test.tsx`, `app/src/App.shelfPeek.test.tsx`.
 - Browser end-to-end: `app/e2e/row-motion.spec.ts`.
