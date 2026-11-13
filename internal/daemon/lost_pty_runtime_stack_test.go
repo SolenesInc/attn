@@ -145,9 +145,11 @@ func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testwor
 	tui := s.Launched(session)
 	server := s.AppServer(fakeagent.Nisse)
 	conversation := tui.ConversationID
+	mark := len(app.Log())
 	app.Type(session, "rename the orders table\r", userKeystroke)
 	tui.Prompted()
 	server.Prompted(conversation)
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 	return s, app, session, server, conversation
 }
 
@@ -171,7 +173,7 @@ func startLastRunTestDriver(t *testing.T, s *testworld.Stack, app *testworld.Pee
 
 func TestAnAppServerSessionSurvivesAStartupWithoutItsPluginOrViewRuntime(t *testing.T) {
 	s, app, session, server, conversation := appServerAtWorkApartFromItsServer(t)
-	before := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	profile := app.SelectedProfile()
 	terminal := app.Terminal(session)
 	s.Stop()
 	s.KillRuntimeOf(terminal)
@@ -179,7 +181,7 @@ func TestAnAppServerSessionSurvivesAStartupWithoutItsPluginOrViewRuntime(t *test
 	s.Start()
 	app = s.App()
 	kept := testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
-	if kept.ProfileID != before.ProfileID {
+	if kept.ProfileID != profile {
 		t.Fatal("startup moved the session to another profile")
 	}
 	startLastRunTestDriver(t, s, app)
