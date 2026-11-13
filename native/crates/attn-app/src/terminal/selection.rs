@@ -214,11 +214,11 @@ impl Terminals {
         }
     }
 
-    /// Where the cursor and what lies over terminal `id`'s view as the window last drew it,
+    /// Where the cursor and what lies over terminal `id`'s view as its screen holds them now,
     /// how far the view is scrolled back, and what ⌘C copies: the automation server's
     /// `terminal-view` slice.
-    pub fn view_state(&self, id: &str) -> Option<serde_json::Value> {
-        let term = self.panes.get(id)?;
+    pub fn view_state(&mut self, id: &str) -> Option<serde_json::Value> {
+        let term = self.current(id)?;
         let overlays: Vec<serde_json::Value> = term
             .grid
             .overlays()

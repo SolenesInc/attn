@@ -84,7 +84,7 @@ are on their way to the daemon.
 | `hold` | `mods`, such as `mod` or `mod+shift`, or empty | holds those modifiers down, as a keyboard does, until the next `hold`; empty lets them all go |
 | `type` | `text`, `target` | focuses the target first, then types |
 | `run` | `name`, an action id such as `session.toggleSidebar` | dispatches the action |
-| `state` | `of`, `includes` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build`, `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`, or `terminal-view:<runtime id>`, its cursor, what lies over it such as the selection, how far it is scrolled back, what the copy key copies and the selected command block. With `includes`, waits until one string in the slice, such as one terminal row, contains the text, and waits for a terminal not drawn yet |
+| `state` | `of`, `includes` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build`, `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`, or `terminal-view:<runtime id>`, its cursor, what lies over it such as the selection, its images, how far it is scrolled back, what the copy key copies, the selected command block and its annotations, as the terminal holds them when read, whether or not a frame drew them. With `includes`, waits until one string in the slice, such as one terminal row, contains the text, and waits for a terminal not drawn yet |
 | `native_windows`, `shot` | `path` for `shot` | the window's platform id; a screenshot |
 
 A request that waits, `state` with `includes` among them, gives up after 30 s,

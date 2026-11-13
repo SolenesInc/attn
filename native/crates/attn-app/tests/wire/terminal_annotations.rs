@@ -76,11 +76,11 @@ fn started(daemon: Daemon) -> World {
     world
 }
 
-fn annotations(world: &World) -> Value {
+fn annotations(world: &mut World) -> Value {
     view(world)["annotations"].clone()
 }
 
-fn violet(world: &World) -> Vec<(u64, [u64; 2], String)> {
+fn violet(world: &mut World) -> Vec<(u64, [u64; 2], String)> {
     view(world)["overlays"]
         .as_array()
         .unwrap()
@@ -157,18 +157,18 @@ fn an_alt_drag_over_the_agents_message_marks_it_and_a_label_saves_the_draft() {
     assert_eq!(world.daemon.sent_of("session_annotations_get").len(), 1);
 
     mark_on_cache(&mut world);
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(state["marks"][0]["quote"], "cache keeps every");
     assert_eq!(state["marks"][0]["label"], "");
     assert_eq!(state["popup"]["writing"], false);
     assert_eq!(
-        view(&world)["copies"],
+        view(&mut world)["copies"],
         Value::Null,
         "marking copies nothing"
     );
-    assert_eq!(copied(&world), None);
+    assert_eq!(copied(&mut world), None);
     assert_eq!(
-        violet(&world),
+        violet(&mut world),
         [
             (0, [4, 21], "Wash".to_owned()),
             (0, [4, 21], "Underline".to_owned())
@@ -180,7 +180,7 @@ fn an_alt_drag_over_the_agents_message_marks_it_and_a_label_saves_the_draft() {
     );
 
     click(&mut world, "terminal.r1.annotation.label.i-agree");
-    assert_eq!(annotations(&world)["popup"], Value::Null);
+    assert_eq!(annotations(&mut world)["popup"], Value::Null);
     assert_eq!(
         saves(&world),
         [json!({
@@ -210,9 +210,9 @@ fn dismissing_the_popup_of_a_mark_that_says_nothing_takes_the_mark_away() {
             mods: Mods::default(),
         })
     });
-    assert_eq!(annotations(&world)["marks"], json!([]));
-    assert_eq!(annotations(&world)["popup"], Value::Null);
-    assert_eq!(violet(&world), []);
+    assert_eq!(annotations(&mut world)["marks"], json!([]));
+    assert_eq!(annotations(&mut world)["popup"], Value::Null);
+    assert_eq!(violet(&mut world), []);
     assert_eq!(saves(&world)[0]["annotations"], json!([]));
     assert!(world.runtime_is_at_rest());
 }
@@ -223,8 +223,8 @@ fn a_press_elsewhere_in_the_terminal_dismisses_the_popup() {
     mark_on_cache(&mut world);
     let elsewhere = cell(&world, 2, 5);
     world.gesture(|app| app.click_at(elsewhere));
-    assert_eq!(annotations(&world)["popup"], Value::Null);
-    assert_eq!(annotations(&world)["marks"], json!([]));
+    assert_eq!(annotations(&mut world)["popup"], Value::Null);
+    assert_eq!(annotations(&mut world)["marks"], json!([]));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -235,12 +235,12 @@ fn an_alt_click_on_a_mark_opens_it_and_a_comment_keeps_it() {
     click(&mut world, "terminal.r1.annotation.label.this-is-wrong");
 
     alt_click(&mut world, (10, 0));
-    assert_eq!(annotations(&world)["popup"]["writing"], false);
+    assert_eq!(annotations(&mut world)["popup"]["writing"], false);
     click(&mut world, "terminal.r1.annotation.write");
     world.gesture(|app| app.type_text("Rows go after a minute"));
     world.gesture(|app| app.press("mod+enter"));
 
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(state["popup"], Value::Null);
     assert_eq!(state["marks"][0]["label"], "this-is-wrong");
     assert_eq!(state["marks"][0]["comment"], "Rows go after a minute");
@@ -249,12 +249,18 @@ fn an_alt_click_on_a_mark_opens_it_and_a_comment_keeps_it() {
     assert_eq!(last["generation"], 2);
 
     alt_click(&mut world, (10, 0));
-    let popup = &annotations(&world)["popup"];
+    let popup = &annotations(&mut world)["popup"];
     assert_eq!(
         popup["writing"], true,
         "a mark with a comment opens writing"
     );
     assert_eq!(popup["comment"], "Rows go after a minute");
+    world.advance(Duration::from_millis(400));
+    assert_eq!(
+        saves(&world).len(),
+        2,
+        "the comment's save took the pending one"
+    );
     assert!(world.runtime_is_at_rest());
 }
 
@@ -263,15 +269,15 @@ fn picking_the_mark_label_again_takes_it_off_and_a_mark_left_bare_goes() {
     let mut world = started(agent(&[("m1", MESSAGE)], "ready"));
     mark_on_cache(&mut world);
     click(&mut world, "terminal.r1.annotation.more");
-    assert_eq!(annotations(&world)["popup"]["picking"], true);
+    assert_eq!(annotations(&mut world)["popup"]["picking"], true);
     world.gesture(|app| app.type_text("1"));
-    assert_eq!(annotations(&world)["marks"][0]["label"], "exactly-this");
-    assert_eq!(annotations(&world)["popup"], Value::Null);
+    assert_eq!(annotations(&mut world)["marks"][0]["label"], "exactly-this");
+    assert_eq!(annotations(&mut world)["popup"], Value::Null);
 
     alt_click(&mut world, (10, 0));
     click(&mut world, "terminal.r1.annotation.more");
     click(&mut world, "terminal.r1.annotation.pick.exactly-this");
-    assert_eq!(annotations(&world)["marks"], json!([]));
+    assert_eq!(annotations(&mut world)["marks"], json!([]));
     assert_eq!(saves(&world).len(), 2);
     assert!(world.runtime_is_at_rest());
 }
@@ -283,13 +289,13 @@ fn an_alt_drag_outside_the_agents_messages_says_why_and_copies_what_it_selected(
     world.settle();
     drag_with(&mut world, alt(), (2, 1), (8, 1));
     assert_eq!(
-        annotations(&world)["notice"],
+        annotations(&mut world)["notice"],
         "Only what the agent wrote can be annotated. This text is the TUI’s own, your own, or from a turn that has scrolled out of the window."
     );
-    assert_eq!(annotations(&world)["marks"], json!([]));
-    assert_eq!(copied(&world).as_deref(), Some("restart"));
+    assert_eq!(annotations(&mut world)["marks"], json!([]));
+    assert_eq!(copied(&mut world).as_deref(), Some("restart"));
     world.advance(Duration::from_secs(5));
-    assert_eq!(annotations(&world)["notice"], Value::Null);
+    assert_eq!(annotations(&mut world)["notice"], Value::Null);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -311,8 +317,8 @@ fn an_alt_drag_before_the_agent_wrote_says_what_the_transcript_is_doing() {
     ] {
         let mut world = started(agent(&[], status));
         drag_with(&mut world, alt(), (4, 0), (20, 0));
-        assert_eq!(annotations(&world)["notice"], says, "{status}");
-        assert_eq!(copied(&world).as_deref(), Some("cache keeps every"));
+        assert_eq!(annotations(&mut world)["notice"], says, "{status}");
+        assert_eq!(copied(&mut world).as_deref(), Some("cache keeps every"));
         world.advance(Duration::from_secs(5));
         assert!(world.runtime_is_at_rest());
     }
@@ -322,8 +328,8 @@ fn an_alt_drag_before_the_agent_wrote_says_what_the_transcript_is_doing() {
 fn a_drag_without_alt_selects_and_copies_over_the_agents_message() {
     let mut world = started(agent(&[("m1", MESSAGE)], "ready"));
     drag_with(&mut world, Mods::default(), (4, 0), (20, 0));
-    assert_eq!(copied(&world).as_deref(), Some("cache keeps every"));
-    assert_eq!(annotations(&world)["marks"], json!([]));
+    assert_eq!(copied(&mut world).as_deref(), Some("cache keeps every"));
+    assert_eq!(annotations(&mut world)["marks"], json!([]));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -351,8 +357,8 @@ fn a_stored_draft_draws_on_its_message_and_a_mark_whose_text_left_the_screen_is_
             draft_result(vec![stored_mark("cut-this")], 4)
         });
     let mut world = started(daemon);
-    assert_eq!(annotations(&world)["generation"], 4);
-    assert_eq!(violet(&world).len(), 2);
+    assert_eq!(annotations(&mut world)["generation"], 4);
+    assert_eq!(violet(&mut world).len(), 2);
 
     output(
         &world,
@@ -360,8 +366,12 @@ fn a_stored_draft_draws_on_its_message_and_a_mark_whose_text_left_the_screen_is_
         b"\x1b[H\x1b[2J\x1b[3JThe cache drops every row\r\n",
     );
     world.settle();
-    assert_eq!(violet(&world), [], "the rows no longer say what was quoted");
-    assert_eq!(annotations(&world)["marks"][0]["label"], "cut-this");
+    assert_eq!(
+        violet(&mut world),
+        [],
+        "the rows no longer say what was quoted"
+    );
+    assert_eq!(annotations(&mut world)["marks"][0]["label"], "cut-this");
     assert!(world.runtime_is_at_rest());
 }
 
@@ -382,8 +392,8 @@ fn a_draft_stored_with_an_emoji_reads_its_label() {
                 1,
             )
         });
-    let world = started(daemon);
-    assert_eq!(annotations(&world)["marks"][0]["label"], "cut-this");
+    let mut world = started(daemon);
+    assert_eq!(annotations(&mut world)["marks"][0]["label"], "cut-this");
     assert!(world.runtime_is_at_rest());
 }
 
@@ -402,7 +412,7 @@ fn a_changed_message_list_is_fetched_again_and_a_mark_draws_once_its_message_arr
             draft_result(vec![stored_mark("i-agree")], 1)
         });
     let mut world = started(daemon);
-    assert_eq!(violet(&world), []);
+    assert_eq!(violet(&mut world), []);
 
     world.daemon.emit(SessionMessagesChangedMessage {
         session_id: "s1".into(),
@@ -410,7 +420,7 @@ fn a_changed_message_list_is_fetched_again_and_a_mark_draws_once_its_message_arr
     });
     world.settle();
     assert_eq!(world.daemon.sent_of("session_messages_get").len(), 2);
-    assert_eq!(violet(&world).len(), 2);
+    assert_eq!(violet(&mut world).len(), 2);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -449,7 +459,7 @@ fn a_save_the_daemon_holds_a_newer_draft_for_reads_that_draft() {
     let mut world = started(daemon);
     mark_on_cache(&mut world);
     click(&mut world, "terminal.r1.annotation.label.i-agree");
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(state["generation"], 7);
     assert_eq!(state["marks"][0]["id"], "a1");
     assert_eq!(state["marks"][0]["label"], "cut-this");
@@ -464,7 +474,7 @@ fn alt_over_a_mark_brightens_it() {
     let (over, off) = (cell(&world, 10, 0), cell(&world, 40, 3));
     world.gesture(|app| app.hold(alt()));
     world.gesture(|app| app.runtime.pointer_move(over.0, over.1));
-    let alphas = |world: &World| -> Vec<u64> {
+    let alphas = |world: &mut World| -> Vec<u64> {
         view(world)["overlays"]
             .as_array()
             .unwrap()
@@ -473,9 +483,9 @@ fn alt_over_a_mark_brightens_it() {
             .map(|o| o["alpha"].as_u64().unwrap())
             .collect()
     };
-    assert_eq!(alphas(&world), [107, 255]);
+    assert_eq!(alphas(&mut world), [107, 255]);
     world.gesture(|app| app.runtime.pointer_move(off.0, off.1));
-    assert_eq!(alphas(&world), [61, 191]);
+    assert_eq!(alphas(&mut world), [61, 191]);
     world.gesture(|app| app.hold(Mods::default()));
     assert!(world.runtime_is_at_rest());
 }
@@ -489,7 +499,7 @@ fn a_mark_after_a_character_of_two_utf16_units_quotes_the_words_it_covers() {
     output(&world, 1, format!("{ROCKET}\r\n").as_bytes());
     world.settle();
     drag_with(&mut world, alt(), (3, 0), (19, 0));
-    let mark = &annotations(&world)["marks"][0];
+    let mark = &annotations(&mut world)["marks"][0];
     assert_eq!(mark["quote"], "cache keeps every");
     assert_eq!(
         (mark["start"].clone(), mark["end"].clone()),
@@ -571,7 +581,7 @@ fn the_send_key_sends_the_marks_and_the_note_as_one_message_and_clears_the_draft
             "Look again"
         )]
     );
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(state["marks"], json!([]));
     assert_eq!(state["note"], "");
     assert_eq!(
@@ -579,10 +589,10 @@ fn the_send_key_sends_the_marks_and_the_note_as_one_message_and_clears_the_draft
         json!({"kind": "sent", "count": 1, "kept": 0})
     );
     assert_eq!(cleared(&world), [json!(3)]);
-    assert_eq!(violet(&world), []);
+    assert_eq!(violet(&mut world), []);
 
     world.advance(Duration::from_millis(2200));
-    assert_eq!(annotations(&world)["outcome"], Value::Null);
+    assert_eq!(annotations(&mut world)["outcome"], Value::Null);
     assert!(
         world
             .screen()
@@ -617,7 +627,7 @@ fn a_session_waiting_on_an_approval_keeps_the_marks_and_says_why() {
     mark_on_cache(&mut world);
     click(&mut world, "terminal.r1.annotation.label.i-agree");
     click(&mut world, "terminal.r1.annotation.send");
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(state["outcome"], json!({"kind": "skipped"}));
     assert_eq!(state["marks"].as_array().unwrap().len(), 1);
     assert!(world.runtime_is_at_rest());
@@ -635,7 +645,7 @@ fn a_comment_being_written_when_a_send_is_refused_is_saved_with_the_draft() {
     world.gesture(|app| app.type_text("Rows go after a minute"));
 
     click(&mut world, "terminal.r1.annotation.send");
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(state["outcome"], json!({"kind": "skipped"}));
     assert_eq!(state["marks"][0]["comment"], "Rows go after a minute");
     let last = saves(&world).pop().unwrap();
@@ -644,6 +654,141 @@ fn a_comment_being_written_when_a_send_is_refused_is_saved_with_the_draft() {
         "the daemon holds the comment, so a relaunch or another terminal reads it back"
     );
     assert_eq!(submitted(&world).len(), 1);
+    world.advance(Duration::from_millis(400));
+    assert!(world.runtime_is_at_rest());
+}
+
+type Stored = std::sync::Arc<std::sync::Mutex<(Vec<SessionAnnotation>, i64)>>;
+
+fn remembering() -> Daemon {
+    remembering_in(Stored::default())
+}
+
+/// An agent terminal of session s1 whose daemon keeps the last draft saved in `stored` and
+/// hands it back.
+fn remembering_in(stored: Stored) -> Daemon {
+    let (kept, read) = (stored.clone(), stored);
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    daemon
+        .on("session_annotations_save", move |r| {
+            let annotations = serde_json::from_value(r["annotations"].clone()).unwrap();
+            *kept.lock().unwrap() = (annotations, r["generation"].as_i64().unwrap());
+            saved()
+        })
+        .on("session_annotations_get", move |_| {
+            let (annotations, generation) = read.lock().unwrap().clone();
+            draft_result(annotations, generation)
+        });
+    daemon
+}
+
+/// Types `comment` into a new mark's popup, without keeping it.
+fn typing_a_comment(world: &mut World, comment: &str) {
+    mark_on_cache(world);
+    click(world, "terminal.r1.annotation.label.this-is-wrong");
+    alt_click(world, (10, 0));
+    click(world, "terminal.r1.annotation.write");
+    world.gesture(|app| app.type_text(comment));
+}
+
+fn arranged(world: &mut World, current: &str, panes: Vec<attn_protocol::DesktopPane>) {
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: attn_protocol::Profile {
+                current_desktop_id: current.into(),
+                ..super::terminal::profile()
+            },
+            desktops: vec![
+                super::terminal::desktop(panes),
+                attn_protocol::Desktop {
+                    id: "d2".into(),
+                    name: "d2".into(),
+                    ..super::terminal::desktop(Vec::new())
+                },
+            ],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+}
+
+#[test]
+fn a_comment_being_typed_is_kept_through_a_desktop_switch_and_back() {
+    let mut world = started(remembering());
+    typing_a_comment(&mut world, "Rows go after a minute");
+
+    arranged(&mut world, "d2", vec![agent_pane()]);
+    assert!(
+        world.terminal_view("r1").is_none(),
+        "the terminal left with its desktop"
+    );
+    arranged(&mut world, "d1", vec![agent_pane()]);
+    world.settle();
+
+    let state = annotations(&mut world);
+    assert_eq!(state["marks"][0]["comment"], "Rows go after a minute");
+    assert_eq!(state["marks"][0]["label"], "this-is-wrong");
+    world.advance(Duration::from_millis(400));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_comment_being_typed_is_kept_when_the_session_moves_to_another_terminal() {
+    let mut world = started(remembering());
+    typing_a_comment(&mut world, "Rows go after a minute");
+
+    let moved = attn_protocol::DesktopPane {
+        session_id: "s1".into(),
+        ..pane("t2", "r2")
+    };
+    arranged(&mut world, "d1", vec![moved]);
+    world.settle();
+
+    let moved_view = world.terminal_view("r2").expect("r2 is drawn");
+    let marks = &moved_view["annotations"]["marks"];
+    assert_eq!(marks[0]["comment"], "Rows go after a minute");
+    world.advance(Duration::from_millis(400));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_comment_being_typed_is_saved_once_typing_pauses_so_a_relaunch_reads_it() {
+    let stored = Stored::default();
+    let mut world = started(remembering_in(stored.clone()));
+    typing_a_comment(&mut world, "Rows go after a minute");
+    world.advance(Duration::from_millis(400));
+    let last = saves(&world).pop().unwrap();
+    assert_eq!(last["annotations"][0]["comment"], "Rows go after a minute");
+    assert!(world.runtime_is_at_rest());
+    drop(world);
+
+    let mut relaunched = started(remembering_in(stored));
+    let state = annotations(&mut relaunched);
+    assert_eq!(state["marks"][0]["comment"], "Rows go after a minute");
+    assert_eq!(state["popup"], Value::Null);
+    assert!(relaunched.runtime_is_at_rest());
+}
+
+#[test]
+fn escape_while_writing_puts_back_the_comment_the_mark_had() {
+    let mut world = started(remembering());
+    typing_a_comment(&mut world, "Rows go after a minute");
+    world.gesture(|app| app.press("mod+enter"));
+
+    alt_click(&mut world, (10, 0));
+    world.gesture(|app| app.type_text(" and more"));
+    assert_eq!(
+        annotations(&mut world)["marks"][0]["comment"],
+        "Rows go after a minute and more"
+    );
+    world.gesture(|app| app.press("escape"));
+
+    let state = annotations(&mut world);
+    assert_eq!(state["popup"], Value::Null);
+    assert_eq!(state["marks"][0]["comment"], "Rows go after a minute");
+    let last = saves(&world).pop().unwrap();
+    assert_eq!(last["annotations"][0]["comment"], "Rows go after a minute");
+    world.advance(Duration::from_millis(400));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -655,7 +800,7 @@ fn a_session_that_did_not_take_the_feedback_keeps_the_marks() {
     mark_on_cache(&mut world);
     click(&mut world, "terminal.r1.annotation.label.i-agree");
     click(&mut world, "terminal.r1.annotation.send");
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(
         state["outcome"],
         json!({"kind": "error", "message": "The session did not take the feedback. Nothing was sent."})
@@ -672,7 +817,10 @@ fn a_mark_changed_while_the_send_was_in_flight_stays_and_is_saved() {
     mark_on_cache(&mut world);
     click(&mut world, "terminal.r1.annotation.label.i-agree");
     click(&mut world, "terminal.r1.annotation.send");
-    assert_eq!(annotations(&world)["outcome"], json!({"kind": "sending"}));
+    assert_eq!(
+        annotations(&mut world)["outcome"],
+        json!({"kind": "sending"})
+    );
 
     alt_click(&mut world, (10, 0));
     click(&mut world, "terminal.r1.annotation.label.this-is-wrong");
@@ -687,7 +835,7 @@ fn a_mark_changed_while_the_send_was_in_flight_stays_and_is_saved() {
         },
     );
     world.settle();
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(
         state["outcome"],
         json!({"kind": "sent", "count": 1, "kept": 1})
@@ -707,27 +855,30 @@ fn a_card_opens_its_mark_to_write_and_its_cross_removes_it() {
     let mut world = started(agent(&[("m1", MESSAGE)], "ready"));
     mark_on_cache(&mut world);
     click(&mut world, "terminal.r1.annotation.label.i-agree");
-    let mark = annotations(&world)["marks"][0]["id"]
+    let mark = annotations(&mut world)["marks"][0]["id"]
         .as_str()
         .unwrap()
         .to_owned();
 
     click(&mut world, &format!("terminal.r1.annotation.card.{mark}"));
-    assert_eq!(annotations(&world)["popup"]["writing"], true);
+    assert_eq!(annotations(&mut world)["popup"]["writing"], true);
     world.gesture(|app| app.press("Escape"));
-    assert_eq!(annotations(&world)["popup"], Value::Null);
-    assert_eq!(annotations(&world)["marks"].as_array().unwrap().len(), 1);
+    assert_eq!(annotations(&mut world)["popup"], Value::Null);
+    assert_eq!(
+        annotations(&mut world)["marks"].as_array().unwrap().len(),
+        1
+    );
 
     click(
         &mut world,
         &format!("terminal.r1.annotation.card.{mark}.remove"),
     );
-    assert_eq!(annotations(&world)["marks"], json!([]));
+    assert_eq!(annotations(&mut world)["marks"], json!([]));
     assert_eq!(saves(&world).last().unwrap()["annotations"], json!([]));
     assert!(world.runtime_is_at_rest());
 }
 
-fn panel_shows(world: &World) -> bool {
+fn panel_shows(world: &mut World) -> bool {
     world
         .screen()
         .find(Target::key("terminal.r1.annotation.panel"))
@@ -776,7 +927,7 @@ fn a_note_typed_just_before_clear_is_saved_to_its_session_and_the_new_session_sh
         (&json!("s1"), &json!("Look again"), &json!(2)),
         "the note goes to the session it was typed for"
     );
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(
         (&state["session"], &state["note"], &state["marks"]),
         (&json!("s2"), &json!("their own"), &json!([]))
@@ -815,7 +966,7 @@ fn a_send_while_one_is_unanswered_sends_nothing_and_a_note_rewritten_meanwhile_s
         },
     );
     world.settle();
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(
         (&state["marks"], &state["note"]),
         (&json!([]), &json!("First, then more"))
@@ -848,7 +999,7 @@ fn a_refused_send_keeps_the_marks_and_the_note_and_says_the_daemons_reason() {
     world.gesture(|app| app.type_text("Keep me"));
     world.advance(Duration::from_millis(400));
     click(&mut world, "terminal.r1.annotation.send");
-    let state = annotations(&world);
+    let state = annotations(&mut world);
     assert_eq!(
         state["outcome"],
         json!({"kind": "error", "message": "pty write failed"})
@@ -874,7 +1025,10 @@ fn a_save_that_fails_for_a_reason_other_than_a_newer_draft_keeps_the_marks_witho
     let mut world = started(daemon);
     mark_on_cache(&mut world);
     click(&mut world, "terminal.r1.annotation.label.i-agree");
-    assert_eq!(annotations(&world)["marks"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        annotations(&mut world)["marks"].as_array().unwrap().len(),
+        1
+    );
     assert_eq!(world.daemon.sent_of("session_annotations_get").len(), 1);
     assert!(world.runtime_is_at_rest());
 }
@@ -882,7 +1036,7 @@ fn a_save_that_fails_for_a_reason_other_than_a_newer_draft_keeps_the_marks_witho
 #[test]
 fn with_nothing_marked_no_panel_shows_and_the_send_key_does_nothing() {
     let mut world = started(agent(&[("m1", MESSAGE)], "ready"));
-    assert!(!panel_shows(&world));
+    assert!(!panel_shows(&mut world));
     let terminal = cell(&world, 30, 4);
     world.gesture(|app| app.click_at(terminal));
     world.gesture(|app| app.press(SEND));
@@ -933,7 +1087,7 @@ fn only_this_sessions_changed_window_is_read_again_and_an_older_read_answering_l
         .reply_to(&older, messages_result(&[("m1", MESSAGE)], "ready"));
     world.settle();
     mark_on_cache(&mut world);
-    assert_eq!(annotations(&world)["marks"][0]["message"], "m2");
+    assert_eq!(annotations(&mut world)["marks"][0]["message"], "m2");
     assert!(world.runtime_is_at_rest());
 }
 
@@ -951,7 +1105,7 @@ fn a_window_the_daemon_cannot_read_says_no_transcript_could_be_read() {
     let mut world = started(daemon);
     mark_on_cache(&mut world);
     assert_eq!(
-        annotations(&world)["notice"],
+        annotations(&mut world)["notice"],
         "No transcript could be read for this session, so there is nothing to annotate. The daemon log names the lookup that failed."
     );
     world.advance(Duration::from_secs(5));
@@ -975,14 +1129,14 @@ fn a_mark_whose_message_was_not_yet_drawn_draws_once_the_agent_prints_it_under_l
         .collect();
     output(&world, 1, &lines);
     world.settle();
-    assert_eq!(violet(&world), [], "the message is not on the rows yet");
+    assert_eq!(violet(&mut world), [], "the message is not on the rows yet");
 
     output(&world, 2, b"more output\r\n");
     world.settle();
     output(&world, 3, format!("{MESSAGE}\r\n").as_bytes());
     world.settle();
     assert_eq!(
-        violet(&world).len(),
+        violet(&mut world).len(),
         2,
         "the mark draws on the message once printed"
     );

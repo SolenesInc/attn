@@ -21,16 +21,11 @@ pub(crate) const COPY_COMMAND: &str = if cfg!(target_os = "macos") {
     "ctrl+alt+c"
 };
 
-pub(crate) fn view(world: &World) -> Value {
-    world
-        .runtime()
-        .state
-        .terminals
-        .view_state("r1")
-        .expect("r1 is drawn")
+pub(crate) fn view(world: &mut World) -> Value {
+    world.terminal_view("r1").expect("r1 is drawn")
 }
 
-fn washes(world: &World) -> Vec<(u64, [u64; 2])> {
+fn washes(world: &mut World) -> Vec<(u64, [u64; 2])> {
     view(world)["overlays"]
         .as_array()
         .unwrap()
@@ -46,7 +41,7 @@ fn washes(world: &World) -> Vec<(u64, [u64; 2])> {
         .collect()
 }
 
-pub(crate) fn copied(world: &World) -> Option<String> {
+pub(crate) fn copied(world: &mut World) -> Option<String> {
     world.clipboard.text().map(|t| t.to_string())
 }
 
@@ -83,19 +78,19 @@ fn the_wheel_scrolls_the_view_through_the_history_and_a_scrolled_view_keeps_its_
     output(&world, 1, &numbered(1, 200));
     world.settle();
     let bottom = world.terminal_text("r1");
-    assert_eq!(view(&world)["scrolled_back"], 0);
+    assert_eq!(view(&mut world)["scrolled_back"], 0);
     let rows = world.terminal_size("r1").1;
-    assert_eq!(view(&world)["cursor"], json!([0, rows - 1]));
+    assert_eq!(view(&mut world)["cursor"], json!([0, rows - 1]));
 
     wheel(&mut world, 10.0);
-    assert_eq!(view(&world)["scrolled_back"], 10);
+    assert_eq!(view(&mut world)["scrolled_back"], 10);
     assert_eq!(
-        view(&world)["cursor"],
+        view(&mut world)["cursor"],
         Value::Null,
         "the cursor's row is below the view"
     );
     wheel(&mut world, -5.0);
-    assert_eq!(view(&world)["cursor"], Value::Null);
+    assert_eq!(view(&mut world)["cursor"], Value::Null);
     wheel(&mut world, 5.0);
     let scrolled = world.terminal_text("r1");
     assert_eq!(scrolled[10], bottom[0], "the view moved ten rows back");
@@ -107,16 +102,44 @@ fn the_wheel_scrolls_the_view_through_the_history_and_a_scrolled_view_keeps_its_
         scrolled,
         "output leaves a scrolled-back view on its rows"
     );
-    assert_eq!(view(&world)["scrolled_back"], 15);
+    assert_eq!(view(&mut world)["scrolled_back"], 15);
 
     wheel(&mut world, -100.0);
-    assert_eq!(view(&world)["scrolled_back"], 0);
+    assert_eq!(view(&mut world)["scrolled_back"], 0);
     output(&world, 3, b"line-206\r\n");
     world.settle();
     let rows = world.terminal_text("r1");
     assert!(
         rows.iter().any(|r| r == "line-206"),
         "a view at the screen follows output: {rows:?}"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_covered_window_reports_the_scroll_and_the_selection_its_input_made_without_drawing() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, &numbered(1, 200));
+    world.settle();
+    world.cover(true);
+    let drawn = world.terminal_frames();
+
+    wheel(&mut world, 10.0);
+    assert_eq!(view(&mut world)["scrolled_back"], 10);
+    drag(&mut world, (0, 2), (5, 3));
+    assert!(
+        view(&mut world)["overlays"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o["kind"] == "Wash"),
+        "the drag's selection is over the view"
+    );
+    assert_eq!(
+        world.terminal_frames(),
+        drawn,
+        "the covered window drew nothing"
     );
     assert!(world.runtime_is_at_rest());
 }
@@ -129,9 +152,9 @@ fn the_cursor_moves_with_its_row_as_the_view_scrolls() {
     output(&world, 2, b"\x1b[6A");
     world.settle();
     let rows = world.terminal_size("r1").1;
-    assert_eq!(view(&world)["cursor"], json!([0, rows - 7]));
+    assert_eq!(view(&mut world)["cursor"], json!([0, rows - 7]));
     wheel(&mut world, 3.0);
-    assert_eq!(view(&world)["cursor"], json!([0, rows - 4]));
+    assert_eq!(view(&mut world)["cursor"], json!([0, rows - 4]));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -144,7 +167,7 @@ fn output_that_clears_the_history_brings_a_scrolled_view_back_to_the_screen() {
     wheel(&mut world, 10.0);
     output(&world, 2, b"\x1b[3J");
     world.settle();
-    assert_eq!(view(&world)["scrolled_back"], 0);
+    assert_eq!(view(&mut world)["scrolled_back"], 0);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -206,10 +229,10 @@ fn a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again() 
         app.runtime.pointer_up(b.0, b.1);
     });
 
-    assert_eq!(copied(&world).as_deref(), Some("alpha beta\ngamma"));
+    assert_eq!(copied(&mut world).as_deref(), Some("alpha beta\ngamma"));
     let cols = u64::from(world.terminal_size("r1").0);
-    assert_eq!(washes(&world), [(0, [0, cols]), (1, [0, 7])]);
-    assert_eq!(view(&world)["copies"], "alpha beta\ngamma");
+    assert_eq!(washes(&mut world), [(0, [0, cols]), (1, [0, 7])]);
+    assert_eq!(view(&mut world)["copies"], "alpha beta\ngamma");
     assert_eq!(
         world.runtime().stats.commits,
         commits,
@@ -218,7 +241,7 @@ fn a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again() 
 
     world.clipboard.set_text("something else");
     world.gesture(|app| app.press(COPY));
-    assert_eq!(copied(&world).as_deref(), Some("alpha beta\ngamma"));
+    assert_eq!(copied(&mut world).as_deref(), Some("alpha beta\ngamma"));
     assert_eq!(inputs(&world), [], "the copy key reaches no program");
     assert!(world.runtime_is_at_rest());
 }
@@ -230,7 +253,7 @@ fn copied_lines_lose_the_indent_they_share() {
     output(&world, 1, b"    one\r\n      two\r\n    three\r\n");
     world.settle();
     drag(&mut world, (0, 0), (20, 2));
-    assert_eq!(copied(&world).as_deref(), Some("one\n  two\nthree"));
+    assert_eq!(copied(&mut world).as_deref(), Some("one\n  two\nthree"));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -247,14 +270,14 @@ fn the_copy_command_key_copies_a_selection_as_markdown_with_its_styles() {
     world.settle();
     drag(&mut world, (0, 0), (10, 2));
     assert_eq!(
-        copied(&world),
+        copied(&mut world),
         Some(format!("Use attn and bold and it\n{filler}\ntail")),
         "plain copy keeps the wrapped rows apart"
     );
 
     world.gesture(|app| app.press(COPY_COMMAND));
     assert_eq!(
-        copied(&world),
+        copied(&mut world),
         Some(format!(
             "Use `attn` and **bold** and *it*\n{filler} **tail**"
         ))
@@ -281,8 +304,8 @@ fn a_click_that_does_not_drag_clears_the_selection_and_copies_nothing() {
         app.runtime.pointer_up(a.0, a.1);
     });
 
-    assert_eq!(washes(&world), []);
-    assert_eq!(copied(&world).as_deref(), Some("kept"));
+    assert_eq!(washes(&mut world), []);
+    assert_eq!(copied(&mut world).as_deref(), Some("kept"));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -300,8 +323,8 @@ fn a_double_click_after_a_wide_character_selects_the_word_under_the_pointer() {
                 app.runtime.pointer_up(at.0, at.1);
             }
         });
-        assert_eq!(copied(&world).as_deref(), Some("hello"), "column {col}");
-        assert_eq!(washes(&world), [(0, [2, 7])], "column {col}");
+        assert_eq!(copied(&mut world).as_deref(), Some("hello"), "column {col}");
+        assert_eq!(washes(&mut world), [(0, [2, 7])], "column {col}");
         world.clipboard.set_text("");
     }
     assert!(world.runtime_is_at_rest());
@@ -320,15 +343,15 @@ fn a_double_click_selects_the_word_and_a_triple_click_the_row() {
             app.runtime.pointer_up(a.0, a.1);
         }
     });
-    assert_eq!(copied(&world).as_deref(), Some("--force-with-lease"));
-    assert_eq!(washes(&world), [(0, [9, 27])]);
+    assert_eq!(copied(&mut world).as_deref(), Some("--force-with-lease"));
+    assert_eq!(washes(&mut world), [(0, [9, 27])]);
 
     world.gesture(|app| {
         app.runtime.pointer_down(a.0, a.1);
         app.runtime.pointer_up(a.0, a.1);
     });
     assert_eq!(
-        copied(&world).as_deref(),
+        copied(&mut world).as_deref(),
         Some("git push --force-with-lease origin")
     );
 
@@ -336,7 +359,7 @@ fn a_double_click_selects_the_word_and_a_triple_click_the_row() {
         app.runtime.pointer_down(a.0, a.1);
         app.runtime.pointer_up(a.0, a.1);
     });
-    assert_eq!(washes(&world), [], "a fourth click starts over");
+    assert_eq!(washes(&mut world), [], "a fourth click starts over");
     assert!(world.runtime_is_at_rest());
 }
 
@@ -347,8 +370,8 @@ fn a_program_that_tracks_the_mouse_hears_the_drag_unless_alt_holds_it_for_a_sele
     output(&world, 1, b"alpha beta\r\n\x1b[?1000h\x1b[?1006h");
     world.settle();
     drag(&mut world, (0, 0), (4, 0));
-    assert_eq!(washes(&world), []);
-    assert_eq!(copied(&world), None);
+    assert_eq!(washes(&mut world), []);
+    assert_eq!(copied(&mut world), None);
     assert_eq!(
         inputs(&world),
         [pointed("\x1b[<0;1;1M"), pointed("\x1b[<3;5;1m")]
@@ -361,7 +384,7 @@ fn a_program_that_tracks_the_mouse_hears_the_drag_unless_alt_holds_it_for_a_sele
         }))
     });
     drag(&mut world, (0, 0), (4, 0));
-    assert_eq!(copied(&world).as_deref(), Some("alpha"));
+    assert_eq!(copied(&mut world).as_deref(), Some("alpha"));
     assert_eq!(inputs(&world).len(), 2, "the program heard nothing more");
     assert!(world.runtime_is_at_rest());
 }
@@ -373,22 +396,22 @@ fn a_selection_stays_on_its_rows_as_the_view_scrolls() {
     output(&world, 1, &numbered(1, 100));
     world.settle();
     drag(&mut world, (0, 2), (6, 2));
-    assert_eq!(washes(&world), [(2, [0, 7])]);
-    let selected = copied(&world).unwrap();
+    assert_eq!(washes(&mut world), [(2, [0, 7])]);
+    let selected = copied(&mut world).unwrap();
 
     wheel(&mut world, 3.0);
-    assert_eq!(washes(&world), [(5, [0, 7])]);
+    assert_eq!(washes(&mut world), [(5, [0, 7])]);
     assert_eq!(world.terminal_text("r1")[5], selected);
 
     let rows = world.terminal_text("r1").len() as f32;
     wheel(&mut world, rows);
     assert_eq!(
-        washes(&world),
+        washes(&mut world),
         [],
         "a row scrolled out of view keeps no wash at the edge"
     );
     wheel(&mut world, -rows);
-    assert_eq!(washes(&world), [(5, [0, 7])]);
+    assert_eq!(washes(&mut world), [(5, [0, 7])]);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -403,7 +426,7 @@ fn a_selection_on_a_programs_screen_follows_its_text_when_the_wheel_scrolls_the_
     );
     world.settle();
     drag(&mut world, (0, 1), (13, 1));
-    assert_eq!(copied(&world).as_deref(), Some("selected first"));
+    assert_eq!(copied(&mut world).as_deref(), Some("selected first"));
 
     wheel(&mut world, 1.0);
     assert_eq!(inputs(&world), [typed("\x1b[A")]);
@@ -413,14 +436,14 @@ fn a_selection_on_a_programs_screen_follows_its_text_when_the_wheel_scrolls_the_
         b"\x1b[2J\x1b[Holder\r\nheading\r\nselected first\r\nfooter",
     );
     world.settle();
-    assert_eq!(washes(&world), [(2, [0, 14])]);
+    assert_eq!(washes(&mut world), [(2, [0, 14])]);
 
     output(&world, 3, b"\x1b[2J\x1b[Hsomething else");
     world.settle();
-    assert_eq!(washes(&world), [], "the wash goes when its text does");
+    assert_eq!(washes(&mut world), [], "the wash goes when its text does");
     world.clipboard.set_text("other");
     world.gesture(|app| app.press(COPY));
-    assert_eq!(copied(&world).as_deref(), Some("selected first"));
+    assert_eq!(copied(&mut world).as_deref(), Some("selected first"));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -433,7 +456,7 @@ fn the_copy_key_with_nothing_selected_never_reaches_the_program() {
     world.clipboard.set_text("kept");
     world.gesture(|app| app.press(COPY));
     assert_eq!(inputs(&world), []);
-    assert_eq!(copied(&world).as_deref(), Some("kept"));
+    assert_eq!(copied(&mut world).as_deref(), Some("kept"));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -453,7 +476,7 @@ fn a_view_with_nothing_over_it_reports_no_overlays() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
     assert_eq!(
-        view(&world),
+        view(&mut world),
         json!({"cursor": [0, 0], "overlays": [], "images": [], "scrolled_back": 0, "copies": null, "block": null, "annotations": null})
     );
     assert!(world.runtime_is_at_rest());
@@ -473,8 +496,8 @@ fn a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal() {
         app.runtime.pointer_move(inside.0, inside.1);
         app.runtime.pointer_up(inside.0, inside.1);
     });
-    assert_eq!(washes(&world), []);
-    assert_eq!(copied(&world), None);
+    assert_eq!(washes(&mut world), []);
+    assert_eq!(copied(&mut world), None);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -485,13 +508,13 @@ fn a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing() {
     output(&world, 1, b"\x1b]52;c;Y29w");
     output(&world, 2, b"aWVk\x07after");
     world.settle();
-    assert_eq!(copied(&world).as_deref(), Some("copied"));
+    assert_eq!(copied(&mut world).as_deref(), Some("copied"));
     assert_eq!(world.terminal_text("r1")[0], "after");
 
     world.clipboard.set_text("kept");
     output(&world, 3, b"\x1b]52;c;?\x07");
     world.settle();
-    assert_eq!(copied(&world).as_deref(), Some("kept"));
+    assert_eq!(copied(&mut world).as_deref(), Some("kept"));
     assert_eq!(
         inputs(&world),
         [],
@@ -538,8 +561,8 @@ fn a_selection_stays_on_its_text_when_the_oldest_history_is_dropped() {
     }
     world.settle();
     drag(&mut world, (0, 10), (11, 10));
-    assert_eq!(washes(&world), [(10, [0, 12])]);
-    let selected = copied(&world).expect("the drag copies");
+    assert_eq!(washes(&mut world), [(10, [0, 12])]);
+    let selected = copied(&mut world).expect("the drag copies");
     output(&world, 10_000, &fill(full, full + 600));
     world.settle();
     wheel(&mut world, 600.0);
@@ -549,7 +572,7 @@ fn a_selection_stays_on_its_text_when_the_oldest_history_is_dropped() {
         "the view is back on the selected row: {:?}",
         &rows[8..12]
     );
-    let washed: Vec<&str> = washes(&world)
+    let washed: Vec<&str> = washes(&mut world)
         .iter()
         .map(|(row, cols)| &rows[*row as usize][cols[0] as usize..cols[1] as usize])
         .collect();

@@ -411,12 +411,15 @@ fn pick(id: &str, label: &QuickLabel, index: usize, t: &Tokens) -> El {
 }
 
 fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Tokens) -> El {
-    let (edited, keyed) = (id.to_owned(), id.to_owned());
+    let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
     let field = text_input(&popup.comment, type_::LABEL)
         .key(draft::comment_field_key(id))
         .label("Annotation comment")
         .placeholder("What should change here?", t.text_muted)
         .on_edit(move |state: &mut State| state.terminals.popup_comment(&edited))
+        .on_input_change(move |state: &mut State, tx: &mut Tx| {
+            draft::comment_edited(state, &changed, tx);
+        })
         .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             on_comment_key(state, &keyed, ev, tx)
         })
@@ -543,7 +546,7 @@ fn panel(id: &str, marking: &Marking, send_key: Option<&str>, t: &Tokens) -> El 
         .placeholder("Anything else to say with these?", t.text_muted)
         .on_edit(move |state: &mut State| state.terminals.note(&edited))
         .on_input_change(move |state: &mut State, tx: &mut Tx| {
-            draft::note_edited(state, &changed, tx);
+            draft::edited(state, &changed, tx);
         })
         .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             if ev.key == Key::Enter && (ev.mods.cmd || ev.mods.ctrl) {

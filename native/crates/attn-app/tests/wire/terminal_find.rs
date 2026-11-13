@@ -38,7 +38,7 @@ fn key(world: &mut World, key: Key, shift: bool) {
 }
 
 /// The yellow washes over the view, as `(row, [from, to], alpha)`.
-fn matches(world: &World) -> Vec<(u64, [u64; 2], u64)> {
+fn matches(world: &mut World) -> Vec<(u64, [u64; 2], u64)> {
     view(world)["overlays"]
         .as_array()
         .unwrap()
@@ -72,7 +72,7 @@ fn the_find_key_opens_the_bar_and_typing_washes_every_match_with_the_newest_focu
 
     world.gesture(|app| app.type_text("apple"));
     assert_eq!(count(&world), "2/2");
-    assert_eq!(matches(&world), [(0, [4, 9], 71), (1, [4, 9], 153)]);
+    assert_eq!(matches(&mut world), [(0, [4, 9], 71), (1, [4, 9], 153)]);
     assert_eq!(inputs(&world), [], "typing in the bar reaches no program");
     assert!(world.runtime_is_at_rest());
 }
@@ -86,7 +86,7 @@ fn enter_steps_to_older_matches_and_shift_enter_to_newer_wrapping_around() {
 
     key(&mut world, Key::Enter, false);
     assert_eq!(count(&world), "2/3");
-    assert_eq!(matches(&world)[1].2, 153);
+    assert_eq!(matches(&mut world)[1].2, 153);
     key(&mut world, Key::Enter, false);
     key(&mut world, Key::Enter, false);
     assert_eq!(
@@ -113,7 +113,7 @@ fn match_case_keeps_only_the_matches_with_the_querys_case() {
 
     world.gesture(|app| app.click(Target::key("terminal.r1.find.case")));
     assert_eq!(count(&world), "1/1");
-    assert_eq!(matches(&world), [(1, [4, 9], 153)]);
+    assert_eq!(matches(&mut world), [(1, [4, 9], 153)]);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -131,7 +131,7 @@ fn a_match_that_wraps_washes_both_rows() {
     assert_eq!(count(&world), "1/1");
     let cols = cols as u64;
     assert_eq!(
-        matches(&world),
+        matches(&mut world),
         [(0, [cols - 3, cols], 153), (1, [0, 3], 153)]
     );
     assert!(world.runtime_is_at_rest());
@@ -146,14 +146,14 @@ fn stepping_to_a_match_in_the_history_scrolls_the_view_to_it() {
     open(&mut world);
     world.gesture(|app| app.type_text("needle"));
     assert_eq!(
-        view(&world)["scrolled_back"],
+        view(&mut world)["scrolled_back"],
         0,
         "the newest match already shows"
     );
 
     key(&mut world, Key::Enter, false);
     assert_eq!(world.terminal_text("r1")[0], "needle at the top");
-    assert_eq!(matches(&world), [(0, [0, 6], 153)]);
+    assert_eq!(matches(&mut world), [(0, [0, 6], 153)]);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -175,7 +175,7 @@ fn output_while_the_bar_is_open_counts_its_matches_and_closed_it_commits_nothing
             .find(Target::key("terminal.r1.find"))
             .is_none()
     );
-    assert_eq!(matches(&world), []);
+    assert_eq!(matches(&mut world), []);
     let commits = world.runtime().stats.commits;
     output(&world, 3, b"apple once more\r\n");
     world.settle();
@@ -231,7 +231,7 @@ fn a_press_on_the_terminal_beside_the_bar_still_selects() {
         app.runtime.pointer_move(b.0, b.1);
         app.runtime.pointer_up(b.0, b.1);
     });
-    assert_eq!(view(&world)["copies"], "alpha");
+    assert_eq!(view(&mut world)["copies"], "alpha");
     assert!(world.runtime_is_at_rest());
 }
 

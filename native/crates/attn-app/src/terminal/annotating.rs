@@ -114,6 +114,8 @@ pub(crate) struct Popup {
     pub(crate) at: (f32, f32),
     pub(crate) writing: bool,
     pub(crate) comment: TextEdit,
+    /// The mark's comment when the popup opened, which a dismiss puts back.
+    pub(crate) before: String,
     /// The list of every other label is open.
     pub(crate) picking: bool,
     /// What the control under the pointer does.
@@ -214,8 +216,8 @@ pub(crate) struct Marking {
     pub(crate) popup: Option<Popup>,
     pub(crate) notice: Option<Notice>,
     pub(crate) outcome: Option<Outcome>,
-    /// When the note, edited since the last save, is saved: once typing pauses.
-    pub(crate) note_due: Option<f64>,
+    /// When the note or a comment, edited since the last save, is saved: once typing pauses.
+    pub(crate) save_due: Option<f64>,
     /// Where the user dragged the panel to, in points from the slot's top-left.
     pub(crate) panel_at: Option<(f32, f32)>,
     /// The panel's size as last laid out.
@@ -226,10 +228,10 @@ pub(crate) struct Marking {
 }
 
 impl Marking {
-    /// The save of a note edit still waiting for typing to pause, as the marking goes: no answer
+    /// The save of an edit still waiting for typing to pause, as the marking goes: no answer
     /// can reach a marking that is gone.
     pub(crate) fn leaving(&self) -> Option<SessionAnnotationsSaveMessage> {
-        self.note_due?;
+        self.save_due?;
         Some(SessionAnnotationsSaveMessage {
             session_id: self.session.clone(),
             annotations: self.marks.iter().map(Annotation::wire).collect(),
@@ -258,7 +260,7 @@ impl Marking {
             popup: None,
             notice: None,
             outcome: None,
-            note_due: None,
+            save_due: None,
             panel_at: None,
             panel_size: None,
             grab: None,
@@ -753,7 +755,7 @@ impl Terminals {
             .collect()
     }
 
-    /// The terminals whose note waits to be saved by `now`, and whether a panel's sent marks
+    /// The terminals whose edits wait to be saved by `now`, and whether a panel's sent marks
     /// stopped showing.
     pub(crate) fn annotations_due(&mut self, now: f64) -> (Vec<String>, bool) {
         let mut notes = Vec::new();
@@ -762,7 +764,7 @@ impl Terminals {
             let Some(marking) = term.marking.as_mut() else {
                 continue;
             };
-            if marking.note_due.is_some_and(|due| now >= due) {
+            if marking.save_due.is_some_and(|due| now >= due) {
                 notes.push(id.clone());
             }
             if let Some(Outcome::Sent { until, .. }) = marking.outcome

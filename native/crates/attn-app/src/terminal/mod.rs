@@ -947,15 +947,34 @@ impl Terminals {
         let finds = &self.finds;
         let images = &mut self.images;
         self.panes.iter_mut().map(move |(id, term)| {
-            term.vt.sync(&mut term.grid);
-            let placed = Terminals::kitty_images(images, id, term);
-            let top = term.vt.view_top();
-            term.grid.set_images(placed, top);
-            let overlays = Terminals::overlays(term, &theme, finds.get(id));
-            term.grid.set_overlays(overlays);
-            term.scrolled_back = term.vt.scrolled_back();
+            Terminals::bring_up_to_date(images, finds, &theme, id, term);
             (mark(id), &mut term.grid)
         })
+    }
+
+    /// Brings terminal `id`'s grid, images, overlays and scroll position up to what its screen
+    /// holds now.
+    fn bring_up_to_date(
+        images: &mut kitty::Images,
+        finds: &HashMap<String, find::Finding>,
+        theme: &Theme,
+        id: &str,
+        term: &mut Term,
+    ) {
+        term.vt.sync(&mut term.grid);
+        let placed = Terminals::kitty_images(images, id, term);
+        let top = term.vt.view_top();
+        term.grid.set_images(placed, top);
+        let overlays = Terminals::overlays(term, theme, finds.get(id));
+        term.grid.set_overlays(overlays);
+        term.scrolled_back = term.vt.scrolled_back();
+    }
+
+    /// Terminal `id` brought up to what its screen holds now, whether or not a frame drew it.
+    fn current(&mut self, id: &str) -> Option<&Term> {
+        let term = self.panes.get_mut(id)?;
+        Terminals::bring_up_to_date(&mut self.images, &self.finds, &self.theme, id, term);
+        Some(term)
     }
 
     /// Whether a screen changed since the renderer last took the grids.

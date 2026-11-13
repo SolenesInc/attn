@@ -11,7 +11,7 @@ pub trait Hooks<S>: Send + Sync + 'static {
     fn run(&self, state: &mut S, name: &str, tx: &mut Tx) -> Result<(), String>;
     /// A named slice, or `None` while it is not there yet, such as a terminal the window has
     /// not drawn.
-    fn state(&self, state: &S, of: &str) -> Result<Option<Value>, String>;
+    fn state(&self, state: &mut S, of: &str) -> Result<Option<Value>, String>;
 }
 
 /// One request, as the Tauri app's automation server reads it, so one Node client drives
@@ -252,7 +252,7 @@ pub fn act<S: 'static>(
         }
         "state" => {
             let Of { of, includes } = args!(action, payload);
-            match (hooks.state(&rt.state, &of), includes) {
+            match (hooks.state(&mut rt.state, &of), includes) {
                 (Err(why), _) => Attempt::Fail(format!("state {of:?}: {why}")),
                 (Ok(None), Some(_)) => Attempt::Wait(format!("state {of:?} to be there")),
                 (Ok(None), None) => Attempt::Fail(format!("state {of:?} is not there yet")),

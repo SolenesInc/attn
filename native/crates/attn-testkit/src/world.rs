@@ -33,6 +33,7 @@ pub struct World {
     pub clipboard: rune::clipboard::MemoryClipboard,
     runtime: Runtime<State>,
     screens: Screens,
+    covered: bool,
     terminal_frames: usize,
     link: Option<Link>,
     _window: Subscription,
@@ -248,6 +249,7 @@ impl World {
             clipboard,
             runtime,
             screens: Screens::default(),
+            covered: false,
             terminal_frames: 0,
             link: Some(link),
             _window: window,
@@ -348,7 +350,7 @@ impl World {
             while self.runtime.has_pending_input() {
                 self.still_frame(&mut sampler);
             }
-            if self.screens.redraws(&self.runtime) {
+            if !self.covered && self.screens.redraws(&self.runtime) {
                 self.screens.draw_without_gpu(&mut self.runtime);
                 self.terminal_frames += 1;
             }
@@ -565,8 +567,21 @@ impl World {
         !self.runtime.animating && self.runtime.wake_deadline().is_none()
     }
 
+    /// Covers the window or uncovers it: a covered window, such as a parked or occluded one,
+    /// draws no terminal frames until it is uncovered.
+    pub fn cover(&mut self, covered: bool) {
+        self.covered = covered;
+        self.settle();
+    }
+
     pub fn runtime(&self) -> &Runtime<State> {
         &self.runtime
+    }
+
+    /// Terminal `id`'s `terminal-view` slice as the automation server reads it: what its screen
+    /// holds now, whether or not a frame drew it.
+    pub fn terminal_view(&mut self, id: &str) -> Option<serde_json::Value> {
+        self.runtime.state.terminals.view_state(id)
     }
 
     /// The links the app asked the system to open since the last call, which a test run

@@ -27,7 +27,7 @@ impl Hooks<State> for AppHooks {
         Ok(())
     }
 
-    fn state(&self, state: &State, of: &str) -> Result<Option<Value>, String> {
+    fn state(&self, state: &mut State, of: &str) -> Result<Option<Value>, String> {
         let facts = &state.facts;
         let window = &state.window;
         if let Some(id) = of.strip_prefix("terminal:") {

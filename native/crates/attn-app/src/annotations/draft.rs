@@ -128,6 +128,7 @@ pub(crate) fn persist(state: &mut State, id: &str, tx: &mut Tx) {
         return;
     };
     marking.generation += 1;
+    marking.save_due = None;
     let save = SessionAnnotationsSaveMessage {
         session_id: marking.session.clone(),
         annotations: marking.marks.iter().map(|m| m.wire()).collect(),
@@ -261,12 +262,18 @@ pub(crate) fn dismiss(state: &mut State, id: &str, tx: &mut Tx) {
     let Some(popup) = marking.popup.as_ref() else {
         return;
     };
-    let mark = popup.mark.clone();
-    let empty = marking
-        .mark(&mark)
-        .is_some_and(|m| m.label.is_empty() && m.comment.is_empty());
+    let (mark, before) = (popup.mark.clone(), popup.before.clone());
+    let Some(annotation) = marking.mark_mut(&mark) else {
+        close(state, id, tx);
+        return;
+    };
+    let restored = annotation.comment != before;
+    annotation.comment = before;
+    let empty = annotation.label.is_empty() && annotation.comment.is_empty();
     if empty {
         marking.remove(&mark);
+    }
+    if restored || empty {
         persist(state, id, tx);
     }
     close(state, id, tx);
@@ -460,6 +467,7 @@ pub(crate) fn hint(state: &mut State, id: &str, hint: Option<&str>) {
 
 impl Popup {
     fn new(mark: String, at: (f32, f32), writing: bool, comment: &str) -> Popup {
+        let comment_before = comment.to_owned();
         let mut comment = TextEdit::new(comment);
         comment.set_caret(comment.text.len());
         Popup {
@@ -467,6 +475,7 @@ impl Popup {
             at,
             writing,
             comment,
+            before: comment_before,
             picking: false,
             hint: None,
             size: None,
@@ -475,22 +484,37 @@ impl Popup {
     }
 }
 
-/// The note changed: it is saved once typing pauses.
-pub(crate) fn note_edited(state: &mut State, id: &str, tx: &mut Tx) {
+/// The note or a comment changed: the draft is saved once typing pauses.
+pub(crate) fn edited(state: &mut State, id: &str, tx: &mut Tx) {
     let due = tx.clock() + NOTE_PAUSE;
     if let Some(marking) = state.terminals.marking_mut(id) {
-        marking.note_due = Some(due);
+        marking.save_due = Some(due);
         tx.wake_at(due);
     }
 }
 
-/// Saves terminal `id`'s note now when an edit to it is waiting to be saved.
-pub(crate) fn flush_note(state: &mut State, id: &str, tx: &mut Tx) {
+/// The popup's comment changed: its mark takes the text as typed, so leaving the terminal or
+/// a refused send keeps it.
+pub(crate) fn comment_edited(state: &mut State, id: &str, tx: &mut Tx) {
+    let Some(marking) = state.terminals.marking_mut(id) else {
+        return;
+    };
+    let Some(popup) = marking.popup.as_ref() else {
+        return;
+    };
+    let (mark, comment) = (popup.mark.clone(), popup.comment.text.trim().to_owned());
+    if let Some(annotation) = marking.mark_mut(&mark) {
+        annotation.comment = comment;
+    }
+    edited(state, id, tx);
+}
+
+/// Saves terminal `id`'s draft now when an edit to it is waiting to be saved.
+pub(crate) fn flush(state: &mut State, id: &str, tx: &mut Tx) {
     let waiting = state
         .terminals
-        .marking_mut(id)
-        .and_then(|m| m.note_due.take())
-        .is_some();
+        .marking(id)
+        .is_some_and(|m| m.save_due.is_some());
     if waiting {
         persist(state, id, tx);
     }
@@ -501,7 +525,7 @@ pub(crate) fn flush_note(state: &mut State, id: &str, tx: &mut Tx) {
 pub(crate) fn due(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let (notes, sent) = state.terminals.annotations_due(now);
     for id in &notes {
-        flush_note(state, id, tx);
+        flush(state, id, tx);
     }
     !notes.is_empty() || sent
 }
@@ -543,7 +567,7 @@ pub(crate) fn send(state: &mut State, id: &str, tx: &mut Tx) {
             }
         }
     }
-    if marking.note_due.take().is_some() || edited {
+    if marking.save_due.is_some() || edited {
         persist(state, id, tx);
     }
     tx.blur();

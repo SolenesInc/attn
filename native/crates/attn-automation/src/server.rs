@@ -221,7 +221,7 @@ mod tests {
             Err(format!("no action {name}"))
         }
 
-        fn state(&self, _: &u32, of: &str) -> Result<Option<Value>, String> {
+        fn state(&self, _: &mut u32, of: &str) -> Result<Option<Value>, String> {
             Err(format!("no slice {of}"))
         }
     }

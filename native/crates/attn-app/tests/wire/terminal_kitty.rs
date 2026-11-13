@@ -56,7 +56,7 @@ fn asked(world: &World) -> Vec<Value> {
         .collect()
 }
 
-fn drawn(world: &World) -> Value {
+fn drawn(world: &mut World) -> Value {
     view(world)["images"].clone()
 }
 
@@ -77,7 +77,7 @@ fn a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive() {
     world.settle();
     assert_eq!(asked(&world), [json!(7)]);
     assert_eq!(
-        drawn(&world),
+        drawn(&mut world),
         json!([]),
         "nothing draws before the pixels come"
     );
@@ -93,7 +93,7 @@ fn a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive() {
     send_pixels(&world, 7, 1, (2, 1), &[255, 0, 0, 255, 0, 0, 255, 255]);
     world.settle();
     assert_eq!(
-        drawn(&world),
+        drawn(&mut world),
         json!([{"image": 7, "placement": 1, "generation": 1, "row": 2, "col": 3,
                 "size": [20, 40], "z": 0, "pixels": [2, 1]}])
     );
@@ -109,7 +109,7 @@ fn a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive() {
     describe(&world, 5, vec![]);
     world.settle();
     assert_eq!(
-        drawn(&world),
+        drawn(&mut world),
         json!([]),
         "the empty set takes the image away"
     );
@@ -146,7 +146,7 @@ fn an_image_the_daemon_cannot_give_is_asked_for_again_only_once_it_is_sent_anew(
         [json!(7), json!(7)],
         "a new generation is a new image"
     );
-    assert_eq!(drawn(&world), json!([]));
+    assert_eq!(drawn(&mut world), json!([]));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -181,8 +181,8 @@ fn a_restored_screen_brings_back_its_placements_and_asks_for_their_pixels() {
 
     send_pixels(&world, 9, 3, (1, 1), &[0, 255, 0, 255]);
     world.settle();
-    assert_eq!(drawn(&world)[0]["placement"], 4);
-    assert_eq!(drawn(&world)[0]["row"], 1);
+    assert_eq!(drawn(&mut world)[0]["placement"], 4);
+    assert_eq!(drawn(&mut world)[0]["row"], 1);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -201,7 +201,7 @@ fn an_image_asked_for_on_a_connection_that_dropped_is_asked_for_again_on_the_nex
     );
     send_pixels(&world, 7, 1, (1, 1), &[0, 255, 0, 255]);
     world.settle();
-    assert_eq!(drawn(&world)[0]["image"], 7);
+    assert_eq!(drawn(&mut world)[0]["image"], 7);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -246,7 +246,7 @@ fn placed_images_past_the_budget_stay_drawn_and_say_so_and_one_no_longer_placed_
         .collect();
     output(&world, 3, &lines);
     world.settle();
-    let cursor_row = view(&world)["cursor"][1]
+    let cursor_row = view(&mut world)["cursor"][1]
         .as_i64()
         .expect("the cursor shows");
     let scrolled = 1 + 40 - cursor_row;
@@ -260,7 +260,7 @@ fn placed_images_past_the_budget_stay_drawn_and_say_so_and_one_no_longer_placed_
     world.settle();
     wheel(&mut world, scrolled as f32);
     world.settle();
-    let images: Vec<(Value, Value)> = drawn(&world)
+    let images: Vec<(Value, Value)> = drawn(&mut world)
         .as_array()
         .expect("the view lists its images")
         .iter()

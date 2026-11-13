@@ -7,13 +7,8 @@ use serde_json::{Value, json};
 
 use super::terminal::{cell, inputs, one_terminal, output, pane, pointed, showing};
 
-fn underlines(world: &World) -> Vec<(u64, [u64; 2])> {
-    world
-        .runtime()
-        .state
-        .terminals
-        .view_state("r1")
-        .expect("r1 is drawn")["overlays"]
+fn underlines(world: &mut World) -> Vec<(u64, [u64; 2])> {
+    world.terminal_view("r1").expect("r1 is drawn")["overlays"]
         .as_array()
         .unwrap()
         .iter()
@@ -82,8 +77,8 @@ fn hovering_a_url_underlines_it_and_output_reads_the_link_under_the_resting_poin
     world.settle();
 
     hover(&mut world, 10, 0);
-    assert_eq!(underlines(&world), [(0, [4, 29])]);
-    let overlay = &world.runtime().state.terminals.view_state("r1").unwrap()["overlays"][0];
+    assert_eq!(underlines(&mut world), [(0, [4, 29])]);
+    let overlay = &world.terminal_view("r1").unwrap()["overlays"][0];
     assert_eq!(
         overlay["alpha"],
         Value::from(204),
@@ -91,23 +86,23 @@ fn hovering_a_url_underlines_it_and_output_reads_the_link_under_the_resting_poin
     );
 
     hover(&mut world, 1, 0);
-    assert_eq!(underlines(&world), []);
+    assert_eq!(underlines(&mut world), []);
 
     hover(&mut world, 10, 0);
     output(&world, 2, b"more");
     world.settle();
     assert_eq!(
-        underlines(&world),
+        underlines(&mut world),
         [(0, [4, 29])],
         "output below leaves the link under the pointer"
     );
     output(&world, 3, b"\x1b[2J\x1b[Hplain words here\r\n");
     world.settle();
-    assert_eq!(underlines(&world), [], "output replaced the link");
+    assert_eq!(underlines(&mut world), [], "output replaced the link");
     output(&world, 4, b"\x1b[Hgo https://example.test/next\r\n");
     world.settle();
     assert_eq!(
-        underlines(&world),
+        underlines(&mut world),
         [(0, [3, 28])],
         "output put a link under the pointer"
     );
@@ -115,7 +110,7 @@ fn hovering_a_url_underlines_it_and_output_reads_the_link_under_the_resting_poin
     hover(&mut world, 11, 0);
     let away = cell(&world, 10, 0);
     world.gesture(|app| app.runtime.pointer_move(away.0, -50.0));
-    assert_eq!(underlines(&world), []);
+    assert_eq!(underlines(&mut world), []);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -178,7 +173,7 @@ fn an_osc_8_hyperlink_underlines_its_whole_label_and_opens_its_hidden_uri() {
     world.settle();
 
     hover(&mut world, 9, 0);
-    assert_eq!(underlines(&world), [(0, [3, 16])]);
+    assert_eq!(underlines(&mut world), [(0, [3, 16])]);
     accelerator(&mut world, true);
     click(&mut world, 4, 0);
     assert_eq!(opened(&mut world), ["https://hidden.test/a"]);
@@ -220,7 +215,7 @@ fn a_url_that_wraps_underlines_both_rows_and_opens_whole() {
 
     hover(&mut world, 2, 1);
     assert_eq!(
-        underlines(&world),
+        underlines(&mut world),
         [
             (0, [0, u64::from(cols)]),
             (1, [0, url.len() as u64 - u64::from(cols)])
@@ -245,14 +240,14 @@ fn a_path_that_exists_under_the_sessions_directory_opens_and_one_that_does_not_i
     world.settle();
 
     hover(&mut world, 5, 0);
-    assert_eq!(underlines(&world), [(0, [1, 17])]);
+    assert_eq!(underlines(&mut world), [(0, [1, 17])]);
     hover(&mut world, 25, 0);
-    assert_eq!(underlines(&world), [], "no such file");
+    assert_eq!(underlines(&mut world), [], "no such file");
     std::fs::write(dir.path().join("src/gone.go"), "").unwrap();
     output(&world, 2, b"\r\n");
     world.settle();
     assert_eq!(
-        underlines(&world),
+        underlines(&mut world),
         [(0, [20, 31])],
         "a file made after it was printed links once the screen draws again"
     );
@@ -286,9 +281,9 @@ fn a_session_on_an_outpost_links_its_urls_but_not_its_paths() {
     world.settle();
 
     hover(&mut world, 2, 0);
-    assert_eq!(underlines(&world), []);
+    assert_eq!(underlines(&mut world), []);
     hover(&mut world, 12, 0);
-    assert_eq!(underlines(&world), [(0, [8, 28])]);
+    assert_eq!(underlines(&mut world), [(0, [8, 28])]);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -329,7 +324,7 @@ fn a_url_after_wide_characters_underlines_the_columns_it_draws_in() {
     world.settle();
 
     hover(&mut world, 8, 0);
-    assert_eq!(underlines(&world), [(0, [5, 22])]);
+    assert_eq!(underlines(&mut world), [(0, [5, 22])]);
     accelerator(&mut world, true);
     click(&mut world, 8, 0);
     assert_eq!(opened(&mut world), ["https://x.test/日"]);
