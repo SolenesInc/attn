@@ -550,6 +550,33 @@ fn taking_the_leader_of_several_chords_unbinds_every_one() {
 }
 
 #[test]
+fn taking_a_leader_that_also_leads_a_required_chord_is_refused() {
+    let leader = chord("mod+alt+y");
+    let mut world = start(Some(json!({
+        "session.new": {"leader": stored(leader), "then": {"key": "g"}},
+        "app.quit": {"leader": stored(leader), "then": {"key": "h"}},
+    })));
+    open_editor(&mut world);
+
+    record(
+        &mut world,
+        &Action::SessionToggleSidebar,
+        &leader.to_string(),
+    );
+
+    assert_eq!(
+        alert(&world),
+        Some(format!(
+            "{} is reserved by “{}” and can’t be reassigned.",
+            label(Binding::Chord(leader)),
+            Action::AppQuit.label()
+        ))
+    );
+    assert_eq!(pending(&world), None);
+    assert!(writes(&world).is_empty());
+}
+
+#[test]
 fn resetting_onto_the_leader_of_several_chords_unbinds_every_one_and_keeps_the_default() {
     let new_session = default_chord(&Action::SessionNew);
     let mut setting = chords_led_by(new_session);
