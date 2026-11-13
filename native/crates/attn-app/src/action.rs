@@ -43,6 +43,8 @@ macro_rules! actions {
             RenameSession { session: String },
             /// Pin the usage breakdown in an agent's tile header.
             ShowSessionUsage { session: String },
+            /// Pin the delegation chain in an agent's tile header.
+            ShowDelegationChain { session: String },
             /// Restart an agent in its pane.
             ReloadSession { session: String },
             /// End an agent's snooze.
@@ -69,6 +71,7 @@ macro_rules! actions {
                     Action::RenameSession { .. } => "session.rename",
                     Action::ReloadSession { .. } => "session.reload",
                     Action::ShowSessionUsage { .. } => "session.showUsage",
+                    Action::ShowDelegationChain { .. } => "session.showDelegationChain",
                     Action::WakeSession { .. } => "session.wake",
                     Action::SetSetting { .. } => "setting.set",
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
@@ -87,6 +90,7 @@ macro_rules! actions {
                     Action::RenameSession { .. } => "Rename an agent",
                     Action::ReloadSession { .. } => "Reload an agent",
                     Action::ShowSessionUsage { .. } => "Show an agent's usage",
+                    Action::ShowDelegationChain { .. } => "Show an agent's delegation chain",
                     Action::WakeSession { .. } => "Unsnooze an agent",
                     Action::SetSetting { .. } => "Change a setting",
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",

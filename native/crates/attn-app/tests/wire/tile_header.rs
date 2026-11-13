@@ -1094,3 +1094,39 @@ fn the_details_of_one_pull_request_spell_out_every_status_the_daemon_reported() 
     );
     rest(&mut world);
 }
+
+fn focused(world: &World) -> Option<String> {
+    world
+        .screen()
+        .all(Target::role("button"))
+        .into_iter()
+        .chain(world.screen().all(Target::role("dialog")))
+        .find(|n| n.is("focused"))
+        .and_then(|n| n.key)
+}
+
+#[test]
+fn the_command_palette_pins_the_delegation_chain_of_the_agent_on_screen() {
+    let mut world = start_with(vec![
+        delegate_of("a", "ledger sweep", "dispatcher"),
+        session("b", "docs", None),
+        session("dispatcher", "docs sweep", None),
+    ]);
+    run_command(&mut world, "delegation chain");
+    assert_eq!(
+        chain(&world).expect("the command pins the chain"),
+        [
+            "docs sweep · Unknown harness",
+            "ledger sweep · Codex · current"
+        ]
+    );
+    assert_eq!(focused(&world).as_deref(), Some("tile.a.role.popover"));
+    key(&mut world, Key::Up);
+    key(&mut world, Key::Enter);
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(
+        shown.last().map(|r| r["session_id"].clone()),
+        Some("s-dispatcher".into())
+    );
+    rest(&mut world);
+}

@@ -172,6 +172,13 @@ pub(crate) fn shows_usage(session: &attn_protocol::Session) -> bool {
     usage::shown(session).is_some()
 }
 
+pub(crate) fn shows_chain(
+    session: &attn_protocol::Session,
+    sessions: &[attn_protocol::Session],
+) -> bool {
+    chain::shown(session, sessions)
+}
+
 /// The open tile header popover.
 pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune::El> {
     let pop = state.window.desk.header_pop.open.as_ref()?;

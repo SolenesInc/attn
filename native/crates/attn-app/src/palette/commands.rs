@@ -328,6 +328,28 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
+        if crate::desktop::shows_chain(session, &state.facts.sessions) {
+            commands.push(
+                Command::new(
+                    "show-delegation-chain",
+                    "Show delegation chain",
+                    &[
+                        "role",
+                        "orchestrator",
+                        "builder",
+                        "parent",
+                        "children",
+                        "agent",
+                        "session",
+                    ],
+                    Action::ShowDelegationChain {
+                        session: session.id.clone(),
+                    },
+                )
+                .describe("Navigate this agent’s dispatcher, peers, and delegates")
+                .pin(),
+            );
+        }
     }
     let snoozed = on_screen.filter(|s| {
         queue_on
