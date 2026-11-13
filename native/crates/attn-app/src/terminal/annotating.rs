@@ -285,7 +285,7 @@ impl Marking {
             .collect();
         serde_json::json!({
             "session": self.session,
-            "messages": self.messages.len(),
+            "messages": self.messages.iter().map(|m| m.key.as_str()).collect::<Vec<_>>(),
             "marks": marks,
             "note": self.note.text,
             "generation": self.generation,

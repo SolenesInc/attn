@@ -237,6 +237,20 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-terminal-features',
+    runnerId: 'NATIVE-TERMINAL-FEATURES',
+    label: 'A shell in the native app scrolls, selects and copies, selects a command block, finds through its history and draws a kitty image',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-features.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-terminal-annotations',
+    runnerId: 'NATIVE-TERMINAL-ANNOTATIONS',
+    label: 'An Alt-drag in the native app marks an agent message; a label, a comment and a note go to the agent with the send key',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-annotations.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-agent-queue',
     runnerId: 'NATIVE-AGENT-QUEUE',
     label: 'The native queue lists turns oldest first, opens a row, hands over on settle and snooze, lands on home and takes a woken agent back',
