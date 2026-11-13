@@ -2,7 +2,7 @@ use rune::{Chord, GesturePhase, Key, KeyEvent, Mods, PhysicalInput, Runtime, Tx,
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::target::{Found, Target};
+use crate::target::{Found, Target, moving_at};
 
 /// What the app adds to the protocol: whether it is ready to be driven, its actions by id,
 /// and named slices of its state.
@@ -302,6 +302,13 @@ fn pointer<S: 'static>(
         return Attempt::Wait(format!("{:?} to show", aimed.target));
     }
     let (landed, matched) = Target::landed(rt, &found, point);
+    if !matched && moving_at(rt, point) {
+        return Attempt::Wait(format!(
+            "{:?} to be uncovered by {}, which still moves",
+            aimed.target,
+            landed.unwrap_or_default()
+        ));
+    }
     input(rt, point);
     Attempt::Done(json!({
         "handled": true,
@@ -329,4 +336,65 @@ fn scroll_into_view<S: 'static>(rt: &mut Runtime<S>, found: &Found) -> Attempt {
         "{:?} is laid out but nothing of it shows",
         found.key
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use rune::{Cx, El, Env, Spring, el};
+
+    use super::*;
+
+    struct Hooksless;
+
+    impl Hooks<bool> for Hooksless {
+        fn ready(&self, _: &bool) -> bool {
+            true
+        }
+
+        fn run(&self, _: &mut bool, name: &str, _: &mut Tx) -> Result<(), String> {
+            Err(format!("no action {name}"))
+        }
+
+        fn state(&self, _: &mut bool, of: &str) -> Result<Option<Value>, String> {
+            Err(format!("no slice {of}"))
+        }
+    }
+
+    fn view(cleared: &bool, _: &mut Cx<bool>) -> El {
+        el().w(200.0)
+            .h(40.0)
+            .child(
+                el().key("button")
+                    .w(40.0)
+                    .h(20.0)
+                    .on_press(|_: &mut bool| {}),
+            )
+            .child(
+                el().key("cover")
+                    .w(40.0)
+                    .h(20.0)
+                    .absolute(0.0, 0.0)
+                    .on_press(|_: &mut bool| {})
+                    .offset(if *cleared { 120.0 } else { 0.0 }, 0.0)
+                    .offset_motion(Spring::new(0.4, 0.0)),
+            )
+    }
+
+    #[test]
+    fn a_press_waits_while_what_covers_its_target_still_moves_away() {
+        let mut rt = Runtime::new(false, view, (200.0, 40.0), Env::default());
+        rt.frame(0.0);
+        rt.update(|cleared, _| *cleared = true);
+        rt.frame(0.016);
+        let press = json!({"target": {"key": "button"}});
+
+        let early = act(&mut rt, &Hooksless, "press", &press);
+        assert!(matches!(early, Attempt::Wait(_)), "{early:?}");
+
+        rt.frame(3.0);
+        let Attempt::Done(receipt) = act(&mut rt, &Hooksless, "press", &press) else {
+            panic!("the press did not land once the cover stopped");
+        };
+        assert_eq!(receipt["matched"], true, "{receipt}");
+    }
 }
