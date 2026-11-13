@@ -3,7 +3,8 @@ use attn_protocol::{
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Side, TextEdit, Tx, col, row, text, text_input};
+use rune::{El, Side, TextEdit, Tx, col, text, text_input};
+use rune_kit::{MenuItem, Placement};
 
 use crate::State;
 use crate::requests::Refused;
@@ -220,81 +221,63 @@ fn close(state: &mut State, tx: &mut Tx) {
     super::actions::closing(state, &session.id, tx);
 }
 
-pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    let menu = state.window.session_menu.as_ref()?;
-    let surface = match &menu.rename {
-        Some(edit) => rename_popover(edit, menu.refused.as_deref(), t),
-        None => actions(state, menu, t),
+pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
+    let Some(menu) = state.window.session_menu.as_ref() else {
+        return Vec::new();
     };
-    Some(
-        surface
-            .anchored(menu.under.clone(), Side::Bottom, rune::Align::End, 4.0)
-            .focus_return(menu.under.clone()),
-    )
+    match &menu.rename {
+        Some(edit) => vec![
+            rename_popover(edit, menu.refused.as_deref(), t)
+                .anchored(menu.under.clone(), Side::Bottom, rune::Align::End, 4.0)
+                .focus_return(menu.under.clone()),
+        ],
+        None => actions(state, menu, t),
+    }
 }
 
-fn actions(state: &State, menu: &Menu, t: &Tokens) -> El {
+fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == menu.session);
     let priority = session.is_some_and(|s| s.priority == Some(true));
     let chief = session.is_some_and(|s| s.chief_of_staff == Some(true));
-    let item = |id: &str, glyph: &str, label: String| {
-        row()
-            .key(format!("{MENU}.{id}"))
-            .role("menuitem")
-            .label(label.clone())
-            .focusable(true)
-            .w_full()
-            .h(26.0)
-            .px(space::S2)
-            .gap(space::S2)
-            .items_center()
-            .radius(4.0)
-            .hover(t.bg_button)
-            .focus_highlight(t.bg_selected)
-            .child(
-                text(glyph.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary)
-                    .w(14.0),
-            )
-            .child(text(label).font(type_::BODY).color(t.text_primary))
-    };
-    let divider = || rune::el().w_full().h(1.0).my(2.0).fill(t.border_subtle);
-    let id = menu.session.clone();
-    col()
-        .key(MENU)
-        .role("menu")
-        .label(format!("Actions for {}", menu.name))
-        .w(200.0)
-        .padding(space::S1)
-        .gap(2.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .focus_group()
-        .modal_tx(true, |state: &mut State, _: &mut Tx| {
-            state.window.session_menu = None
-        })
-        .child(
-            item(
-                "priority",
-                attn_ui::icon::FLAG,
-                if priority {
-                    "Unmark priority"
-                } else {
-                    "Mark priority"
-                }
-                .into(),
-            )
-            .on_press(move |state: &mut State| {
-                state.window.session_menu = None;
-                super::actions::set_priority(state, &id, !priority);
-            }),
+    let item = |id: &str, glyph: &str, label: &str| {
+        MenuItem::new(label).key(format!("{MENU}.{id}")).lead(
+            text(glyph.to_owned())
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .w(14.0),
         )
-        .child(item("rename", attn_ui::icon::PENCIL, "Rename session".into()).on_press_tx(rename))
-        .child(divider())
-        .child(item("reload", "↻", "Reload session".into()).on_press_tx(reload))
-        .children((!chief).then(|| item("close", "×", "Close session".into()).on_press_tx(close)))
+    };
+    let id = menu.session.clone();
+    let priority_label = if priority {
+        "Unmark priority"
+    } else {
+        "Mark priority"
+    };
+    let mut kit_menu = rune_kit::Menu::new(MENU)
+        .anchor(menu.under.clone())
+        .placement(Placement::BottomEnd)
+        .gutter(4.0)
+        .min_width(200.0)
+        .label(format!("Actions for {}", menu.name))
+        .open(true)
+        .on_close(|state: &mut State| state.window.session_menu = None)
+        .item(
+            item("priority", attn_ui::icon::FLAG, priority_label).on_select(
+                move |state: &mut State| {
+                    state.window.session_menu = None;
+                    super::actions::set_priority(state, &id, !priority);
+                },
+            ),
+        )
+        .item(item("rename", attn_ui::icon::PENCIL, "Rename session").on_select_tx(rename))
+        .separator()
+        .item(item("reload", "↻", "Reload session").on_select_tx(reload));
+    if !chief {
+        kit_menu = kit_menu.item(item("close", "×", "Close session").on_select_tx(close));
+    }
+    let mut layer = Vec::new();
+    kit_menu.build(attn_ui::kit(t), &mut layer);
+    layer
 }
 
 fn rename_popover(edit: &TextEdit, refused: Option<&str>, t: &Tokens) -> El {

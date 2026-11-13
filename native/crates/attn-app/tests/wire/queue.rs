@@ -678,7 +678,7 @@ fn a_row_snoozes_its_agent_for_the_time_the_menu_shows() {
     let menu = world
         .screen()
         .get(Target::role("menu").name("Snooze t-old"));
-    assert_eq!(menu.key.as_deref(), Some("snooze.menu.snooze"));
+    assert_eq!(menu.key.as_deref(), Some("snooze.menu.snooze-menu"));
     let choices: Vec<_> = world
         .screen()
         .all(Target::role("menu-item"))

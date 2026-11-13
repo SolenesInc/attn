@@ -1,7 +1,7 @@
 use attn_protocol::{SnoozeTurnMessage, StandbySessionMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
-use rune::{El, Side, Tx, col, row, text};
+use rune::{El, Tx, col};
+use rune_kit::{MenuItem, Placement};
 
 use crate::State;
 use crate::calendar::{clock, iso};
@@ -122,9 +122,6 @@ pub struct Menu {
     pub name: String,
     /// The key of what it opened under; none opens it in the middle of the window.
     pub under: Option<String>,
-    /// Whether it opened from a press on `under`, which takes the keyboard back as it closes;
-    /// opened by a key, the keyboard goes back to where it was.
-    pub pressed: bool,
     pub standby: bool,
     pub opened_ms: i64,
 }
@@ -135,7 +132,6 @@ pub(crate) fn open(
     session: &str,
     name: String,
     under: Option<String>,
-    pressed: bool,
     tx: &mut Tx,
 ) {
     tx.focus(format!("{MENU}.snooze.{}", CHOICES[0].id()), true);
@@ -144,7 +140,6 @@ pub(crate) fn open(
         session: session.to_owned(),
         name,
         under,
-        pressed,
         standby: false,
         opened_ms: state.window.now_ms,
     });
@@ -188,101 +183,70 @@ pub(crate) fn snooze_turn(state: &State, session: &str, choice: Choice, opened_m
 
 pub const MENU: &str = "snooze.menu";
 
-pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    let menu = state.window.snooze.as_ref()?;
+pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
+    let Some(menu) = state.window.snooze.as_ref() else {
+        return Vec::new();
+    };
     let title = if menu.standby {
         format!("Standby {} until", menu.name)
     } else {
         format!("Snooze {}", menu.name)
     };
-    let item = |key: String, label: &str, detail: Option<String>| {
-        row()
-            .key(key)
-            .role("menuitem")
-            .label(label.to_owned())
-            .focusable(true)
-            .w_full()
-            .h(26.0)
-            .px(space::S2)
-            .gap(space::S3)
-            .items_center()
-            .radius(4.0)
-            .hover(t.bg_button)
-            .focus_highlight(t.bg_selected)
-            .child(
-                text(label.to_owned())
-                    .font(type_::BODY)
-                    .color(t.text_primary)
-                    .grow(1.0),
-            )
-            .children(detail.map(|d| text(d).font(type_::MONO_CAPTION).color(t.text_tertiary)))
-    };
     let mode = if menu.standby { "standby" } else { "snooze" };
-    let choices = CHOICES.map(|choice| {
-        item(
-            format!("{MENU}.{mode}.{}", choice.id()),
-            choice.label(),
-            Some(choice.detail(menu.opened_ms)),
-        )
-        .on_press(move |state: &mut State| choose(state, choice))
-    });
-    let standby = (!menu.standby).then(|| {
-        item(format!("{MENU}.standby"), "Standby until…", None).on_press_tx(
-            |state: &mut State, tx: &mut Tx| {
-                if let Some(menu) = &mut state.window.snooze {
-                    menu.standby = true;
-                }
-                tx.focus(format!("{MENU}.standby.{}", CHOICES[0].id()), true);
-            },
-        )
-    });
-    let surface = col()
-        .key(format!("{MENU}.{mode}"))
-        .role("menu")
+    let mut kit_menu = rune_kit::Menu::new(format!("{MENU}.{mode}"))
+        .gutter(4.0)
+        .min_width(260.0)
         .label(title.clone())
-        .w(260.0)
-        .padding(space::S1)
-        .gap(2.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .focus_group()
-        .modal_tx(true, |state: &mut State, _: &mut Tx| {
-            state.window.snooze = None
-        })
-        .child(
-            text(title)
-                .font(type_::SECTION)
-                .color(t.text_tertiary)
-                .px(space::S2)
-                .py(space::S1),
-        )
-        .children(choices)
-        .children(standby)
-        .child(
-            text(format!("↑ ↓ choose · ↵ {mode} · esc cancel"))
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .px(space::S2)
-                .py(space::S1),
+        .open(true)
+        .on_close(|state: &mut State| state.window.snooze = None)
+        .group_label(title);
+    for choice in CHOICES {
+        kit_menu = kit_menu.item(
+            MenuItem::new(choice.label())
+                .key(format!("{MENU}.{mode}.{}", choice.id()))
+                .badge(choice.detail(menu.opened_ms))
+                .on_select(move |state: &mut State| choose(state, choice)),
         );
-    let surface = match &menu.under {
-        Some(under) if menu.pressed => surface
-            .anchored(under.clone(), Side::Bottom, rune::Align::Start, 4.0)
-            .focus_return(under.clone()),
-        Some(under) => surface.anchored(under.clone(), Side::Bottom, rune::Align::Start, 4.0),
-        None => surface,
-    };
-    Some(match menu.under {
-        Some(_) => surface,
-        None => row()
-            .key(format!("{MENU}.center"))
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .center()
-            .child(surface),
-    })
+    }
+    if !menu.standby {
+        kit_menu = kit_menu.item(
+            MenuItem::new("Standby until…")
+                .key(format!("{MENU}.standby"))
+                .on_select_tx(|state: &mut State, tx: &mut Tx| {
+                    if let Some(menu) = &mut state.window.snooze {
+                        menu.standby = true;
+                    }
+                    tx.focus(format!("{MENU}.standby.{}", CHOICES[0].id()), true);
+                }),
+        );
+    }
+    let kit_menu = kit_menu.group_label(format!("↑ ↓ choose · ↵ {mode} · esc cancel"));
+    let mut layer = Vec::new();
+    match &menu.under {
+        Some(under) => {
+            kit_menu
+                .anchor(under.clone())
+                .build(attn_ui::kit(t), &mut layer);
+        }
+        None => {
+            let spot = kit_menu
+                .placement(Placement::Bottom)
+                .build(attn_ui::kit(t), &mut layer);
+            layer.insert(
+                0,
+                col()
+                    .key(format!("{MENU}.center"))
+                    .absolute(0.0, 0.0)
+                    .w_full()
+                    .h_full()
+                    .items_center()
+                    .child(rune::el().grow(1.0))
+                    .child(spot)
+                    .child(rune::el().grow(2.0)),
+            );
+        }
+    }
+    layer
 }
 
 #[cfg(test)]
