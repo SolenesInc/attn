@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="usage: scripts/rune-bump [--branch <fork-branch> | --rev <fork-rev>]
+usage="usage: scripts/rune-bump --pick <upstream-commit>... | --branch <fork-branch> | --rev <fork-rev>
 
-Moves native/'s Rune pin to a new revision of the fork's attn branch and runs
-the native suite. Without options it first merges upstream's dev into attn;
-with --branch it merges that fork branch into attn instead; with --rev it moves
-the pin to a revision already on attn. A merge is tested and pushed to the fork
-before the pin moves. The pin move is left uncommitted."
+Moves native/'s Rune pin to a new revision of the fork's main and runs the
+native suite. --pick cherry-picks the named commits of upstream's dev onto main
+and records each in FORK.md; --branch merges a fork branch into main; --rev
+pins a revision already on main. FORK.md must record every commit on main that
+upstream's dev lacks: the commit changes FORK.md, or a row lists its hash. A new main must pass the tests FORK.md names before
+it is pushed and pinned. The pin move is left uncommitted."
 
-mode=upstream target=""
+mode="" targets=()
 case "${1-}" in
-  "") ;;
+  --pick)
+    [ "$#" -ge 2 ] || { echo "$usage" >&2; exit 2; }
+    mode=pick; shift; targets=("$@") ;;
   --branch | --rev)
     [ "$#" -eq 2 ] && [ -n "$2" ] || { echo "$usage" >&2; exit 2; }
-    mode="${1#--}" target="$2" ;;
+    mode="${1#--}"; targets=("$2") ;;
   -h | --help) echo "$usage"; exit 0 ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac
@@ -61,46 +64,106 @@ old="$old_revs"
 step "fetch upstream dev and the fork"
 run git -C "$clone" fetch --no-tags "$upstream" "+refs/heads/dev:refs/rune-bump/upstream/dev"
 run git -C "$clone" fetch --no-tags "$fork" "+refs/heads/*:refs/rune-bump/fork/*"
-fork_attn=refs/rune-bump/fork/attn
+upstream_dev=refs/rune-bump/upstream/dev
+trunk=refs/rune-bump/fork/main
+git -C "$clone" rev-parse --verify --quiet "$trunk" >/dev/null || die "the fork has no main branch"
+
+ledger_section() {
+  awk -v want="## $2" '/^## / { inside = ($0 == want); next } inside && /^\|/ && !/^\|[- |]*$/' <<<"$1" | sed 1d
+}
+hashes() { grep -oE '`[0-9a-f]{7,40}`' | tr -d '`' || true; }
+listed() {
+  local commit="$1" hash
+  while IFS= read -r hash; do
+    [ -n "$hash" ] && [ "${commit#"$hash"}" != "$commit" ] && return 0
+  done
+  return 1
+}
+
+check_ledger() {
+  local rev="$1" fork_md listed_commits commit unlisted=""
+  fork_md="$(git -C "$clone" show "$rev:FORK.md")" || die "$rev has no FORK.md"
+  listed_commits="$(ledger_section "$fork_md" "Our changes" | awk -F'|' '{ print $(NF-1) }' | hashes)"
+  for commit in $(git -C "$clone" rev-list --no-merges "$rev" "^$upstream_dev"); do
+    git -C "$clone" diff-tree --no-commit-id --name-only -r "$commit" | grep -qxF FORK.md && continue
+    listed "$commit" <<<"$listed_commits" && continue
+    unlisted+="
+  $(git -C "$clone" log -1 --format='%h %s' "$commit")"
+  done
+  [ -z "$unlisted" ] || die "FORK.md at $rev records none of these commits on main that upstream's dev lacks:$unlisted
+a commit records itself by changing FORK.md: add or extend its row under \"Our changes\", or under \"Picked from upstream\" for a pick"
+}
+
+record_pick() {
+  local commit="$1" row last
+  row="| \`$(git -C "$clone" rev-parse --short=8 "$commit")\` | $(git -C "$clone" log -1 --format=%s "$commit" | sed 's/|/\\|/g') |"
+  last="$(awk '/^## / { inside = ($0 == "## Picked from upstream"); next } inside && /^\|/ { n = NR } END { print n }' "$worktree/FORK.md")"
+  [ -n "$last" ] || die "FORK.md has no \"Picked from upstream\" table to record $commit in"
+  ROW="$row" awk -v at="$last" '{ print } NR == at { print ENVIRON["ROW"] }' "$worktree/FORK.md" >"$logs/FORK.md"
+  cp "$logs/FORK.md" "$worktree/FORK.md"
+}
 
 if [ "$mode" = rev ]; then
-  new="$(git -C "$clone" rev-parse --verify --quiet "$target^{commit}")" ||
-    die "$target is not a revision in the fork"
-  git -C "$clone" merge-base --is-ancestor "$new" "$fork_attn" ||
-    die "$new is not on the fork's attn branch; pin only revisions of attn"
+  new="$(git -C "$clone" rev-parse --verify --quiet "${targets[0]}^{commit}")" ||
+    die "${targets[0]} is not a revision in the fork"
+  git -C "$clone" merge-base --is-ancestor "$new" "$trunk" ||
+    die "$new is not on the fork's main; pin only revisions of main"
+  step "check FORK.md lists every commit on main"
+  check_ledger "$new"
 else
-  if [ "$mode" = upstream ]; then
-    incoming=refs/rune-bump/upstream/dev
-    message="Merge upstream dev into attn"
-    step "fast-forward the fork's dev to upstream"
-    git -C "$clone" merge-base --is-ancestor refs/rune-bump/fork/dev "$incoming" ||
-      die "the fork's dev has commits upstream's dev lacks; dev only mirrors upstream"
-    run git -C "$clone" push "$fork" "$incoming:refs/heads/dev"
-  else
-    incoming="refs/rune-bump/fork/$target"
-    message="Merge $target into attn"
-    git -C "$clone" rev-parse --verify --quiet "$incoming" >/dev/null ||
-      die "the fork has no branch $target"
-  fi
-
-  step "merge into attn"
   worktree="$logs/rune"
-  run git -C "$clone" worktree add --detach "$worktree" "$fork_attn"
-  merged="$(git -C "$clone" rev-list --count "$fork_attn..$incoming")"
-  if ! git -C "$worktree" merge --no-edit -m "$message" "$incoming" >>"$logs/merge.log" 2>&1; then
-    cat "$logs/merge.log" >&2
-    conflicts="$(git -C "$worktree" diff --name-only --diff-filter=U | tr '\n' ' ')"
-    [ -n "$conflicts" ] || die "merging $incoming into attn failed"
-    die "merging $incoming into attn conflicts in: $conflicts
-resolve the merge by hand as docs/internal/rune-fork.md says, then run scripts/rune-bump --rev <merged attn rev>"
+  run git -C "$clone" worktree add --detach "$worktree" "$trunk"
+  if [ "$mode" = pick ]; then
+    step "pick from upstream"
+    picks=()
+    for target in "${targets[@]}"; do
+      commit="$(git -C "$clone" rev-parse --verify --quiet "$target^{commit}")" &&
+        git -C "$clone" merge-base --is-ancestor "$commit" "$upstream_dev" ||
+        die "$target is not a commit on upstream's dev; pick only upstream commits"
+      picks+=("$commit")
+    done
+    git -C "$clone" merge-base --is-ancestor refs/rune-bump/fork/dev "$upstream_dev" ||
+      die "the fork's dev has commits upstream's dev lacks; dev only mirrors upstream"
+    run git -C "$clone" push "$fork" "$upstream_dev:refs/heads/dev"
+    for commit in "${picks[@]}"; do
+      if ! git -C "$worktree" cherry-pick -x "$commit" >>"$logs/pick.log" 2>&1; then
+        cat "$logs/pick.log" >&2
+        conflicts="$(git -C "$worktree" diff --name-only --diff-filter=U | tr '\n' ' ')"
+        git -C "$worktree" cherry-pick --abort >/dev/null 2>&1 || true
+        [ -n "$conflicts" ] || die "picking $commit onto main failed"
+        die "picking $commit onto main conflicts in: $conflicts
+port it by hand as docs/internal/rune-fork.md says, then run scripts/rune-bump --branch <your branch>"
+      fi
+      record_pick "$commit"
+      run git -C "$worktree" commit -q --amend --no-edit -- FORK.md
+      say "  picked $(git -C "$worktree" log -1 --format='%h %s')"
+    done
+  else
+    incoming="refs/rune-bump/fork/${targets[0]}"
+    git -C "$clone" rev-parse --verify --quiet "$incoming" >/dev/null ||
+      die "the fork has no branch ${targets[0]}"
+    for base in $(git -C "$clone" merge-base --all "$incoming" "$upstream_dev"); do
+      git -C "$clone" merge-base --is-ancestor "$base" "$trunk" ||
+        die "${targets[0]} carries commits of upstream's dev that main lacks; take upstream changes with scripts/rune-bump --pick, never by merging dev"
+    done
+    step "merge ${targets[0]} into main"
+    if ! git -C "$worktree" merge --no-edit -m "Merge ${targets[0]} into main" "$incoming" >>"$logs/merge.log" 2>&1; then
+      cat "$logs/merge.log" >&2
+      conflicts="$(git -C "$worktree" diff --name-only --diff-filter=U | tr '\n' ' ')"
+      [ -n "$conflicts" ] || die "merging ${targets[0]} into main failed"
+      die "merging ${targets[0]} into main conflicts in: $conflicts
+bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --branch ${targets[0]} again"
+    fi
   fi
   new="$(git -C "$worktree" rev-parse HEAD)"
-  say "merged $merged commits; attn is now $(git -C "$worktree" log -1 --format='%h %s')"
+  say "main is now $(git -C "$worktree" log -1 --format='%h %s')"
+
+  step "check FORK.md lists every commit on main"
+  check_ledger "$new"
 
   step "run the tests FORK.md lists"
-  ledger="$(awk -F'|' -v os="$(uname -s)" '
-    /^\|/ && $(NF-1) !~ /^[ -]*$/ && $(NF-1) !~ /^ *Test *$/ {
-      rest = $(NF-1)
+  ledger="$(ledger_section "$(cat "$worktree/FORK.md")" "Our changes" | awk -F'|' -v os="$(uname -s)" '{
+      rest = $(NF-2)
       while (match(rest, /`[^`]+`( \(macOS\))?/)) {
         token = substr(rest, RSTART, RLENGTH)
         rest = substr(rest, RSTART + RLENGTH)
@@ -109,7 +172,7 @@ resolve the merge by hand as docs/internal/rune-fork.md says, then run scripts/r
         gsub(/`/, "", token)
         print token
       }
-    }' "$worktree/FORK.md")"
+    }')"
   [ -n "$ledger" ] || die "FORK.md lists no tests"
   # shellcheck disable=SC2086
   (cd "$worktree" && run env CARGO_TARGET_DIR="$clone/target" cargo test -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid --lib -- $ledger)
@@ -119,8 +182,8 @@ resolve the merge by hand as docs/internal/rune-fork.md says, then run scripts/r
   done <<<"$ledger"
   [ -z "$missing" ] || die "FORK.md lists tests that did not run:$missing; fix FORK.md or the test names"
 
-  step "push the fork's attn"
-  run git -C "$worktree" push "$fork" "HEAD:refs/heads/attn"
+  step "push the fork's main"
+  run git -C "$worktree" push "$fork" "HEAD:refs/heads/main"
 fi
 
 step "move the pin from $old to $new"

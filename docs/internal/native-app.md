@@ -35,7 +35,7 @@ The build bakes the instance's name, port and bundle id into `attn-app`, and the
 app starts the `attnd` bundled beside it. A build without them, such as a bare
 `cargo run`, refuses to start.
 
-`native/Cargo.toml` pins one revision of the `attn` branch of attn's Rune fork
+`native/Cargo.toml` pins one revision of `main`, the trunk of attn's Rune fork,
 and repeats Rune's `[patch.crates-io]` entries.
 [The Rune fork](rune-fork.md) says why, what the fork holds, and who moves the
 pin.
