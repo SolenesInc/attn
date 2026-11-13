@@ -380,7 +380,12 @@ pub(crate) fn follow_title(state: &mut State, tx: &mut Tx) {
         .and_then(|d| {
             let tree = Node::parse(&d.tree_json)?;
             match tree.find_leaf(&tile.leaf)? {
-                Node::Leaf(leaf) => Some(super::view::leaf_title(d, &state.facts.sessions, leaf)),
+                Node::Leaf(leaf) => Some(super::view::leaf_title(
+                    d,
+                    &state.facts.sessions,
+                    &state.facts.tile_contents,
+                    leaf,
+                )),
                 Node::Split(_) => None,
             }
         });

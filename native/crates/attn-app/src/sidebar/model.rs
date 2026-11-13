@@ -156,9 +156,20 @@ impl TileRow {
     }
 }
 
-/// A tile's name from what its layout leaf holds: a browser's host, a seed's id, a file's
-/// name. A markdown tile's own heading comes with the markdown unit.
-pub fn tile_title(kind: &str, params: &str) -> String {
+/// A tile's name from what its layout leaf holds and, for a document, what the daemon sent of
+/// it: the document's heading or first line, else the file's name. A browser goes by its host
+/// and a seed by its id.
+pub fn tile_title(
+    kind: &str,
+    params: &str,
+    content: Option<&attn_protocol::DesktopTileContentMessage>,
+) -> String {
+    let readable = content.filter(|c| c.error.as_deref().is_none_or(str::is_empty));
+    if kind == "markdown"
+        && let Some(title) = readable.and_then(|c| document_title(&c.content))
+    {
+        return title;
+    }
     let basename = |path: &str| {
         let trimmed = path.trim_end_matches('/');
         trimmed
@@ -193,7 +204,10 @@ pub fn tile_title(kind: &str, params: &str) -> String {
         }
         _ => {
             let path = if kind == "markdown" {
-                path_in(params)
+                content
+                    .map(|c| c.path.clone())
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or_else(|| path_in(params))
             } else {
                 params.to_owned()
             };
@@ -204,6 +218,87 @@ pub fn tile_title(kind: &str, params: &str) -> String {
             }
         }
     }
+}
+
+/// The longest a document's title runs before it ends in an ellipsis.
+const MAX_DOCUMENT_TITLE: usize = 80;
+
+/// A document's first heading or line of text, past a closed front matter block and any
+/// rules, with its heading marker and inline markdown taken off.
+fn document_title(markdown: &str) -> Option<String> {
+    let markdown = markdown.strip_prefix('\u{feff}').unwrap_or(markdown);
+    let lines: Vec<&str> = markdown.split('\n').collect();
+    let mut from = 0;
+    if lines.first().map(|l| l.trim()) == Some("---")
+        && let Some(close) = lines.iter().skip(1).position(|l| l.trim() == "---")
+    {
+        from = close + 2;
+    }
+    lines[from..].iter().find_map(|line| {
+        let raw = line.trim();
+        let squeezed: String = raw.chars().filter(|c| !c.is_whitespace()).collect();
+        let is_rule = squeezed.len() >= 3
+            && ['-', '*', '_']
+                .iter()
+                .any(|&m| squeezed.chars().all(|c| c == m));
+        if raw.is_empty() || is_rule {
+            return None;
+        }
+        let title = plain_inline(heading_text(raw));
+        if title.is_empty() {
+            return None;
+        }
+        Some(if title.chars().count() > MAX_DOCUMENT_TITLE {
+            let cut: String = title.chars().take(MAX_DOCUMENT_TITLE - 1).collect();
+            format!("{}…", cut.trim_end())
+        } else {
+            title
+        })
+    })
+}
+
+/// `line` without a leading `#` to `######` marker and a closing run of `#` set off by space.
+fn heading_text(line: &str) -> &str {
+    let hashes = line.chars().take_while(|&c| c == '#').count();
+    let marked = (1..=6).contains(&hashes) && line[hashes..].starts_with(char::is_whitespace);
+    let text = if marked {
+        line[hashes..].trim_start()
+    } else {
+        line
+    };
+    let unclosed = text.trim_end_matches('#');
+    if unclosed.ends_with(char::is_whitespace) {
+        unclosed.trim_end()
+    } else {
+        text
+    }
+}
+
+/// `text` with links and images reduced to their text, emphasis, code and strike marks
+/// dropped, and runs of whitespace made one space.
+fn plain_inline(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        let label_end = rest[open..].find(']').map(|i| open + i);
+        let link = label_end.filter(|&e| rest[e + 1..].starts_with('('));
+        let close = link.and_then(|e| rest[e + 1..].find(')').map(|i| e + 1 + i));
+        match (label_end, close) {
+            (Some(end), Some(close)) => {
+                let before = &rest[..open];
+                out.push_str(before.strip_suffix('!').unwrap_or(before));
+                out.push_str(&rest[open + 1..end]);
+                rest = &rest[close + 1..];
+            }
+            _ => {
+                out.push_str(&rest[..=open]);
+                rest = &rest[open + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out.retain(|c| !matches!(c, '*' | '_' | '`' | '~'));
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// One line of the desktop sidebar, in the order it shows.
@@ -421,7 +516,17 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
             match leaf {
                 Leaf::Tile { id, kind, params } => children.push(Line::Tile(TileRow {
                     desktop: desktop.id.clone(),
-                    title: tile_title(&kind, &params),
+                    title: tile_title(
+                        &kind,
+                        &params,
+                        facts
+                            .tile_contents
+                            .get(&attn_client::TileKey {
+                                desktop: desktop.id.clone(),
+                                tile: id.clone(),
+                            })
+                            .map(|c| &*c.message),
+                    ),
                     id,
                     kind,
                 })),

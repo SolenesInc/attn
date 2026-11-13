@@ -114,6 +114,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         ),
         desk.held_split().map(str::to_owned),
         super::arrival::keys(&desk.rings),
+        facts.tile_contents.revision,
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -326,6 +327,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         },
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
+        contents: &state.facts.tile_contents,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
         shared: &super::shared_conversation::notices(
             &state.facts.sessions,
@@ -394,6 +396,7 @@ fn screen(
                     },
                     holder,
                     terminals,
+                    contents: &facts.tile_contents,
                     stale: &stale,
                     shared: &shared,
                     t,
@@ -462,6 +465,7 @@ struct TileCx<'a> {
     screen: super::spotlight::Screen,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
+    contents: &'a attn_client::TileContents,
     /// Sessions whose terminal runs an older build, with the notice still up.
     stale: &'a [String],
     /// Sessions whose conversation another terminal also has open, with where it is.
@@ -537,10 +541,23 @@ pub(super) fn share(child: El, ratio: f32) -> El {
 
 /// The name a leaf goes by in its header, on the shelf and to assistive tech: an agent by its
 /// session's name, a tile by what it holds.
-pub(crate) fn leaf_title(desktop: &Desktop, sessions: &[Session], leaf: &Leaf) -> String {
+pub(crate) fn leaf_title(
+    desktop: &Desktop,
+    sessions: &[Session],
+    contents: &attn_client::TileContents,
+    leaf: &Leaf,
+) -> String {
     match &leaf.kind {
         LeafKind::Tile { kind, params, .. } => {
-            crate::sidebar::tile_title(kind, params.as_deref().unwrap_or(""))
+            let key = attn_client::TileKey {
+                desktop: desktop.id.clone(),
+                tile: leaf.id.clone(),
+            };
+            crate::sidebar::tile_title(
+                kind,
+                params.as_deref().unwrap_or(""),
+                contents.get(&key).map(|c| &*c.message),
+            )
         }
         LeafKind::Pane => {
             let pane = pane_of(desktop, &leaf.id);
@@ -571,7 +588,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let desktop = cx.desktop;
     let active = leaf.id == desktop.active_pane_id;
     let held = cx.holder.is_some_and(|h| h.pane == leaf.id);
-    let title = leaf_title(desktop, cx.sessions, leaf);
+    let title = leaf_title(desktop, cx.sessions, cx.contents, leaf);
     let holder = Holder {
         desktop: desktop.id.clone(),
         pane: leaf.id.clone(),
@@ -645,6 +662,16 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             }
         }
         (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
+        (LeafKind::Tile { kind, .. }, _) if kind == "markdown" => {
+            let key = attn_client::TileKey {
+                desktop: desktop.id.clone(),
+                tile: leaf.id.clone(),
+            };
+            takes(
+                crate::markdown::body(&leaf.id, &title, cx.contents.get(&key), t),
+                &holder,
+            )
+        }
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
     };
     let look = super::spotlight::Look::of(

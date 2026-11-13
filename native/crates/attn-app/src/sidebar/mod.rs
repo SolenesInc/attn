@@ -173,6 +173,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
+        facts.tile_contents.revision,
         home,
         on_screen.clone(),
         width::of(state).to_bits(),

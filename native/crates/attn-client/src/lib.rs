@@ -11,6 +11,9 @@ pub use link::{
     TerminalSink, Traffic,
 };
 pub use pulse::Pulse;
-pub use store::{Connection, Facts, Profiles, Refusal, Slices, Store, Subscription};
+pub use store::{
+    Connection, Facts, Profiles, Refusal, Slices, Store, Subscription, TileContent, TileContents,
+    TileKey,
+};
 
 pub const CLIENT_KIND: &str = "native-app";

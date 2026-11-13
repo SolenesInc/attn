@@ -441,6 +441,10 @@ impl Task {
                 self.store.apply_initial_state(state);
                 None
             }
+            "desktop_tile_content" => {
+                self.store.set_tile_content(parse(&header.event, text)?);
+                None
+            }
             "settings_updated" => {
                 let message: SettingsUpdatedMessage = parse(&header.event, text)?;
                 if let Some(settings) = message.settings {

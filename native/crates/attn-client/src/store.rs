@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
-use attn_protocol::{Desktop, InitialStateMessage, OutpostInfo, Profile, Session};
+use attn_protocol::{
+    Desktop, DesktopTileContentMessage, InitialStateMessage, OutpostInfo, Profile, Session,
+};
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
 /// so a slice that did not change keeps its pointer and a view's `memo` can key on it.
@@ -17,6 +19,44 @@ pub struct Facts {
     pub settings: Arc<BTreeMap<String, String>>,
     /// The machines that host remote sessions, by the id a session's `host` names.
     pub outposts: Arc<Vec<OutpostInfo>>,
+    /// What each document tile holds, as the daemon last sent it.
+    pub tile_contents: Arc<TileContents>,
+}
+
+/// Document tiles' contents by desktop and tile.
+#[derive(Clone, Default)]
+pub struct TileContents {
+    /// Rises with every content the daemon sends, so a view can key a `memo` on it.
+    pub revision: u64,
+    pub tiles: BTreeMap<TileKey, TileContent>,
+}
+
+#[derive(Clone)]
+pub struct TileContent {
+    /// The contents' revision when this arrived.
+    pub revision: u64,
+    pub message: Arc<DesktopTileContentMessage>,
+}
+
+impl TileContents {
+    pub fn get(&self, key: &TileKey) -> Option<&TileContent> {
+        self.tiles.get(key)
+    }
+
+    fn held_by(&self, desktops: &[Desktop]) -> Option<TileContents> {
+        if self.tiles.keys().all(|k| holds_tile(desktops, k)) {
+            return None;
+        }
+        let mut kept = self.clone();
+        kept.tiles.retain(|k, _| holds_tile(desktops, k));
+        Some(kept)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TileKey {
+    pub desktop: String,
+    pub tile: String,
 }
 
 impl Facts {
@@ -69,7 +109,8 @@ impl Slices {
     pub const DESKTOPS: Slices = Slices(1 << 3);
     pub const SETTINGS: Slices = Slices(1 << 4);
     pub const OUTPOSTS: Slices = Slices(1 << 5);
-    pub const ALL: Slices = Slices((1 << 6) - 1);
+    pub const TILE_CONTENTS: Slices = Slices(1 << 6);
+    pub const ALL: Slices = Slices((1 << 7) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -179,6 +220,9 @@ impl Store {
                 selected: state.selected_profile_id.unwrap_or_default(),
             });
             facts.desktops = Arc::new(state.desktops.unwrap_or_default());
+            if let Some(kept) = facts.tile_contents.held_by(&facts.desktops) {
+                facts.tile_contents = Arc::new(kept);
+            }
             facts.settings = Arc::new(state.settings.unwrap_or_default());
             facts.outposts = Arc::new(state.outposts.unwrap_or_default());
             Slices::ALL
@@ -216,8 +260,34 @@ impl Store {
             if !shown {
                 return Slices::PROFILES;
             }
+            let mut changed = Slices::PROFILES | Slices::DESKTOPS;
+            if let Some(kept) = facts.tile_contents.held_by(&desktops) {
+                facts.tile_contents = Arc::new(kept);
+                changed |= Slices::TILE_CONTENTS;
+            }
             facts.desktops = Arc::new(desktops);
-            Slices::PROFILES | Slices::DESKTOPS
+            changed
+        });
+    }
+
+    pub(crate) fn set_tile_content(&self, content: DesktopTileContentMessage) {
+        self.change(|facts| {
+            let key = TileKey {
+                desktop: content.desktop_id.clone(),
+                tile: content.tile_id.clone(),
+            };
+            let mut contents = (*facts.tile_contents).clone();
+            contents.revision += 1;
+            let revision = contents.revision;
+            contents.tiles.insert(
+                key,
+                TileContent {
+                    revision,
+                    message: Arc::new(content),
+                },
+            );
+            facts.tile_contents = Arc::new(contents);
+            Slices::TILE_CONTENTS
         });
     }
 
@@ -286,4 +356,20 @@ impl Store {
             (subscriber.notify)(&inner.facts, changed);
         }
     }
+}
+
+/// Whether a desktop in `desktops` still holds the tile `key` names.
+fn holds_tile(desktops: &[Desktop], key: &TileKey) -> bool {
+    fn within(node: &serde_json::Value, tile: &str) -> bool {
+        node.get("tile_id").and_then(serde_json::Value::as_str) == Some(tile)
+            || node
+                .get("children")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|children| children.iter().any(|c| within(c, tile)))
+    }
+    desktops
+        .iter()
+        .find(|d| d.id == key.desktop)
+        .and_then(|d| serde_json::from_str(&d.tree_json).ok())
+        .is_some_and(|tree| within(&tree, &key.tile))
 }

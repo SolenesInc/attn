@@ -8,6 +8,7 @@ mod wire {
     mod desktops;
     mod home;
     mod keys;
+    mod markdown;
     mod palette;
     mod picker;
     mod profile;

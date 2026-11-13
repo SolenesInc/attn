@@ -13,6 +13,7 @@ pub mod instance;
 mod keymap;
 mod keys;
 pub mod launch;
+mod markdown;
 mod palette;
 mod picker;
 pub mod prompts;
