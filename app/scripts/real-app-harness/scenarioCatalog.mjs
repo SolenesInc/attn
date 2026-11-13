@@ -237,6 +237,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-desktop-tiles',
+    runnerId: 'NATIVE-DESKTOP-TILES',
+    label: 'Two shells side by side in the native app: a divider drag saves their widths, zoom, focus alone and back, and tile history',
+    command: ['node', 'scripts/real-app-harness/scenario-native-desktop-tiles.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-terminal-features',
     runnerId: 'NATIVE-TERMINAL-FEATURES',
     label: 'A shell in the native app scrolls, selects and copies, selects a command block, finds through its history and draws a kitty image',
