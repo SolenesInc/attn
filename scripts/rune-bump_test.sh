@@ -52,6 +52,9 @@ pub use api::*;'
 mod tests {
     #[test]
     fn the_answer_holds() { assert_eq!(super::answer(), 42); }
+    #[test]
+    #[should_panic(expected = "never 41")]
+    fn a_wrong_answer_panics() { assert!(super::answer() != 42, "never 41"); }
     #[cfg(target_os = "macos")]
     #[test]
     fn only_on_macos() {}
@@ -67,7 +70,7 @@ EOF
   cat >"$patch/FORK.md" <<'EOF'
 | Patch | Why the app cannot do it | Test |
 |---|---|---|
-| The answer stays 42 (`rune/src/lib.rs`) | The answer is Rune's | `tests::the_answer_holds` |
+| The answer stays 42 (`rune/src/lib.rs`) | The answer is Rune's | `tests::the_answer_holds`, `tests::a_wrong_answer_panics` |
 | The kit holds | Inside `Kit \| Menu` | `tests::the_kit_holds`, `tests::only_on_macos` (macOS) |
 EOF
   commit "$patch" "Patch the answer"
@@ -122,6 +125,7 @@ grep -qF "$(fork_rev attn)" "$work/attn/native/Cargo.lock" || fail "did not move
 [ -n "$(git -C "$work/attn" status --porcelain -- native/Cargo.toml native/Cargo.lock)" ] || fail "committed the pin move"
 grep -qF "ok tests::the_answer_holds" "$work/out" || fail "did not run the patch tests FORK.md lists"
 grep -qF "ok tests::the_kit_holds" "$work/out" || fail "did not run every test of a patch FORK.md lists"
+grep -qF "ok tests::a_wrong_answer_panics" "$work/out" || fail "missed a should_panic test FORK.md lists"
 if [ "$(uname -s)" = Darwin ]; then
   grep -qF "ok tests::only_on_macos" "$work/out" || fail "skipped a macOS test on macOS"
 else

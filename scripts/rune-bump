@@ -115,7 +115,7 @@ resolve the merge by hand as docs/internal/rune-fork.md says, then run scripts/r
   (cd "$worktree" && run env CARGO_TARGET_DIR="$clone/target" cargo test -p rune -p rune-kit --lib -- $ledger)
   missing=""
   while IFS= read -r test; do
-    grep -qxF "test $test ... ok" "$log" && say "  ok $test" || missing+=" $test"
+    grep -qxF -e "test $test ... ok" -e "test $test - should panic ... ok" "$log" && say "  ok $test" || missing+=" $test"
   done <<<"$ledger"
   [ -z "$missing" ] || die "FORK.md lists tests that did not run:$missing; fix FORK.md or the test names"
 
