@@ -106,7 +106,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) docks markdown tiles, follows their files, renders frontmatter, alerts, tables, code, images and Mermaid, opens files from ⌘P with recents, and docks a tile for a markdown path ⌘-clicked in a terminal. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above.
+The native app (`native/`) docks markdown tiles, follows their files, renders frontmatter, alerts, tables, code, images and Mermaid, opens files from ⌘P with recents, and docks a tile for a markdown path ⌘-clicked in a terminal. A code block shows a Copy code button while the pointer is over it, which says Copied! for 2 s, and a diagram that cannot draw shows "Diagram failed to render" above its source. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above.
 
 Preconditions:
 
