@@ -106,6 +106,17 @@ impl Target {
     }
 }
 
+/// Whether the element the pointer at `(x, y)` lands on still moves, as a tile still sliding
+/// back beside a sidebar that has already opened.
+pub(crate) fn moving_at<S>(rt: &Runtime<S>, (x, y): (f32, f32)) -> bool {
+    let Some(picked) = rt.element_at(x, y) else {
+        return false;
+    };
+    rt.elements()
+        .iter()
+        .any(|e| e.path == picked.path() && e.moving)
+}
+
 /// Whether the element at `path` is part of an inert layer whose parent also holds `under`.
 fn inert_over<S>(rt: &Runtime<S>, path: &str, under: &str) -> bool {
     let elements = rt.elements();
