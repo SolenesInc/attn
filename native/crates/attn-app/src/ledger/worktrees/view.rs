@@ -409,18 +409,13 @@ fn verb_menu(path: &str, verbs: &[Verb], t: &Tokens) -> El {
 
 fn copy_path(path: &str, copied: bool, t: &Tokens) -> El {
     let p = path.to_owned();
-    text(format!(
-        "{}{}",
-        tilde_path(path),
-        if copied { "  copied" } else { "" }
-    ))
-    .key("ledger.inspector.path")
-    .role("button")
-    .label("Copy the path (y)")
-    .font(type_::MONO_CAPTION)
-    .color(t.text_primary)
-    .wrap()
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| super::super::copy(state, p.clone(), tx))
+    super::super::view::copy_path(
+        "ledger.inspector.path",
+        &tilde_path(path),
+        copied,
+        t,
+        move |state: &mut State, tx: &mut Tx| super::super::copy(state, p.clone(), tx),
+    )
 }
 
 fn group(key: &str, name: &str, t: &Tokens) -> El {

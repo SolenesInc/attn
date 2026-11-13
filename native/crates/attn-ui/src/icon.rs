@@ -31,3 +31,4 @@ pub const TRASH: &str = "\u{f1f8}";
 pub const GRABBER: &str = "\u{f4a6}";
 pub const SEEDLING: &str = "\u{f06c}";
 pub const BELL: &str = "\u{f0f3}";
+pub const COPY: &str = "\u{f0c5}";

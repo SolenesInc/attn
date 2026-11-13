@@ -6,7 +6,7 @@ use super::sidebar::{desktop, pane, session, state};
 
 /// The buttons on screen that Tab never reaches: the keys of every enabled button, less those
 /// that held the keyboard while Tab walked the window once round.
-fn unreached_by_tab(world: &mut World) -> Vec<String> {
+pub(super) fn unreached_by_tab(world: &mut World) -> Vec<String> {
     let buttons: BTreeSet<String> = world
         .screen()
         .all(Target::role("button"))

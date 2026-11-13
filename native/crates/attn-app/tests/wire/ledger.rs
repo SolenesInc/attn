@@ -1001,3 +1001,14 @@ fn hours(instant: &str) -> i64 {
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + (153 * m + 2) / 5 + d - 1;
     (era * 146_097 + doe - 719_468) * 24 + n(11..13)
 }
+
+#[test]
+fn tab_reaches_every_button_of_the_sessions_list() {
+    let mut world = world();
+    open(&mut world);
+
+    assert_eq!(
+        super::reach::unreached_by_tab(&mut world),
+        Vec::<String>::new()
+    );
+}

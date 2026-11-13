@@ -2,7 +2,7 @@ use attn_protocol::{AskAnswer, AskQuestion, Session};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, Markdown};
+use rune_kit::{Button, ButtonVariant, ControlSize, Markdown, Switch};
 
 use super::{Chip, Item, Kind, Lists, questions};
 use crate::State;
@@ -94,33 +94,18 @@ fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
                 .color(t.accent)
         }))
         .child(
-            text(replied_label.clone())
-                .key("asks.replied")
-                .role("switch")
+            Switch::new(show_replied)
                 .label(replied_label)
-                .checked(show_replied)
-                .font(type_::LABEL)
-                .color(if show_replied {
-                    t.text_primary
-                } else {
-                    t.text_tertiary
-                })
-                .hover(t.bg_elevated)
-                .radius(4.0)
-                .px(space::S1)
-                .on_press_tx(|state: &mut State, tx: &mut Tx| toggle_replied(state, tx)),
+                .control_size(ControlSize::Mini)
+                .on_toggle_tx(toggle_replied)
+                .build(attn_ui::kit(t))
+                .key("asks.replied"),
         )
         .child(
-            text("×")
-                .key("asks.close")
-                .role("button")
-                .label("Close asks")
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .hover(t.bg_elevated)
-                .radius(4.0)
-                .px(space::S1)
-                .on_press_tx(super::close),
+            attn_ui::GlyphButton::new(attn_ui::icon::CLOSE, "Close asks")
+                .on_press_tx(super::close)
+                .build(attn_ui::kit(t))
+                .key("asks.close"),
         )
 }
 
@@ -164,7 +149,7 @@ fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
     }
     col()
         .key(LIST)
-        .role("list")
+        .role("listbox")
         .label(if replied {
             "Open and replied asks"
         } else {
@@ -217,7 +202,7 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
     let tags: Vec<String> = words[2..].to_vec();
     row()
         .key(format!("asks.row.{}", ask.id))
-        .role("button")
+        .role("option")
         .label(format!("{} {age}", words.join(" · ")))
         .a11y_value(if selected { "current" } else { "" })
         .w_full()
@@ -429,19 +414,14 @@ fn snooze_button(snoozed: bool, from: &str, t: &Tokens) -> El {
     small_button(SNOOZE, words, &hint, t).on_press_tx(super::toggle_snooze)
 }
 
-fn small_button(key: &str, words: &str, _hint: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .key(key.to_owned())
-        .role("button")
-        .focusable(true)
-        .label(words.to_owned())
-        .font(type_::LABEL)
-        .color(t.text_secondary)
-        .fill(t.bg_button)
-        .hover(t.bg_elevated)
-        .radius(4.0)
-        .px(space::S2)
-        .py(2.0)
+fn small_button(key: &str, words: &str, hint: &str, t: &Tokens) -> El {
+    let button = Button::new(words).control_size(ControlSize::Small);
+    let button = if hint.is_empty() {
+        button
+    } else {
+        button.help(hint)
+    };
+    button.build(attn_ui::kit(t)).key(key.to_owned())
 }
 
 enum Shown<'a> {
@@ -769,18 +749,12 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                 if sending { "Sending…" } else { "Send" },
                 send_chord()
             );
-            text(words.clone())
-                .key("asks.send")
-                .role("button")
-                .label(words)
+            Button::new(words)
+                .variant(ButtonVariant::Submit)
                 .disabled(!sendable)
-                .font(type_::LABEL)
-                .color(if sendable { t.bg_app } else { t.text_muted })
-                .fill(if sendable { t.accent } else { t.bg_button })
-                .radius(4.0)
-                .px(space::S3)
-                .py(space::S1)
                 .on_press_tx(super::send)
+                .build(attn_ui::kit(t))
+                .key("asks.send")
         }
     };
     col()
@@ -913,29 +887,29 @@ pub(crate) fn chip(leaf: &str, session: &str, chip: &Chip, level: ChipLevel, t: 
             el
         }
     });
-    let el = row()
-        .key(chip_key(leaf))
-        .role("button")
-        .label(label)
-        .items_center()
-        .gap(CHIP_GAP)
-        .px(CHIP_PAD)
-        .py(2.0)
-        .min_w(0.0)
-        .radius(5.0)
-        .fill(t.bg_button)
-        .border(1.0, t.accent)
+    let (accent, tertiary) = (t.accent, t.text_tertiary);
+    let more = (chip.more > 0 && level != ChipLevel::Icon).then(|| format!("+{}", chip.more));
+    let el = Button::new(label)
+        .label_with(move |_, _| {
+            row()
+                .items_center()
+                .gap(CHIP_GAP)
+                .min_w(0.0)
+                .child(text("?").font(type_::LABEL).color(accent))
+                .children(subject)
+                .children(more.map(|more| text(more).font(type_::LABEL).color(tertiary)))
+        })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             header_pop::close(state);
             super::show(state, Some(&id), tx)
         })
-        .child(text("?").font(type_::LABEL).color(t.accent))
-        .children(subject)
-        .children((chip.more > 0 && level != ChipLevel::Icon).then(|| {
-            text(format!("+{}", chip.more))
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-        }));
+        .build(attn_ui::kit(t))
+        .key(chip_key(leaf))
+        .px(CHIP_PAD)
+        .min_w(0.0)
+        .radius(5.0)
+        .fill(t.bg_button)
+        .border(1.0, t.accent);
     header_pop::hovers(el, leaf, session, What::Ask)
 }
 

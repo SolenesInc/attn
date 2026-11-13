@@ -519,3 +519,22 @@ fn an_open_panel_reads_the_feed_again_after_the_daemon_restarts() {
     assert!(has(&world, &row("new")));
     assert!(!has(&world, &row("old")));
 }
+
+#[test]
+fn tab_reaches_every_button_of_the_panel() {
+    let failed = acting(
+        notification("failed", "warning", "Couldn't update activity"),
+        &[
+            ("open_session", "Open session", "s1"),
+            ("retry_task", "Retry", "task-1"),
+        ],
+    );
+    let mut world = start(vec![failed, notification("b", "info", "Two")]);
+    open(&mut world);
+    expand(&mut world, "failed");
+
+    assert_eq!(
+        super::reach::unreached_by_tab(&mut world),
+        Vec::<String>::new()
+    );
+}

@@ -2,6 +2,7 @@ use attn_protocol::SessionLedgerEntry;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
+use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use super::query::{self, Scope, is_closed};
 use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations, worktrees};
@@ -163,17 +164,15 @@ fn toolbar(state: &State, t: &Tokens) -> El {
             let token = token.to_owned();
             let lost = unresolved.contains(&token);
             let removed = token.clone();
-            text(format!("{token} ×"))
+            let face = format!("{token} ×");
+            let ink = if lost { t.warning } else { t.text_secondary };
+            Button::new(token.clone())
+                .control_size(ControlSize::Mini)
+                .label_with(move |_, _| text(face).font(type_::MONO_CAPTION).color(ink))
+                .help(format!("Remove {token}"))
+                .build(attn_ui::kit(t))
                 .key(format!("ledger.chip.{at}"))
-                .role("button")
-                .label(token.clone())
                 .a11y_value(if lost { "unresolved" } else { "" })
-                .font(type_::MONO_CAPTION)
-                .color(if lost { t.warning } else { t.text_secondary })
-                .fill(t.bg_button)
-                .radius(4.0)
-                .px(space::S1)
-                .py(1.0)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     let text = query::remove_token(&state.window.ledger.query.text, &removed);
                     state.window.ledger.query = rune::TextEdit::new(text);
@@ -646,22 +645,13 @@ fn directory_field(
     col()
         .gap(2.0)
         .child(label("Directory", t))
-        .child(
-            text(format!(
-                "{}{}",
-                query::tilde_path(&entry.directory),
-                if copied { "  copied" } else { "" }
-            ))
-            .key("ledger.inspector.directory")
-            .role("button")
-            .label("Copy the path (y)")
-            .font(type_::MONO_CAPTION)
-            .color(t.text_primary)
-            .wrap()
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                super::copy(state, directory.clone(), tx)
-            }),
-        )
+        .child(copy_path(
+            "ledger.inspector.directory",
+            &query::tilde_path(&entry.directory),
+            copied,
+            t,
+            move |state: &mut State, tx: &mut Tx| super::copy(state, directory.clone(), tx),
+        ))
         .children(verdict.map(|v| muted(query::directory_state_label(&v.directory_state), t)))
 }
 
@@ -1000,33 +990,50 @@ pub(super) fn field(name: &str, value: String, t: &Tokens) -> El {
 }
 
 pub(super) fn button(key: &str, words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
+    Button::new(words)
+        .control_size(ControlSize::Small)
+        .build(attn_ui::kit(t))
         .key(key.to_owned())
-        .role("button")
-        .focusable(true)
-        .label(words.to_owned())
-        .font(type_::LABEL)
-        .color(t.text_primary)
-        .fill(t.bg_button)
-        .hover(t.bg_elevated)
-        .radius(4.0)
-        .px(space::S2)
-        .py(2.0)
-        .single_line()
 }
 
 pub(super) fn chip_button(key: &str, words: &str, on: bool, t: &Tokens) -> El {
-    text(words.to_owned())
+    Button::new(words)
+        .variant(if on {
+            ButtonVariant::Neutral
+        } else {
+            ButtonVariant::GhostMuted
+        })
+        .control_size(ControlSize::Small)
+        .build(attn_ui::kit(t))
         .key(key.to_owned())
-        .role("button")
-        .focusable(true)
-        .label(words.to_owned())
         .a11y_value(if on { "pressed" } else { "" })
-        .font(type_::LABEL)
-        .color(if on { t.text_primary } else { t.text_secondary })
-        .fill(if on { t.bg_selected } else { t.bg_button })
-        .hover(t.bg_elevated)
-        .radius(4.0)
-        .px(space::S2)
-        .py(2.0)
+}
+
+/// A path the user copies with y or with the copy button beside it, marked once copied.
+pub(super) fn copy_path(
+    key: &str,
+    path: &str,
+    copied: bool,
+    t: &Tokens,
+    copy: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    row()
+        .w_full()
+        .gap(space::S1)
+        .child(
+            text(format!("{path}{}", if copied { "  copied" } else { "" }))
+                .key(format!("{key}.text"))
+                .font(type_::MONO_CAPTION)
+                .color(t.text_primary)
+                .wrap()
+                .grow(1.0)
+                .min_w(0.0),
+        )
+        .child(
+            attn_ui::GlyphButton::new(attn_ui::icon::COPY, "Copy the path (y)")
+                .side(18.0)
+                .on_press_tx(copy)
+                .build(attn_ui::kit(t))
+                .key(key.to_owned()),
+        )
 }

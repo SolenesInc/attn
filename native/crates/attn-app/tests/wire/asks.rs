@@ -1158,3 +1158,14 @@ fn the_clock_alone_returns_a_woken_askers_ask_to_the_counts_and_moves_the_drawer
     assert!(!name(&world, "asks.row.a-cache1").contains("until "));
     assert_ne!(name(&world, "asks.row.a-release"), release_before);
 }
+
+#[test]
+fn tab_reaches_every_button_of_the_asks_drawer() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_drawer(&mut world);
+
+    assert_eq!(
+        super::reach::unreached_by_tab(&mut world),
+        Vec::<String>::new()
+    );
+}

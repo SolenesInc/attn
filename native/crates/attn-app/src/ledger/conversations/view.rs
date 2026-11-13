@@ -1,12 +1,13 @@
 use attn_protocol::KeptConversationRow;
 use rune::{El, Key, KeyEvent, Tx, col, row, text, text_input};
 
-use super::super::view::{body, button, chip_button, field, label, muted, title};
+use super::super::view::{body, button, field, label, muted, title};
 use super::super::{LIST, Note, QUERY};
 use super::{Verb, amount, date, deleted, key, letter_label, retention, verbs};
 use crate::State;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
+use rune_kit::Checkbox;
 
 pub(crate) fn toolbar(state: &State, t: &Tokens) -> El {
     let kept = &state.window.ledger.conversations;
@@ -30,12 +31,13 @@ pub(crate) fn toolbar(state: &State, t: &Tokens) -> El {
         .py(space::S2)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
-            chip_button("ledger.deleted", "Show deleted", include, t)
-                .role("checkbox")
-                .a11y_value(if include { "checked" } else { "" })
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            Checkbox::new(include)
+                .label("Show deleted")
+                .on_toggle_tx(move |state: &mut State, tx: &mut Tx| {
                     super::set_include_deleted(state, !include, tx)
-                }),
+                })
+                .build(attn_ui::kit(t))
+                .key("ledger.deleted"),
         )
         .child(
             row()
