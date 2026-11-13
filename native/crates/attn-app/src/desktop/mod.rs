@@ -11,6 +11,7 @@ mod header_pop;
 pub mod layout;
 mod overview;
 mod peek;
+mod provenance;
 mod shelf;
 mod stale_build;
 mod terminal_menu;
@@ -169,6 +170,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
     let pop = state.window.desk.header_pop.open.as_ref()?;
     match pop.what {
         header_pop::What::Usage => usage::popover(state, pop, t),
+        header_pop::What::Details => provenance::popover(state, pop, t),
     }
 }
 

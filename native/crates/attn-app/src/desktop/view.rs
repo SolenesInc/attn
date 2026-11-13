@@ -77,7 +77,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         (
             ratio_bits(&desk.ratios),
             desk.peeks.unsent(),
-            usage_badges(desktop, &facts.sessions),
+            subline_reads(desktop, &facts.sessions),
         ),
         *t,
         scale.to_bits(),
@@ -148,12 +148,14 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .child(content)
 }
 
-fn usage_badges(desktop: Option<&Desktop>, sessions: &[Session]) -> Vec<super::usage::Badge> {
+type SublineReads = (Option<super::usage::Badge>, Option<super::provenance::Line>);
+
+fn subline_reads(desktop: Option<&Desktop>, sessions: &[Session]) -> Vec<SublineReads> {
     desktop
         .into_iter()
         .flat_map(|d| &d.panes)
         .filter_map(|p| sessions.iter().find(|s| s.id == p.session_id))
-        .filter_map(super::usage::badge)
+        .map(|s| (super::usage::badge(s), super::provenance::line(s)))
         .collect()
 }
 
@@ -654,14 +656,17 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
         .children(track)
 }
 
-/// The agent header's second line: the session's usage, and its short id, which copies the
-/// whole id.
+/// The agent header's second line: the session's usage, where it came from, and its short id,
+/// which copies the whole id.
 fn subline(key: &str, leaf: &str, session: &str, facts: Option<&Session>, t: &Tokens) -> El {
     let short: String = session.chars().take(8).collect();
     let id = session.to_owned();
     let usage = facts
         .and_then(super::usage::badge)
         .map(|badge| super::usage::piece(leaf, session, &badge, SUBLINE_TYPE, t));
+    let provenance = facts
+        .and_then(super::provenance::line)
+        .map(|line| super::provenance::piece(leaf, session, &line, SUBLINE_TYPE, t));
     row()
         .key(format!("{key}.subline"))
         .w_full()
@@ -670,6 +675,8 @@ fn subline(key: &str, leaf: &str, session: &str, facts: Option<&Session>, t: &To
         .gap(10.0)
         .pl(24.0)
         .pr(10.0)
+        .children(usage)
+        .children(provenance)
         .child(
             text(short.clone())
                 .key(format!("{key}.id"))
@@ -679,7 +686,6 @@ fn subline(key: &str, leaf: &str, session: &str, facts: Option<&Session>, t: &To
                 .color(t.text_tertiary)
                 .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone())),
         )
-        .children(usage)
 }
 
 /// The header's pencil, which renames the agent's session.

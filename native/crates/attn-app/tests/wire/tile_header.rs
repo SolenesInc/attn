@@ -2,9 +2,10 @@ use std::time::Duration;
 
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    CommandUsage, Desktop, DesktopPane, GetCommandUsageResultMessage, InitialStateMessage, Profile,
-    ProfileArrangementChangedMessage, RecordCommandUsageResultMessage, Session,
-    SessionStateChangedMessage, SessionUsage, SessionUsageModel,
+    AutomationProvenance, CommandUsage, Desktop, DesktopPane, GetCommandUsageResultMessage,
+    InitialStateMessage, Profile, ProfileArrangementChangedMessage, PullRequestProvenance,
+    RecordCommandUsageResultMessage, Session, SessionPullRequest, SessionStateChangedMessage,
+    SessionUsage, SessionUsageModel,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
@@ -138,8 +139,8 @@ fn badge(world: &World, leaf: &str) -> Option<String> {
 fn breakdown(world: &World, leaf: &str) -> Option<String> {
     world
         .screen()
-        .find(Target::key(format!("tile.{leaf}.usage.breakdown")))
-        .map(|_| texts(world, &format!("tile.{leaf}.usage.breakdown")).join("\n"))
+        .find(Target::key(format!("tile.{leaf}.usage.popover")))
+        .map(|_| texts(world, &format!("tile.{leaf}.usage.popover")).join("\n"))
 }
 
 fn texts(world: &World, key: &str) -> Vec<String> {
@@ -319,7 +320,7 @@ fn the_usage_preview_waits_for_the_pointer_to_rest_and_stays_open_while_the_poin
     world.advance(Duration::from_millis(60));
     assert!(breakdown(&world, "a").is_some());
 
-    rest_on(&mut world, "tile.a.usage.breakdown");
+    rest_on(&mut world, "tile.a.usage.popover");
     world.advance(Duration::from_millis(400));
     assert!(
         breakdown(&world, "a").is_some(),
@@ -468,5 +469,194 @@ fn a_press_outside_a_pinned_breakdown_closes_it() {
     let at = middle(&world, "tile.b");
     world.gesture(|app| app.click_at(at));
     assert_eq!(breakdown(&world, "a"), None);
+    rest(&mut world);
+}
+
+fn pull_request(number: i64, state: &str, created: &str) -> SessionPullRequest {
+    SessionPullRequest {
+        repository: "github.com/victorarias/attn".into(),
+        number,
+        url: format!("https://github.com/victorarias/attn/pull/{number}"),
+        title: Some(format!("Change {number}")),
+        created_at: created.into(),
+        state: state.into(),
+        ..SessionPullRequest::default()
+    }
+}
+
+fn with_pull_requests(prs: Vec<SessionPullRequest>) -> Session {
+    Session {
+        pull_requests: Some(prs),
+        ..session("a", "ledger sweep", None)
+    }
+}
+
+fn details(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("tile.a.details.popover"))
+        .map(|n| {
+            let mut lines = vec![n.name.unwrap_or_default()];
+            lines.extend(texts(world, "tile.a.details.popover"));
+            lines.join("\n")
+        })
+}
+
+#[test]
+fn an_automations_header_names_its_definition_and_the_pull_request_it_reviews_and_opens_it() {
+    let reviewing = Session {
+        automation: Some(AutomationProvenance {
+            run_id: "run-1".into(),
+            definition_id: 1,
+            definition_name: "Requested PR review - GPT Sol medium".into(),
+            trigger_type: "github_review_requested".into(),
+            pull_request: Some(PullRequestProvenance {
+                repository: "ghe.example.net/feeds/feed-nexus-web".into(),
+                number: 101,
+                url: "https://ghe.example.net/feeds/feed-nexus-web/pull/101".into(),
+                title: Some("Fix validation race".into()),
+                head_sha: "82f1c7a".into(),
+            }),
+            ..AutomationProvenance::default()
+        }),
+        ..session("a", "feed-nexus-web#101 · gpt-5.6-sol", Some(priced(2.61)))
+    };
+    let mut world = start(reviewing, session("b", "docs", None));
+    let shown = texts(&world, "tile.a.provenance");
+    for piece in [
+        "⚡ Automation",
+        "GPT Sol medium",
+        "Open pull request feed-nexus-web#101",
+        "Fix validation race",
+    ] {
+        assert!(shown.iter().any(|s| s == piece), "{piece:?} in {shown:?}");
+    }
+    assert_eq!(badge(&world, "a").as_deref(), Some("Session usage $2.61"));
+
+    world.gesture(|app| app.click(Target::key("tile.a.automation.target")));
+    assert_eq!(
+        world.opened_links(),
+        ["https://ghe.example.net/feeds/feed-nexus-web/pull/101"]
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_header_names_the_sessions_best_pull_request_with_its_status_and_none_when_all_are_closed() {
+    let mut open = pull_request(71, "open", "2026-08-30T12:00:00Z");
+    open.ci_status = Some("failure".into());
+    let world = start(
+        with_pull_requests(vec![
+            pull_request(70, "merged", "2026-08-31T12:00:00Z"),
+            open,
+            pull_request(69, "closed", "2026-09-01T12:00:00Z"),
+        ]),
+        Session {
+            pull_requests: Some(vec![pull_request(5, "closed", "2026-08-30T12:00:00Z")]),
+            ..session("b", "docs", None)
+        },
+    );
+    let shown = texts(&world, "tile.a.provenance");
+    for piece in [
+        "⎇ PR",
+        "Pull request attn#71 details",
+        "checks failed",
+        "Change 71",
+    ] {
+        assert!(shown.iter().any(|s| s == piece), "{piece:?} in {shown:?}");
+    }
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.b.provenance"))
+            .is_none()
+    );
+}
+
+#[test]
+fn the_pull_request_details_open_on_hover_and_close_soon_after_the_pointer_leaves_them() {
+    let mut world = start(
+        with_pull_requests(vec![pull_request(71, "open", "2026-08-30T12:00:00Z")]),
+        session("b", "docs", None),
+    );
+    rest_on(&mut world, "tile.a.details");
+    let shown = details(&world).expect("the details open at once");
+    for line in [
+        "Pull request attn#71",
+        "Open attn#71 on GitHub",
+        "attn#71",
+        "open",
+        "waiting for GitHub",
+        "↵ open · c copy url",
+    ] {
+        assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
+    }
+    rest_on(&mut world, "tile.a.details.popover");
+    world.advance(Duration::from_millis(400));
+    assert!(
+        details(&world).is_some(),
+        "the details stay while the pointer is on them"
+    );
+    rest_on(&mut world, "tile.b");
+    world.advance(Duration::from_millis(100));
+    assert!(details(&world).is_some());
+    world.advance(Duration::from_millis(20));
+    assert_eq!(details(&world), None);
+    rest(&mut world);
+}
+
+#[test]
+fn pinned_pull_request_details_pick_with_the_arrows_open_with_return_and_copy_with_c() {
+    let mut first = pull_request(71, "open", "2026-08-30T12:00:00Z");
+    first.status_fetched_at = Some("2026-08-30T12:05:00Z".into());
+    first.ci_status = Some("success".into());
+    first.review_status = Some("approved".into());
+    first.mergeable_state = Some("clean".into());
+    let mut world = start(
+        with_pull_requests(vec![
+            first,
+            pull_request(60, "merged", "2026-08-01T12:00:00Z"),
+        ]),
+        session("b", "docs", None),
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.details")));
+    let shown = details(&world).expect("a press pins the details");
+    for line in [
+        "passed",
+        "approved",
+        "no conflicts",
+        "↑↓ pick · ↵ open · c copy url",
+    ] {
+        assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
+    }
+
+    key(&mut world, Key::Down);
+    assert!(details(&world).is_some_and(|d| d.starts_with("Pull request attn#60")));
+    key(&mut world, Key::Enter);
+    assert_eq!(
+        world.opened_links(),
+        ["https://github.com/victorarias/attn/pull/60"]
+    );
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Text("c".into()),
+            mods: Mods::default(),
+        })
+    });
+    assert_eq!(
+        world.clipboard.text().map(|t| t.to_string()).as_deref(),
+        Some("https://github.com/victorarias/attn/pull/60")
+    );
+    key(&mut world, Key::Up);
+    assert!(details(&world).is_some_and(|d| d.starts_with("Pull request attn#71")));
+
+    key(&mut world, Key::Escape);
+    assert_eq!(details(&world), None);
+    world.advance(Duration::from_millis(500));
+    assert_eq!(
+        details(&world),
+        None,
+        "Escape under a still pointer leaves the details closed"
+    );
     rest(&mut world);
 }

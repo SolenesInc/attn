@@ -1,26 +1,36 @@
-use rune::Tx;
+use rune::{El, Tx};
 
 use crate::State;
-
-const OPEN_DELAY: f64 = 0.16;
-const CLOSE_DELAY: f64 = 0.24;
 
 /// What a header popover shows about its tile's agent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum What {
     Usage,
+    /// The details of the session's pull requests.
+    Details,
 }
 
 impl What {
     fn part(self) -> &'static str {
         match self {
             What::Usage => "usage",
+            What::Details => "details",
         }
     }
 
     fn shown_for(self, session: &attn_protocol::Session) -> bool {
         match self {
             What::Usage => super::usage::shown(session).is_some(),
+            What::Details => super::provenance::pull_request(session).is_some(),
+        }
+    }
+
+    /// How long the pointer rests before the popover opens, and how long it may be away
+    /// before the popover closes, in seconds.
+    fn delays(self) -> (f64, f64) {
+        match self {
+            What::Usage => (0.16, 0.24),
+            What::Details => (0.0, 0.12),
         }
     }
 }
@@ -39,6 +49,11 @@ impl Pop {
     pub(crate) fn anchor(&self) -> String {
         anchor(&self.leaf, self.what)
     }
+
+    /// The popover's own key.
+    pub(crate) fn surface(&self) -> String {
+        format!("{}.popover", self.anchor())
+    }
 }
 
 pub(crate) fn anchor(leaf: &str, what: What) -> String {
@@ -56,43 +71,61 @@ enum Timer {
 pub(crate) struct HeaderPop {
     pub(crate) open: Option<Pop>,
     timer: Option<Timer>,
+    /// The row a popover listing several things has picked.
+    pub(crate) picked: usize,
 }
 
-pub(crate) fn hover(
-    state: &mut State,
-    leaf: &str,
-    session: &str,
-    what: What,
-    inside: bool,
-    tx: &mut Tx,
-) {
+/// `piece` opens the popover of `what` when the pointer moves onto it, as the shelf's peek does,
+/// so a popover closed under a still pointer stays closed, and lets it go once the pointer
+/// leaves.
+pub(crate) fn hovers(piece: El, leaf: &str, session: &str, what: What) -> El {
+    let (leaf, session) = (leaf.to_owned(), session.to_owned());
+    piece
+        .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
+            rest(state, &leaf, &session, what, tx)
+        })
+        .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
+            if !inside {
+                close_soon(&mut state.window.desk.header_pop, tx);
+            }
+        })
+}
+
+fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
     let pop = &mut state.window.desk.header_pop;
-    if !inside {
-        close_soon(pop, tx);
+    let here = |p: &Pop| p.leaf == leaf && p.what == what;
+    if pop.open.as_ref().is_some_and(here) {
+        if matches!(pop.timer, Some(Timer::Close(_))) {
+            pop.timer = None;
+        } else {
+            tx.live_only();
+        }
         return;
     }
-    if pop
-        .open
-        .as_ref()
-        .is_some_and(|p| p.leaf == leaf && p.what == what)
+    if pop.open.as_ref().is_some_and(|p| p.pinned)
+        || matches!(&pop.timer, Some(Timer::Open(p, _)) if here(p))
     {
-        pop.timer = None;
+        tx.live_only();
         return;
     }
-    if pop.open.as_ref().is_some_and(|p| p.pinned) {
-        return;
+    let opening = Pop {
+        leaf: leaf.to_owned(),
+        session: session.to_owned(),
+        what,
+        pinned: false,
+    };
+    match what.delays().0 {
+        0.0 => {
+            pop.timer = None;
+            pop.picked = 0;
+            pop.open = Some(opening);
+        }
+        delay => {
+            let at = tx.clock() + delay;
+            pop.timer = Some(Timer::Open(opening, at));
+            tx.wake_at(at);
+        }
     }
-    let at = tx.clock() + OPEN_DELAY;
-    pop.timer = Some(Timer::Open(
-        Pop {
-            leaf: leaf.to_owned(),
-            session: session.to_owned(),
-            what,
-            pinned: false,
-        },
-        at,
-    ));
-    tx.wake_at(at);
 }
 
 /// The pointer moved onto the open popover, or off it.
@@ -107,46 +140,54 @@ pub(crate) fn hover_popover(state: &mut State, inside: bool, tx: &mut Tx) {
 
 fn close_soon(pop: &mut HeaderPop, tx: &mut Tx) {
     pop.timer = None;
-    if pop.open.as_ref().is_none_or(|p| p.pinned) {
+    let Some(open) = pop.open.as_ref().filter(|p| !p.pinned) else {
         return;
-    }
-    let at = tx.clock() + CLOSE_DELAY;
+    };
+    let at = tx.clock() + open.what.delays().1;
     pop.timer = Some(Timer::Close(at));
     tx.wake_at(at);
 }
 
-/// A press on the piece pins its popover, and a second press closes it.
-pub(crate) fn press(state: &mut State, leaf: &str, session: &str, what: What) {
-    let pop = &mut state.window.desk.header_pop;
-    pop.timer = None;
-    let pinned_here = pop
+/// A press on the piece pins its popover, which takes the keyboard, and a second press closes
+/// it.
+pub(crate) fn press(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
+    let pinned_here = state
+        .window
+        .desk
+        .header_pop
         .open
         .as_ref()
         .is_some_and(|p| p.pinned && p.leaf == leaf && p.what == what);
-    pop.open = (!pinned_here).then(|| Pop {
+    if pinned_here {
+        close(state);
+    } else {
+        pinned(state, leaf, session, what, tx);
+    }
+}
+
+fn pinned(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
+    let pop = &mut state.window.desk.header_pop;
+    pop.timer = None;
+    pop.picked = 0;
+    let open = Pop {
         leaf: leaf.to_owned(),
         session: session.to_owned(),
         what,
         pinned: true,
-    });
+    };
+    tx.focus(open.surface(), true);
+    pop.open = Some(open);
 }
 
 /// Pins the popover of `what` on the tile on screen that shows `session`.
-pub(crate) fn pin(state: &mut State, session: &str, what: What) {
+pub(crate) fn pin(state: &mut State, session: &str, what: What, tx: &mut Tx) {
     let leaf = state
         .facts
         .current_desktop()
         .and_then(|d| d.panes.iter().find(|p| p.session_id == session))
         .map(|p| p.pane_id.clone());
     if let Some(leaf) = leaf {
-        let pop = &mut state.window.desk.header_pop;
-        pop.timer = None;
-        pop.open = Some(Pop {
-            leaf,
-            session: session.to_owned(),
-            what,
-            pinned: true,
-        });
+        pinned(state, &leaf, session, what, tx);
     }
 }
 
@@ -190,7 +231,10 @@ pub(crate) fn expire(state: &mut State, now: f64) -> bool {
         return false;
     }
     pop.open = match pop.timer.take() {
-        Some(Timer::Open(open, _)) => Some(open),
+        Some(Timer::Open(open, _)) => {
+            pop.picked = 0;
+            Some(open)
+        }
         _ => None,
     };
     true

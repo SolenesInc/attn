@@ -96,23 +96,18 @@ pub(crate) fn piece(
     font: rune::TextStyle,
     t: &Tokens,
 ) -> El {
-    let (hovered, pressed) = (
-        (leaf.to_owned(), session.to_owned()),
-        (leaf.to_owned(), session.to_owned()),
-    );
-    text(badge.text.clone())
+    let pressed = (leaf.to_owned(), session.to_owned());
+    let badge = text(badge.text.clone())
         .key(header_pop::anchor(leaf, What::Usage))
         .role("button")
         .label(badge.label.clone())
         .font(font)
         .color(t.text_tertiary)
         .single_line()
-        .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
-            header_pop::hover(state, &hovered.0, &hovered.1, What::Usage, inside, tx)
-        })
-        .on_press(move |state: &mut State| {
-            header_pop::press(state, &pressed.0, &pressed.1, What::Usage)
-        })
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            header_pop::press(state, &pressed.0, &pressed.1, What::Usage, tx)
+        });
+    header_pop::hovers(badge, leaf, session, What::Usage)
 }
 
 /// The breakdown of the open usage popover, under its badge.
@@ -144,7 +139,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
             .color(t.text_primary)
         }));
     let surface = col()
-        .key(format!("{}.breakdown", pop.anchor()))
+        .key(pop.surface())
         .role("dialog")
         .label("Session usage breakdown")
         .w(300.0)
@@ -153,6 +148,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .radius(6.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
+        .focusable(true)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
         })
