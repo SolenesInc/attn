@@ -28,6 +28,7 @@ pub mod screen;
 mod setting;
 mod settings;
 mod shell;
+mod shortcut_editor;
 pub mod sidebar;
 #[cfg(target_os = "macos")]
 pub mod tauri_settings;
@@ -68,7 +69,12 @@ pub struct State {
     epoch_ms: i64,
     /// The runtime time the window next wakes to move turn ages on.
     age_wake: Option<f64>,
+    /// Gives the menu bar's items the keys of each new keymap.
+    menus: Option<Menus>,
 }
+
+/// Sets the menu bar's items for a keymap.
+pub type Menus = Arc<dyn Fn(&Keymap) + Send + Sync>;
 
 impl State {
     fn wall_ms(&self, tx: &Tx) -> i64 {
@@ -150,6 +156,9 @@ pub fn bind(
                 picker::reconnected(state, tx);
             }
             if let Some(keymap) = keymap {
+                if let Some(menus) = &state.menus {
+                    menus(&keymap);
+                }
                 state.keymap = keymap;
             }
             state.window.follow(&state.facts);
@@ -171,6 +180,7 @@ pub fn bind(
             ledger::follow(state, was, tx);
             notifications::follow(state, was, tx);
             settings::follow(state, tx);
+            shortcut_editor::follow(state);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             if state.window.tile.is_none() {
@@ -250,6 +260,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
     let settings = settings::poll(state, now, tx);
+    shortcut_editor::focus_recording(state, tx);
     shell::expire(state, now, tx)
         || settings
         || recounted
@@ -304,6 +315,12 @@ impl State {
         self.window.desk.windows.main = Some(main);
         desktop::follow_windows(self);
     }
+
+    /// Keeps the menu bar's key equivalents on the keys the keymap gives their actions.
+    pub fn follow_menus(&mut self, menus: Menus) {
+        menus(&self.keymap);
+        self.menus = Some(menus);
+    }
 }
 
 fn quit(state: &mut State, tx: &mut Tx) {
@@ -331,47 +348,55 @@ fn main_reopened(state: &mut State, _: bool, _: &mut Tx) -> bool {
 }
 
 /// The app with its window, reopened where it last closed in the prefs `bundle_id` names, and
-/// the items it adds to the macOS menu bar. Each item runs an action; AppKit takes ⌘. before
-/// any view, so Stop Countdown's item is how its keys arrive.
+/// the items it adds to the macOS menu bar.
 pub fn native_app(bundle_id: &str) -> rune::App<State> {
-    let stop_countdown = keymap::default_chord(&Action::SessionCancelCountdown, KeyPlatform::Mac)
-        .and_then(|chord| Shortcut::parse_on(chord, KeyPlatform::Mac).ok())
-        .expect("Stop Countdown's Mac default is a menu key equivalent");
     let app = app()
         .compositor(screen::Screens::default())
         .playground(attn_ui::playground());
-    frame::restored(app, bundle_id)
+    let app = frame::restored(app, bundle_id)
         .keep_running()
         .on_close(main_closed)
         .on_reopen(main_reopened)
-        .on_quit(quit)
-        .menu_item(
-            MenuItem::new("Stop Countdown", |state, tx| {
-                dispatch(state, Action::SessionCancelCountdown, tx);
-            })
-            .id(Action::SessionCancelCountdown.id())
+        .on_quit(quit);
+    menu_items(&Keymap::default())
+        .into_iter()
+        .fold(app, |app, item| app.menu_item(item))
+}
+
+/// The items attn adds to the macOS menu bar, each running an action, with the keys `keymap`
+/// binds Stop Countdown to: AppKit takes ⌘. before any view, so its item is how its keys
+/// arrive, and the window still hears them first.
+pub fn menu_items(keymap: &Keymap) -> Vec<MenuItem<State>> {
+    let stop = MenuItem::new("Stop Countdown", |state, tx| {
+        dispatch(state, Action::SessionCancelCountdown, tx);
+    })
+    .id(Action::SessionCancelCountdown.id())
+    .menu("File")
+    .keys_first();
+    let stop_keys = match keymap.binding(&Action::SessionCancelCountdown) {
+        Some(Binding::Chord(chord)) => {
+            Shortcut::parse_on(&chord.to_string(), KeyPlatform::Mac).ok()
+        }
+        _ => None,
+    };
+    vec![
+        match stop_keys {
+            Some(keys) => stop.key_equivalent(keys),
+            None => stop,
+        },
+        MenuItem::new("Close Pane", |state, tx| {
+            dispatch(state, Action::SessionClose, tx);
+        })
+        .id(Action::SessionClose.id())
+        .menu("File"),
+        MenuItem::new("Pop Out or Bring Back Tile", |state, tx| {
+            dispatch(state, Action::TilePopOut, tx);
+        })
+        .id(Action::TilePopOut.id())
+        .menu("File"),
+        MenuItem::new("Quick Capture", |_, _| {})
+            .id("quick-capture")
             .menu("File")
-            .key_equivalent(stop_countdown)
-            .keys_first(),
-        )
-        .menu_item(
-            MenuItem::new("Close Pane", |state, tx| {
-                dispatch(state, Action::SessionClose, tx);
-            })
-            .id(Action::SessionClose.id())
-            .menu("File"),
-        )
-        .menu_item(
-            MenuItem::new("Pop Out or Bring Back Tile", |state, tx| {
-                dispatch(state, Action::TilePopOut, tx);
-            })
-            .id(Action::TilePopOut.id())
-            .menu("File"),
-        )
-        .menu_item(
-            MenuItem::new("Quick Capture", |_, _| {})
-                .id("quick-capture")
-                .menu("File")
-                .enabled(false),
-        )
+            .enabled(false),
+    ]
 }

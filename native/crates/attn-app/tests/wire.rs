@@ -24,6 +24,7 @@ mod wire {
     mod shelf_drags;
     mod shelf_layout;
     mod shelf_peek;
+    mod shortcut_editor;
     mod sidebar;
     mod sidebar_width;
     mod terminal;

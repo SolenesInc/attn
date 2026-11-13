@@ -66,6 +66,7 @@ pub struct Window {
     pub(crate) ledger: crate::ledger::Ledger,
     pub(crate) notifications: crate::notifications::Panel,
     pub(crate) settings: crate::settings::Dialog,
+    pub(crate) shortcut_editor: crate::shortcut_editor::Editor,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -100,6 +101,8 @@ pub enum Layer {
     NewSession,
     Settings,
     Shortcuts,
+    /// The editor that rebinds shortcuts; `Window::shortcut_editor` holds it.
+    ShortcutEditor,
     /// The desktop overview.
     Overview,
     /// The ledger of sessions; `Window::ledger` holds it.
@@ -519,6 +522,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
             t,
             cheat_sheet(&state.keymap, t),
         )),
+        Some(Layer::ShortcutEditor) => crate::shortcut_editor::view(state, t, &mut layers),
         None => {}
     }
     if let Some(leader) = &window.leader {
@@ -607,6 +611,10 @@ fn dialog(key: &str, title: &str, t: &Tokens, body: Vec<El>) -> El {
 }
 
 fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
+    let edit = rune_kit::Button::new("Edit shortcuts")
+        .on_press_tx(crate::shortcut_editor::open)
+        .build(attn_ui::kit(t))
+        .key("shortcuts.edit");
     let categories = [
         Category::Sessions,
         Category::Panes,
@@ -614,40 +622,38 @@ fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
         Category::Review,
         Category::App,
     ];
-    categories
-        .into_iter()
-        .map(|category| {
-            let rows = Action::ALL
-                .iter()
-                .filter(|a| a.category() == category)
-                .filter_map(|action| {
-                    let keys = keymap.label(keymap.binding(action)?);
-                    Some(
-                        row()
-                            .key(format!("shortcut.{}", action.id()))
-                            .role("listitem")
-                            .label(format!("{}, {keys}", action.label()))
-                            .w_full()
-                            .gap(space::S2)
-                            .child(
-                                text(action.label())
-                                    .font(type_::BODY)
-                                    .color(t.text_primary)
-                                    .grow(1.0),
-                            )
-                            .child(text(keys).font(type_::MONO_CAPTION).color(t.text_secondary)),
-                    )
-                });
-            col()
-                .key(format!("shortcuts.{category:?}"))
-                .role("list")
-                .label(category.label())
-                .w_full()
-                .gap(space::S1)
-                .child(section_title(category.label(), t))
-                .children(rows)
-        })
-        .collect()
+    let sections = categories.into_iter().map(|category| {
+        let rows = Action::ALL
+            .iter()
+            .filter(|a| a.category() == category)
+            .filter_map(|action| {
+                let keys = keymap.label(keymap.binding(action)?);
+                Some(
+                    row()
+                        .key(format!("shortcut.{}", action.id()))
+                        .role("listitem")
+                        .label(format!("{}, {keys}", action.label()))
+                        .w_full()
+                        .gap(space::S2)
+                        .child(
+                            text(action.label())
+                                .font(type_::BODY)
+                                .color(t.text_primary)
+                                .grow(1.0),
+                        )
+                        .child(text(keys).font(type_::MONO_CAPTION).color(t.text_secondary)),
+                )
+            });
+        col()
+            .key(format!("shortcuts.{category:?}"))
+            .role("list")
+            .label(category.label())
+            .w_full()
+            .gap(space::S1)
+            .child(section_title(category.label(), t))
+            .children(rows)
+    });
+    std::iter::once(edit).chain(sections).collect()
 }
 
 /// A notice with its offer: one button, as the Tauri app's toast row is, that runs the offer

@@ -251,6 +251,15 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         &["shortcuts", "keys", "cheatsheet", "help"],
         Action::UiShowShortcuts,
     ));
+    commands.push(
+        Command::new(
+            "customize-shortcuts",
+            "Customize keyboard shortcuts",
+            &["keybindings", "shortcuts", "keyboard", "rebind", "hotkeys"],
+            Action::OpenShortcutEditor,
+        )
+        .describe("Rebind shortcuts and restore defaults"),
+    );
     commands.extend([
         Command::new(
             "sidebar-wider",

@@ -78,9 +78,17 @@ fn main() -> ExitCode {
         let main = main.clone();
         Arc::new(move |update| main.update(update))
     };
+    let menus = main.clone();
     main.update(Box::new(
         move |state: &mut attn_app::State, _: &mut rune::Tx| {
-            state.open_tile_windows(opener, deliver)
+            state.open_tile_windows(opener, deliver);
+            if cfg!(target_os = "macos") {
+                state.follow_menus(Arc::new(move |keymap| {
+                    if let Err(why) = menus.set_menu(attn_app::menu_items(keymap)) {
+                        eprintln!("attn-app: the menu bar keeps its keys: {why}");
+                    }
+                }));
+            }
         },
     ));
     app.run();

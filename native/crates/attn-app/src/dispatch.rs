@@ -69,6 +69,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::OpenWorktrees => crate::ledger::open(state, crate::ledger::Tab::Worktrees, tx),
         Action::ToggleNotifications => crate::notifications::toggle(state, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
+        Action::OpenShortcutEditor => crate::shortcut_editor::open(state, tx),
         Action::AppQuit => tx.quit(),
         Action::SetSetting { key, value } => {
             let _ = state.daemon.send(&SetSettingMessage {

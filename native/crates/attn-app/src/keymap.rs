@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rune::{Chord, KeyEvent, KeyPlatform, Tx};
 use serde_json::Value;
@@ -69,6 +69,8 @@ pub enum Press {
 pub struct Keymap {
     platform: KeyPlatform,
     entries: Vec<Entry>,
+    /// The actions the user rebound or unbound.
+    customized: BTreeSet<Action>,
 }
 
 impl Default for Keymap {
@@ -118,7 +120,55 @@ impl Keymap {
             entries.push(entry);
         }
         entries.sort_by_key(|entry| !TERMINAL_ONLY.contains(&entry.action));
-        Keymap { platform, entries }
+        Keymap {
+            platform,
+            entries,
+            customized: overrides.into_keys().collect(),
+        }
+    }
+
+    pub fn platform(&self) -> KeyPlatform {
+        self.platform
+    }
+
+    pub fn is_customized(&self, action: &Action) -> bool {
+        self.customized.contains(action)
+    }
+
+    /// The keys `action` has before any rebind.
+    pub fn default_binding(&self, action: &Action) -> Option<Binding> {
+        let spec = default_chord(action, self.platform)?;
+        Chord::parse(spec).ok().map(Binding::Chord)
+    }
+
+    /// The action other than `except` that pressing `binding` could run, as dispatch decides:
+    /// the close and send-annotations pairs share plain keys, but a sequence's leader still
+    /// collides with either.
+    pub fn holder(&self, binding: &Binding, except: &Action) -> Option<Action> {
+        self.entries
+            .iter()
+            .find(|entry| {
+                entry.action != *except
+                    && !(may_share_keys(except, &entry.action)
+                        && matches!(
+                            (binding, entry.binding),
+                            (Binding::Chord(_), Binding::Chord(_))
+                        ))
+                    && binding.collides(&entry.binding, self.platform)
+            })
+            .map(|entry| entry.action.clone())
+    }
+
+    /// Whether two bindings are the same keys on this keymap's platform.
+    pub fn same_keys(&self, a: &Binding, b: &Binding) -> bool {
+        match (a, b) {
+            (Binding::Chord(a), Binding::Chord(b)) => a.same_keys(b, self.platform),
+            (
+                Binding::Sequence { leader: a, then: x },
+                Binding::Sequence { leader: b, then: y },
+            ) => a.same_keys(b, self.platform) && x.same_keys(y, self.platform),
+            _ => false,
+        }
     }
 
     pub fn binding(&self, action: &Action) -> Option<Binding> {
@@ -304,6 +354,11 @@ fn renamed(id: &str) -> String {
         Some(slot) => format!("desktop.select{slot}"),
         None => id.to_owned(),
     }
+}
+
+/// The keys a binding stored in `keybindings_config` runs on, as dispatch reads it.
+pub(crate) fn parse_binding(value: &Value, platform: KeyPlatform) -> Option<Binding> {
+    stored_binding(value, platform).map(|(binding, _)| binding)
 }
 
 /// A binding as the Tauri app stores it: `{key, code?, meta?, shift?, ctrl?, alt?,

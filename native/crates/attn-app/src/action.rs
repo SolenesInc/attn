@@ -65,6 +65,8 @@ macro_rules! actions {
             OpenWorktrees,
             /// Open the notifications panel, or close it.
             ToggleNotifications,
+            /// Open the editor that rebinds shortcuts.
+            OpenShortcutEditor,
         }
 
         impl Action {
@@ -93,6 +95,7 @@ macro_rules! actions {
                     Action::ShowAsks { .. } => "asks.show",
                     Action::OpenWorktrees => "ledger.worktrees",
                     Action::ToggleNotifications => "notifications.toggle",
+                    Action::OpenShortcutEditor => "shortcuts.edit",
                 }
             }
 
@@ -118,6 +121,7 @@ macro_rules! actions {
                     Action::ShowAsks { .. } => "Open asks",
                     Action::OpenWorktrees => "Open worktrees",
                     Action::ToggleNotifications => "Show or hide notifications",
+                    Action::OpenShortcutEditor => "Customize keyboard shortcuts",
                 }
             }
 
@@ -237,6 +241,25 @@ impl Action {
         matches!(
             self,
             Action::UiOpenSettings | Action::UiShowShortcuts | Action::AppQuit
+        )
+    }
+
+    /// Whether the action only acts on a terminal, so its keys do nothing without one open.
+    pub fn requires_terminal(&self) -> bool {
+        matches!(
+            self,
+            Action::TerminalOpen
+                | Action::TerminalSplitVertical
+                | Action::TerminalSplitHorizontal
+                | Action::TerminalToggleZoom
+                | Action::TerminalToggleMaximize
+                | Action::TerminalClose
+                | Action::TerminalFocusLeft
+                | Action::TerminalFocusRight
+                | Action::TerminalFocusUp
+                | Action::TerminalFocusDown
+                | Action::TerminalFind
+                | Action::TerminalSendAnnotations
         )
     }
 

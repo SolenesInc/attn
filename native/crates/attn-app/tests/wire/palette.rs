@@ -247,8 +247,11 @@ fn the_palette_keeps_the_query_while_history_loads_and_offers_commands_once_it_a
     world.settle();
 
     assert_eq!(query(&world), ">keyboard");
-    assert_eq!(titles(&world), ["Keyboard shortcuts"]);
-    assert!(text_of(&world, "palette.count").is_some_and(|c| c.starts_with("1 of ")));
+    assert_eq!(
+        titles(&world),
+        ["Keyboard shortcuts", "Customize keyboard shortcuts"]
+    );
+    assert!(text_of(&world, "palette.count").is_some_and(|c| c.starts_with("2 of ")));
     assert_eq!(world.daemon.sent_of("get_command_usage").len(), 1);
     assert!(records(&world).is_empty());
     rest(&mut world);
