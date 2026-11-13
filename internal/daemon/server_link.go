@@ -108,16 +108,7 @@ func (l *serverLink) resolveCaller(t protocol.TerminalID) (protocol.SessionID, h
 
 func (l *serverLink) runsLink(t harness.TerminalID) bool { return t == l.b.terminal }
 
-func (l *serverLink) serverTerminal(string) harness.TerminalID {
-	if p, err := l.connection(); err == nil {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		if p.terminal != "" {
-			return p.terminal
-		}
-	}
-	return l.b.terminal
-}
+func (l *serverLink) serverTerminal(string) harness.TerminalID { return l.b.terminal }
 
 func (l *serverLink) renamed(protocol.SessionID, string) {}
 
