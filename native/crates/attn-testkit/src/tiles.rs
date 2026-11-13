@@ -175,11 +175,17 @@ impl TileRuntime {
             self.runtime.update(update);
         }
         self.runtime.frame(0.0);
+        self.land_motion();
+        while self.runtime.has_pending_input() {
+            self.runtime.frame(0.0);
+            self.land_motion();
+        }
+    }
+
+    /// Lands the motion the last frame started.
+    fn land_motion(&mut self) {
         if self.runtime.animating {
             self.runtime.settle_all();
-            self.runtime.frame(0.0);
-        }
-        while self.runtime.has_pending_input() {
             self.runtime.frame(0.0);
         }
     }

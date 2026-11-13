@@ -326,6 +326,14 @@ impl World {
         }
     }
 
+    /// Lands the motion the last frame started, unless a sampler records it.
+    fn land_motion(&mut self, sampler: &Option<&mut rune::motion_gate::Sampler>) {
+        if sampler.is_none() && self.runtime.animating {
+            self.runtime.settle_all();
+            self.runtime.frame(0.0);
+        }
+    }
+
     fn sample(&mut self, sampler: &mut rune::motion_gate::Sampler, dt: f64) {
         sampler.before(&mut self.runtime);
         let awake = self.runtime.frame(dt);
@@ -343,12 +351,10 @@ impl World {
                 self.runtime.update(update);
             }
             self.still_frame(&mut sampler);
-            if sampler.is_none() && self.runtime.animating {
-                self.runtime.settle_all();
-                self.runtime.frame(0.0);
-            }
+            self.land_motion(&sampler);
             while self.runtime.has_pending_input() {
                 self.still_frame(&mut sampler);
+                self.land_motion(&sampler);
             }
             if !self.covered && self.screens.redraws(&self.runtime) {
                 self.screens.draw_without_gpu(&mut self.runtime);
