@@ -216,7 +216,7 @@ fn from(ask: &Ask, holder: Option<&Session>) -> String {
     }
 }
 
-fn crew_display_name(id: &str) -> String {
+pub(crate) fn crew_display_name(id: &str) -> String {
     let id = id.trim();
     if id == CREW_DAEMON_ID {
         return id.into();

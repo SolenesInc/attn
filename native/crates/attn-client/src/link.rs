@@ -526,6 +526,10 @@ impl Task {
                 self.store.upsert_session(message.session);
                 None
             }
+            "kept_conversations_changed" => {
+                self.store.kept_conversations_changed();
+                None
+            }
             "session_closed" => {
                 let message: SessionClosedMessage = parse(&header.event, text)?;
                 self.store.add_close(message.session_ledger_entry);

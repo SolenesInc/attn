@@ -8,8 +8,8 @@ mod view;
 use std::collections::HashMap;
 
 use attn_protocol::{
-    OpenSeedMessage, SessionLedgerEntry, SessionLedgerFacets, SessionListResultMessage,
-    SessionReopenMessage, SessionReopenResultMessage, SetSettingMessage,
+    KeptConversationKeepMessage, OpenSeedMessage, SessionLedgerEntry, SessionLedgerFacets,
+    SessionListResultMessage, SessionReopenMessage, SessionReopenResultMessage, SetSettingMessage,
 };
 use rune::{TextEdit, Tx};
 
@@ -20,14 +20,37 @@ use query::{Filters, ProfileChoice, Scope, Verdict};
 
 pub(crate) use view::view;
 
+mod conversations;
+
 /// Rows per page, as the Tauri app reads them.
 pub const PAGE: i64 = 50;
 
 pub(crate) const LIST: &str = "ledger.list";
 pub(crate) const QUERY: &str = "ledger.query.field";
 
+/// The ledger's lists, in the order `[` and `]` walk them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Tab {
+    #[default]
+    Sessions,
+    Conversations,
+}
+
+impl Tab {
+    pub const ALL: [Tab; 2] = [Tab::Sessions, Tab::Conversations];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Tab::Sessions => "Sessions",
+            Tab::Conversations => "Conversations",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Ledger {
+    pub tab: Tab,
+    pub conversations: conversations::Kept,
     /// What the page shows; the scope and the daemon's filters the query resolved to.
     pub filters: Filters,
     pub query: TextEdit,
@@ -50,6 +73,10 @@ pub struct Ledger {
     /// The row whose verb menu is open.
     pub menu: Option<String>,
     attempts: HashMap<String, Attempt>,
+    /// A conversation pin asked of a row, until the daemon answers.
+    keep_notes: HashMap<String, Note>,
+    /// The last `Facts::kept_conversations` the shown list took in.
+    seen_kept: u64,
     pub legend: bool,
     pub copied: Option<String>,
 }
@@ -82,6 +109,7 @@ pub enum Verb {
     Focus,
     Reopen(String),
     Seed { id: String, title: String },
+    Keep(bool),
 }
 
 impl Verb {
@@ -90,6 +118,8 @@ impl Verb {
             Verb::Focus => "Focus".into(),
             Verb::Reopen(action) => query::action_label(action).into(),
             Verb::Seed { title, .. } => format!("Seed · {title}"),
+            Verb::Keep(true) => "Keep conversation".into(),
+            Verb::Keep(false) => "Unkeep".into(),
         }
     }
 }
@@ -126,7 +156,11 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
         deleted: false,
     });
     let epoch = state.window.ledger.epoch;
+    let mut conversations = conversations::Kept::default();
+    conversations.epoch = state.window.ledger.conversations.epoch;
     state.window.ledger = Ledger {
+        conversations,
+        seen_kept: state.facts.kept_conversations,
         query: TextEdit::new(query::format(&filters, &named_with)),
         filters,
         named_with,
@@ -138,7 +172,35 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
     };
     state.window.layer = Some(Layer::Ledger);
     tx.focus(LIST, false);
-    read(state, tx);
+    read_tab(state, tx);
+}
+
+/// Shows `tab` and reads it, with the keyboard on its rows.
+pub(crate) fn show_tab(state: &mut State, tab: Tab, tx: &mut Tx) {
+    let ledger = &mut state.window.ledger;
+    ledger.tab = tab;
+    ledger.menu = None;
+    ledger.legend = false;
+    ledger.conversations.leave();
+    tx.focus(LIST, false);
+    read_tab(state, tx);
+}
+
+/// Moves `by` lists along, wrapping at either end.
+pub(crate) fn step_tab(state: &mut State, by: isize, tx: &mut Tx) {
+    let at = Tab::ALL
+        .iter()
+        .position(|t| *t == state.window.ledger.tab)
+        .unwrap_or(0);
+    let next = (at as isize + by).rem_euclid(Tab::ALL.len() as isize) as usize;
+    show_tab(state, Tab::ALL[next], tx);
+}
+
+fn read_tab(state: &mut State, tx: &mut Tx) {
+    match state.window.ledger.tab {
+        Tab::Sessions => read(state, tx),
+        Tab::Conversations => conversations::read(state, tx),
+    }
 }
 
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
@@ -146,6 +208,7 @@ pub(crate) fn close(state: &mut State, tx: &mut Tx) {
         return;
     }
     state.window.ledger.epoch += 1;
+    state.window.ledger.conversations.epoch += 1;
     state.window.layer = None;
     crate::picker::refocus_inline(state, tx);
 }
@@ -162,12 +225,16 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     let ledger = &mut state.window.ledger;
     if !connected {
         ledger.epoch += 1;
+        ledger.conversations.epoch += 1;
         ledger.loading = false;
         ledger.loading_more = false;
         ledger.seen_closes = state.facts.closes.seq;
         return;
     }
-    let mut reread = !was_connected || ledger.priced_with != pricing;
+    let mut reread = !was_connected
+        || ledger.priced_with != pricing
+        || ledger.seen_kept != state.facts.kept_conversations;
+    ledger.seen_kept = state.facts.kept_conversations;
     ledger.priced_with = pricing;
     if ledger.named_with != names {
         let text = query::rename_profile_tokens(&ledger.query.text, &ledger.named_with, &names);
@@ -189,7 +256,7 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     }
     ledger.seen_closes = closes.seq;
     if reread {
-        read(state, tx);
+        read_tab(state, tx);
     }
     keep_selection(state);
 }
@@ -417,7 +484,9 @@ impl Ledger {
     }
 
     pub(crate) fn note(&self, entry: &SessionLedgerEntry) -> Option<&Note> {
-        self.attempt(entry).and_then(|a| a.note.as_ref())
+        self.keep_notes
+            .get(&entry.id)
+            .or_else(|| self.attempt(entry).and_then(|a| a.note.as_ref()))
     }
 
     pub(crate) fn verdict(&self, entry: &SessionLedgerEntry) -> Option<&Verdict> {
@@ -545,6 +614,9 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
             title: seed.title.clone(),
         });
     }
+    if keeps_conversation(entry) {
+        verbs.push(Verb::Keep(entry.conversation_pinned_at.is_none()));
+    }
     let shell_name = live_session
         .filter(|_| entry.agent == "shell")
         .map(|s| s.label.clone());
@@ -564,6 +636,11 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
         live,
         verbs,
     }
+}
+
+/// attn keeps copies of Claude Code conversations that ran at the home.
+pub(crate) fn keeps_conversation(entry: &SessionLedgerEntry) -> bool {
+    entry.agent == "claude" && entry.host.is_none()
 }
 
 /// The row the inspector reads and the keys act on: the one chosen, or the first.
@@ -627,7 +704,11 @@ pub(crate) fn run(state: &mut State, id: &str, verb: Verb, tx: &mut Tx) {
     let ledger = &mut state.window.ledger;
     ledger.selected = Some(entry.id.clone());
     ledger.menu = None;
-    if matches!(ledger.note(&entry), Some(Note::Busy(_))) {
+    let busy = match verb {
+        Verb::Keep(_) => ledger.keep_notes.get(&entry.id),
+        _ => ledger.attempt(&entry).and_then(|a| a.note.as_ref()),
+    };
+    if matches!(busy, Some(Note::Busy(_))) {
         return;
     }
     match verb {
@@ -635,21 +716,53 @@ pub(crate) fn run(state: &mut State, id: &str, verb: Verb, tx: &mut Tx) {
             close(state, tx);
             crate::sidebar::open_agent(state, &entry.id, tx);
         }
-        Verb::Seed { id, .. } => {
-            close(state, tx);
-            state.act(
-                |request_id| OpenSeedMessage {
-                    seed_id: id,
-                    request_id: Some(request_id),
-                    ..OpenSeedMessage::new()
-                },
-                Refused::Prefixed("Could not open the seed"),
-                |_, _, _| {},
-                tx,
-            );
+        Verb::Seed { id, .. } => open_seed(state, id, tx),
+        Verb::Keep(keep) => keep_conversation(state, entry.id, keep, tx),
+        Verb::Reopen(action) => {
+            state.window.ledger.keep_notes.remove(&entry.id);
+            reopen(state, entry, action, tx)
         }
-        Verb::Reopen(action) => reopen(state, entry, action, tx),
     }
+}
+
+/// Leaves the ledger for a seed's tile.
+pub(crate) fn open_seed(state: &mut State, id: String, tx: &mut Tx) {
+    close(state, tx);
+    state.act(
+        |request_id| OpenSeedMessage {
+            seed_id: id,
+            request_id: Some(request_id),
+            ..OpenSeedMessage::new()
+        },
+        Refused::Prefixed("Could not open the seed"),
+        |_, _, _| {},
+        tx,
+    );
+}
+
+fn keep_conversation(state: &mut State, id: String, keep: bool, tx: &mut Tx) {
+    state
+        .window
+        .ledger
+        .keep_notes
+        .insert(id.clone(), Note::Busy("changing conversation pin…".into()));
+    let session_id = format!("session:{id}");
+    state.ask(
+        |request_id| KeptConversationKeepMessage {
+            request_id: Some(request_id),
+            session_id,
+            keep,
+            ..KeptConversationKeepMessage::new()
+        },
+        move |state, answer, _| {
+            let notes = &mut state.window.ledger.keep_notes;
+            match answer.outcome() {
+                Ok(_) => notes.remove(&id),
+                Err(why) => notes.insert(id, Note::Refused(why)),
+            };
+        },
+        tx,
+    );
 }
 
 /// Runs the row's verb at `index`, its first for Enter.

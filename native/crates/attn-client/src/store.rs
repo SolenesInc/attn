@@ -26,6 +26,8 @@ pub struct Facts {
     /// The selected profile's open asks, then the ones answered in the last day.
     pub asks: Arc<Vec<Ask>>,
     pub closes: Arc<Closes>,
+    /// Rises each time the daemon says attn's kept conversations changed.
+    pub kept_conversations: u64,
 }
 
 /// The sessions the daemon said closed, newest last, as their ledger rows.
@@ -178,7 +180,8 @@ impl Slices {
     pub const GARDEN: Slices = Slices(1 << 7);
     pub const ASKS: Slices = Slices(1 << 8);
     pub const CLOSES: Slices = Slices(1 << 9);
-    pub const ALL: Slices = Slices((1 << 10) - 1);
+    pub const KEPT_CONVERSATIONS: Slices = Slices(1 << 10);
+    pub const ALL: Slices = Slices((1 << 11) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -400,6 +403,13 @@ impl Store {
             }
             facts.asks = Arc::new(asks);
             Slices::ASKS
+        });
+    }
+
+    pub(crate) fn kept_conversations_changed(&self) {
+        self.change(|facts| {
+            facts.kept_conversations += 1;
+            Slices::KEPT_CONVERSATIONS
         });
     }
 

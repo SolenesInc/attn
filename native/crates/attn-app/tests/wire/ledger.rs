@@ -10,10 +10,12 @@ use attn_protocol::{
 use attn_testkit::{Daemon, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 
+mod conversations;
+
 use super::queue::ago;
 use super::sidebar::{chord, desktop, pane, session, state};
 
-fn entry(id: &str, label: &str, minutes_ago: i64) -> SessionLedgerEntry {
+pub(super) fn entry(id: &str, label: &str, minutes_ago: i64) -> SessionLedgerEntry {
     SessionLedgerEntry {
         id: id.into(),
         label: label.into(),
@@ -28,7 +30,7 @@ fn entry(id: &str, label: &str, minutes_ago: i64) -> SessionLedgerEntry {
     }
 }
 
-fn closed(mut row: SessionLedgerEntry, by: &str) -> SessionLedgerEntry {
+pub(super) fn closed(mut row: SessionLedgerEntry, by: &str) -> SessionLedgerEntry {
     row.closed_at = Some(row.last_seen.clone());
     row.closed_by = Some(by.into());
     row.state = "idle".into();
@@ -39,7 +41,7 @@ fn live_api() -> SessionLedgerEntry {
     entry("api", "API work", 5)
 }
 
-fn closed_docs() -> SessionLedgerEntry {
+pub(super) fn closed_docs() -> SessionLedgerEntry {
     closed(entry("docs", "Docs pass", 30), "user")
 }
 
@@ -62,7 +64,7 @@ fn facets() -> SessionLedgerFacets {
     }
 }
 
-fn page(request: &Request, entries: Vec<SessionLedgerEntry>) -> serde_json::Value {
+pub(super) fn page(request: &Request, entries: Vec<SessionLedgerEntry>) -> serde_json::Value {
     page_of(request, entries, 0, None)
 }
 
@@ -87,7 +89,7 @@ fn page_of(
 }
 
 /// A daemon whose ledger holds `rows`, answered by the scope each read asks for.
-fn ledger_daemon(initial: InitialStateMessage, rows: Vec<SessionLedgerEntry>) -> Daemon {
+pub(super) fn ledger_daemon(initial: InitialStateMessage, rows: Vec<SessionLedgerEntry>) -> Daemon {
     let daemon = super::palette::daemon(initial, vec![]);
     daemon.on("session_list", move |r| {
         let closed = r["closed"] == true;
@@ -102,7 +104,7 @@ fn ledger_daemon(initial: InitialStateMessage, rows: Vec<SessionLedgerEntry>) ->
     daemon
 }
 
-fn world() -> World {
+pub(super) fn world() -> World {
     World::start(ledger_daemon(
         state(
             vec![session("api", "waiting_input")],
@@ -112,11 +114,11 @@ fn world() -> World {
     ))
 }
 
-fn open(world: &mut World) {
+pub(super) fn open(world: &mut World) {
     world.gesture(|app| app.key(chord(Action::SessionsOpen)));
 }
 
-fn rows(world: &World) -> Vec<String> {
+pub(super) fn rows(world: &World) -> Vec<String> {
     world
         .screen()
         .descendants(Target::key("ledger.list"))
@@ -130,7 +132,7 @@ fn rows(world: &World) -> Vec<String> {
         .collect()
 }
 
-fn selected(world: &World) -> Option<String> {
+pub(super) fn selected(world: &World) -> Option<String> {
     world
         .screen()
         .descendants(Target::key("ledger.list"))
@@ -144,11 +146,11 @@ fn selected(world: &World) -> Option<String> {
         .and_then(|n| n.key?.strip_prefix("ledger.row.").map(str::to_owned))
 }
 
-fn has(world: &World, key: &str) -> bool {
+pub(super) fn has(world: &World, key: &str) -> bool {
     world.screen().find(Target::key(key)).is_some()
 }
 
-fn name(world: &World, key: &str) -> String {
+pub(super) fn name(world: &World, key: &str) -> String {
     world
         .screen()
         .get(Target::key(key))
@@ -157,7 +159,7 @@ fn name(world: &World, key: &str) -> String {
 }
 
 /// The words of `key` and everything inside it.
-fn text_in(world: &World, key: &str) -> String {
+pub(super) fn text_in(world: &World, key: &str) -> String {
     let screen = world.screen();
     std::iter::once(screen.get(Target::key(key)))
         .chain(screen.descendants(Target::key(key)))
@@ -166,7 +168,7 @@ fn text_in(world: &World, key: &str) -> String {
         .join(" ")
 }
 
-fn query_text(world: &World) -> String {
+pub(super) fn query_text(world: &World) -> String {
     world
         .screen()
         .get(Target::key("ledger.query.field"))
@@ -174,16 +176,16 @@ fn query_text(world: &World) -> String {
         .unwrap_or_default()
 }
 
-fn focused(world: &World) -> Option<String> {
+pub(super) fn focused(world: &World) -> Option<String> {
     world.screen().focused().and_then(|n| n.key)
 }
 
-fn click(world: &mut World, key: &str) {
+pub(super) fn click(world: &mut World, key: &str) {
     let key = key.to_owned();
     world.gesture(|app| app.click(Target::key(key)));
 }
 
-fn plain(world: &mut World, key: Key) {
+pub(super) fn plain(world: &mut World, key: Key) {
     world.gesture(|app| {
         app.key(KeyEvent {
             key,
@@ -192,17 +194,17 @@ fn plain(world: &mut World, key: Key) {
     });
 }
 
-fn letter(world: &mut World, c: &str) {
+pub(super) fn letter(world: &mut World, c: &str) {
     plain(world, Key::Text(c.into()));
 }
 
-fn type_query(world: &mut World, text: &str) {
+pub(super) fn type_query(world: &mut World, text: &str) {
     click(world, "ledger.query.field");
     let text = text.to_owned();
     world.gesture(|app| app.type_text(&text));
 }
 
-fn reads(world: &World) -> Vec<Request> {
+pub(super) fn reads(world: &World) -> Vec<Request> {
     world.daemon.sent_of("session_list")
 }
 
@@ -210,7 +212,7 @@ fn last_read(world: &World) -> Request {
     reads(world).pop().expect("the ledger read a page")
 }
 
-fn hold(world: &World, cmd: &str) -> Arc<Mutex<Vec<Request>>> {
+pub(super) fn hold(world: &World, cmd: &str) -> Arc<Mutex<Vec<Request>>> {
     let held: Arc<Mutex<Vec<Request>>> = Arc::default();
     let keep = held.clone();
     world
@@ -473,7 +475,7 @@ fn reopen_shows_the_row_busy_then_leaves_for_the_reopened_session() {
     assert_eq!(shown_session(&world), ["docs"]);
 }
 
-fn refuse_with(world: &World, offer: Option<SessionReopen>, error: &str) {
+pub(super) fn refuse_with(world: &World, offer: Option<SessionReopen>, error: &str) {
     let error = error.to_owned();
     world.daemon.on("session_reopen", move |r| {
         message(SessionReopenResultMessage {
@@ -678,8 +680,12 @@ fn a_session_whose_profile_was_deleted_offers_no_reopening() {
     gone.profile_deleted = Some(true);
     let mut world = World::start(ledger_daemon(state(vec![], vec![]), vec![gone]));
     open(&mut world);
-    assert!(!has(&world, "ledger.row.docs.verb"));
-    plain(&mut world, Key::Enter);
+    assert_eq!(name(&world, "ledger.row.docs.verb"), "Keep conversation");
+    assert!(
+        !has(&world, "ledger.row.docs.more"),
+        "a deleted profile's row offered more than keeping"
+    );
+    letter(&mut world, "2");
     assert!(world.daemon.sent_of("session_reopen").is_empty());
     let reopen = text_in(&world, "ledger.inspector.reopen");
     assert!(
@@ -803,13 +809,13 @@ fn failure(request: &Request, error: &str) -> serde_json::Value {
     })
 }
 
-fn hang_up(world: &mut World) {
+pub(super) fn hang_up(world: &mut World) {
     world.daemon.refuse_connections(true);
     world.daemon.disconnect();
     world.settle();
 }
 
-fn come_back(world: &mut World) {
+pub(super) fn come_back(world: &mut World) {
     world.daemon.refuse_connections(false);
     let before = world.daemon.connections();
     for _ in 0..30 {

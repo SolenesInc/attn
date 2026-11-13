@@ -115,7 +115,12 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/crates/attn-app/src/ledger/`) has the Sessions list: Live, Closed and All, the typed query with its chips (`repo:`, `profile:`, `dir:`, ranges and words), older pages, a row's verbs and its menu, the inspector, Reopen and the actions a refusal offers, Focus, a tended seed, and the keys j, k, arrows, Home, End, Enter, `.`, `/`, `?`, `y`, digits and Escape. It opens with the shortcut and the palette's "Open the sessions list". The Conversations and Worktrees lists, Keep conversation, Show worktree and the sidebar's "Open Ledger" drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/crates/attn-app/src/ledger/`) has two lists, which `[` and `]` walk:
+
+- Sessions: Live, Closed and All, the typed query with its chips (`repo:`, `profile:`, `dir:`, ranges and words), older pages, a row's verbs and its menu, the inspector, Reopen and the actions a refusal offers, Focus, a tended seed, and Keep conversation on a Claude row at the home.
+- Conversations: attn's copies with their totals, Show deleted, Keep forever or Unkeep, and Forget… with its confirmation, which names the crew letters that lose their transcript.
+
+The keys are j, k, arrows, Home, End, Enter, `.`, `/`, `?`, `y`, digits and Escape. The ledger opens on Sessions with the shortcut and the palette's "Open the sessions list". The Worktrees list, Show worktree and the sidebar's "Open Ledger" drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 
@@ -131,6 +136,7 @@ Steps:
 - **Open from the palette.** Run `bridge key '{"chord":"mod+shift+k"}'`, `bridge type '{"text":"open the sessions list"}'` and `bridge key '{"chord":"enter"}'`: `ledger.panel` answers. Press Escape.
 - **Close and read it back.** Run `./attn agent close ledger-agent -m "ledger drive" --source-session ledger-agent`. Open the ledger and `bridge press '{"target":{"key":"ledger.scope.closed"}}'`: `ledger.scope.closed` is `pressed`, `ledger.row.ledger-agent.meta` ends `closed by ledger-agent: ledger drive`, the verb is named `Reopen`, and `ledger.counts` reads `1 session  ·  1 closed`.
 - **The query.** Press `ledger.query.field` and type `profile:nope`: `ledger.chip.0` is named `profile:nope` with the value `unresolved`. Press Escape twice: the text clears, then focus returns to `ledger.list`.
+- **Keep a conversation.** Press `ledger.row.ledger-agent` on the Closed list, then `ledger.inspector.keep`, named `Keep conversation`: it becomes `Unkeep`, and `./attn conversation list` shows the conversation `pinned`. Press `]`: `ledger.tab.conversations` is `pressed`, and the conversation's row `ledger.row.claude:<conversation>.meta` ends `Forever · pinned <date>`. Press Enter on it: the meta no longer says `Forever`, and `./attn conversation list` no longer shows it `pinned`. Press `[` to go back to Sessions.
 - **Resume from the ledger.** Press `ledger.row.ledger-agent.verb`: `ledger.panel` goes, and `./attn agent list` lists `ledger-agent` again under the same id.
 - **Focus a live row.** Open the ledger again: it opens on Closed, the scope it was left with, and shows `ledger.empty`. Press `ledger.scope.live`, then Enter on the selected `ledger-agent` row: the ledger closes and `bridge state '{"of":"window"}'` shows `on_screen: "ledger-agent"`.
 - **Proof.** In `$P`, keep `bridge tree` after each step and the `./attn` commands' output. Capture `bridge shot '{"path":"<P>/native-ledger-closed.png"}'` with the Closed list showing the row, with `<P>` written out.

@@ -4,16 +4,44 @@ use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
 
 use super::query::{self, Scope, is_closed};
-use super::{LIST, Note, QUERY, Row, Verb};
+use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations};
 use crate::State;
 use crate::sidebar::model::AgentState;
 
 const INSET: f32 = 24.0;
-const INSPECTOR_WIDTH: f32 = 340.0;
+pub(super) const INSPECTOR_WIDTH: f32 = 340.0;
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
-    let rows = super::rows(state);
-    let selected = super::selected(state, &rows);
+    let (toolbar, body, status) = match state.window.ledger.tab {
+        Tab::Sessions => {
+            let rows = super::rows(state);
+            let selected = super::selected(state, &rows);
+            (
+                toolbar(state, t),
+                row()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(0.0)
+                    .child(list(state, &rows, selected, t))
+                    .child(inspector(state, selected, t)),
+                status(state, session_counts(state, &rows, t), t),
+            )
+        }
+        Tab::Conversations => {
+            let rows = conversations::rows(state);
+            let selected = conversations::selected(state, &rows);
+            (
+                conversations::toolbar(state, t),
+                row()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(0.0)
+                    .child(conversations::list(state, &rows, t))
+                    .child(conversations::inspector(state, selected, t)),
+                status(state, conversations::status(state, t), t),
+            )
+        }
+    };
     let panel = col()
         .key("ledger.panel")
         .role("dialog")
@@ -27,17 +55,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .radius(8.0)
         .fill(t.bg_panel)
         .border(1.0, t.border)
-        .child(header(t))
-        .child(toolbar(state, t))
-        .child(
-            row()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(list(state, &rows, selected, t))
-                .child(inspector(state, selected, t)),
-        )
-        .child(status(state, &rows, t));
+        .child(header(state, t))
+        .child(toolbar)
+        .child(body)
+        .child(status);
     el().key("ledger")
         .absolute(0.0, 0.0)
         .w_full()
@@ -60,7 +81,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         )
 }
 
-fn header(t: &Tokens) -> El {
+fn header(state: &State, t: &Tokens) -> El {
+    let shown = state.window.ledger.tab;
     row()
         .w_full()
         .items_center()
@@ -73,7 +95,18 @@ fn header(t: &Tokens) -> El {
                 .role("navigation")
                 .label("Which list")
                 .grow(1.0)
-                .child(chip_button("ledger.tab.sessions", "Sessions", true, t)),
+                .gap(2.0)
+                .children(Tab::ALL.map(|tab| {
+                    chip_button(
+                        &format!("ledger.tab.{}", tab.label().to_lowercase()),
+                        tab.label(),
+                        tab == shown,
+                        t,
+                    )
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        super::show_tab(state, tab, tx)
+                    })
+                })),
         )
         .child(
             button("ledger.close", "Close  esc", t)
@@ -533,6 +566,45 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     if closed {
         fields.push(reopen_verdict(state, r, t));
     }
+    if super::keeps_conversation(entry) {
+        let keep = entry.conversation_pinned_at.is_none();
+        let verb = Verb::Keep(keep);
+        let id = entry.id.clone();
+        let busy = matches!(state.window.ledger.note(entry), Some(Note::Busy(_)));
+        let pin = if keep {
+            "Keep attn’s copy forever"
+        } else {
+            "Kept forever"
+        };
+        let refused = match state.window.ledger.note(entry) {
+            Some(Note::Refused(words)) if !closed => Some(
+                text(words.clone())
+                    .key("ledger.inspector.keep-note")
+                    .role("status")
+                    .font(type_::LABEL)
+                    .color(t.warning)
+                    .wrap(),
+            ),
+            _ => None,
+        };
+        fields.push(
+            col()
+                .key("ledger.inspector.conversation")
+                .role("group")
+                .label("Conversation")
+                .gap(2.0)
+                .child(label("Conversation", t))
+                .child(muted(pin, t))
+                .children(refused)
+                .child(
+                    button("ledger.inspector.keep", &verb.label(), t)
+                        .a11y_value(if busy { "busy" } else { "" })
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            super::run(state, &id, Verb::Keep(keep), tx)
+                        }),
+                ),
+        );
+    }
     if r.live {
         let id = entry.id.clone();
         fields.push(
@@ -660,7 +732,7 @@ fn reopen_verdict(state: &State, r: &Row<'_>, t: &Tokens) -> El {
     block.child(row().gap(space::S1).children(buttons).children(none))
 }
 
-fn status(state: &State, rows: &[Row<'_>], t: &Tokens) -> El {
+fn session_counts(state: &State, rows: &[Row<'_>], t: &Tokens) -> Vec<El> {
     let ledger = &state.window.ledger;
     let shown = rows.len();
     let live = rows.iter().filter(|r| r.live).count();
@@ -688,6 +760,18 @@ fn status(state: &State, rows: &[Row<'_>], t: &Tokens) -> El {
         button("ledger.older", &words, t)
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::load_more(state, tx))
     });
+    std::iter::once(
+        text(parts.join("  ·  "))
+            .key("ledger.counts")
+            .font(type_::LABEL)
+            .color(t.text_secondary),
+    )
+    .chain(older)
+    .collect()
+}
+
+fn status(state: &State, counts: Vec<El>, t: &Tokens) -> El {
+    let ledger = &state.window.ledger;
     let copied = ledger.copied.as_ref().map(|_| {
         text("copied")
             .key("ledger.copied")
@@ -704,13 +788,7 @@ fn status(state: &State, rows: &[Row<'_>], t: &Tokens) -> El {
         .px(space::S3)
         .py(space::S2)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .child(
-            text(parts.join("  ·  "))
-                .key("ledger.counts")
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
-        .children(older)
+        .children(counts)
         .children(copied)
         .child(el().grow(1.0))
         .children(legend)
@@ -767,6 +845,23 @@ fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return false;
     }
     state.window.ledger.copied = None;
+    if let Key::Text(typed) = &ev.key {
+        match typed.as_str() {
+            "/" => tx.focus(QUERY, true),
+            "?" => state.window.ledger.legend = !state.window.ledger.legend,
+            "[" => super::step_tab(state, -1, tx),
+            "]" => super::step_tab(state, 1, tx),
+            _ => return tab_key(state, ev, tx),
+        }
+        return true;
+    }
+    tab_key(state, ev, tx)
+}
+
+fn tab_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if state.window.ledger.tab == Tab::Conversations {
+        return conversations::panel_key(state, ev, tx);
+    }
     let chosen = {
         let rows = super::rows(state);
         super::selected(state, &rows)
@@ -790,9 +885,6 @@ fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Text(typed) => match (typed.as_str(), chosen) {
             ("j", _) => super::step(state, 1),
             ("k", _) => super::step(state, -1),
-            ("/", _) => tx.focus(QUERY, true),
-            ("?", _) => state.window.ledger.legend = !state.window.ledger.legend,
-            ("[" | "]", _) => {}
             (".", Some((id, verbs, _))) if verbs > 1 => toggle_menu(state, &id),
             ("y", Some((_, _, directory))) => super::copy(state, directory, tx),
             (digit, Some((id, ..))) if digit.len() == 1 && ("1"..="9").contains(&digit) => {
@@ -808,6 +900,9 @@ fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// Escape backs out one layer: the verb menu, then the keys legend, then the list.
 fn escape(state: &mut State, tx: &mut Tx) {
+    if state.window.ledger.tab == Tab::Conversations && conversations::back_out(state) {
+        return;
+    }
     let ledger = &mut state.window.ledger;
     if ledger.menu.take().is_some() {
         return;
@@ -846,7 +941,7 @@ fn thousands(n: i64) -> String {
     if n < 0 { format!("-{out}") } else { out }
 }
 
-fn title(words: &str, t: &Tokens) -> El {
+pub(super) fn title(words: &str, t: &Tokens) -> El {
     text(words.to_owned())
         .role("heading")
         .font(type_::TITLE)
@@ -854,27 +949,27 @@ fn title(words: &str, t: &Tokens) -> El {
         .wrap()
 }
 
-fn label(words: &str, t: &Tokens) -> El {
+pub(super) fn label(words: &str, t: &Tokens) -> El {
     text(words.to_owned())
         .font(type_::LABEL)
         .color(t.text_tertiary)
 }
 
-fn body(words: &str, t: &Tokens) -> El {
+pub(super) fn body(words: &str, t: &Tokens) -> El {
     text(words.to_owned())
         .font(type_::BODY)
         .color(t.text_primary)
         .wrap()
 }
 
-fn muted(words: &str, t: &Tokens) -> El {
+pub(super) fn muted(words: &str, t: &Tokens) -> El {
     text(words.to_owned())
         .font(type_::LABEL)
         .color(t.text_tertiary)
         .wrap()
 }
 
-fn field(name: &str, value: String, t: &Tokens) -> El {
+pub(super) fn field(name: &str, value: String, t: &Tokens) -> El {
     col()
         .key(format!(
             "ledger.inspector.{}",
@@ -887,7 +982,7 @@ fn field(name: &str, value: String, t: &Tokens) -> El {
         .child(body(&value, t))
 }
 
-fn button(key: &str, words: &str, t: &Tokens) -> El {
+pub(super) fn button(key: &str, words: &str, t: &Tokens) -> El {
     text(words.to_owned())
         .key(key.to_owned())
         .role("button")
@@ -903,7 +998,7 @@ fn button(key: &str, words: &str, t: &Tokens) -> El {
         .single_line()
 }
 
-fn chip_button(key: &str, words: &str, on: bool, t: &Tokens) -> El {
+pub(super) fn chip_button(key: &str, words: &str, on: bool, t: &Tokens) -> El {
     text(words.to_owned())
         .key(key.to_owned())
         .role("button")
