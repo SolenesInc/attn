@@ -210,10 +210,11 @@ func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
 	})
 	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
 	previous := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return !protocol.Deref(x.TurnOwed) })
+	mark := len(app.Log())
 	app.TypeLine(session, "build the index")
 	view.Prompted()
 	server.Prompted(view.ConversationID)
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 	terminal := app.Terminal(session)
 	s.Stop()
 	s.KillRuntimeOf(terminal)
@@ -256,4 +257,31 @@ func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
 			t.Fatalf("replayed handled completion: %+v", got)
 		}
 	}
+}
+
+func TestASigmaRunThatStartsAndEndsWhileAttnIsDownOwesTheUserItsQuestion(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s.Start()
+	w := &world{World: s.World}
+	app := s.App()
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	promptUntilWorking(app, session, view, server, "which index")
+	server.Reply(view.ConversationID, "By date? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
+	})
+	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
+	settled := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return !protocol.Deref(x.TurnOwed) })
+
+	s.Stop()
+	view.Input("build the index")
+	view.Prompted()
+	server.Prompted(view.ConversationID)
+	server.Reply(view.ConversationID, "Built. Keep the old index? <!-- attn:state=waiting_input -->")
+	s.Start()
+	app = s.App()
+	registerSigmaDriver(t, w, app)
+	testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed) && protocol.Deref(x.TurnOpenedAt) != protocol.Deref(settled.TurnOpenedAt)
+	})
 }

@@ -38,3 +38,9 @@ func (m *Monitor) ObservedServerCompletion() int64 {
 	defer m.mu.Unlock()
 	return m.completions.observed
 }
+
+func (m *Monitor) endsUnseenServerRun(completion int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return completion > m.completions.applied
+}

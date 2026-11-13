@@ -603,7 +603,7 @@ func (m *Monitor) publishResolution(current protocol.SessionState, resolution se
 		m.traceResolutionSkip(resolution, "link_owns_state")
 		return false
 	}
-	if !ResolverOwnedStates[current] || resolution.State == current {
+	if !ResolverOwnedStates[current] || (resolution.State == current && !m.endsUnseenServerRun(completion)) {
 		m.clearDwell()
 		reasoned := m.recordStateReason(resolution) && ResolverOwnedStates[current]
 		m.mu.Lock()
