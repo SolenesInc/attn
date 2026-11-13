@@ -404,6 +404,9 @@ fn begin_verb(state: &mut State, seed: Arc<Seed>, verb: Verb, tx: &mut Tx) {
 
 fn cancel_compose(state: &mut State, tx: &mut Tx) {
     let walk = board(state);
+    if walk.busy {
+        return;
+    }
     let seed = walk.compose.take().map(|c| c.seed.id.clone());
     walk.error = None;
     match seed {
@@ -483,18 +486,15 @@ fn commit(state: &mut State, tx: &mut Tx) {
 fn moved(state: &mut State, id: &str, outcome: Result<(), String>, tx: &mut Tx) {
     let walk = board(state);
     walk.busy = false;
-    match outcome {
-        Ok(()) => {
-            walk.compose = None;
-            walk.error = None;
-            walk.selected = Some(id.to_owned());
-            tx.focus(card_key(id), true);
-        }
-        Err(reason) => {
-            walk.error = Some(reason);
-            tx.focus(COMPOSE_FIELD, true);
-        }
+    if let Err(reason) = outcome {
+        walk.error = Some(reason);
+        tx.focus(COMPOSE_FIELD, true);
+        return;
     }
+    walk.compose = None;
+    walk.error = None;
+    walk.selected = Some(id.to_owned());
+    tx.focus(card_key(id), true);
 }
 
 /// Escape on the board puts away the innermost thing it is doing: the compose line, then the
@@ -524,6 +524,7 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
     }
+    forget_removed(state);
     let walk = &state.window.garden.board_walk;
     if walk.compose.is_some() {
         return false;
@@ -611,6 +612,24 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             None => false,
         },
         _ => false,
+    }
+}
+
+/// Lets go of a selection or an open menu whose seed a garden push took away.
+fn forget_removed(state: &mut State) {
+    let seeds = super::seeds(state);
+    let gone = |id: &Option<String>| {
+        id.as_ref()
+            .is_some_and(|id| !seeds.iter().any(|s| s.id == *id))
+    };
+    let walk = &state.window.garden.board_walk;
+    let (selected, menu) = (gone(&walk.selected), gone(&walk.menu_for));
+    let walk = board(state);
+    if selected {
+        walk.selected = None;
+    }
+    if menu {
+        walk.menu_for = None;
     }
 }
 

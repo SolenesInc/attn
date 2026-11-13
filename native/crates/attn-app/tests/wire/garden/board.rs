@@ -282,7 +282,6 @@ fn takes_a_seed_over_from_its_live_tender_when_harvesting_it() {
             .find(Target::key("garden.board.compose"))
             .is_none()
     );
-    assert_eq!(focused_card(world).as_deref(), Some("held work"));
     assert!(rests(world));
 }
 
@@ -571,5 +570,64 @@ fn one_changed_seed_rebuilds_only_its_card() {
 
     assert_eq!(attn_app::garden::rows_built() - before, 1);
     assert_eq!(column(world, "In progress"), ["seed 3"]);
+    assert!(rests(world));
+}
+
+#[test]
+fn keeps_the_keys_on_the_board_once_a_harvested_card_folds_into_closed() {
+    let seeds = vec![
+        status("s-fini11", "about done", "growing"),
+        status("s-next11", "still going", "growing"),
+    ];
+    let daemon = daemon(seeds.clone(), Vec::new());
+    daemon.on("seed_transition", move |r: &Request| {
+        let moved = vec![
+            status("s-fini11", "about done", "harvested"),
+            seeds[1].clone(),
+        ];
+        vec![
+            transition_reply(r),
+            message(GardenSeedsUpdatedMessage {
+                profile_id: PROFILE.into(),
+                total: 2,
+                seeds: moved,
+                ..GardenSeedsUpdatedMessage::new()
+            }),
+        ]
+    });
+    let world = &mut open_board_with(daemon);
+
+    move_card(
+        world,
+        "about done",
+        "Harvest",
+        "Harvest s-fini11: what got done",
+        "shipped",
+    );
+
+    assert!(column(world, "Closed").is_empty());
+    assert_eq!(
+        focused(world).and_then(|n| n.key).as_deref(),
+        Some("garden.board")
+    );
+    key(world, Key::Down);
+    assert_eq!(focused_card(world).as_deref(), Some("still going"));
+    assert!(rests(world));
+}
+
+#[test]
+fn lets_go_of_a_card_a_push_takes_away() {
+    let world = &mut open_board(
+        vec![seed("s-gone11", "about to go"), seed("s-stay11", "staying")],
+        Vec::new(),
+    );
+    key(world, Key::Down);
+    assert_eq!(focused_card(world).as_deref(), Some("about to go"));
+
+    push(world, vec![seed("s-stay11", "staying")]);
+    key(world, Key::Enter);
+    assert!(world.screen().find(Target::role("menu")).is_none());
+    key(world, Key::Down);
+    assert_eq!(focused_card(world).as_deref(), Some("staying"));
     assert!(rests(world));
 }
