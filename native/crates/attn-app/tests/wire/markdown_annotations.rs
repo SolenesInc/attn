@@ -1002,9 +1002,9 @@ fn the_destination_menu_lists_the_desktops_sessions_and_retargets_the_tile_at_on
     click(&mut world, "send.menu");
     let items: Vec<(String, Vec<String>)> = world
         .screen()
-        .descendants(Target::key("tile.m.document.send.menu.list"))
+        .descendants(Target::key("tile.m.document.send.menu.list-menu"))
         .into_iter()
-        .filter(|n| n.role == "menu-item-radio")
+        .filter(|n| n.role == "menu-item-check-box")
         .map(|n| (n.name.unwrap_or_default(), n.states))
         .collect();
     assert_eq!(
@@ -1012,20 +1012,24 @@ fn the_destination_menu_lists_the_desktops_sessions_and_retargets_the_tile_at_on
         ["Agent a", "Agent b"]
     );
     assert!(items[0].1.iter().any(|s| s == "checked"));
-    let shown: Vec<String> = world
+    let waiting = world
         .screen()
-        .descendants(Target::key("tile.m.document.send.menu.list"))
-        .into_iter()
-        .filter_map(|n| n.name)
-        .collect();
-    assert!(shown.iter().any(|s| s == "approval"), "{shown:?}");
+        .get(Target::key("tile.m.document.send.menu.1"))
+        .description;
+    assert_eq!(
+        waiting.as_deref(),
+        Some("approval"),
+        "Agent b waits for an approval"
+    );
 
-    world.gesture(|app| {
-        app.key(rune::KeyEvent {
-            key: rune::Key::Down,
-            mods: rune::Mods::default(),
-        })
-    });
+    for _ in 0..2 {
+        world.gesture(|app| {
+            app.key(rune::KeyEvent {
+                key: rune::Key::Down,
+                mods: rune::Mods::default(),
+            })
+        });
+    }
     world.gesture(|app| {
         app.key(rune::KeyEvent {
             key: rune::Key::Enter,

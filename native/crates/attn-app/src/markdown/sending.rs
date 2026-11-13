@@ -4,9 +4,10 @@
 //! note on the seed.
 
 use attn_protocol::{Desktop, DesktopUpdateTileMessage, MarkdownAnnotation, Session};
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
-use rune::{Cx, El, Key, KeyEvent, Tx, col, el, row, text};
+use rune::{Cx, El, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant, Menu, MenuItem, Placement};
 
 use super::drafts::{self, Sent, To};
 use crate::State;
@@ -99,28 +100,39 @@ pub(crate) fn controls(
     );
     let any = !desktop_sessions(desktop, sessions).is_empty();
     let noting = matches!(kind, Kind::Seed { tender: None, .. });
-    let small = |part: &str, label: String| {
-        text(label)
+    let small = |label: String, face: String| {
+        Button::new(label)
+            .variant(ButtonVariant::GhostMuted)
+            .label_with(move |_, ink| text(face).font(type_::LABEL).color(ink))
+    };
+    let place = |button: Button, part: &str| {
+        button
+            .build(attn_ui::kit(t))
             .key(key(tile, part))
-            .role("button")
-            .font(type_::LABEL)
-            .color(t.text_secondary)
+            .h(type_::LABEL.line_px() + 6.0)
             .px(space::S1)
-            .py(2.0)
             .radius(5.0)
     };
     let (overall_tile, overall_uri) = (tile.to_owned(), uri.to_owned());
     let notes_tile = tile.to_owned();
     let mut parts = vec![
-        small("overall", "Overall note".into())
-            .help("Add an overall note")
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                super::annotating::compose_overall(state, &overall_tile, &overall_uri, tx)
-            }),
-        small("notes", format!("{} {count}", attn_ui::icon::COMMENT))
-            .label(format!("Notes {count}"))
+        place(
+            small("Overall note".into(), "Overall note".into())
+                .help("Add an overall note")
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    super::annotating::compose_overall(state, &overall_tile, &overall_uri, tx)
+                }),
+            "overall",
+        ),
+        place(
+            small(
+                format!("Notes {count}"),
+                format!("{} {count}", attn_ui::icon::COMMENT),
+            )
             .help("Show review notes")
             .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &notes_tile, tx)),
+            "notes",
+        ),
     ];
     let done = |noted: bool| if noted { "Noted ✓" } else { "Sent ✓" };
     let status = match &sent {
@@ -144,24 +156,26 @@ pub(crate) fn controls(
     }));
     let caret = |label: &str| {
         let tile = tile.to_owned();
-        small("send.menu", attn_ui::icon::CARET_DOWN.into())
-            .label(label)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle_menu(state, &tile, tx))
+        place(
+            small(label.to_owned(), attn_ui::icon::CARET_DOWN.into())
+                .on_press(move |state: &mut State| toggle_menu(state, &tile)),
+            "send.menu",
+        )
     };
-    if count == 0 && sent.is_none() && matches!(kind, Kind::Seed { .. }) {
-    } else if count == 0 && sent.is_none() {
+    let idle = count == 0 && sent.is_none();
+    if idle && matches!(kind, Kind::File { .. }) {
         let tile_menu = tile.to_owned();
-        parts.push(
+        parts.push(place(
             small(
-                "send.to",
+                format!("Annotation destination: {name}"),
                 format!("To {name} {}", attn_ui::icon::CARET_DOWN),
             )
-            .label(format!("Annotation destination: {name}"))
             .help(format!("Annotations will be sent to {name}"))
             .disabled(!any)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle_menu(state, &tile_menu, tx)),
-        );
-    } else {
+            .on_press(move |state: &mut State| toggle_menu(state, &tile_menu)),
+            "send.to",
+        ));
+    } else if !idle {
         let action = match &sent {
             Some(Sent::Sending) if noting => "Noting…".to_owned(),
             Some(Sent::Sending) => "Sending…".to_owned(),
@@ -204,18 +218,16 @@ pub(crate) fn controls(
         let nowhere = matches!(kind, Kind::File { .. }) && to.is_none();
         let disabled = matches!(sent, Some(Sent::Sending)) || count == 0 || nowhere;
         let send_tile = tile.to_owned();
-        parts.push(
-            small("send", label)
-                .color(if disabled {
-                    t.text_muted
-                } else {
-                    t.text_primary
-                })
-                .fill(t.bg_button)
+        let face = label.clone();
+        parts.push(place(
+            Button::new(label)
+                .variant(ButtonVariant::Outline)
+                .label_with(move |_, ink| text(face).font(type_::LABEL).color(ink))
                 .help(title)
                 .disabled(disabled)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &send_tile, tx)),
-        );
+            "send",
+        ));
         match kind {
             Kind::File { .. } if any => parts.push(caret("Change annotation destination")),
             Kind::Seed {
@@ -309,10 +321,7 @@ pub(crate) fn send(state: &mut State, tile: &str, tx: &mut Tx) {
 
 /// Leaves seed tile `tile`'s marks as a note on its seed.
 fn note_on_seed(state: &mut State, tile: &str, tx: &mut Tx) {
-    if let Some(r) = state.readings.tiles.get_mut(tile) {
-        r.menu = false;
-    }
-    state.readings.revision += 1;
+    close_menu(state, tile);
     let Some(Tiled {
         uri,
         kind: Kind::Seed { id, .. },
@@ -322,7 +331,6 @@ fn note_on_seed(state: &mut State, tile: &str, tx: &mut Tx) {
         return;
     };
     deliver(state, tile, &uri, To::Seed(id), tx);
-    tx.focus(key(tile, "send"), false);
 }
 
 fn deliver(state: &mut State, tile: &str, uri: &str, to: To, tx: &mut Tx) {
@@ -407,16 +415,17 @@ pub(crate) fn expire(state: &mut State, now: f64) -> bool {
     went
 }
 
-fn toggle_menu(state: &mut State, tile: &str, tx: &mut Tx) {
+fn toggle_menu(state: &mut State, tile: &str) {
     let reading = state.readings.tiles.entry(tile.to_owned()).or_default();
     reading.menu = !reading.menu;
-    let open = reading.menu;
     state.readings.revision += 1;
-    if open {
-        tx.focus(key(tile, "send.menu.0"), false);
-    } else {
-        tx.focus(key(tile, "send.menu"), false);
+}
+
+fn close_menu(state: &mut State, tile: &str) {
+    if let Some(reading) = state.readings.tiles.get_mut(tile) {
+        reading.menu = false;
     }
+    state.readings.revision += 1;
 }
 
 /// Binds tile `tile` to session `session`: sends go there at once, and back to where they went
@@ -460,9 +469,7 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
         let Some(Tiled { desktop, uri, kind }) = tile_of(state, tile) else {
             continue;
         };
-        if reading.menu
-            && let Some(at) = cx.layout(&key(tile, "controls"))
-        {
+        if reading.menu && cx.layout(&key(tile, "controls")).is_some() {
             let shown = match &kind {
                 Kind::File { bound } => {
                     let current = destination(
@@ -482,7 +489,7 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
                 }
                 Kind::Seed { .. } => seed_menu(tile, t),
             };
-            out.push(shown.absolute((at[0] + at[2] - MENU_W).max(8.0), at[1] + at[3] + 4.0));
+            out.extend(shown);
         }
         if reading.notes
             && let Some(at) = cx.layout(&format!("tile.{tile}"))
@@ -501,124 +508,55 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
     out
 }
 
-fn menu(tile: &str, sessions: Vec<&Session>, current: Option<&str>, t: &Tokens) -> El {
-    let count = sessions.len();
+/// The desktop's sessions to send tile `tile`'s marks to, beside its header controls, with
+/// `current` checked.
+fn menu(tile: &str, sessions: Vec<&Session>, current: Option<&str>, t: &Tokens) -> Vec<El> {
     let items = sessions.into_iter().enumerate().map(|(i, s)| {
-        let picked = current == Some(s.id.as_str());
-        let name = crate::sidebar::model::display_name(s);
-        let approval = s.state == "pending_approval";
-        let (pressed, keyed, session) = (tile.to_owned(), tile.to_owned(), s.id.clone());
-        let session_key = session.clone();
-        row()
+        let (pressed, session) = (tile.to_owned(), s.id.clone());
+        let item = MenuItem::new(crate::sidebar::model::display_name(s))
             .key(key(tile, &format!("send.menu.{i}")))
-            .role("menuitemradio")
-            .label(name.clone())
-            .checked(picked)
-            .focusable(true)
-            .items_center()
-            .gap(6.0)
-            .px(8.0)
-            .py(4.0)
-            .radius(5.0)
-            .child(
-                text(if picked { "✓" } else { " " })
-                    .font(type_::LABEL)
-                    .w(12.0)
-                    .color(t.text_secondary),
-            )
-            .child(
-                text(name)
-                    .font(type_::LABEL)
-                    .color(t.text_primary)
-                    .single_line()
-                    .truncate()
-                    .grow(1.0),
-            )
-            .children(approval.then(|| text("approval").font(type_::LABEL).color(t.warning)))
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            .checked(current == Some(s.id.as_str()))
+            .on_select_tx(move |state: &mut State, tx: &mut Tx| {
                 retarget(state, &pressed, &session, tx)
-            })
-            .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                menu_key(state, &keyed, i, count, &session_key, ev, tx)
-            })
+            });
+        if s.state == "pending_approval" {
+            item.badge("approval")
+        } else {
+            item
+        }
     });
-    col()
-        .key(key(tile, "send.menu.list"))
-        .role("menu")
-        .label("Send annotations to session")
-        .w(MENU_W)
-        .padding(4.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .on_press(|_: &mut State| {})
-        .children(items)
+    destinations(tile, "Send annotations to session", items, t)
 }
 
-/// A seed tile's other destination under its send button: a note on the seed.
-fn seed_menu(tile: &str, t: &Tokens) -> El {
-    let (pressed, keyed) = (tile.to_owned(), tile.to_owned());
-    let item = row()
+/// A seed tile's other destination beside its header controls: a note on the seed.
+fn seed_menu(tile: &str, t: &Tokens) -> Vec<El> {
+    let pressed = tile.to_owned();
+    let note = MenuItem::new("Note on seed")
         .key(key(tile, "send.menu.0"))
-        .role("menuitem")
-        .label("Note on seed")
-        .focusable(true)
-        .items_center()
-        .px(8.0)
-        .py(4.0)
-        .radius(5.0)
-        .child(
-            text("Note on seed")
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| note_on_seed(state, &pressed, tx))
-        .on_key(
-            move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| match ev.key {
-                Key::Enter => {
-                    note_on_seed(state, &keyed, tx);
-                    true
-                }
-                Key::Escape => {
-                    toggle_menu(state, &keyed, tx);
-                    true
-                }
-                _ => false,
-            },
-        );
-    col()
-        .key(key(tile, "send.menu.list"))
-        .role("menu")
-        .label("More annotation destinations")
-        .w(MENU_W)
-        .padding(4.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .on_press(|_: &mut State| {})
-        .child(item)
+        .on_select_tx(move |state: &mut State, tx: &mut Tx| note_on_seed(state, &pressed, tx));
+    destinations(tile, "More annotation destinations", [note], t)
 }
 
-fn menu_key(
-    state: &mut State,
+fn destinations(
     tile: &str,
-    at: usize,
-    count: usize,
-    session: &str,
-    ev: &KeyEvent,
-    tx: &mut Tx,
-) -> bool {
-    match ev.key {
-        Key::Down => tx.focus(key(tile, &format!("send.menu.{}", (at + 1) % count)), false),
-        Key::Up => tx.focus(
-            key(tile, &format!("send.menu.{}", (at + count - 1) % count)),
-            false,
-        ),
-        Key::Enter => retarget(state, tile, session, tx),
-        Key::Escape => toggle_menu(state, tile, tx),
-        _ => return false,
-    }
-    true
+    label: &str,
+    items: impl IntoIterator<Item = MenuItem>,
+    t: &Tokens,
+) -> Vec<El> {
+    let closed = tile.to_owned();
+    let menu = items.into_iter().fold(
+        Menu::new(key(tile, "send.menu.list"))
+            .anchor(key(tile, "controls"))
+            .placement(Placement::BottomEnd)
+            .min_width(MENU_W)
+            .label(label)
+            .open(true)
+            .on_close(move |state: &mut State| close_menu(state, &closed)),
+        Menu::item,
+    );
+    let mut layer = Vec::new();
+    menu.build(attn_ui::kit(t), &mut layer);
+    layer
 }
 
 fn open_notes(state: &mut State, tile: &str, tx: &mut Tx) {
@@ -631,21 +569,17 @@ fn open_notes(state: &mut State, tile: &str, tx: &mut Tx) {
 }
 
 /// Escape with the review notes open closes them. True when it took the key.
-pub(crate) fn escape(state: &mut State, tx: &mut Tx) -> bool {
+pub(crate) fn escape(state: &mut State) -> bool {
     let open = state
         .readings
         .tiles
         .iter()
-        .find(|(_, r)| r.notes || r.menu)
+        .find(|(_, r)| r.notes)
         .map(|(t, _)| t.clone());
     let Some(tile) = open else { return false };
     let reading = state.readings.tiles.get_mut(&tile).expect("found above");
-    if reading.menu {
-        toggle_menu(state, &tile, tx);
-    } else {
-        reading.notes = false;
-        state.readings.revision += 1;
-    }
+    reading.notes = false;
+    state.readings.revision += 1;
     true
 }
 
@@ -668,41 +602,40 @@ fn notes(
                 .color(t.text_primary)
                 .grow(1.0),
         )
-        .child(
-            text(count.to_string())
-                .key(key(tile, "notes.close"))
-                .role("button")
-                .label("Close review notes")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .px(6.0)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &closed, tx)),
-        )
-        .child(
-            text("+ Overall note")
-                .key(key(tile, "notes.overall"))
-                .role("button")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .px(6.0)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    if let Some(r) = state.readings.tiles.get_mut(&overall) {
-                        r.notes = false;
-                    }
-                    let uri = state.readings.tiles.get(&overall).map(|r| r.uri.clone());
-                    if let Some(uri) = uri.or_else(|| tile_of(state, &overall).map(|d| d.uri)) {
-                        super::annotating::compose_overall(state, &overall, &uri, tx);
-                    }
-                }),
-        )
+        .child(panel_button(
+            tile,
+            "notes.close",
+            ("Close review notes", count.to_string()),
+            t.text_secondary,
+            t,
+            move |state: &mut State, tx: &mut Tx| open_notes(state, &closed, tx),
+        ))
+        .child(panel_button(
+            tile,
+            "notes.overall",
+            ("+ Overall note", "+ Overall note".to_owned()),
+            t.text_secondary,
+            t,
+            move |state: &mut State, tx: &mut Tx| {
+                if let Some(r) = state.readings.tiles.get_mut(&overall) {
+                    r.notes = false;
+                }
+                let uri = state.readings.tiles.get(&overall).map(|r| r.uri.clone());
+                if let Some(uri) = uri.or_else(|| tile_of(state, &overall).map(|d| d.uri)) {
+                    super::annotating::compose_overall(state, &overall, &uri, tx);
+                }
+            },
+        ))
         .children((count > 0).then(|| {
-            text(if arming { "Confirm?" } else { "Clear all" })
-                .key(key(tile, "notes.clear"))
-                .role("button")
-                .font(type_::LABEL)
-                .color(t.error)
-                .px(6.0)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| clear_all(state, &cleared, tx))
+            let words = if arming { "Confirm?" } else { "Clear all" };
+            panel_button(
+                tile,
+                "notes.clear",
+                (words, words.to_owned()),
+                t.error,
+                t,
+                move |state: &mut State, tx: &mut Tx| clear_all(state, &cleared, tx),
+            )
         }));
     let body: Vec<El> = if marks.is_empty() {
         vec![
@@ -749,6 +682,25 @@ fn notes(
                 })
                 .children(body),
         )
+}
+
+/// A text button in the review notes' head: `label` names it, `face` shows in `ink`.
+fn panel_button(
+    tile: &str,
+    part: &str,
+    (label, face): (&str, String),
+    ink: rune::Color,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    Button::new(label)
+        .variant(ButtonVariant::GhostMuted)
+        .label_with(move |_, _| text(face).font(type_::LABEL).color(ink))
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
+        .key(key(tile, part))
+        .h(type_::LABEL.line_px() + 6.0)
+        .px(6.0)
 }
 
 fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: &Tokens) -> El {
@@ -803,15 +755,14 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
                 .children(orphan.then(|| text("⚠ moved").font(type_::LABEL).color(t.warning)))
                 .child(el().grow(1.0))
                 .child(
-                    text(attn_ui::icon::CLOSE)
-                        .key(key(tile, &format!("notes.remove.{}", mark.id)))
-                        .role("button")
-                        .label("Remove annotation")
+                    GlyphButton::new(attn_ui::icon::CLOSE, "Remove annotation")
                         .font(type_::LABEL)
-                        .color(t.text_tertiary)
+                        .side(18.0)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             remove(state, &removed, std::slice::from_ref(&gone), tx)
-                        }),
+                        })
+                        .build(attn_ui::kit(t))
+                        .key(key(tile, &format!("notes.remove.{}", mark.id))),
                 ),
         )
         .children(quote.map(|q| {

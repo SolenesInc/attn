@@ -6,13 +6,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use attn_protocol::MarkdownAnnotationAnchor;
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::type_;
 use rune::{
     Chord, Cx, El, Key, KeyEvent, KeyPlatform, SelectionChange, TextEdit, Tx, col, el, row, text,
     text_input,
 };
-use rune_kit::Highlight;
+use rune_kit::{Button, ButtonVariant, Highlight};
 
 use super::anchoring::Resolved;
 use super::marks::{self, Saying};
@@ -510,16 +510,22 @@ pub(crate) fn in_document(readings: &Readings, tile: &str, inset: f32, t: &Token
     vec![toolbar(tile, reading.picking, t).absolute(left, top)]
 }
 
-fn button(tile: &str, part: &str, glyph: &str, label: &str, t: &Tokens) -> El {
-    text(glyph.to_owned())
-        .key(key(tile, &format!("toolbar.{part}")))
-        .role("button")
-        .label(label)
+fn button(
+    tile: &str,
+    part: &str,
+    glyph: &str,
+    label: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    GlyphButton::new(glyph, label)
+        .variant(ButtonVariant::Ghost)
         .font(type_::BODY)
-        .color(t.text_primary)
+        .side(CHIP)
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
+        .key(key(tile, &format!("toolbar.{part}")))
         .w(CHIP)
-        .h(CHIP)
-        .align(rune::Align::Center)
         .radius(6.0)
 }
 
@@ -528,37 +534,58 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
         let tile = tile.to_owned();
         move |state: &mut State, tx: &mut Tx| f(state, &tile, tx)
     };
+    let picker = on_picker(tile);
     let mut parts = vec![
-        button(tile, "delete", attn_ui::icon::TRASH, "Delete", t).on_press_tx(on(
-            |state, tile, tx| mark(state, tile, Saying::Deletion, tx),
-        )),
-        button(tile, "comment", attn_ui::icon::COMMENT, "Comment", t)
-            .on_press_tx(on(|state, tile, tx| compose(state, tile, false, "", tx))),
-        button(tile, "zap", attn_ui::icon::BOLT, "Quick label", t)
-            .fill(if picking {
-                t.accent.alpha(0.2)
-            } else {
-                rune::Color::TRANSPARENT
-            })
-            .on_press(on_picker(tile)),
+        button(
+            tile,
+            "delete",
+            attn_ui::icon::TRASH,
+            "Delete",
+            t,
+            on(|state, tile, tx| mark(state, tile, Saying::Deletion, tx)),
+        ),
+        button(
+            tile,
+            "comment",
+            attn_ui::icon::COMMENT,
+            "Comment",
+            t,
+            on(|state, tile, tx| compose(state, tile, false, "", tx)),
+        ),
+        button(
+            tile,
+            "zap",
+            attn_ui::icon::BOLT,
+            "Quick label",
+            t,
+            move |state, _| picker(state),
+        )
+        .fill(if picking {
+            t.accent.alpha(0.2)
+        } else {
+            rune::Color::TRANSPARENT
+        }),
     ];
     for promoted in annotations::promoted_labels() {
-        let (tile, id) = (tile.to_owned(), promoted.id);
-        parts.push(
-            button(
-                &tile,
-                &format!("label.{id}"),
-                promoted.emoji,
-                promoted.text,
-                t,
-            )
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| label(state, &tile, id, tx)),
-        );
+        let (pressed, id) = (tile.to_owned(), promoted.id);
+        parts.push(button(
+            tile,
+            &format!("label.{id}"),
+            promoted.emoji,
+            promoted.text,
+            t,
+            move |state: &mut State, tx: &mut Tx| label(state, &pressed, id, tx),
+        ));
     }
     parts.push(el().w(1.0).h(18.0).mx(4.0).fill(t.border));
-    parts.push(
-        button(tile, "cancel", attn_ui::icon::CLOSE, "Cancel", t).on_press_tx(on(close_toolbar)),
-    );
+    parts.push(button(
+        tile,
+        "cancel",
+        attn_ui::icon::CLOSE,
+        "Cancel",
+        t,
+        on(close_toolbar),
+    ));
     let list = picking.then(|| {
         let tile = tile.to_owned();
         crate::desktop::annotating::label_list(
@@ -643,6 +670,7 @@ fn composer_box(
             },
             t.text_muted,
         )
+        .autofocus()
         .on_edit(move |state: &mut State| composer_text(state, &edited))
         .on_input_key(
             move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| match ev.key {
@@ -692,16 +720,14 @@ fn composer_box(
                         .grow(1.0),
                 )
                 .child(
-                    text(attn_ui::icon::CLOSE)
-                        .key(key(tile, "composer.close"))
-                        .role("button")
-                        .label("Close")
+                    GlyphButton::new(attn_ui::icon::CLOSE, "Close")
                         .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .px(4.0)
+                        .side(20.0)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             close_composer(state, &closed, tx)
-                        }),
+                        })
+                        .build(attn_ui::kit(t))
+                        .key(key(tile, "composer.close")),
                 ),
         )
         .child(field)
@@ -715,20 +741,14 @@ fn composer_box(
                         .grow(1.0),
                 )
                 .child(
-                    text(if overall { "Add" } else { "Save" })
-                        .key(key(tile, "composer.save"))
-                        .role("button")
+                    Button::new(if overall { "Add" } else { "Save" })
+                        .variant(ButtonVariant::Outline)
                         .disabled(blank)
-                        .font(type_::LABEL)
-                        .color(if blank { t.text_muted } else { t.text_primary })
-                        .px(12.0)
-                        .py(4.0)
-                        .radius(6.0)
-                        .fill(t.bg_button)
-                        .border(1.0, t.border)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             save_comment(state, &saved, tx)
-                        }),
+                        })
+                        .build(attn_ui::kit(t))
+                        .key(key(tile, "composer.save")),
                 ),
         )
         .absolute(left, top)

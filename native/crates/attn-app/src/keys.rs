@@ -59,7 +59,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     {
         return true;
     }
-    if ev.key == Key::Escape && !field && crate::markdown::sending::escape(state, tx) {
+    if ev.key == Key::Escape && !field && crate::markdown::sending::escape(state) {
         return true;
     }
     if ev.key == Key::Escape && tx.focused().is_none() && crate::shell::escape_drawers(state, tx) {
