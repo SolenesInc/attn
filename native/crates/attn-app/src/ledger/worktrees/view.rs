@@ -279,9 +279,8 @@ fn worktree_row(state: &State, w: &Worktree, selected: bool, t: &Tokens) -> El {
         button(&format!("ledger.row.{path}.more"), "···", t)
             .label(format!("More for {name}"))
             .a11y_value(if menu_open { "expanded" } else { "" })
-            .on_press_tx(move |state: &mut State, _: &mut Tx| toggle_menu(state, &p))
+            .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &p))
     });
-    let menu = menu_open.then(|| verb_menu(&path, &verbs, t));
     let chosen = path.clone();
     row()
         .key(format!("ledger.row.{path}"))
@@ -327,7 +326,6 @@ fn worktree_row(state: &State, w: &Worktree, selected: bool, t: &Tokens) -> El {
         )
         .children(primary)
         .children(more)
-        .children(menu)
 }
 
 fn swept_row(state: &State, e: &WorktreeSweepEntry, selected: bool, t: &Tokens) -> El {
@@ -380,33 +378,6 @@ fn swept_row(state: &State, e: &WorktreeSweepEntry, selected: bool, t: &Tokens) 
         )
 }
 
-fn verb_menu(path: &str, verbs: &[Verb], t: &Tokens) -> El {
-    col()
-        .key(format!("ledger.row.{path}.menu"))
-        .role("menu")
-        .gap(2.0)
-        .padding(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .children(verbs.iter().enumerate().map(|(at, verb)| {
-            let (p, verb) = (path.to_owned(), verb.clone());
-            text(format!("{}  {}", at + 1, verb.label()))
-                .key(format!("ledger.row.{path}.menu.{at}"))
-                .role("menuitem")
-                .label(verb.label())
-                .font(type_::LABEL)
-                .color(t.text_primary)
-                .hover(t.bg_selected)
-                .radius(4.0)
-                .px(space::S2)
-                .py(2.0)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::run(state, &p, verb.clone(), tx)
-                })
-        }))
-}
-
 fn copy_path(path: &str, copied: bool, t: &Tokens) -> El {
     let p = path.to_owned();
     super::super::view::copy_path(
@@ -434,6 +405,28 @@ fn session_label(state: &State, id: &str) -> Option<String> {
         .iter()
         .find(|s| s.id == id)
         .map(crate::sidebar::model::display_name)
+}
+
+pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {
+    let ledger = &state.window.ledger.worktrees;
+    let Some(path) = ledger.menu.as_deref() else {
+        return Vec::new();
+    };
+    let Some(w) = ledger.all().iter().find(|w| w.path == path) else {
+        return Vec::new();
+    };
+    let verbs = verbs(state, w)
+        .into_iter()
+        .map(|v| (v.label(), v))
+        .collect();
+    super::super::view::verb_menu(
+        path,
+        base_name(path),
+        verbs,
+        super::run,
+        |state| state.window.ledger.worktrees.menu = None,
+        t,
+    )
 }
 
 pub(crate) fn inspector(state: &State, t: &Tokens) -> El {
@@ -707,13 +700,10 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
     out
 }
 
-fn toggle_menu(state: &mut State, path: &str) {
+fn open_menu(state: &mut State, path: &str) {
     super::select(state, path);
     let ledger = &mut state.window.ledger.worktrees;
-    ledger.menu = match ledger.menu {
-        Some(_) => None,
-        None => Some(path.to_owned()),
-    };
+    ledger.menu = Some(path.to_owned());
 }
 
 /// The Worktrees list's own keys, outside the query field. Escape and the keys every list
@@ -735,7 +725,6 @@ pub(crate) fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     let verb_count = worktree.as_ref().map_or(0, |w| verbs(state, w).len());
     let path = worktree.map(|w| w.path);
-    let menu_open = state.window.ledger.worktrees.menu.is_some();
     match &ev.key {
         Key::Down => super::step(state, 1),
         Key::Up => super::step(state, -1),
@@ -746,14 +735,13 @@ pub(crate) fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             None => return false,
         },
         Key::Right => match path {
-            Some(p) if verb_count > 1 && !menu_open => toggle_menu(state, &p),
+            Some(p) if verb_count > 1 => open_menu(state, &p),
             _ => return false,
         },
-        Key::Left if menu_open => state.window.ledger.worktrees.menu = None,
         Key::Text(typed) => match (typed.as_str(), path) {
             ("j", _) => super::step(state, 1),
             ("k", _) => super::step(state, -1),
-            (".", Some(p)) if verb_count > 1 => toggle_menu(state, &p),
+            (".", Some(p)) if verb_count > 1 => open_menu(state, &p),
             ("y", _) if yank.is_some() => super::super::copy(state, yank.unwrap_or_default(), tx),
             (digit, Some(p)) if digit.len() == 1 && ("1"..="9").contains(&digit) => {
                 let index = usize::from(digit.as_bytes()[0] - b'1');
@@ -766,10 +754,10 @@ pub(crate) fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// Backs out of the Worktrees list's own layers: a waiting delete, then the verb menu.
+/// Backs out of a waiting delete.
 pub(crate) fn back_out(state: &mut State) -> bool {
     let ledger = &mut state.window.ledger.worktrees;
-    ledger.confirming.take().is_some() || ledger.menu.take().is_some()
+    ledger.confirming.take().is_some()
 }
 
 fn query_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {

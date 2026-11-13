@@ -18,7 +18,7 @@ use crate::requests::{Answer, Refused};
 use crate::shell::Layer;
 use query::{Filters, ProfileChoice, Scope, Verdict};
 
-pub(crate) use view::view;
+pub(crate) use view::{row_menu, view};
 
 mod conversations;
 mod worktrees;

@@ -2,7 +2,7 @@ use attn_protocol::SessionLedgerEntry;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, ControlSize};
+use rune_kit::{Button, ButtonVariant, ControlSize, Menu, MenuItem};
 
 use super::query::{self, Scope, is_closed};
 use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations, worktrees};
@@ -11,6 +11,92 @@ use crate::sidebar::model::AgentState;
 
 const INSET: f32 = 24.0;
 pub(super) const INSPECTOR_WIDTH: f32 = 340.0;
+
+/// The open row's verb menu, beside its More button, for the shell's layers.
+pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {
+    match state.window.ledger.tab {
+        Tab::Sessions => {
+            let Some(id) = state.window.ledger.menu.as_deref() else {
+                return Vec::new();
+            };
+            let rows = super::rows(state);
+            let Some(r) = rows.iter().find(|r| r.entry.id == id) else {
+                return Vec::new();
+            };
+            let verbs = r.verbs.iter().map(|v| (v.label(), v.clone())).collect();
+            verb_menu(
+                id,
+                &r.title,
+                verbs,
+                super::run,
+                |state| state.window.ledger.menu = None,
+                t,
+            )
+        }
+        Tab::Worktrees => worktrees::row_menu(state, t),
+        Tab::Conversations => conversations::row_menu(state, t),
+    }
+}
+
+/// A row's verb menu, opened beside its More button: each verb runs on the row `row`, from its
+/// item or from its digit, and `close` forgets the open menu.
+pub(super) fn verb_menu<V: Clone + 'static>(
+    row: &str,
+    title: &str,
+    verbs: Vec<(String, V)>,
+    run: fn(&mut State, &str, V, &mut Tx),
+    close: fn(&mut State),
+    t: &Tokens,
+) -> Vec<El> {
+    let by_digit: Vec<V> = verbs.iter().map(|(_, verb)| verb.clone()).collect();
+    let digit_row = row.to_owned();
+    let menu = verbs.into_iter().enumerate().fold(
+        Menu::new(format!("ledger.row.{row}"))
+            .label(format!("More for {title}"))
+            .anchor(format!("ledger.row.{row}.more"))
+            .open(true)
+            .on_close(close),
+        |menu, (at, (label, verb))| {
+            let row = row.to_owned();
+            menu.item(
+                MenuItem::new(label)
+                    .key(format!("ledger.row.{row}.menu.{at}"))
+                    .shortcut((at + 1).to_string())
+                    .on_select_tx(move |state: &mut State, tx: &mut Tx| {
+                        run(state, &row, verb.clone(), tx)
+                    }),
+            )
+        },
+    );
+    let mut layer = Vec::new();
+    menu.build(attn_ui::kit(t), &mut layer);
+    let surface = layer.pop().map(|surface| {
+        surface.on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+            let Some(verb) = digit_index(ev).and_then(|at| by_digit.get(at)) else {
+                return false;
+            };
+            run(state, &digit_row, verb.clone(), tx);
+            true
+        })
+    });
+    layer.extend(surface);
+    layer
+}
+
+/// The verb a bare digit 1 to 9 names, counted from zero.
+fn digit_index(ev: &KeyEvent) -> Option<usize> {
+    let m = ev.mods;
+    if m.cmd || m.ctrl || m.alt {
+        return None;
+    }
+    let Key::Text(typed) = &ev.key else {
+        return None;
+    };
+    match typed.as_bytes() {
+        [digit @ b'1'..=b'9'] => Some(usize::from(digit - b'1')),
+        _ => None,
+    }
+}
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let (toolbar, body, status) = match state.window.ledger.tab {
@@ -279,9 +365,8 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
         button(&format!("ledger.row.{}.more", entry.id), "···", t)
             .label(format!("More for {}", r.title))
             .a11y_value(if menu_open { "expanded" } else { "" })
-            .on_press_tx(move |state: &mut State, _: &mut Tx| toggle_menu(state, &id))
+            .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &id))
     });
-    let menu = menu_open.then(|| verb_menu(&entry.id, &r.verbs, t));
     let note_line = match note {
         Some(Note::Refused(words)) => Some(
             text(words.clone())
@@ -347,7 +432,6 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
         )
         .children(primary)
         .children(more)
-        .children(menu)
 }
 
 fn meta(state: &State, r: &Row<'_>) -> Vec<String> {
@@ -425,33 +509,6 @@ fn glyph(entry: &SessionLedgerEntry, live: bool, t: &Tokens) -> El {
         crate::sidebar::state_color(AgentState::parse(&entry.state), t)
     };
     el().w(8.0).h(8.0).radius(4.0).fill(color).a11y_hidden()
-}
-
-fn verb_menu(id: &str, verbs: &[Verb], t: &Tokens) -> El {
-    col()
-        .key(format!("ledger.row.{id}.menu"))
-        .role("menu")
-        .gap(2.0)
-        .padding(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .children(verbs.iter().enumerate().map(|(at, verb)| {
-            let (row_id, verb) = (id.to_owned(), verb.clone());
-            text(format!("{}  {}", at + 1, verb.label()))
-                .key(format!("ledger.row.{id}.menu.{at}"))
-                .role("menuitem")
-                .label(verb.label())
-                .font(type_::LABEL)
-                .color(t.text_primary)
-                .hover(t.bg_selected)
-                .radius(4.0)
-                .px(space::S2)
-                .py(2.0)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::run(state, &row_id, verb.clone(), tx)
-                })
-        }))
 }
 
 fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
@@ -825,13 +882,10 @@ fn legend(t: &Tokens) -> El {
         }))
 }
 
-fn toggle_menu(state: &mut State, id: &str) {
+fn open_menu(state: &mut State, id: &str) {
     super::select(state, id);
     let ledger = &mut state.window.ledger;
-    ledger.menu = match ledger.menu {
-        Some(_) => None,
-        None => Some(id.to_owned()),
-    };
+    ledger.menu = Some(id.to_owned());
 }
 
 /// The keys of the open list, outside the query field.
@@ -869,7 +923,6 @@ fn tab_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         super::selected(state, &rows)
             .map(|r| (r.entry.id.clone(), r.verbs.len(), r.entry.directory.clone()))
     };
-    let menu_open = state.window.ledger.menu.is_some();
     match &ev.key {
         Key::Down => super::step(state, 1),
         Key::Up => super::step(state, -1),
@@ -880,14 +933,13 @@ fn tab_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             None => return false,
         },
         Key::Right => match chosen {
-            Some((id, verbs, _)) if verbs > 1 && !menu_open => toggle_menu(state, &id),
+            Some((id, verbs, _)) if verbs > 1 => open_menu(state, &id),
             _ => return false,
         },
-        Key::Left if menu_open => state.window.ledger.menu = None,
         Key::Text(typed) => match (typed.as_str(), chosen) {
             ("j", _) => super::step(state, 1),
             ("k", _) => super::step(state, -1),
-            (".", Some((id, verbs, _))) if verbs > 1 => toggle_menu(state, &id),
+            (".", Some((id, verbs, _))) if verbs > 1 => open_menu(state, &id),
             ("y", Some((_, _, directory))) => super::copy(state, directory, tx),
             (digit, Some((id, ..))) if digit.len() == 1 && ("1"..="9").contains(&digit) => {
                 let index = usize::from(digit.as_bytes()[0] - b'1');
@@ -900,7 +952,7 @@ fn tab_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// Escape backs out one layer: the verb menu, then the keys legend, then the list.
+/// Escape backs out one layer: the keys legend, then the list.
 fn escape(state: &mut State, tx: &mut Tx) {
     let backed_out = match state.window.ledger.tab {
         Tab::Conversations => conversations::back_out(state),
@@ -911,9 +963,6 @@ fn escape(state: &mut State, tx: &mut Tx) {
         return;
     }
     let ledger = &mut state.window.ledger;
-    if ledger.menu.take().is_some() {
-        return;
-    }
     if ledger.legend {
         ledger.legend = false;
         return;

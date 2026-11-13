@@ -591,10 +591,13 @@ fn shows_a_sessions_worktree_and_a_worktrees_sessions_across_the_two_lists() {
     serve_log(&world, vec![]);
     open(&mut world);
     click(&mut world, "ledger.scope.closed");
+    click(&mut world, "ledger.row.plain");
+    letter(&mut world, ".");
+    assert!(!text_in(&world, "ledger.row.plain-menu").contains("Show worktree"));
+    plain(&mut world, Key::Escape);
     click(&mut world, "ledger.row.wt");
     letter(&mut world, ".");
     assert_eq!(name(&world, "ledger.row.wt.menu.1"), "Show worktree");
-    assert!(!text_in(&world, "ledger.row.plain").contains("Show worktree"));
     letter(&mut world, "2");
 
     assert!(has(&world, "ledger.refresh"));

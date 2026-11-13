@@ -532,7 +532,7 @@ fn a_refusal_offers_what_the_session_takes_instead_from_enter_the_menu_and_a_dig
 
     plain(&mut world, Key::Enter);
     letter(&mut world, ".");
-    assert!(has(&world, "ledger.row.docs.menu"));
+    assert!(has(&world, "ledger.row.docs-menu"));
     letter(&mut world, "2");
     let actions: Vec<_> = world
         .daemon
@@ -797,6 +797,45 @@ fn a_seed_the_session_tends_opens_from_its_row() {
         "Seed · Cache store migration"
     );
     letter(&mut world, "2");
+    assert!(!has(&world, "ledger.panel"));
+    assert_eq!(world.daemon.sent_of("open_seed")[0]["seed_id"], "s-cache1");
+}
+
+#[test]
+fn the_verb_menu_takes_the_keyboard_runs_a_verb_by_arrow_and_gives_the_keyboard_back() {
+    let mut initial = state(vec![session("api", "waiting_input")], vec![]);
+    initial.seeds = Some(vec![Seed {
+        id: "s-cache1".into(),
+        title: "Cache store migration".into(),
+        tender: Some(PartyView {
+            session_id: Some("api".into()),
+            ..PartyView::default()
+        }),
+        ..Seed::default()
+    }]);
+    let mut world = World::start(ledger_daemon(initial, vec![live_api()]));
+    open(&mut world);
+
+    letter(&mut world, ".");
+    assert!(
+        focused(&world).is_some_and(|k| k.starts_with("ledger.row.api.menu.")),
+        "{:?}",
+        focused(&world)
+    );
+    plain(&mut world, Key::Escape);
+    assert!(!has(&world, "ledger.row.api-menu"));
+    assert!(has(&world, "ledger.panel"));
+    assert_eq!(focused(&world).as_deref(), Some("ledger.list"));
+
+    click(&mut world, "ledger.row.api.more");
+    for _ in 0..4 {
+        if focused(&world).as_deref() == Some("ledger.row.api.menu.1") {
+            break;
+        }
+        plain(&mut world, Key::Down);
+    }
+    assert_eq!(focused(&world).as_deref(), Some("ledger.row.api.menu.1"));
+    plain(&mut world, Key::Enter);
     assert!(!has(&world, "ledger.panel"));
     assert_eq!(world.daemon.sent_of("open_seed")[0]["seed_id"], "s-cache1");
 }

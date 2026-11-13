@@ -3,7 +3,7 @@ use rune::{El, Key, KeyEvent, Tx, col, row, text, text_input};
 
 use super::super::view::{body, button, field, label, muted, title};
 use super::super::{LIST, Note, QUERY};
-use super::{Verb, amount, date, deleted, key, letter_label, retention, verbs};
+use super::{amount, date, deleted, key, letter_label, retention, verbs};
 use crate::State;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
@@ -134,9 +134,8 @@ fn list_row(state: &State, r: &KeptConversationRow, selected: bool, t: &Tokens) 
         button(&format!("ledger.row.{k}.more"), "···", t)
             .label(format!("More for {title_words}"))
             .a11y_value(if menu_open { "expanded" } else { "" })
-            .on_press_tx(move |state: &mut State, _: &mut Tx| toggle_menu(state, &k))
+            .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &k))
     });
-    let menu = menu_open.then(|| verb_menu(&k, &verbs, t));
     let note_line = match note {
         Some(Note::Refused(words)) => Some(
             text(words.clone())
@@ -196,34 +195,34 @@ fn list_row(state: &State, r: &KeptConversationRow, selected: bool, t: &Tokens) 
         )
         .children(primary)
         .children(more)
-        .children(menu)
 }
 
-fn verb_menu(k: &str, verbs: &[Verb], t: &Tokens) -> El {
-    col()
-        .key(format!("ledger.row.{k}.menu"))
-        .role("menu")
-        .gap(2.0)
-        .padding(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .children(verbs.iter().enumerate().map(|(at, verb)| {
-            let (row_key, verb) = (k.to_owned(), *verb);
-            text(format!("{}  {}", at + 1, verb.label()))
-                .key(format!("ledger.row.{k}.menu.{at}"))
-                .role("menuitem")
-                .label(verb.label())
-                .font(type_::LABEL)
-                .color(t.text_primary)
-                .hover(t.bg_selected)
-                .radius(4.0)
-                .px(space::S2)
-                .py(2.0)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::run(state, &row_key, verb, tx)
-                })
-        }))
+pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {
+    let kept = &state.window.ledger.conversations;
+    let Some(k) = kept.menu.as_deref() else {
+        return Vec::new();
+    };
+    let rows = super::rows(state);
+    let Some(r) = rows.iter().find(|r| key(r) == k) else {
+        return Vec::new();
+    };
+    let verbs = verbs(r, kept.confirming.as_deref() == Some(k))
+        .into_iter()
+        .map(|v| (v.label().to_owned(), v))
+        .collect();
+    let title = if r.title.is_empty() {
+        &r.resume_id
+    } else {
+        &r.title
+    };
+    super::super::view::verb_menu(
+        k,
+        title,
+        verbs,
+        super::run,
+        |state| state.window.ledger.conversations.menu = None,
+        t,
+    )
 }
 
 pub(crate) fn inspector(state: &State, selected: Option<&KeptConversationRow>, t: &Tokens) -> El {
@@ -432,13 +431,10 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
     parts
 }
 
-fn toggle_menu(state: &mut State, k: &str) {
+fn open_menu(state: &mut State, k: &str) {
     super::select(state, k);
     let kept = &mut state.window.ledger.conversations;
-    kept.menu = match kept.menu {
-        Some(_) => None,
-        None => Some(k.to_owned()),
-    };
+    kept.menu = Some(k.to_owned());
 }
 
 /// The Conversations list's own keys, outside the query field. Escape and the keys every
@@ -452,7 +448,6 @@ pub(crate) fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             (key(r), verbs(r, confirming).len(), r.resume_id.clone())
         })
     };
-    let menu_open = state.window.ledger.conversations.menu.is_some();
     match &ev.key {
         Key::Down => super::step(state, 1),
         Key::Up => super::step(state, -1),
@@ -463,14 +458,13 @@ pub(crate) fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             None => return false,
         },
         Key::Right => match chosen {
-            Some((k, n, _)) if n > 1 && !menu_open => toggle_menu(state, &k),
+            Some((k, n, _)) if n > 1 => open_menu(state, &k),
             _ => return false,
         },
-        Key::Left if menu_open => state.window.ledger.conversations.menu = None,
         Key::Text(typed) => match (typed.as_str(), chosen) {
             ("j", _) => super::step(state, 1),
             ("k", _) => super::step(state, -1),
-            (".", Some((k, n, _))) if n > 1 => toggle_menu(state, &k),
+            (".", Some((k, n, _))) if n > 1 => open_menu(state, &k),
             ("y", Some((_, _, resume))) => super::super::copy(state, resume, tx),
             (digit, Some((k, ..))) if digit.len() == 1 && ("1"..="9").contains(&digit) => {
                 let index = usize::from(digit.as_bytes()[0] - b'1');
@@ -483,10 +477,10 @@ pub(crate) fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// Backs out of the Conversations list's own layers: a waiting Forget, then the verb menu.
+/// Backs out of a waiting Forget.
 pub(crate) fn back_out(state: &mut State) -> bool {
     let kept = &mut state.window.ledger.conversations;
-    kept.confirming.take().is_some() || kept.menu.take().is_some()
+    kept.confirming.take().is_some()
 }
 
 fn query_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {

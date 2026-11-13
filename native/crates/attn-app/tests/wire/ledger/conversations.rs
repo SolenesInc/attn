@@ -404,7 +404,7 @@ fn claude_rows_at_the_home_keep_their_conversation_and_a_change_reads_the_sessio
 
     assert_eq!(name(&world, "ledger.row.claude.verb"), "Keep conversation");
     click(&mut world, "ledger.row.done.more");
-    assert!(text_in(&world, "ledger.row.done.menu").contains("Keep conversation"));
+    assert!(text_in(&world, "ledger.row.done-menu").contains("Keep conversation"));
     plain(&mut world, Key::Escape);
     for id in ["codex", "far"] {
         click(&mut world, &format!("ledger.row.{id}"));
@@ -428,7 +428,7 @@ fn claude_rows_at_the_home_keep_their_conversation_and_a_change_reads_the_sessio
     changed(&mut world);
     assert_eq!(super::reads(&world).len(), before + 1);
     click(&mut world, "ledger.row.done.more");
-    assert!(text_in(&world, "ledger.row.done.menu").contains("Unkeep"));
+    assert!(text_in(&world, "ledger.row.done-menu").contains("Unkeep"));
     plain(&mut world, Key::Escape);
     click(&mut world, "ledger.row.claude");
     click(&mut world, "ledger.inspector.keep");

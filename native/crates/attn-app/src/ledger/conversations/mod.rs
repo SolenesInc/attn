@@ -16,7 +16,7 @@ use super::Note;
 use crate::State;
 use crate::requests::Answer;
 
-pub(crate) use view::{back_out, inspector, list, panel_key, status, toolbar};
+pub(crate) use view::{back_out, inspector, list, panel_key, row_menu, status, toolbar};
 
 #[derive(Default)]
 pub struct Kept {

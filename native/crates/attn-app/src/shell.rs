@@ -518,7 +518,10 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Palette(Palette::Files)) => layers.push(crate::opener::view(state, t)),
         Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
         Some(Layer::Overview) => layers.extend(crate::desktop::overview(state, t)),
-        Some(Layer::Ledger) => layers.push(crate::ledger::view(state, t)),
+        Some(Layer::Ledger) => {
+            layers.push(crate::ledger::view(state, t));
+            layers.extend(crate::ledger::row_menu(state, t));
+        }
         Some(Layer::Notifications) => layers.push(crate::notifications::panel(state, t)),
         Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
         Some(Layer::Settings) => layers.extend(crate::settings::dialog(state, t)),
