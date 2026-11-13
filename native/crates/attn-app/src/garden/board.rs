@@ -512,7 +512,7 @@ fn escape(state: &mut State, tx: &mut Tx) -> bool {
     if walk.drag.take().is_some() {
         return true;
     }
-    super::escape(state)
+    crate::shell::escape_drawers(state, tx)
 }
 
 /// The board's keys: the arrows walk the cards down a column and across the columns, → on a

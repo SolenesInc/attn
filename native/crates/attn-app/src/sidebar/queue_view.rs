@@ -291,6 +291,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         (
             std::sync::Arc::as_ptr(&facts.settings) as usize,
             std::sync::Arc::as_ptr(&facts.asks) as usize,
+            std::sync::Arc::as_ptr(&facts.garden) as usize,
         ),
         window.view,
         window.agent_list_open,

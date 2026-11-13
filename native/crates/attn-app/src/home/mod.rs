@@ -20,6 +20,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
         std::sync::Arc::as_ptr(&facts.settings) as usize,
         std::sync::Arc::as_ptr(&facts.asks) as usize,
+        std::sync::Arc::as_ptr(&facts.garden) as usize,
         window.now_ms,
         window.follow_next_turn,
         window.home_snoozed_open,

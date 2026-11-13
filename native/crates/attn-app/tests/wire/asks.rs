@@ -6,6 +6,7 @@ use attn_protocol::{
     Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskPart, AskQuestion, AskReply,
     AsksUpdatedMessage, InitialStateMessage, Session, SessionStateChangedMessage,
 };
+use attn_protocol::{PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage};
 use attn_testkit::{Daemon, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 
@@ -528,9 +529,8 @@ fn the_asking_agents_rows_are_marked_and_open_agent_shows_the_agent_and_closes_t
     assert!(!has(&world, "asks.drawer"));
 }
 
-#[test]
-fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed() {
-    let landing = Ask {
+fn landing() -> Ask {
+    Ask {
         seed_id: Some("s-cache1".into()),
         seed_title: Some("Cache store migration".into()),
         seed_slug: Some("cache-migration".into()),
@@ -546,12 +546,56 @@ fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed()
                 &[],
             )],
         )
-    };
+    }
+}
+
+fn migration(tender: Option<&str>) -> Seed {
+    let mut seed = super::garden::seed("s-cache1", "Cache store migration");
+    seed.tender = tender.map(|id| PartyView {
+        name: id.into(),
+        r#ref: format!("session:{id}"),
+        session_id: Some(id.into()),
+    });
+    seed
+}
+
+fn start_with_seeds(asks: Vec<Ask>, sessions: Vec<Session>, seeds: Vec<Seed>) -> World {
+    let mut state = one_desktop(sessions);
+    state.seeds = Some(seeds);
+    let world = start_on(state, asks, &[]);
+    world.daemon.on("seed_document_get", |r| {
+        message(SeedDocumentGetResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            document: Some(SeedDocument {
+                seed: migration(Some("successor")),
+                ..SeedDocument::default()
+            }),
+            ..SeedDocumentGetResultMessage::new()
+        })
+    });
+    world
+}
+
+fn seed_words(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::key("asks.seed"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+#[test]
+fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed() {
     let successor = Session {
         seed_id: Some("s-cache1".into()),
         ..session("successor", "working")
     };
-    let mut world = start(vec![cache_store(), landing], vec![api_working(), successor]);
+    let mut world = start(
+        vec![cache_store(), landing()],
+        vec![api_working(), successor],
+    );
     world.open_desktop();
 
     assert!(has(&world, "sidebar.session.successor.ask"));
@@ -559,14 +603,10 @@ fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed()
     letter(&mut world, "j");
     assert_eq!(shown(&world).as_deref(), Some("Landing week"));
     assert_eq!(name(&world, "asks.from"), "successor");
-    let seed: Vec<String> = world
-        .screen()
-        .descendants(Target::key("asks.seed"))
-        .into_iter()
-        .filter_map(|n| n.name)
-        .collect();
+    let seed = seed_words(&world);
     assert!(seed.contains(&"cache-migration".to_owned()));
     assert!(seed.contains(&"Cache store migration".to_owned()));
+    assert!(!has(&world, "asks.open-seed"));
 
     click(&mut world, "asks.open-agent");
     let shows = world.daemon.sent_of("desktop_show_session");
@@ -574,28 +614,106 @@ fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed()
 }
 
 #[test]
-fn an_ask_about_a_seed_nobody_live_tends_waits_for_its_next_tender() {
-    let landing = Ask {
+fn an_ask_about_a_seed_waits_on_whoever_the_garden_says_tends_it() {
+    let delegate = Session {
         seed_id: Some("s-cache1".into()),
-        seed_title: Some("Cache store migration".into()),
-        ..ask(
-            "a-landing",
-            "delegate",
-            "Landing week",
-            20,
-            vec![question("q1", "text", "Which week?", &[])],
-        )
+        ..session("delegate", "working")
     };
-    let mut world = start(vec![landing], vec![api_working()]);
-    open_drawer(&mut world);
+    let mut world = start_with_seeds(
+        vec![landing()],
+        vec![delegate, session("successor", "working")],
+        vec![migration(Some("successor"))],
+    );
+    world.open_desktop();
 
+    assert!(has(&world, "sidebar.session.successor.ask"));
+    assert!(!has(&world, "sidebar.session.delegate.ask"));
+    open_drawer(&mut world);
+    assert_eq!(name(&world, "asks.from"), "successor");
+}
+
+#[test]
+fn an_ask_about_a_seed_nobody_live_tends_waits_for_its_next_tender() {
+    let mut world = start_with_seeds(
+        vec![landing()],
+        vec![api_working()],
+        vec![migration(Some("delegate"))],
+    );
+    world.open_desktop();
+
+    assert!(!has(&world, "sidebar.session.api.ask"));
+    open_drawer(&mut world);
     assert_eq!(
         name(&world, "asks.from"),
         "waiting for the next tender of Cache store migration"
     );
     assert!(!has(&world, "asks.open-agent"));
-    let note = world.screen().get(Target::key("asks.note.field"));
-    assert_eq!(note.name.as_deref(), Some("Note"));
+    assert!(!has(&world, "asks.snooze"));
+}
+
+#[test]
+fn open_in_garden_shows_the_seed_beside_the_drawer_and_escape_returns_to_the_ask() {
+    let mut world = start_with_seeds(
+        vec![landing()],
+        vec![session("successor", "working")],
+        vec![migration(Some("successor"))],
+    );
+    open_drawer(&mut world);
+
+    click(&mut world, "asks.open-seed");
+    assert_eq!(
+        garden_heading(&world).as_deref(),
+        Some("Cache store migration")
+    );
+    let read = world.daemon.sent_of("seed_document_get");
+    assert_eq!(read.last().unwrap()["seed_id"], "s-cache1");
+    assert_eq!(shown(&world).as_deref(), Some("Landing week"));
+
+    plain(&mut world, Key::Escape);
+    assert_eq!(garden_heading(&world), None);
+    assert_eq!(shown(&world).as_deref(), Some("Landing week"));
+    assert_eq!(focused(&world).as_deref(), Some("asks.drawer"));
+
+    letter(&mut world, "g");
+    assert_eq!(
+        garden_heading(&world).as_deref(),
+        Some("Cache store migration")
+    );
+}
+
+#[test]
+fn escape_closes_the_newest_drawer_whatever_holds_the_keyboard() {
+    let mut world = start_with_seeds(
+        vec![landing()],
+        vec![session("successor", "working")],
+        vec![migration(Some("successor"))],
+    );
+    world.gesture(|app| app.key(chord(Action::BoardOpen)));
+    open_drawer(&mut world);
+    click(&mut world, "asks.from");
+    letter(&mut world, "g");
+    assert_eq!(
+        garden_heading(&world).as_deref(),
+        Some("Cache store migration")
+    );
+    assert!(focused(&world).is_some_and(|k| k.starts_with("garden.")));
+
+    plain(&mut world, Key::Escape);
+    assert!(!has(&world, "asks.drawer"));
+    assert_eq!(
+        garden_heading(&world).as_deref(),
+        Some("Cache store migration")
+    );
+
+    plain(&mut world, Key::Escape);
+    assert_eq!(garden_heading(&world), None);
+}
+
+fn garden_heading(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("garden.head.title"))
+        .and_then(|n| n.name)
 }
 
 #[test]

@@ -66,7 +66,7 @@ pub(crate) struct Reading {
 pub(crate) fn mode(state: &State) -> Mode {
     if state.window.garden.full {
         Mode::Full
-    } else if state.window.drawer == Some(Drawer::Garden) {
+    } else if state.window.shows(Drawer::Garden) {
         Mode::Dock
     } else {
         Mode::Closed
@@ -118,12 +118,10 @@ fn show(state: &mut State, frame: Mode, tx: &mut Tx) {
     let window = &mut state.window;
     if frame == Mode::Full {
         window.garden.full = true;
-        if window.drawer == Some(Drawer::Garden) {
-            window.drawer = None;
-        }
+        window.close_drawer(Drawer::Garden);
     } else {
         window.garden.full = false;
-        window.drawer = Some(Drawer::Garden);
+        window.open_drawer(Drawer::Garden);
     }
     if was != frame {
         focus_frame(state, tx);
@@ -161,18 +159,7 @@ pub(crate) fn toggle_from_icon(state: &mut State, tx: &mut Tx) {
 pub(crate) fn close(state: &mut State) {
     let window = &mut state.window;
     window.garden.full = false;
-    if window.drawer == Some(Drawer::Garden) {
-        window.drawer = None;
-    }
-}
-
-/// Escape while the garden is open closes it, keeping the walk and the question.
-pub(crate) fn escape(state: &mut State) -> bool {
-    if mode(state) == Mode::Closed {
-        return false;
-    }
-    close(state);
-    true
+    window.close_drawer(Drawer::Garden);
 }
 
 /// The trail without the plots the garden no longer holds, and what follows them.
@@ -285,6 +272,14 @@ pub(crate) fn select_at(state: &mut State, level: usize, id: &str, tx: &mut Tx) 
     follow(state, tx);
 }
 
+/// Opens a seed in the garden, docking the garden when it is closed.
+pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
+    if mode(state) == Mode::Closed {
+        show(state, Mode::Dock, tx);
+    }
+    open_found(state, id, tx);
+}
+
 /// Opens a found seed under the whole path of plots above it, and ends the search.
 pub(crate) fn open_found(state: &mut State, id: &str, tx: &mut Tx) {
     let path = view::index(state).path_to(id);
@@ -355,7 +350,7 @@ pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             }
             None => false,
         },
-        Key::Escape => escape(state),
+        Key::Escape => crate::shell::escape_drawers(state, tx),
         _ => false,
     }
 }
@@ -381,7 +376,7 @@ pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     if ev.key == Key::Escape {
-        return escape(state);
+        return crate::shell::escape_drawers(state, tx);
     }
     if typing(tx) || ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;

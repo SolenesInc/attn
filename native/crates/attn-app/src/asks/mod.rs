@@ -94,7 +94,7 @@ pub(crate) struct Lists<'a> {
 impl<'a> Lists<'a> {
     pub(crate) fn of(facts: &'a Facts, now_ms: i64) -> Lists<'a> {
         let item = |ask: &'a Ask| {
-            let holder = holder(ask, &facts.sessions);
+            let holder = holder(ask, facts);
             Item {
                 ask,
                 holder,
@@ -105,7 +105,7 @@ impl<'a> Lists<'a> {
         };
         let mut open: Vec<&Ask> = facts.asks.iter().filter(|a| a.reply.is_none()).collect();
         let waiting = |ask: &Ask| {
-            holder(ask, &facts.sessions)
+            holder(ask, facts)
                 .filter(|s| s.turn_owed == Some(true))
                 .map(|s| {
                     s.turn_opened_at
@@ -156,16 +156,34 @@ impl<'a> Lists<'a> {
     }
 }
 
-/// The agent an ask waits on: whoever tends its seed, its crew member's session, or the
-/// session that asked. A seed the window does not know is tended by the session that names it
-/// as its stake.
-pub(crate) fn holder<'a>(ask: &Ask, sessions: &'a [Session]) -> Option<&'a Session> {
-    sessions.iter().find(|s| belongs_to(ask, s))
+/// The seed of the selected profile's garden with this id.
+pub(crate) fn known_seed<'a>(state: &'a State, id: &str) -> Option<&'a attn_protocol::Seed> {
+    crate::garden::seeds(state)
+        .iter()
+        .find(|s| s.id == id)
+        .map(|s| s.as_ref())
 }
 
-pub(crate) fn belongs_to(ask: &Ask, session: &Session) -> bool {
+/// The agent an ask waits on: whoever the garden says tends its seed, its crew member's
+/// session, or the session that asked. A seed the garden does not hold is tended by the
+/// session that names it as its stake.
+pub(crate) fn holder<'a>(ask: &Ask, facts: &'a Facts) -> Option<&'a Session> {
+    facts.sessions.iter().find(|s| belongs_to(ask, s, facts))
+}
+
+pub(crate) fn belongs_to(ask: &Ask, session: &Session, facts: &Facts) -> bool {
     if let Some(seed) = &ask.seed_id {
-        return session.seed_id.as_ref() == Some(seed);
+        let seeds = facts.garden.of(&facts.profiles.selected);
+        return match seeds.iter().find(|s| &s.id == seed) {
+            Some(known) => known.tender.as_ref().is_some_and(|tender| {
+                session
+                    .crew_member
+                    .as_ref()
+                    .is_some_and(|member| tender.r#ref == format!("member:{member}"))
+                    || tender.session_id.as_deref() == Some(session.id.as_str())
+            }),
+            None => session.seed_id.as_ref() == Some(seed),
+        };
     }
     if let Some(member) = &ask.crew_member {
         return session.crew_member.as_ref() == Some(member);
@@ -256,7 +274,7 @@ pub(crate) fn of_session<'a>(facts: &'a Facts, session: &Session) -> Vec<&'a Ask
     let mut asks: Vec<&Ask> = facts
         .asks
         .iter()
-        .filter(|a| a.reply.is_none() && belongs_to(a, session))
+        .filter(|a| a.reply.is_none() && belongs_to(a, session, facts))
         .collect();
     asks.sort_by(|a, b| a.created_at.cmp(&b.created_at));
     asks
@@ -310,7 +328,7 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
         .iter()
         .filter_map(|item| item.snoozed_until.and_then(queue::epoch_ms))
         .collect();
-    let ages: Vec<i64> = if state.window.drawer == Some(Drawer::Asks) {
+    let ages: Vec<i64> = if state.window.shows(Drawer::Asks) {
         lists
             .shown(state.window.asks.show_replied)
             .iter()
@@ -364,7 +382,7 @@ impl State {
 /// Opens or closes the drawer. Opening it shows the ask it last showed, or the first, and
 /// takes the keyboard there; closing it hands the keyboard back to the agent.
 pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
-    if state.window.drawer == Some(Drawer::Asks) {
+    if state.window.shows(Drawer::Asks) {
         close(state, tx);
     } else {
         show(state, None, tx);
@@ -374,7 +392,7 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
 /// Opens the drawer on `ask`, or where it was, and takes the keyboard into it even when it
 /// already shows that ask.
 pub(crate) fn show(state: &mut State, ask: Option<&str>, tx: &mut Tx) {
-    state.window.drawer = Some(Drawer::Asks);
+    state.window.open_drawer(Drawer::Asks);
     state.tick(tx);
     if let Some(ask) = ask {
         state.window.asks.selected = Some(ask.to_owned());
@@ -384,7 +402,7 @@ pub(crate) fn show(state: &mut State, ask: Option<&str>, tx: &mut Tx) {
 }
 
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
-    state.window.drawer = None;
+    state.window.close_drawer(Drawer::Asks);
     state.window.asks.selected = None;
     state.window.asks.focused_on = None;
     tx.blur();
@@ -401,7 +419,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .map(|a| a.id.clone())
         .collect();
     state.window.asks.drafts.retain(|id, _| open.contains(id));
-    if state.window.drawer != Some(Drawer::Asks) {
+    if !state.window.shows(Drawer::Asks) {
         return;
     }
     let shown = state.shown_ask();
@@ -569,7 +587,7 @@ pub(crate) fn toggle_snooze(state: &mut State, tx: &mut Tx) {
     let Some(ask) = state.facts.asks.iter().find(|a| a.id == id) else {
         return;
     };
-    let Some(holder) = holder(ask, &state.facts.sessions)
+    let Some(holder) = holder(ask, &state.facts)
         .filter(|s| !offline(s, &state.facts.outposts))
         .cloned()
     else {

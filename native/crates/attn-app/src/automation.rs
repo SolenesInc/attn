@@ -45,7 +45,7 @@ impl Hooks<State> for AppHooks {
                 "view": format!("{:?}", window.view),
                 "on_screen": window.on_screen(facts),
                 "sidebar_hidden": window.sidebar_hidden,
-                "drawer": window.drawer.map(|d| format!("{d:?}")),
+                "drawers": window.drawers.iter().map(|d| format!("{d:?}")).collect::<Vec<_>>(),
                 "layer": window.layer.map(|l| format!("{l:?}")),
                 "keyboard": window.keyboard.as_ref().map(|h| json!({"desktop": h.desktop, "pane": h.pane})),
                 "notice": window.notice.as_ref().map(|n| n.text.clone()),

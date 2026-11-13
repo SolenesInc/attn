@@ -21,7 +21,8 @@ const DRAWER_WIDTH: f32 = 360.0;
 pub struct Window {
     pub view: View,
     pub sidebar_hidden: bool,
-    pub drawer: Option<Drawer>,
+    /// The open drawers, oldest first: they stand side by side, and Escape closes the newest.
+    pub drawers: Vec<Drawer>,
     pub layer: Option<Layer>,
     pub notice: Option<Notice>,
     pub(crate) leader: Option<Leader>,
@@ -154,6 +155,22 @@ pub(crate) struct Leader {
 
 const PALETTE_FIELD: &str = "palette.field";
 
+/// Escape closes the garden when it holds the window, else the newest drawer, whatever has
+/// focus, as the Tauri app's escape stack does.
+pub(crate) fn escape_drawers(state: &mut State, tx: &mut Tx) -> bool {
+    if crate::garden::mode(state) == crate::garden::Mode::Full {
+        crate::garden::close(state);
+        return true;
+    }
+    match state.window.newest_drawer() {
+        Some(Drawer::Garden) => crate::garden::close(state),
+        Some(Drawer::Asks) => crate::asks::close(state, tx),
+        Some(drawer) => state.window.close_drawer(drawer),
+        None => return false,
+    }
+    true
+}
+
 impl Window {
     pub(crate) fn go_home(&mut self) {
         self.view = View::Home;
@@ -193,8 +210,30 @@ impl Window {
             .filter(|id| !id.is_empty())
     }
 
+    pub(crate) fn shows(&self, drawer: Drawer) -> bool {
+        self.drawers.contains(&drawer)
+    }
+
+    pub(crate) fn newest_drawer(&self) -> Option<Drawer> {
+        self.drawers.last().copied()
+    }
+
+    pub(crate) fn open_drawer(&mut self, drawer: Drawer) {
+        if !self.shows(drawer) {
+            self.drawers.push(drawer);
+        }
+    }
+
+    pub(crate) fn close_drawer(&mut self, drawer: Drawer) {
+        self.drawers.retain(|d| *d != drawer);
+    }
+
     pub(crate) fn toggle_drawer(&mut self, drawer: Drawer) {
-        self.drawer = (self.drawer != Some(drawer)).then_some(drawer);
+        if self.shows(drawer) {
+            self.close_drawer(drawer);
+        } else {
+            self.open_drawer(drawer);
+        }
     }
 
     pub(crate) fn toggle_layer(&mut self, layer: Layer, tx: &mut Tx) {
@@ -410,10 +449,13 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
             View::Home => crate::home::view(state, t),
             View::Desktop => crate::desktop::area(state, t, scale),
         })
-        .children(window.drawer.map(|drawer| match drawer {
+        .children(window.drawers.iter().map(|drawer| match drawer {
+            Drawer::Garden if window.shows(Drawer::Asks) => {
+                crate::garden::panel(state, t).focus_return(crate::asks::DRAWER)
+            }
             Drawer::Garden => crate::garden::panel(state, t),
             Drawer::Asks => crate::asks::drawer(state, t),
-            drawer => self::drawer(drawer, t),
+            drawer => self::drawer(*drawer, t),
         }))
 }
 
@@ -430,7 +472,7 @@ impl Window {
 
 fn drawer(drawer: Drawer, t: &Tokens) -> El {
     col()
-        .key("drawer")
+        .key(format!("drawer.{}", drawer.label().to_lowercase()))
         .role("complementary")
         .label(drawer.label())
         .w(DRAWER_WIDTH)

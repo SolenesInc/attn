@@ -10,6 +10,7 @@ use crate::desktop::header_pop::{self, Pop, What};
 use crate::sidebar::queue;
 
 pub(super) const SNOOZE: &str = "asks.snooze";
+const OPEN_SEED: &str = "asks.open-seed";
 const LIST: &str = "asks.list";
 const WIDTH: f32 = 360.0;
 
@@ -293,9 +294,12 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .children(item.holder.map(|s| open_agent(s, &item.from, t)))
         .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)));
     let seed = ask.seed_id.as_ref().map(|seed| {
+        let known = super::known_seed(state, seed).is_some();
+        let id = seed.clone();
         row()
             .key("asks.seed")
             .w_full()
+            .items_center()
             .gap(space::S2)
             .child(
                 text(ask.seed_slug.clone().unwrap_or_else(|| seed.clone()))
@@ -305,8 +309,23 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
             .child(
                 text(ask.seed_title.clone().unwrap_or_default())
                     .font(type_::LABEL)
-                    .color(t.text_secondary),
+                    .color(t.text_secondary)
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .single_line()
+                    .truncate(),
             )
+            .children(known.then(|| {
+                small_button(
+                    OPEN_SEED,
+                    "Open in Garden",
+                    "Open the seed in the garden (g)",
+                    t,
+                )
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    crate::garden::open_seed(state, &id, tx)
+                })
+            }))
     });
     let draft = state.window.asks.drafts.get(&ask.id);
     let reply_answers = ask.reply.as_ref().map(|r| r.answers.as_slice());
@@ -684,7 +703,9 @@ fn field(
 fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
         Key::Enter if ev.mods.cmd || ev.mods.ctrl => super::send(state, tx),
-        Key::Escape => super::close(state, tx),
+        Key::Escape => {
+            crate::shell::escape_drawers(state, tx);
+        }
         _ => return false,
     }
     true
@@ -801,7 +822,7 @@ fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     if ev.key == Key::Escape {
-        super::close(state, tx);
+        crate::shell::escape_drawers(state, tx);
         return true;
     }
     if in_text_field(tx) || m.cmd || m.ctrl || m.alt {
@@ -817,7 +838,7 @@ fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .cloned();
     let holder = ask
         .as_ref()
-        .and_then(|a| super::holder(a, &state.facts.sessions))
+        .and_then(|a| super::holder(a, &state.facts))
         .map(|s| s.id.clone());
     match typed.as_str() {
         "j" if ask.is_some() => super::step(state, 1, tx),
@@ -834,6 +855,14 @@ fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             None => return false,
         },
         "s" if holder.is_some() => super::toggle_snooze(state, tx),
+        "g" => match ask
+            .as_ref()
+            .and_then(|a| a.seed_id.clone())
+            .filter(|seed| super::known_seed(state, seed).is_some())
+        {
+            Some(seed) => crate::garden::open_seed(state, &seed, tx),
+            None => return false,
+        },
         _ => return false,
     }
     true
@@ -1048,7 +1077,7 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
         1 => format!("1 open ask{keys}"),
         n => format!("{n} open asks{keys}"),
     };
-    let open = state.window.drawer == Some(crate::shell::Drawer::Asks);
+    let open = state.window.shows(crate::shell::Drawer::Asks);
     Some(
         row()
             .key("titlebar.asks")
