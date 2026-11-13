@@ -93,6 +93,13 @@ fn work_with_tiles() -> Desktop {
     desktop("work", 1, "Work", Some(tree), &["agent", "shell"])
 }
 
+fn close_key() -> KeyEvent {
+    match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::SessionClose) {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("close has no single chord: {other:?}"),
+    }
+}
+
 fn press(world: &mut World, action: Action) {
     let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
@@ -193,7 +200,10 @@ fn closing_a_desktop_with_tiles_asks_once_and_closes_only_on_confirm_from_each_e
         );
         assert!(closes(&world).is_empty(), "{entry:?}");
 
-        press(&mut world, Action::SessionClose);
+        assert!(
+            !world.press_menu_key(close_key()),
+            "{entry:?}: the close key reached the menu bar, whose Close quits the app"
+        );
         assert!(world.daemon.sent_of("unregister").is_empty(), "{entry:?}");
         assert!(
             world.daemon.sent_of("desktop_close_tile").is_empty(),

@@ -187,6 +187,19 @@ impl Window {
         self.view = View::Desktop;
     }
 
+    /// The window's tiles show with nothing over them, so keys may act on them and type into
+    /// them: a tile window's tile, or the current desktop outside home and any layer.
+    pub(crate) fn tiles_in_front(&self) -> bool {
+        self.tile.is_some() || (self.view == View::Desktop && self.layer.is_none())
+    }
+
+    /// The terminal that keys type into: the keyboard holder's, while its tiles are in front.
+    pub(crate) fn typing_terminal(&self, facts: &Facts) -> Option<String> {
+        self.tiles_in_front()
+            .then(|| self.keyboard_terminal(facts))
+            .flatten()
+    }
+
     /// The agent the window shows: the active pane's agent of the current desktop.
     pub(crate) fn on_screen(&self, facts: &Facts) -> Option<String> {
         if self.view != View::Desktop {

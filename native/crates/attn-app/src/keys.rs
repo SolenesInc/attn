@@ -17,10 +17,14 @@ pub(crate) const FIELD_KEY_SUFFIX: &str = ".field";
 /// passed it on. A focused text field has already taken typing and its edit commands.
 ///
 /// The order: a pending sequence takes the next key; the terminal holding the keyboard keeps
-/// the shell's own Ctrl keys on Linux; then the keymap; then the terminal; then nothing.
+/// what types text and the shell's own Ctrl keys on Linux; then the keymap; then the terminal;
+/// then nothing. A modal dialog keeps every bound key from acting, and from the menu bar.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if !keymap_hears(state, ev) {
+    if matches!(ev.key, Key::Modifier { .. }) {
         return false;
+    }
+    if modal(state) {
+        return bound(state, ev, tx);
     }
     if let Some(leader) = state.window.leader.take().filter(|l| tx.clock() < l.until) {
         if ev.key == Key::Escape {
@@ -64,7 +68,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     let terminal = match tx.focused() {
-        None => state.window.keyboard_terminal(&state.facts),
+        None => state.window.typing_terminal(&state.facts),
         Some(_) => None,
     };
     if let Some(id) = &terminal
@@ -73,7 +77,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     {
         return true;
     }
-    if terminal.is_some() && is_shell_ctrl_letter(ev) {
+    if terminal.is_some() && (types_text(ev) || is_shell_ctrl_letter(ev)) {
         return send_to_terminal(state, terminal, ev, tx);
     }
     let focus = Focus {
@@ -167,6 +171,12 @@ fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool
     }
 }
 
+/// A key that types a character, which a binding never takes from the terminal it would type
+/// into.
+fn types_text(ev: &KeyEvent) -> bool {
+    matches!(ev.key, Key::Text(_)) && !ev.mods.cmd && !ev.mods.ctrl
+}
+
 /// Plain Ctrl and a letter belong to the shell on Linux, whatever the keymap says.
 fn is_shell_ctrl_letter(ev: &KeyEvent) -> bool {
     KeyPlatform::current() != KeyPlatform::Mac
@@ -218,7 +228,7 @@ pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     if tx.focused().is_some() {
         return false;
     }
-    let Some(id) = state.window.keyboard_terminal(&state.facts) else {
+    let Some(id) = state.window.typing_terminal(&state.facts) else {
         return false;
     };
     match ime {
@@ -242,7 +252,7 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
     if tx.focused().is_some() {
         return;
     }
-    let Some(id) = state.window.keyboard_terminal(&state.facts) else {
+    let Some(id) = state.window.typing_terminal(&state.facts) else {
         return;
     };
     let bytes = if content.image().is_some() {
@@ -262,7 +272,7 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
 /// runs it. The editor would otherwise take the bound chords on the keys it moves the caret
 /// with, such as the row keys on the arrows.
 pub(crate) fn shortcut_before_field(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if !keymap_hears(state, ev) || !(ev.mods.cmd || ev.mods.ctrl) {
+    if matches!(ev.key, Key::Modifier { .. }) || modal(state) || !(ev.mods.cmd || ev.mods.ctrl) {
         return false;
     }
     let focus = Focus {
@@ -278,13 +288,20 @@ pub(crate) fn shortcut_before_field(state: &mut State, ev: &KeyEvent, tx: &mut T
     }
 }
 
-fn keymap_hears(state: &State, ev: &KeyEvent) -> bool {
+fn modal(state: &State) -> bool {
     use crate::shell::Layer;
-    !matches!(ev.key, Key::Modifier { .. })
-        && !matches!(
-            state.window.layer,
-            Some(Layer::NewSession | Layer::CloseDesktop)
-        )
+    matches!(
+        state.window.layer,
+        Some(Layer::NewSession | Layer::CloseDesktop)
+    )
+}
+
+fn bound(state: &State, ev: &KeyEvent, tx: &Tx) -> bool {
+    let focus = Focus {
+        field: in_field(tx),
+        terminal: false,
+    };
+    state.keymap.press(ev, tx, focus) != Press::Unbound
 }
 
 fn in_field(tx: &Tx) -> bool {

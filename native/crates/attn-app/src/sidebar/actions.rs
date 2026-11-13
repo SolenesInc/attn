@@ -308,9 +308,23 @@ pub(crate) fn set_priority(state: &State, session: &str, priority: bool) {
     });
 }
 
+/// The person closes `session`: in queue flow, when it is the agent on screen and not a
+/// shell, the window moves on to the next turn.
+pub(crate) fn closing(state: &mut State, session: &str, tx: &mut Tx) {
+    let shown = state.window.on_screen(&state.facts).as_deref() == Some(session);
+    let shell = state
+        .facts
+        .sessions
+        .iter()
+        .any(|s| s.id == session && s.agent == "shell");
+    if shown && !shell {
+        move_on_from(state, session, tx);
+    }
+}
+
 /// In queue flow, leaving an agent on screen that is closing opens the oldest turn owed by
 /// another agent.
-pub(crate) fn move_on_from(state: &mut State, leaving: &str, tx: &mut Tx) {
+fn move_on_from(state: &mut State, leaving: &str, tx: &mut Tx) {
     if !queue_flow(state) {
         return;
     }

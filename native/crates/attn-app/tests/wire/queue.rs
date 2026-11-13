@@ -1057,6 +1057,20 @@ fn closing_the_agent_on_screen_in_queue_flow_opens_the_next_turn() {
 }
 
 #[test]
+fn the_close_key_on_the_agent_on_screen_in_queue_flow_opens_the_next_turn() {
+    let (a, b) = (turn("a", 30), turn("b", 20));
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![a.clone(), b.clone()]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    daemon_shows(&mut world, &[&a, &b], "a");
+
+    world.gesture(|app| app.key(chord(Action::SessionClose)));
+
+    assert_eq!(world.daemon.sent_of("desktop_close_tile").len(), 1);
+    assert_eq!(shown(&world), ["a", "b"]);
+}
+
+#[test]
 fn a_crew_member_is_protected_from_closing_and_the_chief_offers_no_close() {
     let mut world = World::start(Daemon::scripted().state(the_queue()));
 

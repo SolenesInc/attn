@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::cell::Cell;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use attn_app::State;
@@ -46,6 +47,24 @@ pub struct World {
     store: Store,
     orders: crate::tiles::Orders,
     tiles: Vec<crate::tiles::TileRuntime>,
+}
+
+type OnKey = fn(&mut State, &KeyEvent, &mut Tx) -> bool;
+
+/// The app's own key handler, which [`heard`] stands in for.
+static APP_ON_KEY: OnceLock<OnKey> = OnceLock::new();
+
+thread_local! {
+    /// The app's key handler left the last key it heard.
+    static LEFT: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The app's key handler, noting the keys it leaves: macOS's menu bar acts on a standard
+/// item's key, such as Window > Close's ⌘W, only when the window leaves it.
+fn heard(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let took = APP_ON_KEY.get().expect("the app's key handler")(state, ev, tx);
+    LEFT.set(!took);
+    took
 }
 
 /// What a gesture can do to the app.
@@ -230,6 +249,8 @@ impl World {
             scale: 2.0,
         };
         let mut runtime = attn_app::app().headless_runtime(size, env);
+        APP_ON_KEY.get_or_init(|| runtime.on_key.expect("the app hears keys"));
+        runtime.on_key = Some(heard);
         let clipboard = rune::clipboard::memory();
         runtime.use_clipboard(&clipboard);
         let orders = crate::tiles::Orders {
@@ -273,6 +294,16 @@ impl World {
         let scale = self.runtime.env.scale;
         self.runtime.set_viewport(size, scale);
         self.settle();
+    }
+
+    /// Presses `ev` as macOS's menu bar hands the window the key of a standard item, such as
+    /// Window > Close's ⌘W or Edit > Redo's ⇧⌘Z, then settles. True when the app left the key,
+    /// so the item acts: Close closes the window, and with the only window the app quits.
+    pub fn press_menu_key(&mut self, ev: KeyEvent) -> bool {
+        LEFT.set(false);
+        self.runtime.key(ev);
+        self.settle();
+        LEFT.get()
     }
 
     /// Runs a user action, then returns once the app and the daemon have stopped exchanging

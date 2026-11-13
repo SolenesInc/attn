@@ -101,7 +101,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
     true
 }
 
-pub(crate) use actions::{advance, settle, toggle_priority, wake};
+pub(crate) use actions::{advance, closing, settle, toggle_priority, wake};
 
 /// The next wall-clock moment a turn age the window shows reads differently.
 pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {

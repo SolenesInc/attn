@@ -206,7 +206,6 @@ fn close(state: &mut State, tx: &mut Tx) {
         );
         return;
     }
-    let shown = state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str());
     let sent = state.daemon.send(&UnregisterMessage {
         id: session.id.clone(),
         ..UnregisterMessage::new()
@@ -218,9 +217,7 @@ fn close(state: &mut State, tx: &mut Tx) {
         );
         return;
     }
-    if shown && session.agent != "shell" {
-        super::actions::move_on_from(state, &session.id, tx);
-    }
+    super::actions::closing(state, &session.id, tx);
 }
 
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {

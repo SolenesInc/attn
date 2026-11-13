@@ -29,6 +29,8 @@ item	statement	native_test	reason
 49	A terminal mark brightens while ⌥ is held over it	attn-app/tests/wire/terminal_annotations.rs::alt_over_a_mark_brightens_it	
 49	Terminal marks paint in the packaged app on Linux	live:s-9d54yh/annotations-native-panel.png	
 27	⌘W closes the active tile, not the window	attn-app/tests/wire/keys.rs::close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop	
+27	⌘W with home, a palette, the overview, the file opener, the New Session launcher or a dialog in front closes nothing, and the app keeps the key from Window > Close	attn-app/tests/wire/keys.rs::the_close_keys_close_nothing_behind_home_an_overlay_or_a_dialog_and_never_reach_the_menu_bar	
+27	In queue flow ⌘W closes the agent on screen and opens the next turn	attn-app/tests/wire/queue.rs::the_close_key_on_the_agent_on_screen_in_queue_flow_opens_the_next_turn	
 35	A tile window brought back hides, and the next pop-out reuses it (the Present window, re-derived to tile windows)	attn-app/tests/wire/desktops.rs::a_tile_brought_back_hides_its_window_and_the_next_pop_out_reuses_it	
 36	A secondary window gains focus after load so its content is not blank		n/a: native windows draw their content on their first frame, with no webview load that leaves one blank until it takes focus
 37	Window commands resolve the calling window: the pop-out key and close pressed in a tile window bring that tile back	attn-app/tests/wire/desktops.rs::the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back	

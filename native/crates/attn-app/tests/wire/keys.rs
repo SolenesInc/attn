@@ -164,6 +164,7 @@ fn every_shortcut_runs_its_own_action(category: Category) {
     let settings = [("analytics.enabled", "true")];
     let mut with_terminal =
         World::start(Daemon::scripted().state(state(two_terminals(), &settings)));
+    with_terminal.open_desktop();
     let mut without = World::start(Daemon::scripted().state(state(vec![], &settings)));
     for action in Action::ALL.iter().filter(|a| a.category() == category) {
         let world = if needs_no_terminal(action) {
@@ -303,6 +304,7 @@ fn plain_ctrl_and_a_letter_belong_to_the_shell_on_linux() {
 #[test]
 fn close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.open_desktop();
     press(&mut world, &Action::TerminalClose);
     let closed = world.daemon.sent_of("desktop_close_tile");
     assert_eq!(closed.len(), 1);
@@ -316,6 +318,7 @@ fn close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop() {
     let mut empty = desktop("d1", "", vec![]);
     empty.revision = 7;
     let mut world = World::start(Daemon::scripted().state(state(vec![empty], &[])));
+    world.open_desktop();
     press(&mut world, &Action::SessionClose);
     let closed = world.daemon.sent_of("desktop_close");
     assert_eq!(closed.len(), 1);
@@ -327,6 +330,7 @@ fn close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop() {
 #[test]
 fn a_close_the_daemon_refuses_or_that_cannot_be_sent_shows_why_in_the_notice() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.open_desktop();
     world.daemon.on("desktop_close_tile", |r| {
         serde_json::json!({
             "event": "profile_action_result",
@@ -653,4 +657,80 @@ fn stored(ev: &KeyEvent) -> String {
         "shift": ev.mods.shift,
     })
     .to_string()
+}
+
+#[test]
+fn a_key_that_types_text_goes_to_the_terminal_holding_the_keyboard_even_when_bound() {
+    let tilde = KeyEvent {
+        key: Key::Text("~".into()),
+        mods: Mods {
+            shift: true,
+            ..Mods::default()
+        },
+    };
+    let bound = r#"{"version":1,"overrides":{"ui.showShortcuts":{"key":"~","shift":true}},"dock":{"collapsed":false,"items":[]}}"#;
+    for settings in [vec![], vec![("keybindings_config", bound)]] {
+        let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &settings)));
+        world.open_desktop();
+
+        world.gesture(|app| app.key(tilde.clone()));
+
+        assert_eq!(typed(&world), [typed_into("r1", "~")], "{settings:?}");
+        assert_eq!(notice(&world), None, "{settings:?}");
+        assert!(
+            !shows(&world, "dialog", "Keyboard shortcuts"),
+            "{settings:?}"
+        );
+        rest(&mut world);
+    }
+
+    let mut world = World::start(
+        Daemon::scripted().state(state(two_terminals(), &[("keybindings_config", bound)])),
+    );
+    world.open_desktop();
+    world.gesture(|app| app.click(Target::key("sidebar.home")));
+    world.gesture(|app| app.key(tilde.clone()));
+    world.gesture(|app| app.type_text("x"));
+    assert!(
+        shows(&world, "dialog", "Keyboard shortcuts"),
+        "on home no terminal takes the key, so it runs its action"
+    );
+    assert!(typed(&world).is_empty(), "home types into no terminal");
+}
+
+#[test]
+fn the_close_keys_close_nothing_behind_home_an_overlay_or_a_dialog_and_never_reach_the_menu_bar() {
+    let fronts = [
+        ("home", None),
+        ("command palette", Some(Action::UiCommandPalette)),
+        ("action menu", Some(Action::UiActionMenu)),
+        ("overview", Some(Action::DesktopOverview)),
+        ("file opener", Some(Action::FileOpen)),
+        ("new session", Some(Action::SessionNew)),
+    ];
+    for (front, open) in fronts {
+        let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+        world.open_desktop();
+        match &open {
+            None => world.gesture(|app| app.click(Target::key("sidebar.home"))),
+            Some(action) => press(&mut world, action),
+        }
+
+        for close in [Action::SessionClose, Action::TerminalClose] {
+            assert!(
+                !world.press_menu_key(chord(&close)),
+                "{front}: {} reached the menu bar, whose Close closes the window",
+                close.id()
+            );
+        }
+
+        for cmd in [
+            "desktop_close_tile",
+            "desktop_remove_leaf",
+            "desktop_close",
+            "unregister",
+        ] {
+            assert!(world.daemon.sent_of(cmd).is_empty(), "{front}: sent {cmd}");
+        }
+    }
 }

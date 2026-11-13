@@ -591,6 +591,9 @@ pub(crate) fn escape(state: &mut State, tx: &mut Tx) -> bool {
 /// Closes the active tile, or the one shown alone: a document or browser tile leaves the
 /// desktop, a terminal tile ends its terminal, and on an empty desktop the desktop closes.
 fn close(state: &mut State, tx: &mut Tx) {
+    if !state.window.tiles_in_front() {
+        return;
+    }
     let Some(desktop) = state.facts.current_desktop() else {
         return;
     };
@@ -603,6 +606,11 @@ fn close(state: &mut State, tx: &mut Tx) {
         return;
     };
     let (leaf_id, kind) = (leaf.id.clone(), leaf.kind.clone());
+    let session = desktop
+        .panes
+        .iter()
+        .find(|p| p.pane_id == leaf_id)
+        .map(|p| p.session_id.clone());
     let refused = Refused::Prefixed("Could not close that tile");
     match kind {
         LeafKind::Tile { .. } => state.act(
@@ -616,17 +624,22 @@ fn close(state: &mut State, tx: &mut Tx) {
             |_, _, _| {},
             tx,
         ),
-        LeafKind::Pane => state.act(
-            |request_id| DesktopCloseTileMessage {
-                request_id,
-                desktop_id,
-                tile_id: leaf_id,
-                ..DesktopCloseTileMessage::new()
-            },
-            refused,
-            |_, _, _| {},
-            tx,
-        ),
+        LeafKind::Pane => {
+            state.act(
+                |request_id| DesktopCloseTileMessage {
+                    request_id,
+                    desktop_id,
+                    tile_id: leaf_id,
+                    ..DesktopCloseTileMessage::new()
+                },
+                refused,
+                |_, _, _| {},
+                tx,
+            );
+            if let Some(session) = session {
+                crate::sidebar::closing(state, &session, tx);
+            }
+        }
     }
 }
 
