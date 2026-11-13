@@ -614,13 +614,15 @@ pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
 /// when it went to this one.
 pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
     let shown = pane_of(state, session);
-    if let Some((desktop, leaf)) = &shown {
-        state.window.desk.pick(desktop, leaf);
+    if let Some((desktop, leaf)) = &shown
+        && state.window.desk.pick(desktop, leaf)
+    {
+        tx.instant();
     }
     let from_home = state.window.view == View::Home;
     state.window.shows_asked += 1;
     let this_show = state.window.shows_asked;
-    state.window.view = View::Desktop;
+    state.window.show_desktop(tx);
     state.window.follow_next_turn = false;
     let session_id = session.to_owned();
     state.ask(

@@ -240,15 +240,22 @@ fn clear_beside(state: &mut State, drag: &ColumnDrag, tx: &mut Tx) {
     super::shelf::clear_widths(state, &drag.desktop, &leaves, tx);
 }
 
+/// Where split `split` of `desktop`'s screen lies in the window.
+fn split_rect(state: &State, desktop: &str, split: &str) -> Option<[f32; 4]> {
+    let facts = &state.facts;
+    let desk = &state.window.desk;
+    let area = desk.area?;
+    let shown = facts.desktops.iter().find(|d| d.id == desktop)?;
+    let (tree, plan) = desk.plan(facts, shown)?;
+    let rendered = plan.rendered(&tree, &desk.row(desktop).view, &shown.active_pane_id);
+    let placed = desk.placement(&rendered);
+    let [x, y, w, h] = placed.splits.into_iter().find(|s| s.id == split)?.rect;
+    Some([area.x + x, area.y + y, w, h])
+}
+
 fn ratio_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, drag: &RatioDrag) {
     let (desktop, split, direction) = (drag.desktop.as_str(), drag.split.as_str(), drag.direction);
-    let Some(rect) = state
-        .window
-        .desk
-        .rects
-        .get(&format!("split.{split}"))
-        .copied()
-    else {
+    let Some(rect) = split_rect(state, desktop, split) else {
         if d.phase == Phase::Up {
             state.window.desk.ratios.remove(split);
         }

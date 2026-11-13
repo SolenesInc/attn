@@ -179,11 +179,23 @@ impl Desk {
     }
 
     /// The person picked `leaf` on `desktop`: a tile shown alone there gives way to it.
-    pub(crate) fn pick(&mut self, desktop: &str, leaf: &str) {
+    /// Whether one did.
+    pub(crate) fn pick(&mut self, desktop: &str, leaf: &str) -> bool {
         let row = self.row_mut(desktop);
-        if matches!(&row.view, View::Focused(focused) if focused != leaf) {
+        let gives_way = matches!(&row.view, View::Focused(focused) if focused != leaf);
+        if gives_way {
             row.view = View::Normal;
         }
+        gives_way
+    }
+
+    /// Where the tile area lays out `rendered`, the screen it shows, from the area's top left
+    /// corner: each split at the ratio this window shows.
+    pub(crate) fn placement(&self, rendered: &Node) -> layout::Placement {
+        let (w, h) = self.area.map_or((0.0, 0.0), |a| (a.w, a.h));
+        layout::place(rendered, (w, h), view::GAP, &|split| {
+            self.ratios.get(&split.id).map_or(split.ratio, |o| o.ratio)
+        })
     }
 
     pub(crate) fn row_mut(&mut self, desktop: &str) -> &mut RowState {
@@ -367,4 +379,28 @@ pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
 
 fn request_id() -> String {
     uuid::Uuid::new_v4().to_string()
+}
+
+/// The tile the current desktop shows alone.
+pub(crate) fn shown_alone(state: &State) -> Option<String> {
+    let desktop = state.facts.current_desktop()?;
+    match &state.window.desk.row(&desktop.id).view {
+        View::Focused(leaf) => Some(leaf.clone()),
+        _ => None,
+    }
+}
+
+/// Whether `next` changes the tiles of the desktop the window shows, which then move as the
+/// Tauri app moves them: on the same desktop, with no tile shown alone and no divider dragged.
+pub(crate) fn moves_tiles(state: &State, next: &Facts) -> bool {
+    let (Some(was), Some(is)) = (state.facts.current_desktop(), next.current_desktop()) else {
+        return false;
+    };
+    let desk = &state.window.desk;
+    was.id == is.id
+        && (was.tree_json != is.tree_json || was.active_pane_id != is.active_pane_id)
+        && state.window.view == crate::shell::View::Desktop
+        && !matches!(desk.row(&is.id).view, View::Focused(_))
+        && desk.column_drag.is_none()
+        && desk.ratio_drag.is_none()
 }

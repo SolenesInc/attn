@@ -42,7 +42,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let field = tx
         .focused()
         .is_some_and(|key| key.ends_with(FIELD_KEY_SUFFIX));
-    if ev.key == Key::Escape && tx.focused().is_none() && crate::desktop::escape(state) {
+    if ev.key == Key::Escape && tx.focused().is_none() && crate::desktop::escape(state, tx) {
         return true;
     }
     let terminal = match tx.focused() {

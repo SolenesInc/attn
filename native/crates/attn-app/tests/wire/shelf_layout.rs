@@ -10,6 +10,7 @@ use attn_protocol::{
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
 use rune::KeyPlatform;
+use rune::motion_gate::{self, AllowRow, Job, Recording};
 use serde_json::Value;
 
 use super::queue::ago;
@@ -190,12 +191,16 @@ fn start(area: f32, narrowest: Option<&str>, desktops: Vec<Desktop>) -> World {
 
 /// The daemon tells the app the profile's desktops and its current desktop.
 fn arrange(world: &mut World, current: &str, desktops: Vec<Desktop>) {
-    world.daemon.emit(ProfileArrangementChangedMessage {
+    world.daemon.emit(arrangement(current, desktops));
+    world.settle();
+}
+
+fn arrangement(current: &str, desktops: Vec<Desktop>) -> ProfileArrangementChangedMessage {
+    ProfileArrangementChangedMessage {
         profile: profile(current),
         desktops,
         ..ProfileArrangementChangedMessage::new()
-    });
-    world.settle();
+    }
 }
 
 /// The daemon changes desktop 1, the current desktop and the only one.
@@ -1122,5 +1127,187 @@ fn the_tile_that_slides_into_a_closed_tiles_slot_takes_the_keyboard() {
     becomes(&mut world, tiles("c", panes(["a", "c", "d"])));
     assert_eq!(screen(&world), ["c", "d"]);
     assert_eq!(keyboard(&mut world), "c");
+    rest(&mut world);
+}
+
+/// The tile area at `area` wide shows `before`, then the daemon changes desktop 1 to `after`:
+/// what the window shows over the second that follows.
+fn moving(area: f32, before: Desktop, after: Desktop) -> Recording {
+    let mut world = start(area, None, vec![before]);
+    world.record(60.0, 1.0, |daemon, _| {
+        daemon.emit(arrangement("work/desktop_1", vec![after]));
+    })
+}
+
+fn hiding_the_sidebar() -> Recording {
+    let mut world = start(FOUR_FIT, None, vec![tiles("a", panes(["a", "b"]))]);
+    world.record(60.0, 1.0, |_, app| {
+        app.key(chord_of(Action::SessionToggleSidebar))
+    })
+}
+
+fn chord_of(action: Action) -> rune::KeyEvent {
+    match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("{} has no single chord: {other:?}", action.id()),
+    }
+}
+
+fn focusing(focused: bool) -> Recording {
+    let mut world = start(TWO_FIT, None, vec![tiles("a", panes(["a", "b"]))]);
+    if focused {
+        press(&mut world, Action::TerminalToggleMaximize);
+    }
+    world.record(60.0, 1.0, |_, app| {
+        app.key(chord_of(Action::TerminalToggleMaximize))
+    })
+}
+
+const ALONE: &str = "a tile is shown alone|a tile shown alone returns";
+const BY_DESIGN: &str = "showing a tile alone and returning it land at once, as in the Tauri app";
+
+const LANDS_AT_ONCE: &[AllowRow] = &[
+    AllowRow::new("jump", "tile.a", ALONE, BY_DESIGN).max(14),
+    AllowRow::new("pop-in", "tile.", ALONE, BY_DESIGN).max(2),
+    AllowRow::new("pop-out", "tile.", ALONE, BY_DESIGN).max(2),
+    AllowRow::new("pop-in", "divider.", ALONE, BY_DESIGN).max(1),
+    AllowRow::new("pop-out", "divider.", ALONE, BY_DESIGN).max(1),
+    AllowRow::new(
+        "text-swap",
+        "titlebar.sidebar",
+        "the sidebar hides",
+        "the sidebar button's glyph swaps at once, its own unit's motion (s-bsjwvs)",
+    )
+    .max(1),
+    AllowRow::new(
+        "jump",
+        "sidebar.session",
+        "a tile closes",
+        "the sidebar's rows land at once when the daemon removes one, its own unit's motion (s-bsjwvs)",
+    )
+    .max(1),
+];
+
+#[test]
+fn tiles_move_join_and_leave_the_row_without_a_visible_glitch_and_focus_lands_at_once() {
+    let cells: Vec<(&str, Job)> = vec![
+        (
+            "a tile joins the row",
+            Box::new(|| {
+                moving(
+                    FOUR_FIT,
+                    tiles("a", panes(["a", "b"])),
+                    tiles("c", panes(["a", "b", "c"])),
+                )
+            }),
+        ),
+        (
+            "a tile arrives on the shelf",
+            Box::new(|| {
+                moving(
+                    TWO_FIT,
+                    tiles("a", panes(["a", "b"])),
+                    tiles("a", panes(["a", "b", "c"])),
+                )
+            }),
+        ),
+        (
+            "a chip brings its tile in place of another",
+            Box::new(|| {
+                moving(
+                    TWO_FIT,
+                    tiles("a", panes(["a", "b", "c", "d"])),
+                    tiles("d", panes(["a", "d", "b", "c"])),
+                )
+            }),
+        ),
+        (
+            "a tile closes",
+            Box::new(|| {
+                moving(
+                    FOUR_FIT,
+                    tiles("a", panes(["a", "b", "c"])),
+                    tiles("a", panes(["a", "c"])),
+                )
+            }),
+        ),
+        (
+            "the row slides to the last tile",
+            Box::new(|| {
+                moving(
+                    TWO_FIT,
+                    tiles("a", panes(["a", "b", "c", "d"])),
+                    tiles("d", panes(["a", "b", "c", "d"])),
+                )
+            }),
+        ),
+        ("the sidebar hides", Box::new(hiding_the_sidebar)),
+        ("a tile is shown alone", Box::new(|| focusing(false))),
+        ("a tile shown alone returns", Box::new(|| focusing(true))),
+    ];
+    motion_gate::gate_rows(
+        cells.into_iter().map(|(n, j)| (n.to_owned(), j)).collect(),
+        LANDS_AT_ONCE,
+    );
+}
+
+/// How tile `leaf` looked on each frame `rec` drew it, from the frame the gesture landed on:
+/// its rect and opacity.
+fn looks_of(rec: &Recording, leaf: &str) -> Vec<([f32; 4], f32)> {
+    let from = rec.inputs[0].0;
+    let track = rec
+        .tracks
+        .iter()
+        .find(|t| t.path.ends_with(&format!("/tile.{leaf}")))
+        .unwrap_or_else(|| panic!("tile {leaf} is on screen"));
+    track
+        .frames
+        .iter()
+        .filter(|(k, _)| *k >= from)
+        .map(|(_, s)| (s.rect, s.op))
+        .collect()
+}
+
+fn lands_at_once(rec: &Recording, leaf: &str) -> bool {
+    let looks = looks_of(rec, leaf);
+    looks.iter().all(|l| *l == looks[0] && l.1 == 1.0)
+}
+
+#[test]
+fn showing_a_tile_alone_and_returning_it_land_in_the_frame_of_the_key() {
+    let alone = focusing(false);
+    assert!(lands_at_once(&alone, "a") && looks_of(&alone, "a")[0].0[2] == TWO_FIT);
+    let returned = focusing(true);
+    assert!(lands_at_once(&returned, "a") && looks_of(&returned, "a")[0].0[2] < TWO_FIT / 2.0);
+}
+
+#[test]
+fn a_tile_opened_while_another_shows_alone_and_an_agent_opened_from_home_land_at_once() {
+    let mut world = start(TWO_FIT, None, vec![tiles("a", panes(["a", "b", "c"]))]);
+    press(&mut world, Action::TerminalToggleMaximize);
+    let opened_tile = world.record(60.0, 1.0, |_, app| {
+        app.update(|state, tx| {
+            let open = Action::OpenTile {
+                desktop: "work/desktop_1".into(),
+                tile: "b".into(),
+            };
+            attn_app::dispatch(state, open, tx);
+        })
+    });
+    assert!(
+        lands_at_once(&opened_tile, "a"),
+        "{:?}",
+        looks_of(&opened_tile, "a")
+    );
+
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(state, Action::SessionGoToDashboard, tx);
+        })
+    });
+    let opened = world.record(60.0, 1.0, |_, app| {
+        app.click(Target::key("sidebar.session.s-b"))
+    });
+    assert!(lands_at_once(&opened, "b"), "{:?}", looks_of(&opened, "b"));
     rest(&mut world);
 }

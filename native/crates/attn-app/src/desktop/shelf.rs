@@ -350,11 +350,11 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
 
 /// The shelf's row, which runs its chips' drags.
 fn owner() -> El {
-    row()
-        .key("shelf")
-        .on_drag(|state: &mut State, d: &mut Drag, tx: &mut Tx| {
+    super::view::moves_with_the_row(row().key("shelf")).on_drag(
+        |state: &mut State, d: &mut Drag, tx: &mut Tx| {
             super::drag::gesture(state, d, tx, Owner::Shelf)
-        })
+        },
+    )
 }
 
 /// Whether a drag `owner` runs is in flight, so `owner` stays on screen with nothing in it.

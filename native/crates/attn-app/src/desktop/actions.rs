@@ -39,8 +39,8 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         TerminalFocusDown => focus_toward(state, Toward::Down, tx),
         TerminalSplitVertical => split(state, Direction::Vertical, tx),
         TerminalSplitHorizontal => split(state, Direction::Horizontal, tx),
-        TerminalToggleZoom => toggle_view(state, false),
-        TerminalToggleMaximize => toggle_view(state, true),
+        TerminalToggleZoom => toggle_view(state, false, tx),
+        TerminalToggleMaximize => toggle_view(state, true, tx),
         SessionClose | TerminalClose => close(state, tx),
         SessionHistoryBack => walk_history(state, -1, tx),
         SessionHistoryForward => walk_history(state, 1, tx),
@@ -55,7 +55,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         _ => return false,
     }
     if goes_to_a_desktop(action) {
-        state.window.view = crate::shell::View::Desktop;
+        state.window.show_desktop(tx);
     }
     true
 }
@@ -261,7 +261,7 @@ pub(crate) fn show_unseen(state: &mut State, tx: &mut Tx) -> bool {
     let Some(leaf) = state.window.desk.row(&desktop).unseen.first().cloned() else {
         return false;
     };
-    state.window.view = crate::shell::View::Desktop;
+    state.window.show_desktop(tx);
     state.window.follow_next_turn = false;
     show_leaf(state, &desktop, &leaf, tx);
     true
@@ -271,7 +271,9 @@ pub(crate) fn show_unseen(state: &mut State, tx: &mut Tx) -> bool {
 /// keyboard.
 pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     give_keyboard(state, desktop, leaf, tx);
-    state.window.desk.pick(desktop, leaf);
+    if state.window.desk.pick(desktop, leaf) {
+        tx.instant();
+    }
     let (desktop_id, leaf_id) = (desktop.to_owned(), leaf.to_owned());
     state.act(
         |request_id| DesktopShowLeafMessage {
@@ -420,20 +422,23 @@ pub(super) fn split_at(
 }
 
 /// The person asked to see `leaf` alone: it takes the keyboard and becomes the active tile,
-/// shown alone, with zoom off.
+/// shown alone, with zoom off. Showing a tile alone and returning it land at once, as in the
+/// Tauri app.
 pub(super) fn focus_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     activate(state, desktop, leaf, tx);
     state.window.desk.row_mut(desktop).view = View::Focused(leaf.to_owned());
+    tx.instant();
 }
 
 /// The tile `desktop` shows alone goes back to its row.
-pub(super) fn return_to_row(state: &mut State, desktop: &str) {
+pub(super) fn return_to_row(state: &mut State, desktop: &str, tx: &mut Tx) {
     state.window.desk.row_mut(desktop).view = View::Normal;
+    tx.instant();
 }
 
 /// Zoom gives the active tile most of the room and follows the active tile; focus shows the
 /// active tile alone. Each turns the other off.
-fn toggle_view(state: &mut State, focus: bool) {
+fn toggle_view(state: &mut State, focus: bool, tx: &mut Tx) {
     let Some(desktop) = state.facts.current_desktop() else {
         return;
     };
@@ -442,16 +447,20 @@ fn toggle_view(state: &mut State, focus: bool) {
         return;
     }
     let row = state.window.desk.row_mut(&desktop.id);
+    let was_alone = matches!(row.view, View::Focused(_));
     row.view = match (&row.view, focus) {
         (View::Focused(_), true) | (View::Zoomed, false) => View::Normal,
         (_, true) => View::Focused(active),
         (_, false) => View::Zoomed,
     };
+    if was_alone != matches!(row.view, View::Focused(_)) {
+        tx.instant();
+    }
 }
 
 /// Escape ends a drag, closes a shelf cap's menu, or takes the current desktop out of focus
 /// mode, before anything else hears it; false when there is none of those to end.
-pub(crate) fn escape(state: &mut State) -> bool {
+pub(crate) fn escape(state: &mut State, tx: &mut Tx) -> bool {
     if super::peek::close(state) {
         return true;
     }
@@ -466,6 +475,7 @@ pub(crate) fn escape(state: &mut State) -> bool {
         return false;
     }
     row.view = View::Normal;
+    tx.instant();
     true
 }
 

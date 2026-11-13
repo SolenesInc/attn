@@ -149,6 +149,15 @@ impl Window {
         self.follow_next_turn = true;
     }
 
+    /// Shows the current desktop. Coming from another view lands at once, as the Tauri app
+    /// shows a desktop.
+    pub(crate) fn show_desktop(&mut self, tx: &mut Tx) {
+        if self.view != View::Desktop {
+            tx.instant();
+        }
+        self.view = View::Desktop;
+    }
+
     /// The agent the window shows: the active pane's agent of the current desktop.
     pub(crate) fn on_screen(&self, facts: &Facts) -> Option<String> {
         if self.view != View::Desktop {

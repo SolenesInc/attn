@@ -269,6 +269,72 @@ fn overlap(a0: f32, a1: f32, b0: f32, b1: f32) -> f32 {
     (a1.min(b1) - a0.max(b0)).max(0.0)
 }
 
+/// Where a tree's leaves and splits lie in a box, in points from its top left corner.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Placement {
+    pub leaves: Vec<(String, [f32; 4])>,
+    pub splits: Vec<PlacedSplit>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlacedSplit {
+    pub id: String,
+    pub direction: Direction,
+    pub rect: [f32; 4],
+    /// The gap between its two sides, which drags its ratio.
+    pub divider: [f32; 4],
+}
+
+/// Lays `tree` out in a box `size` points large: each split gives its first side its ratio of
+/// the room a `gap`-point divider leaves, and its second side the rest. `ratio` is the share
+/// each split shows.
+pub fn place(tree: &Node, size: (f32, f32), gap: f32, ratio: &dyn Fn(&Split) -> f32) -> Placement {
+    let mut out = Placement::default();
+    place_into(tree, [0.0, 0.0, size.0, size.1], gap, ratio, &mut out);
+    out
+}
+
+fn place_into(
+    node: &Node,
+    rect: [f32; 4],
+    gap: f32,
+    ratio: &dyn Fn(&Split) -> f32,
+    out: &mut Placement,
+) {
+    let split = match node {
+        Node::Leaf(leaf) => return out.leaves.push((leaf.id.clone(), rect)),
+        Node::Split(split) => split,
+    };
+    let [x, y, w, h] = rect;
+    let share = ratio(split).clamp(0.001, 0.999);
+    let (a, divider, b) = match split.direction {
+        Direction::Vertical => {
+            let first = (w - gap).max(0.0) * share;
+            (
+                [x, y, first, h],
+                [x + first, y, gap, h],
+                [x + first + gap, y, (w - gap).max(0.0) - first, h],
+            )
+        }
+        Direction::Horizontal => {
+            let first = (h - gap).max(0.0) * share;
+            (
+                [x, y, w, first],
+                [x, y + first, w, gap],
+                [x, y + first + gap, w, (h - gap).max(0.0) - first],
+            )
+        }
+    };
+    out.splits.push(PlacedSplit {
+        id: split.id.clone(),
+        direction: split.direction,
+        rect,
+        divider,
+    });
+    place_into(&split.children[0], a, gap, ratio, out);
+    place_into(&split.children[1], b, gap, ratio, out);
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect {
     pub left: f32,

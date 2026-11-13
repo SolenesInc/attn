@@ -118,6 +118,10 @@ pub fn bind(
         deliver(Box::new(move |state, tx| {
             let connected = |facts: &Facts| facts.connection == attn_client::Connection::Connected;
             let (was, is) = (connected(&state.facts), connected(&facts));
+            if desktop::moves_tiles(state, &facts) {
+                tx.animated();
+            }
+            let alone = desktop::shown_alone(state);
             state.facts = facts;
             if was && !is {
                 requests::forget(state, tx);
@@ -129,6 +133,9 @@ pub fn bind(
                 state.keymap = keymap;
             }
             state.window.follow(&state.facts);
+            if desktop::shown_alone(state) != alone {
+                tx.instant();
+            }
             desktop::settle(state, tx);
             desktop::follow_windows(state);
             desktop::follow_window_title(state, tx);

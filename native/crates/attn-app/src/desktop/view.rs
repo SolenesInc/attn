@@ -10,7 +10,7 @@ use crate::State;
 use crate::shell::Holder;
 use crate::terminal::{Release, Terminals, accelerator};
 
-const GAP: f32 = 6.0;
+pub(super) const GAP: f32 = 6.0;
 const HEADER_PX: f32 = 2.0 * space::S1 + 18.0;
 const SUBLINE_PX: f32 = 15.0;
 const AGENT_HEADER_PX: f32 = HEADER_PX + SUBLINE_PX;
@@ -110,8 +110,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             ))
         })
     });
-    col()
-        .key("tiles")
+    moves_with_the_row(col().key("tiles"))
         .on_drag(super::divider::area_gesture)
         .role("main")
         .label("Tiles")
@@ -188,7 +187,6 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         keys: &keys,
         focused: None,
         drains: &state.window.desk.settling,
-        ratios: &state.window.desk.ratios,
         dividers: false,
         dragging: None,
         holder: state.window.keyboard.as_ref(),
@@ -196,7 +194,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         t,
         scale,
     };
-    tile(leaf, &cx)
+    tile(leaf, &cx).w_full().h_full()
 }
 
 fn screen(
@@ -229,7 +227,6 @@ fn screen(
                         _ => None,
                     },
                     drains: &desk.settling,
-                    ratios: &desk.ratios,
                     dividers: view == super::layout::View::Normal,
                     dragging,
                     holder,
@@ -237,7 +234,8 @@ fn screen(
                     t,
                     scale,
                 };
-                node(&rendered, &cx)
+                let placed = desk.placement(&rendered);
+                laid_out(&rendered, &placed, &cx)
             }
         },
     }
@@ -277,8 +275,6 @@ struct TileCx<'a> {
     /// The leaf this desktop shows alone.
     focused: Option<&'a str>,
     drains: &'a std::collections::HashMap<String, crate::sidebar::Countdown>,
-    /// Splits this window shows at its own ratio, ahead of the daemon.
-    ratios: &'a std::collections::HashMap<String, super::divider::RatioOverride>,
     /// Dividers drag only in the normal view.
     dividers: bool,
     dragging: Option<&'a str>,
@@ -288,47 +284,30 @@ struct TileCx<'a> {
     scale: f32,
 }
 
-fn node(n: &Node, cx: &TileCx) -> El {
-    match n {
-        Node::Leaf(leaf) => tile(leaf, cx),
-        Node::Split(split) => {
-            let [a, b] = &*split.children;
-            let parent = match split.direction {
-                Direction::Vertical => row(),
-                Direction::Horizontal => col(),
-            };
-            let ratio = cx.ratios.get(&split.id).map_or(split.ratio, |o| o.ratio);
-            let key = format!("split.{}", split.id);
-            let recorded = key.clone();
-            parent
-                .key(key)
-                .w_full()
-                .h_full()
-                .min_w(0.0)
-                .min_h(0.0)
-                .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
-                    let rects = &mut state.window.desk.rects;
-                    if rects.get(&recorded) == Some(&rect) {
-                        tx.live_only();
-                        return;
-                    }
-                    rects.insert(recorded.clone(), rect);
-                })
-                .child(share(node(a, cx), ratio))
-                .child(divider(split.id.clone(), split.direction, cx))
-                .child(share(node(b, cx), 1.0 - ratio))
-        }
-    }
+/// The screen's tiles and dividers as siblings pinned where `placed` lays them, so a tile that
+/// moves to another split stays the same element and springs to its new place.
+fn laid_out(rendered: &Node, placed: &super::layout::Placement, cx: &TileCx) -> El {
+    let leaves = rendered.leaves();
+    let tiles = placed.leaves.iter().filter_map(|(id, rect)| {
+        let leaf = leaves.iter().find(|l| l.id == *id)?;
+        Some(pinned(tile(leaf, cx), *rect))
+    });
+    let dividers = placed
+        .splits
+        .iter()
+        .map(|s| pinned(divider(s.id.clone(), s.direction, cx), s.divider));
+    el().w_full().h_full().children(tiles).children(dividers)
+}
+
+fn pinned(child: El, [x, y, w, h]: [f32; 4]) -> El {
+    child.pin(Some(x), Some(y), None, None).w(w).h(h)
 }
 
 /// The gap between a split's two sides, which drags the split's ratio, or between screen
 /// columns their widths. The tile area runs the drag, so it outlives the divider moving.
 fn divider(split: String, direction: Direction, cx: &TileCx) -> El {
     let key = format!("divider.{split}");
-    let bar = match direction {
-        Direction::Vertical => rune::el().w(GAP).h_full(),
-        Direction::Horizontal => rune::el().h(GAP).w_full(),
-    };
+    let bar = rune::el();
     if !cx.dividers {
         return bar;
     }
@@ -439,8 +418,6 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let recorded = format!("tile.{}", leaf.id);
     col()
         .key(recorded.clone())
-        .w_full()
-        .h_full()
         .min_w(0.0)
         .min_h(0.0)
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
@@ -465,6 +442,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         )
         .role("group")
         .label(title.clone())
+        .transition(tile_transition(&leaf.kind))
         .opacity(if cx.dragging == Some(leaf.id.as_str()) {
             0.5
         } else {
@@ -472,6 +450,31 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         })
         .child(header(leaf, &title, cx))
         .child(body)
+}
+
+/// The spring the Tauri app moves a row's tiles on.
+fn row_spring() -> rune::Spring {
+    rune::Spring::from_stiffness_damping(630.0, 39.0, 1.0)
+}
+
+/// `el` and what it holds move on the row's spring: launched hard and passing their rest a
+/// little, by design.
+pub(super) fn moves_with_the_row(el: El) -> El {
+    el.motion(row_spring())
+        .motion_intent(rune::MotionIntent::OVERSHOOT | rune::MotionIntent::IMPULSE)
+}
+
+/// How a tile joins and leaves the row, as in the Tauri app: it grows in and shrinks out,
+/// fading, and a browser tile snaps.
+fn tile_transition(kind: &LeafKind) -> rune::Transition {
+    use rune::{Spring, SpringPair, Transition};
+    if matches!(kind, LeafKind::Tile { kind, .. } if kind == "browser") {
+        return Transition::none();
+    }
+    Transition::asymmetric(Transition::scale(0.9), Transition::scale(0.92)).springs(SpringPair {
+        enter: row_spring(),
+        exit: Spring::new(0.11, 0.0),
+    })
 }
 
 /// `el`, where a press takes the tile into `holder`.
@@ -642,7 +645,9 @@ fn return_to_row(key: &str, desktop: &str, cx: &TileCx) -> El {
         attn_ui::icon::COMPRESS,
         cx.t,
     )
-    .on_press(move |state: &mut State| super::actions::return_to_row(state, &desktop))
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        super::actions::return_to_row(state, &desktop, tx)
+    })
 }
 
 fn header_button(key: String, label: String, glyph: &'static str, t: &Tokens) -> El {

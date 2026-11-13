@@ -285,19 +285,68 @@ impl World {
     /// window has drawn what the link delivered with its motion landed, and the link waits on
     /// the socket or on a time the clock has not reached.
     pub fn settle(&mut self) {
+        self.exchange(None);
+    }
+
+    /// Runs `cause`, a user action or a change the daemon sends, and records the window for the
+    /// motion gate: the app and the daemon finish their exchange before the app's clock moves,
+    /// then `secs` of motion play at `hz` frames a second, and the window settles.
+    pub fn record(
+        &mut self,
+        hz: f64,
+        secs: f64,
+        cause: impl FnOnce(&Daemon, &mut Driver),
+    ) -> rune::motion_gate::Recording {
+        self.settle();
+        let mut sampler = rune::motion_gate::Sampler::new(&mut self.runtime, hz);
+        self.sample(&mut sampler, 0.0);
+        sampler.input("gesture");
+        cause(
+            &self.daemon,
+            &mut Driver {
+                runtime: &mut self.runtime,
+            },
+        );
+        self.exchange(Some(&mut sampler));
+        for _ in 0..(secs * hz).round() as usize {
+            self.sample(&mut sampler, 1.0 / hz);
+        }
+        self.settle();
+        sampler.rec
+    }
+
+    fn still_frame(&mut self, sampler: &mut Option<&mut rune::motion_gate::Sampler>) {
+        match sampler {
+            Some(sampler) => self.sample(sampler, 0.0),
+            None => {
+                self.runtime.frame(0.0);
+            }
+        }
+    }
+
+    fn sample(&mut self, sampler: &mut rune::motion_gate::Sampler, dt: f64) {
+        sampler.before(&mut self.runtime);
+        let awake = self.runtime.frame(dt);
+        sampler.frame(&mut self.runtime, awake);
+    }
+
+    /// Delivers what each side sent until both are quiet, on frames that move no time. With no
+    /// `sampler` the window lands its motion; with one, each frame is recorded and the motion
+    /// keeps running.
+    fn exchange(&mut self, mut sampler: Option<&mut rune::motion_gate::Sampler>) {
         loop {
             let seen = self.pulse.count();
             let updates = std::mem::take(&mut *self.inbox.lock().unwrap());
             for update in updates {
                 self.runtime.update(update);
             }
-            self.runtime.frame(0.0);
-            if self.runtime.animating {
+            self.still_frame(&mut sampler);
+            if sampler.is_none() && self.runtime.animating {
                 self.runtime.settle_all();
                 self.runtime.frame(0.0);
             }
             while self.runtime.has_pending_input() {
-                self.runtime.frame(0.0);
+                self.still_frame(&mut sampler);
             }
             if self.screens.redraws(&self.runtime) {
                 self.screens.draw_without_gpu(&mut self.runtime);
