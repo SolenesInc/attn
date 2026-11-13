@@ -87,8 +87,9 @@ export class NativeAppDriver {
     return this.window.parkWindow(...args);
   }
 
-  setWindowBounds(...args) {
-    return this.window.setWindowBounds(...args);
+  async setWindowBounds(bounds) {
+    const { logicalBounds } = await this.client.request('set_window_bounds', { logicalBounds: bounds });
+    return logicalBounds;
   }
 
   parkPointerBeside(...args) {

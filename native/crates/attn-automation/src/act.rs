@@ -263,7 +263,7 @@ pub fn act<S: 'static>(
             }
         }
         other => Attempt::Fail(format!(
-            "unknown action {other:?}; actions: ping, tree, find, wait, press, hover, drag, scroll, key, hold, type, run, state, native_windows, shot"
+            "unknown action {other:?}; actions: ping, tree, find, wait, press, hover, drag, scroll, key, hold, type, run, state, native_windows, shot, set_window_bounds"
         )),
     }
 }

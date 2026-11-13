@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use attn_automation::WindowInfo;
+use attn_automation::{Bounds, WindowBounds, WindowInfo};
 use rune::prefs::Prefs;
 use rune::{App, Tx, WindowHandle, WindowOptions};
 
@@ -59,6 +59,39 @@ pub(crate) fn main_content_origin() -> (f64, f64) {
                 let (x, y) = p.content_position;
                 (f64::from(x) / p.scale, f64::from(y) / p.scale)
             })
+    })
+}
+
+/// Moves the main window's top-left corner toward `bounds`' corner, where the system lets it,
+/// and sizes its content to `bounds`' size, in points. Call it on the UI thread.
+pub(crate) fn move_main(bounds: Bounds) -> Result<(), String> {
+    MAIN.with_borrow(|main| {
+        let (_, window) = main.as_ref().ok_or("the app has no window open")?;
+        let p = window.placement().ok_or("the app has no window open")?;
+        window.set_position((
+            (bounds.x * p.scale).round() as i32,
+            (bounds.y * p.scale).round() as i32,
+        ));
+        window.resize_instant((bounds.width as f32, bounds.height as f32));
+        Ok(())
+    })
+}
+
+/// Where the main window is and how big its content is, in points, while it is open. Call it
+/// on the UI thread.
+pub(crate) fn main_bounds() -> Option<WindowBounds> {
+    MAIN.with_borrow(|main| {
+        let p = main.as_ref()?.1.placement()?;
+        Some(WindowBounds {
+            scale_factor: p.scale,
+            minimized: p.minimized,
+            logical_bounds: Bounds {
+                x: f64::from(p.position.0) / p.scale,
+                y: f64::from(p.position.1) / p.scale,
+                width: f64::from(p.content_size.0) / p.scale,
+                height: f64::from(p.content_size.1) / p.scale,
+            },
+        })
     })
 }
 

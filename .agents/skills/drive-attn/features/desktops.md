@@ -139,7 +139,7 @@ Preconditions:
 
 - Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'` so the display outlives each step.
 - Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"sidebar"}}'`.
-- Two tiles at the default narrowest width need about 1200px of tile area, and the window opens at 1200px. On Linux, widen it with `xdotool windowsize <id> 1600 1000`, `<id>` being `windows[0].id` from `bridge native_windows`.
+- Two tiles at the default narrowest width (`narrowest_tile_cols` 66) need about 1200 points of tile area, and the window opens at 1200 by 800, which fits one. Widen it on either platform with `bridge set_window_bounds '{"logicalBounds":{"x":0,"y":0,"width":1600,"height":1000}}'`: it answers once the tiles lay out at the new size, or fails naming the size the window got.
 - Session ids are spent once removed, so give each run's shells new ids, such as `left-$(date +%s)`.
 
 Steps:

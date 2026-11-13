@@ -12,6 +12,6 @@ mod target;
 pub use act::{Attempt, Hooks, Request, act};
 pub use chord::key_event;
 pub use headless::{Change, Headless, Work};
-pub use host::{Host, Inspection, WindowInfo};
+pub use host::{Bounds, Host, Inspection, WindowBounds, WindowInfo};
 pub use server::{Manifest, Server};
 pub use target::{Found, Target};

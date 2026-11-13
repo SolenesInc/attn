@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::act::{Attempt, Hooks, Request, act};
-use crate::host::Host;
+use crate::host::{Bounds, Host};
 
 /// How long a request waits for its element before it fails and says what it waited for.
 /// Under the Node client's 35 s request timeout (`uiAutomationClient.mjs`), so the app's
@@ -127,6 +127,23 @@ pub(crate) fn answer<S: 'static>(
                 .ok_or("shot: give `path`")?;
             host.shot(path, patience(request))?;
             return Ok(json!({"path": path}));
+        }
+        "set_window_bounds" => {
+            let asked = request
+                .payload
+                .get("logicalBounds")
+                .cloned()
+                .ok_or("set_window_bounds: give `logicalBounds` {x, y, width, height}")?;
+            let asked: Bounds = serde_json::from_value(asked)
+                .map_err(|e| format!("set_window_bounds: bad logicalBounds: {e}"))?;
+            if asked.width <= 0.0 || asked.height <= 0.0 {
+                return Err(format!(
+                    "set_window_bounds: logicalBounds must have positive width and height (got width={} height={})",
+                    asked.width, asked.height
+                ));
+            }
+            let bounds = host.set_window_bounds(asked, patience(request))?;
+            return Ok(serde_json::to_value(bounds).expect("window bounds serialize"));
         }
         _ => {}
     }

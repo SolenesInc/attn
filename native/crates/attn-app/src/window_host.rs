@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use attn_automation::{Host, Inspection, WindowInfo};
+use attn_automation::{Bounds, Host, Inspection, WindowBounds, WindowInfo};
 use attn_client::{Clock, Pulse};
 use rune::{AppHandle, Runtime};
 
@@ -92,6 +92,42 @@ impl Host<State> for WindowHost {
             ));
         }
         Ok(())
+    }
+
+    fn set_window_bounds(&self, asked: Bounds, wait: Duration) -> Result<WindowBounds, String> {
+        const CLOSED: &str = "set_window_bounds: the app closed before it answered";
+        self.read(move |_| crate::frame::move_main(asked))
+            .ok_or(CLOSED)?
+            .map_err(|e| format!("set_window_bounds: {e}"))?;
+        let clock = Clock::system();
+        loop {
+            let seen = self.frames.count();
+            let (got, laid_out) = self
+                .read(|rt| (crate::frame::main_bounds(), rt.window_viewport()))
+                .ok_or(CLOSED)?;
+            let got = got.ok_or("set_window_bounds: the app has no window open")?;
+            let at = got.logical_bounds;
+            let reached = [
+                (at.width, asked.width),
+                (at.height, asked.height),
+                (f64::from(laid_out.0), at.width),
+                (f64::from(laid_out.1), at.height),
+            ]
+            .iter()
+            .all(|(a, b)| (a - b).abs() <= 1.0);
+            if reached {
+                return Ok(got);
+            }
+            let left = wait.saturating_sub(clock.now());
+            if left.is_zero() || !self.frames.wait_past(seen, left) {
+                return Err(format!(
+                    "set_window_bounds: asked for {asked:?}; after {} ms (timeout_ms) the window is at {at:?} and its view lays out at {} x {} points; the window's minimum size or the screen may hold its size back",
+                    wait.as_millis(),
+                    laid_out.0,
+                    laid_out.1
+                ));
+            }
+        }
     }
 }
 

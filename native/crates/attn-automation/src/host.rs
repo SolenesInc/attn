@@ -35,6 +35,33 @@ pub trait Host<S: 'static>: Send + Sync + 'static {
     fn shot(&self, _path: &str, _wait: Duration) -> Result<(), String> {
         Err("this host draws no window to capture".into())
     }
+
+    /// Moves the main window's top-left corner to `asked`'s and sizes its content to
+    /// `asked`'s, in points, then waits up to `wait` for the view to lay out at that size.
+    /// Replies with [`WindowBounds`] once it has, and fails naming the size the window got
+    /// when it never does.
+    fn set_window_bounds(&self, _asked: Bounds, _wait: Duration) -> Result<WindowBounds, String> {
+        Err("this host has no window to move".into())
+    }
+}
+
+/// A window's place on the desktop in points, as the Tauri app's `logicalBounds` names it:
+/// its outer top-left corner and its content size.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Bounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// What `set_window_bounds` replies, in the Tauri app's shape.
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowBounds {
+    pub scale_factor: f64,
+    pub minimized: bool,
+    pub logical_bounds: Bounds,
 }
 
 /// The app's window as the platform names it: the CGWindowID on macOS, the X11 window id on
