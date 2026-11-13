@@ -150,8 +150,9 @@ Steps:
 - **Divider.** Run `bridge drag '{"target":{"key":"divider.row:<L>"},"by":[90,0]}'`: the receipt's `landed` names the divider, and `wsctl list` gives both leaves `wanted_cols`, the left one wider.
 - **Zoom and focus.** Press zoom: `bridge wait` on `tile.<R>` answers wider than twice `tile.<L>`. Press it again and the widths return. Press focus: `bridge wait '{"target":{"key":"tile.<L>"},"gone":true}'` matches and the shot shows `<R>` alone with an orange border. Press focus again and `tile.<L>` is back.
 - **Tile history.** Press `tile.<L>.header`, then history back: `active_pane_id` in `bridge state '{"of":"desktops"}'` is `<R>`. History forward makes it `<L>` again, and each landing rings its tile once.
+- **Sort and Undo.** With named desktops in a hand order, run `bridge run '{"name":"ui.commandPalette"}'`, `bridge type '{"text":"Sort desktops"}'` and `bridge key '{"chord":"Enter"}'`: `bridge state '{"of":"desktops"}'` lists numbered desktops by number, then named ones by name, and `bridge wait '{"target":{"key":"notice.offer"}}'` answers "Desktops sorted Undo". Run `bridge press '{"target":{"key":"notice.offer"}}'`: the desktops return to the hand order and the notice reads "Desktops sorted ✓ Done". The notice stays while the pointer rests on it.
 - **Clean up.** `wsctl rm-session --id <left>` and `--id <right>`, then `./attn instance stop-app`. The daemon sweeps the empty desktop 3.
-- **Proof.** Keep each `bridge` answer and both shots. The `native-desktop-tiles` scenario runs the shells, divider, zoom, focus and history steps.
+- **Proof.** Keep each `bridge` answer and both shots. The `native-desktop-tiles` scenario runs the shells, divider, zoom, focus and history steps, and `native-desktop-order` runs Sort and Undo.
 
 ## Contexts
 
@@ -166,9 +167,9 @@ Steps:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/desktops.rs`, `shelf_layout.rs` and `shelf_drags.rs` (the native app), `internal/daemon/desktop_*_wire_test.go`, `internal/daemon/launch_desktop_wire_test.go`, `internal/daemon/terminal_move_wire_test.go`, `internal/daemon/desktop_tiles_protocol_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/desktops.rs`, `desktop_order.rs`, `shelf_layout.rs` and `shelf_drags.rs` (the native app), `internal/daemon/desktop_*_wire_test.go`, `internal/daemon/launch_desktop_wire_test.go`, `internal/daemon/terminal_move_wire_test.go`, `internal/daemon/desktop_tiles_protocol_test.go`.
 - Stack: `cmd/attnd/launch_desktop_stack_test.go`, `cmd/attnd/terminal_move_stack_test.go`, `scripts/verify-terminal-move.sh`, `app/e2e/desktop-sessions.spec.ts`, `app/e2e/tile-header.spec.ts`, `app/e2e/agent-header.spec.ts`, `app/e2e/pane-focus-ring.spec.ts`, `app/e2e/split-paint.spec.ts`.
-- Scenario: in the native app `native-desktop-tiles`, `native-tile-windows`, `native-shelf-layout`, `native-shelf-moves`, `native-shelf-drags`, `native-shelf-drop-beside`, `native-shelf-peek`, `native-title-bar`, `native-desktop-switching`, `native-close-desktop`, `native-desktop-splits` and `native-close-pane`; in the Tauri app `shelf-layout`, `title-bar`, `shelf-moves`, `shelf-drags`, `shelf-drop-beside`, `shelf-motion`, `shelf-peek`, `desktop-switching`, `desktop-order`, `desktop-splits`, `close-desktop`, `empty-desktop-keys`, `close-pane-nonblocking`, `desktop-close-one-session-keeps-selection`, `desktop-migration`, `launch-desktops`, `move-with-delegates`.
+- Scenario: in the native app `native-desktop-tiles`, `native-tile-windows`, `native-shelf-layout`, `native-shelf-moves`, `native-shelf-drags`, `native-shelf-drop-beside`, `native-shelf-peek`, `native-title-bar`, `native-desktop-switching`, `native-desktop-order`, `native-close-desktop`, `native-desktop-splits` and `native-close-pane`; in the Tauri app `shelf-layout`, `title-bar`, `shelf-moves`, `shelf-drags`, `shelf-drop-beside`, `shelf-motion`, `shelf-peek`, `desktop-switching`, `desktop-order`, `desktop-splits`, `close-desktop`, `empty-desktop-keys`, `close-pane-nonblocking`, `desktop-close-one-session-keeps-selection`, `desktop-migration`, `launch-desktops`, `move-with-delegates`.
 - Kernel: `internal/layouttree/*_test.go`, `app/src/components/SessionTerminalDesktop/rowLayout.test.ts`.
 - App wire: `app/src/App.shelfLayout.test.tsx`, `app/src/App.shelfPeek.test.tsx`.
 - Browser end-to-end: `app/e2e/row-motion.spec.ts`.

@@ -126,6 +126,17 @@ pub struct Holder {
 pub struct Notice {
     pub text: String,
     until: f64,
+    /// The pointer rests on it, which keeps it until the pointer leaves.
+    held: bool,
+    offer: Option<Offer>,
+}
+
+/// What a notice offers to do about what it says, as Undo after a sort, and whether it did.
+#[derive(Clone, Debug)]
+struct Offer {
+    label: &'static str,
+    action: Action,
+    done: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -194,8 +205,33 @@ impl Window {
     }
 
     pub(crate) fn notify(&mut self, text: String, tx: &mut Tx) {
+        self.show_notice(text, None, tx);
+    }
+
+    /// A notice whose button runs `action`, once.
+    pub(crate) fn notify_offering(
+        &mut self,
+        text: String,
+        label: &'static str,
+        action: Action,
+        tx: &mut Tx,
+    ) {
+        let offer = Offer {
+            label,
+            action,
+            done: false,
+        };
+        self.show_notice(text, Some(offer), tx);
+    }
+
+    fn show_notice(&mut self, text: String, offer: Option<Offer>, tx: &mut Tx) {
         let until = tx.clock() + NOTICE_SECONDS;
-        self.notice = Some(Notice { text, until });
+        self.notice = Some(Notice {
+            text,
+            until,
+            held: false,
+            offer,
+        });
         tx.wake_at(until);
     }
 
@@ -254,7 +290,10 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
     let switched = crate::desktop::expire(state, tx);
     let now = tx.clock();
     let window = &mut state.window;
-    let notice = window.notice.take_if(|n| now >= n.until).is_some();
+    let notice = window
+        .notice
+        .take_if(|n| !n.held && now >= n.until)
+        .is_some();
     let leader = window.leader.take_if(|l| now >= l.until).is_some();
     let label = window
         .desk
@@ -433,7 +472,10 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::desktop::drag_overlay(state, t));
     layers.extend(crate::picker::worktree_setup(state, t));
     if let Some(notice) = &window.notice {
-        layers.push(floating_status("notice", notice.text.clone(), t));
+        layers.push(match &notice.offer {
+            None => floating_status("notice", notice.text.clone(), t),
+            Some(offer) => offering(notice, offer, t),
+        });
     }
     layers
 }
@@ -570,6 +612,71 @@ fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
                 .children(rows)
         })
         .collect()
+}
+
+/// A notice with its offer: one button, as the Tauri app's toast row is, that runs the offer
+/// and then says it is done. The pointer resting on it keeps it.
+fn offering(notice: &Notice, offer: &Offer, t: &Tokens) -> El {
+    let said = if offer.done { "✓ Done" } else { offer.label };
+    let button = row()
+        .key("notice.offer")
+        .role("button")
+        .label(format!("{} {said}", notice.text))
+        .disabled(offer.done)
+        .items_center()
+        .gap(space::S3)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .radius(6.0)
+        .padding(space::S2)
+        .child(
+            text(notice.text.clone())
+                .font(type_::BODY)
+                .color(t.text_primary),
+        )
+        .child(text(said).font(type_::LABEL).color(if offer.done {
+            t.text_muted
+        } else {
+            t.accent
+        }))
+        .on_hover_change(|state: &mut State, inside, tx: &mut Tx| hold_notice(state, inside, tx))
+        .on_press_tx(|state: &mut State, tx: &mut Tx| take_offer(state, tx));
+    el().key("notice")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .child(
+            col()
+                .w_full()
+                .h_full()
+                .items_center()
+                .justify_end()
+                .padding(space::S6)
+                .child(button),
+        )
+}
+
+fn hold_notice(state: &mut State, inside: bool, tx: &mut Tx) {
+    let Some(notice) = &mut state.window.notice else {
+        return;
+    };
+    notice.held = inside;
+    if !inside {
+        notice.until = tx.clock() + NOTICE_SECONDS;
+        tx.wake_at(notice.until);
+    }
+}
+
+fn take_offer(state: &mut State, tx: &mut Tx) {
+    let Some(offer) = state.window.notice.as_mut().and_then(|n| n.offer.as_mut()) else {
+        return;
+    };
+    if offer.done {
+        return;
+    }
+    offer.done = true;
+    let action = offer.action.clone();
+    crate::dispatch::dispatch(state, action, tx);
 }
 
 fn floating_status(key: &str, message: String, t: &Tokens) -> El {

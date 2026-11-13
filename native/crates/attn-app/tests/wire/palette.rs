@@ -101,7 +101,7 @@ fn history(request: &Request, entries: Vec<CommandUsage>) -> Value {
 }
 
 /// A daemon that answers every history read with `entries`.
-fn daemon(state: InitialStateMessage, entries: Vec<CommandUsage>) -> Daemon {
+pub(super) fn daemon(state: InitialStateMessage, entries: Vec<CommandUsage>) -> Daemon {
     let daemon = Daemon::scripted().state(state);
     daemon
         .on("get_command_usage", move |r| history(r, entries.clone()))

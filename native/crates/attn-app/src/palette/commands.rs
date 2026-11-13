@@ -128,6 +128,19 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .filter(|d| &d.profile_id == profile)
         .cloned()
         .collect();
+    if !profile.is_empty() {
+        commands.push(
+            Command::new(
+                "sort-desktops",
+                "Sort desktops",
+                &["desktop", "order", "organize"],
+                Action::SortDesktops {
+                    profile: profile.clone(),
+                },
+            )
+            .describe("Numbered desktops first, then names A–Z"),
+        );
+    }
     for desktop in model::ordered_desktops(&desktops) {
         commands.push(
             Command::new(

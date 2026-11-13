@@ -270,6 +270,50 @@ pub fn ordered_desktops(desktops: &[Desktop]) -> Vec<&Desktop> {
     ordered
 }
 
+/// The order "Sort desktops" gives: numbered desktops by number, then named ones by name, case
+/// aside and numbers by value, then unnamed ones in the order they had.
+pub fn sorted_desktop_ids(desktops: &[Desktop]) -> Vec<String> {
+    let slot = |d: &Desktop| d.shortcut_slot.filter(|s| *s > 0);
+    let mut sorted = ordered_desktops(desktops);
+    sorted.sort_by(|a, b| match (slot(a), slot(b)) {
+        (Some(a), Some(b)) => a.cmp(&b),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => match (a.name.trim(), b.name.trim()) {
+            ("", "") => std::cmp::Ordering::Equal,
+            ("", _) => std::cmp::Ordering::Greater,
+            (_, "") => std::cmp::Ordering::Less,
+            (a, b) => natural(a, b),
+        },
+    });
+    sorted.into_iter().map(|d| d.id.clone()).collect()
+}
+
+/// Compares names as a person reads them: letters without case, and each run of digits by
+/// its value, so "review 2" comes before "Review 10".
+fn natural(a: &str, b: &str) -> std::cmp::Ordering {
+    fn runs(s: &str) -> Vec<(bool, String)> {
+        let mut runs: Vec<(bool, String)> = Vec::new();
+        for c in s.chars() {
+            let digit = c.is_ascii_digit();
+            match runs.last_mut() {
+                Some((d, run)) if *d == digit => run.push(c),
+                _ => runs.push((digit, c.to_string())),
+            }
+        }
+        runs
+    }
+    let key = |(digit, run): &(bool, String)| {
+        if *digit {
+            let value = run.trim_start_matches('0');
+            (0, value.len(), value.to_owned())
+        } else {
+            (1, 0, run.to_lowercase())
+        }
+    };
+    runs(a).iter().map(key).cmp(runs(b).iter().map(key))
+}
+
 /// A desktop's number: its shortcut slot, or after the nine slots in order for the rest.
 pub fn desktop_number(desktop: &Desktop, desktops: &[Desktop]) -> i64 {
     if let Some(slot) = desktop.shortcut_slot.filter(|slot| *slot > 0) {

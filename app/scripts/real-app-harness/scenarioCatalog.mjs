@@ -244,6 +244,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-desktop-order',
+    runnerId: 'NATIVE-DESKTOP-ORDER',
+    label: 'Sort desktops from the native palette orders numbered desktops then names, and its Undo puts back the order before',
+    command: ['node', 'scripts/real-app-harness/scenario-native-desktop-order.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-tile-windows',
     runnerId: 'NATIVE-TILE-WINDOWS',
     label: 'A document tile in the native app pops out into its own window, which hides when the tile comes back and shows again for the next pop-out',

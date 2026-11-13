@@ -2,7 +2,7 @@ use attn_client::Facts;
 use attn_protocol::{
     Desktop, DesktopCloseMessage, DesktopCloseTileMessage, DesktopCreateMessage,
     DesktopMoveLeafMessage, DesktopRemoveLeafMessage, DesktopSetCurrentMessage,
-    DesktopShowLeafMessage, SessionPlacement, SpawnSessionMessage,
+    DesktopSetOrderMessage, DesktopShowLeafMessage, SessionPlacement, SpawnSessionMessage,
 };
 use rune::Tx;
 
@@ -11,6 +11,7 @@ use super::{Visit, arrival, leaf_ids};
 use crate::State;
 use crate::action::Action;
 use crate::requests::Refused;
+use crate::sidebar::model;
 
 /// Runs a desktop or tile action; false when `action` is not one.
 pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
@@ -26,6 +27,10 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         OpenTile { desktop, tile } => show_leaf(state, desktop, tile, tx),
         ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop, tx),
+        SortDesktops { profile } => sort(state, profile, tx),
+        SetDesktopOrder { profile, desktops } => {
+            set_order(state, profile, desktops.clone(), |_, _| {}, tx)
+        }
         DesktopSelect1 | DesktopSelect2 | DesktopSelect3 | DesktopSelect4 | DesktopSelect5
         | DesktopSelect6 | DesktopSelect7 | DesktopSelect8 | DesktopSelect9 => {
             select_slot(state, slot_of(action), tx)
@@ -68,6 +73,57 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         state.window.show_desktop(tx);
     }
     true
+}
+
+/// Puts the profile's desktops in "Sort desktops" order, offering to put back the order they had.
+fn sort(state: &mut State, profile: &str, tx: &mut Tx) {
+    let desktops: Vec<Desktop> = state
+        .facts
+        .desktops
+        .iter()
+        .filter(|d| d.profile_id == profile)
+        .cloned()
+        .collect();
+    let previous: Vec<String> = model::ordered_desktops(&desktops)
+        .into_iter()
+        .map(|d| d.id.clone())
+        .collect();
+    let undo = Action::SetDesktopOrder {
+        profile: profile.to_owned(),
+        desktops: previous,
+    };
+    set_order(
+        state,
+        profile,
+        model::sorted_desktop_ids(&desktops),
+        move |state, tx| {
+            state
+                .window
+                .notify_offering("Desktops sorted".into(), "Undo", undo, tx)
+        },
+        tx,
+    );
+}
+
+fn set_order(
+    state: &mut State,
+    profile: &str,
+    desktop_ids: Vec<String>,
+    done: impl FnOnce(&mut State, &mut Tx) + 'static,
+    tx: &mut Tx,
+) {
+    let profile_id = profile.to_owned();
+    state.act(
+        |request_id| DesktopSetOrderMessage {
+            request_id,
+            profile_id,
+            desktop_ids,
+            ..DesktopSetOrderMessage::new()
+        },
+        Refused::Bare,
+        move |state, _, tx| done(state, tx),
+        tx,
+    );
 }
 
 /// Opens find in the terminal holding the keyboard.

@@ -53,6 +53,10 @@ macro_rules! actions {
             SetSetting { key: String, value: String },
             /// Forget every column width dragged on a desktop.
             ClearDraggedWidths { desktop: String },
+            /// Order a profile's desktops by number, then by name.
+            SortDesktops { profile: String },
+            /// Put a profile's desktops in this order, as Undo after a sort does.
+            SetDesktopOrder { profile: String, desktops: Vec<String> },
         }
 
         impl Action {
@@ -75,6 +79,8 @@ macro_rules! actions {
                     Action::WakeSession { .. } => "session.wake",
                     Action::SetSetting { .. } => "setting.set",
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
+                    Action::SortDesktops { .. } => "desktop.sort",
+                    Action::SetDesktopOrder { .. } => "desktop.setOrder",
                 }
             }
 
@@ -94,6 +100,8 @@ macro_rules! actions {
                     Action::WakeSession { .. } => "Unsnooze an agent",
                     Action::SetSetting { .. } => "Change a setting",
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",
+                    Action::SortDesktops { .. } => "Sort desktops",
+                    Action::SetDesktopOrder { .. } => "Restore an order of desktops",
                 }
             }
 
