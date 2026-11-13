@@ -2,7 +2,7 @@
 //! and what the window does to it.
 
 mod actions;
-mod annotation_popup;
+mod annotating;
 mod divider;
 mod drag;
 mod filter_panel;

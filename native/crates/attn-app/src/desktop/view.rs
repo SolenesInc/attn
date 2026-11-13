@@ -155,6 +155,7 @@ struct HeaderKeys {
     keep: Option<String>,
     pop_out: Option<String>,
     focus: Option<String>,
+    send_annotations: Option<String>,
 }
 
 fn header_keys(state: &State) -> HeaderKeys {
@@ -165,6 +166,7 @@ fn header_keys(state: &State) -> HeaderKeys {
         keep: key_of(&crate::action::Action::SessionCancelCountdown),
         pop_out: key_of(&crate::action::Action::TilePopOut),
         focus: key_of(&crate::action::Action::TerminalToggleMaximize),
+        send_annotations: key_of(&crate::action::Action::TerminalSendAnnotations),
     }
 }
 
@@ -405,10 +407,12 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 None => slot,
             };
             let slot = match cx.terminals.marking(&pane.runtime_id) {
-                Some(marking) => slot.children(super::annotation_popup::layers(
+                Some(marking) => slot.children(super::annotating::layers(
                     &pane.runtime_id,
                     marking,
                     cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default(),
+                    held.then_some(cx.keys.send_annotations.as_deref())
+                        .flatten(),
                     t,
                 )),
                 None => slot,

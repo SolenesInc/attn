@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use attn_protocol::{
-    SessionAnnotation, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage,
-    SessionMessage, SessionMessagesChangedMessage, SessionMessagesGetResultMessage,
+    SessionAnnotation, SessionAnnotationsClearResultMessage, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitResultMessage, SessionMessage,
+    SessionMessagesChangedMessage, SessionMessagesGetResultMessage,
 };
 use attn_testkit::{Answer, Daemon, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -494,5 +495,210 @@ fn a_mark_after_a_character_of_two_utf16_units_quotes_the_words_it_covers() {
         (mark["start"].clone(), mark["end"].clone()),
         (json!(3), json!(20))
     );
+    assert!(world.runtime_is_at_rest());
+}
+
+fn submitted(world: &World) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("session_annotations_submit")
+        .iter()
+        .map(|r| r["text"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn submit_answers(daemon: &Daemon, success: bool, status: &'static str) {
+    daemon.on("session_annotations_submit", move |_| {
+        message(SessionAnnotationsSubmitResultMessage {
+            session_id: "s1".into(),
+            success,
+            status: status.into(),
+            ..SessionAnnotationsSubmitResultMessage::new()
+        })
+    });
+}
+
+fn cleared(world: &World) -> Vec<Value> {
+    world
+        .daemon
+        .sent_of("session_annotations_clear")
+        .iter()
+        .map(|r| r["generation"].clone())
+        .collect()
+}
+
+/// The send key: ⌘Enter on macOS, Ctrl+Shift+Enter elsewhere.
+const SEND: &str = if cfg!(target_os = "macos") {
+    "mod+enter"
+} else {
+    "mod+shift+enter"
+};
+
+#[test]
+fn the_send_key_sends_the_marks_and_the_note_as_one_message_and_clears_the_draft() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    submit_answers(&daemon, true, "delivered");
+    daemon.on("session_annotations_clear", |r| {
+        message(SessionAnnotationsClearResultMessage {
+            session_id: "s1".into(),
+            success: true,
+            generation: r["generation"].as_i64().unwrap(),
+            ..SessionAnnotationsClearResultMessage::new()
+        })
+    });
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.this-is-wrong");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("terminal.r1.annotation.panel"))
+            .is_some()
+    );
+
+    click(&mut world, "terminal.r1.annotation.note.field");
+    world.gesture(|app| app.type_text("Look again"));
+    world.advance(Duration::from_millis(400));
+    assert_eq!(saves(&world).last().unwrap()["note"], "Look again");
+
+    let terminal = cell(&world, 30, 4);
+    world.gesture(|app| app.click_at(terminal));
+    world.gesture(|app| app.press(SEND));
+    assert_eq!(
+        submitted(&world),
+        [payload(
+            &[("cache keeps every", "this-is-wrong", "")],
+            "Look again"
+        )]
+    );
+    let state = annotations(&world);
+    assert_eq!(state["marks"], json!([]));
+    assert_eq!(state["note"], "");
+    assert_eq!(
+        state["outcome"],
+        json!({"kind": "sent", "count": 1, "kept": 0})
+    );
+    assert_eq!(cleared(&world), [json!(3)]);
+    assert_eq!(violet(&world), []);
+
+    world.advance(Duration::from_millis(2200));
+    assert_eq!(annotations(&world)["outcome"], Value::Null);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("terminal.r1.annotation.panel"))
+            .is_none()
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+/// What the app sends for marks of (quote, label, comment) and `note`, as the prompts render it.
+pub(crate) fn payload(marks: &[(&str, &str, &str)], note: &str) -> String {
+    let quoted: Vec<attn_app::annotations::Quoted> = marks
+        .iter()
+        .enumerate()
+        .map(
+            |(i, (quote, label, comment))| attn_app::annotations::Quoted {
+                quote,
+                label,
+                comment,
+                start: i,
+            },
+        )
+        .collect();
+    attn_app::annotations::terminal_payload(&quoted, note).unwrap()
+}
+
+#[test]
+fn a_session_waiting_on_an_approval_keeps_the_marks_and_says_why() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    submit_answers(&daemon, false, "skipped_pending_approval");
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    click(&mut world, "terminal.r1.annotation.send");
+    let state = annotations(&world);
+    assert_eq!(state["outcome"], json!({"kind": "skipped"}));
+    assert_eq!(state["marks"].as_array().unwrap().len(), 1);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_session_that_did_not_take_the_feedback_keeps_the_marks() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    submit_answers(&daemon, true, "error");
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    click(&mut world, "terminal.r1.annotation.send");
+    let state = annotations(&world);
+    assert_eq!(
+        state["outcome"],
+        json!({"kind": "error", "message": "The session did not take the feedback. Nothing was sent."})
+    );
+    assert_eq!(state["marks"].as_array().unwrap().len(), 1);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_mark_changed_while_the_send_was_in_flight_stays_and_is_saved() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    daemon.answer_in_turn("session_annotations_submit", [Answer::Hold]);
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    click(&mut world, "terminal.r1.annotation.send");
+    assert_eq!(annotations(&world)["outcome"], json!({"kind": "sending"}));
+
+    alt_click(&mut world, (10, 0));
+    click(&mut world, "terminal.r1.annotation.label.this-is-wrong");
+    let request = world.daemon.sent_of("session_annotations_submit")[0].clone();
+    world.daemon.reply_to(
+        &request,
+        SessionAnnotationsSubmitResultMessage {
+            session_id: "s1".into(),
+            success: true,
+            status: "delivered".into(),
+            ..SessionAnnotationsSubmitResultMessage::new()
+        },
+    );
+    world.settle();
+    let state = annotations(&world);
+    assert_eq!(
+        state["outcome"],
+        json!({"kind": "sent", "count": 1, "kept": 1})
+    );
+    assert_eq!(state["marks"][0]["label"], "this-is-wrong");
+    assert_eq!(
+        saves(&world).last().unwrap()["annotations"][0]["quick_label_id"],
+        "this-is-wrong"
+    );
+    assert!(world.daemon.sent_of("session_annotations_clear").is_empty());
+    world.advance(Duration::from_millis(2200));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_card_opens_its_mark_to_write_and_its_cross_removes_it() {
+    let mut world = started(agent(&[("m1", MESSAGE)], "ready"));
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    let mark = annotations(&world)["marks"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    click(&mut world, &format!("terminal.r1.annotation.card.{mark}"));
+    assert_eq!(annotations(&world)["popup"]["writing"], true);
+    world.gesture(|app| app.press("Escape"));
+    assert_eq!(annotations(&world)["popup"], Value::Null);
+    assert_eq!(annotations(&world)["marks"].as_array().unwrap().len(), 1);
+
+    click(
+        &mut world,
+        &format!("terminal.r1.annotation.card.{mark}.remove"),
+    );
+    assert_eq!(annotations(&world)["marks"], json!([]));
+    assert_eq!(saves(&world).last().unwrap()["annotations"], json!([]));
     assert!(world.runtime_is_at_rest());
 }

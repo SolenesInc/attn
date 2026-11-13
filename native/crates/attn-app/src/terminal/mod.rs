@@ -21,7 +21,9 @@ mod kitty;
 mod links;
 mod selection;
 
-pub(crate) use annotating::{Anchor, Annotation, Marking, Miss, Notice, Popup, Transcript};
+pub(crate) use annotating::{
+    Anchor, Annotation, Marking, Miss, Notice, Outcome, Popup, Transcript,
+};
 pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
@@ -99,7 +101,7 @@ pub struct Terminals {
     finds: HashMap<String, Finding>,
     images: kitty::Images,
     filters: HashMap<String, Filtering>,
-    /// What a comment box edits once its popup has closed.
+    /// What a comment or note box edits once its popup or panel has closed.
     unshown_comment: rune::TextEdit,
 }
 

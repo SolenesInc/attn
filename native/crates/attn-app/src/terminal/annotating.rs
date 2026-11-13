@@ -120,6 +120,23 @@ pub(crate) struct Popup {
     pub(crate) hint: Option<String>,
     /// The popup's size as last laid out, which places it.
     pub(crate) size: Option<(f32, f32)>,
+    /// Where the user moved the popup to, which it keeps until it closes.
+    pub(crate) moved: Option<(f32, f32)>,
+}
+
+/// How the last send of the marks went, shown in the panel.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Outcome {
+    Sending,
+    /// `count` went to the session; `kept` were made or changed meanwhile and stayed.
+    Sent {
+        count: usize,
+        kept: usize,
+        until: f64,
+    },
+    /// The session waits on an approval, which the sending Enter would answer.
+    Skipped,
+    Failed(String),
 }
 
 /// Why the last ⌥-drag marked nothing, shown where it let go until `until`.
@@ -131,22 +148,29 @@ pub(crate) struct Notice {
 }
 
 /// One terminal's marks as its slot shows them.
+/// A point or size by its bits, which hash.
+type Bits = (u32, u32);
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Shown {
     id: String,
     hovered: bool,
-    notice: Option<(String, (u32, u32))>,
+    notice: Option<(String, Bits)>,
     #[allow(clippy::type_complexity)]
     popup: Option<(
         String,
-        (u32, u32),
+        Bits,
         (bool, bool),
         Option<String>,
-        Option<(u32, u32)>,
+        Option<Bits>,
         (String, usize, usize, bool),
     )>,
     marks: Vec<(String, String, String)>,
-    slot: Option<(u32, u32)>,
+    slot: Option<Bits>,
+    note: (String, usize, usize, bool),
+    outcome: Option<String>,
+    panel: (Option<Bits>, Option<Bits>),
+    moved: Option<Bits>,
 }
 
 struct Cached {
@@ -181,6 +205,16 @@ pub(crate) struct Marking {
     pub(crate) hovered: Option<String>,
     pub(crate) popup: Option<Popup>,
     pub(crate) notice: Option<Notice>,
+    pub(crate) outcome: Option<Outcome>,
+    /// When the note, edited since the last save, is saved: once typing pauses.
+    pub(crate) note_due: Option<f64>,
+    /// Where the user dragged the panel to, in points from the slot's top-left.
+    pub(crate) panel_at: Option<(f32, f32)>,
+    /// The panel's size as last laid out.
+    pub(crate) panel_size: Option<(f32, f32)>,
+    /// A drag moving the panel or the popup: where the box started, and where the pointer
+    /// pressed, in window points.
+    pub(crate) grab: Option<((f32, f32), [f32; 2])>,
 }
 
 impl Marking {
@@ -202,6 +236,11 @@ impl Marking {
             hovered: None,
             popup: None,
             notice: None,
+            outcome: None,
+            note_due: None,
+            panel_at: None,
+            panel_size: None,
+            grab: None,
         }
     }
 
@@ -237,6 +276,14 @@ impl Marking {
                 "comment": p.comment.text,
             })),
             "notice": self.notice.as_ref().map(|n| n.text.clone()),
+            "outcome": self.outcome.as_ref().map(|o| match o {
+                Outcome::Sending => serde_json::json!({"kind": "sending"}),
+                Outcome::Sent { count, kept, .. } => {
+                    serde_json::json!({"kind": "sent", "count": count, "kept": kept})
+                }
+                Outcome::Skipped => serde_json::json!({"kind": "skipped"}),
+                Outcome::Failed(why) => serde_json::json!({"kind": "error", "message": why}),
+            }),
         })
     }
 
@@ -640,6 +687,15 @@ impl Terminals {
                         .map(|a| (a.id.clone(), a.label.clone(), a.comment.clone()))
                         .collect(),
                     slot: term.slot.map(|(size, _)| bits(size)),
+                    note: (
+                        m.note.text.clone(),
+                        m.note.anchor,
+                        m.note.focus,
+                        m.note.focused,
+                    ),
+                    outcome: m.outcome.as_ref().map(|o| format!("{o:?}")),
+                    panel: (m.panel_at.map(bits), m.panel_size.map(bits)),
+                    moved: m.popup.as_ref().and_then(|p| p.moved).map(bits),
                 })
             })
             .collect();
@@ -654,6 +710,37 @@ impl Terminals {
             .filter(|(_, t)| t.marking.as_ref().is_some_and(|m| m.popup.is_some()))
             .map(|(id, _)| id.clone())
             .collect()
+    }
+
+    /// The terminals whose note waits to be saved by `now`, and whether a panel's sent marks
+    /// stopped showing.
+    pub(crate) fn annotations_due(&mut self, now: f64) -> (Vec<String>, bool) {
+        let mut notes = Vec::new();
+        let mut sent = false;
+        for (id, term) in &mut self.panes {
+            let Some(marking) = term.marking.as_mut() else {
+                continue;
+            };
+            if marking.note_due.is_some_and(|due| now >= due) {
+                notes.push(id.clone());
+            }
+            if let Some(Outcome::Sent { until, .. }) = marking.outcome
+                && now >= until
+            {
+                marking.outcome = None;
+                sent = true;
+            }
+        }
+        self.undrawn |= sent;
+        (notes, sent)
+    }
+
+    /// The text terminal `id`'s note edits.
+    pub(crate) fn note(&mut self, id: &str) -> &mut TextEdit {
+        match self.panes.get_mut(id).and_then(|t| t.marking.as_mut()) {
+            Some(marking) => &mut marking.note,
+            None => &mut self.unshown_comment,
+        }
     }
 
     /// Takes down each notice whose time is up: true when one went.

@@ -26,3 +26,6 @@ pub const REFRESH: &str = "\u{f021}";
 pub const CIRCLE: &str = "\u{f111}";
 pub const CIRCLE_OPEN: &str = "\u{f10c}";
 pub const CIRCLE_DOT: &str = "\u{f192}";
+pub const COMMENT: &str = "\u{f075}";
+pub const TRASH: &str = "\u{f1f8}";
+pub const GRABBER: &str = "\u{f4a6}";

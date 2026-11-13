@@ -206,7 +206,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let recounted = state.terminals.drain(tx, &state.daemon);
     let answered = requests::drain(state, tx);
     annotations::draft::follow(state, tx);
-    let expired = annotations::draft::expire(state, now);
+    let expired = annotations::draft::expire(state, now) | annotations::draft::due(state, now, tx);
     let browsed = picker::browse_due(state, tx);
     let launched = picker::follow(state, tx);
     let aged = state.age_wake.is_some_and(|at| now >= at);

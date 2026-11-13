@@ -4,17 +4,24 @@
 
 use attn_client::Connection;
 use attn_protocol::{
+    SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage,
     SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionMessagesGetMessage,
-    SessionMessagesGetResultMessage,
+    SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage,
+    SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage,
+    SessionMessagesGetMessage, SessionMessagesGetResultMessage,
 };
 use rune::{TextEdit, Tx};
 
 use crate::State;
-use crate::terminal::{Anchor, Miss, Notice, Popup, Transcript};
+use crate::terminal::{Anchor, Annotation, Miss, Notice, Outcome, Popup, Transcript};
 
 /// How long a drag that marked nothing says why.
 const NOTICE_SECONDS: f64 = 5.0;
+/// How long typing in the note pauses before the note is saved, as the Tauri panel waits:
+/// measured to clear an ordinary gap between keystrokes, 100 to 250 ms.
+const NOTE_PAUSE: f64 = 0.4;
+/// How long the panel says the marks went before it closes.
+const SENT_SECONDS: f64 = 2.2;
 
 /// Fetches what each drawn agent terminal is missing: its session's messages, or its draft.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
@@ -393,6 +400,14 @@ pub(crate) fn measured(state: &mut State, id: &str, size: (f32, f32)) -> bool {
     popup.size.replace(size) != Some(size)
 }
 
+/// Terminal `id`'s panel was laid out at `size`: true when that moves it.
+pub(crate) fn panel_measured(state: &mut State, id: &str, size: (f32, f32)) -> bool {
+    let Some(marking) = state.terminals.marking_mut(id) else {
+        return false;
+    };
+    marking.panel_size.replace(size) != Some(size)
+}
+
 /// A digit with the label list open picks the label it numbers, 0 the tenth. True when it took
 /// the key.
 pub(crate) fn digit(state: &mut State, digit: u32, tx: &mut Tx) -> bool {
@@ -455,6 +470,288 @@ impl Popup {
             picking: false,
             hint: None,
             size: None,
+            moved: None,
         }
     }
+}
+
+/// The note changed: it is saved once typing pauses.
+pub(crate) fn note_edited(state: &mut State, id: &str, tx: &mut Tx) {
+    let due = tx.clock() + NOTE_PAUSE;
+    if let Some(marking) = state.terminals.marking_mut(id) {
+        marking.note_due = Some(due);
+        tx.wake_at(due);
+    }
+}
+
+/// Saves terminal `id`'s note now when an edit to it is waiting to be saved.
+pub(crate) fn flush_note(state: &mut State, id: &str, tx: &mut Tx) {
+    let waiting = state
+        .terminals
+        .marking_mut(id)
+        .and_then(|m| m.note_due.take())
+        .is_some();
+    if waiting {
+        persist(state, id, tx);
+    }
+}
+
+/// Saves each note whose typing paused, and closes each panel whose sent marks have shown long
+/// enough. True when either happened.
+pub(crate) fn due(state: &mut State, now: f64, tx: &mut Tx) -> bool {
+    let (notes, sent) = state.terminals.annotations_due(now);
+    for id in &notes {
+        flush_note(state, id, tx);
+    }
+    !notes.is_empty() || sent
+}
+
+/// The send key: terminal `id`'s marks go to its session. False when there is nothing to send,
+/// so the key goes on to the terminal.
+pub(crate) fn send_key(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(id) = state.window.keyboard_terminal(&state.facts) else {
+        return false;
+    };
+    let has_marks = state
+        .terminals
+        .marking(&id)
+        .is_some_and(|m| !m.marks.is_empty());
+    if has_marks {
+        send(state, &id, tx);
+    }
+    has_marks
+}
+
+/// Sends terminal `id`'s marks and note to its session as one message, keeping a comment the
+/// popup is writing. Marks made or changed while it is in flight stay.
+pub(crate) fn send(state: &mut State, id: &str, tx: &mut Tx) {
+    let sending_now = state
+        .terminals
+        .marking(id)
+        .is_none_or(|m| m.marks.is_empty() || m.outcome == Some(Outcome::Sending));
+    if sending_now {
+        return;
+    }
+    flush_note(state, id, tx);
+    let marking = state.terminals.marking_mut(id).expect("checked above");
+    if let Some(popup) = marking.popup.take().filter(|p| p.writing) {
+        let comment = popup.comment.text.trim().to_owned();
+        if let Some(mark) = marking.mark_mut(&popup.mark) {
+            mark.comment = comment;
+            if mark.comment.is_empty() && mark.label.is_empty() {
+                marking.remove(&popup.mark);
+            }
+        }
+    }
+    tx.blur();
+    let sending = marking.marks.clone();
+    if sending.is_empty() {
+        persist(state, id, tx);
+        return;
+    }
+    let note = marking.note.text.trim().to_owned();
+    let quoted: Vec<crate::annotations::Quoted> = sending
+        .iter()
+        .map(|m| crate::annotations::Quoted {
+            quote: &m.quote,
+            label: &m.label,
+            comment: &m.comment,
+            start: m.start,
+        })
+        .collect();
+    let text = match crate::annotations::terminal_payload(&quoted, &note) {
+        Ok(text) => text,
+        Err(why) => {
+            marking.outcome = Some(Outcome::Failed(why));
+            return;
+        }
+    };
+    marking.outcome = Some(Outcome::Sending);
+    let session = marking.session.clone();
+    let (id, session_id) = (id.to_owned(), session.clone());
+    state.ask(
+        move |request_id| SessionAnnotationsSubmitMessage {
+            request_id,
+            session_id,
+            text,
+            ..SessionAnnotationsSubmitMessage::new()
+        },
+        move |state, answer, tx| {
+            let result = answer.parse::<SessionAnnotationsSubmitResultMessage>();
+            sent(state, &id, &session, result, &sending, &note, tx);
+        },
+        tx,
+    );
+}
+
+/// The daemon answered a send of `sending` and `note`: what went is taken off, and the panel
+/// says how it went.
+fn sent(
+    state: &mut State,
+    id: &str,
+    session: &str,
+    result: Option<SessionAnnotationsSubmitResultMessage>,
+    sending: &[Annotation],
+    note: &str,
+    tx: &mut Tx,
+) {
+    let outcome = match &result {
+        None => Some(Outcome::Failed("Send failed".into())),
+        Some(r) if !r.success && r.status == "skipped_pending_approval" => Some(Outcome::Skipped),
+        Some(r) if !r.success => Some(Outcome::Failed(
+            r.error
+                .clone()
+                .unwrap_or_else(|| "Session annotation send failed".into()),
+        )),
+        Some(r) if r.status != "delivered" => Some(Outcome::Failed(
+            "The session did not take the feedback. Nothing was sent.".into(),
+        )),
+        Some(_) => None,
+    };
+    let Some(marking) = state
+        .terminals
+        .marking_mut(id)
+        .filter(|m| m.session == session)
+    else {
+        if outcome.is_none() {
+            keep_unsent(state, session, sending, note, tx);
+        }
+        return;
+    };
+    if let Some(outcome) = outcome {
+        marking.outcome = Some(outcome);
+        return;
+    }
+    let delivered = delivered_unchanged(&marking.marks, sending);
+    marking.marks.retain(|m| !delivered.contains(&m.id));
+    if !note.is_empty() && marking.note.text.trim() == note {
+        marking.note = TextEdit::default();
+    }
+    let kept = marking.marks.len();
+    let until = tx.clock() + SENT_SECONDS;
+    marking.outcome = Some(Outcome::Sent {
+        count: sending.len(),
+        kept,
+        until,
+    });
+    tx.wake_at(until);
+    if kept > 0 || !marking.note.text.trim().is_empty() {
+        persist(state, id, tx);
+        return;
+    }
+    marking.generation += 1;
+    let (generation, id) = (marking.generation, id.to_owned());
+    let session_id = session.to_owned();
+    state.ask(
+        move |request_id| SessionAnnotationsClearMessage {
+            request_id,
+            session_id,
+            generation,
+            ..SessionAnnotationsClearMessage::new()
+        },
+        move |state, answer, _| {
+            let Some(cleared) = answer.parse::<SessionAnnotationsClearResultMessage>() else {
+                return;
+            };
+            if let Some(marking) = state.terminals.marking_mut(&id) {
+                marking.generation = marking.generation.max(cleared.generation);
+            }
+        },
+        tx,
+    );
+}
+
+/// The ids of `current` marks that went in `sent` and have not changed since.
+fn delivered_unchanged(current: &[Annotation], sent: &[Annotation]) -> Vec<String> {
+    current
+        .iter()
+        .filter(|m| {
+            sent.iter()
+                .any(|s| s.id == m.id && s.label == m.label && s.comment == m.comment)
+        })
+        .map(|m| m.id.clone())
+        .collect()
+}
+
+/// The terminal that sent `sending` no longer shows its session: the session's stored draft
+/// loses what went, read and saved in the background.
+fn keep_unsent(state: &mut State, session: &str, sending: &[Annotation], note: &str, tx: &mut Tx) {
+    let (sending, note) = (sending.to_vec(), note.to_owned());
+    let (session, session_id) = (session.to_owned(), session.to_owned());
+    state.ask(
+        move |request_id| SessionAnnotationsGetMessage {
+            request_id,
+            session_id,
+            ..SessionAnnotationsGetMessage::new()
+        },
+        move |state, answer, tx| {
+            let Some(stored) = answer
+                .parse::<SessionAnnotationsGetResultMessage>()
+                .filter(|r| r.success)
+            else {
+                return;
+            };
+            let mut marking = crate::terminal::Marking::new(session.clone());
+            let stored_note = stored.note.clone().unwrap_or_default();
+            marking.hydrate(&stored.annotations, &stored_note, stored.generation);
+            let delivered = delivered_unchanged(&marking.marks, &sending);
+            let kept: Vec<_> = marking
+                .marks
+                .iter()
+                .filter(|m| !delivered.contains(&m.id))
+                .map(Annotation::wire)
+                .collect();
+            let note = if !note.is_empty() && stored_note.trim() == note {
+                String::new()
+            } else {
+                stored_note
+            };
+            let save = SessionAnnotationsSaveMessage {
+                session_id: session.clone(),
+                annotations: kept,
+                note: Some(note),
+                generation: stored.generation + 1,
+                ..SessionAnnotationsSaveMessage::new()
+            };
+            state.ask(
+                move |request_id| SessionAnnotationsSaveMessage { request_id, ..save },
+                |_, _, _| {},
+                tx,
+            );
+        },
+        tx,
+    );
+}
+
+/// The panel's card for mark `mark` was pressed: its popup opens, writing.
+pub(crate) fn open_card(state: &mut State, id: &str, mark: &str, at: (f32, f32), tx: &mut Tx) {
+    if holds_writing(state, id, tx) {
+        return;
+    }
+    let Some(comment) = state
+        .terminals
+        .marking(id)
+        .and_then(|m| m.mark(mark))
+        .map(|m| m.comment.clone())
+    else {
+        return;
+    };
+    open_popup(
+        state,
+        id,
+        Popup::new(mark.to_owned(), at, true, &comment),
+        tx,
+    );
+}
+
+/// Takes mark `mark` off from the panel, leaving the keyboard where it is.
+pub(crate) fn remove_card(state: &mut State, id: &str, mark: &str, tx: &mut Tx) {
+    let Some(marking) = state.terminals.marking_mut(id) else {
+        return;
+    };
+    marking.remove(mark);
+    if marking.popup.as_ref().is_some_and(|p| p.mark == mark) {
+        marking.popup = None;
+    }
+    persist(state, id, tx);
 }

@@ -36,13 +36,21 @@ fn drawn_characters(dir: &Path, found: &mut Vec<(char, String)>) {
     }
 }
 
+/// The annotation labels' emoji are the exception: they draw from the system's emoji font, as
+/// the Tauri app's do.
 #[test]
 fn every_character_the_app_draws_is_in_a_font_it_bundles() {
     let fonts: Vec<FontRef> = attn_ui::FONTS
         .iter()
         .map(|data| FontRef::new(data).expect("a bundled font parses"))
         .collect();
-    let covered = |c: char| fonts.iter().any(|font| font.charmap().map(c).is_some());
+    let label_emoji: String = attn_app::annotations::labels()
+        .iter()
+        .map(|label| label.emoji)
+        .collect();
+    let covered = |c: char| {
+        fonts.iter().any(|font| font.charmap().map(c).is_some()) || label_emoji.contains(c)
+    };
     let mut found = Vec::new();
     for crate_dir in ["", "../attn-ui"] {
         let src = Path::new(env!("CARGO_MANIFEST_DIR"))

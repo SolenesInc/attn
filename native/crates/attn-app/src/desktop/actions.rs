@@ -52,6 +52,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         DesktopOverview => super::overview::toggle(state, tx),
         TilePopOut => super::windows::toggle(state, tx),
         TerminalFind => find(state, tx),
+        TerminalSendAnnotations => return crate::annotations::draft::send_key(state, tx),
         _ => return false,
     }
     if goes_to_a_desktop(action) {
