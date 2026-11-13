@@ -360,16 +360,18 @@ fn deleted_copies_are_asked_for_only_while_shown_and_say_who_deleted_them() {
 }
 
 #[test]
-fn the_brackets_walk_the_lists_both_ways_and_land_on_the_rows() {
+fn the_brackets_walk_the_three_lists_both_ways_and_land_on_the_rows() {
     let mut world = start(fixture());
     plain(&mut world, Key::Text("]".into()));
-    assert!(has(&world, "ledger.scope"));
+    assert!(has(&world, "ledger.scope") && !has(&world, "ledger.refresh"));
+    assert_eq!(focused(&world).as_deref(), Some("ledger.list"));
+    plain(&mut world, Key::Text("]".into()));
+    assert!(has(&world, "ledger.refresh"));
     assert_eq!(focused(&world).as_deref(), Some("ledger.list"));
     plain(&mut world, Key::Text("]".into()));
     assert!(has(&world, "ledger.deleted"));
     plain(&mut world, Key::Text("[".into()));
-    assert!(has(&world, "ledger.scope"));
-    plain(&mut world, Key::Text("]".into()));
+    assert!(has(&world, "ledger.refresh"));
     plain(&mut world, Key::Escape);
     open(&mut world);
     assert!(

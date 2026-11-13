@@ -21,6 +21,7 @@ use query::{Filters, ProfileChoice, Scope, Verdict};
 pub(crate) use view::view;
 
 mod conversations;
+mod worktrees;
 
 /// Rows per page, as the Tauri app reads them.
 pub const PAGE: i64 = 50;
@@ -33,15 +34,17 @@ pub(crate) const QUERY: &str = "ledger.query.field";
 pub enum Tab {
     #[default]
     Sessions,
+    Worktrees,
     Conversations,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 2] = [Tab::Sessions, Tab::Conversations];
+    pub const ALL: [Tab; 3] = [Tab::Sessions, Tab::Worktrees, Tab::Conversations];
 
     pub fn label(self) -> &'static str {
         match self {
             Tab::Sessions => "Sessions",
+            Tab::Worktrees => "Worktrees",
             Tab::Conversations => "Conversations",
         }
     }
@@ -51,6 +54,7 @@ impl Tab {
 pub struct Ledger {
     pub tab: Tab,
     pub conversations: conversations::Kept,
+    pub worktrees: worktrees::Worktrees,
     /// What the page shows; the scope and the daemon's filters the query resolved to.
     pub filters: Filters,
     pub query: TextEdit,
@@ -109,6 +113,7 @@ pub enum Verb {
     Focus,
     Reopen(String),
     Seed { id: String, title: String },
+    ShowWorktree,
     Keep(bool),
 }
 
@@ -118,6 +123,7 @@ impl Verb {
             Verb::Focus => "Focus".into(),
             Verb::Reopen(action) => query::action_label(action).into(),
             Verb::Seed { title, .. } => format!("Seed · {title}"),
+            Verb::ShowWorktree => "Show worktree".into(),
             Verb::Keep(true) => "Keep conversation".into(),
             Verb::Keep(false) => "Unkeep".into(),
         }
@@ -132,12 +138,13 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
     if is_open(state) {
         close(state, tx);
     } else {
-        open(state, tx);
+        open(state, Tab::Sessions, tx);
     }
 }
 
-/// Opens the Sessions list on the filters it was last left with, and reads its first page.
-pub(crate) fn open(state: &mut State, tx: &mut Tx) {
+/// Opens the ledger on `tab`, the Sessions list on the filters it was last left with, and reads
+/// what `tab` shows.
+pub(crate) fn open(state: &mut State, tab: Tab, tx: &mut Tx) {
     let filters = Filters::remembered(
         state
             .facts
@@ -158,8 +165,13 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
     let epoch = state.window.ledger.epoch;
     let mut conversations = conversations::Kept::default();
     conversations.epoch = state.window.ledger.conversations.epoch;
+    let mut worktrees = worktrees::Worktrees::default();
+    worktrees.epoch = state.window.ledger.worktrees.epoch;
+    worktrees.log_epoch = state.window.ledger.worktrees.log_epoch;
     state.window.ledger = Ledger {
+        tab,
         conversations,
+        worktrees,
         seen_kept: state.facts.kept_conversations,
         query: TextEdit::new(query::format(&filters, &named_with)),
         filters,
@@ -177,13 +189,35 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
 
 /// Shows `tab` and reads it, with the keyboard on its rows.
 pub(crate) fn show_tab(state: &mut State, tab: Tab, tx: &mut Tx) {
+    leave_for(state, tab, tx);
+    match tab {
+        Tab::Worktrees => worktrees::enter(state, None, tx),
+        _ => read_tab(state, tx),
+    }
+}
+
+fn leave_for(state: &mut State, tab: Tab, tx: &mut Tx) {
     let ledger = &mut state.window.ledger;
     ledger.tab = tab;
     ledger.menu = None;
     ledger.legend = false;
     ledger.conversations.leave();
     tx.focus(LIST, false);
-    read_tab(state, tx);
+}
+
+/// Shows the Worktrees list on the worktree a session ran in.
+fn show_worktree(state: &mut State, path: String, tx: &mut Tx) {
+    leave_for(state, Tab::Worktrees, tx);
+    worktrees::enter(state, Some(path), tx);
+}
+
+/// Shows the Sessions list narrowed to the sessions that ran in `path`.
+fn show_sessions_in(state: &mut State, path: &str, tx: &mut Tx) {
+    show_tab(state, Tab::Sessions, tx);
+    let ledger = &mut state.window.ledger;
+    ledger.query = TextEdit::new(format!("dir:{path}"));
+    ledger.selected = None;
+    query_edited(state, tx);
 }
 
 /// Moves `by` lists along, wrapping at either end.
@@ -199,6 +233,7 @@ pub(crate) fn step_tab(state: &mut State, by: isize, tx: &mut Tx) {
 fn read_tab(state: &mut State, tx: &mut Tx) {
     match state.window.ledger.tab {
         Tab::Sessions => read(state, tx),
+        Tab::Worktrees => worktrees::read(state, tx),
         Tab::Conversations => conversations::read(state, tx),
     }
 }
@@ -207,8 +242,7 @@ pub(crate) fn close(state: &mut State, tx: &mut Tx) {
     if !is_open(state) {
         return;
     }
-    state.window.ledger.epoch += 1;
-    state.window.ledger.conversations.epoch += 1;
+    forget_reads(&mut state.window.ledger);
     state.window.layer = None;
     crate::picker::refocus_inline(state, tx);
 }
@@ -224,8 +258,7 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     let pricing = pricing(state);
     let ledger = &mut state.window.ledger;
     if !connected {
-        ledger.epoch += 1;
-        ledger.conversations.epoch += 1;
+        forget_reads(ledger);
         ledger.loading = false;
         ledger.loading_more = false;
         ledger.seen_closes = state.facts.closes.seq;
@@ -257,8 +290,18 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     ledger.seen_closes = closes.seq;
     if reread {
         read_tab(state, tx);
+    } else if state.window.ledger.tab == Tab::Worktrees {
+        worktrees::follow(state, tx);
     }
     keep_selection(state);
+}
+
+/// Drops every read in flight, so no answer lands on a list that moved on.
+fn forget_reads(ledger: &mut Ledger) {
+    ledger.epoch += 1;
+    ledger.conversations.epoch += 1;
+    ledger.worktrees.epoch += 1;
+    ledger.worktrees.log_epoch += 1;
 }
 
 fn take_close(ledger: &mut Ledger, entry: SessionLedgerEntry, now_ms: i64) {
@@ -614,6 +657,12 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
             title: seed.title.clone(),
         });
     }
+    let directory_missing = ledger
+        .verdict(entry)
+        .is_some_and(|v| v.directory_state == "missing");
+    if entry.host.is_none() && entry.is_worktree.unwrap_or_default() && !directory_missing {
+        verbs.push(Verb::ShowWorktree);
+    }
     if keeps_conversation(entry) {
         verbs.push(Verb::Keep(entry.conversation_pinned_at.is_none()));
     }
@@ -717,6 +766,7 @@ pub(crate) fn run(state: &mut State, id: &str, verb: Verb, tx: &mut Tx) {
             crate::sidebar::open_agent(state, &entry.id, tx);
         }
         Verb::Seed { id, .. } => open_seed(state, id, tx),
+        Verb::ShowWorktree => show_worktree(state, entry.directory, tx),
         Verb::Keep(keep) => keep_conversation(state, entry.id, keep, tx),
         Verb::Reopen(action) => {
             state.window.ledger.keep_notes.remove(&entry.id);

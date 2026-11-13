@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
-    Ask, Desktop, DesktopTileContentMessage, InitialStateMessage, OutpostInfo, Profile, Seed,
-    Session, SessionLedgerEntry,
+    Ask, Desktop, DesktopTileContentMessage, GitOperation, InitialStateMessage, OutpostInfo,
+    Profile, Seed, Session, SessionLedgerEntry, Worktree, WorktreeSweepEntry,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -29,6 +29,9 @@ pub struct Facts {
     /// Rises each time the daemon says attn's kept conversations changed.
     pub kept_conversations: u64,
     pub github: Arc<GitHub>,
+    pub worktrees: Arc<WorktreePushes>,
+    /// The paths git operations run on now, by operation id.
+    pub git_running: Arc<BTreeMap<String, String>>,
 }
 
 /// The GitHub hosts the daemon found signed in, or why it does not look for pull requests.
@@ -36,6 +39,51 @@ pub struct Facts {
 pub struct GitHub {
     pub hosts: Vec<String>,
     pub polling_off_reason: Option<String>,
+}
+
+/// What the daemon pushed about worktrees, numbered in arrival order, so a list read earlier
+/// takes in what changed since.
+#[derive(Clone, Default)]
+pub struct WorktreePushes {
+    /// How many pushes this process has heard of.
+    pub seq: u64,
+    /// Each worktree's latest pushed state, and its push number.
+    pub observed: BTreeMap<String, (u64, Worktree)>,
+    /// The last [`SWEEPS_KEPT`] sweeps, newest last, with their push numbers.
+    pub swept: Vec<(u64, WorktreeSweepEntry)>,
+}
+
+/// One worktree push.
+pub enum WorktreePush<'a> {
+    Observed(&'a Worktree),
+    Swept(&'a WorktreeSweepEntry),
+}
+
+/// As many sweeps as the Tauri app keeps from pushes; a reader that missed more reads again.
+pub const SWEEPS_KEPT: usize = 200;
+
+impl WorktreePushes {
+    /// The pushes after push number `seen`, oldest first, or `None` when some sweep among them
+    /// is no longer kept.
+    pub fn since(&self, seen: u64) -> Option<Vec<WorktreePush<'_>>> {
+        if self.swept.len() == SWEEPS_KEPT && self.swept[0].0 > seen + 1 {
+            return None;
+        }
+        let mut news: Vec<(u64, WorktreePush<'_>)> = self
+            .observed
+            .values()
+            .filter(|(at, _)| *at > seen)
+            .map(|(at, w)| (*at, WorktreePush::Observed(w)))
+            .chain(
+                self.swept
+                    .iter()
+                    .filter(|(at, _)| *at > seen)
+                    .map(|(at, e)| (*at, WorktreePush::Swept(e))),
+            )
+            .collect();
+        news.sort_by_key(|(at, _)| *at);
+        Some(news.into_iter().map(|(_, push)| push).collect())
+    }
 }
 
 /// The sessions the daemon said closed, newest last, as their ledger rows.
@@ -190,7 +238,9 @@ impl Slices {
     pub const CLOSES: Slices = Slices(1 << 9);
     pub const KEPT_CONVERSATIONS: Slices = Slices(1 << 10);
     pub const GITHUB: Slices = Slices(1 << 11);
-    pub const ALL: Slices = Slices((1 << 12) - 1);
+    pub const WORKTREES: Slices = Slices(1 << 12);
+    pub const GIT_OPERATIONS: Slices = Slices(1 << 13);
+    pub const ALL: Slices = Slices((1 << 14) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -321,6 +371,7 @@ impl Store {
                 hosts: state.github_hosts.unwrap_or_default(),
                 polling_off_reason: state.github_polling_off_reason.filter(|r| !r.is_empty()),
             });
+            facts.git_running = Arc::default();
             Slices::ALL
         });
     }
@@ -433,6 +484,48 @@ impl Store {
         self.change(|facts| {
             facts.kept_conversations += 1;
             Slices::KEPT_CONVERSATIONS
+        });
+    }
+
+    pub(crate) fn observe_worktrees(&self, worktrees: Vec<Worktree>) {
+        self.change(|facts| {
+            let pushes = Arc::make_mut(&mut facts.worktrees);
+            for worktree in worktrees {
+                pushes.seq += 1;
+                pushes
+                    .observed
+                    .insert(worktree.path.clone(), (pushes.seq, worktree));
+            }
+            Slices::WORKTREES
+        });
+    }
+
+    pub(crate) fn sweep_worktree(&self, entry: WorktreeSweepEntry) {
+        self.change(|facts| {
+            let pushes = Arc::make_mut(&mut facts.worktrees);
+            pushes.seq += 1;
+            pushes.observed.remove(&entry.path);
+            pushes.swept.push((pushes.seq, entry));
+            let over = pushes.swept.len().saturating_sub(SWEEPS_KEPT);
+            pushes.swept.drain(..over);
+            Slices::WORKTREES
+        });
+    }
+
+    pub(crate) fn git_operation(&self, operation: GitOperation) {
+        self.change(|facts| {
+            let running = Arc::make_mut(&mut facts.git_running);
+            match (operation.status.as_str(), operation.path) {
+                ("running", Some(path)) => {
+                    running.insert(operation.id, path);
+                }
+                _ => {
+                    if running.remove(&operation.id).is_none() {
+                        return Slices::NONE;
+                    }
+                }
+            }
+            Slices::GIT_OPERATIONS
         });
     }
 

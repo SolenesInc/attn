@@ -11,6 +11,7 @@ use attn_testkit::{Daemon, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 
 mod conversations;
+mod worktrees;
 
 use super::queue::ago;
 use super::sidebar::{chord, desktop, pane, session, state};
@@ -221,7 +222,7 @@ pub(super) fn hold(world: &World, cmd: &str) -> Arc<Mutex<Vec<Request>>> {
     held
 }
 
-fn shown_session(world: &World) -> Vec<String> {
+pub(super) fn shown_session(world: &World) -> Vec<String> {
     world
         .daemon
         .sent_of("desktop_show_session")

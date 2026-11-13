@@ -61,6 +61,8 @@ macro_rules! actions {
             CloseDesktop { desktop: String },
             /// Open the asks drawer on an ask, or on the first one.
             ShowAsks { ask: Option<String> },
+            /// Open the ledger on its Worktrees list.
+            OpenWorktrees,
         }
 
         impl Action {
@@ -87,6 +89,7 @@ macro_rules! actions {
                     Action::SetDesktopOrder { .. } => "desktop.setOrder",
                     Action::CloseDesktop { .. } => "desktop.close",
                     Action::ShowAsks { .. } => "asks.show",
+                    Action::OpenWorktrees => "ledger.worktrees",
                 }
             }
 
@@ -110,6 +113,7 @@ macro_rules! actions {
                     Action::SetDesktopOrder { .. } => "Restore an order of desktops",
                     Action::CloseDesktop { .. } => "Close desktop",
                     Action::ShowAsks { .. } => "Open asks",
+                    Action::OpenWorktrees => "Open worktrees",
                 }
             }
 

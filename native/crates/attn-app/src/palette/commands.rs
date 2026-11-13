@@ -208,6 +208,23 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .describe("Every session this machine ran, live and closed, with reopen")
         .shortcut(Some(Action::SessionsOpen)),
     );
+    commands.push(
+        Command::new(
+            "worktrees",
+            "Open worktrees",
+            &[
+                "worktree",
+                "worktrees",
+                "sweep",
+                "branch",
+                "reclaim",
+                "pin",
+                "keep",
+            ],
+            Action::OpenWorktrees,
+        )
+        .describe("Every worktree, what the sweep decided, and why it kept the rest"),
+    );
     commands.push(Command::new(
         "toggle-sidebar",
         if state.window.sidebar_hidden {

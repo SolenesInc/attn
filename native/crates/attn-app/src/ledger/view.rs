@@ -4,7 +4,7 @@ use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
 
 use super::query::{self, Scope, is_closed};
-use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations};
+use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations, worktrees};
 use crate::State;
 use crate::sidebar::model::AgentState;
 
@@ -27,6 +27,16 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                 status(state, session_counts(state, &rows, t), t),
             )
         }
+        Tab::Worktrees => (
+            worktrees::toolbar(state, t),
+            row()
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .child(worktrees::list(state, t))
+                .child(worktrees::inspector(state, t)),
+            status(state, worktrees::status(state, t), t),
+        ),
         Tab::Conversations => {
             let rows = conversations::rows(state);
             let selected = conversations::selected(state, &rows);
@@ -859,8 +869,10 @@ fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 fn tab_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if state.window.ledger.tab == Tab::Conversations {
-        return conversations::panel_key(state, ev, tx);
+    match state.window.ledger.tab {
+        Tab::Conversations => return conversations::panel_key(state, ev, tx),
+        Tab::Worktrees => return worktrees::panel_key(state, ev, tx),
+        Tab::Sessions => {}
     }
     let chosen = {
         let rows = super::rows(state);
@@ -900,7 +912,12 @@ fn tab_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// Escape backs out one layer: the verb menu, then the keys legend, then the list.
 fn escape(state: &mut State, tx: &mut Tx) {
-    if state.window.ledger.tab == Tab::Conversations && conversations::back_out(state) {
+    let backed_out = match state.window.ledger.tab {
+        Tab::Conversations => conversations::back_out(state),
+        Tab::Worktrees => worktrees::back_out(state),
+        Tab::Sessions => false,
+    };
+    if backed_out {
         return;
     }
     let ledger = &mut state.window.ledger;

@@ -5,11 +5,13 @@ use std::time::Duration;
 use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, ClientHelloMessage, CommandErrorMessage,
     GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
-    InitialStateMessage, KittyImageResultMessage, KittyPlacementsMessage, OutpostsUpdatedMessage,
-    PROTOCOL_VERSION, ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage,
-    PtyResizedMessage, RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
+    GitOperationStartedMessage, InitialStateMessage, KittyImageResultMessage,
+    KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
+    RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
     SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
-    SessionsUpdatedMessage, SettingsUpdatedMessage, go_values,
+    SessionsUpdatedMessage, SettingsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
+    go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -536,6 +538,21 @@ impl Task {
             }
             "kept_conversations_changed" => {
                 self.store.kept_conversations_changed();
+                None
+            }
+            "worktree_state_changed" => {
+                let message: WorktreeStateChangedEvent = parse(&header.event, text)?;
+                self.store.observe_worktrees(message.worktrees);
+                None
+            }
+            "worktree_swept" => {
+                let message: WorktreeSweptEvent = parse(&header.event, text)?;
+                self.store.sweep_worktree(message.sweep_entry);
+                None
+            }
+            "git_operation_started" | "git_operation_finished" => {
+                let message: GitOperationStartedMessage = parse(&header.event, text)?;
+                self.store.git_operation(message.operation);
                 None
             }
             "session_closed" => {

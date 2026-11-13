@@ -538,6 +538,22 @@ pub fn relative_stamp(at_ms: i64, now_ms: i64) -> String {
     }
 }
 
+/// How long until `at_ms`, in the fewest characters that still say when.
+pub fn until_stamp(at_ms: i64, now_ms: i64) -> String {
+    let seconds = (at_ms - now_ms + 500).div_euclid(1000);
+    if seconds < 45 {
+        "now".into()
+    } else if seconds < 3600 {
+        format!("{}m", ((seconds as f64 / 60.0).round() as i64).max(1))
+    } else if seconds < DAY_S {
+        format!("{}h", (seconds as f64 / 3600.0).round() as i64)
+    } else if seconds < 30 * DAY_S {
+        format!("{}d", (seconds as f64 / DAY_S as f64).round() as i64)
+    } else {
+        month_day(at_ms)
+    }
+}
+
 fn month_day(at_ms: i64) -> String {
     let t = LocalTime::at(at_ms);
     format!(

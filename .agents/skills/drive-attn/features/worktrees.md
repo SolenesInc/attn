@@ -98,20 +98,28 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) has the new session dialog's worktree chooser: the repository's worktrees, the new worktree form with its generated name, and deleting a worktree from the chooser. The Worktrees list, the ledger and Settings drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) has the new session dialog's worktree chooser: the repository's worktrees, the new worktree form with its generated name, and deleting a worktree from the chooser. It has the ledger's Worktrees list with Active and Removed, the query (`repo:` and words), "refresh", and per row Keep or Unpin, "Sessions here", "Go to <session>" and "Delete…", and a session row's "Show worktree". Settings drives only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 
 - Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
 - Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
 - Make `W` with its repository and `P` as above. The chooser's keys start `new-session.repo.`: `row.<n>` for each destination, `form` for the new worktree form, `name.field` for its branch name, `reroll` for "Pick another name" and `start.default` and `start.current` for where it starts.
+- The Worktrees list keys a row `ledger.row.<path>` with the path written out, its words `ledger.row.<path>.meta`, its first verb `ledger.row.<path>.verb` and its menu items `ledger.row.<path>.menu.<n>`, counting from 0. A repository's heading is `ledger.group.<repository>`, and a removal's row is `ledger.row.<entry id>`.
 - The chords below are macOS's. On Linux, press the ones **Linux** under Contexts names.
 
 Steps:
 
 - **A new worktree from the new session dialog.** Press `bridge key '{"chord":"mod+n"}'`, type `$W/repo` written out with `bridge type` and press `enter`. `bridge wait '{"target":{"key":"new-session.repo.form"}}'` answers, and `bridge tree` shows `new-session.repo.name.field` holding an adjective-animal name. Run `bridge press '{"target":{"key":"new-session.repo.reroll"}}'`, then press `ctrl+r`: each gives a new name. The tree marks `new-session.repo.start.default` `checked`. Press `enter`: after a few seconds a session starts in a new worktree on that branch, `./attn worktree list --repo $W/repo` lists it, and `wsctl list` shows the session in it.
 - **Open an existing worktree.** Press `mod+n`, type `$W/repo` and press `enter`, then `down` past `new-session.repo.row.0`, the main checkout, until the tree marks the new worktree's `new-session.repo.row.<n>` `selected`, and press `enter`: a session starts in that worktree, and `./attn worktree list --repo $W/repo` lists no new one.
-- **Proof.** In `$P`, keep `bridge tree` with the form open and after each new name, and `./attn worktree list --repo $W/repo --json` after each start. Capture `bridge shot '{"path":"<P>/native-worktree-form.png"}'` with the form open.
+- **Open the list from the palette.** Press `mod+shift+k`, type `open worktrees` and press `enter`. `bridge wait '{"target":{"key":"ledger.row.<new>"}}'` answers, where `<new>` is the worktree the first step made. Its row is `selected` under `ledger.group.<W>/repo`, focus is on `ledger.list`, and `ledger.row.<new>.meta` holds its branch, `1 live session` and the sweep's word.
+- **Keep from the app.** Press `enter`: `ledger.row.<new>.verb` reads `Unpin`, the meta holds `kept`, and `./attn worktree list --repo $W/repo --json` shows `"pinned": true` for it. Press `enter` again: the verb reads `Keep`.
+- **Sessions here and Go to.** Press `.`: `ledger.row.<new>.menu.1` reads `Sessions here` and `menu.2` `Go to <session>`. Press `2`: the ledger shows Sessions, `ledger.query.field` holds `dir:<new>`, and the only row is the session. Press `]`, then `3` on the worktree's row: the ledger closes and `bridge state '{"of":"window"}'` shows the session on screen.
+- **Show a session's worktree.** Press `mod+shift+l`, then `.` on the session's row: one menu item reads `Show worktree`. Press its digit, counting from 1: the ledger shows Worktrees with `ledger.row.<new>` `selected`.
+- **Refresh from the app.** Press `ledger.refresh`: it reads `refresh · asked now`.
+- **Delete from the app.** Run `git -C $W/repo worktree add -q -b drive-gone $W/wt-gone main` and `echo wip > $W/wt-gone/wip.txt`, then `./attn worktree refresh` until `./attn worktree list --repo $W/repo` shows `drive-gone` with SWEEP `kept_dirty`. The row `ledger.row.<W>/wt-gone` appears on its own, its meta holding `dirty 1`. Press it, then its last verb's digit, `Delete…`: `ledger.row.<W>/wt-gone.verb` reads `Delete, losing changes`. Press `enter`: the row leaves the list, the folder is gone, and `./attn worktree log --repo $W/repo` lists it with ACTION `deleted`.
+- **The removal log.** Press `ledger.scope.removed`: a row's meta reads `drive-gone  ·  deleted  ·  at your request`, and `ledger.counts` counts it among `removed`. Press `ledger.scope.active` to go back.
+- **Proof.** In `$P`, keep `bridge tree` with the form open and after each new name, and `./attn worktree list --repo $W/repo --json` after each start. Keep `bridge tree` after each step of the Worktrees list. Capture `bridge shot '{"path":"<P>/native-worktree-form.png"}'` with the form open, and `bridge shot '{"path":"<P>/native-worktrees.png"}'` with the Worktrees list showing both worktrees, with `<P>` written out.
 
 ## Contexts
 
@@ -125,7 +133,7 @@ Steps:
 
 ## Tests
 
-- Wire: `internal/daemon/worktree_*_wire_test.go`, `internal/daemon/worktree_wire_test.go`, `internal/daemon/plugin_worktree_wire_test.go`, `internal/daemon/delegate_checkout_wire_test.go`.
+- Wire: `internal/daemon/worktree_*_wire_test.go`, `internal/daemon/worktree_wire_test.go`, `internal/daemon/plugin_worktree_wire_test.go`, `internal/daemon/delegate_checkout_wire_test.go`, `native/crates/attn-app/tests/wire/ledger/worktrees.rs` (the native app).
 - Stack: `cmd/attnd/session_reopen_outpost_stack_test.go`.
 - Scenario: `worktree-surface`.
 - Kernel: `internal/git/worktree_test.go`.
