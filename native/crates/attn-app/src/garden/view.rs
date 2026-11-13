@@ -1146,7 +1146,15 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         .padding(space::S3)
         .gap(space::S2)
         .child(head)
-        .child(plan(here, t));
+        .child(plan(
+            here,
+            if stacked {
+                "garden.viewport"
+            } else {
+                "garden.reader"
+            },
+            t,
+        ));
     let checks: Vec<_> = here
         .checks
         .iter()
@@ -1236,7 +1244,8 @@ fn open_as_tile(id: &str, t: &Tokens) -> El {
     )
 }
 
-fn plan(here: &Seed, t: &Tokens) -> El {
+/// The seed's body, read where `view` scrolls it.
+fn plan(here: &Seed, view: &'static str, t: &Tokens) -> El {
     if here.body.trim().is_empty() {
         return note(
             "garden.body.empty",
@@ -1247,18 +1256,24 @@ fn plan(here: &Seed, t: &Tokens) -> El {
     let body = here.body.clone();
     memo(
         format!("garden.plan.{}", here.id),
-        (body.clone(), *t),
+        (body.clone(), view, *t),
         || {
             col()
                 .key("garden.plan")
                 .role("document")
                 .label("Plan")
                 .w_full()
-                .child(
-                    rune_kit::Markdown::new(body)
-                        .selectable(true)
-                        .build(&attn_ui::kit(t)),
-                )
+                .child(crate::markdown::reader(
+                    &body,
+                    crate::markdown::Document {
+                        path: String::new(),
+                        session: None,
+                        outpost: None,
+                        view: view.to_owned(),
+                    },
+                    std::rc::Rc::default(),
+                    t,
+                ))
         },
     )
 }
