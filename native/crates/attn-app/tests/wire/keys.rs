@@ -173,15 +173,18 @@ fn every_shortcut_runs_its_own_action(category: Category) {
             &mut with_terminal
         };
         let before = shortcut_records(world).len();
+        let typed_before = typed(world).len();
 
-        press(world, action);
+        let left = world.press_menu_key(chord(action));
 
         let recorded = shortcut_records(world)[before..].to_vec();
+        let reached_terminal = typed(world).len() > typed_before;
         let pending = format!("Not in the native app yet: {}", action.label());
         match (recorded.as_slice(), notice(world)) {
             ([id], said) => {
                 assert_eq!(id, action.id());
                 assert_ne!(said.as_ref(), Some(&pending), "{}", action.id());
+                assert!(!reached_terminal, "{} reached a terminal", action.id());
                 if *action != Action::AppQuit {
                     press(world, action);
                 }
@@ -198,17 +201,13 @@ fn every_shortcut_runs_its_own_action(category: Category) {
                 }
                 world.advance(Duration::from_secs(6));
             }
-            ([], Some(text)) => {
-                assert_eq!(text, pending, "{}", action.id());
-                world.advance(Duration::from_secs(6));
-            }
+            ([], None) => assert!(
+                left || !needs_no_terminal(action),
+                "{} ran nothing yet kept its keys from the menu bar",
+                action.id()
+            ),
             other => panic!("{} ran {other:?}", action.id()),
         }
-        assert!(
-            typed(world).is_empty(),
-            "{} reached a terminal",
-            action.id()
-        );
         assert_eq!(
             world.screen().find(Target::role("dialog")),
             None,
@@ -733,4 +732,18 @@ fn the_close_keys_close_nothing_behind_home_an_overlay_or_a_dialog_and_never_rea
             assert!(world.daemon.sent_of(cmd).is_empty(), "{front}: sent {cmd}");
         }
     }
+}
+
+#[test]
+fn a_bound_chord_whose_action_does_not_run_goes_on_as_a_key_nothing_binds() {
+    let mut world =
+        World::start(Daemon::scripted().state(state(vec![], &[("asks_enabled", "false")])));
+
+    assert!(
+        world.press_menu_key(chord(&Action::DockAsks)),
+        "the asks key with no asks kept its keys"
+    );
+    assert_eq!(notice(&world), None);
+    assert!(world.screen().find(Target::key("drawer.asks")).is_none());
+    rest(&mut world);
 }

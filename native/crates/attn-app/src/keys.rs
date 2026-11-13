@@ -5,7 +5,7 @@ use attn_protocol::RecordAnalyticsMessage;
 
 use crate::State;
 use crate::action::Action;
-use crate::dispatch::dispatch;
+use crate::dispatch::{Outcome, run};
 use crate::keymap::{Focus, Press};
 use crate::shell::{LEADER_TIMEOUT, Leader};
 
@@ -86,9 +86,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => {
-            run_shortcut(state, action, tx);
-            true
+            run_shortcut(state, action, tx) || send_to_terminal(state, terminal, ev, tx)
         }
+        Press::Unbound => send_to_terminal(state, terminal, ev, tx),
         Press::Leader { chord, sequences } => {
             let until = tx.clock() + LEADER_TIMEOUT;
             state.window.leader = Some(Leader {
@@ -99,7 +99,6 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             tx.wake_at(until);
             true
         }
-        Press::Unbound => send_to_terminal(state, terminal, ev, tx),
     }
 }
 
@@ -280,10 +279,7 @@ pub(crate) fn shortcut_before_field(state: &mut State, ev: &KeyEvent, tx: &mut T
         terminal: false,
     };
     match state.keymap.press(ev, tx, focus) {
-        Press::Action(action) => {
-            run_shortcut(state, action, tx);
-            true
-        }
+        Press::Action(action) => run_shortcut(state, action, tx),
         Press::Leader { .. } | Press::Unbound => false,
     }
 }
@@ -309,10 +305,13 @@ fn in_field(tx: &Tx) -> bool {
         .is_some_and(|key| key.ends_with(FIELD_KEY_SUFFIX))
 }
 
-fn run_shortcut(state: &mut State, action: Action, tx: &mut Tx) {
-    if dispatch(state, action.clone(), tx) {
+/// Whether the shortcut's action ran.
+fn run_shortcut(state: &mut State, action: Action, tx: &mut Tx) -> bool {
+    let ran = run(state, action.clone(), tx) == Outcome::Ran;
+    if ran {
         record_shortcut(state, &action);
     }
+    ran
 }
 
 fn record_shortcut(state: &State, action: &Action) {
