@@ -214,6 +214,7 @@ export function useSessionControls({
   };
   return {
     agent,
+    labelForAgent: (candidate: SessionAgent) => settings[`${candidate}_display_name`]?.trim() || pickerAgentLabel(candidate),
     yoloMode,
     yoloSupported,
     effectiveAgentAvailability,
@@ -244,6 +245,7 @@ export function SessionControls({
 }) {
   const {
     agent,
+    labelForAgent,
     yoloMode,
     yoloSupported,
     effectiveAgentAvailability,
@@ -322,7 +324,7 @@ export function SessionControls({
                     ? String(shortcutNumber)
                     : null;
               const shortcut = key && (compact ? key : keyCombo('alt', key));
-              const label = pickerAgentLabel(candidate);
+              const label = labelForAgent(candidate);
               const absent = missing?.harnesses.has(candidate) && missing.machine;
               const checking = availability === 'checking' && !targetIsOutpost && !absent;
               return (

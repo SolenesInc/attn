@@ -312,7 +312,8 @@ func (p *plugDriver) connect() error {
 	}
 	var registered okResult
 	err = p.daemon.call(context.Background(), "driver.register", map[string]any{
-		"agent": plugAgentName(),
+		"agent":        plugAgentName(),
+		"display_name": os.Getenv("ATTN_FAKE_PLUG_DISPLAY_NAME"),
 		"capabilities": withPlugCapabilityOverrides(map[string]bool{
 			"resume":              p.resume,
 			"resume_availability": true,

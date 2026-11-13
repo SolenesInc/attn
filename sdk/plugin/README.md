@@ -40,8 +40,9 @@ await client.connect();
 ```
 
 `client.driver` is the one registration call; a client registers one harness.
-The ID is lowercase letters, numbers, hyphens and underscores. The harness shows
-in attn's picker once `connect()` succeeds.
+The ID is lowercase letters, numbers, hyphens and underscores. Set optional
+`displayName` to the name people should see while keeping the stored ID stable.
+The harness shows in attn's picker once `connect()` succeeds.
 
 The handlers you pass decide what attn offers. The SDK registers exactly the
 capabilities the handlers and promises imply, and attn never calls a handler

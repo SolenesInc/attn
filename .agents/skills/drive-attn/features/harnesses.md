@@ -14,7 +14,7 @@ harness's logo.
 - `harness-models`: the models each harness offers, and the light, standard and deep tiers mapped to them.
 - `execution-targets`: where a Sigma conversation runs its tools, `local` or the folder's DevVM VM, chosen at launch and kept through resume. An unavailable target ends the view with its reason and never falls back to local.
 - `plugins`: install a plugin from a folder or a Git repository, link a folder while developing one, set a plugin's priority, uninstall.
-- `plugin-driver`: a plugin's driver starts its harness's agents and reports what they do. A run keeps its terminal or direct input route across disconnects and restarts. Capable drivers receive attributed input, accept text during approval without answering it, and compact before closing.
+- `plugin-driver`: a plugin's driver starts its harness's agents and reports what they do. A driver may declare a display name while keeping its stored harness ID. A run keeps its terminal or direct input route across disconnects and restarts. Capable drivers receive attributed input, accept text during approval without answering it, and compact before closing.
 - `plugin-server`: an installed plugin declares a shared app-server, prepares native views and exposes models and optional targets. Open conversations retain direct input and ownership without a view.
 - `plugin-authoring`: an author outside the checkout installs `@victorarias/attn-plugin`, copies `examples/plugins/sample-harness`, changes its harness ID and installs it with `attn plugin install --path`. The ID appears in the picker and launches the harness. A capability the author leaves out is unavailable.
 - `harness-logos`: the Claude or Codex mark beside each agent in the sidebar, or a state dot without it.

@@ -26,11 +26,13 @@ const pluginResumeAvailabilityTimeout = 10 * time.Second
 type pluginDriverRegistration struct {
 	PluginName   string
 	Agent        string
+	DisplayName  string
 	Capabilities map[string]bool
 }
 
 type pluginDriverRegisterParams struct {
 	Agent        string                   `json:"agent"`
+	DisplayName  string                   `json:"display_name,omitempty"`
 	Capabilities map[string]bool          `json:"capabilities,omitempty"`
 	Server       *pluginServerDeclaration `json:"server,omitempty"`
 }
@@ -227,10 +229,18 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 		PluginName:   plugin.name,
 		Agent:        agent,
 		Capabilities: capabilities,
+		DisplayName:  strings.TrimSpace(params.DisplayName),
 	}
 	close(r.driverRegistered)
 	r.driverRegistered = make(chan struct{})
 	return nil
+}
+
+func (r pluginDriverRegistration) displayName() string {
+	if r.DisplayName != "" {
+		return r.DisplayName
+	}
+	return r.Agent
 }
 
 func pluginDriverRoute(reg pluginDriverRegistration) string {

@@ -263,6 +263,7 @@ export class AttnPluginClient {
     try {
       return await this.request<RegisterResult>("driver.register", {
         agent: definition.id,
+        display_name: definition.displayName,
         capabilities: driverCapabilities(definition),
         server: serverRegistration(definition.server),
       });

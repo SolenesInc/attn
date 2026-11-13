@@ -113,7 +113,13 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
     let options = listed(&agents, &launching.catalog)
         .into_iter()
         .map(|agent| {
-            let label = agents::label(&agent);
+            let label = state
+                .facts
+                .settings
+                .get(&format!("{agent}_display_name"))
+                .filter(|name| !name.trim().is_empty())
+                .cloned()
+                .unwrap_or_else(|| agents::label(&agent));
             let availability = agents.of(&agent);
             let selectable = availability != agents::Availability::Unavailable;
             let keys = if !selectable {

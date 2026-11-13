@@ -47,6 +47,7 @@ describe("AttnPluginClient driver", () => {
     const client = connectable(daemon);
     client.driver({
       ...baseDriver,
+      displayName: "Example Agent",
       resume: () => ({ argv: ["sample"] }),
       resumeAvailable: () => [],
       models: () => ({ models: [] }),
@@ -61,6 +62,7 @@ describe("AttnPluginClient driver", () => {
     const register = daemon.requests.find((request) => request.method === "driver.register");
     expect(register?.params).toEqual({
       agent: "sample",
+      display_name: "Example Agent",
       capabilities: {
         resume: true,
         resume_availability: true,

@@ -186,6 +186,7 @@ export type DriverPromises = {
 export type DriverDefinition = DriverHandlers & DriverPromises & {
   /** Stable harness ID: lowercase letters, numbers, hyphens and underscores, starting with a letter or number. */
   id: string;
+  displayName?: string;
   server?: ServerBinding;
 };
 

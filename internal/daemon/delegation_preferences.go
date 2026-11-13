@@ -38,7 +38,7 @@ func (d *Daemon) delegationHarnesses() []protocol.Harness {
 			continue
 		}
 		health, _, _ := plugin.healthSnapshot()
-		result = append(result, protocol.Harness{ID: driver.Agent, Name: driver.Agent, Available: health != agentdriver.HealthUnhealthy, ModelPin: driver.Capabilities["model_pin"], EffortPin: driver.Capabilities["effort_pin"], Discovery: driver.Capabilities["model_discovery"] || driver.Capabilities["server_binding"]})
+		result = append(result, protocol.Harness{ID: driver.Agent, Name: driver.displayName(), Available: health != agentdriver.HealthUnhealthy, ModelPin: driver.Capabilities["model_pin"], EffortPin: driver.Capabilities["effort_pin"], Discovery: driver.Capabilities["model_discovery"] || driver.Capabilities["server_binding"]})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result

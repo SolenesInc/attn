@@ -281,7 +281,7 @@ Plugin to Attn, once per connection, in this order:
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"hello","params":{"name":"my-harness","version":"0.1.0","attn_api_version":7,"generation":1}}
-{"jsonrpc":"2.0","id":2,"method":"driver.register","params":{"agent":"my-agent","capabilities":{"resume":true,"message_delivery":true,"attributed_input":true}}}
+{"jsonrpc":"2.0","id":2,"method":"driver.register","params":{"agent":"my-agent","display_name":"My Agent","capabilities":{"resume":true,"message_delivery":true,"attributed_input":true}}}
 ```
 
 `hello` returns `{"ok":true,"active_runs":[{"session_id":"…","run_id":"…","metadata":…, "seq":7}]}`.

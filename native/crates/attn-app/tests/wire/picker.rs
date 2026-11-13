@@ -694,6 +694,21 @@ fn offers_the_agents_the_daemon_advertises_and_falls_back_from_a_missing_one() {
 }
 
 #[test]
+fn a_plugin_display_name_is_shown_on_its_stored_harness_control() {
+    let mut world = busy_desktop_with(
+        &[],
+        &[
+            ("snipe_available", "true"),
+            ("snipe_display_name", "Xirp Agent"),
+        ],
+    );
+    open_dialog(&mut world);
+    assert!(agent_names(&world).contains(&"Xirp Agent".into()));
+    let _ = world.screen().get(Target::key("new-session.agent.snipe"));
+    rest(&mut world);
+}
+
+#[test]
 fn a_saved_agent_that_is_missing_gives_way_to_the_first_one_there_or_terminal_when_none_is() {
     let mut world = busy_desktop_with(
         &[],

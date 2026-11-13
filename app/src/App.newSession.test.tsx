@@ -145,6 +145,20 @@ describe('App new session', () => {
       expect(choices().getByRole('radio', { name: /^Codex/ })).toHaveAttribute('aria-checked', 'true');
     });
 
+    it('shows a declared plugin name while keeping its stored harness ID', async () => {
+      const { daemon } = await openPicker({}, { settings: { snipe_available: 'true', snipe_display_name: 'Xirp Agent' } }, [
+        ...harnesses,
+      ]);
+      const choice = screen.getByRole('radio', { name: /^Xirp Agent/ });
+      await gesture(daemon, () => fireEvent.click(choice));
+      expect(daemon.sentOf('set_setting').some(request => request.key === 'new_session_agent' && request.value === 'snipe')).toBe(true);
+    });
+
+    it('shows a declared plugin name in Settings even without delegation support', async () => {
+      await openSection('agents', { settings: { snipe_available: 'true', snipe_display_name: 'Xirp Agent' } });
+      expect(settingsAgents().some(agent => agent.name === 'Xirp Agent')).toBe(true);
+    });
+
     it('lists the preferred agent first in Settings, with what each agent supports', async () => {
       await openSection('agents', {
         settings: {
