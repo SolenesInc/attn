@@ -1,3 +1,4 @@
+mod board;
 pub(crate) mod model;
 pub(crate) mod search;
 mod view;
@@ -50,6 +51,7 @@ pub(crate) struct Garden {
     /// The folded trail is open.
     pub(crate) trail_open: bool,
     pub(crate) reading: Reading,
+    pub(crate) board_walk: board::Board,
 }
 
 /// The opened seed's document as the daemon last answered it.
@@ -94,9 +96,21 @@ pub(crate) fn shows_board(state: &State) -> bool {
             .unwrap_or_else(|| crate::frame::pref_string(VIEW_PREF).as_deref() == Some("board"))
 }
 
-pub(crate) fn choose_board(state: &mut State, board: bool) {
+pub(crate) fn choose_board(state: &mut State, board: bool, tx: &mut Tx) {
     state.window.garden.board = Some(board);
     crate::frame::set_pref_string(VIEW_PREF, if board { "board" } else { "list" });
+    focus_frame(state, tx);
+}
+
+fn focus_frame(state: &State, tx: &mut Tx) {
+    tx.focus(
+        if shows_board(state) {
+            board::BOARD
+        } else {
+            BODY
+        },
+        false,
+    );
 }
 
 fn show(state: &mut State, frame: Mode, tx: &mut Tx) {
@@ -112,7 +126,7 @@ fn show(state: &mut State, frame: Mode, tx: &mut Tx) {
         window.drawer = Some(Drawer::Garden);
     }
     if was != frame {
-        tx.focus(BODY, false);
+        focus_frame(state, tx);
     }
     follow(state, tx);
 }

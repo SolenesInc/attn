@@ -258,10 +258,15 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
 
 /// The garden holding the window, over everything, below the title bar.
 pub(crate) fn frame_layer(state: &State, t: &Tokens) -> Option<El> {
-    if super::mode(state) != Mode::Full || super::shows_board(state) {
+    if super::mode(state) != Mode::Full {
         return None;
     }
-    Some(full_frame(state, t, body(state, t)))
+    let content = if super::shows_board(state) {
+        super::board::view(state, t)
+    } else {
+        body(state, t)
+    };
+    Some(full_frame(state, t, content))
 }
 
 pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {
@@ -321,7 +326,7 @@ fn body(state: &State, t: &Tokens) -> El {
         .child(content)
 }
 
-fn button(key: String, label: impl Into<String>, t: &Tokens) -> El {
+pub(super) fn button(key: String, label: impl Into<String>, t: &Tokens) -> El {
     let label = label.into();
     row()
         .key(key)
@@ -397,13 +402,13 @@ fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
     )
 }
 
-fn view_switch(state: &State, t: &Tokens) -> El {
+pub(super) fn view_switch(state: &State, t: &Tokens) -> El {
     let board = super::shows_board(state);
     let choice = |name: &'static str, on: bool, pick: bool| {
         button(format!("garden.view.{name}"), name, t)
             .a11y_value(if on { "pressed" } else { "" })
             .fill(if on { t.bg_selected } else { t.bg_panel })
-            .on_press(move |state: &mut State| super::choose_board(state, pick))
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::choose_board(state, pick, tx))
     };
     row()
         .key("garden.view")

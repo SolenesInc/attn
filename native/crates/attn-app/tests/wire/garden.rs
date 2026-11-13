@@ -10,6 +10,8 @@ use attn_testkit::{Daemon, Node, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 use serde_json::Value;
 
+mod board;
+
 const PROFILE: &str = "work";
 
 pub(super) fn seed(id: &str, title: &str) -> Seed {
