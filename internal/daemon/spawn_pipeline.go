@@ -726,6 +726,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 	if req.hasPluginDriver {
 		runID := uuid.NewString()
 		params := pluginDriverSpawnParams{
+			Executable:      opts.Executable,
 			Agent:           req.agent,
 			TerminalID:      terminal,
 			RunID:           runID,

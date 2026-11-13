@@ -30,18 +30,7 @@ func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
 	return rest[:i], rest[i+1:], true
 }
 
-const (
-	NisseConversationPrefix = "nisse:"
-	SigmaConversationPrefix = "sigma:"
-)
-
-func NisseConversationTerminal(conversation string) TerminalID {
-	return conversationTerminal(NisseConversationPrefix, conversation)
-}
-
-func ParseNisseConversationTerminal(t TerminalID) (conversation string, ok bool) {
-	return parseConversationTerminal(NisseConversationPrefix, t)
-}
+const SigmaConversationPrefix = "sigma:"
 
 func SigmaConversationTerminal(conversation string) TerminalID {
 	return conversationTerminal(SigmaConversationPrefix, conversation)

@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -68,9 +69,9 @@ func lostRuntimeAgentAtRest(s *testworld.Stack, app *testworld.Peer, session str
 	return run
 }
 
-func TestANisseSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *testing.T) {
+func TestAnAppServerSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *testing.T) {
 	t.Parallel()
-	s, app, session, server, conversation := nisseAtWorkApartFromItsServer(t)
+	s, app, session, server, conversation := appServerAtWorkApartFromItsServer(t)
 	server.AskApproval(conversation)
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
 
@@ -83,7 +84,7 @@ func TestANisseSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *testin
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
 	if servers := s.AppServers(fakeagent.Nisse); servers != 1 {
-		t.Errorf("Nisse servers launched = %d, want the one still waiting on the approval", servers)
+		t.Errorf("AppServer servers launched = %d, want the one still waiting on the approval", servers)
 	}
 
 	mark = len(app.Log())
@@ -93,9 +94,9 @@ func TestANisseSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *testin
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
 }
 
-func TestANisseSessionAtRestComesBackAtRestAfterItsTUIRuntimeDies(t *testing.T) {
+func TestAnAppServerSessionAtRestComesBackAtRestAfterItsTUIRuntimeDies(t *testing.T) {
 	t.Parallel()
-	s, app, session, server, conversation := nisseAtWorkApartFromItsServer(t)
+	s, app, session, server, conversation := appServerAtWorkApartFromItsServer(t)
 	server.Reply(conversation, "Renamed. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 
@@ -115,9 +116,9 @@ func TestANisseSessionAtRestComesBackAtRestAfterItsTUIRuntimeDies(t *testing.T) 
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 }
 
-func TestANisseSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *testing.T) {
+func TestAnAppServerSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *testing.T) {
 	t.Parallel()
-	s, app, session, server, conversation := nisseAtWorkApartFromItsServer(t)
+	s, app, session, server, conversation := appServerAtWorkApartFromItsServer(t)
 	server.Reply(conversation, "By date or by customer? <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
 
@@ -134,16 +135,16 @@ func TestANisseSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *testing.T
 	}
 }
 
-func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.AppServer, string) {
+func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.AppServer, string) {
 	t.Helper()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Nisse), testworld.OnPTYBackend(testworld.SharedHostPTY))
 	s.Start()
 	app := s.App()
-	setSetting(t, app, "nisse_enabled", "true")
+	startLastRunTestDriver(t, s, app)
 	setSetting(t, app, "pty_shared_host_enabled", "false")
-	s.Spawn(app, fakeagent.Nisse, s.Path("server-on-a-worker"))
+	s.Spawn(app, fakeagent.Harness(serverPluginAgent), s.Path("server-on-a-worker"))
 	s.EnableSharedHost(app)
-	session := s.Spawn(app, fakeagent.Nisse, s.Path("shop"))
+	session := s.Spawn(app, fakeagent.Harness(serverPluginAgent), s.Path("shop"))
 	tui := s.Launched(session)
 	server := s.AppServer(fakeagent.Nisse)
 	conversation := tui.ConversationID
@@ -151,4 +152,45 @@ func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.P
 	tui.Prompted()
 	server.Prompted(conversation)
 	return s, app, session, server, conversation
+}
+
+func startLastRunTestDriver(t *testing.T, s *testworld.Stack, app *testworld.Peer) {
+	t.Helper()
+	w := &world{World: s.World}
+	declaration := map[string]any{
+		"protocol": "attn-app-server-v1", "executable": filepath.Join(s.Dir, "bin", "nisse"),
+		"serve_args": []string{"serve"}, "home_env": "NISSE_HOME", "default_home": ".nisse", "socket_name": "nisse.sock",
+		"initialize": map[string]any{"protocol": map[string]int{"min": 7}}, "caller_conversation_env": "NISSE_ROOT_CONVERSATION",
+	}
+	declaration["recovery"] = "last-run"
+	declaration["on_close"] = "interrupt"
+	driver := registerServerDriver(t, w, "last-run-server", declaration)
+	driver.mu.Lock()
+	driver.holdLaunch = false
+	driver.serverExecutable = filepath.Join(s.Dir, "bin", "nisse")
+	driver.mu.Unlock()
+	awaitDriverAvailable(app, serverPluginAgent)
+}
+
+func TestAnAppServerSessionSurvivesAStartupWithoutItsPluginOrViewRuntime(t *testing.T) {
+	s, app, session, server, conversation := appServerAtWorkApartFromItsServer(t)
+	before := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	terminal := app.Terminal(session)
+	s.Stop()
+	s.KillRuntimeOf(terminal)
+	server.AskApproval(conversation)
+	s.Start()
+	app = s.App()
+	kept := testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
+	if kept.ProfileID != before.ProfileID {
+		t.Fatal("startup moved the session to another profile")
+	}
+	startLastRunTestDriver(t, s, app)
+	if view := s.Launched(session); view.ConversationID != conversation {
+		t.Fatalf("registration opened conversation %s, want %s", view.ConversationID, conversation)
+	}
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
+	if servers := s.AppServers(fakeagent.Nisse); servers != 1 {
+		t.Fatalf("registration started %d servers, want the existing one", servers)
+	}
 }

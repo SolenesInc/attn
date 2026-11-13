@@ -1135,9 +1135,9 @@ fn retype_field(world: &mut World, key: &str, text: &str) {
 
 #[test]
 fn a_feature_toggle_shows_only_for_a_search_and_flips_its_setting() {
-    let mut world = World::start(daemon(one_agent(&[("nisse_enabled", "true")]), vec![]));
+    let mut world = World::start(daemon(one_agent(&[("sigma_enabled", "true")]), vec![]));
     press_action(&mut world, Action::UiCommandPalette);
-    assert!(!titles(&world).iter().any(|t| t.contains("Nisse")));
+    assert!(!titles(&world).iter().any(|t| t.contains("Sigma")));
     let count = text_of(&world, "palette.count").unwrap();
     let (shown, all) = count.split_once(" of ").unwrap();
     assert!(
@@ -1146,13 +1146,13 @@ fn a_feature_toggle_shows_only_for_a_search_and_flips_its_setting() {
     );
     press(&mut world, Key::Escape);
 
-    run_command(&mut world, "nisse");
-    run_command(&mut world, "turn on sigma");
+    run_command(&mut world, "sigma");
+    run_command(&mut world, "turn on launcher 2.0");
     assert_eq!(
         settings_sent(&world),
         [
-            ("nisse_enabled".to_owned(), "false".to_owned()),
-            ("sigma_enabled".to_owned(), "true".to_owned())
+            ("sigma_enabled".to_owned(), "false".to_owned()),
+            ("new_session_launcher_enabled".to_owned(), "true".to_owned())
         ]
     );
     rest(&mut world);

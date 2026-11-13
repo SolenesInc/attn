@@ -14,23 +14,23 @@ async function search(daemon: ScriptedDaemon, query: string) {
 describe('Feature commands', () => {
   it('turns an off feature on from the palette', async () => {
     const { daemon } = await renderApp();
-    const [option] = await search(daemon, '>nisse');
-    expect(option?.textContent).toContain('Turn on Nisse');
+    const [option] = await search(daemon, '>sigma');
+    expect(option?.textContent).toContain('Turn on Sigma');
     await gesture(daemon, () => fireEvent.mouseDown(option!));
-    expect(savedSettings(daemon)).toContainEqual(['nisse_enabled', 'true']);
+    expect(savedSettings(daemon)).toContainEqual(['sigma_enabled', 'true']);
   });
 
   it('turns an on feature off from the palette', async () => {
-    const { daemon } = await renderApp({ initialState: { settings: { nisse_enabled: 'true' } } });
-    const [option] = await search(daemon, '>nisse');
-    expect(option?.textContent).toContain('Turn off Nisse');
+    const { daemon } = await renderApp({ initialState: { settings: { sigma_enabled: 'true' } } });
+    const [option] = await search(daemon, '>sigma');
+    expect(option?.textContent).toContain('Turn off Sigma');
     await gesture(daemon, () => fireEvent.mouseDown(option!));
-    expect(savedSettings(daemon)).toContainEqual(['nisse_enabled', 'false']);
+    expect(savedSettings(daemon)).toContainEqual(['sigma_enabled', 'false']);
   });
 
   it('stays out of the list until a search asks for it', async () => {
     const { daemon } = await renderApp();
     const options = await search(daemon, '>');
-    expect(options.map((option) => option.textContent).join()).not.toContain('Nisse');
+    expect(options.map((option) => option.textContent).join()).not.toContain('Sigma');
   });
 });

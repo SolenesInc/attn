@@ -61,6 +61,7 @@ func (d *Daemon) activePluginRuns(pluginName string) []activePluginRun {
 }
 
 type pluginDriverSpawnParams struct {
+	Executable      string                    `json:"executable,omitempty"`
 	Agent           string                    `json:"agent"`
 	TerminalID      protocol.TerminalID       `json:"session_id"`
 	RunID           string                    `json:"run_id"`

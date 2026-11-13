@@ -46,7 +46,7 @@ folder you picked.
 
 The ID is yours to choose: lowercase letters, numbers, hyphens and underscores,
 starting with a letter or number. The built-in names `claude`, `codex`, `shell`,
-`nisse` and `sigma` are taken, as are `codex-app`, `codex-server`, and IDs
+and `sigma` are taken, as are `codex-app`, `codex-server`, and IDs
 starting with `codex-server-`. Two plugins cannot register one ID.
 
 ## What the plugin declares
@@ -210,6 +210,9 @@ to the owning session, whose profile the command keeps. If more than one
 nonempty root variable exists, commands needing a caller refuse with the
 conflicting names; keep only the current server's root variable.
 
+`executable`, when supplied, is the explicit per-session executable selection.
+Use it before the plugin's environment override or default executable.
+
 `spawn` and `resume` receive `conversation_id`, the exact native conversation
 that the view must open, and optional `execution_target`. Keep that ID on every
 view. A target-capable plugin forwards the target on both launch and resume.
@@ -306,7 +309,7 @@ Attn to plugin, each answered with a result or a JSON-RPC error:
 | Method | Params | Result |
 |---|---|---|
 | `attn.health` | `now` | `{"ok":true}` or `{"ok":false,"message":"…"}`, every 15 seconds |
-| `driver.spawn`, `driver.resume` | `agent`, `session_id`, `run_id`, `cwd`, and when set `label`, `yolo`, `model`, `effort`, `initial_prompt`, `metadata`, `resume_session_id`, `instructions`, and for server views `conversation_id`, `execution_target` | `{"argv":["…"],"env":{…},"cwd":"…"}` |
+| `driver.spawn`, `driver.resume` | `agent`, `session_id`, `run_id`, `cwd`, and when set `label`, `executable`, `yolo`, `model`, `effort`, `initial_prompt`, `metadata`, `resume_session_id`, `instructions`, and for server views `conversation_id`, `execution_target` | `{"argv":["…"],"env":{…},"cwd":"…"}` |
 | `driver.resume_available` | `conversations`: `agent`, `cwd`, `resume_session_id` | `{"availability":[` the same fields plus `available` and `reason` `]}` |
 | `driver.models` | `agent` | `{"models":[…],"detail":"…"}` |
 | `driver.deliver_message` | `session_id`, `run_id`, `input_id`, `text`, and with `attributed_input` `voice` and `conversation_id` | `{"ok":true}`; `{"ok":false,"status":"deferred"}`; `{"ok":false,"status":"rejected","reason":"…"}`; `{"ok":false,"status":"target_ended"}` |

@@ -210,9 +210,9 @@ func TestACodexQuietStopIsJudgedByCodexAtTheClassifiersEffort(t *testing.T) {
 	}
 }
 
-func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
+func TestAnAppServerQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	judged := make(chan string, 2)
-	w := newTitlingWorld(t, fakeagent.Nisse, fakeagent.Claude)
+	w := newTitlingWorld(t, fakeagent.Sigma, fakeagent.Claude)
 	w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
 		switch {
 		case strings.Contains(task.Prompt, quietStopQuestion):
@@ -228,7 +228,7 @@ func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	setSetting(t, app, "queue_mode_enabled", "true")
 	setAnalyticsEnabled(app, "true")
 	registerSessions(t, w, w.Client(), "reviewer")
-	session, nisse, server := appServerSession(t, w, app, fakeagent.Nisse, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
+	session, nisse, server := appServerSession(t, w, app, fakeagent.Sigma, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
 	conversation := nisse.ConversationID
 	nisse.Prompted()
 	server.Prompted(conversation)
@@ -251,7 +251,7 @@ func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	ringAndAnswer("the deploy is in", "The deploy finished with no errors. <!-- attn:state=idle -->")
 	verdicts := verdictsOnceTheDaemonHasStopped(t, w, session)
 	if revived := w.Launched(session); revived.ConversationID != conversation {
-		t.Errorf("the restart revived Nisse on conversation %q, want %q", revived.ConversationID, conversation)
+		t.Errorf("the restart revived AppServer on conversation %q, want %q", revived.ConversationID, conversation)
 	}
 	if !slices.Equal(verdicts, []string{`{"verdict":"read"}`, `{"verdict":"read"}`}) {
 		t.Errorf("quiet stop records %q", verdicts)

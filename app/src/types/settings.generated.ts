@@ -2,7 +2,6 @@
 
 export const BoolSetting = {
   asksEnabled: "asks_enabled",
-  nisseEnabled: "nisse_enabled",
   sigmaEnabled: "sigma_enabled",
   newSessionLauncherEnabled: "new_session_launcher_enabled",
   outpostsEnabled: "outposts_enabled",
@@ -61,7 +60,6 @@ export interface Feature {
 
 export const FEATURES: readonly Feature[] = [
   { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "on by default", since: "2026-10-18", search: "questions answer decisions drawer" },
-  { key: "nisse_enabled", name: "Nisse", summary: "Offer Nisse as a harness.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-29", search: "harness server" },
   { key: "sigma_enabled", name: "Sigma", summary: "Offer Sigma, Pi Durable behind an app-server, as a harness.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-11-12", search: "harness server pi durable" },
   { key: "new_session_launcher_enabled", name: "Launcher 2.0", summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.", note: "", group: "Interface", timing: "", stage: "experimental", since: "2026-10-16", search: "one-screen one screen new-session new session project path" },
   { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", note: "", group: "Connections", timing: "", stage: "experimental", since: "2026-10-27", search: "remote computers bridge ssh" },

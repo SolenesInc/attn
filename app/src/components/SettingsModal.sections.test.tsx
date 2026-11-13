@@ -132,7 +132,7 @@ describe('SettingsModal sections', () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });
     const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    for (const query of ['Nisse', 'Outposts', 'Phone access', 'Usage analytics']) {
+    for (const query of ['Sigma', 'Outposts', 'Phone access', 'Usage analytics']) {
       await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
       expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
     }

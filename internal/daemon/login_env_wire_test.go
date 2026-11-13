@@ -182,15 +182,15 @@ func TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer(t *testing.T
 	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, settled)
 }
 
-func TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
+func TestAnAppServerSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
-	w := &world{World: prepareWorld(t, fakeagent.Nisse)}
+	w := &world{World: prepareWorld(t, fakeagent.Sigma)}
 	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
 	shell := installBlockedLoginShell(t, w)
 	w.start()
 	app := w.App()
-	session, nisse, server := appServerSession(t, w, app, fakeagent.Nisse)
+	session, nisse, server := appServerSession(t, w, app, fakeagent.Sigma)
 	conversation := nisse.ConversationID
 	promptUntilWorking(app, session, nisse, server, "migrate the orders table")
 

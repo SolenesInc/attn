@@ -17,10 +17,12 @@ import (
 const scriptedAgent = fakeagent.Harness("snipe")
 
 type driverLaunch struct {
+	Executable      string          `json:"executable"`
 	Method          string          `json:"-"`
 	Agent           string          `json:"agent"`
 	SessionID       string          `json:"session_id"`
 	RunID           string          `json:"run_id"`
+	ConversationID  string          `json:"conversation_id"`
 	CWD             string          `json:"cwd"`
 	Yolo            bool            `json:"yolo"`
 	Model           string          `json:"model"`
@@ -57,21 +59,22 @@ type driverRegistered struct {
 }
 
 type driverPeer struct {
-	t          *testing.T
-	name       string
-	conn       net.Conn
-	writing    sync.Mutex
-	mu         sync.Mutex
-	nextID     int
-	pending    map[string]chan pluginWireMessage
-	holdLaunch bool
-	argv       []string
-	launches   chan driverLaunch
-	closes     chan driverClosed
-	requests   chan pluginWireMessage
-	gone       chan struct{}
-	agent      string
-	registered driverRegistered
+	t                *testing.T
+	name             string
+	conn             net.Conn
+	writing          sync.Mutex
+	mu               sync.Mutex
+	nextID           int
+	pending          map[string]chan pluginWireMessage
+	holdLaunch       bool
+	serverExecutable string
+	argv             []string
+	launches         chan driverLaunch
+	closes           chan driverClosed
+	requests         chan pluginWireMessage
+	gone             chan struct{}
+	agent            string
+	registered       driverRegistered
 }
 
 func connectDriver(t *testing.T, w *world, name, agent string, capabilities map[string]bool) *driverPeer {
@@ -141,6 +144,13 @@ func (d *driverPeer) listen() {
 			launch.Method = message.Method
 			d.mu.Lock()
 			argv, held := d.argv, d.holdLaunch
+			if d.serverExecutable != "" {
+				executable := d.serverExecutable
+				if launch.Executable != "" {
+					executable = launch.Executable
+				}
+				argv = []string{executable, "--conversation", launch.ConversationID}
+			}
 			d.mu.Unlock()
 			if held {
 				d.requests <- message

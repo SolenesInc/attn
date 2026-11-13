@@ -21,7 +21,6 @@ import (
 
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/nisse"
 	"github.com/victorarias/attn/internal/sigma"
 )
 
@@ -52,8 +51,8 @@ type appServerFlavor struct {
 var appServerFlavors = map[Harness]appServerFlavor{
 	Nisse: {
 		harness: Nisse, role: "nisse-server", homeVariable: "NISSE_HOME", homeDir: "nh", rootVariable: "NISSE_ROOT_CONVERSATION",
-		socket: nisse.Socket, connect: nisse.Connect,
-		hello: map[string]any{"version": "fake", "protocol": nisse.Protocol},
+		socket: func(home string) string { return filepath.Join(home, "nisse.sock") }, connect: connectFakeNisse,
+		hello: map[string]any{"version": "fake", "protocol": 7},
 	},
 	Sigma: {
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
@@ -746,3 +745,17 @@ func (s *AppServer) ControlCounts() (initializes, watches int) {
 }
 
 func (s *AppServer) PID() int { return s.fake.Pid }
+
+func connectFakeNisse(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
+	c, err := effectrpc.Dial(ctx, socket, "nisse")
+	if err != nil {
+		return nil, effectrpc.ServerInfo{}, err
+	}
+	var hello effectrpc.ServerInfo
+	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": 7}, &hello)
+	if err != nil {
+		c.Close()
+		return nil, hello, err
+	}
+	return c, hello, nil
+}

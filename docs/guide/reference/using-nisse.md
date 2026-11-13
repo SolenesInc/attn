@@ -1,17 +1,32 @@
 # Using Nisse
 
-Nisse is experimental. It is a coding agent whose conversations are stored in a server, not in the terminal that shows them. One Nisse server per Nisse home stores every conversation. The Nisse terminal UI, `nisse exec` and Attn are all
-clients of that server. A run keeps going when the terminal that started the run
-closes, and a server that crashed resumes the runs the crash interrupted.
+Nisse is an installable harness plugin. Its conversations live in a server,
+independently of the terminals that show them. One server per Nisse home serves
+the Nisse terminal UI, `nisse exec` and Attn. If the server crashes, it resumes
+the runs the crash interrupted.
 
 Attn runs the `nisse` on your PATH, or the one `ATTN_NISSE_EXECUTABLE` names.
 Attn uses `NISSE_HOME` from your login shell as the Nisse home, by default `~/.nisse`. The bare `nisse` uses the same home, so Attn and your terminal see the same conversations, sign-ins and config. Attn needs Nisse protocol 7 or later.
 
-## Turn it on or off
+## Install the plugin
 
-**Nisse** in **Settings → Experimental** is off by default. While the setting is
-off, the harness pickers don't offer Nisse and Attn refuses Nisse launches,
-resumes from the Sessions ledger included.
+Download `attn-nisse-0.1.1.tgz` from the [Nisse plugin 0.1.1 release](https://github.com/SolenesInc/attn-nisse/releases/tag/v0.1.1).
+The repository is private, so your GitHub account needs access. Extract the
+archive and run `attn plugin install --path /path/to/attn-nisse-0.1.1`.
+The package contains its install and upgrade instructions. Installation requires
+Bun and a compatible Attn build. Without the package, the picker omits Nisse.
+
+When upgrading from the built-in harness, stage the plugin with that command
+before updating Attn. The old build reserves the harness ID, so registration
+starts only after the update. Keep the same Nisse home and executable override.
+Existing sessions and ledger entries keep their conversation IDs and profiles.
+
+If you upgrade without the package, install it to reconnect existing sessions
+and restore ledger resumes. Session history remains available while the plugin
+is absent. Do not create replacement conversations to recover.
+
+Close every open Nisse session before `attn plugin uninstall nisse`. Reinstalling
+the package restores availability.
 
 ## How a session runs
 

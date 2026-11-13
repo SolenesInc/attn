@@ -1,27 +1,6 @@
 package agent
 
-import (
-	"os/exec"
-	"strings"
-)
-
-type Nisse struct{}
-
-var _ Driver = (*Nisse)(nil)
-var _ ResumePolicyProvider = (*Nisse)(nil)
-
-func init() {
-	Register(&Nisse{})
-}
-
-func (n *Nisse) Name() string              { return "nisse" }
-func (n *Nisse) DisplayName() string       { return "Nisse" }
-func (n *Nisse) DefaultExecutable() string { return "nisse" }
-func (n *Nisse) ExecutableEnvVar() string  { return "ATTN_NISSE_EXECUTABLE" }
-
-func (n *Nisse) ResolveExecutable(configured string) string {
-	return resolveExec(n.ExecutableEnvVar(), configured, n.DefaultExecutable())
-}
+import "strings"
 
 var appServerCapabilities = Capabilities{
 	HasClassifier:         true,
@@ -32,12 +11,6 @@ var appServerCapabilities = Capabilities{
 	HasEffortPin:          true,
 	HasLaunchInstructions: true,
 	ConversationIsSession: true,
-}
-
-func (n *Nisse) Capabilities() Capabilities { return appServerCapabilities }
-
-func (n *Nisse) BuildCommand(opts SpawnOpts) *exec.Cmd {
-	return exec.Command(opts.Executable, appServerViewArgs(opts)...)
 }
 
 func appServerViewArgs(opts SpawnOpts) []string {
@@ -68,21 +41,9 @@ func appServerViewArgs(opts SpawnOpts) []string {
 	return args
 }
 
-func (n *Nisse) BuildEnv(SpawnOpts) []string { return nil }
-
-func (n *Nisse) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
-	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
-}
-
-func (n *Nisse) SpawnResumeSessionID(sessionID, resolvedResumeID string, _ bool) string {
-	return conversationOrSession(sessionID, resolvedResumeID)
-}
-
 func conversationOrSession(sessionID, resolvedResumeID string) string {
 	if resolved := strings.TrimSpace(resolvedResumeID); resolved != "" {
 		return resolved
 	}
 	return strings.TrimSpace(sessionID)
 }
-
-func (n *Nisse) ResumeSessionIDFromTranscriptPath(string) string { return "" }

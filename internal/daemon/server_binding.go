@@ -12,7 +12,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/nisse"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/setting"
@@ -37,24 +36,7 @@ type serverBinding struct {
 	closeLeavesRun    bool
 }
 
-const (
-	nisseAgent = "nisse"
-	sigmaAgent = "sigma"
-)
-
-var nisseBinding = &serverBinding{
-	agent:          nisseAgent,
-	name:           "Nisse",
-	kind:           "nisse-server",
-	terminal:       "nisse-server",
-	feature:        setting.NisseEnabled,
-	homeVariable:   "NISSE_HOME",
-	callerVariable: "NISSE_ROOT_CONVERSATION",
-	homeDir:        ".nisse",
-	socket:         nisse.Socket,
-	connect:        nisse.Connect,
-	conversationOf: harness.ParseNisseConversationTerminal,
-}
+const sigmaAgent = "sigma"
 
 var sigmaBinding = &serverBinding{
 	agent:             sigmaAgent,
@@ -75,10 +57,8 @@ var sigmaBinding = &serverBinding{
 var serverEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID=", "BUN_GC_TIMER_DISABLE=1"}
 
 func appServerBinding(agent string) *serverBinding {
-	for _, b := range []*serverBinding{nisseBinding, sigmaBinding} {
-		if b.agent == agent {
-			return b
-		}
+	if agent == sigmaBinding.agent {
+		return sigmaBinding
 	}
 	return nil
 }
@@ -102,9 +82,7 @@ func (d *Daemon) serverLinkFor(agent string) *serverLink {
 }
 
 func (d *Daemon) appServerLinks() []*serverLink {
-	for _, b := range []*serverBinding{nisseBinding, sigmaBinding} {
-		d.serverLinkFor(b.agent)
-	}
+	d.serverLinkFor(sigmaAgent)
 	d.serverLinksMu.Lock()
 	defer d.serverLinksMu.Unlock()
 	links := make([]*serverLink, 0, len(d.serverLinks))
@@ -142,6 +120,9 @@ func (l *serverLink) home() string {
 
 func (l *serverLink) executable(opts *ptybackend.SpawnOptions) string {
 	if p := l.b.declaration.Load(); p != nil {
+		if opts != nil && opts.Executable != "" {
+			return opts.Executable
+		}
 		if override := l.environmentValue(p.ExecutableEnv); override != "" {
 			return override
 		}
@@ -200,9 +181,6 @@ func (l *serverLink) callerConversationEnv() string {
 func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string) error {
 	if p := l.b.declaration.Load(); p != nil {
 		return p.validateServerInfo(hello, socket)
-	}
-	if l.b == nisseBinding {
-		return nisse.Validate(hello, socket)
 	}
 	if l.b == sigmaBinding {
 		return sigma.Validate(hello, socket)

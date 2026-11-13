@@ -974,6 +974,9 @@ func (d *Daemon) canReviveSession(session *protocol.Session) bool {
 }
 
 func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent store.LaunchIntent) bool {
+	if _, serverOwned := d.linkOf(session.ID).(*serverLink); serverOwned && d.linkConversation(session.ID) != "" {
+		return true
+	}
 	if session.Agent == protocol.AgentShellValue {
 		return true
 	}

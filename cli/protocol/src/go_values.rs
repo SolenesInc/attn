@@ -47,7 +47,6 @@ pub const SHARED_CODEX_RESTART_RESTARTING: &str = "restarting";
 pub const SHARED_CODEX_RESTART_FAILED: &str = "failed";
 pub const CODEX_SHARED_PROFILE_ENV: &str = "ATTN_CODEX_SHARED_PROFILE";
 pub const CODEX_THREAD_PREFIX: &str = "codex:";
-pub const NISSE_CONVERSATION_PREFIX: &str = "nisse:";
 pub const SIGMA_CONVERSATION_PREFIX: &str = "sigma:";
 pub const ID_ALPHABET: &str = "0123456789abcdefghjkmnpqrstvwxyz";
 pub const CREW_KEY_REF_PREFIX: &str = "member:";
@@ -103,7 +102,6 @@ pub struct Feature {
 
 pub const SETTINGS: &[Setting] = &[
     Setting { key: "asks_enabled", machine: false, default_on: true },
-    Setting { key: "nisse_enabled", machine: false, default_on: false },
     Setting { key: "sigma_enabled", machine: false, default_on: false },
     Setting { key: "new_session_launcher_enabled", machine: false, default_on: false },
     Setting { key: "outposts_enabled", machine: false, default_on: false },
@@ -196,7 +194,6 @@ pub const SETTINGS: &[Setting] = &[
 
 pub const FEATURES: &[Feature] = &[
     Feature { key: "asks_enabled", name: "Asks", stage: "on by default", applies: "New agents", search: "questions answer decisions drawer" },
-    Feature { key: "nisse_enabled", name: "Nisse", stage: "experimental", applies: "New agents", search: "harness server" },
     Feature { key: "sigma_enabled", name: "Sigma", stage: "experimental", applies: "New agents", search: "harness server pi durable" },
     Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", stage: "experimental", applies: "Now", search: "one-screen one screen new-session new session project path" },
     Feature { key: "outposts_enabled", name: "Outposts", stage: "experimental", applies: "Now", search: "remote computers bridge ssh" },

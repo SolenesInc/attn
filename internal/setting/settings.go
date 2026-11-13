@@ -11,15 +11,6 @@ var (
 		Since:   "2026-10-18",
 		Search:  "questions answer decisions drawer",
 	})
-	NisseEnabled = feature("nisse_enabled", "Offer Nisse as a harness: true or false.", Info{
-		Name:    "Nisse",
-		Summary: "Offer Nisse as a harness.",
-		Group:   Agents,
-		Applies: NewAgents,
-		Stage:   Experimental,
-		Since:   "2026-10-29",
-		Search:  "harness server",
-	})
 	SigmaEnabled = feature("sigma_enabled", "Offer Sigma as a harness: true or false.", Info{
 		Name:    "Sigma",
 		Summary: "Offer Sigma, Pi Durable behind an app-server, as a harness.",

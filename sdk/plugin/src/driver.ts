@@ -39,6 +39,7 @@ export function serverRegistration(server: ServerBinding | undefined): Record<st
 }
 
 export type DriverSpawnParams = {
+  executable?: string;
   agent: string;
   session_id: string;
   run_id: string;

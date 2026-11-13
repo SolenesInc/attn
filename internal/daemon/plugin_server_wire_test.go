@@ -260,3 +260,99 @@ func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T
 	testworld.AwaitSession(app, original, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	testworld.AwaitSession(app, alias, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
+
+func TestAPluginServerWithLastRunRecoveryInterruptsOnClose(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "worker")
+	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	declaration := serverDriverDeclaration(w)
+	declaration["on_close"] = "interrupt"
+	declaration["recovery"] = "last-run"
+	driver := registerServerDriver(t, w, "interrupting-server", declaration)
+	awaitDriverAvailable(app, serverPluginAgent)
+	session, view := spawnPluginServerView(w, app, driver)
+	server := w.AppServer(fakeagent.Sigma)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if r := submitSessionAnnotationFeedbackAs(app, session, uuid.NewString(), "work through restart"); !r.Success {
+		t.Fatal(r)
+	}
+	server.Prompted(view.ConversationID)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	w.stop()
+	server.Reply(view.ConversationID, "Check the answer? <!-- attn:state=waiting_input -->")
+	w.start()
+	app = w.App()
+	registerServerDriver(t, w, "interrupting-server", declaration)
+	awaitDriverAvailable(app, serverPluginAgent)
+	testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if r := submitSessionAnnotationFeedbackAs(app, session, uuid.NewString(), "continue"); !r.Success {
+		t.Fatal(r)
+	}
+	server.Prompted(view.ConversationID)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatal(protocol.Deref(closed.Error))
+	}
+	server.AwaitInterrupted(view.ConversationID)
+}
+
+func TestAPluginServerInterruptsWhenItsViewQuits(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	declaration := serverDriverDeclaration(w)
+	declaration["on_close"] = "interrupt"
+	declaration["recovery"] = "last-run"
+	driver := registerServerDriver(t, w, "interrupting-view", declaration)
+	awaitDriverAvailable(app, serverPluginAgent)
+	session, view := spawnPluginServerView(w, app, driver)
+	server := w.AppServer(fakeagent.Sigma)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if r := submitSessionAnnotationFeedbackAs(app, session, uuid.NewString(), "work until quit"); !r.Success {
+		t.Fatal(r)
+	}
+	server.Prompted(view.ConversationID)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	view.Exit(0)
+	server.AwaitInterrupted(view.ConversationID)
+	if entry := ledgerShowOverTheWebSocket(app, session).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		t.Fatalf("quitting left session open: %+v", entry)
+	}
+}
+
+func TestAPluginServerKeepsTheExplicitExecutableOnLaunchAndReload(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	executable := filepath.Join(w.Dir, "explicit-sigma")
+	script := "#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=explicit\nexec '" + filepath.Join(w.Dir, "bin", "sigma") + "' \"$@\"\n"
+	if err := os.WriteFile(executable, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ATTN_TEST_SERVER_EXECUTABLE", "/not-the-selected-executable")
+	declaration := serverDriverDeclaration(w)
+	declaration["executable_env"] = "ATTN_TEST_SERVER_EXECUTABLE"
+	driver := registerServerDriver(t, w, "executable-server", declaration)
+	driver.mu.Lock()
+	driver.holdLaunch = false
+	driver.serverExecutable = "/not-the-selected-view"
+	driver.mu.Unlock()
+	awaitDriverAvailable(app, serverPluginAgent)
+	session := w.Spawn(app, fakeagent.Harness(serverPluginAgent), w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(executable) })
+	check := func(view *fakeagent.Run) {
+		t.Helper()
+		if selection := driver.launched().Executable; selection != executable {
+			t.Fatalf("plugin received executable %q, want %q", selection, executable)
+		}
+		if got, _ := envEntry(view.Env, "ATTN_TEST_EXECUTABLE"); got != "explicit" {
+			t.Fatalf("view selected executable %q", got)
+		}
+	}
+	view := w.Launched(session)
+	check(view)
+	if got, _ := envEntry(w.AppServer(fakeagent.Sigma).Env(), "ATTN_TEST_EXECUTABLE"); got != "explicit" {
+		t.Fatalf("server selected executable %q", got)
+	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	launchIntentReload(t, app, session)
+	check(w.Launched(session))
+}

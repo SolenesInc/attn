@@ -138,7 +138,7 @@ func TestClosingASigmaSessionLeavesItsRunGoingForAReopen(t *testing.T) {
 	}
 }
 
-func TestSigmaListsTheExecutionTargetsOfAFolderAndNisseHasNone(t *testing.T) {
+func TestSigmaListsTheExecutionTargetsOfAFolder(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
 	setSetting(t, app, "sigma_enabled", "true")
@@ -153,16 +153,6 @@ func TestSigmaListsTheExecutionTargetsOfAFolderAndNisseHasNone(t *testing.T) {
 		t.Fatalf("Sigma's targets for %s = %+v, want %+v", folder, listed, want)
 	}
 
-	setSetting(t, app, "nisse_enabled", "true")
-	nisse := testworld.Request(app, protocol.HarnessTargetsMessage{Cmd: protocol.CmdHarnessTargets, RequestID: "nisse-targets", Harness: "nisse", Cwd: folder},
-		protocol.EventHarnessTargetsResult, func(r protocol.HarnessTargetsResultMessage) bool { return r.RequestID == "nisse-targets" })
-	if nisse.Success {
-		t.Errorf("Nisse's targets = %+v, want a refusal", nisse)
-	}
-	refused, _, _ := w.RequestSpawn(app, fakeagent.Nisse, folder, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
-	if refused.Success {
-		t.Errorf("a Nisse launch on target devvm succeeded, want it refused")
-	}
 }
 
 func TestASigmaConversationStartsOnTheTargetItsSessionLaunchedWith(t *testing.T) {

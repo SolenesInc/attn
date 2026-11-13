@@ -599,6 +599,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	}
 	runID := uuid.NewString()
 	params := pluginDriverSpawnParams{
+		Executable:      opts.Executable,
 		Agent:           reg.Agent,
 		TerminalID:      opts.ID,
 		RunID:           runID,

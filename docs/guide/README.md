@@ -34,7 +34,7 @@ the app still shows an older word, the page tells you which label to look for.
 | [using-shared-codex](reference/using-shared-codex.md) | Codex terminals sharing one app-server |
 | [using-claude-mod](reference/using-claude-mod.md) | Delivering messages to Claude sessions through a Claude Code mod instead of typing |
 | [writing-harness-plugins](reference/writing-harness-plugins.md) | Add your own harness with a plugin: install it, what attn asks of it, and the wire for any language |
-| [using-nisse](reference/using-nisse.md) | Experimental: Nisse sessions, whose runs live in the Nisse server |
+| [using-nisse](reference/using-nisse.md) | Installable plugin: Nisse sessions, whose runs live in the Nisse server |
 | [using-sigma](reference/using-sigma.md) | Experimental: Sigma sessions, whose runs live in the Sigma app-server |
 
 Keyboard shortcuts live in the app: Cmd+/ (Ctrl+Shift+/ on Linux) shows the
