@@ -271,6 +271,7 @@ impl Terminals {
             self.finds.remove(&id);
             self.filters.remove(&id);
             self.images.forget(&id);
+            save_leaving_note(term.marking.as_ref(), daemon);
             release(&id, &mut term, None, 0, daemon);
             if self.connected
                 && matches!(
@@ -293,6 +294,7 @@ impl Terminals {
             term.place = place;
             let session = agent.filter(|s| !s.is_empty());
             if term.marking.as_ref().map(|m| &m.session) != session.as_ref() {
+                save_leaving_note(term.marking.as_ref(), daemon);
                 term.marking = session.map(annotating::Marking::new);
             }
         }
@@ -1098,6 +1100,12 @@ fn clamp(n: i64) -> u16 {
 
 fn cell_pixels(metrics: &Metrics) -> (u32, u32) {
     (metrics.cell_w as u32, metrics.cell_h as u32)
+}
+
+fn save_leaving_note(marking: Option<&annotating::Marking>, daemon: &Commands) {
+    if let Some(save) = marking.and_then(annotating::Marking::leaving) {
+        let _ = daemon.send(&save);
+    }
 }
 
 /// What the terminal says when its process ends, as the Tauri app's exit notice: the daemon

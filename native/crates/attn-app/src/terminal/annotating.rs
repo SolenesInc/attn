@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use attn_protocol::{SessionAnnotation, SessionMessage};
+use attn_protocol::{SessionAnnotation, SessionAnnotationsSaveMessage, SessionMessage};
 use attn_term::align::{Alignment, RowRange, quotes_anchor};
 use attn_term::selection::Selection;
 use attn_term::{Overlay, OverlayKind, Rgb, Vt};
@@ -218,6 +218,19 @@ pub(crate) struct Marking {
 }
 
 impl Marking {
+    /// The save of a note edit still waiting for typing to pause, as the marking goes: no answer
+    /// can reach a marking that is gone.
+    pub(crate) fn leaving(&self) -> Option<SessionAnnotationsSaveMessage> {
+        self.note_due?;
+        Some(SessionAnnotationsSaveMessage {
+            session_id: self.session.clone(),
+            annotations: self.marks.iter().map(Annotation::wire).collect(),
+            note: Some(self.note.text.clone()),
+            generation: self.generation + 1,
+            ..SessionAnnotationsSaveMessage::new()
+        })
+    }
+
     pub(crate) fn new(session: String) -> Marking {
         Marking {
             session,

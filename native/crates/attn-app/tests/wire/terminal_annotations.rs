@@ -702,3 +702,234 @@ fn a_card_opens_its_mark_to_write_and_its_cross_removes_it() {
     assert_eq!(saves(&world).last().unwrap()["annotations"], json!([]));
     assert!(world.runtime_is_at_rest());
 }
+
+fn panel_shows(world: &World) -> bool {
+    world
+        .screen()
+        .find(Target::key("terminal.r1.annotation.panel"))
+        .is_some()
+}
+
+#[test]
+fn a_note_typed_just_before_clear_is_saved_to_its_session_and_the_new_session_shows_its_own() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    daemon
+        .on("session_messages_get", |r| {
+            message(SessionMessagesGetResultMessage {
+                session_id: r["session_id"].as_str().unwrap().into(),
+                ..messages_result(&[("m1", MESSAGE)], "ready")
+            })
+        })
+        .on("session_annotations_get", |r| {
+            let session = r["session_id"].as_str().unwrap();
+            message(SessionAnnotationsGetResultMessage {
+                session_id: session.into(),
+                success: true,
+                note: Some(if session == "s2" { "their own" } else { "" }.into()),
+                ..SessionAnnotationsGetResultMessage::new()
+            })
+        });
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    click(&mut world, "terminal.r1.annotation.note.field");
+    world.gesture(|app| app.type_text("Look again"));
+
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: super::terminal::profile(),
+            desktops: vec![super::terminal::desktop(vec![attn_protocol::DesktopPane {
+                session_id: "s2".into(),
+                ..agent_pane()
+            }])],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    let last = saves(&world).last().unwrap().clone();
+    assert_eq!(
+        (&last["session_id"], &last["note"], &last["generation"]),
+        (&json!("s1"), &json!("Look again"), &json!(2)),
+        "the note goes to the session it was typed for"
+    );
+    let state = annotations(&world);
+    assert_eq!(
+        (&state["session"], &state["note"], &state["marks"]),
+        (&json!("s2"), &json!("their own"), &json!([]))
+    );
+    world.advance(Duration::from_millis(400));
+    assert_eq!(saves(&world).len(), 2, "nothing more is saved");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_send_while_one_is_unanswered_sends_nothing_and_a_note_rewritten_meanwhile_stays() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    daemon.answer_in_turn("session_annotations_submit", [Answer::Hold]);
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    click(&mut world, "terminal.r1.annotation.note.field");
+    world.gesture(|app| app.type_text("First"));
+    world.advance(Duration::from_millis(400));
+    click(&mut world, "terminal.r1.annotation.send");
+    click(&mut world, "terminal.r1.annotation.send");
+    click(&mut world, "terminal.r1.annotation.note.field");
+    world.gesture(|app| app.press("mod+enter"));
+    assert_eq!(submitted(&world).len(), 1, "one send at a time");
+
+    world.gesture(|app| app.type_text(", then more"));
+    world.advance(Duration::from_millis(400));
+    let request = world.daemon.sent_of("session_annotations_submit")[0].clone();
+    world.daemon.reply_to(
+        &request,
+        SessionAnnotationsSubmitResultMessage {
+            session_id: "s1".into(),
+            success: true,
+            status: "delivered".into(),
+            ..SessionAnnotationsSubmitResultMessage::new()
+        },
+    );
+    world.settle();
+    let state = annotations(&world);
+    assert_eq!(
+        (&state["marks"], &state["note"]),
+        (&json!([]), &json!("First, then more"))
+    );
+    let last = saves(&world).last().unwrap().clone();
+    assert_eq!(
+        (&last["note"], &last["annotations"]),
+        (&json!("First, then more"), &json!([]))
+    );
+    assert!(world.daemon.sent_of("session_annotations_clear").is_empty());
+    world.advance(Duration::from_millis(2200));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_refused_send_keeps_the_marks_and_the_note_and_says_the_daemons_reason() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    daemon.on("session_annotations_submit", |_| {
+        message(SessionAnnotationsSubmitResultMessage {
+            session_id: "s1".into(),
+            success: false,
+            error: Some("pty write failed".into()),
+            ..SessionAnnotationsSubmitResultMessage::new()
+        })
+    });
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    click(&mut world, "terminal.r1.annotation.note.field");
+    world.gesture(|app| app.type_text("Keep me"));
+    world.advance(Duration::from_millis(400));
+    click(&mut world, "terminal.r1.annotation.send");
+    let state = annotations(&world);
+    assert_eq!(
+        state["outcome"],
+        json!({"kind": "error", "message": "pty write failed"})
+    );
+    assert_eq!(
+        (state["marks"].as_array().unwrap().len(), &state["note"]),
+        (1, &json!("Keep me"))
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_save_that_fails_for_a_reason_other_than_a_newer_draft_keeps_the_marks_without_reading_again() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    daemon.on("session_annotations_save", |_| {
+        message(SessionAnnotationsSaveResultMessage {
+            session_id: "s1".into(),
+            success: false,
+            error: Some("disk full".into()),
+            ..SessionAnnotationsSaveResultMessage::new()
+        })
+    });
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.i-agree");
+    assert_eq!(annotations(&world)["marks"].as_array().unwrap().len(), 1);
+    assert_eq!(world.daemon.sent_of("session_annotations_get").len(), 1);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn with_nothing_marked_no_panel_shows_and_the_send_key_does_nothing() {
+    let mut world = started(agent(&[("m1", MESSAGE)], "ready"));
+    assert!(!panel_shows(&world));
+    let terminal = cell(&world, 30, 4);
+    world.gesture(|app| app.click_at(terminal));
+    world.gesture(|app| app.press(SEND));
+    assert!(submitted(&world).is_empty());
+    assert!(super::terminal::inputs(&world).is_empty());
+    assert!(
+        world.screen().find(Target::key("notice.text")).is_none(),
+        "the key is the send key, with nothing to send"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn only_this_sessions_changed_window_is_read_again_and_an_older_read_answering_last_is_dropped() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    let mut world = started(daemon);
+    let reads = |world: &World| world.daemon.sent_of("session_messages_get").len();
+    let before = reads(&world);
+    world.daemon.emit(SessionMessagesChangedMessage {
+        session_id: "s2".into(),
+        ..SessionMessagesChangedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        reads(&world),
+        before,
+        "another session's window is not read"
+    );
+
+    world
+        .daemon
+        .answer_in_turn("session_messages_get", [Answer::Hold, Answer::Hold]);
+    for _ in 0..2 {
+        world.daemon.emit(SessionMessagesChangedMessage {
+            session_id: "s1".into(),
+            ..SessionMessagesChangedMessage::new()
+        });
+        world.settle();
+    }
+    let asks = world.daemon.sent_of("session_messages_get");
+    let (older, newer) = (asks[asks.len() - 2].clone(), asks[asks.len() - 1].clone());
+    world
+        .daemon
+        .reply_to(&newer, messages_result(&[("m2", MESSAGE)], "ready"));
+    world.settle();
+    world
+        .daemon
+        .reply_to(&older, messages_result(&[("m1", MESSAGE)], "ready"));
+    world.settle();
+    mark_on_cache(&mut world);
+    assert_eq!(annotations(&world)["marks"][0]["message"], "m2");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_window_the_daemon_cannot_read_says_no_transcript_could_be_read() {
+    let daemon = agent(&[], "ready");
+    daemon.on("session_messages_get", |_| {
+        message(SessionMessagesGetResultMessage {
+            session_id: "s1".into(),
+            success: false,
+            error: Some("no transcript".into()),
+            ..SessionMessagesGetResultMessage::new()
+        })
+    });
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    assert_eq!(
+        annotations(&world)["notice"],
+        "No transcript could be read for this session, so there is nothing to annotate. The daemon log names the lookup that failed."
+    );
+    world.advance(Duration::from_secs(5));
+    assert!(world.runtime_is_at_rest());
+}

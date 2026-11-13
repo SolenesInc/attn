@@ -24,3 +24,6 @@ item	statement	native_test	reason
 54	A spawn link reaches the native app on Linux		gap: s-vmre0j
 55	On macOS a link sent while the app runs reaches the running app: a second link for the same folder starts no agent and shows the first	live:s-fmcb34/palmac-proof.tgz	
 55	On Linux a link sent while the app runs reaches the running app instead of starting a second one		gap: s-vmre0j
+49	A terminal mark paints a violet wash and underline over the text it quotes, and only while the rows still read as its quote	attn-app/tests/wire/terminal_annotations.rs::a_stored_draft_draws_on_its_message_and_a_mark_whose_text_left_the_screen_is_not_drawn	
+49	A terminal mark brightens while ⌥ is held over it	attn-app/tests/wire/terminal_annotations.rs::alt_over_a_mark_brightens_it	
+49	Terminal marks paint in the packaged app on Linux	live:s-9d54yh/annotations-native-panel.png	

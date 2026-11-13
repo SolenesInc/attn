@@ -105,7 +105,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) draws, types into and resizes terminals, scrolls their history, selects and copies, copies a selection as Markdown, takes OSC 52 writes and image pastes, underlines and opens links, selects and copies command blocks, filters a block's output, finds text through the history, draws kitty images, reports the mouse to programs that track it, answers terminal queries and reports pointer activity. Its right-click menu opens on macOS only, since Rune has no pop-up menu on Linux. The location picker and `attn terminal`'s tiles drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation) such as `press`, `type`, `key`, `scroll`, `wait`, `state` and `shot`, not the Tauri reads and native input above.
+The native app (`native/`) draws, types into and resizes terminals, scrolls their history, selects and copies, copies a selection as Markdown, takes OSC 52 writes and image pastes, underlines and opens links, selects and copies command blocks, filters a block's output, finds text through the history, draws kitty images, marks an agent's messages ([annotations.md](annotations.md)), reports the mouse to programs that track it, answers terminal queries and reports pointer activity. Its right-click menu opens on macOS only, since Rune has no pop-up menu on Linux. The location picker and `attn terminal`'s tiles drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation) such as `press`, `type`, `key`, `scroll`, `wait`, `state` and `shot`, not the Tauri reads and native input above.
 
 Preconditions:
 

@@ -68,6 +68,25 @@ Preconditions:
 - **A seed nobody tends.** Run `./attn seed plant "Annotate me" -m "Mark this sentence."` and `./attn open <seed>`. In the seed tile, mark a passage with a comment as above: the send button reads `Note on seed 1`. Click the button: it reads `Noted ✓`, and `./attn seed notes <seed> --limit 1` shows the batch as a note.
 - **Proof.** In `$P`, keep `bridge get_annotation_state` after each mark, after the relaunch and after the send. Keep `bridge markdown_get_annotations_state` before and after the document's send, `./attn agent peek anno-agent` after each send, and `./attn seed notes <seed>` after the seed note. Capture `bridge capture_screenshot '{"path":"<P>/annotations-markdown.png"}'` with the document's marks and the review notes open, where `<P>` is the folder's path written out. Terminal marks do not show in that capture, so their proof is `get_annotation_state`. Name each file for its way in, such as `annotations-terminal-send-peek.txt`.
 
+### In the native app
+
+The native app (`native/`) marks an agent's message in its terminal, labels and comments on the mark, keeps the draft with the daemon, and sends the batch from its panel. It has no markdown annotations, tile header controls or destination menu yet. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`, and launch it as [terminals.md](terminals.md) says for the native app. On Linux, run every command that reaches the app inside one `xvfb-run`.
+- Make `P` and `A` and start `anno-agent` as above. Press `sidebar.session.anno-agent`. `<agent>` is the `runtime_id` in `bridge state '{"of":"desktops"}'`.
+
+Steps:
+
+- **Mark an agent's message.** Run `wsctl input --id <agent> --text "say-prose" --enter`, and wait with `bridge state '{"of":"terminal:<agent>","includes":"duplicate network effects."}'`. Its rows give the row and column of `retry wrapper`. The cell size comes from `bridge wait '{"target":{"key":"terminal.<agent>.caret"}}'`, whose `rect` sits on the cell named by `cursor` in `bridge state '{"of":"terminal-view:<agent>"}'`. Turn the phrase's first cell into a fraction of `bridge wait '{"target":{"key":"terminal.<agent>"}}'`'s `rect`. Run `bridge hold '{"mods":"alt"}'`, then `bridge drag '{"target":{"key":"terminal.<agent>"},"at":[<fx>,<fy>],"by":[<12 cells wide>,0]}'`, then `bridge hold '{"mods":""}'`. In `terminal-view:<agent>`, `annotations.marks` holds one mark quoting `retry wrapper`, `annotations.popup` is open, and violet washes cover the phrase.
+- **Label and comment.** Press `terminal.<agent>.annotation.label.clarify-this`. `wsctl request --json '{"cmd":"session_annotations_get","request_id":"r1","session_id":"anno-agent"}' --event session_annotations_get_result` holds the mark with that label at generation 1. ⌥-click the mark the same way to open it, press `terminal.<agent>.annotation.write`, `bridge type '{"text":"Which operations are idempotent?"}'` and `bridge key '{"chord":"ctrl+Enter"}'` (`mod+Enter` on macOS): the stored mark carries the comment.
+- **Relaunch keeps it.** Run `./attn instance stop-app`, launch again and press the session. `terminal-view:<agent>` lists the mark, and the washes draw again.
+- **Note and send.** Press `terminal.<agent>.annotation.note.field` and type `Keep it short.`. `terminal-view:<agent>` shows the note once the typing pauses. Press `ctrl+Enter` in the note, `ctrl+shift+Enter` from the terminal on Linux, or `mod+Enter` on macOS, or press `terminal.<agent>.annotation.send`. `annotations.outcome` reads `{"kind":"sent","count":1}` for about two seconds, and the stored draft is empty. The mock's terminal does not draw a reply that arrives through its app server, so read it with `wsctl request --json '{"cmd":"session_messages_get","request_id":"r2","session_id":"anno-agent"}' --event session_messages_get_result`, which holds `got terminal feedback`.
+- **Proof.** Keep `terminal-view:<agent>` and the stored draft after each step, and `bridge shot '{"path":"<P>/annotations-native-<step>.png"}'` with the popup open, while writing, after the relaunch and with the panel. Unlike the Tauri capture, the native shot shows the marks.
+
+Known differences from the Tauri app: the panel sits at its terminal's bottom right instead of the window's, a press outside every terminal (on the sidebar, say) leaves the popup open, "More labels" lists the labels under the popup, and an outpost's unreachable host does not refuse marks. The label emoji draw from the system's emoji font, so a Linux machine without one draws them as boxes.
+
 ## Contexts
 
 - **Durability across restarts**: the daemon keeps drafts for each session and each document, and they come back after an app or daemon restart and across the agent's next turn. A send clears the marks it sent. Marks made while a send was in flight stay. A send the agent's terminal does not take within 5 s fails, keeps the marks and shows the reason, and other terminals keep taking input meanwhile.
@@ -79,7 +98,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_annotations_wire_test.go`, `internal/daemon/annotation_delivery_wire_test.go`, `internal/daemon/annotation_drafts_wire_test.go`, `internal/daemon/markdown_annotations_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/terminal_annotations.rs` (the native app), `internal/daemon/session_annotations_wire_test.go`, `internal/daemon/annotation_delivery_wire_test.go`, `internal/daemon/annotation_drafts_wire_test.go`, `internal/daemon/markdown_annotations_wire_test.go`.
 - Stack: `app/e2e/terminal-annotations.spec.ts`, `app/e2e/markdown-annotation-tiles.spec.ts`.
 - Scenario: `focusless-native` (parked macOS Alt-drag), `terminal-annotations`, `markdown-opener`.
 - App: `app/src/App.sessionAnnotations.test.tsx`, `app/src/App.markdownAnnotations.test.tsx`, `app/src/components/MarkdownReader/anchoring/*.test.*`, `app/src/annotations/quickLabelPlacement.test.ts`, `app/src/utils/terminalAnnotations.gate.test.ts`, `app/src/utils/terminalMessageAlign.projection.test.ts`.

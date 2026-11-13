@@ -506,11 +506,10 @@ pub(crate) fn due(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     !notes.is_empty() || sent
 }
 
-/// The send key: terminal `id`'s marks go to its session. False when there is nothing to send,
-/// so the key goes on to the terminal.
-pub(crate) fn send_key(state: &mut State, tx: &mut Tx) -> bool {
+/// The send key: the marks of the terminal that holds the keyboard go to its session.
+pub(crate) fn send_key(state: &mut State, tx: &mut Tx) {
     let Some(id) = state.window.keyboard_terminal(&state.facts) else {
-        return false;
+        return;
     };
     let has_marks = state
         .terminals
@@ -519,7 +518,6 @@ pub(crate) fn send_key(state: &mut State, tx: &mut Tx) -> bool {
     if has_marks {
         send(state, &id, tx);
     }
-    has_marks
 }
 
 /// Sends terminal `id`'s marks and note to its session as one message, keeping a comment the
