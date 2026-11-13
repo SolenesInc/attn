@@ -25,6 +25,13 @@ const CAPS_PX: f32 = 104.0;
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
 /// How long a chip flashes when its tile arrives on the shelf.
 const FLASH_SECONDS: f64 = 0.9;
+const FLASH_FADE: &[rune::Beat] = &[
+    rune::Beat::new(0.0).opacity(1.0),
+    rune::Beat::new(FLASH_SECONDS * 0.6).opacity(1.0),
+    rune::Beat::new(FLASH_SECONDS)
+        .opacity(0.0)
+        .easing(rune::Easing::EASE_OUT),
+];
 
 /// A chip flashing for a moment because its tile arrived on the shelf or went off screen.
 #[derive(Clone, Debug, PartialEq)]
@@ -67,8 +74,8 @@ struct Chip {
     label: String,
     /// A tile in the column waits on the person, or arrived unseen.
     needs: bool,
-    /// A tile in the column just arrived on the shelf.
-    arrival: bool,
+    /// A tile in the column just arrived on the shelf: when its flash ends, as `f64` bits.
+    arrival: Option<u64>,
     members: Vec<Member>,
     leaves: Vec<String>,
 }
@@ -106,7 +113,7 @@ fn chip(
     facts: &attn_client::Facts,
     tree: &Node,
     row: &super::RowState,
-    flashing: &[&str],
+    flashing: &[(&str, u64)],
     column: &Column,
 ) -> Chip {
     let titles: Vec<String> = column
@@ -130,10 +137,10 @@ fn chip(
         go: column.last_used(&row.focus_order).to_owned(),
         label: label(&titles),
         needs: waits || column.leaf_ids.iter().any(|l| row.unseen.contains(l)),
-        arrival: column
-            .leaf_ids
+        arrival: flashing
             .iter()
-            .any(|l| flashing.contains(&l.as_str())),
+            .find(|(leaf, _)| column.leaf_ids.iter().any(|l| l == leaf))
+            .map(|(_, until)| *until),
         members,
         leaves: column.leaf_ids.clone(),
     }
@@ -200,11 +207,11 @@ impl Shelf {
         if plan.before.is_empty() && plan.after.is_empty() {
             return None;
         }
-        let flashing: Vec<&str> = desk
+        let flashing: Vec<(&str, u64)> = desk
             .flashes
             .iter()
             .filter(|f| f.desktop == desktop.id)
-            .map(|f| f.leaf.as_str())
+            .map(|f| (f.leaf.as_str(), f.until.to_bits()))
             .collect();
         let chips = |columns: &[Column]| -> Vec<Chip> {
             columns
@@ -435,12 +442,16 @@ fn chip_button(
         });
     let moved = (desktop.to_owned(), chip.go.clone(), chip.key.clone());
     let left = chip.key.clone();
-    let state = [(chip.needs, "needs you"), (chip.arrival, "arrived")]
-        .iter()
-        .filter(|(on, _)| *on)
-        .map(|(_, words)| *words)
-        .collect::<Vec<_>>()
-        .join(", ");
+    let flash = chip.arrival.map(|until| flash_ring(&key, until, t));
+    let state = [
+        (chip.needs, "needs you"),
+        (chip.arrival.is_some(), "arrived"),
+    ]
+    .iter()
+    .filter(|(on, _)| *on)
+    .map(|(_, words)| *words)
+    .collect::<Vec<_>>()
+    .join(", ");
     let chip = row()
         .key(key.clone())
         .role("button")
@@ -454,7 +465,7 @@ fn chip_button(
         .py(space::S1)
         .radius(5.0)
         .fill(t.bg_button)
-        .border(1.0, if chip.arrival { t.accent } else { t.border })
+        .border(1.0, t.border)
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
             record(state, &recorded, rect, tx)
         })
@@ -471,7 +482,7 @@ fn chip_button(
         .child(
             text(chip.label.clone())
                 .font(type_::LABEL)
-                .color(if chip.arrival {
+                .color(if chip.arrival.is_some() {
                     t.text_primary
                 } else {
                     t.text_secondary
@@ -479,8 +490,22 @@ fn chip_button(
                 .single_line()
                 .truncate()
                 .grow(1.0),
-        );
+        )
+        .children(flash);
     drop_bar(chip, drop, t)
+}
+
+/// The accent ring a chip shows while its tile's arrival flashes, held and then fading, as
+/// the Tauri app's `desktop-shelf-chip-arrival`; keyed by when the flash ends, so a new flash
+/// plays from the start.
+fn flash_ring(chip_key: &str, until: u64, t: &Tokens) -> El {
+    rune::el()
+        .key(format!("{chip_key}.flash.{until}"))
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .radius(5.0)
+        .border(1.0, t.accent)
+        .transition(rune::Transition::none())
+        .sequence(rune::Sequence::new(FLASH_FADE))
 }
 
 /// A tile's mark on its chip: an agent's state dot, or a square, in the warning colour while
@@ -805,6 +830,11 @@ fn refused_move(
     error: &str,
     tx: &mut Tx,
 ) {
+    let moved = super::arrival::Shown::Leaf {
+        desktop: desktop.to_owned(),
+        leaf: leaf.to_owned(),
+    };
+    super::arrival::forget(state, &moved);
     let row = state.window.desk.row_mut(desktop);
     if row.drop.as_ref().is_some_and(|p| p.drop.leaf == leaf) {
         row.drop = None;
@@ -933,6 +963,11 @@ pub(crate) fn bring(state: &mut State, desktop_id: &str, leaf: &str, tx: &mut Tx
     };
     let active_then = active.clone();
     actions::give_keyboard(state, desktop_id, leaf, tx);
+    let brought = super::arrival::Shown::Leaf {
+        desktop: desktop_id.to_owned(),
+        leaf: leaf.to_owned(),
+    };
+    super::arrival::expect(state, brought, true, tx);
     move_leaf(
         state,
         desktop_id,

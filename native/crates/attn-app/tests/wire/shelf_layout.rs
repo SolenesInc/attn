@@ -640,6 +640,11 @@ fn keys_typed_right_after_a_chip_click_reach_the_tile_it_brings_once_it_lands() 
     assert!(typed(&world).is_empty(), "{:?}", typed(&world));
 
     becomes(&mut world, tiles("d", panes(["a", "d", "b", "c"])));
+    assert_eq!(
+        super::desktops::ringing(&world),
+        ["d"],
+        "the brought tile rings"
+    );
     assert_eq!(typed(&world), [("r-d".to_owned(), "x".to_owned())]);
     world.gesture(|app| app.type_text("y"));
     assert_eq!(
@@ -755,6 +760,11 @@ fn a_split_beside_a_full_screen_slides_to_keep_the_anchor_and_flashes_the_chip_o
     becomes(&mut world, placed);
     assert_eq!(screen(&world), ["b", "c", "n"]);
     assert_eq!(chip(&world, "a").as_deref(), Some("arrived"));
+    assert_eq!(
+        super::desktops::ringing(&world),
+        Vec::<String>::new(),
+        "the split's own shell does not ring"
+    );
     rest(&mut world);
 }
 
@@ -1106,13 +1116,29 @@ fn a_terminal_an_agent_starts_off_screen_flashes_its_chip_and_moves_nothing() {
         vec![tiles("a", panes(["a", "b", "c", "d", "e"]))],
     );
 
-    becomes(
-        &mut world,
-        tiles("a", panes(["a", "b", "c", "d", "e", "late"])),
-    );
+    let arrived = world.record(60.0, 1.0, |daemon, _| {
+        daemon.emit(arrangement(
+            "work/desktop_1",
+            vec![tiles("a", panes(["a", "b", "c", "d", "e", "late"]))],
+        ))
+    });
     assert_eq!(screen(&world), ["a", "b", "c"]);
-    assert_eq!(chip(&world, "late").as_deref(), Some("arrived"));
-    world.advance(Duration::from_secs(1));
+    let chip_shown = opacities(&arrived, |path| path.ends_with("/shelf.chip.late"));
+    let flash: Vec<f32> = opacities(&arrived, |path| path.contains("/shelf.chip.late.flash."))
+        .iter()
+        .zip(&chip_shown)
+        .map(|(flash, chip)| if *chip > 0.0 { flash / chip } else { 1.0 })
+        .collect();
+    let (held, fading) = flash.split_at(32);
+    assert!(
+        held.iter().all(|o| *o == 1.0),
+        "the flash holds for 60%: {flash:?}"
+    );
+    assert!(
+        fading.windows(2).all(|p| p[1] <= p[0]) && fading.iter().any(|o| *o < 1.0),
+        "then fades: {flash:?}"
+    );
+    assert!(flash.len() <= 60, "over 0.9 s: {flash:?}");
     assert_eq!(chip(&world, "late").as_deref(), Some(""));
     assert!(shown_leaf(&world).is_empty());
     rest(&mut world);
@@ -1138,10 +1164,10 @@ fn the_tile_that_slides_into_a_closed_tiles_slot_takes_the_keyboard() {
 }
 
 /// The tile area at `area` wide shows `before`, then the daemon changes desktop 1 to `after`:
-/// what the window shows over the second that follows.
+/// what the window shows over the two seconds that follow, long enough for a chip's flash.
 fn moving(area: f32, before: Desktop, after: Desktop) -> Recording {
     let mut world = start(area, None, vec![before]);
-    world.record(60.0, 1.0, |daemon, _| {
+    world.record(60.0, 2.0, |daemon, _| {
         daemon.emit(arrangement("work/desktop_1", vec![after]));
     })
 }
@@ -1273,6 +1299,23 @@ fn looks_of(rec: &Recording, leaf: &str) -> Vec<([f32; 4], f32)> {
         .filter(|(k, _)| *k >= from)
         .map(|(_, s)| (s.rect, s.op))
         .collect()
+}
+
+/// The opacity, frame by frame from the gesture on, of the first element `rec` drew whose path
+/// is `of`.
+pub(crate) fn opacities(rec: &Recording, of: impl Fn(&str) -> bool) -> Vec<f32> {
+    let from = rec.inputs[0].0;
+    rec.tracks
+        .iter()
+        .find(|t| of(&t.path))
+        .map(|t| {
+            t.frames
+                .iter()
+                .filter(|(k, _)| *k >= from)
+                .map(|(_, s)| s.op)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn lands_at_once(rec: &Recording, leaf: &str) -> bool {

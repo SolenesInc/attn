@@ -142,6 +142,7 @@ impl Window {
         self.view = View::Home;
         self.desk.header_pop = Default::default();
         self.follow_next_turn = false;
+        self.desk.awaited = None;
     }
 
     /// Home after the last turn closed, ready to open the next one that opens.
@@ -149,6 +150,7 @@ impl Window {
         self.view = View::Home;
         self.desk.header_pop = Default::default();
         self.follow_next_turn = true;
+        self.desk.awaited = None;
     }
 
     /// Shows the current desktop. Coming from another view lands at once, as the Tauri app

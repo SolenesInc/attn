@@ -747,7 +747,7 @@ fn a_comment_being_typed_is_kept_when_the_session_moves_to_another_terminal() {
     let moved_view = world.terminal_view("r2").expect("r2 is drawn");
     let marks = &moved_view["annotations"]["marks"];
     assert_eq!(marks[0]["comment"], "Rows go after a minute");
-    world.advance(Duration::from_millis(400));
+    world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 

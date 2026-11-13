@@ -103,6 +103,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         state.terminals.annotation_layers(),
         stale_builds(&facts.sessions, desk),
         desk.held_split().map(str::to_owned),
+        super::arrival::keys(&desk.rings),
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -213,6 +214,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         drains: &state.window.desk.settling,
         dividers: false,
         dragging: None,
+        rings: &[],
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
@@ -255,6 +257,7 @@ fn screen(
                     drains: &desk.settling,
                     dividers: view == super::layout::View::Normal,
                     dragging,
+                    rings: &desk.rings,
                     holder,
                     terminals,
                     stale: &stale,
@@ -317,6 +320,8 @@ struct TileCx<'a> {
     /// Dividers drag only in the normal view.
     dividers: bool,
     dragging: Option<&'a str>,
+    /// Tiles that ring because they arrived on screen.
+    rings: &'a [super::arrival::Ring],
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
     /// Sessions whose terminal runs an older build, with the notice still up.
@@ -521,6 +526,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         })
         .child(header(leaf, &title, cx))
         .child(body)
+        .children(super::arrival::overlay(cx.rings, &leaf.id, t))
 }
 
 /// The spring the Tauri app moves a row's tiles on.

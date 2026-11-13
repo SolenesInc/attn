@@ -124,6 +124,7 @@ pub fn bind(
                 tx.animated();
             }
             let alone = desktop::shown_alone(state);
+            let on_screen = desktop::arrival::on_screen(state);
             state.facts = facts;
             if was && !is {
                 requests::forget(state, tx);
@@ -139,6 +140,7 @@ pub fn bind(
                 tx.instant();
             }
             desktop::settle(state, tx);
+            desktop::arrival::follow(state, on_screen, tx);
             desktop::follow_windows(state);
             desktop::follow_window_title(state, tx);
             let _ = picker::follow(state, tx);

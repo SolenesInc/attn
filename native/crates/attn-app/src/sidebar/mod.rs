@@ -624,6 +624,8 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
     let this_show = state.window.shows_asked;
     state.window.show_desktop(tx);
     state.window.follow_next_turn = false;
+    let awaited = crate::desktop::arrival::Shown::Session(session.to_owned());
+    crate::desktop::arrival::expect(state, awaited.clone(), true, tx);
     let session_id = session.to_owned();
     state.ask(
         |request_id| DesktopShowSessionMessage {
@@ -638,6 +640,7 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
             state
                 .window
                 .notify(format!("Could not show that agent: {reason}"), tx);
+            crate::desktop::arrival::forget(state, &awaited);
             if state.window.shows_asked != this_show {
                 return;
             }

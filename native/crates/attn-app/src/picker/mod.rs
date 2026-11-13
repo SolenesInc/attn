@@ -988,6 +988,8 @@ pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
         })
     });
     let id = session_id();
+    let started = crate::desktop::arrival::Shown::Session(id.clone());
+    crate::desktop::arrival::expect(state, started.clone(), false, tx);
     let message = SpawnSessionMessage {
         id: id.clone(),
         cwd: spawn.path,
@@ -1019,21 +1021,26 @@ pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
                 }) => {
                     let shown = state.facts.current_desktop().map(|d| d.id.clone());
                     let desktop = desktop_id.unwrap_or(target.desktop);
+                    crate::desktop::arrival::forget(state, &started);
                     if shown.as_deref() == Some(&desktop) {
                         state.window.show_desktop(tx);
                         state.window.follow_next_turn = false;
-                        let tile = crate::shell::Holder { desktop, pane };
-                        crate::desktop::take_tile(state, &tile, tx);
+                        crate::desktop::activate_started(state, &desktop, &pane, tx);
                     }
                 }
-                Some(SpawnResultMessage { success: true, .. }) => {}
-                other => state.window.notify(
-                    other
-                        .and_then(|r| r.error)
-                        .filter(|e| !e.is_empty())
-                        .unwrap_or_else(|| "Failed to start the agent".into()),
-                    tx,
-                ),
+                Some(SpawnResultMessage { success: true, .. }) => {
+                    crate::desktop::arrival::forget(state, &started);
+                }
+                other => {
+                    crate::desktop::arrival::forget(state, &started);
+                    state.window.notify(
+                        other
+                            .and_then(|r| r.error)
+                            .filter(|e| !e.is_empty())
+                            .unwrap_or_else(|| "Failed to start the agent".into()),
+                        tx,
+                    );
+                }
             }
             let _ = follow(state, tx);
         },

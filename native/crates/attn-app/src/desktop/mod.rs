@@ -3,6 +3,7 @@
 
 mod actions;
 mod annotating;
+pub(crate) mod arrival;
 mod divider;
 mod drag;
 mod filter_panel;
@@ -27,12 +28,12 @@ use rune::Tx;
 
 use crate::State;
 
-pub(crate) use actions::{escape, give_keyboard, run, show_unseen};
+pub(crate) use actions::{activate_started, escape, give_keyboard, run, show_unseen};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
 pub(crate) use overview::view as overview;
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
-pub(crate) use view::{area, take_tile};
+pub(crate) use view::area;
 pub use windows::{
     Deliver, Opened, Opener, Placement, Setup, TileWindow, on_close as tile_window_closed,
     on_quit as tile_window_quits, tile_window_leaf,
@@ -77,6 +78,10 @@ pub struct Desk {
     pub(crate) ratios: HashMap<String, divider::RatioOverride>,
     /// Chips that flash for a moment: a tile that arrived or went off screen.
     pub(crate) flashes: Vec<shelf::Flash>,
+    /// A show this window asked for that has not landed on screen yet.
+    pub(crate) awaited: Option<arrival::Awaited>,
+    /// Tiles that ring for a moment because they arrived on screen.
+    pub(crate) rings: Vec<arrival::Ring>,
     /// A tile or shelf column being dragged.
     pub(crate) drag: Option<drag::LeafDrag>,
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
@@ -174,7 +179,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
     }
 }
 
-/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, the rest a
+/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, tiles' rings, the rest a
 /// drag takes on a sidebar desktop before the window switches to it, the delays of the peek
 /// and the header popover, and the peek's reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
@@ -184,7 +189,8 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
     let flashes = &mut state.window.desk.flashes;
     let before = flashes.len();
     flashes.retain(|f| f.until > now);
-    switched || flashes.len() != before
+    let flashed = flashes.len() != before;
+    switched | flashed | arrival::expire(state, now)
 }
 
 impl Desk {

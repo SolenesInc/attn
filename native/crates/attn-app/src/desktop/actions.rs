@@ -7,7 +7,7 @@ use attn_protocol::{
 use rune::Tx;
 
 use super::layout::{self, Direction, LeafKind, Node, Toward, View};
-use super::{Visit, leaf_ids};
+use super::{Visit, arrival, leaf_ids};
 use crate::State;
 use crate::action::Action;
 use crate::requests::Refused;
@@ -127,6 +127,7 @@ fn set_current(state: &mut State, desktop: &str, refused: Refused, tx: &mut Tx) 
     let Some(profile_id) = profile(state) else {
         return;
     };
+    state.window.desk.awaited = None;
     let desktop_id = desktop.to_owned();
     state.act(
         |request_id| DesktopSetCurrentMessage {
@@ -275,22 +276,38 @@ pub(crate) fn show_unseen(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 /// Shows `leaf` on `desktop` as the active tile, as the person picked it, and gives it the
-/// keyboard.
+/// keyboard. The tile rings when it lands, as the Tauri app announces a show.
 pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    show_leaf_as(state, desktop, leaf, true, tx);
+}
+
+/// As `show_leaf`, ringing the tile when it lands only if `announced`.
+fn show_leaf_as(state: &mut State, desktop: &str, leaf: &str, announced: bool, tx: &mut Tx) {
     give_keyboard(state, desktop, leaf, tx);
     if state.window.desk.pick(desktop, leaf) {
         tx.instant();
     }
+    let awaited = arrival::Shown::Leaf {
+        desktop: desktop.to_owned(),
+        leaf: leaf.to_owned(),
+    };
+    arrival::expect(state, awaited.clone(), announced, tx);
     let (desktop_id, leaf_id) = (desktop.to_owned(), leaf.to_owned());
-    state.act(
+    state.ask(
         |request_id| DesktopShowLeafMessage {
             request_id,
             desktop_id,
             leaf_id,
             ..DesktopShowLeafMessage::new()
         },
-        Refused::Prefixed("Could not show that leaf"),
-        |_, _, _| {},
+        move |state: &mut State, answer, tx: &mut Tx| {
+            if let Err(reason) = answer.outcome() {
+                state
+                    .window
+                    .notify(format!("Could not show that leaf: {reason}"), tx);
+                arrival::forget(state, &awaited);
+            }
+        },
         tx,
     );
 }
@@ -298,12 +315,22 @@ pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut T
 /// A tile the window took: it holds the keyboard and becomes the active tile of the current
 /// desktop.
 pub(crate) fn activate(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    activate_as(state, desktop, leaf, true, tx);
+}
+
+/// As `activate`, for a tile that just started: it does not ring, as the Tauri app does not
+/// announce a session it created.
+pub(crate) fn activate_started(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    activate_as(state, desktop, leaf, false, tx);
+}
+
+fn activate_as(state: &mut State, desktop: &str, leaf: &str, announced: bool, tx: &mut Tx) {
     let current = state.facts.current_desktop();
     let already = current.is_some_and(|d| d.id == desktop && d.active_pane_id == leaf);
     if already {
         give_keyboard(state, desktop, leaf, tx);
     } else {
-        show_leaf(state, desktop, leaf, tx);
+        show_leaf_as(state, desktop, leaf, announced, tx);
     }
 }
 
@@ -424,7 +451,19 @@ pub(super) fn split_at(
         profile_id,
         ..SpawnSessionMessage::new()
     };
-    state.act_as(id.clone(), &spawn, Refused::Bare, |_, _, _| {}, tx);
+    let started = arrival::Shown::Session(id.clone());
+    arrival::expect(state, started.clone(), false, tx);
+    state.ask_as(
+        id.clone(),
+        &spawn,
+        move |state: &mut State, answer, tx: &mut Tx| {
+            if let Err(reason) = answer.outcome() {
+                state.window.notify(reason, tx);
+                arrival::forget(state, &started);
+            }
+        },
+        tx,
+    );
     state.window.desk.split = Some(id);
 }
 

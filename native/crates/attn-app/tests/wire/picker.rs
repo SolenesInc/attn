@@ -2026,6 +2026,47 @@ fn a_launch_lost_to_a_daemon_restart_brings_the_launcher_back() {
 }
 
 #[test]
+fn an_agent_started_with_the_picker_lands_without_ringing_its_tile() {
+    let tree = |leaves: &[&str]| {
+        attn_testkit::tree::row(leaves.iter().map(|l| attn_testkit::tree::pane(l))).to_string()
+    };
+    let d1 = Desktop {
+        tree_json: tree(&["p1"]),
+        ..desktop("d1", "Desktop 1", vec![pane("d1", "p1")])
+    };
+    let mut world = World::start(daemon(initial(vec![d1], &[]), &[]));
+    world.open_desktop();
+    let spawned = hold(&world, "spawn_session");
+    open_dialog(&mut world);
+    type_path(&mut world, "/tmp/plain");
+    press(&mut world, Key::Enter);
+
+    let request = spawned.lock().unwrap().remove(0);
+    let started = DesktopPane {
+        session_id: request["id"].as_str().unwrap().into(),
+        ..pane("d1", "p-new")
+    };
+    world.daemon.emit(arrangement(
+        "d1",
+        vec![Desktop {
+            tree_json: tree(&["p1", "p-new"]),
+            active_pane_id: "p-new".into(),
+            ..desktop("d1", "Desktop 1", vec![pane("d1", "p1"), started])
+        }],
+    ));
+    world.daemon.reply_to(&request, placed(&request));
+    world.settle();
+
+    assert!(
+        world.screen().find(Target::key("tile.p-new")).is_some(),
+        "{}",
+        world.screen()
+    );
+    assert_eq!(super::desktops::ringing(&world), Vec::<String>::new());
+    rest(&mut world);
+}
+
+#[test]
 fn an_agent_started_from_home_is_shown_holding_the_keyboard() {
     let mut world = World::start(daemon(
         initial(

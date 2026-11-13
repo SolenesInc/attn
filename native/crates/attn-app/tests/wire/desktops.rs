@@ -299,6 +299,7 @@ fn arrows_show_the_neighbouring_tile_and_leave_the_desktop_past_the_row_end() {
             r#"{"profile_id":"work","desktop_id":"work/desktop_2"}"#
         )]
     );
+    world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -339,6 +340,156 @@ fn a_palette_jump_and_a_sidebar_press_give_the_shown_agent_the_keyboard() {
         .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
         .collect();
     assert_eq!(typed, ["r-b", "r-a"]);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+/// The tiles that ring because they arrived on screen.
+pub(crate) fn ringing(world: &World) -> Vec<String> {
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| !e.exiting)
+        .filter_map(|e| {
+            let key = e.key?;
+            let (leaf, _) = key.strip_prefix("tile.")?.split_once(".arrival.")?;
+            Some(leaf.to_owned())
+        })
+        .collect()
+}
+
+fn with_active(mut desktop: Desktop, leaf: &str) -> Desktop {
+    desktop.active_pane_id = leaf.into();
+    desktop
+}
+
+#[test]
+fn an_agent_the_person_picks_rings_when_it_lands_and_another_clients_show_does_not() {
+    let first = || desktop(1, "a", Some(row([pane("a"), pane("b")])));
+    let second = || desktop(2, "c", Some(pane("c")));
+    let mut world = start(vec![first(), second()]);
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-b")));
+    assert_eq!(
+        ringing(&world),
+        Vec::<String>::new(),
+        "not before the daemon shows it"
+    );
+    let landed = world.record(60.0, 1.0, |daemon, _| {
+        daemon.emit(ProfileArrangementChangedMessage {
+            profile: profile("work/desktop_1"),
+            desktops: vec![with_active(first(), "b"), second()],
+            ..ProfileArrangementChangedMessage::new()
+        })
+    });
+    let ring = super::shelf_layout::opacities(&landed, |path| path.contains("/tile.b.arrival."));
+    assert_eq!(ring.first(), Some(&1.0), "{ring:?}");
+    assert!(ring.windows(2).all(|p| p[1] <= p[0]), "it fades: {ring:?}");
+    assert!(ring.len() <= 34, "and is gone after 0.55 s: {ring:?}");
+    assert_eq!(ringing(&world), Vec::<String>::new());
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-b")));
+    assert_eq!(
+        ringing(&world),
+        ["b"],
+        "a pick of the tile on screen rings it again"
+    );
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-c")));
+    arrange(
+        &mut world,
+        "work/desktop_2",
+        vec![with_active(first(), "b"), second()],
+    );
+    assert_eq!(
+        ringing(&world),
+        ["c"],
+        "only the tile the last pick landed on rings"
+    );
+
+    arrange(&mut world, "work/desktop_1", vec![first(), second()]);
+    assert_eq!(
+        ringing(&world),
+        Vec::<String>::new(),
+        "another client's show does not"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn history_and_the_jump_to_waiting_ring_the_tile_they_land_on() {
+    let first = || desktop(1, "a", Some(row([pane("a"), pane("b")])));
+    let mut world = start(vec![first()]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![with_active(first(), "b")],
+    );
+
+    press(&mut world, Action::SessionHistoryBack);
+    arrange(&mut world, "work/desktop_1", vec![first()]);
+    assert_eq!(ringing(&world), ["a"]);
+    world.advance(Duration::from_secs(1));
+
+    press(&mut world, Action::SessionHistoryForward);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![with_active(first(), "b")],
+    );
+    assert_eq!(ringing(&world), ["b"]);
+    world.advance(Duration::from_secs(1));
+
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            state: "waiting_input".into(),
+            turn_owed: Some(true),
+            turn_opened_at: Some(super::queue::ago(5)),
+            ..session("a")
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+    press(&mut world, Action::SessionJumpToWaiting);
+    arrange(&mut world, "work/desktop_1", vec![first()]);
+    assert_eq!(ringing(&world), ["a"]);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn tiles_that_join_the_shown_desktop_ring_while_the_keyboard_stays_where_it_was() {
+    let one = desktop(1, "a", Some(row([pane("a")])));
+    let mut world = World::start_sized(daemon(vec![one]), THREE_FIT);
+    world.open_desktop();
+    world.gesture(|app| app.click(Target::role("group").name("Agent a")));
+    world.advance(Duration::from_secs(1));
+
+    for (n, joined) in ["b", "c"].into_iter().enumerate() {
+        let leaves = ["a", "b", "c"][..n + 2].iter().map(|l| pane(l));
+        world.daemon.emit(attn_protocol::SessionRegisteredMessage {
+            session: session(joined),
+            ..attn_protocol::SessionRegisteredMessage::new()
+        });
+        arrange(
+            &mut world,
+            "work/desktop_1",
+            vec![desktop(1, "a", Some(row(leaves)))],
+        );
+        assert_eq!(ringing(&world), [joined]);
+        world.gesture(|app| app.type_text("x"));
+        world.advance(Duration::from_secs(1));
+        assert_eq!(ringing(&world), Vec::<String>::new());
+    }
+    let typed: Vec<_> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(typed, ["r-a", "r-a"]);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -772,6 +923,7 @@ fn history_walks_back_and_forward_through_the_tiles_this_window_showed() {
         shown,
         ["work/desktop_1:b", "work/desktop_1:a", "work/desktop_1:b"]
     );
+    world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 
