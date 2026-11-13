@@ -84,6 +84,16 @@ fn home_groups_sessions_by_what_they_are_doing() {
 }
 
 #[test]
+fn the_home_header_leads_with_attns_logo() {
+    let world = home(vec![], &[]);
+
+    let header = world.screen().children(Target::key("home.header"));
+    let logo = header.first().expect("the home header is empty");
+    assert_eq!(logo.role, "image");
+    assert_eq!(logo.name.as_deref(), Some("attn"));
+}
+
+#[test]
 fn home_says_so_when_there_are_no_sessions() {
     let world = home(vec![], &[]);
 

@@ -42,7 +42,8 @@ impl Load {
     }
 }
 
-/// The window's pictures for the documents its tiles show, and the one open larger.
+/// The window's pictures: attn's logo, those of the documents its tiles show, and the one
+/// open larger.
 #[derive(Default)]
 pub struct Pictures {
     cache: Option<ImageCache>,
@@ -55,6 +56,7 @@ pub struct Pictures {
     /// changes.
     documents: HashMap<TileKey, u64>,
     shown: Option<Shown>,
+    logo: Option<Image>,
     zoom: ImageZoom,
     /// The window's size in points, which the open image fits in.
     window: [f32; 2],
@@ -68,7 +70,14 @@ struct Shown {
 impl Pictures {
     /// Decodes on worker threads that call `wake` when a picture is ready.
     pub(crate) fn start(&mut self, wake: rune::Waker) {
-        self.cache = Some(ImageCache::new(wake));
+        let cache = ImageCache::new(wake);
+        self.logo = Some(cache.load(crate::home::LOGO));
+        self.cache = Some(cache);
+    }
+
+    /// attn's logo, decoded once when the window starts.
+    pub(crate) fn logo(&self) -> Option<&Image> {
+        self.logo.as_ref()
     }
 
     /// Whether a picture is still decoding, which will wake the window when it is done.

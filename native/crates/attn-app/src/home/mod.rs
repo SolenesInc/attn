@@ -2,7 +2,7 @@ mod model;
 
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
-use rune::{El, ScrollSpec, Tx, col, memo, row, text};
+use rune::{El, Image, ScrollSpec, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::asks::Item as AskItem;
@@ -11,6 +11,10 @@ use crate::{Action, State};
 use model::{Group, Home, HomeAgent};
 
 pub(crate) use model::next_change;
+
+/// attn's cat head, cropped to its outline, at twice the largest size the header draws it.
+pub(crate) const LOGO: &[u8] = include_bytes!("logo.png");
+const LOGO_SIZE: [f32; 2] = [36.0, 32.0];
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
@@ -25,6 +29,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         window.now_ms,
         window.follow_next_turn,
         window.home_snoozed_open,
+        state.pictures.logo().map(Image::id),
         *t,
     );
     memo("home", reads, || {
@@ -40,7 +45,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .padding(space::S6)
             .gap(space::S3)
             .fill(t.bg_app)
-            .child(header(t))
+            .child(header(state.pictures.logo(), t))
             .children(
                 home.all_settled
                     .as_ref()
@@ -50,12 +55,19 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     })
 }
 
-fn header(t: &Tokens) -> El {
+fn header(logo: Option<&Image>, t: &Tokens) -> El {
     row()
         .key("home.header")
         .w_full()
         .items_center()
         .gap(space::S2)
+        .children(logo.map(|logo| {
+            el().key("home.logo")
+                .role("image")
+                .label("attn")
+                .size(LOGO_SIZE[0], LOGO_SIZE[1])
+                .pixels(logo.pixels())
+        }))
         .child(
             col()
                 .grow(1.0)
