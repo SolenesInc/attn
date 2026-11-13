@@ -63,6 +63,8 @@ macro_rules! actions {
             ShowAsks { ask: Option<String> },
             /// Open the ledger on its Worktrees list.
             OpenWorktrees,
+            /// Open the notifications panel, or close it.
+            ToggleNotifications,
         }
 
         impl Action {
@@ -90,6 +92,7 @@ macro_rules! actions {
                     Action::CloseDesktop { .. } => "desktop.close",
                     Action::ShowAsks { .. } => "asks.show",
                     Action::OpenWorktrees => "ledger.worktrees",
+                    Action::ToggleNotifications => "notifications.toggle",
                 }
             }
 
@@ -114,6 +117,7 @@ macro_rules! actions {
                     Action::CloseDesktop { .. } => "Close desktop",
                     Action::ShowAsks { .. } => "Open asks",
                     Action::OpenWorktrees => "Open worktrees",
+                    Action::ToggleNotifications => "Show or hide notifications",
                 }
             }
 

@@ -226,6 +226,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .describe("Every worktree, what the sweep decided, and why it kept the rest"),
     );
     commands.push(Command::new(
+        "notifications",
+        if crate::notifications::is_open(state) {
+            "Hide notifications"
+        } else {
+            "Show notifications"
+        },
+        &["notifications", "alerts", "bell"],
+        Action::ToggleNotifications,
+    ));
+    commands.push(Command::new(
         "toggle-sidebar",
         if state.window.sidebar_hidden {
             "Show the sidebar"

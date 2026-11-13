@@ -62,7 +62,15 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
 pub(crate) fn title_middle(state: &State, t: &Tokens) -> Option<El> {
     (actions::queue_flow(state) && state.window.sidebar_hidden).then(|| {
         let bands = queue::bands(&state.facts, state.window.now_ms);
-        chrome::queue_bar(state, &bands, t)
+        row()
+            .h_full()
+            .items_center()
+            .gap(space::S2)
+            .children(
+                crate::notifications::critical_strip(&state.facts.notifications, t)
+                    .map(|s| s.w(240.0)),
+            )
+            .child(chrome::queue_bar(state, &bands, t))
     })
 }
 
@@ -181,7 +189,11 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         width::of(state).to_bits(),
         state.window.reorder.clone(),
         new_desktop,
-        *t,
+        (
+            *t,
+            facts.notifications.unread_critical,
+            facts.notifications.critical_title.clone(),
+        ),
     );
     memo("sidebar", reads, || {
         let lines: Rc<[Line]> = model::desktop_lines(facts, home, &on_screen).into();
@@ -197,6 +209,10 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
             .padding(space::S2)
             .gap(space::S1)
+            .children(crate::notifications::critical_strip(
+                &facts.notifications,
+                &t,
+            ))
             .child(home_row(home, &t))
             .child(
                 col()

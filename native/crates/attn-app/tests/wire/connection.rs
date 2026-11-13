@@ -29,8 +29,8 @@ fn the_app_says_hello_with_its_token_and_shows_the_daemon_state() {
         .collect();
     assert_eq!(
         sent,
-        ["client_hello", "set_terminal_theme"],
-        "the app says hello, then gives the daemon its terminal colors once the handshake completes"
+        ["client_hello", "notification_list", "set_terminal_theme"],
+        "the app says hello, then counts its notifications and gives the daemon its terminal colors once the handshake completes"
     );
     let hello = &hello[0];
     assert_eq!(hello["client_kind"], "native-app");

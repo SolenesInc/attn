@@ -34,6 +34,19 @@ pub struct Facts {
     pub worktrees: Arc<WorktreePushes>,
     /// The paths git operations run on now, by operation id.
     pub git_running: Arc<BTreeMap<String, String>>,
+    pub notifications: Notifications,
+}
+
+/// The selected profile's unread notifications, as counted by the daemon's last list answer
+/// or broadcast.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Notifications {
+    pub unread: u32,
+    pub unread_critical: u32,
+    /// The newest unread critical notification's title, while one is unread.
+    pub critical_title: Option<String>,
+    /// Rises with each broadcast that the feed changed, so an open feed reads it again.
+    pub changes: u64,
 }
 
 /// The GitHub hosts the daemon found signed in, or why it does not look for pull requests.
@@ -243,7 +256,8 @@ impl Slices {
     pub const WORKTREES: Slices = Slices(1 << 12);
     pub const GIT_OPERATIONS: Slices = Slices(1 << 13);
     pub const TASKS: Slices = Slices(1 << 14);
-    pub const ALL: Slices = Slices((1 << 15) - 1);
+    pub const NOTIFICATIONS: Slices = Slices(1 << 15);
+    pub const ALL: Slices = Slices((1 << 16) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -396,6 +410,29 @@ impl Store {
             }
             facts.github = Arc::new(github);
             Slices::GITHUB
+        });
+    }
+
+    /// The feed's counts; `changed` says the feed itself changed, as a broadcast does and a
+    /// list answer does not.
+    pub(crate) fn count_notifications(
+        &self,
+        unread: u32,
+        unread_critical: u32,
+        critical_title: Option<String>,
+        changed: bool,
+    ) {
+        self.change(|facts| {
+            let was = facts.notifications.clone();
+            let n = &mut facts.notifications;
+            n.unread = unread;
+            n.unread_critical = unread_critical;
+            n.critical_title = critical_title.filter(|_| unread_critical > 0);
+            n.changes += u64::from(changed);
+            if *n == was {
+                return Slices::NONE;
+            }
+            Slices::NOTIFICATIONS
         });
     }
 

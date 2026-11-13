@@ -67,6 +67,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::FileOpen => crate::opener::open(state, tx),
         Action::SessionsOpen => crate::ledger::toggle(state, tx),
         Action::OpenWorktrees => crate::ledger::open(state, crate::ledger::Tab::Worktrees, tx),
+        Action::ToggleNotifications => crate::notifications::toggle(state, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::AppQuit => tx.quit(),
         Action::SetSetting { key, value } => {

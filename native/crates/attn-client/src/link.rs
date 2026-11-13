@@ -6,12 +6,12 @@ use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, ClientHelloMessage, CommandErrorMessage,
     GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
     GitOperationStartedMessage, InitialStateMessage, KittyImageResultMessage,
-    KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
-    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
-    RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
-    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
-    SessionsUpdatedMessage, SettingsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
-    go_values,
+    KittyPlacementsMessage, NotificationListResultMessage, NotificationsUpdatedMessage,
+    OutpostsUpdatedMessage, PROTOCOL_VERSION, ProfileArrangementChangedMessage,
+    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, RuntimeRespawnedMessage,
+    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
+    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
+    SettingsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -516,6 +516,28 @@ impl Task {
                 });
                 None
             }
+            "notifications_updated" => {
+                let m: NotificationsUpdatedMessage = parse(&header.event, text)?;
+                self.store.count_notifications(
+                    count(m.unread_count),
+                    count(m.unread_critical_count),
+                    m.critical_title,
+                    true,
+                );
+                None
+            }
+            "notification_list_result" => {
+                let m: NotificationListResultMessage = parse(&header.event, text)?;
+                if m.success {
+                    self.store.count_notifications(
+                        count(m.unread_count),
+                        count(m.unread_critical_count),
+                        m.critical_title,
+                        false,
+                    );
+                }
+                None
+            }
             "outposts_updated" => {
                 let message: OutpostsUpdatedMessage = parse(&header.event, text)?;
                 self.store.set_outposts(message.outposts);
@@ -674,4 +696,8 @@ fn socket_config() -> tokio_tungstenite::tungstenite::protocol::WebSocketConfig 
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
         .max_message_size(Some(DAEMON_MESSAGE_BYTES))
         .max_frame_size(Some(DAEMON_MESSAGE_BYTES))
+}
+
+fn count(n: i64) -> u32 {
+    u32::try_from(n).unwrap_or(0)
 }

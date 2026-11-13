@@ -18,6 +18,7 @@ mod keys;
 pub mod launch;
 mod ledger;
 mod markdown;
+mod notifications;
 mod opener;
 mod palette;
 mod picker;
@@ -168,6 +169,7 @@ pub fn bind(
             palette::follow(state);
             asks::follow(state, tx);
             ledger::follow(state, was, tx);
+            notifications::follow(state, was, tx);
             settings::follow(state, tx);
             sidebar::advance(state, tx);
             garden::follow(state, tx);

@@ -64,6 +64,7 @@ pub struct Window {
     pub(crate) garden: crate::garden::Garden,
     pub(crate) asks: crate::asks::Asks,
     pub(crate) ledger: crate::ledger::Ledger,
+    pub(crate) notifications: crate::notifications::Panel,
     pub(crate) settings: crate::settings::Dialog,
 }
 
@@ -103,6 +104,8 @@ pub enum Layer {
     Overview,
     /// The ledger of sessions; `Window::ledger` holds it.
     Ledger,
+    /// The notifications panel; `Window::notifications` holds it.
+    Notifications,
     /// The confirmation before closing a desktop that holds tiles; `Window::closing_desktop`
     /// holds it.
     CloseDesktop,
@@ -428,6 +431,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
             state.window.desk.window_w = Some(w);
         })
         .child(crate::desktop::shelf_slot(state, t))
+        .children(connected.then(|| crate::notifications::title_button(state, t)))
         .children(
             connected
                 .then(|| crate::asks::title_button(state, t))
@@ -505,6 +509,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
         Some(Layer::Overview) => layers.extend(crate::desktop::overview(state, t)),
         Some(Layer::Ledger) => layers.push(crate::ledger::view(state, t)),
+        Some(Layer::Notifications) => layers.push(crate::notifications::panel(state, t)),
         Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
         Some(Layer::Settings) => layers.extend(crate::settings::dialog(state, t)),
         Some(Layer::Shortcuts) => layers.push(dialog(

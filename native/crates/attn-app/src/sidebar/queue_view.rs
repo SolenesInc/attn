@@ -303,7 +303,11 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         crate::desktop::on_screen_sessions(state),
         super::width::of(state).to_bits(),
         window.desk.drag.as_ref().and_then(|d| d.desktop_marks()),
-        *t,
+        (
+            *t,
+            facts.notifications.unread_critical,
+            facts.notifications.critical_title.clone(),
+        ),
     );
     memo("sidebar", reads, || {
         let bands = queue::bands(facts, window.now_ms);
@@ -326,6 +330,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
             .padding(space::S2)
             .gap(space::S1)
+            .children(crate::notifications::critical_strip(
+                &facts.notifications,
+                &t,
+            ))
             .child(home_row(window.view == crate::shell::View::Home, &t))
             .child(
                 col()

@@ -83,7 +83,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) opens on home and shows the Sessions card by state in desktop flow, "Your turn" and "Settled" in queue flow, "All settled" with its follow checkbox, the snoozed group with each agent's wake button, and the Asks group ([asks.md](asks.md)). What's new and its banner, notifications, toasts, the PR card and the rate-limit banner drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) opens on home and shows the Sessions card by state in desktop flow, "Your turn" and "Settled" in queue flow, "All settled" with its follow checkbox, the snoozed group with each agent's wake button, the Asks group ([asks.md](asks.md)), and the notifications panel with its bell and critical strip. What's new and its banner, toasts, the PR card and the rate-limit banner drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 
@@ -100,8 +100,11 @@ Steps:
 - **Your turn.** Run `./attn settings set queue_mode_enabled true`: `home.session.home-a` shows inside `home.group.turns`.
 - **All settled, then the next turn.** Open `home-a` and press `mod+shift+e`. The app goes home: `bridge wait '{"target":{"key":"home.all-settled"}}'` answers and `bridge tree` shows `home.follow` checked. Run `wsctl input --id <terminal> --text "question" --enter`. When the agent stops, `bridge state '{"of":"window","includes":"home-a"}'` shows `on_screen: "home-a"`.
 - **Stay home instead.** Settle `home-a` again, then run `bridge press '{"target":{"key":"home.follow"}}'`: the tree shows it unchecked. Send `question` again. The user stays home, and the row returns under `home.group.turns`.
+- **The notifications panel.** `bridge find '{"target":{"key":"titlebar.notifications"}}'` is the bell, named "Show Notifications", its value the unread count. Press `mod+alt+k`, run `bridge type '{"text":"show notifications"}'` and press `Enter`: `bridge wait '{"target":{"key":"notifications.panel"}}'` answers, and on the baseline `notifications.state` reads "No notifications.". Press `Escape`: the panel goes and the bell has the keyboard. While the panel is open the window is inert behind it, so the bell is not in `bridge tree`; a click outside the panel closes it.
+- **Read a notification.** Raise a critical notification with the plugin from the Tauri steps above. When attn parks it, `bridge wait '{"target":{"key":"sidebar.critical"}}'` answers above `sidebar.home`, named "1 unread critical notification: Plugin stopped: home-crash. Open notifications.". A wait gives up after 30 s, so repeat it. Press the strip: the panel opens, and its row `notifications.row.<id>` has the value "critical, unread". Press `notifications.row.<id>.head`: `notifications.row.<id>.detail` shows, the row's value turns "critical", and the strip goes.
+- **Mark all read.** Uninstall the plugin and install it again. When the strip comes back, press the bell, then `notifications.mark-all`: every row loses "unread", "Mark all read" is disabled, and the bell's value is 0. Uninstall the plugin.
 - **Settings and a new agent from home.** Run `bridge press '{"target":{"key":"home.settings"}}'` and `bridge press '{"target":{"key":"home.new"}}'`: each opens its feature, whose recipe is in its own file.
-- **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each way home, the `./attn` commands' output and `bridge tree` after each step on home. Capture `bridge shot '{"path":"<P>/native-home.png"}'` with the agent in a state group and `<P>/native-home-all-settled.png` with "All settled", with `<P>` written out.
+- **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each way home, the `./attn` commands' output and `bridge tree` after each step on home. Capture `bridge shot '{"path":"<P>/native-home.png"}'` with the agent in a state group, `<P>/native-home-all-settled.png` with "All settled", `<P>/native-critical-strip.png` with the strip and `<P>/native-notifications.png` with the panel open, with `<P>` written out.
 
 ## Contexts
 
@@ -115,7 +118,7 @@ Steps:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/home.rs` (the native app), `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/home.rs` and `native/crates/attn-app/tests/wire/notifications.rs` (the native app), `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
 - Scenario: `native-agent-queue` (the native app's All settled and wake), `focusless-native` (parked macOS native input), `home-dock`.
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
 - App: `app/src/App.dashboard.test.tsx`, `app/src/App.homeDock.test.tsx`, `app/src/App.notifications.test.tsx`, `app/src/App.criticalNotifications.test.tsx`, `app/src/App.whatsNew.test.tsx`, `app/src/components/Toast.lifecycle.test.tsx`.
