@@ -1,3 +1,4 @@
+mod artifacts;
 mod authorization;
 mod board;
 mod checks;
@@ -13,7 +14,10 @@ mod view;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use attn_protocol::{Seed, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage};
+use attn_protocol::{
+    FsExistsMessage, FsExistsResultMessage, Seed, SeedDocument, SeedDocumentGetMessage,
+    SeedDocumentGetResultMessage,
+};
 use rune::{Key, KeyEvent, TextEdit, Tx};
 
 use crate::State;
@@ -80,6 +84,9 @@ struct Reading {
     asked: Option<(usize, String)>,
     document: Option<Arc<SeedDocument>>,
     error: Option<String>,
+    /// The linked files asked about, and those the daemon says are not on disk.
+    looked_for: Vec<String>,
+    missing: HashSet<String>,
 }
 
 pub(crate) fn mode(state: &State) -> Mode {
@@ -253,7 +260,7 @@ fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {
     state.ask_as(
         request_id.clone(),
         &command,
-        move |state, answer, _| {
+        move |state, answer, tx| {
             let garden = &mut state.window.garden;
             let Some(reading) = garden.readings.get_mut(&id).filter(|r| {
                 r.asked
@@ -266,6 +273,14 @@ fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {
                 Some(reply) if reply.success => {
                     reading.document = reply.document.map(Arc::new);
                     reading.error = None;
+                    let linked = linked_files(reading.document.as_deref());
+                    if linked != reading.looked_for {
+                        reading.looked_for = linked.clone();
+                        reading.missing.clear();
+                        garden.revision += 1;
+                        look_for(state, &id, linked, tx);
+                        return;
+                    }
                 }
                 Some(reply) => {
                     reading.error = Some(
@@ -280,6 +295,58 @@ fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {
         },
         tx,
     );
+}
+
+/// The absolute paths of the files `document` links to.
+fn linked_files(document: Option<&SeedDocument>) -> Vec<String> {
+    document
+        .into_iter()
+        .flat_map(|d| &d.references)
+        .filter_map(|r| r.path.clone())
+        .filter(|p| p.starts_with('/'))
+        .collect()
+}
+
+/// Asks the daemon whether each linked file of seed `id` is on disk.
+fn look_for(state: &mut State, id: &str, paths: Vec<String>, tx: &mut Tx) {
+    for path in paths {
+        let Some((dir, name)) = path.rsplit_once('/').filter(|(dir, _)| !dir.is_empty()) else {
+            continue;
+        };
+        let command = FsExistsMessage {
+            path: name.to_owned(),
+            root: Some(dir.to_owned()),
+            ..FsExistsMessage::new()
+        };
+        let (id, path) = (id.to_owned(), path.clone());
+        state.ask(
+            |request_id| FsExistsMessage {
+                request_id: Some(request_id),
+                ..command
+            },
+            move |state, answer, _| {
+                let gone = answer
+                    .parse::<FsExistsResultMessage>()
+                    .and_then(|r| r.result)
+                    .is_some_and(|r| !r.exists);
+                let garden = &mut state.window.garden;
+                if let Some(reading) = garden
+                    .readings
+                    .get_mut(&id)
+                    .filter(|r| gone && r.looked_for.contains(&path))
+                {
+                    reading.missing.insert(path);
+                    garden.revision += 1;
+                }
+            },
+            tx,
+        );
+    }
+}
+
+/// The linked files of seed `id` the daemon says are not on disk.
+pub(super) fn missing<'a>(garden: &'a Garden, id: &str) -> Option<&'a HashSet<String>> {
+    garden.readings.get(id).map(|r| &r.missing)
 }
 
 /// The shown seed's document as the daemon last answered it, and the error of its last read.

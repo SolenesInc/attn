@@ -629,6 +629,23 @@ impl World {
         self.runtime.take_url_requests()
     }
 
+    /// The file dialog the app shows, and its title.
+    pub fn file_dialog(&self) -> Option<(rune::FileDialogKind, String)> {
+        self.runtime
+            .file_dialog()
+            .map(|(kind, options)| (kind, options.title.clone()))
+    }
+
+    /// Answers the file dialog the app shows as the user would, choosing `path` or cancelling
+    /// with `None`.
+    pub fn answer_file_dialog(&mut self, path: Option<&str>) {
+        self.runtime
+            .resolve_file_dialog(path.map(std::path::PathBuf::from))
+            .expect("a file dialog is open");
+        self.runtime.frame(0.0);
+        self.settle();
+    }
+
     /// How many settles left a terminal screen the renderer had not yet taken, which a
     /// window asked for a frame by a key or a timer would present: a key whose echo has not
     /// come back leaves none.

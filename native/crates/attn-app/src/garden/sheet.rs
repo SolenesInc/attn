@@ -63,7 +63,7 @@ impl Sheet<'_> {
         note(&self.key(part), words, self.t)
     }
 
-    fn section(&self, part: &str, title: &str) -> El {
+    pub(super) fn section(&self, part: &str, title: &str) -> El {
         section(&self.key(part), title, self.t)
     }
 
@@ -189,25 +189,6 @@ impl Sheet<'_> {
             );
         }
         Some(list)
-    }
-
-    pub(super) fn artifacts(&self, document: Option<&SeedDocument>) -> Option<El> {
-        let document = document?;
-        if document.artifacts.is_empty() && document.references.is_empty() {
-            return None;
-        }
-        let mut artifacts = self.section("artifacts", "Artifacts");
-        for artifact in &document.artifacts {
-            artifacts = artifacts.child(
-                text(artifact.filename.clone())
-                    .key(self.key(&format!("artifact.{}", artifact.filename)))
-                    .role("listitem")
-                    .label(artifact.filename.clone())
-                    .font(type_::BODY)
-                    .color(self.t.text_primary),
-            );
-        }
-        Some(artifacts)
     }
 
     pub(super) fn log(&self, document: Option<&SeedDocument>, error: Option<&str>) -> El {

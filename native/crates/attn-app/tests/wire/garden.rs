@@ -10,6 +10,7 @@ use attn_testkit::{Daemon, Node, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 use serde_json::Value;
 
+mod artifacts;
 mod authorization;
 mod board;
 mod checks;

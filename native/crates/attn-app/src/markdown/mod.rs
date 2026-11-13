@@ -6,7 +6,7 @@ pub(crate) mod annotating;
 pub(crate) mod drafts;
 mod front_matter;
 mod images;
-mod links;
+pub(crate) mod links;
 mod marks;
 mod passages;
 pub(crate) mod sending;
