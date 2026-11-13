@@ -450,9 +450,9 @@ enum Shown<'a> {
 }
 
 impl Shown<'_> {
-    fn picked(&self, label: &str, kind: Kind) -> bool {
+    fn picked(&self, label: &str) -> bool {
         match self {
-            Shown::Draft(a) => a.is_some_and(|a| a.standing(kind).iter().any(|p| p == label)),
+            Shown::Draft(a) => a.is_some_and(|a| a.picked.iter().any(|p| p == label)),
             Shown::Replied(a) => a.is_some_and(|a| a.picked.iter().any(|p| p == label)),
         }
     }
@@ -553,7 +553,7 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
 fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t: &Tokens) -> El {
     let replied = matches!(answer, Shown::Replied(_));
     let rows = question.choices.iter().enumerate().map(|(i, choice)| {
-        let picked = answer.picked(&choice.label, kind);
+        let picked = answer.picked(&choice.label);
         let recommended = question.recommended.as_deref() == Some(choice.label.as_str());
         let (ask_id, q, label) = (ask.to_owned(), question.key.clone(), choice.label.clone());
         let mark = match (kind, picked) {
@@ -633,7 +633,13 @@ fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t:
                     t,
                 )
                 .single_line()
-                .on_edit(move |state: &mut State| &mut state.answer(&ask_id, &q).other),
+                .on_edit({
+                    let (ask_id, q) = (ask_id.clone(), q.clone());
+                    move |state: &mut State| &mut state.answer(&ask_id, &q).other
+                })
+                .on_input_change(move |state: &mut State, _: &mut Tx| {
+                    super::other_edited(state, &ask_id, &q, kind)
+                }),
             )
         }
     };

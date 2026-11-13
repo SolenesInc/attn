@@ -1121,6 +1121,12 @@ fn a_one_choice_questions_other_answer_replaces_its_pick_from_the_first_characte
 
     type_into(&mut world, "asks.q.q1.other.field", "S");
     assert!(!checked(&world, "asks.q.q1.choice.0"));
+    world.gesture(|app| app.press("backspace"));
+    assert!(
+        !checked(&world, "asks.q.q1.choice.0"),
+        "clearing Other brought the pick back"
+    );
+    world.gesture(|app| app.type_text("S"));
     send_key(&mut world);
 
     assert_eq!(

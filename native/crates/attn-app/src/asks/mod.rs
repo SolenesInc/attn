@@ -46,16 +46,6 @@ pub(crate) struct Answer {
     pub text: TextEdit,
 }
 
-impl Answer {
-    /// The choices that stand: a one-choice question's written answer replaces its pick.
-    pub(crate) fn standing(&self, kind: Kind) -> &[String] {
-        if kind == Kind::One && !self.other.text.trim().is_empty() {
-            return &[];
-        }
-        &self.picked
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
     One,
@@ -298,7 +288,7 @@ impl Draft {
         questions(ask)
             .filter_map(|q| {
                 let answer = self.answers.get(&q.key)?;
-                let picked = answer.standing(Kind::of(q));
+                let picked = &answer.picked;
                 let other = answer.other.text.trim();
                 let text = answer.text.text.trim();
                 if picked.is_empty() && other.is_empty() && text.is_empty() {
@@ -499,6 +489,13 @@ pub(crate) fn pick(state: &mut State, ask: &str, question: &str, kind: Kind, lab
             }
         }
         Kind::Text => {}
+    }
+}
+
+/// A one-choice question's written answer replaces its pick.
+pub(crate) fn other_edited(state: &mut State, ask: &str, question: &str, kind: Kind) {
+    if kind == Kind::One {
+        state.answer(ask, question).picked.clear();
     }
 }
 
