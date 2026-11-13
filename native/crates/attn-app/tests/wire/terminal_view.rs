@@ -51,7 +51,7 @@ pub(crate) fn copied(world: &World) -> Option<String> {
 }
 
 /// Turns the wheel `rows` rows over terminal r1, positive toward the history.
-fn wheel(world: &mut World, rows: f32) {
+pub(crate) fn wheel(world: &mut World, rows: f32) {
     let at = cell(world, 1, 1);
     let row = Fonts::default().metrics(FONT_SIZE).cell_h;
     world.gesture(|app| {

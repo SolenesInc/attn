@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use attn_client::{Commands, KittyFormat};
@@ -8,7 +8,8 @@ use attn_term::kitty::{Described, Format, Picture};
 
 use super::{Term, Terminals};
 
-/// The decoded pixels kept across terminals before the least recently drawn go. Measured
+/// The decoded pixels kept across terminals before the least recently drawn that no placement
+/// shows go. Measured
 /// 2026-08-03 with kitten icat, timg and chafa: the largest stored image held 6.48 MB of
 /// pixels, typical ones 1.9 to 6 MB, so 64 MB is about ten of the largest, past what a screen
 /// shows at once.
@@ -24,7 +25,7 @@ enum Entry {
 }
 
 /// The images the terminals' placements show, pulled from the daemon on a miss and kept,
-/// least recently drawn first, up to `CACHE_BYTES`.
+/// least recently drawn first, up to `CACHE_BYTES` of images no placement shows.
 #[derive(Default)]
 pub(super) struct Images {
     entries: HashMap<Key, Entry>,
@@ -33,6 +34,8 @@ pub(super) struct Images {
     /// The generation asked for, per terminal and image id: the daemon answers by image id.
     asked: HashMap<(String, u32), u64>,
     next_picture: u64,
+    /// The placed images alone are past `CACHE_BYTES`.
+    over: bool,
 }
 
 impl Images {
@@ -43,14 +46,34 @@ impl Images {
         }
         self.order.push_back(key.clone());
         self.entries.insert(key, entry);
-        while self.bytes > CACHE_BYTES && self.order.len() > 1 {
-            let Some(oldest) = self.order.pop_front() else {
+    }
+
+    /// Lets the least recently drawn images no placement shows go until the rest fit
+    /// `CACHE_BYTES`, and says once, as they first stop fitting, when the placed ones alone
+    /// do not.
+    fn trim(&mut self, placed: &HashSet<Key>) -> Option<String> {
+        let unplaced: Vec<Key> = self
+            .order
+            .iter()
+            .filter(|key| !placed.contains(*key))
+            .cloned()
+            .collect();
+        for key in unplaced {
+            if self.bytes <= CACHE_BYTES {
                 break;
-            };
-            if let Some(Entry::Present(picture)) = self.entries.remove(&oldest) {
-                self.bytes -= picture.rgba.len();
             }
+            self.remove(&key);
         }
+        let over = self.bytes > CACHE_BYTES;
+        let say = over && !self.over;
+        self.over = over;
+        say.then(|| {
+            format!(
+                "The terminals' images hold {} MB of pixels, past the {} MB budget; they stay drawn",
+                self.bytes.div_ceil(1024 * 1024),
+                CACHE_BYTES / (1024 * 1024)
+            )
+        })
     }
 
     fn remove(&mut self, key: &Key) {
@@ -107,6 +130,7 @@ impl Terminals {
         if term.placements.apply(seq, &described(placements), history) {
             self.undrawn = true;
             self.ask_images(id, daemon);
+            self.trim_images();
         }
     }
 
@@ -161,6 +185,7 @@ impl Terminals {
         let entry = picture.map_or(Entry::Failed, |p| Entry::Present(Arc::new(p)));
         self.images
             .insert((id.to_owned(), image, generation), entry);
+        self.trim_images();
         self.undrawn = true;
     }
 
@@ -178,6 +203,22 @@ impl Terminals {
         if let Some(generation) = generation {
             self.images
                 .insert((result.id.clone(), image, generation), Entry::Failed);
+        }
+    }
+
+    fn trim_images(&mut self) {
+        let placed: HashSet<Key> = self
+            .panes
+            .iter()
+            .flat_map(|(id, term)| {
+                term.placements
+                    .placed()
+                    .iter()
+                    .map(|p| (id.clone(), p.image_id, p.generation))
+            })
+            .collect();
+        if let Some(said) = self.images.trim(&placed) {
+            self.said = Some(said);
         }
     }
 

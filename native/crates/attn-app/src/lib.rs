@@ -204,6 +204,11 @@ pub fn connect(
 
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let recounted = state.terminals.drain(tx, &state.daemon);
+    let said = state.terminals.take_said();
+    let told = said.is_some();
+    if let Some(said) = said {
+        state.window.notify(said, tx);
+    }
     let answered = requests::drain(state, tx);
     annotations::draft::follow(state, tx);
     let expired = annotations::draft::expire(state, now) | annotations::draft::due(state, now, tx);
@@ -217,6 +222,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | desktop::follow_settling(state, state.wall_ms(tx));
     shell::expire(state, now, tx)
         || recounted
+        || told
         || aged
         || answered
         || browsed

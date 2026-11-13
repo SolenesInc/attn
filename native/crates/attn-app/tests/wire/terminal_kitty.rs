@@ -8,7 +8,7 @@ use base64::Engine;
 use serde_json::{Value, json};
 
 use super::terminal::{attached, one_terminal, output};
-use super::terminal_view::view;
+use super::terminal_view::{view, wheel};
 
 fn placement(placement_id: i64, image_id: i64, generation: i64, row: i64) -> KittyPlacement {
     KittyPlacement {
@@ -202,5 +202,102 @@ fn an_image_asked_for_on_a_connection_that_dropped_is_asked_for_again_on_the_nex
     send_pixels(&world, 7, 1, (1, 1), &[0, 255, 0, 255]);
     world.settle();
     assert_eq!(drawn(&world)[0]["image"], 7);
+    assert!(world.runtime_is_at_rest());
+}
+
+/// A 2048x2048 RGBA image's pixels: 16 MiB, so five are past the 64 MiB the app keeps.
+fn large(world: &World, image: u32) {
+    send_pixels(
+        world,
+        image,
+        1,
+        (2048, 2048),
+        &vec![image as u8; 2048 * 2048 * 4],
+    );
+}
+
+fn notice(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(attn_testkit::Target::key("notice.text"))
+        .and_then(|n| n.name)
+}
+
+#[test]
+fn placed_images_past_the_budget_stay_drawn_and_say_so_and_one_no_longer_placed_goes() {
+    let mut world = started();
+    describe(
+        &world,
+        2,
+        (1..=5).map(|i| placement(i, i, 1, i - 1)).collect(),
+    );
+    world.settle();
+    for image in 1..=5 {
+        large(&world, image as u32);
+    }
+    world.settle();
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("The terminals' images hold 80 MB of pixels, past the 64 MB budget; they stay drawn")
+    );
+
+    let lines: Vec<u8> = (0..40)
+        .flat_map(|n| format!("line {n}\r\n").into_bytes())
+        .collect();
+    output(&world, 3, &lines);
+    world.settle();
+    let cursor_row = view(&world)["cursor"][1]
+        .as_i64()
+        .expect("the cursor shows");
+    let scrolled = 1 + 40 - cursor_row;
+    describe(
+        &world,
+        4,
+        (1..=5)
+            .map(|i| placement(i, i, 1, i - 1 - scrolled))
+            .collect(),
+    );
+    world.settle();
+    wheel(&mut world, scrolled as f32);
+    world.settle();
+    let images: Vec<(Value, Value)> = drawn(&world)
+        .as_array()
+        .expect("the view lists its images")
+        .iter()
+        .map(|image| (image["image"].clone(), image["row"].clone()))
+        .collect();
+    assert_eq!(
+        images,
+        (1..=5)
+            .map(|i| (json!(i), json!(i - 1)))
+            .collect::<Vec<_>>(),
+        "every placed image draws where it was when scrolled back to"
+    );
+    assert_eq!(asked(&world).len(), 5, "nothing is asked for twice");
+
+    describe(
+        &world,
+        5,
+        (2..=6)
+            .map(|i| placement(i, i, 1, i - 1 - scrolled))
+            .collect(),
+    );
+    world.settle();
+    large(&world, 6);
+    world.settle();
+    describe(
+        &world,
+        6,
+        (1..=6)
+            .map(|i| placement(i, i, 1, i - 1 - scrolled))
+            .collect(),
+    );
+    world.settle();
+    assert_eq!(
+        asked(&world).last(),
+        Some(&json!(1)),
+        "an image no placement showed went, and is asked for once placed again"
+    );
+    world.advance(std::time::Duration::from_secs(6));
     assert!(world.runtime_is_at_rest());
 }

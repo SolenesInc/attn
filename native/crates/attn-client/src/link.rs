@@ -333,7 +333,9 @@ impl Task {
             });
         }
         let url = format!("ws://{}/ws", self.config.daemon);
-        let Ok((socket, _)) = tokio_tungstenite::connect_async(url).await else {
+        let Ok((socket, _)) =
+            tokio_tungstenite::connect_async_with_config(url, Some(socket_config()), false).await
+        else {
             return Ended::Lost { greeted: false };
         };
         let (mut write, mut read) = socket.split();
@@ -558,4 +560,14 @@ fn parse<T: serde::de::DeserializeOwned>(event: &str, text: &str) -> Option<T> {
     serde_json::from_str(text)
         .inspect_err(|why| eprintln!("attn-app: dropped an unreadable {event}: {why}"))
         .ok()
+}
+
+/// The largest message the daemon sends is one kitty image's pixels, which the daemon caps at
+/// 400 MiB (`maxKittyImageBytes` in `internal/ghosttyvt/kitty_png.go`) and sends as one frame.
+const DAEMON_MESSAGE_BYTES: usize = 512 * 1024 * 1024;
+
+fn socket_config() -> tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
+    tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
+        .max_message_size(Some(DAEMON_MESSAGE_BYTES))
+        .max_frame_size(Some(DAEMON_MESSAGE_BYTES))
 }
