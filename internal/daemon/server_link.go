@@ -56,11 +56,8 @@ func (l *serverLink) canRun(req *spawnRequest) bool {
 }
 
 func (l *serverLink) enabledForNewLaunches() bool {
-	if l.b.plugin != "" {
-		reg, conn := l.d.ensurePluginRegistry().driverConnection(l.b.agent, l.b.plugin)
-		return l.b.declaration.Load() != nil && conn != nil && reg.Capabilities["server_binding"]
-	}
-	return l.d.on(l.b.feature)
+	reg, conn := l.d.ensurePluginRegistry().driverConnection(l.b.agent, l.b.plugin)
+	return l.b.declaration.Load() != nil && conn != nil && reg.Capabilities["server_binding"]
 }
 
 func (l *serverLink) admit(profile, conversation string) error {
@@ -232,10 +229,8 @@ func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOpti
 	if err != nil {
 		return fmt.Errorf("start the %s server: %w", l.b.name, err)
 	}
-	args, homeVariable := []string{"serve"}, l.b.homeVariable
-	if p := l.b.declaration.Load(); p != nil {
-		args, homeVariable = p.ServeArgs, p.HomeEnv
-	}
+	p := l.b.declaration.Load()
+	args, homeVariable := p.ServeArgs, p.HomeEnv
 	argv, env := append([]string{executable}, args...), append(append([]string(nil), serverEnv...), homeVariable+"="+home)
 	spawn := ptybackend.SpawnOptions{
 		ID: terminal, Agent: string(terminal), Label: l.b.name + " server", CWD: home, Cols: 80, Rows: 24,
@@ -256,7 +251,7 @@ func (l *serverLink) tracksCompletions() bool {
 	if p := l.b.declaration.Load(); p != nil {
 		return p.Recovery == "numbered-completions"
 	}
-	return l.b.tracksCompletions
+	return false
 }
 
 func (l *serverLink) launchStarted(id protocol.SessionID) {
@@ -383,11 +378,8 @@ func userName() string {
 }
 
 func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conversation string) {
-	leavesRun := l.b.closeLeavesRun
-	if p := l.b.declaration.Load(); p != nil {
-		leavesRun = p.OnClose == "leave-running"
-	}
-	if leavesRun || conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
+	declaration := l.b.declaration.Load()
+	if declaration == nil || declaration.OnClose == "leave-running" || conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)

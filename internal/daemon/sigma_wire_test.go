@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
@@ -19,14 +20,6 @@ func submitSessionAnnotationFeedbackAs(app *testworld.Peer, sessionID, requestID
 	return testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{
 		Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(sessionID), Text: text,
 	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
-}
-
-func TestASigmaViewAttachesToTheServerAttnRuns(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
-	_, view, _ := appServerSession(t, w, w.App(), fakeagent.Sigma)
-	if !slices.Contains(view.Argv, "--attach") {
-		t.Errorf("the Sigma view ran %q, want --attach so it never starts a second server", view.Argv)
-	}
 }
 
 func TestASigmaQuestionAttnNeverSawStartReachesTheUserAndARetryDoesNotRunItAgain(t *testing.T) {
@@ -101,6 +94,7 @@ func TestASigmaQuestionTheUserHandledStaysHandledThroughReconnectsAndRestarts(t 
 	stillHandled("after attn reconnected to the server")
 
 	w.restart()
+	registerSigmaDriver(t, w, w.App())
 	app = w.App()
 	testworld.AwaitSessionFromConnect(app, neighbour, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	stillHandled("after a daemon restart")
@@ -141,7 +135,7 @@ func TestClosingASigmaSessionLeavesItsRunGoingForAReopen(t *testing.T) {
 func TestSigmaListsTheExecutionTargetsOfAFolder(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
-	setSetting(t, app, "sigma_enabled", "true")
+	registerSigmaDriver(t, w, app)
 	folder := w.Path("shop")
 	listed := testworld.Request(app, protocol.HarnessTargetsMessage{Cmd: protocol.CmdHarnessTargets, RequestID: "targets", Harness: "sigma", Cwd: folder},
 		protocol.EventHarnessTargetsResult, func(r protocol.HarnessTargetsResultMessage) bool { return r.RequestID == "targets" })
@@ -172,7 +166,7 @@ func TestASigmaConversationStartsOnTheTargetItsSessionLaunchedWith(t *testing.T)
 func TestASigmaSessionWhoseTargetIsUnavailableKeepsItsErrorAndTriesThatTargetAgainOnResumeAndReopen(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
-	setSetting(t, app, "sigma_enabled", "true")
+	registerSigmaDriver(t, w, app)
 	session := w.Spawn(app, fakeagent.Sigma, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("gone") })
 	failed, failure := w.LaunchFailed(session)
 	if target, _ := flagValue(failed.Argv, "--target"); target != "gone" || !strings.Contains(failure, "TargetUnavailable") {
@@ -200,5 +194,66 @@ func TestASigmaSessionWhoseTargetIsUnavailableKeepsItsErrorAndTriesThatTargetAga
 	fromLedger, _ := w.LaunchFailed(session)
 	if target, _ := flagValue(fromLedger.Argv, "--target"); target != "gone" {
 		t.Fatalf("the view reopened from the ledger ran %q, want it on target gone again", fromLedger.Argv)
+	}
+}
+
+func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s.Start()
+	w := &world{World: s.World}
+	app := s.App()
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	promptUntilWorking(app, session, view, server, "which index")
+	server.Reply(view.ConversationID, "By date? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
+	})
+	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
+	previous := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return !protocol.Deref(x.TurnOwed) })
+	app.TypeLine(session, "build the index")
+	view.Prompted()
+	server.Prompted(view.ConversationID)
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	terminal := app.Terminal(session)
+	s.Stop()
+	s.KillRuntimeOf(terminal)
+	server.Reply(view.ConversationID, "Built. Keep the old index? <!-- attn:state=waiting_input -->")
+	recovery := s.PauseAt(pausepoint.TerminalCopyApplied)
+	verdict := s.PauseAt(pausepoint.ClassifierVerdictApplied)
+	s.Start()
+	app = s.App()
+	registerSigmaDriver(t, w, app)
+	recovery.Await()
+	verdict.Await()
+	verdict.Release()
+	recovery.Release()
+	again := s.Launched(session)
+	if again.ConversationID != view.ConversationID {
+		t.Fatal("view recovery changed conversation")
+	}
+	neighbor := s.Spawn(app, fakeagent.Sigma, s.Path("neighbor"))
+	neighborView := s.Launched(neighbor)
+	promptUntilWorking(app, neighbor, neighborView, server, "sync status after recovery")
+	server.Reply(neighborView.ConversationID, "Synced. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, neighbor, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	got := queriedSession(t, s.Client(), session)
+	if got.State != protocol.SessionStateWaitingInput || !protocol.Deref(got.TurnOwed) || protocol.Deref(got.TurnOpenedAt) == protocol.Deref(previous.TurnOpenedAt) {
+		t.Fatalf("recovered view changed completion: state=%s opened=%s want=%s", got.State, protocol.Deref(got.TurnOpenedAt), "the missed question")
+	}
+	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
+	handled := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return !protocol.Deref(x.TurnOwed) })
+	for range 2 {
+		s.Stop()
+		s.Start()
+		app = s.App()
+		registerSigmaDriver(t, w, app)
+		server.AskApproval(neighborView.ConversationID)
+		testworld.AwaitSessionFromConnect(app, neighbor, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
+		server.Work(neighborView.ConversationID)
+		testworld.AwaitSession(app, neighbor, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+		got := queriedSession(t, s.Client(), session)
+		if got.State != protocol.SessionStateWaitingInput || protocol.Deref(got.TurnOwed) || protocol.Deref(got.TurnOpenedAt) != protocol.Deref(handled.TurnOpenedAt) {
+			t.Fatalf("replayed handled completion: %+v", got)
+		}
 	}
 }

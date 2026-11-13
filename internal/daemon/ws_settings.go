@@ -234,7 +234,7 @@ func isAgentExecutableSettingKey(key string) (agent string, ok bool) {
 	if agent == "" {
 		return "", false
 	}
-	if agentdriver.Get(agent) == nil {
+	if normalizePluginAgent(agent) == "" {
 		return "", false
 	}
 	return agent, true

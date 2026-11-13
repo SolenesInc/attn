@@ -1,21 +1,37 @@
 # Using Sigma
 
-Sigma is experimental. It runs Pi Durable conversations behind an app-server:
+Sigma is an installable harness plugin. It runs Pi Durable conversations behind an app-server:
 one Sigma server per Sigma home stores every conversation, and the Sigma
 terminal view and Attn are both clients of that server. A run keeps going when
 the terminal that started it closes, and a restarted server resumes the work it
 had not finished.
 
-Attn runs the `sigma` on your PATH, or the one `ATTN_SIGMA_EXECUTABLE` names.
+Attn uses a session's explicit executable first, then the `sigma_executable`
+machine setting, then `ATTN_SIGMA_EXECUTABLE`, then `sigma` on PATH.
 Attn uses `SIGMA_HOME` from your login shell as the Sigma home, by default
 `~/.sigma`. Keep that path short: the server's socket lives in it. Attn needs
 Sigma protocol 1.
 
-## Turn it on or off
+## Install the plugin
 
-**Sigma** in **Settings → Experimental** is off by default. While the setting is
-off, the harness pickers don't offer Sigma and Attn refuses Sigma launches,
-resumes from the Sessions ledger included.
+Extract `attn-sigma-0.1.0.tgz` and run
+`attn plugin install --path /path/to/attn-sigma-0.1.0`.
+The package includes its install and upgrade instructions. Installation requires
+Bun and an Attn build containing the Sigma plugin cutover. Without the package,
+the picker omits Sigma.
+
+When upgrading from the built-in harness, stage the package with that command
+before updating Attn. The old build reserves `sigma`, so registration starts
+after the update. Keep the same Sigma home, server and executable override.
+Existing sessions and ledger entries retain their native conversation IDs,
+profiles, execution targets and applied completion numbers.
+
+If you upgrade without the package, install it to reconnect existing sessions
+and restore ledger resumes. History remains available while the plugin is
+absent. Do not change `SIGMA_HOME` or create replacement conversations to recover.
+
+Close every open Sigma session before `attn plugin uninstall sigma`. The runs
+continue on the server. Reinstalling the package restores availability.
 
 ## How a session runs
 

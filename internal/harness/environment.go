@@ -30,28 +30,6 @@ func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
 	return rest[:i], rest[i+1:], true
 }
 
-const SigmaConversationPrefix = "sigma:"
-
-func SigmaConversationTerminal(conversation string) TerminalID {
-	return conversationTerminal(SigmaConversationPrefix, conversation)
-}
-
-func ParseSigmaConversationTerminal(t TerminalID) (conversation string, ok bool) {
-	return parseConversationTerminal(SigmaConversationPrefix, t)
-}
-
-func conversationTerminal(prefix, conversation string) TerminalID {
-	if conversation = strings.TrimSpace(conversation); conversation == "" {
-		return ""
-	}
-	return TerminalID(prefix + conversation)
-}
-
-func parseConversationTerminal(prefix string, t TerminalID) (conversation string, ok bool) {
-	conversation, ok = strings.CutPrefix(strings.TrimSpace(string(t)), prefix)
-	return conversation, ok && conversation != ""
-}
-
 // TerminalFromEnv reads the terminal identity, including the spelling used by older launches.
 func TerminalFromEnv() TerminalID {
 	id, _ := ResolveTerminalFromEnv()

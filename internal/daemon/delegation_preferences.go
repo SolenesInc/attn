@@ -245,12 +245,12 @@ func (d *Daemon) projectDelegationPreferencesChanged() {
 
 func supportsModelDiscovery(driver agentdriver.Driver) bool {
 	_, ok := driver.(agentdriver.ModelDiscoverer)
-	return ok || appServerBinding(driver.Name()) != nil
+	return ok
 }
 
 func (d *Daemon) selectsProviders(harness string) bool {
 	_, plugin := d.ensurePluginRegistry().driver(harness)
-	return plugin || appServerBinding(harness) != nil
+	return plugin
 }
 
 func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
@@ -294,7 +294,7 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, hos
 		return nil, err
 	}
 	if s.Provider != "" && !d.selectsProviders(s.Harness) {
-		return nil, fmt.Errorf("harness %q uses its configured provider; provider selection is supported by Nisse, Sigma and plugin harnesses", s.Harness)
+		return nil, fmt.Errorf("harness %q uses its configured provider; provider selection is supported by plugin harnesses", s.Harness)
 	}
 	if err := d.validateHarnessModelEffort(s.Harness, s.Model, s.Effort); err != nil {
 		return nil, err

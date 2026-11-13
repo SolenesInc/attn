@@ -250,6 +250,7 @@ func TestAnAppServerQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	ringAndAnswer("the review is in", "The refund bug is fixed and landed. <!-- attn:state=idle -->")
 	ringAndAnswer("the deploy is in", "The deploy finished with no errors. <!-- attn:state=idle -->")
 	verdicts := verdictsOnceTheDaemonHasStopped(t, w, session)
+	registerSigmaDriver(t, w, w.App())
 	if revived := w.Launched(session); revived.ConversationID != conversation {
 		t.Errorf("the restart revived AppServer on conversation %q, want %q", revived.ConversationID, conversation)
 	}

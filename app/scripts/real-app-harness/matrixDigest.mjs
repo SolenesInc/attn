@@ -15,7 +15,7 @@ export function scenarioSkipReason(scenario, platform = process.platform, env = 
   if (typeof rule === 'string') {
     return rule;
   }
-  if (rule.unlessEnv && env[rule.unlessEnv]) {
+  if (rule.unlessEnv && [rule.unlessEnv].flat().every(key => env[key])) {
     return null;
   }
   return rule.reason;

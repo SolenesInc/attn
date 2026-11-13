@@ -45,8 +45,7 @@ Attn runs the argv your `spawn` handler returned, in the terminal, in the
 folder you picked.
 
 The ID is yours to choose: lowercase letters, numbers, hyphens and underscores,
-starting with a letter or number. The built-in names `claude`, `codex`, `shell`,
-and `sigma` are taken, as are `codex-app`, `codex-server`, and IDs
+starting with a letter or number. The built-in names `claude`, `codex`, and `shell` are taken, as are `codex-app`, `codex-server`, and IDs
 starting with `codex-server-`. Two plugins cannot register one ID.
 
 ## What the plugin declares

@@ -196,6 +196,7 @@ func TestAnAppServerSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) 
 
 	shell.block()
 	w.restart()
+	registerSigmaDriver(t, w, w.App())
 	app = w.App()
 	if got := app.Initial.Settings["claude_available"]; got != "checking" {
 		t.Fatalf("initial_state carries claude_available=%v during the capture, want checking", got)

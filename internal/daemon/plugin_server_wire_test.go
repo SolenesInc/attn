@@ -224,7 +224,7 @@ func TestAPluginServerCannotClaimABuiltInLinkName(t *testing.T) {
 func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
-	setSetting(t, app, "sigma_enabled", "true")
+	registerSigmaDriver(t, w, app)
 	driver := registerServerDriver(t, w, "alias", serverDriverDeclaration(w))
 	awaitDriverAvailable(app, serverPluginAgent)
 	if err := os.MkdirAll(w.Path("shop"), 0700); err != nil {
@@ -235,7 +235,7 @@ func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T
 	alias, view := spawnPluginServerView(w, app, driver)
 	started := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == original })
 	if !started.Success {
-		t.Fatalf("concurrent built-in view: %+v", started)
+		t.Fatalf("concurrent registered view: %+v", started)
 	}
 	native, server := w.Launched(original), w.AppServer(fakeagent.Sigma)
 	for _, run := range []struct {
@@ -320,39 +320,57 @@ func TestAPluginServerInterruptsWhenItsViewQuits(t *testing.T) {
 	}
 }
 
-func TestAPluginServerKeepsTheExplicitExecutableOnLaunchAndReload(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
-	app := w.App()
-	executable := filepath.Join(w.Dir, "explicit-sigma")
-	script := "#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=explicit\nexec '" + filepath.Join(w.Dir, "bin", "sigma") + "' \"$@\"\n"
-	if err := os.WriteFile(executable, []byte(script), 0755); err != nil {
-		t.Fatal(err)
+func TestAPluginServerKeepsTheConfiguredExecutableOnLaunchAndReload(t *testing.T) {
+	for _, source := range []string{"session", "machine", "environment"} {
+		t.Run(source, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Sigma)
+			app := w.App()
+			executable := filepath.Join(w.Dir, "selected-sigma")
+			script := "#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=selected\nexec '" + filepath.Join(w.Dir, "bin", "sigma") + "' \"$@\"\n"
+			if err := os.WriteFile(executable, []byte(script), 0755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("ATTN_TEST_SERVER_EXECUTABLE", "/not-the-selected-executable")
+			declaration := serverDriverDeclaration(w)
+			declaration["executable_env"] = "ATTN_TEST_SERVER_EXECUTABLE"
+			driver := registerServerDriver(t, w, "executable-server", declaration)
+			driver.mu.Lock()
+			driver.holdLaunch = false
+			driver.serverExecutable = "/not-the-selected-view"
+			driver.mu.Unlock()
+			awaitDriverAvailable(app, serverPluginAgent)
+			if source == "machine" {
+				setSetting(t, app, serverPluginAgent+"_executable", executable)
+			}
+			if source == "environment" {
+				t.Setenv("ATTN_TEST_SERVER_EXECUTABLE", executable)
+			}
+			if source != "session" {
+				if models := harnessCatalog(app, serverPluginAgent, true); !models.Success {
+					t.Fatal(models)
+				}
+			}
+			session := w.Spawn(app, fakeagent.Harness(serverPluginAgent), w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+				if source == "session" {
+					m.Executable = protocol.Ptr(executable)
+				}
+			})
+			check := func(view *fakeagent.Run) {
+				t.Helper()
+				if selection := driver.launched().Executable; selection != executable {
+					t.Fatalf("plugin received executable %q, want %q", selection, executable)
+				}
+				if got, _ := envEntry(view.Env, "ATTN_TEST_EXECUTABLE"); got != "selected" {
+					t.Fatalf("view selected executable %q", got)
+				}
+			}
+			check(w.Launched(session))
+			if got, _ := envEntry(w.AppServer(fakeagent.Sigma).Env(), "ATTN_TEST_EXECUTABLE"); got != "selected" {
+				t.Fatalf("server selected executable %q", got)
+			}
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+			launchIntentReload(t, app, session)
+			check(w.Launched(session))
+		})
 	}
-	t.Setenv("ATTN_TEST_SERVER_EXECUTABLE", "/not-the-selected-executable")
-	declaration := serverDriverDeclaration(w)
-	declaration["executable_env"] = "ATTN_TEST_SERVER_EXECUTABLE"
-	driver := registerServerDriver(t, w, "executable-server", declaration)
-	driver.mu.Lock()
-	driver.holdLaunch = false
-	driver.serverExecutable = "/not-the-selected-view"
-	driver.mu.Unlock()
-	awaitDriverAvailable(app, serverPluginAgent)
-	session := w.Spawn(app, fakeagent.Harness(serverPluginAgent), w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(executable) })
-	check := func(view *fakeagent.Run) {
-		t.Helper()
-		if selection := driver.launched().Executable; selection != executable {
-			t.Fatalf("plugin received executable %q, want %q", selection, executable)
-		}
-		if got, _ := envEntry(view.Env, "ATTN_TEST_EXECUTABLE"); got != "explicit" {
-			t.Fatalf("view selected executable %q", got)
-		}
-	}
-	view := w.Launched(session)
-	check(view)
-	if got, _ := envEntry(w.AppServer(fakeagent.Sigma).Env(), "ATTN_TEST_EXECUTABLE"); got != "explicit" {
-		t.Fatalf("server selected executable %q", got)
-	}
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	launchIntentReload(t, app, session)
-	check(w.Launched(session))
 }

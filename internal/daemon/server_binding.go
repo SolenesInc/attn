@@ -9,80 +9,31 @@ import (
 	"strings"
 	"sync/atomic"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/setting"
-	"github.com/victorarias/attn/internal/sigma"
 )
 
 type serverBinding struct {
-	plugin            string
-	declaration       atomic.Pointer[pluginServerDeclaration]
-	agent             string
-	name              string
-	kind              string
-	terminal          harness.TerminalID
-	feature           *setting.Setting
-	callerVariable    string
-	homeVariable      string
-	homeDir           string
-	socket            func(home string) string
-	connect           func(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error)
-	conversationOf    func(harness.TerminalID) (string, bool)
-	tracksCompletions bool
-	closeLeavesRun    bool
-}
-
-const sigmaAgent = "sigma"
-
-var sigmaBinding = &serverBinding{
-	agent:             sigmaAgent,
-	name:              "Sigma",
-	kind:              "sigma-server",
-	terminal:          "sigma-server",
-	feature:           setting.SigmaEnabled,
-	homeVariable:      "SIGMA_HOME",
-	callerVariable:    "SIGMA_ROOT_CONVERSATION",
-	homeDir:           ".sigma",
-	socket:            sigma.Socket,
-	connect:           sigma.Connect,
-	conversationOf:    harness.ParseSigmaConversationTerminal,
-	tracksCompletions: true,
-	closeLeavesRun:    true,
+	plugin         string
+	declaration    atomic.Pointer[pluginServerDeclaration]
+	agent          string
+	name           string
+	kind           string
+	terminal       harness.TerminalID
+	conversationOf func(harness.TerminalID) (string, bool)
 }
 
 var serverEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID=", "BUN_GC_TIMER_DISABLE=1"}
 
-func appServerBinding(agent string) *serverBinding {
-	if agent == sigmaBinding.agent {
-		return sigmaBinding
-	}
-	return nil
-}
-
 func (d *Daemon) serverLinkFor(agent string) *serverLink {
 	d.serverLinksMu.Lock()
 	defer d.serverLinksMu.Unlock()
-	if l := d.serverLinks[agent]; l != nil {
-		return l
-	}
-	b := appServerBinding(agent)
-	if b == nil {
-		return nil
-	}
-	if d.serverLinks == nil {
-		d.serverLinks = make(map[string]*serverLink)
-	}
-	l := newServerLink(d, b)
-	d.serverLinks[agent] = l
-	return l
+	return d.serverLinks[agent]
 }
 
 func (d *Daemon) appServerLinks() []*serverLink {
-	d.serverLinkFor(sigmaAgent)
 	d.serverLinksMu.Lock()
 	defer d.serverLinksMu.Unlock()
 	links := make([]*serverLink, 0, len(d.serverLinks))
@@ -108,7 +59,7 @@ func (l *serverLink) home() string {
 		}
 		return ""
 	}
-	variable, dir := l.b.homeVariable, l.b.homeDir
+	var variable, dir string
 	if p := l.b.declaration.Load(); p != nil {
 		variable, dir = p.HomeEnv, p.DefaultHome
 	}
@@ -120,21 +71,20 @@ func (l *serverLink) home() string {
 
 func (l *serverLink) executable(opts *ptybackend.SpawnOptions) string {
 	if p := l.b.declaration.Load(); p != nil {
-		if opts != nil && opts.Executable != "" {
-			return opts.Executable
+		if opts != nil {
+			if configured := configuredLaunchExecutable(nil, opts); configured != "" {
+				return configured
+			}
+		}
+		if configured := strings.TrimSpace(l.d.setting(executableSetting(l.b.agent))); configured != "" {
+			return configured
 		}
 		if override := l.environmentValue(p.ExecutableEnv); override != "" {
 			return override
 		}
 		return p.Executable
 	}
-	driver := agentdriver.MustGet(l.b.agent)
-	if opts != nil {
-		if configured := configuredLaunchExecutable(driver, opts); configured != "" {
-			return driver.ResolveExecutable(configured)
-		}
-	}
-	return driver.ResolveExecutable(l.d.setting(executableSetting(l.b.agent)))
+	return ""
 }
 
 func (l *serverLink) environmentValue(key string) string {
@@ -154,36 +104,27 @@ func (l *serverLink) socketPath() string {
 	if p := l.b.declaration.Load(); p != nil {
 		return filepath.Join(l.home(), p.SocketName)
 	}
-	if l.b.socket == nil {
-		return ""
-	}
-	return l.b.socket(l.home())
+	return ""
 }
 
 func (l *serverLink) connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
-	if l.b.plugin != "" {
-		p := l.b.declaration.Load()
-		if p == nil {
-			return nil, effectrpc.ServerInfo{}, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
-		}
-		return p.connect(ctx, socket, client, version)
+	p := l.b.declaration.Load()
+	if p == nil {
+		return nil, effectrpc.ServerInfo{}, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
 	}
-	return l.b.connect(ctx, socket, client, version)
+	return p.connect(ctx, socket, client, version)
 }
 
 func (l *serverLink) callerConversationEnv() string {
 	if p := l.b.declaration.Load(); p != nil {
 		return p.CallerConversationEnv
 	}
-	return l.b.callerVariable
+	return ""
 }
 
 func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string) error {
 	if p := l.b.declaration.Load(); p != nil {
 		return p.validateServerInfo(hello, socket)
-	}
-	if l.b == sigmaBinding {
-		return sigma.Validate(hello, socket)
 	}
 	return fmt.Errorf("server binding unavailable until plugin %s registers", l.b.plugin)
 }

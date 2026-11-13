@@ -88,6 +88,9 @@ func configuredLaunchExecutable(driver agentdriver.Driver, opts *ptybackend.Spaw
 	if opts.Executable != "" {
 		return opts.Executable
 	}
+	if driver == nil {
+		return ""
+	}
 	switch driver.Name() {
 	case "claude":
 		return opts.ClaudeExecutable

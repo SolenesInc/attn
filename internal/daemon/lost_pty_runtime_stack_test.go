@@ -81,7 +81,6 @@ func TestAnAppServerSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *t
 	if revived := s.Launched(session); revived.ConversationID != conversation {
 		t.Fatalf("the TUI came back on conversation %s, want %s", revived.ConversationID, conversation)
 	}
-	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
 	if servers := s.AppServers(fakeagent.Nisse); servers != 1 {
 		t.Errorf("AppServer servers launched = %d, want the one still waiting on the approval", servers)
@@ -104,7 +103,6 @@ func TestAnAppServerSessionAtRestComesBackAtRestAfterItsTUIRuntimeDies(t *testin
 	s.KillRuntimeOf(app.Terminal(session))
 
 	revived := s.Launched(session)
-	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 
 	mark = len(app.Log())
@@ -126,7 +124,6 @@ func TestAnAppServerSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *test
 	s.KillRuntimeOf(app.Terminal(session))
 
 	s.Launched(session)
-	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
 	settled := testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool {
 		return x.State == protocol.SessionStateWaitingInput || x.State == protocol.SessionStateIdle
 	})
@@ -181,7 +178,7 @@ func TestAnAppServerSessionSurvivesAStartupWithoutItsPluginOrViewRuntime(t *test
 	server.AskApproval(conversation)
 	s.Start()
 	app = s.App()
-	kept := testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
+	kept := testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 	if kept.ProfileID != before.ProfileID {
 		t.Fatal("startup moved the session to another profile")
 	}

@@ -21,7 +21,6 @@ import (
 
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/sigma"
 )
 
 const (
@@ -56,8 +55,8 @@ var appServerFlavors = map[Harness]appServerFlavor{
 	},
 	Sigma: {
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
-		socket: sigma.Socket, connect: sigma.Connect,
-		hello:       map[string]any{"server": sigma.Server, "version": "fake", "protocol": sigma.Protocol},
+		socket: func(home string) string { return filepath.Join(home, "sigma.sock") }, connect: connectFakeSigma,
+		hello:       map[string]any{"server": "sigma", "version": "fake", "protocol": 1},
 		completions: true,
 	},
 }
@@ -753,6 +752,20 @@ func connectFakeNisse(ctx context.Context, socket, client, version string) (*eff
 	}
 	var hello effectrpc.ServerInfo
 	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": 7}, &hello)
+	if err != nil {
+		c.Close()
+		return nil, hello, err
+	}
+	return c, hello, nil
+}
+
+func connectFakeSigma(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
+	c, err := effectrpc.Dial(ctx, socket, "sigma")
+	if err != nil {
+		return nil, effectrpc.ServerInfo{}, err
+	}
+	var hello effectrpc.ServerInfo
+	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": 1}, &hello)
 	if err != nil {
 		c.Close()
 		return nil, hello, err

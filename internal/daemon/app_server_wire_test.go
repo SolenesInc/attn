@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -22,7 +23,7 @@ func eachAppServer(t *testing.T, test func(t *testing.T, h fakeagent.Harness)) {
 
 func appServerSession(t *testing.T, w *world, app *testworld.Peer, h fakeagent.Harness, opts ...func(*protocol.SpawnSessionMessage)) (string, *fakeagent.Run, *fakeagent.AppServer) {
 	t.Helper()
-	setSetting(t, app, string(h)+"_enabled", "true")
+	registerSigmaDriver(t, w, app)
 	session := w.Spawn(app, h, w.Path("shop"), opts...)
 	return session, w.Launched(session), w.AppServer(h)
 }
@@ -35,25 +36,6 @@ func promptUntilWorking(app *testworld.Peer, session string, nisse *fakeagent.Ru
 	nisse.Prompted()
 	server.Prompted(nisse.ConversationID)
 	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-}
-
-func TestAppServerIsOfferedOnlyWhileItsExperimentalSettingIsOn(t *testing.T) {
-	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
-		w := newWorld(t, h)
-		app := w.App()
-		if got, listed := app.Initial.Settings[string(h)+"_available"]; listed {
-			t.Fatalf("with %s off the app sees %s_available = %q, want it not offered", h, h, got)
-		}
-		refused, _, _ := w.RequestSpawn(app, h, w.Path("shop"))
-		if refused.Success {
-			t.Fatalf("a launch with the harness off = %+v, want it refused", refused)
-		}
-
-		setSetting(t, app, string(h)+"_enabled", "true")
-		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-			return m.Settings[string(h)+"_available"] == "true"
-		})
-	})
 }
 
 func TestAnAppServerSessionRunsItsTUIOnTheConversationAttnNamedAndFollowsTheServersStatus(t *testing.T) {
@@ -231,6 +213,7 @@ func TestAnAppServerSessionWorkingThroughADaemonRestartSettlesFromTheServerAfter
 		promptUntilWorking(app, session, nisse, server, "migrate the orders table")
 
 		w.restart()
+		registerSigmaDriver(t, w, w.App())
 		app = w.App()
 		testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 		server.Reply(conversation, "Migrated. <!-- attn:state=idle -->")
@@ -261,6 +244,7 @@ func TestAppServerSessionsKeepTheirAnswersAndLearnRunsThatEndedWhileTheDaemonWas
 		w.stop()
 		server.Reply(workingTUI.ConversationID, "Migrated, but two rows failed. Retry them? <!-- attn:state=waiting_input -->")
 		w.start()
+		registerSigmaDriver(t, w, w.App())
 		app = w.App()
 		testworld.AwaitSessionFromConnect(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 		if got := restartedSession(w.App(), asked); got.State != protocol.SessionStateWaitingInput {
@@ -273,7 +257,7 @@ func TestAnAppServerConversationOpenInAnotherProfileIsRefusedThere(t *testing.T)
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
 		app := w.App()
-		setSetting(t, app, string(h)+"_enabled", "true")
+		registerSigmaDriver(t, w, app)
 		side := createProfile(app, "Side")
 		sideApp := w.AppOn(side.ID)
 		sideTUI := w.Launched(w.Spawn(sideApp, h, w.Path("shop")))
@@ -329,7 +313,7 @@ func TestAppServerOffersItsProvidersModelsWithoutKeepingItsServer(t *testing.T) 
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
 		app := w.App()
-		setSetting(t, app, string(h)+"_enabled", "true")
+		registerSigmaDriver(t, w, app)
 		found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: string(h), RequestID: "nisse-models"},
 			protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "nisse-models" })
 		var offered []string
@@ -348,7 +332,7 @@ func TestADelegationRoleRunsTheAppServerModelThePickerOffered(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
 		app, cli := w.App(), w.Client()
-		setSetting(t, app, string(h)+"_enabled", "true")
+		registerSigmaDriver(t, w, app)
 		roles := buildRole()
 		roles.Roles[0].Choices[0].Selection = protocol.DelegationSelection{Harness: string(h), Provider: "openai", Model: "gpt-5.5", Effort: "high"}
 		if saved := savePreferences(app, roles); !saved.Success {
@@ -369,4 +353,18 @@ func TestADelegationRoleRunsTheAppServerModelThePickerOffered(t *testing.T) {
 			t.Fatalf("the delegated conversation started as %+v, want openai's gpt-5.5", started)
 		}
 	})
+}
+
+func registerSigmaDriver(t *testing.T, w *world, app *testworld.Peer) {
+	t.Helper()
+	driver := dialDriver(t, w, "sigma")
+	driver.agent = "sigma"
+	driver.mu.Lock()
+	driver.serverExecutable = filepath.Join(w.Dir, "bin", "sigma")
+	driver.mu.Unlock()
+	caps := map[string]bool{"server_binding": true, "resume": true, "yolo": true, "initial_prompt": true, "model_pin": true, "effort_pin": true, "launch_instructions": true}
+	if err := driver.call("driver.register", map[string]any{"agent": "sigma", "capabilities": caps, "server": serverDriverDeclaration(w)}, &driver.registered); err != nil {
+		t.Fatal(err)
+	}
+	awaitDriverAvailable(app, "sigma")
 }

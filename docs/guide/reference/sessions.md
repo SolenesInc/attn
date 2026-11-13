@@ -14,7 +14,7 @@ branch), the main checkout, or a worktree that already exists. Enter starts it.
 Attn runs Claude Code and Codex, and other harnesses through plugins; to add one,
 see [Writing a harness plugin](writing-harness-plugins.md). You get
 each harness as its makers built it, and you can still use its bare CLI whenever you want.
-Install the Nisse plugin to add Nisse. Sigma is experimental and off by default.
+Install the Nisse or Sigma plugin to add its harness.
 See [Using Nisse](using-nisse.md) and [Using Sigma](using-sigma.md).
 
 ### The launcher

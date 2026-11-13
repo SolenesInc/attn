@@ -22,6 +22,7 @@ type driverLaunch struct {
 	Agent           string          `json:"agent"`
 	SessionID       string          `json:"session_id"`
 	RunID           string          `json:"run_id"`
+	ExecutionTarget string          `json:"execution_target"`
 	ConversationID  string          `json:"conversation_id"`
 	CWD             string          `json:"cwd"`
 	Yolo            bool            `json:"yolo"`
@@ -149,7 +150,31 @@ func (d *driverPeer) listen() {
 				if launch.Executable != "" {
 					executable = launch.Executable
 				}
-				argv = []string{executable, "--conversation", launch.ConversationID}
+				argv = []string{executable, "--attach", "--conversation", launch.ConversationID}
+				if launch.ExecutionTarget != "" {
+					argv = append(argv, "--target", launch.ExecutionTarget)
+				}
+				if launch.Yolo {
+					argv = append(argv, "--auto")
+				}
+				if launch.Model != "" {
+					provider, model, qualified := strings.Cut(launch.Model, "/")
+					if qualified {
+						argv = append(argv, "--provider", provider)
+					} else {
+						model = provider
+					}
+					argv = append(argv, "--model", model)
+				}
+				if launch.Effort != "" {
+					argv = append(argv, "--effort", launch.Effort)
+				}
+				if launch.Instructions != nil {
+					argv = append(argv, "--instructions", launch.Instructions.Content)
+				}
+				if launch.InitialPrompt != "" {
+					argv = append(argv, "--", launch.InitialPrompt)
+				}
 			}
 			d.mu.Unlock()
 			if held {

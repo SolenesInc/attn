@@ -6,7 +6,7 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-sigma.mjs'],
     skipOn: {
       linux: 'Needs the Sigma fork build, which runs only on a developer Mac',
-      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE', unlessEnv: 'ATTN_SCENARIO_SIGMA_EXECUTABLE' },
+      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE and its package in ATTN_SCENARIO_SIGMA_PLUGIN_DIR', unlessEnv: ['ATTN_SCENARIO_SIGMA_EXECUTABLE', 'ATTN_SCENARIO_SIGMA_PLUGIN_DIR'] },
     },
   },
   {
@@ -16,7 +16,7 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-sigma-targets.mjs'],
     skipOn: {
       linux: 'Needs the Sigma fork build and a DevVM VM, which run only on a developer Mac',
-      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE and a DevVM project in ATTN_SCENARIO_SIGMA_DEVVM_PROJECT', unlessEnv: 'ATTN_SCENARIO_SIGMA_DEVVM_PROJECT' },
+      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE, its package in ATTN_SCENARIO_SIGMA_PLUGIN_DIR and a DevVM project in ATTN_SCENARIO_SIGMA_DEVVM_PROJECT', unlessEnv: ['ATTN_SCENARIO_SIGMA_EXECUTABLE', 'ATTN_SCENARIO_SIGMA_PLUGIN_DIR', 'ATTN_SCENARIO_SIGMA_DEVVM_PROJECT'] },
     },
   },
   {

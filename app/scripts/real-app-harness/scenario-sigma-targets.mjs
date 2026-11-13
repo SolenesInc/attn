@@ -18,6 +18,8 @@ const SCRIPTED_MODEL = 'faux/scripted';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const executable = process.env.ATTN_SCENARIO_SIGMA_EXECUTABLE;
+const plugin = process.env.ATTN_SCENARIO_SIGMA_PLUGIN_DIR;
+if (!plugin || !fs.existsSync(plugin)) throw new Error("ATTN_SCENARIO_SIGMA_PLUGIN_DIR must name the extracted Sigma plugin package");
 const project = process.env.ATTN_SCENARIO_SIGMA_DEVVM_PROJECT;
 if (!executable || !fs.existsSync(executable)) {
   throw new Error('ATTN_SCENARIO_SIGMA_EXECUTABLE must name the Sigma fork build, such as <sigma checkout>/packages/sigma/dist/cli.js');
@@ -139,6 +141,7 @@ runner.registerCleanup('stop_daemon', () => stopDaemon());
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', () => Promise.all([...baseline].map(([key, value]) => set(key, value ?? ''))));
+runner.registerCleanup('uninstall_sigma_plugin', () => cli('plugin', 'uninstall', 'sigma'));
 runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, sessions.filter(id => observer.getSession(id))));
 
 try {
@@ -146,7 +149,8 @@ try {
     await client.quitApp();
     await stopDaemon();
     await launchFreshAppAndConnect(client, observer);
-    await set('sigma_enabled', 'true');
+    cli('plugin', 'install', '--path', plugin);
+    await observer.waitFor(() => observer.getSetting('sigma_available') === 'true', 'the Sigma plugin registers', 30_000);
     await set('default_model_sigma', SCRIPTED_MODEL);
     await openHarnessDesktop(client, observer);
   });

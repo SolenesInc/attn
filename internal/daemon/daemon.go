@@ -935,6 +935,9 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			continue
 		}
+		if _, serverView := d.linkOf(session.ID).(*serverLink); serverView {
+			continue
+		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
 			continue
@@ -1402,6 +1405,9 @@ func (d *Daemon) recoverMissingSession(sessionID protocol.SessionID, machine mac
 	if session == nil {
 		return
 	}
+	if _, serverView := d.linkOf(sessionID).(*serverLink); serverView {
+		return
+	}
 	if sessionUpdatedAfter(session, rules.startedAt) {
 		report.SkippedRecent++
 		return
@@ -1824,7 +1830,9 @@ func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptyback
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on lost runtime failed for %s: %v", info.ID, err)
 	}
-	d.applyState(sessionID, sessionmonitor.Change{State: string(protocol.SessionStateRecoverable), Cause: sessionmonitor.RuntimeLost{}})
+	if _, serverView := d.linkOf(sessionID).(*serverLink); !serverView {
+		d.applyState(sessionID, sessionmonitor.Change{State: string(protocol.SessionStateRecoverable), Cause: sessionmonitor.RuntimeLost{}})
+	}
 	d.logf("terminal %s lost its runtime; bringing session %s back", info.ID, sessionID)
 	cols, rows := 80, 24
 	if size, sized := d.ptySizes.owned(protocol.TerminalID(info.ID)); sized {

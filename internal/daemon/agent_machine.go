@@ -97,9 +97,14 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		if !ok || reg.PluginName != p.Plugin {
 			return nil, fmt.Errorf("agent %q is not available on this machine", opts.Agent)
 		}
+		p.Params.Executable = configuredLaunchExecutable(nil, opts)
+		if p.Params.Executable == "" {
+			p.Params.Executable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
+		}
 		serverBound := reg.Capabilities["server_binding"]
 		var prepared *preparedPluginReload
 		if serverBound {
+			p.Params.Executable = d.serverLinkFor(opts.Agent).executable(opts)
 			if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
 				return nil, err
 			}
@@ -174,6 +179,14 @@ func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.Spa
 		seed = launch.Monitor
 	}
 	monitor := d.startSessionMonitor(session.ID)
+	if _, serverView := d.linkNamed(launch.Link).(*serverLink); serverView && opts.ResumeSessionID != "" {
+		if monitor.Snapshot().State.V.State == protocol.SessionStateRecoverable {
+			monitor.Begin(withSeed(seed, session))
+		}
+		monitor.RecordReviewer(opts.ApprovalRoute.ReviewerInLoop())
+		monitor.RememberInitialPrompt(launch.InitialPrompt)
+		return
+	}
 	monitor.Restart(withSeed(seed, session), fresh)
 	monitor.Launched(launch.StartedAt)
 	monitor.HarnessStarting(opts.Agent)

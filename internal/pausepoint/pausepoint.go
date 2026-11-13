@@ -113,6 +113,7 @@ const (
 	BridgeSendQueued               = "bridge-send-queued"
 	OutpostMachineRead             = "outpost-machine-read"
 	ClassifierVerdictReached       = "classifier-verdict-reached"
+	ClassifierVerdictApplied       = "classifier-verdict-applied"
 	EnsureFoundNoListener          = "ensure-found-no-listener"
 	UpdateApplyFinished            = "update-apply-finished"
 	UpdateOutpostsStaged           = "update-outposts-staged"
