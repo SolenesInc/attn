@@ -65,6 +65,8 @@ macro_rules! actions {
             OpenWorktrees,
             /// Open the notifications panel, or close it.
             ToggleNotifications,
+            /// Ask the daemon to update attn.
+            StartUpdate,
         }
 
         impl Action {
@@ -93,6 +95,7 @@ macro_rules! actions {
                     Action::ShowAsks { .. } => "asks.show",
                     Action::OpenWorktrees => "ledger.worktrees",
                     Action::ToggleNotifications => "notifications.toggle",
+                    Action::StartUpdate => "update.start",
                 }
             }
 
@@ -118,6 +121,7 @@ macro_rules! actions {
                     Action::ShowAsks { .. } => "Open asks",
                     Action::OpenWorktrees => "Open worktrees",
                     Action::ToggleNotifications => "Show or hide notifications",
+                    Action::StartUpdate => "Update attn",
                 }
             }
 

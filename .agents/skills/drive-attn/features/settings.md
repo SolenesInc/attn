@@ -77,6 +77,24 @@ Preconditions:
 - **Home and machine settings on an outpost.** With an outpost paired, as [outposts.md](outposts.md) describes, run on the outpost `attn settings list --all`: home settings such as `theme` carry `set at the home`. `attn settings set theme system` there prints `theme = system`, and the home's `./attn settings get theme` prints `system`. `attn settings set worktree_sweep_enabled false` there leaves the home's value alone. With the home unreachable, the outpost's home-setting write fails and names the home as unreachable. On the baseline, which has no outpost, this step fails as Gotchas says.
 - **Proof.** In `$P`, keep each `./attn settings` command's output with its exit code. Keep `bridge settings_get_state` after each open, section change, search and close, and `./attn agent peek settings-agent` after each turn. Capture `bridge capture_screenshot '{"path":"<P>/settings-dialog.png"}'` with the dialog open on Files and locations, where `<P>` is the folder's path written out. Name each file for its way in, such as `settings-shortcut-state.json`.
 
+### In the native app
+
+The native app (`native/`) follows an update run in a band under the title bar, `update-run`, a region named "attn update" whose value is the run's phase, and offers **Update attn** in the palette. Its Settings dialog is driven from its own recipe.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`, from a worktree with nothing uncommitted: Update attn rebuilds a named instance from the worktree it was installed from. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+alt+k` for `mod+shift+k`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Run `./attn settings set self_update_enabled true`.
+
+Steps:
+
+- **Update attn from the palette.** Press `mod+shift+k`, run `bridge type '{"text":"update attn"}'` and press `Enter`. `bridge wait '{"target":{"key":"update-run"}}'` answers, and `update-run.text` reads the phase, such as "Building the update.". A wait gives up after 30 s, so repeat it. Read `bridge tree` as the run moves through staging and applying.
+- **The app restarts.** Applying quits the app, and the update opens it again. `bridge ping` reaches the new app. On the new app, `update-run` shows the run once it reconnects.
+- **The run ends well.** When `./attn update status` shows the run done, `update-run.text` reads the outcome, such as "attn is now running 0.15.0 (…)", and `update-run.countdown` reads "Closing in Ns". The band goes after five seconds, and does not come back for that run after `./attn instance stop-app` and a relaunch. To reach this step without a build, run Update attn on an instance already at its worktree's commit: the run ends at once with "Already running …".
+- **A refusal.** Start the daemon from the checkout with `./attn daemon ensure` instead of the installed app, then run Update attn: `notice.text` reads the refusal, "attn cannot update itself here: … is not inside this install's app …".
+- **Only where attn can update.** Run `./attn settings set self_update_enabled false`: the palette no longer offers Update attn. Turn the setting back on.
+- **Proof.** In `$P`, keep `bridge tree` at each phase, `./attn update status` before and after, and `bridge shot '{"path":"<P>/native-update-run.png"}'` while the run is open, with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: settings are daemon records and come back after any restart. The dialog says "Saved" only once the daemon has kept the value, and a refused change leaves the old value in place. An outpost reads its copy of the home settings while the home is unreachable.
@@ -88,12 +106,14 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`.
+- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/update_run.rs` (the native app's update band and Update attn).
 - Stack: `cmd/attnd/update_run_stack_test.go`, `cmd/attnd/update_release_stack_test.go`, `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
 - Scenario: `focusless-native` (parked macOS native input), `agent-settings`, `self-update`.
 - App: `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`.
 
 ## Gotchas
+
+- Updating an instance installed with `APP=native` reinstalls the Tauri app, so the native app does not come back after the native recipe's update steps (seed `s-nf6bsw`). Until that seed lands, check the native band on a run that ends without installing, and reinstall with `APP=native` after a real update.
 
 - The dialog first opens on GitHub hosts (`connectivity`), not Appearance, and keeps the last section and the last search while the app runs. A search that leaves a section out hides its nav button: when `bridge settings_get_state` shows a `search`, clear it as the GitHub hosts step does before clicking a `settings-nav-<section>` button.
 - The dialog shows the shell's `theme light` only because a fresh instance has no theme yet, and the app takes the first value it sees. On an instance that already had a theme, run the theme steps from the dialog first.

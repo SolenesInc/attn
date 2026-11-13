@@ -58,6 +58,13 @@ fn availability(settings: &BTreeMap<String, String>) -> String {
     }
 }
 
+/// Whether the daemon can update this install of attn in place.
+pub(crate) fn updatable(settings: &BTreeMap<String, String>) -> bool {
+    settings
+        .get("update_install_kind")
+        .is_some_and(|kind| UPDATABLE_KINDS.contains(&kind.as_str()))
+}
+
 fn running(state: &State) -> bool {
     state
         .facts
@@ -116,7 +123,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         )
                 })),
         ];
-    if UPDATABLE_KINDS.contains(&kind) {
+    if updatable(settings) {
         page.push(action(state, t));
     }
     page

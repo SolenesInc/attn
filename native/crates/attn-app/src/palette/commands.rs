@@ -318,6 +318,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             },
         )
     }));
+    if setting::on(&facts.settings, "self_update_enabled")
+        && crate::settings::updatable(&facts.settings)
+    {
+        commands.push(Command::new(
+            "update-attn",
+            "Update attn",
+            &["update", "upgrade", "install", "build"],
+            Action::StartUpdate,
+        ));
+    }
     commands.push(Command::new(
         "settings",
         "Settings",
