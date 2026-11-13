@@ -359,6 +359,7 @@ try {
       const columns = columnsOf(treeOf(current())).map(leavesOf);
       return sameList(columns[columns.findIndex((leaves) => leaves.includes(short.anchor)) + 1] ?? [], short.column);
     }, 'the stack beside the short tile');
+    await driver.state('window', { includes: 'so it moved beside instead' });
     await shot('stack-beside-a-short-tile');
 
     await driver.setWindowBounds({ ...WINDOW, height: 1300 });

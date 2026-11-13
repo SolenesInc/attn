@@ -141,16 +141,23 @@ impl Shared {
         Ok(())
     }
 
-    fn open(&self, outbox: mpsc::UnboundedSender<String>) {
+    /// Opens a connection whose first command is `hello`: the outbox is handed to senders
+    /// only once the hello is in it, so nothing reaches the daemon ahead of it.
+    fn open(&self, outbox: mpsc::UnboundedSender<String>, hello: String) {
+        outbox
+            .send(hello)
+            .expect("the session holds the outbox's receiver");
         let mut state = self.state.lock().unwrap();
         let connection = state.traffic.connection + 1;
         state.traffic = Traffic {
             connection,
-            sent: 0,
+            sent: 1,
             received: 0,
             parked: Parked::Busy,
         };
         state.outbox = Some(outbox);
+        drop(state);
+        self.pulse.beat();
     }
 
     fn close(&self) {
@@ -340,11 +347,8 @@ impl Task {
         };
         let (mut write, mut read) = socket.split();
         let (outbox, mut commands) = mpsc::unbounded_channel();
-        self.shared.open(outbox);
         let hello = serde_json::to_string(&self.hello()).expect("client_hello serializes");
-        if self.shared.send(hello).is_err() {
-            return Ended::Lost { greeted: false };
-        }
+        self.shared.open(outbox, hello);
         let mut greeted = false;
         loop {
             self.park(Parked::Reading);

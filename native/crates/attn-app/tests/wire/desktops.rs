@@ -1845,6 +1845,32 @@ fn a_chip_dragged_onto_a_tiles_edge_brings_its_whole_column_and_lands_beside_a_t
 }
 
 #[test]
+fn the_moved_beside_notice_stays_up_when_the_app_has_run_a_while_and_takes_no_presses() {
+    let tree = row([pane("a"), pane("b"), below(pane("c"), pane("e"))]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+    world.advance(Duration::from_secs(100));
+
+    let to = in_tile(&world, "b", 0.5, 0.02);
+    drag(&mut world, "shelf.chip.c", to);
+    world.advance(Duration::from_secs(1));
+
+    assert!(
+        notice(&world).is_some_and(|said| said.ends_with("so it moved beside instead.")),
+        "the notice is still up a second after the drop"
+    );
+    let under = world
+        .automate(
+            "press",
+            serde_json::json!({"target": {"key": "tile.a.header"}}),
+        )
+        .unwrap();
+    assert_eq!(
+        under["matched"], true,
+        "the notice takes no presses: {under}"
+    );
+}
+
+#[test]
 fn a_chip_dropped_in_a_tiles_middle_takes_its_place_and_the_tile_takes_the_chips_place() {
     let mut world = start(vec![four_in_a_row("a")]);
     world.daemon.on("desktop_move_leaf", |r| {

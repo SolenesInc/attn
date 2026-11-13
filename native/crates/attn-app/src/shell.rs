@@ -573,26 +573,31 @@ fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
 }
 
 fn floating_status(key: &str, message: String, t: &Tokens) -> El {
-    el().key(key).absolute(0.0, 0.0).w_full().h_full().child(
-        col()
-            .w_full()
-            .h_full()
-            .items_center()
-            .justify_end()
-            .padding(space::S6)
-            .child(
-                text(message.clone())
-                    .key(format!("{key}.text"))
-                    .role("status")
-                    .label(message)
-                    .font(type_::BODY)
-                    .color(t.text_primary)
-                    .fill(t.bg_elevated)
-                    .border(1.0, t.border)
-                    .radius(6.0)
-                    .padding(space::S2),
-            ),
-    )
+    el().key(key)
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .inert()
+        .child(
+            col()
+                .w_full()
+                .h_full()
+                .items_center()
+                .justify_end()
+                .padding(space::S6)
+                .child(
+                    text(message.clone())
+                        .key(format!("{key}.text"))
+                        .role("status")
+                        .label(message)
+                        .font(type_::BODY)
+                        .color(t.text_primary)
+                        .fill(t.bg_elevated)
+                        .border(1.0, t.border)
+                        .radius(6.0)
+                        .padding(space::S2),
+                ),
+        )
 }
 
 fn section_title(title: &str, t: &Tokens) -> El {
