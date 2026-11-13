@@ -10366,6 +10366,7 @@ export interface SenderRefineResultObject {
 export interface SenderSessionElement {
     agent:            string;
     host?:            string;
+    host_label?:      string;
     id:               string;
     label:            string;
     last_focused_at?: string;
@@ -12229,6 +12230,7 @@ export interface SenderRefineResult {
 export interface SenderSession {
     agent:            string;
     host?:            string;
+    host_label?:      string;
     id:               string;
     label:            string;
     last_focused_at?: string;
@@ -28322,6 +28324,7 @@ const typeMap: any = {
     "SenderSessionElement": o([
         { json: "agent", js: "agent", typ: "" },
         { json: "host", js: "host", typ: u(undefined, "") },
+        { json: "host_label", js: "host_label", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "label", js: "label", typ: "" },
         { json: "last_focused_at", js: "last_focused_at", typ: u(undefined, "") },
@@ -29602,6 +29605,7 @@ const typeMap: any = {
     "SenderSession": o([
         { json: "agent", js: "agent", typ: "" },
         { json: "host", js: "host", typ: u(undefined, "") },
+        { json: "host_label", js: "host_label", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "label", js: "label", typ: "" },
         { json: "last_focused_at", js: "last_focused_at", typ: u(undefined, "") },

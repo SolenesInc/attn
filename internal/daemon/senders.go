@@ -282,6 +282,9 @@ func (d *Daemon) handleSenderSessions(conn net.Conn, msg *protocol.SenderSession
 			continue
 		}
 		listed := protocol.SenderSession{ID: session.ID, Label: session.Label, Agent: session.Agent, State: session.State, Host: session.Host}
+		if session.Host != nil {
+			listed.HostLabel = protocol.Ptr(d.outpostName(*session.Host))
+		}
 		if at, ok := focused[session.ID]; ok {
 			listed.LastFocusedAt = protocol.Ptr(at)
 		}

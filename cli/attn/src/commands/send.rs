@@ -52,9 +52,10 @@ send <session>
 sessions --token-stdin
   list every live agent session of the sender's profile, the sessions it can
   send to, in one unpaged list. --json prints an array of objects with id,
-  label, agent, state, host (only for a session on an outpost) and
-  last_focused_at (only once the user has focused the session's terminal in
-  attn). The most recent last_focused_at is the session the user last focused.
+  label, agent, state, host and host_label (the outpost's id and name, only
+  for a session on an outpost) and last_focused_at (only once the user has
+  focused the session's terminal in attn). The most recent last_focused_at is
+  the session the user last focused.
 
 pair --name <name>
   ask the user to pair this program. The attn app asks the user to allow or
@@ -548,7 +549,13 @@ fn sessions(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             session.id,
             session.agent,
             session.state,
-            or_dash(session.host.as_deref().unwrap_or("")),
+            or_dash(
+                session
+                    .host_label
+                    .as_deref()
+                    .or(session.host.as_deref())
+                    .unwrap_or("")
+            ),
             or_dash(session.last_focused_at.as_deref().unwrap_or("")),
             session.label
         );

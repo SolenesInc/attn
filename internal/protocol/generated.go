@@ -12387,6 +12387,9 @@ type SenderSession struct {
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
 
+	// HostLabel corresponds to the JSON schema field "host_label".
+	HostLabel *string `json:"host_label,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
 

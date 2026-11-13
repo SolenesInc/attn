@@ -9315,6 +9315,8 @@ model SenderSession {
   state: SessionState;
   // The outpost the session runs on; absent for a session on this machine.
   host?: string;
+  // The outpost's name as attn shows it; absent with host.
+  host_label?: string;
   // When the user last focused the session's terminal in attn; absent when
   // never.
   last_focused_at?: string;
