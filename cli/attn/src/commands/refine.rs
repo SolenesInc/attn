@@ -12,7 +12,7 @@ pub const HELP: &str = r"usage: attn refine --token-stdin [--duration-ms <n>] [-
 Clean up a dictated transcript with attn's dictation refinement, as a program
 the user paired with attn send pair. The refinement runs tool-free on the
 light model of the harness the dictation.refinement_agent setting names
-(claude when empty), under the sender's profile. It needs headless tasks on.
+(claude when empty). It needs headless tasks on.
 
   --token-stdin      read the paired sender's token from the first line of
                      stdin and the raw transcript from the rest

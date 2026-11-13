@@ -134,7 +134,8 @@ quick capture           a quick message (with optional attachments) the user
                         like macOS Quick Note
 paired sender           a program the user allowed in the app to send quick
                         captures as them with attn send, to the sessions of
-                        the profile it was allowed in; like an OAuth client
+                        the profile it was allowed in, and to refine dictated
+                        text with attn refine; like an OAuth client
 ```
 
 ```text

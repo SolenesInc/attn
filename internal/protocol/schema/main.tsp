@@ -9285,8 +9285,8 @@ model SenderSessionsMessage {
   sender_token: string;
 }
 
-// Refines one dictated transcript the way dictation_refine does, under the
-// paired sender's profile. The daemon answers once; closing the connection
+// Refines one dictated transcript for a paired sender the way
+// dictation_refine does. The daemon answers once; closing the connection
 // first cancels the refinement.
 @extension("x-on", #{ home: true })
 model SenderRefineMessage {
