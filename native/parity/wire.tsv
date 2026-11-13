@@ -587,3 +587,6 @@ app/src/App.desktopOrder.test.tsx	App desktop ordering > sorts once and Undo sen
 app/src/App.desktopOrder.test.tsx	App desktop ordering > sorts case-insensitively and numerically when the browser defaults to POSIX collation	attn-app/tests/wire/desktop_order.rs::sorting_sends_the_sorted_order_once_and_undo_sends_the_whole_previous_order	
 app/src/App.desktopOrder.test.tsx	App desktop ordering > shows a refused sort without offering Undo	attn-app/tests/wire/desktop_order.rs::a_refused_sort_shows_the_refusal_and_offers_no_undo	
 app/src/App.agentNavigation.test.tsx	queue > keeps following the next turn after %s desktops	attn-app/tests/wire/desktop_order.rs::following_the_next_turn_from_home_survives_a_sort_and_its_undo	
+app/src/App.closeDesktop.test.tsx	close desktop > asks once about closing the desktop and its contents from %s	attn-app/tests/wire/desktop_close.rs::closing_a_desktop_with_tiles_asks_once_and_closes_only_on_confirm_from_each_entry	
+app/src/App.closeDesktop.test.tsx	close desktop > asks the same confirmation for a shell-only desktop	attn-app/tests/wire/desktop_close.rs::a_shell_only_desktop_asks_the_same_confirmation_and_escape_leaves_it_open	
+app/src/App.closeDesktop.test.tsx	close desktop > names protected sessions and sends nothing	attn-app/tests/wire/desktop_close.rs::a_desktop_holding_a_crew_members_session_names_it_and_sends_nothing	

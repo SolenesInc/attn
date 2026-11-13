@@ -21,6 +21,7 @@ pub(crate) use model::{AgentRow, Line, display_name, tile_title};
 use model::{DesktopHeader, TileRow};
 
 use crate::State;
+use crate::action::Action;
 use crate::desktop::DesktopMark;
 use crate::shell::View;
 
@@ -262,7 +263,15 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
     memo(key.clone(), (line, draining, seam, mark, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         let row = match line {
-            Line::Desktop(desktop) => desktop_row(key.clone(), desktop, t),
+            Line::Desktop(desktop) => {
+                let close = rune::row()
+                    .key(format!("{key}.controls"))
+                    .group_opacity(0.0, 1.0)
+                    .child(close_desktop_button(&key, desktop, t));
+                desktop_row(key.clone(), desktop, t)
+                    .hover_group()
+                    .child(close)
+            }
             Line::Agent { row, .. } => {
                 let bar = settling_bar(state, &key, row, t);
                 let more = rune::row()
@@ -418,6 +427,22 @@ fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+}
+
+/// The × button that closes a desktop, asking first when it holds tiles.
+fn close_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> El {
+    let id = desktop.id.clone();
+    queue_view::control(row_key, "close", format!("Close {}", desktop.title), "×", t).on_press_tx(
+        move |state: &mut State, tx: &mut Tx| {
+            crate::dispatch::dispatch(
+                state,
+                Action::CloseDesktop {
+                    desktop: id.clone(),
+                },
+                tx,
+            );
+        },
+    )
 }
 
 /// The ••• button that opens an agent's actions menu under itself.

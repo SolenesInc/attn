@@ -267,7 +267,7 @@ export const scenarioCatalog = [
   {
     id: 'native-close-desktop',
     runnerId: 'NATIVE-CLOSE-DESKTOP',
-    label: 'The native close key closes an empty desktop with its launcher focused and shows the desktop above',
+    label: 'The native close key closes an empty desktop with its launcher focused and shows the desktop above, and a desktop holding a shell closes from its sidebar row only through a confirmation',
     command: ['node', 'scripts/real-app-harness/scenario-native-close-desktop.mjs'],
     app: 'native',
   },

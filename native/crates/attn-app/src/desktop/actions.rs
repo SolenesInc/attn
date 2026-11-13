@@ -1,8 +1,8 @@
 use attn_client::Facts;
 use attn_protocol::{
-    Desktop, DesktopCloseMessage, DesktopCloseTileMessage, DesktopCreateMessage,
-    DesktopMoveLeafMessage, DesktopRemoveLeafMessage, DesktopSetCurrentMessage,
-    DesktopSetOrderMessage, DesktopShowLeafMessage, SessionPlacement, SpawnSessionMessage,
+    Desktop, DesktopCloseTileMessage, DesktopCreateMessage, DesktopMoveLeafMessage,
+    DesktopRemoveLeafMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage,
+    DesktopShowLeafMessage, SessionPlacement, SpawnSessionMessage,
 };
 use rune::Tx;
 
@@ -28,6 +28,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop, tx),
         SortDesktops { profile } => sort(state, profile, tx),
+        CloseDesktop { desktop } => super::close::request(state, desktop, tx),
         SetDesktopOrder { profile, desktops } => {
             set_order(state, profile, desktops.clone(), |_, _| {}, tx)
         }
@@ -595,18 +596,7 @@ fn close(state: &mut State, tx: &mut Tx) {
     };
     let desktop_id = desktop.id.clone();
     let Some(tree) = Node::parse(&desktop.tree_json) else {
-        let expected_revision = desktop.revision;
-        state.act(
-            |request_id| DesktopCloseMessage {
-                request_id,
-                desktop_id,
-                expected_revision,
-                ..DesktopCloseMessage::new()
-            },
-            Refused::Bare,
-            |_, _, _| {},
-            tx,
-        );
+        super::close::request(state, &desktop_id, tx);
         return;
     };
     let Some(Node::Leaf(leaf)) = tree.find_leaf(&state.window.desk.acting_leaf(desktop)) else {

@@ -5,6 +5,7 @@ mod actions;
 mod annotating;
 pub(crate) mod arrival;
 mod chain;
+mod close;
 mod divider;
 mod drag;
 mod filter_panel;
@@ -35,6 +36,7 @@ use rune::Tx;
 use crate::State;
 
 pub(crate) use actions::{activate_started, escape, give_keyboard, run, show_unseen};
+pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
 pub(crate) use overview::view as overview;
 pub(crate) use peek::view as peek;

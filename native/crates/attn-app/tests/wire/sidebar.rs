@@ -107,7 +107,10 @@ fn rows(world: &World) -> Vec<String> {
         .into_iter()
         .filter(|n| {
             n.key.as_deref().is_some_and(|k| {
-                k.starts_with("sidebar.") && k != "sidebar.home" && !k.ends_with(".actions")
+                k.starts_with("sidebar.")
+                    && k != "sidebar.home"
+                    && !k.ends_with(".actions")
+                    && !k.ends_with(".close")
             })
         })
         .filter_map(|n| n.name)

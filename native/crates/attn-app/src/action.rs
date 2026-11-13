@@ -57,6 +57,8 @@ macro_rules! actions {
             SortDesktops { profile: String },
             /// Put a profile's desktops in this order, as Undo after a sort does.
             SetDesktopOrder { profile: String, desktops: Vec<String> },
+            /// Close a desktop, asking first when it holds tiles.
+            CloseDesktop { desktop: String },
         }
 
         impl Action {
@@ -81,6 +83,7 @@ macro_rules! actions {
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
                     Action::SortDesktops { .. } => "desktop.sort",
                     Action::SetDesktopOrder { .. } => "desktop.setOrder",
+                    Action::CloseDesktop { .. } => "desktop.close",
                 }
             }
 
@@ -102,6 +105,7 @@ macro_rules! actions {
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",
                     Action::SortDesktops { .. } => "Sort desktops",
                     Action::SetDesktopOrder { .. } => "Restore an order of desktops",
+                    Action::CloseDesktop { .. } => "Close desktop",
                 }
             }
 

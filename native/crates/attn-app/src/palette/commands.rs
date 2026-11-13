@@ -128,6 +128,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .filter(|d| &d.profile_id == profile)
         .cloned()
         .collect();
+    if let Some(current) = facts.current_desktop() {
+        commands.push(Command::new(
+            "close-desktop",
+            "Close desktop",
+            &["desktop", "close"],
+            Action::CloseDesktop {
+                desktop: current.id.clone(),
+            },
+        ));
+    }
     if !profile.is_empty() {
         commands.push(
             Command::new(

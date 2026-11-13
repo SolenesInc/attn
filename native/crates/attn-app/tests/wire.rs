@@ -3,6 +3,7 @@ mod wire {
     mod connection;
     mod covered;
     mod deep_link;
+    mod desktop_close;
     mod desktop_order;
     mod desktops;
     mod home;

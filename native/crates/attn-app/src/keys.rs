@@ -273,8 +273,12 @@ pub(crate) fn shortcut_before_field(state: &mut State, ev: &KeyEvent, tx: &mut T
 }
 
 fn keymap_hears(state: &State, ev: &KeyEvent) -> bool {
+    use crate::shell::Layer;
     !matches!(ev.key, Key::Modifier { .. })
-        && state.window.layer != Some(crate::shell::Layer::NewSession)
+        && !matches!(
+            state.window.layer,
+            Some(Layer::NewSession | Layer::CloseDesktop)
+        )
 }
 
 fn in_field(tx: &Tx) -> bool {

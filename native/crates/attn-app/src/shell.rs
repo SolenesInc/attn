@@ -53,6 +53,7 @@ pub struct Window {
     pub(crate) countdowns: std::collections::HashMap<String, crate::sidebar::Countdown>,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
     pub(crate) launching: crate::picker::Launching,
+    pub(crate) closing_desktop: Option<crate::desktop::Closing>,
     /// Links opened before the current desktop arrived, in the order they came.
     pub(crate) links: Vec<crate::deep_link::Link>,
     pub(crate) width: crate::sidebar::width::Width,
@@ -96,6 +97,9 @@ pub enum Layer {
     Shortcuts,
     /// The desktop overview.
     Overview,
+    /// The confirmation before closing a desktop that holds tiles; `Window::closing_desktop`
+    /// holds it.
+    CloseDesktop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -435,6 +439,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         }
         Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
         Some(Layer::Overview) => layers.extend(crate::desktop::overview(state, t)),
+        Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
         Some(Layer::Settings) => layers.push(dialog(
             "settings",
             "Settings",
