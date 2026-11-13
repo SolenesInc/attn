@@ -62,6 +62,7 @@ pub struct Window {
     /// The popped-out leaf this window shows, when it is a tile window.
     pub(crate) tile: Option<crate::desktop::TileWindow>,
     pub(crate) garden: crate::garden::Garden,
+    pub(crate) asks: crate::asks::Asks,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -375,6 +376,11 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
             state.window.desk.window_w = Some(w);
         })
         .child(crate::desktop::shelf_slot(state, t))
+        .children(
+            connected
+                .then(|| crate::asks::title_button(state, t))
+                .flatten(),
+        )
 }
 
 fn centered(t: &Tokens, content: El) -> El {
@@ -406,6 +412,7 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
         })
         .children(window.drawer.map(|drawer| match drawer {
             Drawer::Garden => crate::garden::panel(state, t),
+            Drawer::Asks => crate::asks::drawer(state, t),
             drawer => self::drawer(drawer, t),
         }))
 }

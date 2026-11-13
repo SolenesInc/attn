@@ -4,6 +4,7 @@ use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, ScrollSpec, Tx, col, memo, row, text};
 
+use crate::asks::Item as AskItem;
 use crate::sidebar::{open_agent, state_mark};
 use crate::{Action, State};
 use model::{Group, Home, HomeAgent};
@@ -18,6 +19,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
         std::sync::Arc::as_ptr(&facts.settings) as usize,
+        std::sync::Arc::as_ptr(&facts.asks) as usize,
         window.now_ms,
         window.follow_next_turn,
         window.home_snoozed_open,
@@ -25,6 +27,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     );
     memo("home", reads, || {
         let home = model::home(facts, window.now_ms);
+        let asks = crate::asks::Lists::of(facts, window.now_ms).live;
         col()
             .key("home")
             .role("main")
@@ -41,7 +44,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                     .as_ref()
                     .map(|running| all_settled(running, window.follow_next_turn, t)),
             )
-            .child(sessions_card(&home, window.home_snoozed_open, t))
+            .child(sessions_card(&home, &asks, window.home_snoozed_open, t))
     })
 }
 
@@ -126,7 +129,7 @@ fn follow_check(follow: bool, t: &Tokens) -> El {
         .child(text(LABEL).font(type_::LABEL).color(t.text_secondary))
 }
 
-fn sessions_card(home: &Home, snoozed_open: bool, t: &Tokens) -> El {
+fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Tokens) -> El {
     let mut body = col()
         .key("home.sessions.body")
         .w_full()
@@ -136,6 +139,18 @@ fn sessions_card(home: &Home, snoozed_open: bool, t: &Tokens) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         });
+    if !asks.is_empty() {
+        body = body.child(
+            col()
+                .key("home.group.asks")
+                .role("list")
+                .label("Asks")
+                .w_full()
+                .gap(2.0)
+                .child(group_label("Asks", Some(asks.len()), t))
+                .children(asks.iter().map(|item| ask_row(item, t))),
+        );
+    }
     if home.empty {
         body = body.child(
             text("No active sessions")
@@ -265,6 +280,39 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
             open.then(|| rows.iter().map(|agent| session_row(agent, t)))
                 .into_iter()
                 .flatten(),
+        )
+}
+
+fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
+    let id = item.ask.id.clone();
+    row()
+        .key(format!("home.ask.{id}"))
+        .role("button")
+        .label(format!("{}: {}", item.from, item.ask.subject))
+        .w_full()
+        .min_h(32.0)
+        .px(space::S2)
+        .py(space::S1)
+        .gap(space::S2)
+        .items_center()
+        .radius(4.0)
+        .hover(t.bg_elevated)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| crate::asks::show(state, Some(&id), tx))
+        .child(text("?").font(type_::BODY).color(t.accent))
+        .child(
+            text(item.from.clone())
+                .font(type_::BODY)
+                .color(t.text_primary)
+                .single_line(),
+        )
+        .child(
+            text(item.ask.subject.clone())
+                .font(type_::BODY)
+                .color(t.text_secondary)
+                .grow(1.0)
+                .min_w(0.0)
+                .single_line()
+                .truncate(),
         )
 }
 

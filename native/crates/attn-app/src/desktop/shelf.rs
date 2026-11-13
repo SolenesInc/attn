@@ -78,6 +78,8 @@ struct Chip {
     arrival: Option<u64>,
     members: Vec<Member>,
     leaves: Vec<String>,
+    /// How many of the column's agents have open asks.
+    asking: usize,
 }
 
 fn member(desktop: &Desktop, facts: &attn_client::Facts, leaf: &str) -> Member {
@@ -145,6 +147,13 @@ fn chip(
             .map(|(_, until)| *until),
         members,
         leaves: column.leaf_ids.clone(),
+        asking: column
+            .leaf_ids
+            .iter()
+            .filter_map(|leaf| super::view::pane_of(desktop, leaf))
+            .filter_map(|pane| facts.sessions.iter().find(|s| s.id == pane.session_id))
+            .filter(|s| !crate::asks::of_session(facts, s).is_empty())
+            .count(),
     }
 }
 
@@ -493,6 +502,14 @@ fn chip_button(
                 .truncate()
                 .grow(1.0),
         )
+        .children((0..chip.asking).map(|i| {
+            text("?")
+                .key(format!("{key}.ask.{i}"))
+                .role("img")
+                .label("Open ask")
+                .font(type_::LABEL)
+                .color(t.accent)
+        }))
         .children(flash);
     drop_bar(chip, drop, t)
 }

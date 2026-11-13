@@ -20,7 +20,12 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
     match action {
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
         Action::DockAttention => window.toggle_drawer(Drawer::Attention),
-        Action::DockAsks => window.toggle_drawer(Drawer::Asks),
+        Action::DockAsks if crate::asks::available(&state.facts) => crate::asks::toggle(state, tx),
+        Action::DockAsks => return false,
+        Action::ShowAsks { ask } if crate::asks::available(&state.facts) => {
+            crate::asks::show(state, ask.as_deref(), tx)
+        }
+        Action::ShowAsks { .. } => return false,
         Action::BoardOpen => crate::garden::toggle_frame(state, tx),
         Action::UiActionMenu => crate::palette::open(state, Face::Agents, tx),
         Action::UiCommandPalette => crate::palette::open(state, Face::Commands, tx),

@@ -136,7 +136,8 @@ fn agent(
             let row = AgentRow::of(
                 session,
                 state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
-            );
+            )
+            .asking(&state.facts, session);
             if on_screen.contains(&session.id) {
                 row
             } else {
@@ -287,7 +288,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
-        std::sync::Arc::as_ptr(&facts.settings) as usize,
+        (
+            std::sync::Arc::as_ptr(&facts.settings) as usize,
+            std::sync::Arc::as_ptr(&facts.asks) as usize,
+        ),
         window.view,
         window.agent_list_open,
         (
@@ -518,6 +522,7 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+        .children(crate::asks::marker(&key, a.agent.asks, t))
         .children((!a.slot.is_empty()).then(|| {
             text(a.slot.clone())
                 .key(format!("{key}.slot"))

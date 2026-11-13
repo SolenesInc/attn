@@ -115,6 +115,18 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             .pin(),
         );
     }
+    if crate::asks::available(facts) {
+        commands.push(
+            Command::new(
+                "asks",
+                "Open asks",
+                &["ask", "asks", "questions", "answer", "reply", "inbox"],
+                Action::ShowAsks { ask: None },
+            )
+            .describe("Answer what your agents asked, one ask after another")
+            .shortcut(Some(Action::DockAsks)),
+        );
+    }
     commands.push(Command::new(
         "home",
         "Home",

@@ -118,6 +118,30 @@ Preconditions:
 - **From the person's shell.** `./attn ask list --session ask-agent` prints `No open asks.` and `./attn ask list --session ask-early` prints `Asks are off for this session.`
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek ask-agent` after each ask and after each answer lands, `./attn seed notes <seed>`, `bridge dom_text` of the ask before answering and of the replied list, and `bridge capture_screenshot '{"path":"<P>/asks-drawer.png"}'` with an open ask on screen, where `<P>` is the folder's path written out. Name each file for its way in, such as `asks-chip-seed-notes.txt`.
 
+### In the native app
+
+The native app (`native/`, `native/crates/attn-app/src/asks/`) has the drawer with each question type, the note, Send, Accept all recommended, Replied, Snooze or Wake and Open agent; the keys ⌘⇧R, ⌘↩, j, k, r, a, o, s and Escape; the palette's "Open asks"; the title bar's asks button; the Asks group on home; the tile header chip with its preview; and the markers on sidebar rows, shelf chips and rail desktops. Ask images, Open in Garden (`g`), links to mentioned seeds and the seed tender the Garden names drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
+- Make `P` and `A` with the fixture above, run `./attn settings set asks_enabled true`, and start `ask-agent` with `wsctl add-session --cwd $A --agent claude --label ask-agent --id ask-agent --place`.
+
+The steps press the macOS chords. On Linux press `mod+alt+r` for `mod+shift+r`, `mod+alt+k` for `mod+shift+k`, `mod+alt+h` for `mod+shift+h` and `mod+alt+b` for `mod+b`; the pane's `runtime_id` in `wsctl list` is `<terminal>`. `<ask>` is the id an `Asked` reply prints. `bridge tree` shows the rest: `<q>`, the key of the ask's first question, in `asks.q.<q>`; `<leaf>`, the agent's tile, in `tile.<leaf>`; and `<slot>`, the desktop's number, in `rail.desktop.<slot>`.
+
+Steps:
+
+- **An agent asks.** Run `wsctl input --id <terminal> --text "open an ask" --enter`. `bridge wait '{"target":{"key":"home.ask.<ask>"}}'` answers inside `home.group.asks`, `bridge tree` names `titlebar.asks` starting `1 open ask`, and `sidebar.session.ask-agent.ask` shows.
+- **Open the drawer with the shortcut and answer from the keyboard.** Run `bridge key '{"chord":"mod+shift+r"}'`. `bridge wait '{"target":{"key":"asks.drawer"}}'` answers, `asks.ask` is named `Cache store`, and `bridge tree` shows focus on `asks.q.<q>.choice.0`, which draws its focus ring. Run `bridge key '{"chord":"space"}'`: the tree shows that choice checked. Run `bridge key '{"chord":"mod+enter"}'`: the drawer shows `asks.empty`. Thirty seconds after the last `wsctl input`, `./attn agent peek ask-agent` shows the typed answer and `got the answer`.
+- **Replied asks.** With the drawer open, run `bridge key '{"chord":"r"}'`: `asks.list` holds `asks.row.<ask>` under "Replied in the last day", and `asks.q.<q>.choice.0` shows checked and disabled. Press `r` again, then Escape: `asks.drawer` is gone.
+- **Step through asks and open the agent.** Ask twice more with `open an ask`. Open the drawer, run `bridge press '{"target":{"key":"asks.part.0"}}'` so focus leaves the answer fields, then press `j` and `k`: `asks.ask`'s name moves between the two asks. Press `o`: the drawer closes and `bridge state '{"of":"window"}'` shows `on_screen: "ask-agent"`.
+- **Snooze and wake.** Open the drawer, press `asks.part.0` and press `s`: `bridge wait '{"target":{"role":"menu","name":"Snooze ask-agent"}}'` answers. Press Enter: the menu closes, `asks.snooze` is named `Wake` and has focus, the asks sit under "Snoozed", and `titlebar.asks` no longer counts them. Press `s` again: they return and are counted.
+- **The palette, the title bar and home.** Press Escape. Run `bridge key '{"chord":"mod+shift+k"}'`, `bridge type '{"text":"open asks"}'` and `bridge key '{"chord":"enter"}'`: `asks.drawer` answers. Press Escape, then `bridge press '{"target":{"key":"titlebar.asks"}}'`: the drawer opens again. Press Escape, go home with `mod+shift+h` and `bridge press '{"target":{"key":"home.ask.<ask>"}}'`: the drawer opens on that ask.
+- **The tile chip.** Open `ask-agent`. `bridge tree` shows `tile.<leaf>.ask` named `Open ask: Cache store, and 1 more`. Run `bridge hover '{"target":{"key":"tile.<leaf>.ask"}}'`: `tile.<leaf>.ask.popover` answers with an Answer button per ask. Press the chip: the drawer opens on the oldest ask, with focus in its first answer.
+- **The rail.** Press `mod+b`: the rail's desktop chip holding `ask-agent` shows `rail.desktop.<slot>.ask`. Press `mod+b` to expand. Withdraw each open ask with `wsctl input --id <terminal> --text "withdraw <ask>" --enter`.
+- **Proof.** In `$P`, keep `bridge tree` after each step, `./attn agent peek ask-agent` after the answer lands, and the `./attn` commands' output. Capture `bridge shot '{"path":"<P>/native-asks-drawer.png"}'` with an open ask and `<P>/native-asks-chip.png` with the chip's preview, with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The home keeps an ask's images under `<data-dir>/asks/<ask>/` until the ask's record goes. Each time the daemon starts, it copies any image an ask shows that has no copy yet, from its file on the home; this covers asks opened before attn copied images.
@@ -133,7 +157,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/asks_wire_test.go`, `internal/daemon/phone_push_wire_test.go` (no push for a snoozed asker).
+- Wire: `native/crates/attn-app/tests/wire/asks.rs` (the native app), `internal/daemon/asks_wire_test.go`, `internal/daemon/phone_push_wire_test.go` (no push for a snoozed asker).
 - Stack: `cmd/attnd/ask_stack_test.go`, `cmd/attnd/ask_images_stack_test.go`, `app/e2e/asks.spec.ts`.
 - Kernel: `internal/ask/ask_test.go`.
 - App: `app/src/App.asks.test.tsx`.
@@ -144,6 +168,6 @@ Preconditions:
 - An answer is user input, so attn types it only after 30 seconds of quiet in the agent's terminal. `wsctl input` to the asking agent restarts that wait.
 - `attn ask --seed <id>` needs the asker to tend the seed. attn refuses it from an agent that has not claimed the seed, with `nobody is tending <seed> ... tend it first`.
 - attn types a multi-line answer as one bracketed paste, so the mock sees one prompt. Keep `answered the ask` as the fixture's first turn: the mock tries turns in order, and the rest of the answer carries the user's own words, which can match a later turn.
-- The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so click the ask's subject natively first. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
+- The drawer's letter keys act only while focus is on the drawer itself (in the native app, press `asks.part.0` instead of clicking the subject). ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so click the ask's subject natively first. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
 - The `dock.asks` shortcut, the palette command and the sidebar icon exist only while asks are on or some ask exists. An instance with asks turned off and no asks shows none of them. Their absence there is not a missing way in.
 - Working but wrong: after sending, the drawer moves to the next open ask, or to its empty state, with no confirmation that the answer reached the agent. The proof is the agent's screen, not the drawer.

@@ -1,5 +1,6 @@
 mod action;
 pub mod annotations;
+mod asks;
 pub mod automation;
 mod connection;
 pub mod daemon;
@@ -75,6 +76,7 @@ impl State {
             .into_iter()
             .chain(home::next_change(&self.facts, now_ms))
             .chain(palette::next_change(self, now_ms))
+            .chain(asks::next_change(self, now_ms))
             .min()
             .map(|at| (at - self.epoch_ms) as f64 / 1000.0);
         if let Some(at) = self.age_wake {
@@ -157,6 +159,7 @@ pub fn bind(
             sidebar::session_menu::follow(state);
             sidebar::width::follow(state);
             palette::follow(state);
+            asks::follow(state, tx);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             if state.window.tile.is_none() {

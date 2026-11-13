@@ -3,9 +3,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use attn_protocol::{
-    AttachResultMessage, ClientHelloMessage, CommandErrorMessage, GardenSeedsChangedMessage,
-    GardenSeedsUpdatedMessage, InitialStateMessage, KittyImageResultMessage,
-    KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
+    AsksUpdatedMessage, AttachResultMessage, ClientHelloMessage, CommandErrorMessage,
+    GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, InitialStateMessage,
+    KittyImageResultMessage, KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
     ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
     RuntimeRespawnedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
     SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
@@ -478,6 +478,11 @@ impl Task {
             "outposts_updated" => {
                 let message: OutpostsUpdatedMessage = parse(&header.event, text)?;
                 self.store.set_outposts(message.outposts);
+                None
+            }
+            "asks_updated" => {
+                let message: AsksUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_asks(&message.profile_id, message.asks);
                 None
             }
             "profiles_changed" => {

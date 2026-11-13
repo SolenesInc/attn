@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
-    Desktop, DesktopTileContentMessage, InitialStateMessage, OutpostInfo, Profile, Seed, Session,
+    Ask, Desktop, DesktopTileContentMessage, InitialStateMessage, OutpostInfo, Profile, Seed,
+    Session,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -22,6 +23,8 @@ pub struct Facts {
     /// What each document tile holds, as the daemon last sent it.
     pub tile_contents: Arc<TileContents>,
     pub garden: Arc<Garden>,
+    /// The selected profile's open asks, then the ones answered in the last day.
+    pub asks: Arc<Vec<Ask>>,
 }
 
 /// Document tiles' contents by desktop and tile.
@@ -142,7 +145,8 @@ impl Slices {
     pub const OUTPOSTS: Slices = Slices(1 << 5);
     pub const TILE_CONTENTS: Slices = Slices(1 << 6);
     pub const GARDEN: Slices = Slices(1 << 7);
-    pub const ALL: Slices = Slices((1 << 8) - 1);
+    pub const ASKS: Slices = Slices(1 << 8);
+    pub const ALL: Slices = Slices((1 << 9) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -268,6 +272,7 @@ impl Store {
                 total: state.seeds_total.unwrap_or(seeds.len() as i64),
                 seeds,
             });
+            facts.asks = Arc::new(state.asks.unwrap_or_default());
             Slices::ALL
         });
     }
@@ -352,6 +357,17 @@ impl Store {
                 total,
             });
             Slices::GARDEN
+        });
+    }
+
+    /// A profile's asks; another profile's change nothing here.
+    pub(crate) fn set_asks(&self, profile: &str, asks: Vec<Ask>) {
+        self.change(|facts| {
+            if profile != facts.profiles.selected {
+                return Slices::NONE;
+            }
+            facts.asks = Arc::new(asks);
+            Slices::ASKS
         });
     }
 

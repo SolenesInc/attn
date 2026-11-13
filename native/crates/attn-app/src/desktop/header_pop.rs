@@ -10,6 +10,8 @@ pub(crate) enum What {
     Details,
     /// The delegation chain the session sits in.
     Chain,
+    /// The agent's open asks.
+    Ask,
 }
 
 impl What {
@@ -18,18 +20,16 @@ impl What {
             What::Usage => "usage",
             What::Details => "details",
             What::Chain => "role",
+            What::Ask => "ask",
         }
     }
 
-    fn shown_for(
-        self,
-        session: &attn_protocol::Session,
-        sessions: &[attn_protocol::Session],
-    ) -> bool {
+    fn shown_for(self, session: &attn_protocol::Session, facts: &attn_client::Facts) -> bool {
         match self {
             What::Usage => super::usage::shown(session).is_some(),
             What::Details => super::provenance::pull_request(session).is_some(),
-            What::Chain => super::chain::shown(session, sessions),
+            What::Chain => super::chain::shown(session, &facts.sessions),
+            What::Ask => !crate::asks::of_session(facts, session).is_empty(),
         }
     }
 
@@ -37,7 +37,7 @@ impl What {
     fn first_pick(self, session: &str, sessions: &[attn_protocol::Session]) -> usize {
         match self {
             What::Chain => super::chain::current_row(session, sessions),
-            What::Usage | What::Details => 0,
+            What::Usage | What::Details | What::Ask => 0,
         }
     }
 
@@ -52,7 +52,7 @@ impl What {
     /// before the popover closes, in seconds.
     fn delays(self) -> (f64, f64) {
         match self {
-            What::Usage => (0.16, 0.24),
+            What::Usage | What::Ask => (0.16, 0.24),
             What::Details | What::Chain => (0.0, 0.12),
         }
     }
@@ -236,7 +236,7 @@ impl HeaderPop {
                     .sessions
                     .iter()
                     .find(|s| s.id == pop.session)
-                    .is_some_and(|s| pop.what.shown_for(s, &facts.sessions))
+                    .is_some_and(|s| pop.what.shown_for(s, facts))
         };
         if self.open.as_ref().is_some_and(|p| !stands(p)) {
             self.open = None;

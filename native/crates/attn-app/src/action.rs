@@ -59,6 +59,8 @@ macro_rules! actions {
             SetDesktopOrder { profile: String, desktops: Vec<String> },
             /// Close a desktop, asking first when it holds tiles.
             CloseDesktop { desktop: String },
+            /// Open the asks drawer on an ask, or on the first one.
+            ShowAsks { ask: Option<String> },
         }
 
         impl Action {
@@ -84,6 +86,7 @@ macro_rules! actions {
                     Action::SortDesktops { .. } => "desktop.sort",
                     Action::SetDesktopOrder { .. } => "desktop.setOrder",
                     Action::CloseDesktop { .. } => "desktop.close",
+                    Action::ShowAsks { .. } => "asks.show",
                 }
             }
 
@@ -106,6 +109,7 @@ macro_rules! actions {
                     Action::SortDesktops { .. } => "Sort desktops",
                     Action::SetDesktopOrder { .. } => "Restore an order of desktops",
                     Action::CloseDesktop { .. } => "Close desktop",
+                    Action::ShowAsks { .. } => "Open asks",
                 }
             }
 

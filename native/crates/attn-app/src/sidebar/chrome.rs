@@ -20,6 +20,8 @@ pub struct Chip {
     pub current: bool,
     /// The turns waiting on agents of this desktop.
     pub waiting: usize,
+    /// An agent of this desktop has an open ask.
+    pub asks: bool,
 }
 
 /// The desktops without a shortcut slot, as one chip.
@@ -52,6 +54,13 @@ pub fn chips(state: &State, bands: Option<&Bands<'_>>) -> (Vec<Chip>, Extras) {
                 title: desktop_title(d, &facts.desktops),
                 current: current.as_deref() == Some(d.id.as_str()),
                 waiting: waiting.get(d.id.as_str()).copied().unwrap_or(0),
+                asks: d.panes.iter().any(|p| {
+                    facts
+                        .sessions
+                        .iter()
+                        .find(|s| s.id == p.session_id)
+                        .is_some_and(|s| !crate::asks::of_session(facts, s).is_empty())
+                }),
             })
         })
         .collect();
@@ -90,7 +99,8 @@ pub(crate) fn chip(
     t: &Tokens,
 ) -> El {
     let desktop = chip.desktop.clone();
-    let label = format!("{}{}", chip.title, waiting_words(chip.waiting, mark));
+    let asks = if chip.asks { ", has open asks" } else { "" };
+    let label = format!("{}{}{asks}", chip.title, waiting_words(chip.waiting, mark));
     let el = row()
         .key(format!("{prefix}.{}", chip.slot))
         .role("button")
@@ -113,7 +123,14 @@ pub(crate) fn chip(
                 .font(type_::MONO_CAPTION)
                 .color(t.text_secondary),
         )
-        .children(waiting_mark(chip.waiting, mark, t));
+        .children(waiting_mark(chip.waiting, mark, t))
+        .children(chip.asks.then(|| {
+            text("?")
+                .key(format!("{prefix}.{}.ask", chip.slot))
+                .font(type_::MONO_CAPTION)
+                .color(t.accent)
+                .ml(2.0)
+        }));
     match drop {
         None => el,
         Some(DesktopMark::Source) => el.opacity(0.4),

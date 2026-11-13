@@ -68,6 +68,8 @@ pub struct AgentRow {
     pub owed: bool,
     pub selected: bool,
     pub settling: Settling,
+    /// The agent's open asks.
+    pub asks: usize,
 }
 
 /// The daemon's auto-settle countdown, as a row whose tile is not on screen shows it.
@@ -111,7 +113,14 @@ impl AgentRow {
             owed: session.turn_owed == Some(true),
             selected,
             settling: Settling::Off,
+            asks: 0,
         }
+    }
+
+    /// The row with the agent's open asks counted.
+    pub fn asking(mut self, facts: &Facts, session: &Session) -> AgentRow {
+        self.asks = crate::asks::of_session(facts, session).len();
+        self
     }
 
     /// The row of an agent whose tile is not on screen, which shows its countdown.
@@ -537,6 +546,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
                     };
                     if placed.insert(session.id.as_str()) {
                         children.push(agent_line(
+                            facts,
                             desktop,
                             session,
                             shown,
@@ -552,6 +562,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
                 && placed.insert(session.id.as_str())
             {
                 children.push(agent_line(
+                    facts,
                     desktop,
                     session,
                     shown,
@@ -573,6 +584,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
 }
 
 fn agent_line(
+    facts: &Facts,
     desktop: &Desktop,
     session: &Session,
     shown: bool,
@@ -580,7 +592,7 @@ fn agent_line(
     on_screen: &[String],
 ) -> Line {
     let selected = shown && active == Some(session.id.as_str());
-    let row = AgentRow::of(session, selected);
+    let row = AgentRow::of(session, selected).asking(facts, session);
     Line::Agent {
         desktop: desktop.id.clone(),
         row: if on_screen.contains(&session.id) {

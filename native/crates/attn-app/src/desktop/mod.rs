@@ -11,7 +11,7 @@ mod drag;
 mod filter_panel;
 mod find_bar;
 mod fit;
-mod header_pop;
+pub(crate) mod header_pop;
 mod host;
 pub mod layout;
 mod overview;
@@ -38,6 +38,7 @@ use crate::State;
 pub(crate) use actions::{activate_started, escape, give_keyboard, run, show_unseen};
 pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
+pub(crate) use fit::{Widths, text_w};
 pub(crate) use host::outpost_name;
 pub(crate) use overview::view as overview;
 pub(crate) use peek::view as peek;
@@ -205,6 +206,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
         header_pop::What::Usage => usage::popover(state, pop, t),
         header_pop::What::Details => provenance::popover(state, pop, t),
         header_pop::What::Chain => chain::popover(state, pop, t),
+        header_pop::What::Ask => crate::asks::preview(state, pop, t),
     }
 }
 

@@ -155,7 +155,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
 }
 
 /// What an agent header's second line shows, each piece at the level its tile's width leaves
-/// it.
+/// it, and the chips its first line fits beside the title.
 #[derive(Clone, Debug, PartialEq, Hash)]
 struct Subline {
     role: Option<super::chain::Trigger>,
@@ -163,6 +163,8 @@ struct Subline {
     usage: Option<super::usage::Badge>,
     provenance: Option<super::provenance::Line>,
     levels: Vec<(Piece, Level)>,
+    ask: Option<crate::asks::Chip>,
+    headline: Vec<(Piece, Level)>,
 }
 
 impl Subline {
@@ -176,7 +178,20 @@ impl Subline {
     fn shows(&self, piece: Piece) -> Option<Level> {
         Some(self.level(piece)).filter(|level| *level != Level::Hidden)
     }
+
+    fn headline_level(&self, piece: Piece) -> Level {
+        self.headline
+            .iter()
+            .find(|(p, _)| *p == piece)
+            .map_or(Level::Full, |(_, level)| *level)
+    }
 }
+
+/// The room a headline's controls take besides its chips: its side padding, the pop-out
+/// button and the gaps beside it.
+const HEADLINE_CONTROLS: f32 = 2.0 * space::S2 + 24.0 + space::S2;
+/// The state dot at the headline's start.
+const HEADLINE_DOT: f32 = 8.0;
 
 const SUBLINE_GAP: f32 = 10.0;
 const SUBLINE_LEFT: f32 = 24.0;
@@ -189,6 +204,7 @@ fn sublines(
     facts: &attn_client::Facts,
     desk: &super::Desk,
 ) -> Vec<(String, Subline)> {
+    let settles = settles(desktop, &facts.sessions);
     desktop
         .panes
         .iter()
@@ -200,11 +216,37 @@ fn sublines(
                 usage: super::usage::badge(s),
                 provenance: super::provenance::line(s),
                 levels: Vec::new(),
+                ask: crate::asks::chip_of(facts, s),
+                headline: Vec::new(),
             };
-            let available = desk
+            let tile_w = desk
                 .rects
                 .get(&format!("tile.{}", p.pane_id))
-                .map(|[_, _, w, _]| w - SUBLINE_LEFT - SUBLINE_RIGHT);
+                .map(|[_, _, w, _]| *w);
+            let settle = settles
+                .iter()
+                .find(|(l, _)| *l == p.pane_id)
+                .map(|(_, s)| s);
+            if let Some(tile_w) = tile_w {
+                let pieces: Vec<(Piece, Widths)> = [
+                    settle.map(|settle| (Piece::Settling, settling_widths(settle))),
+                    sub.ask
+                        .as_ref()
+                        .map(|chip| (Piece::Ask, crate::asks::chip_widths(chip))),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                sub.headline = fit(&Row {
+                    available: tile_w - HEADLINE_CONTROLS,
+                    gap: space::S2,
+                    fixed: &[HEADLINE_DOT, super::fit::TITLE_MINIMUM],
+                    pieces: &pieces,
+                    rank: super::fit::HEADLINE_RANK,
+                    keep: &[],
+                });
+            }
+            let available = tile_w.map(|w| w - SUBLINE_LEFT - SUBLINE_RIGHT);
             if let Some(available) = available {
                 let pieces: Vec<(Piece, Widths)> = [
                     sub.role
@@ -236,13 +278,16 @@ fn sublines(
                         What::Usage => Piece::Usage,
                         What::Details => Piece::Provenance,
                         What::Chain => Piece::Role,
+                        What::Ask => Piece::Ask,
                     })
                     .into_iter()
                     .collect();
                 sub.levels = fit(&Row {
                     available,
                     gap: SUBLINE_GAP,
+                    fixed: &[],
                     pieces: &pieces,
+                    rank: super::fit::SUBLINE_RANK,
                     keep: &keep,
                 });
             }
@@ -833,15 +878,36 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                     )
                     .child(actions),
             );
+    let sub = cx
+        .sublines
+        .iter()
+        .find(|(pane, _)| *pane == leaf.id)
+        .map(|(_, sub)| sub);
     let headline = match (settle, pane) {
         (Some(settle), Some(pane)) => headline.child(settling_chip(
             &leaf.id,
             settle,
             &pane.session_id,
             cx.keys.keep.as_deref(),
+            sub.is_some_and(|sub| sub.headline_level(Piece::Settling) == Level::Icon),
         )),
         _ => headline,
     };
+    let headline = headline.children(sub.zip(pane).and_then(|(sub, pane)| {
+        let chip = sub.ask.as_ref()?;
+        let level = match sub.headline_level(Piece::Ask) {
+            Level::Icon | Level::Hidden => crate::asks::ChipLevel::Icon,
+            Level::Short => crate::asks::ChipLevel::Short,
+            Level::Full => crate::asks::ChipLevel::Full,
+        };
+        Some(crate::asks::chip(
+            &leaf.id,
+            &pane.session_id,
+            chip,
+            level,
+            t,
+        ))
+    }));
     let pops_out = matches!(leaf.kind, LeafKind::Tile { .. });
     let headline = headline
         .children(pops_out.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
@@ -1026,7 +1092,33 @@ fn settling(alpha: f32) -> rune::Color {
 
 /// The header's mark of a turn that settles on its own, or that the person kept; pressing it
 /// keeps the turn, or undoes keeping it.
-fn settling_chip(leaf: &str, settle: &Settle, session: &str, keep_key: Option<&str>) -> El {
+/// The widths of the settling chip in full and as its mark alone.
+fn settling_widths(settle: &Settle) -> Widths {
+    let words = match settle {
+        Settle::Counting(_) => "SETTLING…",
+        Settle::Held => "SETTLING PAUSED",
+        Settle::Kept => "TURN KEPT",
+    };
+    let font = rune::TextStyle {
+        size: 10.0,
+        weight: 600.0,
+        ..type_::LABEL
+    };
+    let mark = 6.0 + 2.0 * 9.0 + 2.0;
+    Widths {
+        full: mark + 7.0 + super::fit::text_w(words, font) + 7.0 + 60.0,
+        short: None,
+        icon: Some(mark),
+    }
+}
+
+fn settling_chip(
+    leaf: &str,
+    settle: &Settle,
+    session: &str,
+    keep_key: Option<&str>,
+    icon: bool,
+) -> El {
     let (label, words, verb, fill, edge, ink) = match settle {
         Settle::Counting(_) => ("Keep this turn", "SETTLING…", "keep", 0.16, 0.55, "#e2d9fd"),
         Settle::Held => (
@@ -1077,8 +1169,8 @@ fn settling_chip(leaf: &str, settle: &Settle, session: &str, keep_key: Option<&s
             });
         })
         .child(mark)
-        .child(text(words).font(font).color(ink).single_line())
-        .children(keep_key.map(|key| {
+        .children((!icon).then(|| text(words).font(font).color(ink).single_line()))
+        .children(keep_key.filter(|_| !icon).map(|key| {
             row()
                 .items_center()
                 .gap(4.0)

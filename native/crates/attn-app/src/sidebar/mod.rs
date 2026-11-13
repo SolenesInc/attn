@@ -174,6 +174,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
         facts.tile_contents.revision,
+        std::sync::Arc::as_ptr(&facts.asks) as usize,
         home,
         on_screen.clone(),
         width::of(state).to_bits(),
@@ -428,6 +429,7 @@ fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+        .children(crate::asks::marker(&key, agent.asks, t))
 }
 
 /// The × button that closes a desktop, asking first when it holds tiles.

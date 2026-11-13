@@ -83,7 +83,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) opens on home and shows the Sessions card by state in desktop flow, "Your turn" and "Settled" in queue flow, "All settled" with its follow checkbox, and the snoozed group with each agent's wake button. What's new and its banner, notifications, toasts, the asks group, the PR card and the rate-limit banner drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) opens on home and shows the Sessions card by state in desktop flow, "Your turn" and "Settled" in queue flow, "All settled" with its follow checkbox, the snoozed group with each agent's wake button, and the Asks group ([asks.md](asks.md)). What's new and its banner, notifications, toasts, the PR card and the rate-limit banner drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 
