@@ -70,7 +70,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) marks an agent's message in its terminal, labels and comments on the mark, keeps the draft with the daemon, and sends the batch from its panel. It has no markdown annotations, tile header controls or destination menu yet. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above.
+The native app (`native/`) marks an agent's message in its terminal and a passage of a markdown tile, labels and comments on each mark, keeps the drafts with the daemon, and sends a terminal's batch from its panel and a document's from its tile header. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above.
 
 Preconditions:
 
@@ -84,6 +84,10 @@ Steps:
 - **Relaunch keeps it.** Run `./attn instance stop-app`, launch again and press the session. `terminal-view:<agent>` lists the mark, and the washes draw again.
 - **Note and send.** Press `terminal.<agent>.annotation.note.field` and type `Keep it short.`. `terminal-view:<agent>` shows the note once the typing pauses. Press `ctrl+Enter` in the note, `ctrl+shift+Enter` from the terminal on Linux, or `mod+Enter` on macOS, or press `terminal.<agent>.annotation.send`. `annotations.outcome` reads `{"kind":"sent","count":1}` for about two seconds, and the stored draft is empty. The mock's terminal does not draw a reply that arrives through its app server, so read it with `wsctl request --json '{"cmd":"session_messages_get","request_id":"r2","session_id":"anno-agent"}' --event session_messages_get_result`, which holds `got terminal feedback`.
 - **Proof.** Keep `terminal-view:<agent>` and the stored draft after each step, and `bridge shot '{"path":"<P>/annotations-native-<step>.png"}'` with the popup open, while writing, after the relaunch and with the panel. Unlike the Tauri capture, the native shot shows the marks.
+- **Mark a document.** Widen the window as [markdown.md](markdown.md) says for the native app, and run `wsctl input --id <agent> --text "show-plan" --enter`, with the fixture's `attn open` given the absolute path of `plan.md`. `<doc>` is `tile.<tile_id>.document`, and the document's blocks are keyed `b1`, `b2` and on. A block's box spans the tile, so aim a drag at the start of its text: `bridge drag '{"target":{"key":"b1"},"at":[0.01,0.5],"by":[100,0]}'`. `<doc>.toolbar` appears. Press `<doc>.toolbar.label.clarify-this`: the header's `Notes 1` button counts it. Select again, press `<doc>.toolbar.comment`, type with `bridge type` and press `ctrl+Enter` (`mod+Enter` on macOS): `Notes 2`. Typing over a selection opens the comment box with what was typed.
+- **Overall note and review notes.** Press `<doc>.overall`, type `Looks right overall.` and press `ctrl+Enter`: `Notes 3`. Press `<doc>.notes`: `<doc>.notes.dialog` lists the marks in reading order. Escape closes it.
+- **Change the destination.** Press `<doc>.send.menu`: `<doc>.send.menu.list` is a menu of this desktop's sessions, keyed `<doc>.send.menu.<n>`. Escape closes it.
+- **Send the document's marks.** Press `<doc>.send`, labelled `Send 3 to anno-agent`: a status reads `Sent ✓`, the stored draft is empty in `wsctl request --json '{"cmd":"markdown_annotations_get","request_id":"d1","document_uri":"attn://file/<plan.md's absolute path, percent-encoded>","source_kind":"file","path":"<plan.md's absolute path>"}' --event markdown_annotations_get_result`, and peek shows `got markdown feedback`. With a new mark and the document pressed, `ctrl+shift+Enter` (`mod+Enter` on macOS) does the same.
 
 Known differences from the Tauri app: the panel sits at its terminal's bottom right instead of the window's, a press outside every terminal (on the sidebar, say) leaves the popup open, "More labels" lists the labels under the popup, and an outpost's unreachable host does not refuse marks. The label emoji draw from the system's emoji font, so a Linux machine without one draws them as boxes.
 
@@ -98,9 +102,9 @@ Known differences from the Tauri app: the panel sits at its terminal's bottom ri
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/terminal_annotations.rs` (the native app), `internal/daemon/session_annotations_wire_test.go`, `internal/daemon/annotation_delivery_wire_test.go`, `internal/daemon/annotation_drafts_wire_test.go`, `internal/daemon/markdown_annotations_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/terminal_annotations.rs` and `native/crates/attn-app/tests/wire/markdown_annotations.rs` (the native app), `internal/daemon/session_annotations_wire_test.go`, `internal/daemon/annotation_delivery_wire_test.go`, `internal/daemon/annotation_drafts_wire_test.go`, `internal/daemon/markdown_annotations_wire_test.go`.
 - Stack: `app/e2e/terminal-annotations.spec.ts`, `app/e2e/markdown-annotation-tiles.spec.ts`.
-- Scenario: `focusless-native` (parked macOS Alt-drag), `terminal-annotations`, `native-terminal-annotations` (the native app), `markdown-opener`.
+- Scenario: `focusless-native` (parked macOS Alt-drag), `terminal-annotations`, `native-terminal-annotations` and `native-markdown-annotations` (the native app), `markdown-opener`.
 - App: `app/src/App.sessionAnnotations.test.tsx`, `app/src/App.markdownAnnotations.test.tsx`, `app/src/components/MarkdownReader/anchoring/*.test.*`, `app/src/annotations/quickLabelPlacement.test.ts`, `app/src/utils/terminalAnnotations.gate.test.ts`, `app/src/utils/terminalMessageAlign.projection.test.ts`.
 
 ## Gotchas

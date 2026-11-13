@@ -104,6 +104,28 @@ Preconditions:
 - **Refusals.** `./attn open $A/missing.md` exits 1 with `open:` and the missing file's error. `./attn open` exits 1 with `usage: attn open <file.md|seed-id> [--session <id>]`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `wsctl list` after each open, `bridge markdown_opener_get_state` with the opener open on the empty query and on `secnd`, `./attn agent peek md-agent` after the agent opens a file, and `bridge dom_text '{"selector":"[data-tile-kind=\"markdown\"] .md-reader-doc"}'` before and after the edit. Capture `bridge capture_screenshot '{"path":"<P>/markdown-tiles.png"}'` with both tiles docked and `<P>/markdown-opener.png` with the opener open, `<P>` written out. Name each file for its way in, such as `markdown-agent-open-list.json`.
 
+### In the native app
+
+The native app (`native/`) docks markdown tiles, follows their files, renders frontmatter, alerts, tables, code, images and Mermaid, opens files from ⌘P with recents, and docks a tile for a markdown path ⌘-clicked in a terminal. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`, and launch it as [terminals.md](terminals.md) says for the native app. On Linux, run every command that reaches the app inside one `xvfb-run`.
+- Widen the window with `bridge set_window_bounds '{"logicalBounds":{"x":0,"y":0,"width":1900,"height":1050}}'`. At the default width a docked document is shelved as a tab at the top of the desktop.
+- Make `P` and `A` and start `md-agent` as above, with the fixture's `attn open` given `$A/notes.md` written out: the mock agent runs in a folder of its own, so a relative name misses.
+
+Steps:
+
+- **An agent shows a file.** Run `wsctl input --id <agent> --text "show-notes" --enter`. `tree_json` holds the tile as above, and `bridge wait '{"target":{"key":"drive-notes"}}'` matches: each heading's key is its slug.
+- **The tile follows the file.** Append a line to `$A/notes.md`: `bridge wait '{"target":{"role":"text","name":"A new line."}}'` matches.
+- **From the person's shell.** Run `./attn open $A/rich.md`: `bridge wait '{"target":{"key":"rich-drive"}}'` matches, and `bridge shot '{"path":"<P>/markdown-native-rich.png"}'` shows the frontmatter, the alert and the diagram.
+- **The opener.** With the agent's terminal pressed, run `bridge run '{"name":"file.open"}'` and wait for `opener.field`. Rows are keyed `opener.row.<absolute path>`. On the empty query the files opened above are listed, the later first. `bridge type '{"text":"secnd"}'` lists `second.md`; press its row: the opener closes and `tree_json` gains a tile for it, bound to the agent. Picking a file that is open makes its tile active instead.
+- **⌘-click in a terminal.** Start a shell in `$A` with `wsctl add-session --cwd $A --agent shell --label md-shell --id md-shell --place` and run `echo ./third.md` in it. Find the cell as [annotations.md](annotations.md) does for a mark, then `bridge hold '{"mods":"mod"}'`, `bridge press` on that point of `terminal.<shell>`, and `bridge hold '{"mods":""}'`. A tile for `third.md` docks, bound to `md-shell`. A press without the modifier opens nothing, and the same path again makes its tile active.
+- **Close the tile.** Press the document to make its tile active, then `bridge run '{"name":"terminal.close"}'` (⌘W): the tile leaves `tree_json`, and the file stays on disk.
+- **Proof.** Keep `tree_json` after each open, the opener's rows from `bridge tree`, and the `bridge shot` of the rendered document.
+
+Known differences from the Tauri app: H5 and H6 draw as H4, `console` and `tsp` code blocks are plain, and footnotes are not rendered.
+
 ## Contexts
 
 - **Durability across restarts**: a markdown tile is part of its desktop and comes back after any restart, re-reading the file. Recent files are kept too. The file itself is the source, so a tile shows whatever is on disk now.
@@ -118,9 +140,9 @@ Preconditions:
 
 - Kernel: `internal/review/corpus_test.go` (documents and the bundles they resolve to, in `internal/review/testdata/corpus`), `internal/review/linemap_test.go`.
 - Kernel: `app/src/components/ReviewReader/editUnit.cases.test.ts` (the edit unit over real Shiki tokens).
-- Wire: `internal/daemon/review_wire_test.go`, `internal/daemon/code_nav_wire_test.go`, `internal/daemon/review_marks_wire_test.go`, `internal/daemon/review_edit_wire_test.go`, `internal/daemon/markdown_tiles_wire_test.go`, `internal/daemon/fs_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`, `internal/daemon/fs_watch_darwin_wire_test.go`, `internal/daemon/fs_index_wire_test.go`, `internal/daemon/fs_containment_wire_test.go`, `internal/daemon/recent_files_wire_test.go`, `internal/daemon/agent_tiles_test.go`, `internal/daemon/markdown_tiles_outpost_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/markdown.rs` and `native/crates/attn-app/tests/wire/opener.rs` (the native app), `internal/daemon/review_wire_test.go`, `internal/daemon/code_nav_wire_test.go`, `internal/daemon/review_marks_wire_test.go`, `internal/daemon/review_edit_wire_test.go`, `internal/daemon/markdown_tiles_wire_test.go`, `internal/daemon/fs_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`, `internal/daemon/fs_watch_darwin_wire_test.go`, `internal/daemon/fs_index_wire_test.go`, `internal/daemon/fs_containment_wire_test.go`, `internal/daemon/recent_files_wire_test.go`, `internal/daemon/agent_tiles_test.go`, `internal/daemon/markdown_tiles_outpost_wire_test.go`.
 - Stack: `cmd/attnd/agent_commands_stack_test.go`, `cmd/attnd/markdown_tiles_outpost_stack_test.go`, `cmd/attnd/outpost_paths_stack_test.go`, `cmd/attnd/review_outpost_stack_test.go`, `cmd/attnd/code_nav_outpost_stack_test.go`, `cmd/attnd/review_marks_outpost_stack_test.go`, `cmd/attnd/review_edit_outpost_stack_test.go`, `app/e2e/mermaid-diagram.spec.ts`, `app/e2e/review-tile-width.spec.ts`.
-- Scenario: `markdown-opener`, `terminal-md-link`.
+- Scenario: `markdown-opener`, `terminal-md-link`, and in the native app `native-markdown-opener` and `native-terminal-md-link`.
 - App: `app/src/App.markdownOpener.test.tsx`, `app/src/App.reviewReader.test.tsx`, `app/src/App.reviewMarks.test.tsx`, `app/src/App.reviewNavigation.test.tsx`, `app/src/App.reviewEdits.test.tsx`, `app/src/App.reviewTokens.test.tsx`, `app/src/App.reviewDocumentStops.test.tsx`, `app/src/App.markdownRendering.test.tsx`, `app/src/components/MarkdownReader/*.test.*`, `app/src/components/palette/openerRank.test.ts`, `app/src/components/palette/pathMode.test.ts`, `app/src/utils/terminalMarkdown.test.ts`, `app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx`.
 
 ## Gotchas

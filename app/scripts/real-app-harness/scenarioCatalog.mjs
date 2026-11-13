@@ -342,6 +342,27 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-markdown-annotations',
+    runnerId: 'NATIVE-MARKDOWN-ANNOTATIONS',
+    label: 'A selection in a native markdown tile takes a quick label and a comment, and Send delivers both to the bound agent',
+    command: ['node', 'scripts/real-app-harness/scenario-native-markdown-annotations.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-terminal-md-link',
+    runnerId: 'NATIVE-TERMINAL-MD-LINK',
+    label: 'A markdown path Cmd-clicked in a native terminal docks a tile bound to its agent, and again reuses it',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-md-link.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-markdown-opener',
+    runnerId: 'NATIVE-MARKDOWN-OPENER',
+    label: 'The native markdown opener docks tracked and untracked files by a fuzzy query, and a recent reuses its tile',
+    command: ['node', 'scripts/real-app-harness/scenario-native-markdown-opener.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-agent-queue',
     runnerId: 'NATIVE-AGENT-QUEUE',
     label: 'The native queue lists turns oldest first, opens a row, hands over on settle and snooze, lands on home and takes a woken agent back',
