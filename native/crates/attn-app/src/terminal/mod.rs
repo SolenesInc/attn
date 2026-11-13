@@ -33,6 +33,9 @@ pub(crate) use selection::Release;
 /// How often a terminal tells the daemon its new size while its tile is being resized, as in
 /// the Tauri app.
 const RESIZE_INTERVAL: f64 = 0.25;
+/// Seconds a synchronized update may hold the screen: Ghostty's renderer ends one after 1 s,
+/// and the Tauri app waits as long.
+const SYNCHRONIZED_UPDATE_LIMIT: f64 = 1.0;
 /// An agent's grid this small is a tile mid-layout, not a size the agent should draw for, as
 /// in the Tauri app.
 const AGENT_USABLE: (u16, u16) = (21, 11);
@@ -136,6 +139,8 @@ struct Term {
     placements: attn_term::kitty::Placements,
     /// How far back the view was scrolled when the window last drew it.
     scrolled_back: u32,
+    /// When the program began the synchronized update the window waits out before drawing.
+    synchronizing_since: Option<f64>,
     /// An agent terminal's annotations, once its session is known.
     marking: Option<annotating::Marking>,
 }
@@ -218,6 +223,7 @@ impl Term {
             blocks: Default::default(),
             placements: Default::default(),
             scrolled_back: 0,
+            synchronizing_since: None,
             marking: None,
         }
     }
@@ -442,6 +448,29 @@ impl Terminals {
         self.said.take()
     }
 
+    /// Holds the screen while the program draws a synchronized update, and ends one that
+    /// outlasts `SYNCHRONIZED_UPDATE_LIMIT`. True when the held screen is to be drawn now.
+    fn follow_synchronized_update(term: &mut Term, now: f64, tx: &mut Tx) -> bool {
+        match (term.vt.synchronizing(), term.synchronizing_since) {
+            (true, None) => {
+                term.synchronizing_since = Some(now);
+                tx.wake_at(now + SYNCHRONIZED_UPDATE_LIMIT);
+                false
+            }
+            (true, Some(since)) if now >= since + SYNCHRONIZED_UPDATE_LIMIT => {
+                term.vt.end_synchronized_update();
+                term.synchronizing_since = None;
+                draw_even_when_resting(tx);
+                true
+            }
+            (false, Some(_)) => {
+                term.synchronizing_since = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Takes what the link heard since the last frame. Output changes nothing in the view
     /// beyond an open find bar's count: true when that count changed.
     pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) -> bool {
@@ -461,6 +490,11 @@ impl Terminals {
         }
         let recounted = heard && self.refind();
         let now = tx.clock();
+        for term in self.panes.values_mut() {
+            if heard || term.synchronizing_since.is_some() {
+                self.undrawn |= Terminals::follow_synchronized_update(term, now, tx);
+            }
+        }
         for (id, term) in &mut self.panes {
             match term.phase {
                 Phase::Live if term.resize_due.is_some_and(|due| now >= due) => {
@@ -961,7 +995,9 @@ impl Terminals {
         id: &str,
         term: &mut Term,
     ) {
-        term.vt.sync(&mut term.grid);
+        if term.synchronizing_since.is_none() {
+            term.vt.sync(&mut term.grid);
+        }
         let placed = Terminals::kitty_images(images, id, term);
         let top = term.vt.view_top();
         term.grid.set_images(placed, top);
@@ -986,6 +1022,12 @@ impl Terminals {
     pub fn screen_size(&mut self, id: &str) -> Option<(u16, u16)> {
         Some(self.panes.get_mut(id)?.vt.size())
     }
+}
+
+/// Asks for the next frame from a poll a timer ran: a resting window draws for that poll only
+/// when it asks.
+fn draw_even_when_resting(tx: &mut Tx) {
+    tx.wake_after(std::time::Duration::ZERO);
 }
 
 /// Puts on the clipboard what the program's clipboard writes asked for, without a gesture, as

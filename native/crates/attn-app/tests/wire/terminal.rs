@@ -503,6 +503,66 @@ fn pty_output_draws_without_running_the_view() {
     assert_eq!(world.runtime().stats.commits, commits);
 }
 
+fn drawn(world: &mut World) -> Vec<String> {
+    let rows = world
+        .automate("state", serde_json::json!({"of": "terminal:r1"}))
+        .expect("the window drew terminal r1");
+    serde_json::from_value(rows).expect("rows of text")
+}
+
+fn drew(world: &mut World, text: &str) -> bool {
+    drawn(world).iter().any(|row| row.contains(text))
+}
+
+#[test]
+fn a_synchronized_update_draws_once_the_program_ends_it() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, b"$ watch\r\n");
+    world.settle();
+
+    output(&world, 2, b"\x1b[?2026hcounter 1\r\n");
+    world.settle();
+    world.advance(Duration::from_millis(500));
+
+    assert!(drew(&mut world, "$ watch"), "{:?}", drawn(&mut world));
+    assert!(
+        !drew(&mut world, "counter 1"),
+        "nothing of the update shows while it lasts: {:?}",
+        drawn(&mut world)
+    );
+    output(&world, 3, b"$ \x1b[?2026l");
+    world.settle();
+
+    let rows = drawn(&mut world);
+    assert_eq!(rows[..3], ["$ watch", "counter 1", "$"], "{rows:?}");
+    world.advance(Duration::from_millis(500));
+    assert_eq!(drawn(&mut world), rows);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_synchronized_update_the_program_never_ends_draws_after_a_second() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, b"\x1b[?2026hstuck");
+    world.settle();
+
+    world.advance(Duration::from_millis(999));
+    assert!(!drew(&mut world, "stuck"), "{:?}", drawn(&mut world));
+    world.advance(Duration::from_millis(1));
+    assert!(drew(&mut world, "stuck"), "{:?}", drawn(&mut world));
+
+    output(&world, 2, b" more");
+    world.settle();
+    assert!(
+        drew(&mut world, "stuck more"),
+        "output after the limit draws at once: {:?}",
+        drawn(&mut world)
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn a_failed_revive_says_why_on_the_screen_and_is_not_asked_again() {
     let daemon = recoverable();

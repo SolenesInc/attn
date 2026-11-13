@@ -267,6 +267,7 @@ pub struct Vt {
 }
 
 const WRAPAROUND: u16 = 7;
+const SYNCHRONIZED_OUTPUT: u16 = 2026;
 const GRAPHEME_CLUSTERING_MODE: u16 = 2027;
 const GRAPHEME_CLUSTERING: &[u8] = b"\x1b[?2027h";
 const ESC: u8 = 0x1b;
@@ -658,6 +659,16 @@ impl Vt {
 
     pub fn dec_mode(&mut self, mode: u16) -> bool {
         unsafe { attn_term_mode(self.raw.as_ptr(), mode, false) }
+    }
+
+    /// The program is drawing a frame it wants shown whole (synchronized output, DEC mode 2026).
+    pub fn synchronizing(&mut self) -> bool {
+        self.dec_mode(SYNCHRONIZED_OUTPUT)
+    }
+
+    /// Ends the program's synchronized update for it, as a terminal does once it lasts too long.
+    pub fn end_synchronized_update(&mut self) {
+        self.write(b"\x1b[?2026l");
     }
 
     pub fn mouse_modes(&mut self) -> mouse::Modes {
