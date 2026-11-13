@@ -666,11 +666,11 @@ fn recording_saves_the_accelerator_and_waits_past_a_lone_modifier() {
         })
     });
     assert!(writes(&world).is_empty());
-    hit(&mut world, PhysicalKeyCode::KeyK, held);
+    hit(&mut world, PhysicalKeyCode::KeyU, held);
 
     assert_eq!(
         overrides(&world)["terminal.toggleMaximize"],
-        json!({"key": "k", "meta": true})
+        json!({"key": "u", "meta": true})
     );
     assert!(world.runtime_is_at_rest());
 }
