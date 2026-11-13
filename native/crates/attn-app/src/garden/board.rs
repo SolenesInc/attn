@@ -885,12 +885,13 @@ fn trail(place: &Place, t: &Tokens) -> El {
                 .color(t.text_muted)
                 .a11y_hidden(),
         );
-        let step = super::view::button(format!("garden.board.trail.{}", depth + 1), title, t);
-        nav = nav.child(if depth == last {
-            step.disabled(true)
-        } else {
-            step.on_press_tx(move |state: &mut State, tx: &mut Tx| climb_to(state, depth + 1, tx))
-        });
+        let step = super::view::kit_button(title)
+            .disabled(depth == last)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| climb_to(state, depth + 1, tx));
+        nav = nav.child(
+            step.build(attn_ui::kit(t))
+                .key(format!("garden.board.trail.{}", depth + 1)),
+        );
     }
     nav.child(
         text(place.trail[last].clone())

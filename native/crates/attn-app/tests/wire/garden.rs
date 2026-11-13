@@ -1414,3 +1414,20 @@ fn keeps_the_seed_it_opened_when_an_earlier_read_answers_late() {
     );
     assert!(rests(&mut world));
 }
+
+#[test]
+fn tab_reaches_every_button_of_the_garden_and_a_plots_page() {
+    let mut world = open_garden(deep());
+    assert_eq!(
+        super::reach::unreached_by_tab(&mut world),
+        Vec::<String>::new()
+    );
+
+    open_row(&mut world, "the migration");
+    click(&mut world, "Expand the garden");
+    assert_eq!(
+        super::reach::unreached_by_tab(&mut world),
+        Vec::<String>::new()
+    );
+    assert!(world.runtime_is_at_rest());
+}

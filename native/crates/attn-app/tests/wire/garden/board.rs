@@ -631,3 +631,20 @@ fn lets_go_of_a_card_a_push_takes_away() {
     assert_eq!(focused_card(world).as_deref(), Some("staying"));
     assert!(rests(world));
 }
+
+#[test]
+fn tab_reaches_every_button_of_the_board_with_a_cards_menu_open() {
+    let mut world = open_board(garden(), Vec::new());
+    select_card(&mut world, "pick this up");
+    for key in [
+        "garden.board.drill.s-plot11",
+        "garden.board.menu-of.s-ready1",
+    ] {
+        assert!(world.screen().find(Target::key(key)).is_some(), "{key}");
+    }
+    assert_eq!(
+        super::super::reach::unreached_by_tab(&mut world),
+        Vec::<String>::new()
+    );
+    assert!(rests(&mut world));
+}

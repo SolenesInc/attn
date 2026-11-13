@@ -3,9 +3,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use attn_protocol::{OpenSeedMessage, Seed};
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, ScrollSpec, Span, Tx, col, el, memo, rich, row, text, text_input};
+use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use super::model::{self, Index, SessionNames};
 use super::search::{self, Lookups, Match, Partial, Query};
@@ -328,16 +329,13 @@ fn body(state: &State, t: &Tokens) -> El {
 }
 
 pub(super) fn button(key: String, label: impl Into<String>, t: &Tokens) -> El {
-    let label = label.into();
-    row()
-        .key(key)
-        .role("button")
-        .label(label.clone())
-        .items_center()
-        .padding(space::S1)
-        .radius(4.0)
-        .hover(t.bg_elevated)
-        .child(text(label).font(type_::LABEL).color(t.text_secondary))
+    kit_button(label).build(attn_ui::kit(t)).key(key)
+}
+
+pub(super) fn kit_button(label: impl Into<String>) -> Button {
+    Button::new(label)
+        .variant(ButtonVariant::GhostMuted)
+        .control_size(ControlSize::Small)
 }
 
 fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
@@ -376,40 +374,32 @@ fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
         attn_ui::icon::EXPAND
     };
     bar.child(
-        row()
-            .key("garden.frame-button")
-            .role("button")
-            .label(frame_label)
-            .padding(space::S1)
-            .radius(4.0)
-            .hover(t.bg_elevated)
-            .child(text(frame_glyph).font(type_::LABEL).color(t.text_secondary))
-            .on_press_tx(super::toggle_frame),
+        GlyphButton::new(frame_glyph, frame_label)
+            .on_press_tx(super::toggle_frame)
+            .build(attn_ui::kit(t))
+            .key("garden.frame-button"),
     )
     .child(
-        row()
-            .key("garden.close")
-            .role("button")
-            .label("Close")
-            .padding(space::S1)
-            .radius(4.0)
-            .hover(t.bg_elevated)
-            .child(
-                text(attn_ui::icon::CLOSE)
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
-            .on_press(super::close),
+        GlyphButton::new(attn_ui::icon::CLOSE, "Close")
+            .on_press(super::close)
+            .build(attn_ui::kit(t))
+            .key("garden.close"),
     )
 }
 
 pub(super) fn view_switch(state: &State, t: &Tokens) -> El {
     let board = super::shows_board(state);
     let choice = |name: &'static str, on: bool, pick: bool| {
-        button(format!("garden.view.{name}"), name, t)
-            .a11y_value(if on { "pressed" } else { "" })
-            .fill(if on { t.bg_selected } else { t.bg_panel })
+        kit_button(name)
+            .variant(if on {
+                ButtonVariant::Neutral
+            } else {
+                ButtonVariant::GhostMuted
+            })
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::choose_board(state, pick, tx))
+            .build(attn_ui::kit(t))
+            .key(format!("garden.view.{name}"))
+            .a11y_value(if on { "pressed" } else { "" })
     };
     row()
         .key("garden.view")
