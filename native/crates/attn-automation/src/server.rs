@@ -284,7 +284,7 @@ mod tests {
                 while rt.has_pending_input() {
                     rt.frame(0.0);
                 }
-                published.store(rt.state, Ordering::SeqCst);
+                published.store(*rt.state(), Ordering::SeqCst);
                 f(&mut rt);
             }
         });

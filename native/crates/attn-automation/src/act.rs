@@ -127,7 +127,7 @@ pub fn act<S: 'static>(
     payload: &Value,
 ) -> Attempt {
     match action {
-        "ping" => Attempt::Done(json!({"pong": true, "frontendReady": hooks.ready(&rt.state)})),
+        "ping" => Attempt::Done(json!({"pong": true, "frontendReady": hooks.ready(rt.state())})),
         "tree" => Attempt::Done(rt.accessibility_json()),
         "find" => {
             let Aimed { target, .. } = args!(action, payload);
@@ -252,7 +252,7 @@ pub fn act<S: 'static>(
         }
         "state" => {
             let Of { of, includes } = args!(action, payload);
-            match (hooks.state(&mut rt.state, &of), includes) {
+            match (hooks.state(rt.state_mut(), &of), includes) {
                 (Err(why), _) => Attempt::Fail(format!("state {of:?}: {why}")),
                 (Ok(None), Some(_)) => Attempt::Wait(format!("state {of:?} to be there")),
                 (Ok(None), None) => Attempt::Fail(format!("state {of:?} is not there yet")),

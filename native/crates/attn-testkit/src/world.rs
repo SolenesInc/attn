@@ -269,8 +269,8 @@ impl World {
             scale: 2.0,
         };
         let mut runtime = attn_app::app().headless_runtime(size, env);
-        APP_ON_KEY.get_or_init(|| runtime.on_key.expect("the app hears keys"));
-        runtime.on_key = Some(heard);
+        APP_ON_KEY.get_or_init(|| runtime.app_mut().on_key.expect("the app hears keys"));
+        runtime.app_mut().on_key = Some(heard);
         let clipboard = rune::clipboard::memory();
         runtime.use_clipboard(&clipboard);
         let orders = crate::tiles::Orders {
@@ -423,7 +423,7 @@ impl World {
                 && self.inbox.lock().unwrap().is_empty()
                 && self.terminals.is_empty()
                 && self.replies.is_empty()
-                && !self.runtime.state.pictures.decoding()
+                && !self.runtime.state().pictures.decoding()
             {
                 return;
             }
@@ -452,7 +452,7 @@ impl World {
         self.daemon.disconnect();
         self.settle();
         while self.daemon.connections() == before
-            || self.runtime.state.facts.connection != Connection::Connected
+            || self.runtime.state().facts.connection != Connection::Connected
         {
             let Parked::Until(at) = self.link().traffic().parked else {
                 panic!(
@@ -641,7 +641,7 @@ impl World {
     /// Terminal `id`'s `terminal-view` slice as the automation server reads it: what its screen
     /// holds now, whether or not a frame drew it.
     pub fn terminal_view(&mut self, id: &str) -> Option<serde_json::Value> {
-        self.runtime.state.terminals.view_state(id)
+        self.runtime.state_mut().terminals.view_state(id)
     }
 
     /// The links the app asked the system to open since the last call, which a test run
@@ -693,7 +693,7 @@ impl World {
     /// The text on a terminal's screen, by its runtime id, row by row.
     pub fn terminal_text(&mut self, runtime_id: &str) -> Vec<String> {
         self.runtime
-            .state
+            .state_mut()
             .terminals
             .screen_text(runtime_id)
             .unwrap_or_else(|| panic!("no terminal {runtime_id} is drawn"))
@@ -702,7 +702,7 @@ impl World {
     /// The size of a terminal's own screen, which follows its PTY.
     pub fn terminal_size(&mut self, runtime_id: &str) -> (u16, u16) {
         self.runtime
-            .state
+            .state_mut()
             .terminals
             .screen_size(runtime_id)
             .unwrap_or_else(|| panic!("no terminal {runtime_id} is drawn"))

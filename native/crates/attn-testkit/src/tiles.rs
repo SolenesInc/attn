@@ -160,7 +160,7 @@ impl TileRuntime {
             key: self.key.clone(),
             shown: self.shown,
             frame: *self.frame.lock().unwrap(),
-            showing: attn_app::desktop::tile_window_leaf(&self.runtime.state),
+            showing: attn_app::desktop::tile_window_leaf(self.runtime.state()),
         }
     }
 
@@ -191,6 +191,6 @@ impl TileRuntime {
     }
 
     pub(crate) fn idle(&self) -> bool {
-        self.inbox.lock().unwrap().is_empty() && !self.runtime.state.pictures.decoding()
+        self.inbox.lock().unwrap().is_empty() && !self.runtime.state().pictures.decoding()
     }
 }
