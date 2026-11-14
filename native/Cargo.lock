@@ -2411,7 +2411,7 @@ checksum = "9c4482d912d7671a7cd2089794f90ef3bb5f5f8c738230fb0fcd50fa020f0ed3"
 [[package]]
 name = "parley_engine"
 version = "0.12.0"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "fontique",
  "harfrust",
@@ -2855,7 +2855,7 @@ dependencies = [
 [[package]]
 name = "rune"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2934,7 +2934,7 @@ dependencies = [
 [[package]]
 name = "rune-highlights"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "unicode-ident",
  "wasmparser",
@@ -2943,7 +2943,7 @@ dependencies = [
 [[package]]
 name = "rune-kit"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "icu_normalizer",
  "pulldown-cmark",
@@ -2957,7 +2957,7 @@ dependencies = [
 [[package]]
 name = "rune-mac"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "objc2 0.5.3",
  "rune-notify",
@@ -2966,7 +2966,7 @@ dependencies = [
 [[package]]
 name = "rune-mermaid"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "rune",
 ]
@@ -2974,12 +2974,12 @@ dependencies = [
 [[package]]
 name = "rune-motion"
 version = "0.1.0"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 
 [[package]]
 name = "rune-notify"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "block2 0.5.1",
  "objc2 0.5.3",
@@ -2988,7 +2988,7 @@ dependencies = [
 [[package]]
 name = "rune-staging"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "wgpu",
 ]
@@ -2996,7 +2996,7 @@ dependencies = [
 [[package]]
 name = "rune-taffy"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=ba6897100180d94523dd6340835a2904ba4690d3#ba6897100180d94523dd6340835a2904ba4690d3"
+source = "git+https://github.com/SolenesInc/rune?rev=ea6e33ee7dbcb973b1c970b08216997456c6b1d5#ea6e33ee7dbcb973b1c970b08216997456c6b1d5"
 dependencies = [
  "taffy",
 ]
