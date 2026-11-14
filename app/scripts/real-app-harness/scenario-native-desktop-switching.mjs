@@ -177,13 +177,13 @@ try {
   });
 
   const doc = `tile-${crypto.randomUUID()}`;
-  const docName = `notes-${crypto.randomUUID().slice(0, 8)}.md`;
+  const docTitle = `Leaf notes ${crypto.randomUUID().slice(0, 8)}`;
   await runner.step('going_to_a_document_from_the_palette_makes_it_the_active_tile_and_takes_the_keyboard_off_the_shell', async () => {
     await driver.click({ key: `tile.${split.pane}.header` });
     await driver.pressKey(keys.focus);
     await driver.waitFor({ key: `tile.${split.pane}.return` });
-    const notes = path.join(runner.sessionDir, 'shells', docName);
-    fs.writeFileSync(notes, '# Leaf notes\n\nDocked content.\n');
+    const notes = path.join(runner.sessionDir, 'shells', 'notes.md');
+    fs.writeFileSync(notes, `# ${docTitle}\n\nDocked content.\n`);
     await observer.profileCommand('desktop_dock_tile', { desktop_id: desktopB.id, anchor_id: split.pane, edge: 'right', tile_id: doc, tile_kind: 'markdown', tile_params: notes });
     await driver.state('desktops', { includes: doc });
     runner.assert(!(await driver.find({ key: `tile.${doc}` })), 'a document arriving beside the shell shown alone leaves it alone', await driver.state('window'));
@@ -191,12 +191,12 @@ try {
 
     await driver.pressKey(keys.agents);
     await driver.waitFor({ key: 'palette.dialog' });
-    await driver.typeInto(null, docName);
+    await driver.typeInto(null, docTitle);
     await driver.waitFor({ key: `palette.row.tile:${desktopB.id}:${doc}` });
     await driver.pressKey('Enter');
     await driver.waitFor({ key: 'palette' }, { gone: true });
     const tile = await driver.waitFor({ key: `tile.${doc}` });
-    runner.assert(tile.name === docName, 'the tile goes by its file name', tile);
+    runner.assert(tile.name === docTitle, 'the tile goes by its heading', tile);
     await keyboardLeft(split.pane);
     await observer.waitFor(() => observer.desktop(desktopB.id)?.active_pane_id === doc, 'the document is the active tile');
   });
