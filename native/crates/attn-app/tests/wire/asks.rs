@@ -6,7 +6,9 @@ use attn_protocol::{
     Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskPart, AskQuestion, AskReply,
     AsksUpdatedMessage, InitialStateMessage, Session, SessionStateChangedMessage,
 };
-use attn_protocol::{PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage};
+use attn_protocol::{
+    GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
+};
 use attn_testkit::{Daemon, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 
@@ -1168,4 +1170,229 @@ fn tab_reaches_every_button_of_the_asks_drawer() {
         super::reach::unreached_by_tab(&mut world),
         Vec::<String>::new()
     );
+}
+
+fn mentions_answered(world: &World, mentions: &[(&str, &str)]) {
+    let mentions: Vec<serde_json::Value> = mentions
+        .iter()
+        .map(|(text, seed)| serde_json::json!({"text": text, "seed_id": seed}))
+        .collect();
+    world.daemon.on("ask_seed_mentions", move |r| {
+        serde_json::json!({
+            "event": "ask_seed_mentions_result",
+            "request_id": r["request_id"],
+            "success": true,
+            "mentions": mentions,
+        })
+    });
+}
+
+fn seed_links(world: &World) -> Vec<(String, String)> {
+    world
+        .screen()
+        .descendants(Target::key("asks.ask"))
+        .into_iter()
+        .filter(|n| n.role == "link")
+        .map(|n| (n.name.unwrap_or_default(), n.key.unwrap_or_default()))
+        .collect()
+}
+
+#[test]
+fn the_seeds_an_ask_names_by_id_or_slug_open_from_its_words_and_code_and_unknown_ids_stay_text() {
+    let mut mentioning = ask(
+        "a-cache1",
+        "api",
+        "Review s-cache1",
+        30,
+        vec![
+            prose(
+                "Blocked on cache-migration and s-zzzzzz; run `attn seed show s-cache1`.\n\n\
+                 ```\ns-cache1\n```",
+            ),
+            question("q1", "text", "Is cache-migration done?", &[]),
+        ],
+    );
+    mentioning.base_dir = "/tmp/api".into();
+    let mut world = start_with_seeds(vec![mentioning], vec![api_working()], vec![migration(None)]);
+    mentions_answered(
+        &world,
+        &[("s-cache1", "s-cache1"), ("cache-migration", "s-cache1")],
+    );
+    open_drawer(&mut world);
+
+    assert_eq!(
+        world.daemon.sent_of("ask_seed_mentions")[0]["ask_id"],
+        "a-cache1"
+    );
+    let links: Vec<String> = seed_links(&world)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(links, ["s-cache1", "cache-migration", "cache-migration"]);
+    let words: Vec<String> = world
+        .screen()
+        .descendants(Target::key("asks.ask"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(words.iter().any(|w| w.contains("attn seed show s-cache1")));
+    assert!(
+        !words
+            .iter()
+            .any(|w| w.contains('[') || w.contains("attn-seed")),
+        "code shows as written: {words:?}"
+    );
+
+    let in_prose = seed_links(&world)[1].1.clone();
+    world.gesture(|app| app.click(Target::key(in_prose)));
+    assert_eq!(
+        garden_heading(&world).as_deref(),
+        Some("Cache store migration")
+    );
+}
+
+#[test]
+fn a_mentioned_seed_the_garden_does_not_hold_opens_in_a_tile_and_unresolved_names_stay_text() {
+    let read = ask(
+        "a-cache1",
+        "api",
+        "Cache store",
+        30,
+        vec![
+            prose("Read s-cache1, old-work, and shared-work."),
+            question("q1", "text", "Ready?", &[]),
+        ],
+    );
+    let mut world = start(vec![read], vec![api_working()]);
+    mentions_answered(
+        &world,
+        &[("s-cache1", "s-cache1"), ("old-work", "s-cache1")],
+    );
+    open_drawer(&mut world);
+
+    let links = seed_links(&world);
+    let names: Vec<&str> = links.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(names, ["s-cache1", "old-work"]);
+    world.gesture(|app| app.click(Target::key(links[1].1.clone())));
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], "s-cache1");
+}
+
+#[test]
+fn a_seed_planted_after_the_ask_is_linked_once_the_garden_has_it() {
+    let read = ask(
+        "a-cache1",
+        "api",
+        "Cache store",
+        30,
+        vec![
+            prose("Blocked on cache-migration."),
+            question("q1", "text", "Ready?", &[]),
+        ],
+    );
+    let mut world = start(vec![read], vec![api_working()]);
+    mentions_answered(&world, &[]);
+    open_drawer(&mut world);
+    assert!(seed_links(&world).is_empty());
+
+    mentions_answered(&world, &[("cache-migration", "s-cache1")]);
+    world.daemon.emit(message(GardenSeedsUpdatedMessage {
+        profile_id: "work".into(),
+        total: 1,
+        seeds: vec![migration(None)],
+        ..GardenSeedsUpdatedMessage::new()
+    }));
+    world.settle();
+
+    assert_eq!(world.daemon.sent_of("ask_seed_mentions").len(), 2);
+    let names: Vec<String> = seed_links(&world)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["cache-migration"]);
+}
+
+const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAEklEQVR4nGP4z8DwHxkzEBQAAGHtF+mRbBMEAAAAAElFTkSuQmCC";
+
+#[test]
+fn an_asks_images_show_from_the_copy_the_home_keeps() {
+    let mut screenshot = ask(
+        "a-cache1",
+        "api",
+        "Cache store",
+        30,
+        vec![
+            prose(
+                "The banner overlaps: ![before](shots/before.png) ![odd](shots/a\\(b\\)&amp;c.png)",
+            ),
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "text".into(),
+                    prompt: "Ship it?".into(),
+                    context: Some("![after](/elsewhere/after.png)".into()),
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
+    );
+    screenshot.base_dir = "/tmp/api".into();
+    let mut world = start(vec![screenshot], vec![api_working()]);
+    world.daemon.on("ask_image", |r| {
+        let found = r["path"] == "/tmp/api/shots/before.png";
+        serde_json::json!({
+            "event": "ask_image_result",
+            "request_id": r["request_id"],
+            "success": found,
+            "mime_type": found.then_some("image/png"),
+            "data_base64": found.then_some(PNG),
+            "error": (!found).then(|| format!("ask a-cache1 holds no copy of {}", r["path"])),
+        })
+    });
+    open_drawer(&mut world);
+    world.settle();
+
+    let mut asked: Vec<String> = world
+        .daemon
+        .sent_of("ask_image")
+        .iter()
+        .inspect(|r| assert_eq!(r["ask_id"], "a-cache1"))
+        .map(|r| r["path"].as_str().unwrap().to_owned())
+        .collect();
+    asked.sort();
+    assert_eq!(
+        asked,
+        [
+            "/elsewhere/after.png",
+            "/tmp/api/shots/a(b)&c.png",
+            "/tmp/api/shots/before.png"
+        ]
+    );
+
+    world.gesture(|app| app.click(Target::role("image").name("after")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("image-preview.picture"))
+            .is_none()
+    );
+    world.gesture(|app| app.click(Target::role("image").name("before")));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("image-preview.picture"))
+            .name
+            .as_deref(),
+        Some("before")
+    );
+    plain(&mut world, Key::Escape);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("image-preview.picture"))
+            .is_none()
+    );
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
 }

@@ -4,7 +4,9 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use attn_protocol::{TileAssetReadMessage, TileAssetReadResultMessage};
+use attn_protocol::{
+    Ask, AskImageMessage, AskImageResultMessage, TileAssetReadMessage, TileAssetReadResultMessage,
+};
 use base64::Engine;
 use pulldown_cmark::{Event, Parser, Tag};
 use rune::{El, Image, ImageCache, Tx, el};
@@ -16,11 +18,19 @@ use attn_client::TileKey;
 use crate::State;
 use crate::requests::Answer;
 
-/// An image file a document shows: its path on this machine, or on outpost `host`.
+/// An image file a document shows, and whom the window reads it through.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Source {
-    host: Option<String>,
+    reader: Reader,
     path: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Reader {
+    /// A tile's document, on this machine or on outpost `host`.
+    Tile { host: Option<String> },
+    /// An ask, from the copy of its images the home keeps.
+    Ask(String),
 }
 
 /// A picture's read, with the picture read before it, shown until this one is ready.
@@ -50,7 +60,7 @@ pub struct Pictures {
     loads: HashMap<Source, Load>,
     /// Moves each time a picture becomes ready or fails, so views that draw them build again.
     pub(crate) revision: u64,
-    /// The tile contents revision the loads follow.
+    /// The tile contents and the shown ask the loads follow.
     followed: Option<u64>,
     /// Each shown document's content as last followed, whose images are read again when it
     /// changes.
@@ -87,14 +97,44 @@ impl Pictures {
 
     /// The ready pictures of a document on `host`, by the paths its images resolve to.
     pub(crate) fn of(&self, host: Option<&str>) -> Rc<HashMap<String, Image>> {
+        self.read_by(&Reader::Tile {
+            host: host.map(str::to_owned),
+        })
+    }
+
+    /// The ready pictures of ask `ask`, by the paths its images resolve to.
+    pub(crate) fn of_ask(&self, ask: &str) -> Rc<HashMap<String, Image>> {
+        self.read_by(&Reader::Ask(ask.to_owned()))
+    }
+
+    fn read_by(&self, reader: &Reader) -> Rc<HashMap<String, Image>> {
         Rc::new(
             self.loads
                 .iter()
-                .filter(|(source, _)| source.host.as_deref() == host)
+                .filter(|(source, _)| source.reader == *reader)
                 .filter_map(|(source, load)| Some((source.path.clone(), load.shown()?.clone())))
                 .collect(),
         )
     }
+}
+
+/// Where the image files of `ask` resolve from: a document in the folder it was asked from.
+pub(crate) fn ask_document(ask: &Ask) -> String {
+    format!("{}/{}.md", ask.base_dir, ask.id)
+}
+
+/// The local image files `ask`'s markdown and its questions' context show.
+fn images_of_ask(ask: &Ask) -> Vec<String> {
+    let document = ask_document(ask);
+    ask.parts
+        .iter()
+        .flat_map(|part| {
+            part.markdown
+                .iter()
+                .chain(part.question.iter().filter_map(|q| q.context.as_ref()))
+        })
+        .flat_map(|source| images_in(&document, source))
+        .collect()
 }
 
 /// The local image files `source`, a document at `document`, shows.
@@ -116,8 +156,18 @@ fn images_in(document: &str, source: &str) -> Vec<String> {
 /// forgets the pictures no document shows any more. Returns whether a picture became ready.
 pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let contents = state.facts.tile_contents.clone();
-    if state.pictures.followed != Some(contents.revision) {
-        state.pictures.followed = Some(contents.revision);
+    let shown_ask = state
+        .window
+        .shows(crate::shell::Drawer::Asks)
+        .then(|| state.window.asks.selected.clone())
+        .flatten();
+    let followed = hash(&(
+        contents.revision,
+        std::sync::Arc::as_ptr(&state.facts.asks) as usize,
+        &shown_ask,
+    ));
+    if state.pictures.followed != Some(followed) {
+        state.pictures.followed = Some(followed);
         let mut wanted = HashSet::new();
         let mut changed = HashSet::new();
         let mut documents = HashMap::new();
@@ -132,7 +182,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
             documents.insert(key.clone(), read);
             for path in images_in(&c.path, &c.content) {
                 let source = Source {
-                    host: host.clone(),
+                    reader: Reader::Tile { host: host.clone() },
                     path,
                 };
                 if fresh {
@@ -142,6 +192,14 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
             }
         }
         state.pictures.documents = documents;
+        if let Some(ask) = shown_ask.and_then(|id| state.facts.asks.iter().find(|a| a.id == id)) {
+            for path in images_of_ask(ask) {
+                wanted.insert(Source {
+                    reader: Reader::Ask(ask.id.clone()),
+                    path,
+                });
+            }
+        }
         state
             .pictures
             .loads
@@ -178,36 +236,61 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
         .pictures
         .loads
         .insert(source.clone(), Load::Asked(previous));
-    let asked = source.clone();
-    state.ask(
-        |id| TileAssetReadMessage {
-            host: asked.host,
-            path: asked.path,
-            request_id: Some(id),
-            ..TileAssetReadMessage::new()
-        },
-        move |state, answer: Answer, _| {
-            let Some(Load::Asked(previous)) = state.pictures.loads.get(&source) else {
-                return;
-            };
-            let previous = previous.clone();
-            let bytes = answer
-                .outcome()
-                .ok()
-                .and_then(|reply| reply.parse::<TileAssetReadResultMessage>())
-                .and_then(|result| result.data_uri)
-                .and_then(|uri| decoded(&uri));
-            let load = match (bytes, &state.pictures.cache) {
-                (Some(bytes), Some(cache)) => Load::Decoding(cache.load(bytes), previous),
-                _ => Load::Failed,
-            };
-            if matches!(load, Load::Failed) {
-                state.pictures.revision += 1;
-            }
-            state.pictures.loads.insert(source, load);
-        },
-        tx,
-    );
+    let path = source.path.clone();
+    match source.reader.clone() {
+        Reader::Tile { host } => state.ask(
+            |id| TileAssetReadMessage {
+                host,
+                path,
+                request_id: Some(id),
+                ..TileAssetReadMessage::new()
+            },
+            move |state, answer: Answer, _| {
+                let bytes = answer
+                    .outcome()
+                    .ok()
+                    .and_then(|reply| reply.parse::<TileAssetReadResultMessage>())
+                    .and_then(|result| result.data_uri)
+                    .and_then(|uri| decoded(&uri));
+                arrived(state, source, bytes);
+            },
+            tx,
+        ),
+        Reader::Ask(ask_id) => state.ask(
+            |id| AskImageMessage {
+                ask_id,
+                path,
+                request_id: id,
+                ..AskImageMessage::new()
+            },
+            move |state, answer: Answer, _| {
+                let bytes = answer
+                    .outcome()
+                    .ok()
+                    .and_then(|reply| reply.parse::<AskImageResultMessage>())
+                    .filter(|result| result.success)
+                    .and_then(|result| result.data_base64)
+                    .and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok());
+                arrived(state, source, bytes);
+            },
+            tx,
+        ),
+    }
+}
+
+fn arrived(state: &mut State, source: Source, bytes: Option<Vec<u8>>) {
+    let Some(Load::Asked(previous)) = state.pictures.loads.get(&source) else {
+        return;
+    };
+    let previous = previous.clone();
+    let load = match (bytes, &state.pictures.cache) {
+        (Some(bytes), Some(cache)) => Load::Decoding(cache.load(bytes), previous),
+        _ => Load::Failed,
+    };
+    if matches!(load, Load::Failed) {
+        state.pictures.revision += 1;
+    }
+    state.pictures.loads.insert(source, load);
 }
 
 fn hash(value: &impl std::hash::Hash) -> u64 {

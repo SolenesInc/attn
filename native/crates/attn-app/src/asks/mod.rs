@@ -1,3 +1,4 @@
+mod mentions;
 mod view;
 
 use std::collections::{BTreeMap, HashMap};
@@ -31,6 +32,7 @@ pub struct Asks {
     focused_on: Option<(String, bool)>,
     /// The keyboard moves into the drawer at the next follow, whatever it shows.
     take_keyboard: bool,
+    mentions: Option<mentions::Mentions>,
 }
 
 #[derive(Default)]
@@ -416,6 +418,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     }
     let shown = state.shown_ask();
     state.window.asks.selected = shown.as_ref().map(|(id, _)| id.clone());
+    mentions::follow(state, shown.as_ref().map(|(id, _)| id.as_str()), tx);
     let take_keyboard = std::mem::take(&mut state.window.asks.take_keyboard);
     if shown == state.window.asks.focused_on && !take_keyboard {
         return;

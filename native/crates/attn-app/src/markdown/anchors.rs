@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 /// The extensions rune-kit's Markdown parses with, so blocks found here are the blocks it draws.
-pub(super) const OPTIONS: Options = Options::ENABLE_TABLES
+pub(crate) const OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_TASKLISTS)
     .union(Options::ENABLE_STRIKETHROUGH)
     .union(Options::ENABLE_GFM)

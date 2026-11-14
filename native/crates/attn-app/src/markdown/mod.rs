@@ -1,11 +1,11 @@
 //! A markdown tile's body: the document the daemon reads from disk, rendered.
 
 mod anchoring;
-mod anchors;
+pub(crate) mod anchors;
 pub(crate) mod annotating;
 pub(crate) mod drafts;
 mod front_matter;
-mod images;
+pub(crate) mod images;
 pub(crate) mod links;
 mod marks;
 mod passages;

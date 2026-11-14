@@ -1,12 +1,16 @@
-use attn_protocol::{AskAnswer, AskQuestion, Session};
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, Session};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, ControlSize, Markdown, Switch};
+use rune::{El, Image, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
+use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown, Switch};
 
-use super::{Chip, Item, Kind, Lists, questions};
+use super::{Chip, Item, Kind, Lists, mentions, questions};
 use crate::State;
 use crate::desktop::header_pop::{self, Pop, What};
+use crate::markdown::{images, links};
 use crate::sidebar::queue;
 
 pub(super) const SNOOZE: &str = "asks.snooze";
@@ -250,10 +254,63 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
         .child(text(age).font(type_::MONO_CAPTION).color(t.text_tertiary))
 }
 
+/// How an ask's words show: the seeds they name as links that open them, and its pictures,
+/// read from the copy of them the home keeps.
+struct Prose<'a> {
+    names: &'a [AskSeedMention],
+    pictures: Rc<HashMap<String, Image>>,
+    document: String,
+    t: &'a Tokens,
+}
+
+impl<'a> Prose<'a> {
+    fn of(state: &'a State, ask: &Ask, t: &'a Tokens) -> Prose<'a> {
+        Prose {
+            names: mentions::of(state, &ask.id),
+            pictures: state.pictures.of_ask(&ask.id),
+            document: images::ask_document(ask),
+            t,
+        }
+    }
+
+    fn text(&self, el: El, content: &str) -> El {
+        mentions::linked(el, content, self.names, self.t.accent)
+    }
+
+    fn markdown(&self, source: &str) -> El {
+        let document = links::Document {
+            path: self.document.clone(),
+            session: None,
+            outpost: None,
+            view: "asks.ask".into(),
+        };
+        let path = self.document.clone();
+        let pictures = self.pictures.clone();
+        Markdown::new(mentions::linked_markdown(source, self.names))
+            .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
+                match mentions::seed_of(href) {
+                    Some(seed) => super::open_seed(state, seed, tx),
+                    None => links::follow(state, &document, href, tx),
+                }
+            })
+            .images(move |src| match links::resolve(&path, src) {
+                Some(links::Target::Local(file)) => pictures.get(&file).cloned(),
+                _ => None,
+            })
+            .image_frame(|shown: El, frame: &ImageFrame<'_>| {
+                let (image, alt) = (frame.image.clone(), frame.alt.to_owned());
+                shown.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    images::show(state, image.clone(), &alt, tx)
+                })
+            })
+            .build(attn_ui::kit(self.t))
+    }
+}
+
 fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
     let ask = item.ask;
     let replied = ask.reply.is_some();
-    let kit = attn_ui::kit(t);
+    let prose = Prose::of(state, ask, t);
     let snoozable = item
         .holder
         .filter(|s| !super::offline(s, &state.facts.outposts));
@@ -325,12 +382,12 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     Some(answers) => Shown::Replied(answers.iter().find(|a| a.key == question.key)),
                     None => Shown::Draft(draft.and_then(|d| d.answers.get(&question.key))),
                 };
-                question_card(&ask.id, index, question, answer, kit, t)
+                question_card(&ask.id, index, question, answer, &prose, t)
             }
             None => col()
                 .key(format!("asks.part.{at}"))
                 .w_full()
-                .child(Markdown::new(part.markdown.clone().unwrap_or_default()).build(kit)),
+                .child(prose.markdown(part.markdown.as_deref().unwrap_or_default())),
         });
     let note_placeholder = if item.holder.is_some() || ask.seed_id.is_none() {
         format!("Anything else for {}?", item.from)
@@ -383,11 +440,14 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .child(from)
         .children(seed)
         .child(
-            text(ask.subject.clone())
-                .role("heading")
-                .font(type_::TITLE)
-                .color(t.text_primary)
-                .wrap(),
+            prose.text(
+                text(ask.subject.clone())
+                    .role("heading")
+                    .font(type_::TITLE)
+                    .color(t.text_primary)
+                    .wrap(),
+                &ask.subject,
+            ),
         )
         .children(parts)
         .children(note)
@@ -443,7 +503,7 @@ fn question_card(
     index: usize,
     question: &AskQuestion,
     answer: Shown<'_>,
-    kit: &rune_kit::Kit,
+    prose: &Prose<'_>,
     t: &Tokens,
 ) -> El {
     let kind = Kind::of(question);
@@ -456,18 +516,21 @@ fn question_card(
                 .color(t.text_tertiary),
         )
         .child(
-            text(question.prompt.clone())
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
+            prose.text(
+                text(question.prompt.clone())
+                    .font(type_::BODY)
+                    .color(t.text_primary)
+                    .wrap()
+                    .grow(1.0)
+                    .min_w(0.0),
+                &question.prompt,
+            ),
         );
     let context = question
         .context
         .as_ref()
         .filter(|c| !c.is_empty())
-        .map(|c| Markdown::new(c.clone()).build(kit).w_full());
+        .map(|c| prose.markdown(c).w_full());
     let body = match kind {
         Kind::Text => written(ask, question, &answer, t),
         Kind::One | Kind::Any => choices(ask, question, kind, &answer, t),
