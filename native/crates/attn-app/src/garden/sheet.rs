@@ -137,6 +137,7 @@ impl Sheet<'_> {
         let key = self.key("plan");
         let t = *self.t;
         let kept = self.readings.kept(&view);
+        let text_width = kept.width.map(|w| w as f32);
         let read = {
             let (body, view, kept) = (body.clone(), view.clone(), kept.clone());
             move |marking| {
@@ -151,6 +152,7 @@ impl Sheet<'_> {
                     std::rc::Rc::default(),
                     kept,
                     marking,
+                    text_width,
                     &t,
                 )
             }
@@ -161,6 +163,12 @@ impl Sheet<'_> {
                 .role("document")
                 .label("Plan")
                 .w_full()
+                .on_layout_tx({
+                    let view = view.clone();
+                    move |state: &mut State, [_, _, w, _], tx: &mut Tx| {
+                        state.readings.measured(&view, w, tx)
+                    }
+                })
                 .child(reading)
         };
         if let (Go::Tile { tile, .. }, Some(drafts)) = (&self.go, self.drafts) {

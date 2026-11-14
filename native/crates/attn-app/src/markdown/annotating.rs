@@ -65,11 +65,13 @@ pub(crate) struct Reading {
 }
 
 /// What people did to a document: the `<details>` blocks they opened or closed, by the source
-/// byte each block's tag starts at, and the code block that says it was just copied.
+/// byte each block's tag starts at, and the code block that says it was just copied. And the
+/// whole points its view last laid out across, once it has.
 #[derive(Clone, Default, PartialEq, Hash)]
 pub(crate) struct Kept {
     pub(crate) folds: BTreeMap<usize, bool>,
     pub(crate) copied: Option<usize>,
+    pub(crate) width: Option<u32>,
 }
 
 /// How long a copied code block says "Copied!", as the Tauri reader does.
@@ -91,6 +93,7 @@ pub struct Readings {
     copied: Option<(String, usize, f64)>,
     /// Each review tile's reading.
     pub(crate) reviews: crate::review::Reviews,
+    widths: HashMap<String, u32>,
     /// Moves with every change, so views that show them build again.
     pub(crate) revision: u64,
 }
@@ -105,7 +108,19 @@ impl Readings {
                 .as_ref()
                 .filter(|(at, _, _)| at == view)
                 .map(|(_, index, _)| *index),
+            width: self.widths.get(view).copied(),
         }
+    }
+
+    /// The document `view` scrolls laid out `width` points across.
+    pub(crate) fn measured(&mut self, view: &str, width: f32, tx: &mut Tx) {
+        let width = width.round() as u32;
+        if self.widths.get(view) == Some(&width) {
+            tx.live_only();
+            return;
+        }
+        self.widths.insert(view.to_owned(), width);
+        self.revision += 1;
     }
 
     /// Code block `index` of the document `view` scrolls was copied: it says so a while.

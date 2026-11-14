@@ -728,6 +728,70 @@ fn a_long_code_line_stays_one_line() {
 }
 
 #[test]
+fn a_wide_table_wraps_its_cells_inside_the_document() {
+    let mut world = start();
+    let cell = |n: usize| {
+        format!(
+            "cell {n} holds a sentence long enough that three of them cannot share one line of the page"
+        )
+    };
+    world.daemon.emit(content(&format!(
+        "| One | Two | Three |\n| --- | --- | --- |\n| {} | {} | {} |\n",
+        cell(1),
+        cell(2),
+        cell(3)
+    )));
+    world.settle();
+    let screen = world.screen();
+    let [x, _, w, _] = screen.bounds(Target::key("tile.m.document")).unwrap();
+    for n in 1..=3 {
+        let [cx, _, cw, ch] = screen
+            .bounds(Target::role("label").name(cell(n)))
+            .unwrap_or_else(|| panic!("cell {n} is shown"));
+        assert!(
+            cx + cw <= x + w,
+            "cell {n} ends at {} past the document's {}",
+            cx + cw,
+            x + w
+        );
+        assert!(ch > 30.0, "cell {n} wraps: {ch} high");
+    }
+}
+
+/// Three subgraphs side by side, too wide to read across: the kit turns it top-down.
+const FLOW: &str = "flowchart LR\n    subgraph Plain[Plain session]\n        P0[Launch instructions] --> P1[SessionStart startup]\n        P1 --> P2[SessionStart resume clear compact]\n    end\n\n    subgraph Delegate[Delegate]\n        D0[Bind seed] --> D1[Launch instructions]\n        D1 --> D2[First prompt leaf identity + brief + reporting tail]\n        D1 --> D3[SessionStart live garden tail]\n        D2 -.-> DN[No guaranteed order between first prompt and SessionStart]\n        D3 -.-> DN\n    end\n\n    subgraph Crew[Crew day]\n        C0[Wake fresh] --> C1[Launch with crew priming]\n        C1 --> C2{First prompt}\n        C2 -->|ordinary wake| C3[Cold-wake greeting]\n        C2 -->|addressed while asleep| C4[Agent message replaces greeting]\n        C3 --> C5[Work or wait]\n        C4 --> C5\n        C5 --> C6[Heartbeat / auto-sleep / context handoff / requested sleep]\n        C6 --> C7[File predecessor letter]\n        C7 -->|sleep| C8[No successor]\n        C7 -->|nap or presence turnover| C9[Fresh successor]\n        C9 --> C1\n    end";
+
+#[test]
+fn a_wide_diagram_that_turns_to_fit_stays_turned_at_its_size() {
+    let mut world = start();
+    world
+        .daemon
+        .emit(content(&format!("```mermaid\n{FLOW}\n```\n")));
+    world.settle();
+    let screen = world.screen();
+    assert!(
+        screen
+            .find(Target::role("button").name("Focus diagram"))
+            .is_some(),
+        "it is large"
+    );
+    let at = |name: &str| {
+        screen
+            .bounds(Target::role("label").name(name))
+            .unwrap_or_else(|| panic!("{name} is shown"))
+    };
+    let centre = |[x, y, w, _]: [f32; 4]| (x + w / 2.0, y);
+    let ((x0, y0), (x1, y1)) = (
+        centre(at("Wake fresh")),
+        centre(at("Launch with crew priming")),
+    );
+    assert!(
+        y1 > y0 && (x1 - x0).abs() < 2.0,
+        "the next node sits below, not beside: {x0},{y0} then {x1},{y1}"
+    );
+}
+
+#[test]
 fn a_details_block_opens_as_its_tag_says_and_a_press_on_its_summary_opens_or_closes_it_through_edits()
  {
     let mut world = start();

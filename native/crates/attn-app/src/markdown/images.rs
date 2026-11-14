@@ -79,9 +79,6 @@ enum Shown {
     Diagram { source: String },
 }
 
-/// The width a diagram drawn at its natural size is laid out for: more than any draws.
-pub(crate) const NATURAL: f32 = 1.0e6;
-
 static ZOOM_OUT: Icon = Icon {
     name: "zoom-out",
     view: 20.0,
@@ -377,7 +374,7 @@ fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<E
             Preview::new(lens, [w as f32, h as f32], picture)
         }
         Shown::Diagram { source } => {
-            let drawing = rune_kit::mermaid::drawing(source, &super::look(t), NATURAL)?;
+            let drawing = super::natural(source, t)?;
             let drawn = el()
                 .key("diagram-preview.drawing")
                 .size(drawing.size[0], drawing.size[1])

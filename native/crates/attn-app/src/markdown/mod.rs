@@ -29,7 +29,29 @@ pub(crate) use links::Document;
 
 /// The reading column's width, as the Tauri reader's card caps it.
 const CARD_MAX_WIDTH: f32 = 832.0;
-const CARD_PADDING: f32 = 20.0;
+const CARD_BORDER: f32 = 1.0;
+
+/// The Tauri reader's card padding for the room inside the tile's gutter: 1.25rem, then 2, 2.5
+/// and 3rem from 768, 1024 and 1280 points (its CSS container queries, at a 14 point rem).
+fn card_padding(room: f32) -> f32 {
+    match room {
+        r if r >= 1280.0 => 42.0,
+        r if r >= 1024.0 => 35.0,
+        r if r >= 768.0 => 28.0,
+        _ => 17.5,
+    }
+}
+
+/// The card's padding and the text column inside it, in a document view `area` points across.
+fn card_fit(area: Option<u32>) -> (f32, Option<f32>) {
+    let Some(area) = area else {
+        return (card_padding(0.0), None);
+    };
+    let room = area as f32 - 2.0 * space::S3;
+    let padding = card_padding(room);
+    let text = room.min(CARD_MAX_WIDTH) - 2.0 * (padding + CARD_BORDER);
+    (padding, Some(text.max(0.0)))
+}
 
 /// The body of the document tile `tile`, opened for `session`, from what the daemon last sent
 /// for it. `outposts` names the outpost a document is on.
@@ -67,6 +89,7 @@ pub(crate) fn body(
     .uri();
     let marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
     let kept = readings.kept(&view);
+    let (padding, text_width) = card_fit(kept.width);
     let version = (
         *revision,
         title,
@@ -89,16 +112,22 @@ pub(crate) fn body(
             })
             .padding(space::S3)
             .items_center()
+            .on_layout_tx({
+                let view = view.clone();
+                move |state: &mut State, [_, _, w, _], tx: &mut Tx| {
+                    state.readings.measured(&view, w, tx)
+                }
+            })
             .child(card)
     };
     let card = |reading: El| {
         col()
             .w_full()
             .max_w(CARD_MAX_WIDTH)
-            .padding(CARD_PADDING)
+            .padding(padding)
             .radius(radius::LG)
             .fill(t.bg_panel)
-            .border(1.0, t.border.alpha(0.5))
+            .border(CARD_BORDER, t.border.alpha(0.5))
             .child(reading)
     };
     let read_source = |source: &str, marking: Option<Marking>| {
@@ -109,7 +138,15 @@ pub(crate) fn body(
             outpost: outpost.clone(),
             view: view.clone(),
         };
-        reader(source, document, pictures, kept.clone(), marking, t)
+        reader(
+            source,
+            document,
+            pictures,
+            kept.clone(),
+            marking,
+            text_width,
+            t,
+        )
     };
     if let Some(bundle) = content.review.as_ref() {
         return crate::review::body(
@@ -138,7 +175,7 @@ pub(crate) fn body(
             highlights: marks,
         }))
     });
-    scroll(card(reading).children(annotating::in_document(readings, tile, CARD_PADDING, t)))
+    scroll(card(reading).children(annotating::in_document(readings, tile, padding, t)))
 }
 
 /// The marks a reader in tile `tile` paints over document `uri`, and where its selections go.
@@ -187,6 +224,7 @@ pub(crate) fn reader(
     pictures: Rc<HashMap<String, Option<Image>>>,
     kept: annotating::Kept,
     marking: Option<Marking>,
+    text_width: Option<f32>,
     t: &Tokens,
 ) -> El {
     let mut document = document;
@@ -270,7 +308,11 @@ pub(crate) fn reader(
                 )
             })
         });
-    let markdown = markdown.style(look(t));
+    let style = look(t);
+    let markdown = markdown.style(match text_width {
+        Some(width) => style.text_width(width),
+        None => style,
+    });
     let (
         Some(Marking {
             tile,
@@ -306,10 +348,11 @@ fn details_order(source: &str) -> Rc<dyn Fn(usize) -> usize> {
     Rc::new(move |at| starts.partition_point(|&start| start < at))
 }
 
-/// The Tauri reader's type and marks (MarkdownReader.css): 15 point paragraphs, 22, 19 and 16
-/// point headings, 14 point list items with their markers in the accent, 13 point code that
-/// keeps its lines whole and scrolls sideways, tables at their columns' natural widths, and
-/// round task checkboxes.
+/// The Tauri reader's type and marks (MarkdownReader.css, at its 14 point rem): 15 point
+/// paragraphs, 19.25, 16.625 and 14 point headings, 14 point list items with their markers in
+/// the accent, 13 point code that keeps its lines whole and scrolls sideways, tables across the
+/// text with hairlines under their rows, round task checkboxes, and diagrams in mermaid's 16
+/// point labels.
 pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     let kit = attn_ui::kit(t);
     let body = TextStyle {
@@ -323,28 +366,40 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
         line_height,
         ..body
     };
+    let small = TextStyle {
+        size: 14.0,
+        line_height: 22.75,
+        ..body
+    };
     MarkdownStyle::from_kit(kit)
         .body_font(body)
-        .heading_font(1, heading(22.0, 700.0, 28.6))
-        .heading_font(2, heading(19.0, 600.0, 26.6))
-        .heading_font(3, heading(16.0, 600.0, 24.8))
-        .heading_font(4, heading(16.0, 600.0, 24.8))
+        .heading_font(1, heading(19.25, 700.0, 25.0))
+        .heading_font(2, heading(16.625, 600.0, 23.3))
+        .heading_font(3, heading(14.0, 600.0, 21.7))
+        .heading_font(4, heading(14.0, 600.0, 21.7))
         .deep_heading(t.text_primary)
-        .list_font(TextStyle {
-            size: 14.0,
-            line_height: 22.75,
-            ..body
-        })
+        .list_font(small)
         .list_marker(t.accent.alpha(0.6))
-        .inline_code_font(14.0 / 15.0, 400.0)
+        .inline_code_font(12.25 / 15.0, 400.0)
+        .inline_code_pad(5.25)
         .code_block_font(TextStyle {
             size: 13.0,
-            line_height: 17.0,
+            line_height: 21.1,
             ..kit.ty.mono
         })
-        .table_font(TextStyle {
-            size: 14.0,
-            line_height: 17.0,
+        .table_font(small)
+        .table_outline(None)
+        .table_header_rule(t.border)
+        .table_rules(t.border.alpha(0.5))
+        .table_header_fill(t.bg_elevated.alpha(0.3))
+        .table_header_weight(600.0)
+        .table_cell_padding(10.5, 7.0)
+        .table_margin(14.0, 14.0)
+        .table_full_width(true)
+        .table_scroll_bar(t.border, t.text_tertiary)
+        .diagram_font(TextStyle {
+            size: 16.0,
+            line_height: 24.0,
             ..body
         })
         .task_checkbox(
@@ -446,6 +501,12 @@ const DIAGRAM_ROOM: f32 = 680.0;
 /// A diagram whose card would draw it smaller than this share of its natural size shows at its
 /// natural size instead, scrolling, as the Tauri reader's `OVERSIZED_FIT_RATIO` does.
 const LEAST_FIT: f32 = 0.8;
+/// `source` at its natural size, laid out for the room a document gives it, so a diagram that
+/// turns top-down to fit that room turns here too.
+pub(crate) fn natural(source: &str, t: &Tokens) -> Option<rune_kit::mermaid::Drawing> {
+    rune_kit::mermaid::drawing(source, &look(t).diagram_min_scale(1.0), DIAGRAM_ROOM)
+}
+
 /// The tallest a large diagram's scroll box grows, as the Tauri reader's `min(52vh, 410px)`.
 const LARGE_HEIGHT: f32 = 410.0;
 
@@ -458,7 +519,7 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
         .then(|| rune_kit::mermaid::drawing(frame.source, &style, DIAGRAM_ROOM))
         .flatten()
         .filter(|fitted| fitted.scale < LEAST_FIT)
-        .and_then(|_| rune_kit::mermaid::drawing(frame.source, &style, images::NATURAL));
+        .and_then(|_| natural(frame.source, t));
     let label = text("diagram")
         .font(TextStyle {
             size: 11.0,
