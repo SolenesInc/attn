@@ -3425,3 +3425,91 @@ fn a_key_pressed_in_a_tile_window_whose_action_does_not_run_says_nothing_in_the_
         });
     }
 }
+
+/// The root agent on desktop 1 with its delegate beside it, or on desktop 2 when
+/// `delegate_away`; desktop 2 is named Target.
+fn delegating(delegate_away: bool, queue: bool) -> World {
+    let mut source = desktop(1, "root", Some(row([pane("root"), pane("delegate")])));
+    let mut target = desktop(2, "x", None);
+    if delegate_away {
+        source = desktop(1, "root", Some(pane("root")));
+        target = desktop(2, "delegate", Some(pane("delegate")));
+    }
+    target.name = "Target".into();
+    let sessions = vec![
+        session("root"),
+        Session {
+            dispatcher_session_id: Some("s-root".into()),
+            ..session("delegate")
+        },
+    ];
+    let state = InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile(&source.id)]),
+        desktops: Some(vec![source, target]),
+        sessions: Some(sessions),
+        settings: Some(
+            [("queue_mode_enabled".to_owned(), queue.to_string())]
+                .into_iter()
+                .collect(),
+        ),
+        ..InitialStateMessage::new()
+    };
+    let mut world = World::start_sized(super::palette::daemon(state, vec![]), TWO_FIT);
+    if queue {
+        world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+        world.settle();
+    } else {
+        world.open_desktop();
+    }
+    world
+}
+
+fn palette_rows(world: &mut World, query: &str) -> Vec<String> {
+    press(world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text(query));
+    world
+        .screen()
+        .all(Target::role("list-box-option"))
+        .into_iter()
+        .filter(|n| {
+            n.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("palette.row."))
+        })
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+#[test]
+fn the_palette_moves_the_agent_on_screen_with_its_delegates_in_either_flow() {
+    for queue in [false, true] {
+        let mut world = delegating(false, queue);
+        assert_eq!(
+            palette_rows(&mut world, "Move with delegates"),
+            ["Move with delegates to Target"],
+            "queue flow {queue}"
+        );
+        world.gesture(|app| {
+            app.key(rune::KeyEvent {
+                key: rune::Key::Enter,
+                mods: rune::Mods::default(),
+            })
+        });
+        assert_eq!(
+            sent(&world, "desktop_move_leaf"),
+            [json(
+                r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_2",
+                    "leaf_id":"root","with_delegates":true}"#
+            )],
+            "queue flow {queue}"
+        );
+    }
+}
+
+#[test]
+fn the_palette_offers_no_move_with_delegates_when_the_only_delegate_is_on_another_desktop() {
+    let mut world = delegating(true, false);
+    assert!(palette_rows(&mut world, "Move with delegates").is_empty());
+    assert!(sent(&world, "desktop_move_leaf").is_empty());
+}

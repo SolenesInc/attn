@@ -224,6 +224,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-move-with-delegates',
+    runnerId: 'NATIVE-MOVE-WITH-DELEGATES',
+    label: 'The native palette moves a dispatcher, two delegates and a nested delegate to another desktop together',
+    command: ['node', 'scripts/real-app-harness/scenario-native-move-with-delegates.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-desktop-order',
     runnerId: 'NATIVE-DESKTOP-ORDER',
     label: 'Sort desktops from the native palette orders numbered desktops then names, and its Undo puts back the order before',

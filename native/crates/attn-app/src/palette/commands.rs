@@ -64,6 +64,19 @@ impl Command {
     }
 }
 
+/// Whether one of `agent`'s delegates has a pane on `desktop`.
+fn has_delegate_on(
+    facts: &attn_client::Facts,
+    agent: &str,
+    desktop: &attn_protocol::Desktop,
+) -> bool {
+    facts
+        .sessions
+        .iter()
+        .filter(|s| s.dispatcher_session_id.as_deref() == Some(agent))
+        .any(|delegate| desktop.panes.iter().any(|p| p.session_id == delegate.id))
+}
+
 /// The commands the palette offers now, in the order they are declared: the ones the native
 /// app runs and that apply to what the window shows.
 pub(crate) fn catalog(state: &State) -> Vec<Command> {
@@ -205,6 +218,26 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             )
             .shortcut(desktop.shortcut_slot.and_then(Action::desktop_select)),
         );
+    }
+    if let Some(current) = facts.current_desktop()
+        && on_screen.is_some_and(|agent| has_delegate_on(facts, &agent.id, current))
+    {
+        for desktop in model::ordered_desktops(&desktops)
+            .into_iter()
+            .filter(|d| d.id != current.id)
+        {
+            commands.push(Command::new(
+                &format!("move-with-delegates-{}", desktop.id),
+                &format!(
+                    "Move with delegates to {}",
+                    model::desktop_title(desktop, &desktops)
+                ),
+                &["desktop", "move", "send", "delegates"],
+                Action::MoveWithDelegates {
+                    desktop: desktop.id.clone(),
+                },
+            ));
+        }
     }
     commands.push(
         Command::new(
