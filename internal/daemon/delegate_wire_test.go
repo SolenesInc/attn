@@ -85,8 +85,9 @@ func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 				t.Errorf("the caller's desktop holds panes for %v; want the caller and then the delegate", panes)
 			}
 			delegate := testworld.AwaitSession(app, string(result.SessionID), func(s protocol.Session) bool { return protocol.Deref(s.SeedID) != "" })
-			if protocol.Deref(delegate.SeedID) != result.SeedID || string(delegate.Agent) != string(agent) || protocol.Deref(delegate.DelegatedFromChief) {
-				t.Errorf("the app sees the delegate as %+v; want a %s session on seed %s, not delegated from a chief", delegate, agent, result.SeedID)
+			if protocol.Deref(delegate.SeedID) != result.SeedID || string(delegate.Agent) != string(agent) || protocol.Deref(delegate.DelegatedFromChief) ||
+				protocol.Deref(delegate.DispatcherSessionID) != source {
+				t.Errorf("the app sees the delegate as %+v; want a %s session on seed %s, dispatched by %s, not delegated from a chief", delegate, agent, result.SeedID, source)
 			}
 		})
 	}

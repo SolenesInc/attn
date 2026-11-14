@@ -101,6 +101,7 @@ go ./internal/daemon TestCodexsHooksNamingTheDefaultModeDoNotRetireTheReviewerIt
 go ./internal/daemon TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactCompactsAndCloses
 go ./internal/daemon TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten
 go ./internal/daemon TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing
+go ./internal/daemon TestADelegateStartsOnASeedPointerBesideItsCaller
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal

@@ -23,6 +23,13 @@ func (d *Daemon) delegationCaller(accepted delegationTarget, source *protocol.Se
 	return d.sessionOrOwner(protocol.TrimID(protocol.Deref(source)))
 }
 
+func (d *Daemon) delegationDispatcher(source protocol.SessionID, by who.Actor) who.Actor {
+	if source = protocol.TrimID(source); source != "" {
+		return d.partyOfSession(source).Actor()
+	}
+	return by
+}
+
 func (d *Daemon) sessionOrOwner(session protocol.SessionID) who.Actor {
 	if session == "" {
 		return who.User()

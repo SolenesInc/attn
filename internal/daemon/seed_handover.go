@@ -236,7 +236,7 @@ func (d *Daemon) handoverDispatchCommits(
 	newDispatch = mergeGardenExecution(newDispatch, observed)
 	newDispatch.Crown = seed.ID
 	newDispatch.SupersededBy = ""
-	newDispatch.Dispatcher = msg.By
+	newDispatch.Dispatcher = d.delegationDispatcher(protocol.Deref(msg.SourceSessionID), msg.By)
 	newDispatch.FromChief = fromChief
 	newDispatch.OperationID = operationID
 	if newDispatch.Cwd == "" {
