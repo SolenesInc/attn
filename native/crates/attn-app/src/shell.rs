@@ -117,6 +117,8 @@ pub enum Layer {
     WhatsNew,
     /// The dialog that saves a diagnostic report; `Window::diagnostic_report` holds it.
     DiagnosticReport,
+    /// The notebook over the whole window; `Notebook::fullscreen` holds it.
+    Notebook,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -529,6 +531,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::ProfileSwitcher) => layers.extend(crate::profile_switcher::view(state, t)),
         Some(Layer::WhatsNew) => crate::whats_new::dialog(state, t, &mut layers),
         Some(Layer::DiagnosticReport) => crate::diagnostic_report::dialog(state, t, &mut layers),
+        Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         None => {}
     }
     if let Some(leader) = &window.leader {
@@ -543,6 +546,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     }
     layers.extend(crate::attention::merge_confirmation(state, t));
     layers.extend(crate::garden::frame_layer(state, t));
+    crate::notebook::root_picker_overlay(state, t, &mut layers);
     layers.extend(crate::desktop::cap_menu(state, t));
     layers.extend(crate::desktop::peek(state, t));
     layers.extend(crate::desktop::header_popover(state, t));

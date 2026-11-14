@@ -58,6 +58,8 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::DockAttention => crate::attention::toggle(state, tx),
         Action::OpenAttention => crate::attention::open(state, tx),
         Action::OpenWhatsNew => crate::whats_new::open(state, tx),
+        Action::NotebookOpenTile => crate::notebook::open_tile(state, tx),
+        Action::NotebookOpenFullscreen => crate::notebook::open_fullscreen(state, tx),
         Action::CreateDiagnosticReport => crate::diagnostic_report::open(state, tx),
         Action::SessionRefreshPrs => crate::attention::refresh(state, tx),
         Action::DockAsks if crate::asks::available(&state.facts) => crate::asks::toggle(state, tx),
@@ -72,7 +74,11 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::FileOpen if window.layer == Some(Layer::Palette(Palette::Files)) => {
             crate::opener::close(state, tx)
         }
-        Action::FileOpen => crate::opener::open(state, tx),
+        Action::FileOpen => {
+            if !crate::notebook::find_note(state, tx) {
+                crate::opener::open(state, tx);
+            }
+        }
         Action::SessionsOpen => crate::ledger::toggle(state, tx),
         Action::OpenWorktrees => crate::ledger::open(state, crate::ledger::Tab::Worktrees, tx),
         Action::ToggleNotifications => crate::notifications::toggle(state, tx),

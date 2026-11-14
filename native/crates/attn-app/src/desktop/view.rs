@@ -128,6 +128,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 crate::garden::model::has_chief(&facts.sessions, &facts.profiles.selected),
             ),
             (state.drafts.revision, state.readings.revision),
+            state.notebook.revision,
         ),
     );
     let launcher = desktop
@@ -144,6 +145,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 (
                     &state.terminals,
                     &state.pictures,
+                    &state.notebook,
                     &seed_reads(state),
                     (&state.drafts, &state.readings),
                 ),
@@ -405,6 +407,8 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         contents: &state.facts.tile_contents,
         outposts: &state.facts.outposts,
         pictures: &state.pictures,
+        notebook: &state.notebook,
+        facts: &state.facts,
         marks: (&state.drafts, &state.readings),
         annotates: false,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
@@ -433,9 +437,10 @@ fn screen(
     facts: &attn_client::Facts,
     (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
-    (terminals, pictures, seeds, marks): (
+    (terminals, pictures, notebook, seeds, marks): (
         &Terminals,
         &crate::markdown::Pictures,
+        &crate::notebook::Notebook,
         &crate::garden::TileReads,
         (&crate::markdown::Drafts, &crate::markdown::Readings),
     ),
@@ -484,6 +489,8 @@ fn screen(
                     contents: &facts.tile_contents,
                     outposts: &facts.outposts,
                     pictures,
+                    notebook,
+                    facts,
                     marks,
                     annotates: true,
                     stale: &stale,
@@ -558,6 +565,8 @@ struct TileCx<'a> {
     contents: &'a attn_client::TileContents,
     outposts: &'a [attn_protocol::OutpostInfo],
     pictures: &'a crate::markdown::Pictures,
+    notebook: &'a crate::notebook::Notebook,
+    facts: &'a attn_client::Facts,
     marks: (&'a crate::markdown::Drafts, &'a crate::markdown::Readings),
     /// Whether its document tiles take annotations, which a tile window's do not.
     annotates: bool,
@@ -800,6 +809,10 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 cx.annotates.then_some(cx.marks.0),
                 t,
             ),
+            &holder,
+        ),
+        (LeafKind::Tile { kind, .. }, _) if kind == "notebook" => takes(
+            crate::notebook::tile_body(cx.notebook, &leaf.id, t),
             &holder,
         ),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
@@ -1076,6 +1089,18 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .children(is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
         .children(is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)));
     let headline = headline
+        .children(match &leaf.kind {
+            LeafKind::Tile { kind, params, .. } if kind == "notebook" => {
+                Some(crate::notebook::root_picker(
+                    cx.facts,
+                    cx.notebook,
+                    &leaf.id,
+                    params.as_deref().unwrap_or(""),
+                    t,
+                ))
+            }
+            _ => None,
+        })
         .children(document_controls(leaf, cx))
         .children((is_tile || focused).then_some(tile_actions));
     let height = header_height(pane.is_some());

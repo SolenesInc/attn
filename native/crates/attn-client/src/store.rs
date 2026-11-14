@@ -39,6 +39,9 @@ pub struct Facts {
     pub closes: Arc<Closes>,
     /// Rises each time the daemon says attn's kept conversations changed.
     pub kept_conversations: u64,
+    /// Rises for a root, the resolved absolute folder, each time the daemon says files under it
+    /// changed.
+    pub file_changes: Arc<BTreeMap<String, u64>>,
     /// Rises each time the daemon says its background tasks changed.
     pub tasks_changed: u64,
     /// Rises each time the daemon says the delegation preferences changed.
@@ -351,7 +354,8 @@ impl Slices {
     pub const PHONES: Slices = Slices(1 << 21);
     pub const SENDERS: Slices = Slices(1 << 22);
     pub const MIGRATION: Slices = Slices(1 << 23);
-    pub const ALL: Slices = Slices((1 << 24) - 1);
+    pub const FILES: Slices = Slices(1 << 24);
+    pub const ALL: Slices = Slices((1 << 25) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -699,6 +703,15 @@ impl Store {
         self.change(|facts| {
             facts.kept_conversations += 1;
             Slices::KEPT_CONVERSATIONS
+        });
+    }
+
+    pub(crate) fn files_changed(&self, root: String) {
+        self.change(|facts| {
+            *Arc::make_mut(&mut facts.file_changes)
+                .entry(root)
+                .or_default() += 1;
+            Slices::FILES
         });
     }
 

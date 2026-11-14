@@ -23,6 +23,7 @@ mod ledger;
 mod markdown;
 mod migration_failure;
 mod migration_gate;
+mod notebook;
 mod notifications;
 mod opener;
 mod palette;
@@ -73,6 +74,7 @@ pub struct State {
     pub drafts: markdown::Drafts,
     pub readings: markdown::Readings,
     pub opener: opener::Opener,
+    pub notebook: notebook::Notebook,
     daemon: Commands,
     requests: requests::Requests,
     /// Wall-clock milliseconds when the runtime's clock read zero.
@@ -263,6 +265,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let launched = picker::follow(state, tx);
     let browsed = browsed | opener::browse_due(state, tx);
     let pictured = markdown::follow_images(state, now, tx);
+    let noted = notebook::follow(state, now, tx);
     let drafted = markdown::drafts::follow(state, now, tx)
         | markdown::annotating::expire(state, now)
         | markdown::sending::expire(state, now);
@@ -290,6 +293,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         || browsed
         || launched
         || pictured
+        || noted
         || drafted
         || drains
         || expired

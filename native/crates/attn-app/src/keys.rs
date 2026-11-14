@@ -234,6 +234,9 @@ pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     if composing.is_none() {
         state.terminals.end_composition();
     }
+    if crate::notebook::ime(state, ime, tx) {
+        return true;
+    }
     if tx.focused().is_some() {
         return false;
     }
@@ -258,6 +261,9 @@ pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
 /// for an image the Ctrl-V byte, which tells an agent to read the image off the clipboard
 /// itself, as the Tauri terminal sends it.
 pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut Tx) {
+    if !content.text().is_empty() && crate::notebook::paste(state, content.text(), tx) {
+        return;
+    }
     if tx.focused().is_some() {
         return;
     }

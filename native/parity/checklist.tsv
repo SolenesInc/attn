@@ -60,3 +60,4 @@ item	statement	native_test	reason
 54	Settings' Browse opens the system folder dialog from the packaged bundle	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
 71	The settings, agent settings, self-update, shortcut, profile and session usage scenarios have native copies that pass on Linux	live:s-qjaqty/slice6-scenarios.tgz	
 71	The native copies of the settings, agent settings, profile and session usage scenarios pass on macOS	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
+29	Cmd+Z and Shift+Cmd+Z undo and redo in the notebook's editor, which hears them before the app's keymap	attn-app/tests/wire/notebook.rs::command_z_undoes_typing_in_the_editor_and_shift_command_z_redoes_it	

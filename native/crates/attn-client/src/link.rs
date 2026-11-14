@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage, ClientHelloMessage,
-    CommandErrorMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
+    CommandErrorMessage, FsChangedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
     GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
     KittyImageResultMessage, KittyPlacementsMessage, MigrationChangedMessage,
     NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
@@ -664,6 +664,11 @@ impl Task {
             }
             "kept_conversations_changed" => {
                 self.store.kept_conversations_changed();
+                None
+            }
+            "fs_changed" => {
+                let message: FsChangedMessage = parse(&header.event, text)?;
+                self.store.files_changed(message.root);
                 None
             }
             "worktree_state_changed" => {

@@ -5,6 +5,7 @@ pub(crate) mod anchors;
 pub(crate) mod annotating;
 pub(crate) mod drafts;
 mod front_matter;
+pub(crate) use front_matter::{Value as FrontMatterValue, entries as front_matter_entries};
 pub(crate) mod images;
 pub(crate) mod links;
 mod marks;

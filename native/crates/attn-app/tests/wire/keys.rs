@@ -191,6 +191,7 @@ fn every_shortcut_runs_its_own_action(category: Category) {
                 let screen = world.screen();
                 if screen.find(Target::key("new-session")).is_some()
                     || screen.find(Target::key("garden.full")).is_some()
+                    || screen.find(Target::key("notebook")).is_some()
                 {
                     world.gesture(|app| {
                         app.key(KeyEvent {

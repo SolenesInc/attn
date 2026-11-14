@@ -109,7 +109,7 @@ pub(crate) fn basename(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
-fn score(path: &str, query: &str) -> f64 {
+pub(crate) fn score(path: &str, query: &str) -> f64 {
     let query = query.trim().to_lowercase();
     let path = path.to_lowercase();
     let whole = subsequence(&path, &query);

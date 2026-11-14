@@ -4,7 +4,7 @@
 //! opens in a tile for that agent.
 
 mod paths;
-mod rank;
+pub(crate) mod rank;
 mod view;
 
 use attn_protocol::{
@@ -149,7 +149,7 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
 
 /// The session of the tile the screen shows as active: its agent, or the agent a document
 /// tile was opened for.
-fn behind_screen(state: &State) -> Option<&attn_protocol::Session> {
+pub(crate) fn behind_screen(state: &State) -> Option<&attn_protocol::Session> {
     if state.window.view != crate::shell::View::Desktop {
         return None;
     }
