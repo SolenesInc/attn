@@ -53,6 +53,9 @@ pub struct Node {
     pub description: Option<String>,
     /// An outline row's depth, 1 at the top.
     pub level: Option<u64>,
+    /// The key of the element inside it that assistive technology treats as current, as a
+    /// list's selected row or a document's cursor.
+    pub active_descendant: Option<String>,
     /// What assistive technology hears about the element's state: `focused`, `disabled`,
     /// `checked`, `selected` and the like.
     pub states: Vec<String>,
@@ -158,6 +161,7 @@ fn node(value: &Value) -> Node {
         name: field("name"),
         value: field("value"),
         description: field("description"),
+        active_descendant: field("activeDescendant"),
         level: value.get("level").and_then(Value::as_u64),
         states: value
             .get("states")

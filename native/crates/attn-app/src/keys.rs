@@ -43,6 +43,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if !field && crate::markdown::annotating::on_key(state, ev, tx) {
         return true;
     }
+    if !field && crate::review::on_key(state, ev, tx) {
+        return true;
+    }
     if ev.key == Key::Escape
         && tx.focused().is_none()
         && crate::annotations::draft::escape(state, tx)

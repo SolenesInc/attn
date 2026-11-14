@@ -30,6 +30,7 @@ mod picker;
 mod profile_switcher;
 pub mod prompts;
 mod requests;
+mod review;
 pub mod screen;
 mod setting;
 mod settings;

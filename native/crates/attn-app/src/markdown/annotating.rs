@@ -89,6 +89,8 @@ pub struct Readings {
     /// The code block last copied, by the scroll view its document reads in and its place among
     /// the fences, until it stops saying so.
     copied: Option<(String, usize, f64)>,
+    /// Each review tile's reading.
+    pub(crate) reviews: crate::review::Reviews,
     /// Moves with every change, so views that show them build again.
     pub(crate) revision: u64,
 }

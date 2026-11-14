@@ -1,0 +1,240 @@
+//! The review's own chrome around the document: the change's facts under the title, the Not
+//! shown list, the key line under the tile and the sheet of every key.
+
+use std::collections::HashSet;
+
+use attn_protocol::{ReviewBundle, ReviewFile};
+use attn_ui::Tokens;
+use rune::tok::{radius, space, type_};
+use rune::{El, col, row, text};
+
+use super::{Review, Spot, cursor_frame};
+
+fn short(commit: &str) -> &str {
+    &commit[..commit.len().min(9)]
+}
+
+fn plural(count: usize, one: &str, many: &str) -> String {
+    format!("{count} {}", if count == 1 { one } else { many })
+}
+
+/// The changed lines the stops show, each counted once however many stops show it.
+fn shown_changed_lines(bundle: &ReviewBundle) -> usize {
+    bundle
+        .stops
+        .iter()
+        .flat_map(|stop| {
+            stop.rows
+                .iter()
+                .filter(|r| r.kind != " ")
+                .map(move |r| (stop.path.as_str(), r.kind.as_str(), r.old, r.now))
+        })
+        .collect::<HashSet<_>>()
+        .len()
+}
+
+/// The change's facts: base and head, the files, the lines added and removed and how many of
+/// them the stops show, which Enter opens into the list of changed files.
+pub(super) fn summary(
+    prefix: &str,
+    bundle: &ReviewBundle,
+    review: &Review,
+    cursor: Option<&Spot>,
+    t: &Tokens,
+) -> El {
+    let added: i64 = bundle.files.iter().map(|f| f.added).sum();
+    let removed: i64 = bundle.files.iter().map(|f| f.removed).sum();
+    let commits = match bundle.base.as_deref().filter(|b| !b.is_empty()) {
+        Some(base) => format!("base {} → head {}", short(base), short(&bundle.head)),
+        None => format!("a tour at head {}", short(&bundle.head)),
+    };
+    let mut facts = vec![
+        commits,
+        plural(bundle.files.len(), "file", "files"),
+        format!("+{added} −{removed}"),
+        format!(
+            "{} {} of {} changed lines",
+            plural(bundle.stops.len(), "stop shows", "stops show"),
+            shown_changed_lines(bundle),
+            added + removed
+        ),
+    ];
+    if !bundle.files.is_empty() {
+        let toggle = if review.files_shown { "hide" } else { "show" };
+        facts.push(format!("↵ {toggle} the files"));
+    }
+    let line = facts.join(" · ");
+    let mut meta = row()
+        .key(format!("{prefix}.facts"))
+        .role("button")
+        .label(line.clone())
+        .w_full()
+        .child(text(line).font(type_::LABEL).color(t.text_secondary).wrap());
+    if !bundle.files.is_empty() {
+        meta = meta.expanded(review.files_shown);
+    }
+    let files = review.files_shown.then(|| {
+        bundle.files.iter().zip(0..).map(|(file, i)| {
+            let current = cursor == Some(&Spot::File(file.path.clone()));
+            cursor_frame(file_row(prefix, i, file, t), current, t)
+        })
+    });
+    let problems = (!bundle.problems.is_empty()).then(|| {
+        col()
+            .role("list")
+            .label("Problems in the review document")
+            .gap(space::S1)
+            .children(bundle.problems.iter().map(|p| {
+                let at = if p.line > 0 {
+                    format!("line {}: ", p.line)
+                } else {
+                    String::new()
+                };
+                text(format!("{at}{}", p.message))
+                    .font(type_::BODY)
+                    .color(t.warning)
+                    .wrap()
+            }))
+    });
+    col()
+        .role("region")
+        .label("The change")
+        .w_full()
+        .gap(space::S1)
+        .child(cursor_frame(meta, cursor == Some(&Spot::Facts), t))
+        .children(files.into_iter().flatten())
+        .children(problems)
+}
+
+fn file_row(prefix: &str, i: usize, file: &ReviewFile, t: &Tokens) -> El {
+    let stat = if file.binary {
+        "binary".to_owned()
+    } else {
+        format!("+{} −{}", file.added, file.removed)
+    };
+    let from = file.old_path.as_deref().map(|p| format!("from {p}"));
+    let label = [
+        Some(file.status.clone()),
+        Some(file.path.clone()),
+        from.clone(),
+        Some(stat.clone()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ");
+    row()
+        .key(format!("{prefix}.file.{i}"))
+        .role("row")
+        .label(label)
+        .w_full()
+        .gap(space::S2)
+        .child(
+            text(file.status.clone())
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .w(72.0),
+        )
+        .child(
+            text(file.path.clone())
+                .font(type_::LABEL)
+                .color(t.text_primary),
+        )
+        .children(from.map(|f| text(f).font(type_::LABEL).color(t.text_tertiary)))
+        .child(text(stat).font(type_::LABEL).color(t.text_secondary))
+}
+
+/// The files the review leaves out, each with why.
+pub(super) fn not_shown(key: &str, bundle: &ReviewBundle, cursor: Option<&Spot>, t: &Tokens) -> El {
+    col()
+        .key(key.to_owned())
+        .role("list")
+        .label("Not shown")
+        .w_full()
+        .gap(space::S1)
+        .children(bundle.not_shown.iter().zip(0..).map(|(entry, j)| {
+            let current = cursor == Some(&Spot::NotShown(entry.path.clone()));
+            let el = row()
+                .key(format!("{key}.entry.{j}"))
+                .role("row")
+                .label(format!("{} {}", entry.path, entry.reason))
+                .w_full()
+                .gap(space::S2)
+                .child(
+                    text(entry.path.clone())
+                        .font(type_::LABEL)
+                        .color(t.text_primary),
+                )
+                .child(
+                    text(entry.reason.clone())
+                        .font(type_::LABEL)
+                        .color(t.text_secondary)
+                        .wrap(),
+                );
+            cursor_frame(el, current, t)
+        }))
+}
+
+const KEYS: &[(&str, &str)] = &[("↑ ↓", "line"), ("← →", "stop"), ("↵", "show the files")];
+
+/// The keys for what the review shows, under the tile.
+pub(super) fn key_line(prefix: &str, t: &Tokens) -> El {
+    let entry = |keys: &str, what: &str| {
+        text(format!("{keys} {what}"))
+            .font(type_::LABEL)
+            .color(t.text_secondary)
+    };
+    row()
+        .key(format!("{prefix}.keys"))
+        .role("toolbar")
+        .label("Review keys")
+        .w_full()
+        .gap(space::S3)
+        .px(space::S3)
+        .py(space::S1)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.5))
+        .children(KEYS.iter().map(|(k, w)| entry(k, w)))
+        .child(col().grow(1.0))
+        .child(entry("?", "all keys"))
+}
+
+const ALL_KEYS: &[(&str, &str)] = &[
+    ("↑ ↓", "Move by line in code and by block in prose."),
+    ("← →", "The previous or next stop."),
+    (
+        "↵",
+        "On the change's facts under the title, show or hide the changed files.",
+    ),
+    ("esc", "Close this sheet."),
+    ("?", "Show or hide this sheet."),
+];
+
+/// Every key the review takes, with what it does.
+pub(super) fn sheet(prefix: &str, t: &Tokens) -> El {
+    col()
+        .key(format!("{prefix}.sheet"))
+        .role("dialog")
+        .label("Review keys")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .padding(space::S3)
+        .gap(space::S2)
+        .radius(radius::LG)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .child(text("Keys").font(type_::TITLE).color(t.text_primary))
+        .children(ALL_KEYS.iter().map(|(keys, what)| {
+            row()
+                .role("row")
+                .label(format!("{keys}: {what}"))
+                .gap(space::S3)
+                .child(text(*keys).font(type_::LABEL).color(t.text_primary).w(64.0))
+                .child(
+                    text(*what)
+                        .font(type_::BODY)
+                        .color(t.text_secondary)
+                        .wrap()
+                        .grow(1.0),
+                )
+        }))
+}

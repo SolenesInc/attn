@@ -26,6 +26,7 @@ mod wire {
     mod profile;
     mod queue;
     mod reach;
+    mod review;
     mod settings;
     mod shelf_drags;
     mod shelf_layout;

@@ -101,7 +101,7 @@ pub(crate) fn body(
             .border(1.0, t.border.alpha(0.5))
             .child(reading)
     };
-    let read = |marking: Option<Marking>| {
+    let read_source = |source: &str, marking: Option<Marking>| {
         let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
         let document = links::Document {
             path: content.path.clone(),
@@ -109,15 +109,20 @@ pub(crate) fn body(
             outpost: outpost.clone(),
             view: view.clone(),
         };
-        reader(
-            &content.content,
-            document,
-            pictures,
-            kept.clone(),
-            marking,
-            t,
-        )
+        reader(source, document, pictures, kept.clone(), marking, t)
     };
+    if let Some(bundle) = content.review.as_ref() {
+        return crate::review::body(
+            tile,
+            &view,
+            title,
+            (&content.content, bundle, *revision),
+            &readings.reviews,
+            &|source: &str| read_source(source, None),
+            t,
+        );
+    }
+    let read = |marking: Option<Marking>| read_source(&content.content, marking);
     if !annotates {
         return memo(view.clone(), version, || scroll(card(read(None))));
     }
