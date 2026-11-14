@@ -335,6 +335,38 @@ fn a_page_that_browses_elsewhere_stores_its_address_and_loads_nothing_when_the_d
 }
 
 #[test]
+fn a_page_that_moves_twice_before_the_daemon_stores_either_stays_where_it_went() {
+    let (mut world, engine) = start(START);
+    engine.take();
+
+    let (pushed, replaced) = ("https://start.example/b", "https://start.example/c");
+    for url in [pushed, replaced] {
+        page_says(
+            &mut world,
+            Heard::Located {
+                page: page(),
+                url: url.into(),
+            },
+        );
+    }
+    lay_out(&mut world, with_browser(pushed), 2);
+    lay_out(&mut world, with_browser(replaced), 3);
+
+    let asked = engine.take();
+    assert!(
+        !asked.iter().any(|a| matches!(a, Asked::Navigate(_))),
+        "{asked:?}"
+    );
+    assert_eq!(stored(&world), vec![pushed, replaced]);
+    assert_eq!(address(&world), replaced);
+
+    let elsewhere = "https://elsewhere.example/";
+    lay_out(&mut world, with_browser(elsewhere), 4);
+    assert_eq!(engine.take(), vec![Asked::Navigate(elsewhere.into())]);
+    rest(&mut world);
+}
+
+#[test]
 fn the_tile_stores_its_location_again_after_the_daemon_refused_to_store_it() {
     let daemon = daemon(with_browser(START));
     daemon.on("desktop_update_tile", |r| {
@@ -618,6 +650,26 @@ fn wait_for_asks_the_page_until_its_element_is_ready_or_its_time_runs_out() {
             "wait_for timed out waiting for visible (timeoutMs=200, hostTimeoutMs=200)"
         ))
     );
+
+    ask(
+        &mut world,
+        "wait-3",
+        "wait_for",
+        json!({"selector": "#here", "timeout": 0}),
+    );
+    let once = engine
+        .controls()
+        .pop()
+        .expect("a wait with no time asks the page once");
+    assert_eq!(once.request_id, "wait-3");
+    page_says(
+        &mut world,
+        Heard::Answered {
+            request_id: once.request_id,
+            result: Ok(r#"{"ready":true,"value":true}"#.into()),
+        },
+    );
+    assert_eq!(result(&world, "wait-3"), Some(answered("wait-3", "true")));
     rest(&mut world);
 }
 
@@ -714,7 +766,7 @@ fn an_action_on_a_desktop_the_window_has_not_loaded_says_to_open_that_desktop() 
 }
 
 #[test]
-fn the_address_field_takes_the_page_where_it_says_and_the_reload_button_loads_it_again() {
+fn the_address_field_takes_the_page_where_it_says_and_the_reload_buttons_load_it_again() {
     for (typed, url) in [
         ("localhost:3000/app", "http://localhost:3000/app"),
         ("127.0.0.1:8080", "http://127.0.0.1:8080"),
@@ -738,6 +790,16 @@ fn the_address_field_takes_the_page_where_it_says_and_the_reload_button_loads_it
     let (mut world, engine) = start(START);
     engine.take();
     world.gesture(|app| app.click(Target::key(format!("tile.{TILE}.reload"))));
+    assert!(engine.take().contains(&Asked::Reload));
+    let sidebar = format!("sidebar.tile.{DESKTOP}.{TILE}.reload");
+    assert!(
+        world
+            .screen()
+            .get(Target::key(sidebar.clone()))
+            .name
+            .is_some_and(|name| name.starts_with("Reload ")),
+    );
+    world.gesture(|app| app.click(Target::key(sidebar)));
     assert!(engine.take().contains(&Asked::Reload));
     rest(&mut world);
 }
@@ -872,4 +934,52 @@ fn an_answer_too_large_for_the_daemon_to_read_fails_and_says_why() {
         ))
     );
     rest(&mut world);
+}
+
+#[test]
+fn a_popped_out_browser_tile_says_its_window_shows_no_page_and_agents_hear_why() {
+    let mut popped = browser_at(START);
+    popped["window"] = json!({"x": 10.0, "y": 20.0, "width": 500.0, "height": 400.0});
+    let (mut world, engine) = start_on(daemon(row(vec![pane("a"), popped])));
+
+    let windows = world.tile_windows();
+    assert_eq!(windows.len(), 1, "{windows:?}");
+    let screen = world.tile_screen(&windows[0].key);
+    let said = screen
+        .descendants(Target::key(format!("tile.{TILE}.page")))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        said,
+        vec![
+            "This window does not show browser pages yet. Bring the tile back to its desktop to see its page."
+        ]
+    );
+    assert!(
+        screen
+            .find(Target::key(format!("tile.{TILE}.address")))
+            .is_none()
+    );
+    assert!(
+        screen
+            .find(Target::key(format!("tile.{TILE}.reload")))
+            .is_none()
+    );
+    assert!(
+        !engine.asked().iter().any(|a| matches!(a, Asked::Open(_))),
+        "{:?}",
+        engine.asked()
+    );
+
+    ask(&mut world, "shot", "screenshot", json!({}));
+    assert_eq!(
+        result(&world, "shot"),
+        Some(failed(
+            "shot",
+            "the browser tile is popped out into its own window, where this app shows no page yet. Ask the user to bring it back to its desktop, then retry."
+        ))
+    );
+    world.advance(Duration::from_secs(2));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
 }

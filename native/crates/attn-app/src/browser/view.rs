@@ -71,9 +71,9 @@ pub(crate) fn reload_button(page: &TileKey, t: &Tokens) -> El {
         .radius(4.0)
 }
 
-/// Where the tile's page shows. The page is a native view the host places over this area; where
-/// no engine runs pages, the area says so.
-pub(crate) fn page_area(page: &TileKey, t: &Tokens) -> El {
+/// Where the tile's page shows. The page is a native view the host places over this area in the
+/// main window; a tile window, or a platform where no engine runs pages, says why none shows.
+pub(crate) fn page_area(page: &TileKey, popped: bool, t: &Tokens) -> El {
     let area = col()
         .key(page_key(page))
         .w_full()
@@ -81,16 +81,15 @@ pub(crate) fn page_area(page: &TileKey, t: &Tokens) -> El {
         .min_h(0.0)
         .on_layout_tx(|_: &mut State, _, tx: &mut Tx| tx.live_only())
         .on_drawn_layout_tx(|_: &mut State, _, tx: &mut Tx| tx.live_only());
-    if super::hosts_pages() {
+    let why = if !super::hosts_pages() {
+        "Browser tiles are not available in this app on this platform yet."
+    } else if popped {
+        "This window does not show browser pages yet. Bring the tile back to its desktop to see its page."
+    } else {
         return area;
-    }
+    };
     area.items_center()
         .justify_center()
         .padding(space::S6)
-        .child(
-            text("Browser tiles are not available in this app on this platform yet.")
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap(),
-        )
+        .child(text(why).font(type_::BODY).color(t.text_secondary).wrap())
 }

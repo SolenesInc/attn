@@ -821,7 +821,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             &holder,
         ),
         (LeafKind::Tile { kind, .. }, _) if kind == crate::browser::KIND => takes(
-            crate::browser::page_area(&browser_page(desktop, leaf), t),
+            crate::browser::page_area(&browser_page(desktop, leaf), leaf.window.is_some(), t),
             &holder,
         ),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
@@ -1051,7 +1051,9 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                     .h_full()
                     .items_center()
                     .child(match &leaf.kind {
-                        LeafKind::Tile { kind, params, .. } if kind == crate::browser::KIND => {
+                        LeafKind::Tile { kind, params, .. }
+                            if kind == crate::browser::KIND && !popped =>
+                        {
                             crate::browser::address_field(
                                 cx.browsers,
                                 &browser_page(cx.desktop, leaf),
@@ -1111,7 +1113,8 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                 .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
         )
         .children(
-            matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
+            (matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
+                && !popped)
                 .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
         )
         .children(is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))

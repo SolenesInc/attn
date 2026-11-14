@@ -49,10 +49,6 @@ pub struct Browsers {
     waits: HashMap<String, Wait>,
     /// Counts changes to what the tiles show of the pages, for the view's memo.
     revision: u64,
-    /// Whether the pages know which keys the window takes from them.
-    claims_known: bool,
-    /// The host the pages run on, by [`host::host_count`].
-    host: u64,
 }
 
 struct Page {
@@ -62,8 +58,9 @@ struct Page {
     /// when this changes, so storing where it browsed loads nothing.
     stored: String,
     shown: Option<Placement>,
-    /// The location this page last asked the daemon to store, until the daemon answers.
-    storing: Option<String>,
+    /// The locations this page asked the daemon to store, oldest first, until the daemon's
+    /// copy of the tile shows each: the daemon storing one of these is the page's own echo.
+    sent: Vec<String>,
 }
 
 /// A `wait_for` that asks the page again until its element is ready or its time runs out.
@@ -111,6 +108,7 @@ fn wanted(state: &State) -> Vec<(TileKey, String)> {
             };
             tree.leaves()
                 .into_iter()
+                .filter(|leaf| leaf.window.is_none())
                 .filter_map(|leaf| match &leaf.kind {
                     LeafKind::Tile { kind, params, .. } if kind == KIND => Some((
                         TileKey {
@@ -131,21 +129,8 @@ fn wanted(state: &State) -> Vec<(TileKey, String)> {
 /// takes what the pages said. Runs at the start of every frame; true when the view reads
 /// something that changed.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
-    if !hosts_pages() {
+    if !hosts_pages() || state.window.tile.is_some() {
         return false;
-    }
-    if state.browser.host != host::host_count() {
-        let browsers = &mut state.browser;
-        browsers.host = host::host_count();
-        for page in std::mem::take(&mut browsers.pages).into_keys() {
-            host::forget(&page);
-        }
-        browsers.focused = None;
-        browsers.revision += 1;
-    }
-    if !state.browser.claims_known {
-        claim_keys(&state.keymap);
-        state.browser.claims_known = true;
     }
     let mut changed = keep_pages(state);
     changed |= heard(state, tx);
@@ -189,7 +174,7 @@ fn keep_pages(state: &mut State) -> bool {
                         url: url.clone(),
                         stored: url.clone(),
                         shown: None,
-                        storing: None,
+                        sent: Vec::new(),
                     },
                 );
                 *browsers.address_mut(&key) = TextEdit::new(&url);
@@ -197,7 +182,12 @@ fn keep_pages(state: &mut State) -> bool {
             }
             Some(page) if page.stored != url => {
                 page.stored = url.clone();
-                if page.url != url {
+                let echo = page.sent.iter().position(|sent| *sent == url);
+                match echo {
+                    Some(at) => drop(page.sent.drain(..=at)),
+                    None => page.sent.clear(),
+                }
+                if echo.is_none() && page.url != url {
                     host::with_host(|h| h.navigate(&key, &url));
                     page.url = url.clone();
                     *browsers.address_mut(&key) = TextEdit::new(&url);
@@ -231,30 +221,37 @@ fn located(state: &mut State, page: TileKey, url: String, tx: &mut Tx) -> bool {
         return false;
     };
     known.url = url.clone();
+    let already_stored = known.sent.last().or(stored.as_ref()) == Some(&url);
     *state.browser.address_mut(&page) = TextEdit::new(&url);
-    let known = &state.browser.pages[&page];
-    if stored.as_deref() == Some(url.as_str()) || known.storing.as_deref() == Some(url.as_str()) {
+    if already_stored {
         return true;
     }
     store_location(state, page, url, tx);
     true
 }
 
-fn stored_url(state: &State, page: &TileKey) -> Option<String> {
+fn leaf_of(state: &State, page: &TileKey) -> Option<crate::desktop::layout::Leaf> {
     let desktop = state.facts.desktops.iter().find(|d| d.id == page.desktop)?;
-    let tree = Node::parse(&desktop.tree_json)?;
-    match tree.find_leaf(&page.tile)? {
-        Node::Leaf(crate::desktop::layout::Leaf {
-            kind: LeafKind::Tile { params, .. },
-            ..
-        }) => params.clone(),
+    match Node::parse(&desktop.tree_json)?.find_leaf(&page.tile)? {
+        Node::Leaf(leaf) => Some(leaf.clone()),
         _ => None,
     }
 }
 
+fn stored_url(state: &State, page: &TileKey) -> Option<String> {
+    match leaf_of(state, page)?.kind {
+        LeafKind::Tile { params, .. } => params,
+        _ => None,
+    }
+}
+
+fn popped_out(state: &State, page: &TileKey) -> bool {
+    leaf_of(state, page).is_some_and(|leaf| leaf.window.is_some())
+}
+
 fn store_location(state: &mut State, page: TileKey, url: String, tx: &mut Tx) {
     if let Some(known) = state.browser.pages.get_mut(&page) {
-        known.storing = Some(url.clone());
+        known.sent.push(url.clone());
     }
     let (desktop_id, tile_id) = (page.desktop.clone(), page.tile.clone());
     let sent = url.clone();
@@ -267,13 +264,12 @@ fn store_location(state: &mut State, page: TileKey, url: String, tx: &mut Tx) {
             ..DesktopUpdateTileMessage::new()
         },
         move |state, answer, _| {
-            if let Some(known) = state.browser.pages.get_mut(&page)
-                && known.storing.as_deref() == Some(url.as_str())
-            {
-                known.storing = None;
-            }
-            if let Err(why) = answer.outcome() {
-                eprintln!("attn-app: the browser tile's location was not stored: {why}");
+            let Err(why) = answer.outcome() else {
+                return;
+            };
+            eprintln!("attn-app: the browser tile's location was not stored: {why}");
+            if let Some(known) = state.browser.pages.get_mut(&page) {
+                known.sent.retain(|sent| *sent != url);
             }
         },
         tx,
@@ -382,14 +378,15 @@ fn control(state: &mut State, request: BrowserControlRequestMessage, tx: &mut Tx
         keep_pages(state);
     }
     let Some(known) = state.browser.pages.get_mut(&page) else {
-        return answer(
-            state,
-            id,
-            Err(format!(
+        let why = if popped_out(state, &page) {
+            "the browser tile is popped out into its own window, where this app shows no page yet. Ask the user to bring it back to its desktop, then retry.".to_owned()
+        } else {
+            format!(
                 "the browser tile on desktop {} is not loaded: attn loads it only while its desktop is the current or the previous one. Ask the user to open that desktop, then retry.",
                 request.desktop_id
-            )),
-        );
+            )
+        };
+        return answer(state, id, Err(why));
     };
     match request.action.as_str() {
         "navigate" => {
@@ -440,17 +437,17 @@ fn control(state: &mut State, request: BrowserControlRequestMessage, tx: &mut Tx
                 .unwrap_or(WAIT_DEFAULT_MS);
             let host_ms = asked_ms.clamp(0.0, WAIT_LONGEST_MS);
             state.browser.waits.insert(
-                id,
+                id.clone(),
                 Wait {
                     page,
                     params,
                     until: tx.clock() + host_ms / 1000.0,
-                    next: Some(tx.clock()),
+                    next: None,
                     asked_ms,
                     host_ms,
                 },
             );
-            probe_waits(state, tx);
+            probe(state, &id);
         }
         action => {
             let request = Control {
@@ -503,63 +500,51 @@ fn web_url(params: &Map<String, Value>) -> Result<String, String> {
     }
 }
 
-/// Asks the page again for each `wait_for` whose turn came, and gives up on the ones whose time
-/// ran out.
+/// Asks the page again for each `wait_for` whose turn came.
 fn probe_waits(state: &mut State, tx: &mut Tx) -> bool {
     let now = tx.clock();
-    let mut expired = Vec::new();
-    for (id, wait) in &mut state.browser.waits {
-        let Some(next) = wait.next else { continue };
-        if now < next {
-            tx.wake_at(next);
-            continue;
-        }
-        if now >= wait.until && next > wait.until - WAIT_PROBE_SECS {
-            expired.push(id.clone());
-            continue;
-        }
-        wait.next = None;
-        let request = Control {
-            request_id: probe_id(id),
-            action: "wait_for".into(),
-            params: wait.params.clone(),
-        };
-        host::run(&wait.page.clone(), request);
-    }
-    for id in expired {
-        let wait = state.browser.waits.remove(&id).expect("an expired wait");
-        let state_name = wait
-            .params
-            .get("state")
-            .and_then(Value::as_str)
-            .unwrap_or("attached")
-            .to_owned();
-        answer(
-            state,
-            id,
-            Err(format!(
-                "wait_for timed out waiting for {state_name} (timeoutMs={}, hostTimeoutMs={})",
-                wait.asked_ms, wait.host_ms
-            )),
-        );
+    let due: Vec<String> = state
+        .browser
+        .waits
+        .iter()
+        .filter_map(|(id, wait)| {
+            let next = wait.next?;
+            if now < next {
+                tx.wake_at(next);
+                return None;
+            }
+            Some(id.clone())
+        })
+        .collect();
+    for id in due {
+        probe(state, &id);
     }
     false
 }
 
-fn probe_id(wait: &str) -> String {
-    format!("{wait}#probe")
+/// Asks the page whether the element `wait_id` waits for is ready, under the wait's own id.
+fn probe(state: &mut State, wait_id: &str) {
+    let Some(wait) = state.browser.waits.get_mut(wait_id) else {
+        return;
+    };
+    wait.next = None;
+    let request = Control {
+        request_id: wait_id.to_owned(),
+        action: "wait_for".into(),
+        params: wait.params.clone(),
+    };
+    host::run(&wait.page.clone(), request);
 }
 
 fn answered(state: &mut State, request_id: String, result: Result<String, String>, tx: &mut Tx) {
     if !host::settle(&request_id) {
         return;
     }
-    let Some(wait_id) = request_id.strip_suffix("#probe") else {
+    if !state.browser.waits.contains_key(&request_id) {
         return answer(state, request_id, result);
-    };
-    let wait_id = wait_id.to_owned();
-    let ready = result.as_ref().map(|raw| {
-        let probe: Value = serde_json::from_str(raw).unwrap_or(Value::Null);
+    }
+    let ready = result.map(|raw| {
+        let probe: Value = serde_json::from_str(&raw).unwrap_or(Value::Null);
         probe
             .get("ready")
             .and_then(Value::as_bool)
@@ -572,22 +557,42 @@ fn answered(state: &mut State, request_id: String, result: Result<String, String
                     .to_string()
             })
     });
+    let now = tx.clock();
+    let wait = state
+        .browser
+        .waits
+        .get_mut(&request_id)
+        .expect("a probed wait");
     match ready {
-        Err(_) | Ok(Some(_)) => {
-            state.browser.waits.remove(&wait_id);
-            answer(
-                state,
-                wait_id,
-                ready.map(Option::unwrap_or_default).map_err(Clone::clone),
-            );
+        Ok(None) if now < wait.until => {
+            let next = (now + WAIT_PROBE_SECS).min(wait.until);
+            wait.next = Some(next);
+            tx.wake_at(next);
         }
         Ok(None) => {
-            let now = tx.clock();
-            if let Some(wait) = state.browser.waits.get_mut(&wait_id) {
-                let next = (now + WAIT_PROBE_SECS).min(wait.until);
-                wait.next = Some(next);
-                tx.wake_at(next);
-            }
+            let wait = state
+                .browser
+                .waits
+                .remove(&request_id)
+                .expect("a probed wait");
+            let state_name = wait
+                .params
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or("attached")
+                .to_owned();
+            answer(
+                state,
+                request_id,
+                Err(format!(
+                    "wait_for timed out waiting for {state_name} (timeoutMs={}, hostTimeoutMs={})",
+                    wait.asked_ms, wait.host_ms
+                )),
+            );
+        }
+        done => {
+            state.browser.waits.remove(&request_id);
+            answer(state, request_id, done.map(Option::unwrap_or_default));
         }
     }
 }
@@ -596,13 +601,7 @@ fn answered(state: &mut State, request_id: String, result: Result<String, String
 /// agent goes on to read or close the dialog.
 fn alerted(state: &mut State, page: &TileKey) {
     for request_id in host::interrupt(page) {
-        let request_id = match request_id.strip_suffix("#probe") {
-            Some(wait) => {
-                state.browser.waits.remove(wait);
-                wait.to_owned()
-            }
-            None => request_id,
-        };
+        state.browser.waits.remove(&request_id);
         answer(state, request_id, Ok("null".into()));
     }
 }

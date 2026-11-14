@@ -614,7 +614,7 @@ pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
 fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
     let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
     row()
-        .key(key)
+        .key(key.clone())
         .role("button")
         .focusable(true)
         .label(format!("Open {}", tile.title))
@@ -640,6 +640,23 @@ fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
                 .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary),
         )
+        .children((tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile, t)))
+}
+
+/// The browser row's button that loads its page again, as the tile header's does.
+fn reload_tile_button(row: &str, tile: &TileRow, t: &Tokens) -> El {
+    let page = attn_client::TileKey {
+        desktop: tile.desktop.clone(),
+        tile: tile.id.clone(),
+    };
+    attn_ui::GlyphButton::new("↻", format!("Reload {}", tile.title))
+        .variant(rune_kit::ButtonVariant::GhostFaint)
+        .font(type_::LABEL)
+        .side(type_::LABEL.line_px())
+        .on_press_tx(move |_: &mut State, _: &mut Tx| crate::browser::reload(&page))
+        .build(attn_ui::kit(t))
+        .key(format!("{row}.reload"))
+        .radius(4.0)
 }
 
 /// The header of the tile showing `session` on the current desktop.

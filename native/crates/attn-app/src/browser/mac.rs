@@ -904,9 +904,7 @@ define_class!(
                 default_text: None,
                 close: Box::new(move |_| done.call(())),
             };
-            if let Some(alert) = super::page_alert(self.ivars(), alert) {
-                show(MainThreadMarker::from(self), alert);
-            }
+            answer_or_show(MainThreadMarker::from(self), self.ivars(), alert);
         }
 
         #[unsafe(method(webView:runJavaScriptConfirmPanelWithMessage:initiatedByFrame:completionHandler:))]
@@ -930,9 +928,7 @@ define_class!(
                     done.call((Bool::new(answer.is_some()),))
                 }),
             };
-            if let Some(alert) = super::page_alert(self.ivars(), alert) {
-                show(MainThreadMarker::from(self), alert);
-            }
+            answer_or_show(MainThreadMarker::from(self), self.ivars(), alert);
         }
 
         #[unsafe(method(webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:))]
@@ -961,12 +957,19 @@ define_class!(
                     None => done.call((std::ptr::null_mut(),)),
                 }),
             };
-            if let Some(alert) = super::page_alert(self.ivars(), alert) {
-                show(MainThreadMarker::from(self), alert);
-            }
+            answer_or_show(MainThreadMarker::from(self), self.ivars(), alert);
         }
     }
 );
+
+/// An agent's action ended in `alert`, which waits for the agent, and the window wakes to tell
+/// it; with no action running the person answers it.
+fn answer_or_show(mtm: MainThreadMarker, page: &TileKey, alert: Alert) {
+    match super::page_alert(page, alert) {
+        None => wake(),
+        Some(alert) => show(mtm, alert),
+    }
+}
 
 impl PageDialogs {
     fn new(mtm: MainThreadMarker, page: TileKey) -> Retained<Self> {

@@ -87,19 +87,11 @@ thread_local! {
     static HEARD: RefCell<Vec<Heard>> = const { RefCell::new(Vec::new()) };
     static ACTING: RefCell<HashMap<TileKey, Acting>> = RefCell::new(HashMap::new());
     static CLAIMED: RefCell<Vec<Chord>> = const { RefCell::new(Vec::new()) };
-    static HOSTS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
-/// Runs browser tiles' pages on `host`, for every window on this thread. A host that replaces
-/// another starts with no pages, and the window opens them again on it.
+/// Runs browser tiles' pages on `host`, for the main window on this thread.
 pub fn use_host(host: Box<dyn BrowserHost>) {
     HOST.with_borrow_mut(|slot| *slot = Some(host));
-    HOSTS.set(HOSTS.get() + 1);
-}
-
-/// Counts the hosts this thread has used, so the window knows when its pages went with one.
-pub(super) fn host_count() -> u64 {
-    HOSTS.get()
 }
 
 /// Whether this thread runs pages: false where no engine is, such as on Linux.

@@ -355,6 +355,7 @@ fn desktops_list_in_order_with_their_agents_and_tiles_in_layout_order() {
             "Open a",
             "Open a1",
             "Open docs.test",
+            "Reload docs.test",
             "Open a2",
             "Open b",
             "Open b1",
@@ -362,6 +363,7 @@ fn desktops_list_in_order_with_their_agents_and_tiles_in_layout_order() {
             "Open c1",
             "Open tile-only",
             "Open tiles.test",
+            "Reload tiles.test",
             "Open empty",
         ]
     );
