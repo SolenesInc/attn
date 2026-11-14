@@ -104,9 +104,9 @@ try {
     await driver.typeInto(null, 'keyboard shortcuts');
     await waitForHighlight('command:keyboard-shortcuts', 'the search highlights Keyboard shortcuts');
     await driver.pressKey('Enter');
-    await driver.waitFor({ key: 'shortcuts' });
+    await driver.waitFor({ key: 'shortcuts-dialog' });
     await driver.pressKey('Escape');
-    await driver.waitFor({ key: 'shortcuts' }, { gone: true });
+    await driver.waitFor({ key: 'shortcuts-dialog' }, { gone: true });
 
     await openPalette('commands');
     await driver.waitFor({ key: 'palette.row.command:new-agent' });
@@ -120,9 +120,9 @@ try {
 
   await runner.step('the_agent_palette_switches_to_commands_on_a_greater_than_sign', async () => {
     await runCommand('keyboard shortcuts', 'keyboard-shortcuts');
-    await driver.waitFor({ key: 'shortcuts' });
+    await driver.waitFor({ key: 'shortcuts-dialog' });
     await driver.pressKey('Escape');
-    await driver.waitFor({ key: 'shortcuts' }, { gone: true });
+    await driver.waitFor({ key: 'shortcuts-dialog' }, { gone: true });
   });
 
   await runner.step('priority_marks_and_clears_from_the_palette', async () => {

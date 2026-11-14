@@ -26,7 +26,7 @@ runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 
 const ID = 'ui.showShortcuts';
-const CHEAT = { key: 'shortcuts.dialog' };
+const CHEAT = { key: 'shortcuts-dialog' };
 const EDITOR = { key: 'shortcut-editor-dialog' };
 const physical = async (...strokes) => {
   await driver.window.activateBackground();

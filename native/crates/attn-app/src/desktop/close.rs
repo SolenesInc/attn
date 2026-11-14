@@ -1,8 +1,8 @@
 use attn_protocol::{Desktop, DesktopCloseMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
-use rune::{El, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant};
+use rune::tok::space;
+use rune::{El, Tx, row};
+use rune_kit::{Button, ButtonVariant, Dialog};
 
 use super::layout::Node;
 use crate::State;
@@ -97,69 +97,38 @@ fn confirm(state: &mut State, tx: &mut Tx) {
     send(state, closing.desktop_id, closing.revision, tx);
 }
 
-pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    let closing = state.window.closing_desktop.as_ref()?;
-    let title = format!("Close {}?", closing.title);
-    let button = |key: &str, label: &str, fill, press: fn(&mut State, &mut Tx)| {
-        let face = label.to_owned();
-        Button::new(label)
-            .variant(ButtonVariant::Ghost)
-            .on_press_tx(press)
-            .label_with(move |_, ink| text(face).font(type_::BODY).color(ink))
-            .build(attn_ui::kit(t))
-            .key(format!("close_desktop.{key}"))
-            .h(type_::BODY.line_px() + 12.0)
-            .px(12.0)
-            .radius(6.0)
-            .fill(fill)
-            .border(1.0, t.border)
+pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
+    let Some(closing) = state.window.closing_desktop.as_ref() else {
+        return Vec::new();
     };
-    let panel = col()
-        .key("close_desktop.dialog")
-        .role("dialog")
-        .label(title.clone())
-        .modal_tx(true, cancel)
-        .w_full()
-        .max_w(420.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .padding(space::S6)
-        .gap(space::S3)
-        .child(text(title).font(type_::TITLE).color(t.text_primary))
-        .child(
-            text("Close this desktop and everything inside it?")
-                .font(type_::BODY)
-                .color(t.text_secondary),
-        )
+    let k = attn_ui::kit(t);
+    let mut layer = Vec::new();
+    Dialog::new("close_desktop", format!("Close {}?", closing.title))
+        .description("Close this desktop and everything inside it?")
+        .open(true)
+        .fit()
+        .on_close_tx(cancel)
         .child(
             row()
                 .w_full()
                 .gap(space::S2)
-                .child(el().grow(1.0))
-                .child(button("cancel", "Cancel", t.bg_button, cancel).autofocus())
-                .child(button("confirm", "Close desktop", t.accent, confirm)),
-        );
-    Some(
-        el().key("close_desktop")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .child(
-                el().key("close_desktop.scrim")
-                    .absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .fill(t.bg_overlay)
-                    .a11y_hidden(),
-            )
-            .child(
-                col()
-                    .w_full()
-                    .h_full()
-                    .padding(space::S6)
-                    .center()
-                    .child(panel),
-            ),
-    )
+                .padding(space::S3)
+                .child(row().grow(1.0))
+                .child(
+                    Button::new("Cancel")
+                        .on_press_tx(cancel)
+                        .build(k)
+                        .key("close_desktop.cancel")
+                        .autofocus(),
+                )
+                .child(
+                    Button::new("Close desktop")
+                        .variant(ButtonVariant::Submit)
+                        .on_press_tx(confirm)
+                        .build(k)
+                        .key("close_desktop.confirm"),
+                ),
+        )
+        .build(k, &mut layer);
+    layer
 }
