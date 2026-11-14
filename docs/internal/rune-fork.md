@@ -47,9 +47,8 @@ than pieces, since a deleted area can no longer take picks.
    `crates/rune/src/overlay/fork_tests.rs`.
 4. Run `scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid`
    for the areas you touched. `scripts/test.sh` passes its arguments to
-   `cargo test` and lets one run at a time per machine, as
-   [Test builds and memory](#test-builds-and-memory) explains; it says whose
-   run it waits for. A test that runs only on macOS runs in the fork's
+   `cargo test`; several agents can run it at once on one machine, as
+   [Test builds and memory](#test-builds-and-memory) explains. A test that runs only on macOS runs in the fork's
    `fork macOS tests` workflow (`.github/workflows/fork-macos.yml`), on each
    push to `main` and on request.
 5. Add a row under "Our changes" in `FORK.md`: what the change does, why it
@@ -135,28 +134,24 @@ fails, names it and prints its output.
 
 ## Test builds and memory
 
-Compiling `rune`'s lib tests is one `rustc` that peaks at 24 GB of resident
-memory and takes about 9 minutes on ai-sandbox (22 cores, 64 GB), measured
-2026-11-13 on `main` at `caf8af7d` and `b9d85323`. The rest of the ledger's
-build stays near 2 GB. Several agents running the ledger at once exhausted
-ai-sandbox's memory, so `scripts/test.sh` lets one run at a time per machine,
-under a lock in `~/.cargo`: Rune's test builds on a machine now take 24 GB at
-most, not 24 GB for each agent that runs one.
+Compiling `rune`'s lib tests is one `rustc` that peaks at 3.6 GB of resident
+memory and takes 55 s on ai-sandbox (22 cores, 64 GB). It instantiates 188,000
+items. Two full ledger runs started together from two checkouts both finish,
+with a combined peak of 21.7 GB: most of it is cargo building one checkout's
+integration-test crates in parallel, not the lib tests. Measured 2026-11-14 on
+the fork's `main` at `e659f048` and on `test-lock-removal` at `5383df81`.
 
-The peak comes from monomorphization. The runtime is generic over the app
-state, `Runtime<S>`, and the tests use 271 state types, so the test build
-instantiates 2.43 million items where the library alone instantiates 78,000.
-Collecting them takes 160 s and 6.8 GB, and generating LLVM IR for them takes
-the rest. Build settings barely move it:
+Before that, the build peaked at 24.8 GB and took 425 s (2.53 million items,
+at `e92ffed3`), so `scripts/test.sh` let one run at a time per machine, under a
+lock in `~/.cargo`. The cost came from monomorphization: the runtime was generic
+over the app state, `Runtime<S>`, and the lib tests use 271 state types, so the
+whole runtime was built 271 times. Build settings barely moved it.
 
-| Setting | Peak | Wall time |
-|---|---|---|
-| defaults (`debug = "line-tables-only"`, incremental) | 24.0 GB | 595 s |
-| `debug = false` | 21.6 GB | 486 s |
-| incremental off | 28.7 GB | 475 s |
-| `debug = false`, incremental off | 22.6 GB | 403 s |
-| `-j8` or `-j4` | 24.4 GB, 24.1 GB | 537 s, 648 s |
-| `codegen-units = 1024` | 24.3 GB | 591 s |
-
-Lowering the peak means taking the work that does not need `S` out of the
-generic runtime, as `runtime/commit/text_layout.rs` does for Taffy's layout.
+The runtime now does its work in `RuntimeCore`, which has no type parameter,
+and reaches the app's state, view and hooks through one trait object; the
+typed `Runtime<S>` is a thin wrapper that derefs to it. The fork's
+`scripts/state-free.sh`, run by its `scripts/file-size.sh`, fails on an `impl`
+over `Runtime<S>` outside `runtime/app_side.rs`, since such a method is built
+again for every state type. Write runtime methods in `impl RuntimeCore`, and
+take `impl RuntimeCore` for an upstream pick that adds an `impl<S> Runtime<S>`
+block.

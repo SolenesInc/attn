@@ -207,7 +207,7 @@ bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --bra
       }
     }')"
   [ -n "$ledger" ] || die "FORK.md lists no tests"
-  [ -x "$worktree/scripts/test.sh" ] || die "the new main has no scripts/test.sh, which runs the fork's tests one run at a time per machine"
+  [ -x "$worktree/scripts/test.sh" ] || die "the new main has no scripts/test.sh, which runs the fork's tests"
   test_cargo() {
     run env CARGO_TARGET_DIR="$clone/target" scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid "$@" </dev/null
   }
