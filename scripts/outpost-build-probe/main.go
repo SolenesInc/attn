@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -23,6 +24,7 @@ func main() {
 	cache := flag.String("cache", "", "isolated outpost-builds directory")
 	platform := flag.String("platform", "linux/amd64", "outpost platform")
 	releaseSource := flag.String("release-source", "https://github.com/victorarias/attn/releases/download", "release download source")
+	callers := flag.Int("callers", 1, "outposts acquiring the build at once")
 	flag.Parse()
 	if *home == "" || *cache == "" {
 		fail(fmt.Errorf("--home and --cache are required"))
@@ -43,13 +45,25 @@ func main() {
 		fail(err)
 	}
 	build := bridge.Build{Version: info.Version, SourceFingerprint: info.Fingerprint, ProtocolVersion: strings.TrimSpace(string(read("--protocol-version")))}
-	start := time.Now()
-	binaries, err := outpostbuild.Acquire(context.Background(), outpostbuild.Request{Build: build, Channel: info.Channel, Repository: *repository, ReleaseSource: *releaseSource, Cache: *cache, Platform: *platform}, func(phase string) { fmt.Fprintln(os.Stderr, phase) })
-	if err != nil {
-		fail(err)
+	request := outpostbuild.Request{Build: build, Channel: info.Channel, Repository: *repository, ReleaseSource: *releaseSource, Cache: *cache, Platform: *platform}
+	var wait sync.WaitGroup
+	var out sync.Mutex
+	for caller := range *callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			start := time.Now()
+			binaries, err := outpostbuild.Acquire(context.Background(), request, func(phase string) { fmt.Fprintf(os.Stderr, "caller %d: %s\n", caller, phase) })
+			if err != nil {
+				fail(err)
+			}
+			duration := time.Since(start)
+			out.Lock()
+			defer out.Unlock()
+			_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"caller": caller, "build": build, "channel": info.Channel, "platform": *platform, "seconds": duration.Seconds(), "attn": describe(binaries.Attn), "attnd": describe(binaries.Attnd), "host": describe(binaries.Host)})
+		}()
 	}
-	duration := time.Since(start)
-	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"build": build, "channel": info.Channel, "platform": *platform, "seconds": duration.Seconds(), "attn": describe(binaries.Attn), "host": describe(binaries.Host)})
+	wait.Wait()
 }
 
 func describe(path string) map[string]any {
