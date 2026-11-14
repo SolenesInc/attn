@@ -1062,11 +1062,18 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
             t,
         ))
     }));
-    let headline = headline.children(document_controls(leaf, cx));
-    let pops_out = matches!(leaf.kind, LeafKind::Tile { .. });
+    let is_tile = matches!(leaf.kind, LeafKind::Tile { .. });
+    let is_document =
+        matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == "markdown" || kind == "seed");
     let headline = headline
-        .children(pops_out.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
-        .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)));
+        .children(document_controls(leaf, cx))
+        .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)))
+        .children(
+            (is_document && !focused && !popped)
+                .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
+        )
+        .children(is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
+        .children(is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)));
     let height = header_height(pane.is_some());
     let track = match (settle, pane) {
         (Some(settle), Some(pane)) => {
@@ -1201,6 +1208,32 @@ fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) 
         attn_ui::icon::EXPAND,
         cx.t,
         move |state, tx| super::actions::focus_leaf(state, &desktop, &leaf, tx),
+    )
+}
+
+/// The header's button that shows this document alone on its desktop.
+fn focus_document_button(key: &str, desktop: &str, leaf: &str, cx: &TileCx) -> El {
+    let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
+    Button::new("Focus document")
+        .variant(ButtonVariant::Outline)
+        .label_with(|_, ink| text("Focus").font(type_::LABEL).color(ink))
+        .help(with_key("Focus document", cx.keys.focus.as_ref()))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::actions::focus_leaf(state, &desktop, &leaf, tx)
+        })
+        .build(attn_ui::kit(cx.t))
+        .key(format!("{key}.focus"))
+}
+
+/// The header's button that takes the document or browser tile off its desktop.
+fn close_tile_button(key: &str, desktop: &str, leaf: &str, t: &Tokens) -> El {
+    let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
+    header_button(
+        format!("{key}.close"),
+        "Close tile".to_owned(),
+        attn_ui::icon::CLOSE,
+        t,
+        move |state, tx| super::actions::remove_tile(state, desktop.clone(), leaf.clone(), tx),
     )
 }
 
