@@ -1065,8 +1065,9 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
     let is_tile = matches!(leaf.kind, LeafKind::Tile { .. });
     let is_document =
         matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == "markdown" || kind == "seed");
-    let headline = headline
-        .children(document_controls(leaf, cx))
+    let tile_actions = row()
+        .items_center()
+        .gap(2.0)
         .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)))
         .children(
             (is_document && !focused && !popped)
@@ -1074,6 +1075,9 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         )
         .children(is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
         .children(is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)));
+    let headline = headline
+        .children(document_controls(leaf, cx))
+        .children((is_tile || focused).then_some(tile_actions));
     let height = header_height(pane.is_some());
     let track = match (settle, pane) {
         (Some(settle), Some(pane)) => {
@@ -1214,27 +1218,47 @@ fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) 
 /// The header's button that shows this document alone on its desktop.
 fn focus_document_button(key: &str, desktop: &str, leaf: &str, cx: &TileCx) -> El {
     let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
+    let ink = cx.t.text_secondary;
     Button::new("Focus document")
-        .variant(ButtonVariant::Outline)
-        .label_with(|_, ink| text("Focus").font(type_::LABEL).color(ink))
+        .variant(ButtonVariant::Ghost)
+        .label_with(move |_, _| text("Focus").font(FOCUS_PILL_TYPE).color(ink))
         .help(with_key("Focus document", cx.keys.focus.as_ref()))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::actions::focus_leaf(state, &desktop, &leaf, tx)
         })
         .build(attn_ui::kit(cx.t))
         .key(format!("{key}.focus"))
+        .h(24.0)
+        .px(9.0)
+        .radius(12.0)
+        .border(1.0, cx.t.brand.alpha(0.36))
+        .fill(cx.t.brand.alpha(0.08))
 }
+
+/// The Tauri app's Focus pill: 11 px, semibold.
+const FOCUS_PILL_TYPE: rune::TextStyle = rune::TextStyle {
+    size: 11.0,
+    weight: 600.0,
+    ..type_::LABEL
+};
 
 /// The header's button that takes the document or browser tile off its desktop.
 fn close_tile_button(key: &str, desktop: &str, leaf: &str, t: &Tokens) -> El {
     let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
-    header_button(
-        format!("{key}.close"),
-        "Close tile".to_owned(),
-        attn_ui::icon::CLOSE,
-        t,
-        move |state, tx| super::actions::remove_tile(state, desktop.clone(), leaf.clone(), tx),
-    )
+    GlyphButton::new("×", "Close tile")
+        .variant(ButtonVariant::GhostFaint)
+        .font(rune::TextStyle {
+            size: 15.0,
+            weight: 400.0,
+            ..type_::LABEL
+        })
+        .side(24.0)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::actions::remove_tile(state, desktop.clone(), leaf.clone(), tx)
+        })
+        .build(attn_ui::kit(t))
+        .key(format!("{key}.close"))
+        .radius(4.0)
 }
 
 /// The header's button that puts the tile shown alone back in its row.
@@ -1257,6 +1281,7 @@ fn header_button(
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
     GlyphButton::new(glyph, label)
+        .variant(ButtonVariant::GhostFaint)
         .font(type_::LABEL)
         .side(type_::LABEL.line_px())
         .on_press_tx(press)
