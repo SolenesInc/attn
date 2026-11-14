@@ -82,7 +82,7 @@ func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper stri
 	if wrapper != "" {
 		links[wrapperName] = wrapper
 	}
-	for _, h := range []Harness{Claude, Codex, Plug, Nisse, Sigma} {
+	for _, h := range []Harness{Claude, Codex, Plug, Sigma, SampleServer} {
 		links[string(h)] = binary
 	}
 	mustInstall(t, cfg.Bin, links, map[string]string{configName: string(encoded)})
@@ -112,10 +112,10 @@ func (k *Kit) Env() []string {
 		"PATH=" + k.cfg.Bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"ATTN_CLAUDE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Claude)),
 		"ATTN_CODEX_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Codex)),
-		"ATTN_NISSE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Nisse)),
-		"NISSE_HOME=" + appServerHome(filepath.Dir(k.cfg.Control), Nisse),
 		"ATTN_SIGMA_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Sigma)),
 		"SIGMA_HOME=" + appServerHome(filepath.Dir(k.cfg.Control), Sigma),
+		"ATTN_SAMPLE_SERVER_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(SampleServer)),
+		"SAMPLE_SERVER_HOME=" + appServerHome(filepath.Dir(k.cfg.Control), SampleServer),
 		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, wrapperName),
 	}
 }

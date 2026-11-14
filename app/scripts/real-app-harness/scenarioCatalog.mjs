@@ -1,25 +1,5 @@
 export const scenarioCatalog = [
   {
-    id: 'sigma',
-    runnerId: 'SIGMA',
-    label: 'A Sigma session runs, asks, detaches, reattaches and survives a daemon restart against the Sigma fork build',
-    command: ['node', 'scripts/real-app-harness/scenario-sigma.mjs'],
-    skipOn: {
-      linux: 'Needs the Sigma fork build, which runs only on a developer Mac',
-      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE and its package in ATTN_SCENARIO_SIGMA_PLUGIN_DIR', unlessEnv: ['ATTN_SCENARIO_SIGMA_EXECUTABLE', 'ATTN_SCENARIO_SIGMA_PLUGIN_DIR'] },
-    },
-  },
-  {
-    id: 'sigma-targets',
-    runnerId: 'SIGMA-TARGETS',
-    label: 'Sigma sessions run on the execution target they launched with, through a restart and a resume, and an unavailable DevVM target never runs locally',
-    command: ['node', 'scripts/real-app-harness/scenario-sigma-targets.mjs'],
-    skipOn: {
-      linux: 'Needs the Sigma fork build and a DevVM VM, which run only on a developer Mac',
-      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE, its package in ATTN_SCENARIO_SIGMA_PLUGIN_DIR and a DevVM project in ATTN_SCENARIO_SIGMA_DEVVM_PROJECT', unlessEnv: ['ATTN_SCENARIO_SIGMA_EXECUTABLE', 'ATTN_SCENARIO_SIGMA_PLUGIN_DIR', 'ATTN_SCENARIO_SIGMA_DEVVM_PROJECT'] },
-    },
-  },
-  {
     id: 'browser-wait-navigation',
     runnerId: 'BROWSER-WAIT-NAVIGATION',
     label: 'Browser waits survive initial navigation, tile reopening and later navigation',

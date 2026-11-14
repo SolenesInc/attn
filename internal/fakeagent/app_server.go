@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	Nisse                 = Harness("nisse")
 	Sigma                 = Harness("sigma")
+	SampleServer          = Harness("sample-server")
 	serverIdleGrace       = 300 * time.Millisecond
 	methodServerFakeReply = "attn-fake/reply"
 	methodAwaitInterrupt  = "await_interrupt"
@@ -42,21 +42,20 @@ type appServerFlavor struct {
 	homeDir      string
 	rootVariable string
 	socket       func(home string) string
-	connect      func(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error)
 	hello        map[string]any
 	completions  bool
 }
 
 var appServerFlavors = map[Harness]appServerFlavor{
-	Nisse: {
-		harness: Nisse, role: "nisse-server", homeVariable: "NISSE_HOME", homeDir: "nh", rootVariable: "NISSE_ROOT_CONVERSATION",
-		socket: func(home string) string { return filepath.Join(home, "nisse.sock") }, connect: connectFakeNisse,
-		hello: map[string]any{"version": "fake", "protocol": 7},
-	},
 	Sigma: {
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
-		socket: func(home string) string { return filepath.Join(home, "sigma.sock") }, connect: connectFakeSigma,
-		hello:       map[string]any{"server": "sigma", "version": "fake", "protocol": 1},
+		socket: func(home string) string { return filepath.Join(home, "sigma.sock") },
+		hello:  map[string]any{"version": "fake", "protocol": 1},
+	},
+	SampleServer: {
+		harness: SampleServer, role: "sample-server-server", homeVariable: "SAMPLE_SERVER_HOME", homeDir: "ss", rootVariable: "SAMPLE_SERVER_ROOT_CONVERSATION",
+		socket:      func(home string) string { return filepath.Join(home, "sample-server.sock") },
+		hello:       map[string]any{"server": "sample-server", "version": "fake", "protocol": 1},
 		completions: true,
 	},
 }
@@ -67,12 +66,6 @@ var serverViewFlags = flagSpec{values: map[string]bool{"--conversation": true, "
 
 func appServerProgram(h Harness) func(config) int {
 	flavor := appServerFlavors[h]
-	if home := os.Getenv("ATTN_TEST_SERVER_HOME_ENV"); home != "" {
-		flavor.homeVariable = home
-	}
-	if socket := os.Getenv("ATTN_TEST_SERVER_SOCKET"); socket != "" {
-		flavor.socket = func(home string) string { return filepath.Join(home, socket) }
-	}
 	return func(cfg config) int {
 		if len(os.Args) > 1 && os.Args[1] == "serve" {
 			return runAppServer(cfg, flavor)
@@ -102,7 +95,7 @@ func (n *serverView) begin(*terminal) error {
 	socket := n.flavor.socket(os.Getenv(n.flavor.homeVariable))
 	deadline := time.Now().Add(HangGuard)
 	for {
-		client, _, err := n.flavor.connect(context.Background(), socket, string(n.flavor.harness)+"-tui", "fake")
+		client, err := n.flavor.connect(context.Background(), socket)
 		if err == nil {
 			n.client = client
 			break
@@ -745,30 +738,15 @@ func (s *AppServer) ControlCounts() (initializes, watches int) {
 
 func (s *AppServer) PID() int { return s.fake.Pid }
 
-func connectFakeNisse(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
-	c, err := effectrpc.Dial(ctx, socket, "nisse")
+func (f appServerFlavor) connect(ctx context.Context, socket string) (*effectrpc.Client, error) {
+	c, err := effectrpc.Dial(ctx, socket, string(f.harness))
 	if err != nil {
-		return nil, effectrpc.ServerInfo{}, err
+		return nil, err
 	}
 	var hello effectrpc.ServerInfo
-	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": 7}, &hello)
-	if err != nil {
+	if err := c.Call(ctx, "initialize", map[string]any{"client": string(f.harness) + "-tui", "version": "fake", "protocol": 1}, &hello); err != nil {
 		c.Close()
-		return nil, hello, err
+		return nil, err
 	}
-	return c, hello, nil
-}
-
-func connectFakeSigma(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
-	c, err := effectrpc.Dial(ctx, socket, "sigma")
-	if err != nil {
-		return nil, effectrpc.ServerInfo{}, err
-	}
-	var hello effectrpc.ServerInfo
-	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": 1}, &hello)
-	if err != nil {
-		c.Close()
-		return nil, hello, err
-	}
-	return c, hello, nil
+	return c, nil
 }

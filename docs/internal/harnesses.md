@@ -16,8 +16,7 @@ harness.
 - [Codex](harnesses/codex.md): plain Codex, local memories and updates.
 - [Codex app-server and `--remote`](harnesses/codex-app-server.md): the shared
   app-server that shared Codex runs on.
-- [Nisse](harnesses/nisse.md): the Nisse server.
-- [Sigma](harnesses/sigma.md): the Sigma app-server over Pi Durable.
+- [Sigma](harnesses/sigma.md): the Sigma server, named Nisse until 2026-11-14.
 
 This file keeps the facts that hold across harnesses.
 
@@ -31,10 +30,10 @@ Under shared Codex, hooks and commands run in the app-server and name their
 conversation instead: a hook by the `session_id` on its stdin, a command by
 `CODEX_THREAD_ID`. A `/side` conversation has no session of its own: attn sets
 `ATTN_TERMINAL_ID` on its shell tools, so its commands act as the session of the
-terminal that shows it, and its hooks resolve to no session. Nisse and Sigma run
-commands in their server, and name the conversation people started by
-`NISSE_ROOT_CONVERSATION` and `SIGMA_ROOT_CONVERSATION`. Native harness
-conversation ids remain separate text values.
+terminal that shows it, and its hooks resolve to no session. Sigma runs
+commands in its server, and names the conversation people started by
+`SIGMA_ROOT_CONVERSATION`. Native harness conversation ids remain separate text
+values.
 
 A session is attn's record of one conversation in one profile. A terminal
 shows one session at a time, and a session can show in any number of

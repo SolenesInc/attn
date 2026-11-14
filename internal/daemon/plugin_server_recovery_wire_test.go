@@ -22,10 +22,10 @@ func submitSessionAnnotationFeedbackAs(app *testworld.Peer, sessionID, requestID
 	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
 }
 
-func TestASigmaQuestionAttnNeverSawStartReachesTheUserAndARetryDoesNotRunItAgain(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+func TestAServerQuestionAttnNeverSawStartReachesTheUserAndARetryDoesNotRunItAgain(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
-	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
 	conversation := view.ConversationID
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
@@ -51,14 +51,14 @@ func TestASigmaQuestionAttnNeverSawStartReachesTheUserAndARetryDoesNotRunItAgain
 	}
 }
 
-func TestASigmaQuestionTheUserHandledStaysHandledThroughReconnectsAndRestarts(t *testing.T) {
+func TestAServerQuestionTheUserHandledStaysHandledThroughReconnectsAndRestarts(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
 	app := w.App()
-	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
-	neighbour := w.Spawn(app, fakeagent.Sigma, w.Path("neighbour"))
+	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
+	neighbour := w.Spawn(app, fakeagent.SampleServer, w.Path("neighbour"))
 	neighbourView := w.Launched(neighbour)
 	conversation := view.ConversationID
 	promptUntilWorking(app, session, view, server, "which index should the report use?")
@@ -94,22 +94,22 @@ func TestASigmaQuestionTheUserHandledStaysHandledThroughReconnectsAndRestarts(t 
 	stillHandled("after attn reconnected to the server")
 
 	w.restart()
-	registerSigmaDriver(t, w, w.App())
+	registerSampleServerDriver(t, w, w.App())
 	app = w.App()
 	testworld.AwaitSessionFromConnect(app, neighbour, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	stillHandled("after a daemon restart")
 }
 
-func TestClosingASigmaSessionLeavesItsRunGoingForAReopen(t *testing.T) {
+func TestClosingAServerSessionLeavesItsRunGoingForAReopen(t *testing.T) {
 	closes := map[string]func(app *testworld.Peer, session string, view *fakeagent.Run){
 		"the view exits":     func(_ *testworld.Peer, _ string, view *fakeagent.Run) { view.Exit(0) },
 		"the user closes it": func(app *testworld.Peer, session string, _ *fakeagent.Run) { closeSessionPane(app, session) },
 	}
 	for name, closeSession := range closes {
 		t.Run(name, func(t *testing.T) {
-			w := newWorld(t, fakeagent.Sigma)
+			w := newWorld(t, fakeagent.SampleServer)
 			app := w.App()
-			session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+			session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
 			conversation := view.ConversationID
 			promptUntilWorking(app, session, view, server, "rename the orders table")
 
@@ -132,30 +132,30 @@ func TestClosingASigmaSessionLeavesItsRunGoingForAReopen(t *testing.T) {
 	}
 }
 
-func TestSigmaListsTheExecutionTargetsOfAFolder(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+func TestAServerListsTheExecutionTargetsOfAFolder(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
-	registerSigmaDriver(t, w, app)
+	registerSampleServerDriver(t, w, app)
 	folder := w.Path("shop")
-	listed := testworld.Request(app, protocol.HarnessTargetsMessage{Cmd: protocol.CmdHarnessTargets, RequestID: "targets", Harness: "sigma", Cwd: folder},
+	listed := testworld.Request(app, protocol.HarnessTargetsMessage{Cmd: protocol.CmdHarnessTargets, RequestID: "targets", Harness: "sample-server", Cwd: folder},
 		protocol.EventHarnessTargetsResult, func(r protocol.HarnessTargetsResultMessage) bool { return r.RequestID == "targets" })
 	var want []protocol.ExecutionTarget
 	for _, target := range fakeagent.ServerTargets(folder) {
 		want = append(want, protocol.ExecutionTarget{ID: target.ID, Name: target.Name, Available: target.Available, Detail: target.Detail})
 	}
 	if !listed.Success || !slices.Equal(listed.Targets, want) {
-		t.Fatalf("Sigma's targets for %s = %+v, want %+v", folder, listed, want)
+		t.Fatalf("the server's targets for %s = %+v, want %+v", folder, listed, want)
 	}
 
 }
 
-func TestASigmaConversationStartsOnTheTargetItsSessionLaunchedWith(t *testing.T) {
+func TestAServerConversationStartsOnTheTargetItsSessionLaunchedWith(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newWorld(t, fakeagent.Sigma)
+			w := newWorld(t, fakeagent.SampleServer)
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			_, view, server := appServerSession(t, w, app, fakeagent.Sigma, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
+			_, view, server := appServerSession(t, w, app, fakeagent.SampleServer, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
 			if started := server.Started(view.ConversationID); started.Target != "devvm" {
 				t.Fatalf("the conversation started on %q, want devvm", started.Target)
 			}
@@ -163,11 +163,11 @@ func TestASigmaConversationStartsOnTheTargetItsSessionLaunchedWith(t *testing.T)
 	}
 }
 
-func TestASigmaSessionWhoseTargetIsUnavailableKeepsItsErrorAndTriesThatTargetAgainOnResumeAndReopen(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+func TestAServerSessionWhoseTargetIsUnavailableKeepsItsErrorAndTriesThatTargetAgainOnResumeAndReopen(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
-	registerSigmaDriver(t, w, app)
-	session := w.Spawn(app, fakeagent.Sigma, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("gone") })
+	registerSampleServerDriver(t, w, app)
+	session := w.Spawn(app, fakeagent.SampleServer, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("gone") })
 	failed, failure := w.LaunchFailed(session)
 	if target, _ := flagValue(failed.Argv, "--target"); target != "gone" || !strings.Contains(failure, "TargetUnavailable") {
 		t.Fatalf("the view ran %q and failed with %q, want it opened on target gone and refused as TargetUnavailable", failed.Argv, failure)
@@ -198,11 +198,11 @@ func TestASigmaSessionWhoseTargetIsUnavailableKeepsItsErrorAndTriesThatTargetAga
 }
 
 func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(testworld.WorkerPTY))
 	s.Start()
 	w := &world{World: s.World}
 	app := s.App()
-	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
 	promptUntilWorking(app, session, view, server, "which index")
 	server.Reply(view.ConversationID, "By date? <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool {
@@ -223,7 +223,7 @@ func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
 	verdict := s.PauseAt(pausepoint.ClassifierVerdictApplied)
 	s.Start()
 	app = s.App()
-	registerSigmaDriver(t, w, app)
+	registerSampleServerDriver(t, w, app)
 	recovery.Await()
 	verdict.Await()
 	verdict.Release()
@@ -232,7 +232,7 @@ func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
 	if again.ConversationID != view.ConversationID {
 		t.Fatal("view recovery changed conversation")
 	}
-	neighbor := s.Spawn(app, fakeagent.Sigma, s.Path("neighbor"))
+	neighbor := s.Spawn(app, fakeagent.SampleServer, s.Path("neighbor"))
 	neighborView := s.Launched(neighbor)
 	promptUntilWorking(app, neighbor, neighborView, server, "sync status after recovery")
 	server.Reply(neighborView.ConversationID, "Synced. <!-- attn:state=idle -->")
@@ -247,7 +247,7 @@ func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
 		s.Stop()
 		s.Start()
 		app = s.App()
-		registerSigmaDriver(t, w, app)
+		registerSampleServerDriver(t, w, app)
 		server.AskApproval(neighborView.ConversationID)
 		testworld.AwaitSessionFromConnect(app, neighbor, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
 		server.Work(neighborView.ConversationID)
@@ -259,12 +259,12 @@ func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
 	}
 }
 
-func TestASigmaRunThatStartsAndEndsWhileAttnIsDownOwesTheUserItsQuestion(t *testing.T) {
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.WorkerPTY))
+func TestAServerRunThatStartsAndEndsWhileAttnIsDownOwesTheUserItsQuestion(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(testworld.WorkerPTY))
 	s.Start()
 	w := &world{World: s.World}
 	app := s.App()
-	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
 	promptUntilWorking(app, session, view, server, "which index")
 	server.Reply(view.ConversationID, "By date? <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool {
@@ -280,7 +280,7 @@ func TestASigmaRunThatStartsAndEndsWhileAttnIsDownOwesTheUserItsQuestion(t *test
 	server.Reply(view.ConversationID, "Built. Keep the old index? <!-- attn:state=waiting_input -->")
 	s.Start()
 	app = s.App()
-	registerSigmaDriver(t, w, app)
+	registerSampleServerDriver(t, w, app)
 	testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool {
 		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed) && protocol.Deref(x.TurnOpenedAt) != protocol.Deref(settled.TurnOpenedAt)
 	})

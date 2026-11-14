@@ -162,7 +162,7 @@ cp -R examples/plugins/sample-server /tmp/my-server-plugin
 attn plugin install --path /tmp/my-server-plugin
 ```
 
-The sample expects an executable speaking the fake server's Sigma-compatible protocol, supplied by
+The sample expects an executable speaking `attn-app-server-v1`, supplied by
 `ATTN_SAMPLE_SERVER_EXECUTABLE` or `sample-server` on PATH. Set `SAMPLE_SERVER_HOME` in the
 daemon's environment to select an existing server home. The default is
 `~/.sample-server`. The isolated stack check supplies the fake app-server,
@@ -183,7 +183,7 @@ server: {
   homeEnv: "SAMPLE_SERVER_HOME",
   defaultHome: ".sample-server",
   socketName: "sample-server.sock",
-  initialize: { server: "sigma", protocol: { exact: 1 } },
+  initialize: { server: "sample-server", protocol: { exact: 1 } },
   callerConversationEnv: "SAMPLE_SERVER_ROOT_CONVERSATION",
   onClose: "leave-running",
   recovery: "numbered-completions",

@@ -212,7 +212,7 @@ func TestACodexQuietStopIsJudgedByCodexAtTheClassifiersEffort(t *testing.T) {
 
 func TestAnAppServerQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	judged := make(chan string, 2)
-	w := newTitlingWorld(t, fakeagent.Sigma, fakeagent.Claude)
+	w := newTitlingWorld(t, fakeagent.SampleServer, fakeagent.Claude)
 	w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
 		switch {
 		case strings.Contains(task.Prompt, quietStopQuestion):
@@ -228,9 +228,9 @@ func TestAnAppServerQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	setSetting(t, app, "queue_mode_enabled", "true")
 	setAnalyticsEnabled(app, "true")
 	registerSessions(t, w, w.Client(), "reviewer")
-	session, nisse, server := appServerSession(t, w, app, fakeagent.Sigma, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
-	conversation := nisse.ConversationID
-	nisse.Prompted()
+	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
+	conversation := view.ConversationID
+	view.Prompted()
 	server.Prompted(conversation)
 	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	server.Reply(conversation, "Planned the refund flow. <!-- attn:state=idle -->")
@@ -250,7 +250,7 @@ func TestAnAppServerQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	ringAndAnswer("the review is in", "The refund bug is fixed and landed. <!-- attn:state=idle -->")
 	ringAndAnswer("the deploy is in", "The deploy finished with no errors. <!-- attn:state=idle -->")
 	verdicts := verdictsOnceTheDaemonHasStopped(t, w, session)
-	registerSigmaDriver(t, w, w.App())
+	registerSampleServerDriver(t, w, w.App())
 	if revived := w.Launched(session); revived.ConversationID != conversation {
 		t.Errorf("the restart revived AppServer on conversation %q, want %q", revived.ConversationID, conversation)
 	}

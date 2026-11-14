@@ -37,7 +37,7 @@ client.driver({
     homeEnv: "SAMPLE_SERVER_HOME",
     defaultHome: ".sample-server",
     socketName: "sample-server.sock",
-    initialize: { server: "sigma", protocol: { exact: 1 } },
+    initialize: { server: "sample-server", protocol: { exact: 1 } },
     callerConversationEnv: "SAMPLE_SERVER_ROOT_CONVERSATION",
     onClose: "leave-running",
     recovery: "numbered-completions",

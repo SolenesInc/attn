@@ -82,7 +82,7 @@ func TestAnAppServerSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *t
 		t.Fatalf("the TUI came back on conversation %s, want %s", revived.ConversationID, conversation)
 	}
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
-	if servers := s.AppServers(fakeagent.Nisse); servers != 1 {
+	if servers := s.AppServers(fakeagent.Sigma); servers != 1 {
 		t.Errorf("AppServer servers launched = %d, want the one still waiting on the approval", servers)
 	}
 
@@ -134,7 +134,7 @@ func TestAnAppServerSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *test
 
 func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.AppServer, string) {
 	t.Helper()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Nisse), testworld.OnPTYBackend(testworld.SharedHostPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.SharedHostPTY))
 	s.Start()
 	app := s.App()
 	startLastRunTestDriver(t, s, app)
@@ -143,7 +143,7 @@ func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testwor
 	s.EnableSharedHost(app)
 	session := s.Spawn(app, fakeagent.Harness(serverPluginAgent), s.Path("shop"))
 	tui := s.Launched(session)
-	server := s.AppServer(fakeagent.Nisse)
+	server := s.AppServer(fakeagent.Sigma)
 	conversation := tui.ConversationID
 	mark := len(app.Log())
 	app.Type(session, "rename the orders table\r", userKeystroke)
@@ -157,16 +157,16 @@ func startLastRunTestDriver(t *testing.T, s *testworld.Stack, app *testworld.Pee
 	t.Helper()
 	w := &world{World: s.World}
 	declaration := map[string]any{
-		"protocol": "attn-app-server-v1", "executable": filepath.Join(s.Dir, "bin", "nisse"),
-		"serve_args": []string{"serve"}, "home_env": "NISSE_HOME", "default_home": ".nisse", "socket_name": "nisse.sock",
-		"initialize": map[string]any{"protocol": map[string]int{"min": 7}}, "caller_conversation_env": "NISSE_ROOT_CONVERSATION",
+		"protocol": "attn-app-server-v1", "executable": filepath.Join(s.Dir, "bin", "sigma"),
+		"serve_args": []string{"serve"}, "home_env": "SIGMA_HOME", "default_home": ".sigma", "socket_name": "sigma.sock",
+		"initialize": map[string]any{"protocol": map[string]int{"min": 1}}, "caller_conversation_env": "SIGMA_ROOT_CONVERSATION",
 	}
 	declaration["recovery"] = "last-run"
 	declaration["on_close"] = "interrupt"
 	driver := registerServerDriver(t, w, "last-run-server", declaration)
 	driver.mu.Lock()
 	driver.holdLaunch = false
-	driver.serverExecutable = filepath.Join(s.Dir, "bin", "nisse")
+	driver.serverExecutable = filepath.Join(s.Dir, "bin", "sigma")
 	driver.mu.Unlock()
 	awaitDriverAvailable(app, serverPluginAgent)
 }
@@ -189,7 +189,7 @@ func TestAnAppServerSessionSurvivesAStartupWithoutItsPluginOrViewRuntime(t *test
 		t.Fatalf("registration opened conversation %s, want %s", view.ConversationID, conversation)
 	}
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
-	if servers := s.AppServers(fakeagent.Nisse); servers != 1 {
+	if servers := s.AppServers(fakeagent.Sigma); servers != 1 {
 		t.Fatalf("registration started %d servers, want the existing one", servers)
 	}
 }

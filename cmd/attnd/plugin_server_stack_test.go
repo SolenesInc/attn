@@ -62,7 +62,7 @@ func serverInput(app *testworld.Peer, session, id, text string) protocol.Session
 func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAndRestarts(t *testing.T) {
 	for _, backend := range testworld.WorkerAndSharedHost {
 		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(backend))
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(backend))
 			gatePath := filepath.Join(s.Dir, "plugin-gate.sock")
 			listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: gatePath, Net: "unix"})
 			if err != nil {
@@ -89,11 +89,11 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 					t.Fatalf("registration: %q %v", line, err)
 				}
 			}
-			callerVariable := "SIGMA_ROOT_CONVERSATION"
+			callerVariable := "INSTALLED_SERVER_ROOT_CONVERSATION"
 			if backend == testworld.WorkerPTY {
 				callerVariable = "SAMPLE_SERVER_ROOT_CONVERSATION"
 			}
-			s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sigma"), "ATTN_TEST_SERVER_CALLER_ENV="+callerVariable, "ATTN_TEST_SERVER_HOME_ENV=SAMPLE_SERVER_HOME", "ATTN_TEST_SERVER_SOCKET=sample-server.sock", "SAMPLE_SERVER_HOME="+filepath.Join(s.Dir, "sample-server-home"))
+			s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sample-server"), "ATTN_TEST_SERVER_CALLER_ENV="+callerVariable, "SAMPLE_SERVER_HOME="+filepath.Join(s.Dir, "sample-server-home"))
 			s.Start()
 			app := s.App()
 			id := "installed_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
@@ -106,8 +106,8 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			control := accept()
 			register(control)
 			awaitAgentAvailable(app, fakeagent.Harness(id))
-			s.Launch(testworld.Invocation{Binary: filepath.Join(s.Dir, "bin", "sigma"), Args: []string{"serve"}})
-			server := s.AppServer(fakeagent.Sigma)
+			s.Launch(testworld.Invocation{Binary: filepath.Join(s.Dir, "bin", "sample-server"), Args: []string{"serve"}})
+			server := s.AppServer(fakeagent.SampleServer)
 			session := s.Spawn(app, fakeagent.Harness(id), s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
 			view := s.Launched(session)
 			conversation := view.ConversationID
@@ -289,7 +289,7 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			control = accept()
 			direct("hidden while plugin restarts")
 			register(control)
-			if n := s.AppServers(fakeagent.Sigma); n != 1 {
+			if n := s.AppServers(fakeagent.SampleServer); n != 1 {
 				t.Fatalf("recovery started %d servers", n)
 			}
 			t.Logf("plugin restart, late registration after live-view and zero-view daemon restarts: same session %s and profile %s, one server, direct request IDs", session, profile)
@@ -350,7 +350,7 @@ func TestAPlainShellCommandDoesNotReadTheHarnessCatalog(t *testing.T) {
 func TestAPluginServerSurvivesItsStartingAliasUninstallAndDaemonRestart(t *testing.T) {
 	for _, backend := range testworld.WorkerAndSharedHost {
 		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(backend))
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(backend))
 			gate := filepath.Join(s.Dir, "aliases.sock")
 			listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: gate, Net: "unix"})
 			if err != nil {
@@ -373,7 +373,7 @@ func TestAPluginServerSurvivesItsStartingAliasUninstallAndDaemonRestart(t *testi
 					t.Fatalf("alias registration: %q %v", line, err)
 				}
 			}
-			s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sigma"), "ATTN_TEST_SERVER_CALLER_ENV=SAMPLE_SERVER_ROOT_CONVERSATION", "ATTN_TEST_SERVER_HOME_ENV=SAMPLE_SERVER_HOME", "ATTN_TEST_SERVER_SOCKET=sample-server.sock", "SAMPLE_SERVER_HOME="+filepath.Join(s.Dir, "sample-home"))
+			s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sample-server"), "ATTN_TEST_SERVER_CALLER_ENV=SAMPLE_SERVER_ROOT_CONVERSATION", "SAMPLE_SERVER_HOME="+filepath.Join(s.Dir, "sample-home"))
 			s.Start()
 			app := s.App()
 			sdk := packSDK(t)
@@ -396,7 +396,7 @@ func TestAPluginServerSurvivesItsStartingAliasUninstallAndDaemonRestart(t *testi
 			}
 			a := s.Spawn(app, fakeagent.Harness("starting_alias"), s.Path("first"))
 			s.Launched(a)
-			server := s.AppServer(fakeagent.Sigma)
+			server := s.AppServer(fakeagent.SampleServer)
 			pid := server.PID()
 			b := s.Spawn(app, fakeagent.Harness("surviving_alias"), s.Path("second"))
 			view := s.Launched(b)
@@ -416,10 +416,10 @@ func TestAPluginServerSurvivesItsStartingAliasUninstallAndDaemonRestart(t *testi
 				t.Fatalf("surviving alias: %+v", result)
 			}
 			got := server.Prompted(view.ConversationID)
-			if got.Text != "after alias uninstall and restart" || s.AppServer(fakeagent.Sigma).PID() != pid || s.AppServers(fakeagent.Sigma) != 1 {
+			if got.Text != "after alias uninstall and restart" || s.AppServer(fakeagent.SampleServer).PID() != pid || s.AppServers(fakeagent.SampleServer) != 1 {
 				t.Fatalf("shared server replaced: input=%+v original PID=%d", got, pid)
 			}
-			if initializations, watches := s.AppServer(fakeagent.Sigma).ControlCounts(); initializations != 2 || watches != 2 {
+			if initializations, watches := s.AppServer(fakeagent.SampleServer).ControlCounts(); initializations != 2 || watches != 2 {
 				t.Fatalf("aliases/restart initialized %d controls and %d watches, want one per daemon", initializations, watches)
 			}
 			t.Logf("starting alias uninstalled; %s daemon restart preserved server PID %d and session %s conversation %s", backend, pid, b, view.ConversationID)

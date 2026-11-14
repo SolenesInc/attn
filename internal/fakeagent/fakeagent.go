@@ -116,14 +116,14 @@ type exitParams struct {
 }
 
 var programs = map[string]func(config) int{
-	string(Claude): runClaude,
-	string(Codex):  runCodex,
-	string(Plug):   runPlugTerminal,
-	string(Nisse):  appServerProgram(Nisse),
-	string(Sigma):  appServerProgram(Sigma),
-	plugPluginName: runPlugDriver,
-	wrapperName:    runWrapperTripwire,
-	miseName:       runMise,
+	string(Claude):       runClaude,
+	string(Codex):        runCodex,
+	string(Plug):         runPlugTerminal,
+	string(Sigma):        appServerProgram(Sigma),
+	string(SampleServer): appServerProgram(SampleServer),
+	plugPluginName:       runPlugDriver,
+	wrapperName:          runWrapperTripwire,
+	miseName:             runMise,
 }
 
 func Main() {

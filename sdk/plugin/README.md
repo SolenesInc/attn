@@ -109,8 +109,8 @@ does not change API 7 for existing plugins.
 
 `attn guide writing-harness-plugins` describes the declaration, RPC contract
 and install recipe.
-`examples/plugins/sample-server` prepares views speaking the fake server's
-Sigma-compatible protocol and runs
+`examples/plugins/sample-server` prepares views of a server speaking
+`attn-app-server-v1` and runs
 against the repository's fake app-server in the stack verification.
 
 A plugin disconnect leaves an established server binding usable. After a daemon

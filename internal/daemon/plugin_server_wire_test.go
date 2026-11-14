@@ -16,10 +16,10 @@ const serverPluginAgent = "other-server-harness"
 
 func serverDriverDeclaration(w *world) map[string]any {
 	return map[string]any{
-		"protocol": "attn-app-server-v1", "executable": filepath.Join(w.Dir, "bin", "sigma"),
-		"serve_args": []string{"serve"}, "home_env": "SIGMA_HOME", "default_home": ".sigma", "socket_name": "sigma.sock",
-		"initialize":              map[string]any{"server": "sigma", "protocol": map[string]int{"exact": 1}},
-		"caller_conversation_env": "SIGMA_ROOT_CONVERSATION", "on_close": "leave-running", "recovery": "numbered-completions", "targets": true,
+		"protocol": "attn-app-server-v1", "executable": filepath.Join(w.Dir, "bin", "sample-server"),
+		"serve_args": []string{"serve"}, "home_env": "SAMPLE_SERVER_HOME", "default_home": ".sample-server", "socket_name": "sample-server.sock",
+		"initialize":              map[string]any{"server": "sample-server", "protocol": map[string]int{"exact": 1}},
+		"caller_conversation_env": "SAMPLE_SERVER_ROOT_CONVERSATION", "on_close": "leave-running", "recovery": "numbered-completions", "targets": true,
 	}
 }
 
@@ -55,7 +55,7 @@ func spawnPluginServerView(w *world, app *testworld.Peer, driver *driverPeer, ed
 	if params.Conversation == "" {
 		w.T.Fatal("server view launch has no conversation_id")
 	}
-	argv := []string{filepath.Join(w.Dir, "bin", "sigma"), "--attach", "--conversation", params.Conversation}
+	argv := []string{filepath.Join(w.Dir, "bin", "sample-server"), "--attach", "--conversation", params.Conversation}
 	if params.Target != "" {
 		argv = append(argv, "--target", params.Target)
 	}
@@ -68,12 +68,12 @@ func spawnPluginServerView(w *world, app *testworld.Peer, driver *driverPeer, ed
 }
 
 func TestAPluginServerBindingUsesTheSharedServerForInputModelsAndTargets(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
 	driver := registerServerDriver(t, w, "server-example", serverDriverDeclaration(w))
 	awaitDriverAvailable(app, serverPluginAgent)
 	session, view := spawnPluginServerView(w, app, driver, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("local") })
-	server := w.AppServer(fakeagent.Sigma)
+	server := w.AppServer(fakeagent.SampleServer)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	delivery := uuid.NewString()
 	for range 2 {
@@ -111,13 +111,13 @@ func TestAPluginServerBindingUsesTheSharedServerForInputModelsAndTargets(t *test
 		t.Fatalf("disconnected delivery: %+v", r)
 	}
 	server.Prompted(view.ConversationID)
-	if n := w.AppServers(fakeagent.Sigma); n != 1 {
+	if n := w.AppServers(fakeagent.SampleServer); n != 1 {
 		t.Fatalf("started %d servers", n)
 	}
 }
 
 func TestAPluginServerDeclarationRejectsUnknownProtocolsCapabilitiesAndOwners(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
 	d := dialDriver(t, w, "owner")
 	d.agent = serverPluginAgent
@@ -161,10 +161,10 @@ func TestAPluginServerDeclarationRejectsUnknownProtocolsCapabilitiesAndOwners(t 
 }
 
 func TestAPluginServerHandshakeMismatchFailsBeforeLaunchingAView(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
 	declaration := serverDriverDeclaration(w)
-	declaration["initialize"] = map[string]any{"server": "sigma", "protocol": map[string]int{"exact": 99}}
+	declaration["initialize"] = map[string]any{"server": "sample-server", "protocol": map[string]int{"exact": 99}}
 	registerServerDriver(t, w, "wrong-protocol", declaration)
 	awaitDriverAvailable(app, serverPluginAgent)
 	result := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: serverPluginAgent, RequestID: "wrong"}, protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "wrong" })
@@ -174,9 +174,9 @@ func TestAPluginServerHandshakeMismatchFailsBeforeLaunchingAView(t *testing.T) {
 }
 
 func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
-	session, view, _ := appServerSession(t, w, app, fakeagent.Sigma)
+	session, view, _ := appServerSession(t, w, app, fakeagent.SampleServer)
 	alias := registerServerDriver(t, w, "alias", serverDriverDeclaration(w))
 	awaitDriverAvailable(app, serverPluginAgent)
 	side := createProfile(app, "Side")
@@ -189,7 +189,7 @@ func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *tes
 			t.Fatalf("alias refusal: %+v", refused)
 		}
 	}
-	if got := queriedSession(t, w.Client(), session); got.Agent != "sigma" || got.ProfileID != app.SelectedProfile() {
+	if got := queriedSession(t, w.Client(), session); got.Agent != "sample-server" || got.ProfileID != app.SelectedProfile() {
 		t.Fatalf("alias changed original owner: %+v", got)
 	}
 	sideApp := w.AppOn(side.ID)
@@ -205,7 +205,7 @@ func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *tes
 }
 
 func TestAPluginServerCannotClaimABuiltInLinkName(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	d := dialDriver(t, w, "reserved")
 	for _, agent := range []string{"codex-app", "codex-server", "codex-server-alias"} {
 		for _, server := range []bool{false, true} {
@@ -222,22 +222,22 @@ func TestAPluginServerCannotClaimABuiltInLinkName(t *testing.T) {
 }
 
 func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
-	registerSigmaDriver(t, w, app)
+	registerSampleServerDriver(t, w, app)
 	driver := registerServerDriver(t, w, "alias", serverDriverDeclaration(w))
 	awaitDriverAvailable(app, serverPluginAgent)
 	if err := os.MkdirAll(w.Path("shop"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	original := uuid.NewString()
-	app.Send(protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(original), Agent: "sigma", Cwd: w.Path("shop"), ProfileID: app.SelectedProfile(), Cols: 80, Rows: 24})
+	app.Send(protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(original), Agent: "sample-server", Cwd: w.Path("shop"), ProfileID: app.SelectedProfile(), Cols: 80, Rows: 24})
 	alias, view := spawnPluginServerView(w, app, driver)
 	started := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == original })
 	if !started.Success {
 		t.Fatalf("concurrent registered view: %+v", started)
 	}
-	native, server := w.Launched(original), w.AppServer(fakeagent.Sigma)
+	native, server := w.Launched(original), w.AppServer(fakeagent.SampleServer)
 	for _, run := range []struct {
 		session      string
 		conversation string
@@ -252,7 +252,7 @@ func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T
 	if initializes != 1 || watches != 1 {
 		t.Fatalf("shared endpoint initialized %d control connections and %d watches, want one each", initializes, watches)
 	}
-	if n := w.AppServers(fakeagent.Sigma); n != 1 {
+	if n := w.AppServers(fakeagent.SampleServer); n != 1 {
 		t.Fatalf("started %d shared servers", n)
 	}
 	server.Reply(native.ConversationID, "First done. <!-- attn:state=idle -->")
@@ -264,7 +264,7 @@ func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T
 func TestAPluginServerWithLastRunRecoveryInterruptsOnClose(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
 	declaration := serverDriverDeclaration(w)
 	declaration["on_close"] = "interrupt"
@@ -272,7 +272,7 @@ func TestAPluginServerWithLastRunRecoveryInterruptsOnClose(t *testing.T) {
 	driver := registerServerDriver(t, w, "interrupting-server", declaration)
 	awaitDriverAvailable(app, serverPluginAgent)
 	session, view := spawnPluginServerView(w, app, driver)
-	server := w.AppServer(fakeagent.Sigma)
+	server := w.AppServer(fakeagent.SampleServer)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if r := submitSessionAnnotationFeedbackAs(app, session, uuid.NewString(), "work through restart"); !r.Success {
 		t.Fatal(r)
@@ -298,7 +298,7 @@ func TestAPluginServerWithLastRunRecoveryInterruptsOnClose(t *testing.T) {
 }
 
 func TestAPluginServerInterruptsWhenItsViewQuits(t *testing.T) {
-	w := newWorld(t, fakeagent.Sigma)
+	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
 	declaration := serverDriverDeclaration(w)
 	declaration["on_close"] = "interrupt"
@@ -306,7 +306,7 @@ func TestAPluginServerInterruptsWhenItsViewQuits(t *testing.T) {
 	driver := registerServerDriver(t, w, "interrupting-view", declaration)
 	awaitDriverAvailable(app, serverPluginAgent)
 	session, view := spawnPluginServerView(w, app, driver)
-	server := w.AppServer(fakeagent.Sigma)
+	server := w.AppServer(fakeagent.SampleServer)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if r := submitSessionAnnotationFeedbackAs(app, session, uuid.NewString(), "work until quit"); !r.Success {
 		t.Fatal(r)
@@ -323,10 +323,10 @@ func TestAPluginServerInterruptsWhenItsViewQuits(t *testing.T) {
 func TestAPluginServerKeepsTheConfiguredExecutableOnLaunchAndReload(t *testing.T) {
 	for _, source := range []string{"session", "machine", "environment"} {
 		t.Run(source, func(t *testing.T) {
-			w := newWorld(t, fakeagent.Sigma)
+			w := newWorld(t, fakeagent.SampleServer)
 			app := w.App()
-			executable := filepath.Join(w.Dir, "selected-sigma")
-			script := "#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=selected\nexec '" + filepath.Join(w.Dir, "bin", "sigma") + "' \"$@\"\n"
+			executable := filepath.Join(w.Dir, "selected-sample-server")
+			script := "#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=selected\nexec '" + filepath.Join(w.Dir, "bin", "sample-server") + "' \"$@\"\n"
 			if err := os.WriteFile(executable, []byte(script), 0755); err != nil {
 				t.Fatal(err)
 			}
@@ -365,7 +365,7 @@ func TestAPluginServerKeepsTheConfiguredExecutableOnLaunchAndReload(t *testing.T
 				}
 			}
 			check(w.Launched(session))
-			if got, _ := envEntry(w.AppServer(fakeagent.Sigma).Env(), "ATTN_TEST_EXECUTABLE"); got != "selected" {
+			if got, _ := envEntry(w.AppServer(fakeagent.SampleServer).Env(), "ATTN_TEST_EXECUTABLE"); got != "selected" {
 				t.Fatalf("server selected executable %q", got)
 			}
 			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
