@@ -73,6 +73,28 @@ fn a_press_aimed_by_role_and_name_lands_on_that_element_and_says_so() {
 }
 
 #[test]
+fn a_key_with_a_name_matches_only_while_that_element_carries_the_name() {
+    let mut world = two_tiles();
+
+    let named = world
+        .automate(
+            "find",
+            json!({"target": {"key": "tile.t2", "name": "Agent t2"}}),
+        )
+        .unwrap();
+    assert_eq!(named["key"], "tile.t2", "{named}");
+
+    let renamed = world.automate(
+        "find",
+        json!({"target": {"key": "tile.t2", "name": "Agent t1"}}),
+    );
+    assert!(
+        renamed.as_ref().map_or(true, |found| found.is_null()),
+        "another name does not match: {renamed:?}"
+    );
+}
+
+#[test]
 fn a_press_through_the_veil_on_an_inactive_agent_lands_on_its_terminal() {
     let mut world = two_tiles();
     assert_eq!(keyboard(&mut world), "t1");

@@ -2,12 +2,15 @@ use rune::{ElementInfo, Runtime};
 use serde::{Deserialize, Serialize};
 
 /// An element named the way a person or an assistive tool would: by its key, or by its role
-/// and accessible name. A role alone matches its first element.
+/// and accessible name. A role alone matches its first element, and a key with a name matches
+/// only while that element carries the name.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Target {
     Key {
         key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
     },
     Role {
         role: String,
@@ -36,16 +39,16 @@ pub struct Found {
     pub(crate) moving: bool,
 }
 
+fn named(e: &ElementInfo, name: &Option<String>) -> bool {
+    name.as_ref()
+        .is_none_or(|name| accessible_name(e) == Some(name))
+}
+
 impl Target {
     fn matches(&self, e: &ElementInfo) -> bool {
         match self {
-            Target::Key { key } => e.key.as_deref() == Some(key),
-            Target::Role { role, name } => {
-                e.role == role
-                    && name
-                        .as_ref()
-                        .is_none_or(|name| accessible_name(e) == Some(name))
-            }
+            Target::Key { key, name } => e.key.as_deref() == Some(key) && named(e, name),
+            Target::Role { role, name } => e.role == role && named(e, name),
         }
     }
 

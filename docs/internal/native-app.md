@@ -66,7 +66,9 @@ newline-delimited JSON over loopback TCP, `{id, token, action, payload}` in and
 actions are the native app's own.
 
 A target names an element by its key, `{"key": "sidebar"}`, or by its role and
-accessible name, `{"role": "group", "name": "Agent t2"}`. Pointer actions wait
+accessible name, `{"role": "group", "name": "Agent t2"}`. A key with a name,
+`{"key": "ledger.row.a.verb", "name": "Unkeep"}`, matches only while that
+element carries the name, so `wait` on it waits for the name to change. Pointer actions wait
 for the element to appear and stop moving, scroll it into view, and reply with a
 receipt that says which element the press landed on. Every reply comes after the
 app handled the request's input: its handlers ran, and the commands they sent

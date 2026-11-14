@@ -95,7 +95,7 @@ Steps:
 
 - Wire: `native/crates/attn-app/tests/wire/callouts.rs` (the native app), `internal/daemon/callouts_wire_test.go`.
 - Stack: `cmd/attnd/callout_stack_test.go`.
-- Scenario: `callouts`.
+- Scenario: `native-callouts` in the native app, `callouts` in the Tauri app.
 - App: `app/src/App.callouts.test.tsx`.
 
 ## Gotchas

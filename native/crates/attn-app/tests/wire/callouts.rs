@@ -366,6 +366,10 @@ fn an_agent_step_in_queue_flow_opens_the_agent_list_and_enter_shows_the_agent() 
     let ring = ring(&world).unwrap();
     assert_eq!(ring[1], row[1] - 3.0);
     assert_eq!(next_name(&world).as_deref(), Some("↵ Go there"));
+    assert!(
+        world.runtime_is_at_rest(),
+        "an open callout draws no frames"
+    );
 
     key(&mut world, Key::Enter);
     assert_eq!(
