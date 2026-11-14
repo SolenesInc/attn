@@ -16,8 +16,8 @@ use std::rc::Rc;
 
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{radius, space, type_};
-use rune::{El, Image, LinkPaint, ScrollSpec, Span, Tx, col, memo, text};
-use rune_kit::{CodeFrame, ImageFrame, Markdown};
+use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
+use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle};
 
 use crate::State;
 
@@ -246,6 +246,7 @@ pub(crate) fn reader(
                 )
             })
         });
+    let markdown = markdown.style(look(t));
     let (
         Some(Marking {
             tile,
@@ -281,12 +282,58 @@ fn details_order(source: &str) -> Rc<dyn Fn(usize) -> usize> {
     Rc::new(move |at| starts.partition_point(|&start| start < at))
 }
 
+/// The Tauri reader's type and marks (MarkdownReader.css): 15 point paragraphs, 22, 19 and 16
+/// point headings, 13 point code that keeps its lines whole and scrolls sideways, tables at
+/// their columns' natural widths, and round task checkboxes.
+fn look(t: &Tokens) -> MarkdownStyle {
+    let kit = attn_ui::kit(t);
+    let body = TextStyle {
+        size: 15.0,
+        line_height: 24.4,
+        ..kit.ty.body
+    };
+    let heading = |size: f32, weight: f32, line_height: f32| TextStyle {
+        size,
+        weight,
+        line_height,
+        ..body
+    };
+    MarkdownStyle::from_kit(kit)
+        .body_font(body)
+        .heading_font(1, heading(22.0, 700.0, 28.6))
+        .heading_font(2, heading(19.0, 600.0, 26.6))
+        .heading_font(3, heading(16.0, 600.0, 24.8))
+        .heading_font(4, heading(16.0, 600.0, 24.8))
+        .inline_code_font(14.0 / 15.0, 400.0)
+        .code_block_font(TextStyle {
+            size: 13.0,
+            line_height: 17.0,
+            ..kit.ty.mono
+        })
+        .table_font(TextStyle {
+            size: 14.0,
+            line_height: 17.0,
+            ..body
+        })
+        .task_checkbox(
+            16.0,
+            8.0,
+            8.0,
+            None,
+            t.success,
+            t.bg_app,
+            Color::TRANSPARENT,
+            t.text_secondary.alpha(0.5),
+        )
+}
+
 /// `source` as the reader reads it, which a mark's passage is found in.
 fn read_as(source: &str) -> Markdown {
     Markdown::new(source.to_owned())
         .selectable(true)
         .smart_punctuation(true)
         .block_keys(anchors::heading_keys(source))
+        .scroll_wide(true)
 }
 
 /// A code block's card with a button that copies its code, shown while the pointer is over the
