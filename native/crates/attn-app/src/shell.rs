@@ -570,11 +570,20 @@ fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .on_close_tx(close_layer)
         .child(
             col()
-                .key("body")
+                .key("shortcuts.list")
                 .w_full()
-                .gap(space::S2)
-                .padding(space::S6)
-                .children(cheat_sheet(&state.keymap, t)),
+                .grow(1.0)
+                .min_h(0.0)
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(
+                    col()
+                        .w_full()
+                        .gap(space::S2)
+                        .padding(space::S6)
+                        .children(cheat_sheet(&state.keymap, t)),
+                ),
         )
         .build(k, layers);
 }

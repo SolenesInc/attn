@@ -758,3 +758,39 @@ fn a_click_on_a_title_bar_button_leaves_the_keyboard_with_the_terminal() {
 
     assert_eq!(typed(&world), [typed_into("r1", "x")]);
 }
+
+#[test]
+fn the_last_shortcut_scrolls_into_the_cheat_sheet_by_wheel_and_by_end() {
+    let in_view = |world: &World, target: Target| {
+        let screen = world.screen();
+        let list = screen.bounds(Target::key("shortcuts.list")).unwrap();
+        let row = screen.bounds(target).unwrap();
+        row[1] >= list[1] && row[1] + row[3] <= list[1] + list[3]
+    };
+    let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
+    world.gesture(|app| app.key(chord(&Action::UiShowShortcuts)));
+    let last = world
+        .screen()
+        .children(Target::key("shortcuts.App"))
+        .pop()
+        .and_then(|n| n.key)
+        .map(Target::key)
+        .unwrap();
+    assert!(!in_view(&world, last.clone()));
+
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key("shortcuts.list"))
+        .unwrap();
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(rune::WheelEvent::new(0.0, -10_000.0).at(x + w / 2.0, y + h / 2.0))
+    });
+    assert!(in_view(&world, last.clone()));
+
+    world.gesture(|app| app.press("home"));
+    assert!(!in_view(&world, last.clone()));
+    world.gesture(|app| app.press("end"));
+    assert!(in_view(&world, last));
+    rest(&mut world);
+}
