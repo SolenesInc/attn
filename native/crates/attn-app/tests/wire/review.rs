@@ -510,3 +510,56 @@ fn renders_a_review_document_as_plain_markdown_with_no_keys_when_the_tile_carrie
     let document = world.screen().get(Target::key("tile.m.document"));
     assert_eq!(document.active_descendant, None);
 }
+
+#[test]
+fn walks_on_through_two_stops_that_show_the_same_line() {
+    let stop = |heading_line: i64, from: i64, rows: Vec<ReviewRow>| ReviewStop {
+        heading_line,
+        path: "x.go".into(),
+        from,
+        to: from + 1,
+        now_from: from,
+        now_to: from + 1,
+        file_hash: "h".into(),
+        rows,
+        ..ReviewStop::default()
+    };
+    let review = ReviewBundle {
+        frame: "brief".into(),
+        repository: "/repo".into(),
+        head: "9f3a7e2".into(),
+        stops: vec![
+            stop(
+                7,
+                1,
+                vec![
+                    line(" ", Some(1), Some(1), "a"),
+                    line(" ", Some(2), Some(2), "b"),
+                ],
+            ),
+            stop(
+                9,
+                2,
+                vec![
+                    line(" ", Some(2), Some(2), "b"),
+                    line(" ", Some(3), Some(3), "c"),
+                ],
+            ),
+        ],
+        ..ReviewBundle::default()
+    };
+    let mut world = start();
+    deliver(
+        &mut world,
+        "---\nattn: review\n---\n\n# Overlap\n\n### x.go:1-2\n\n### x.go:2-3\n",
+        Some(review),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    for _ in 0..6 {
+        press(&mut world, Key::Down);
+    }
+    assert_eq!(cursor(&world).name.as_deref(), Some("unchanged line 3: c"));
+    press(&mut world, Key::Up);
+    assert!(cursor_in_stop(&world, "x.go L2–3"));
+    assert_eq!(cursor(&world).name.as_deref(), Some("unchanged line 2: b"));
+}

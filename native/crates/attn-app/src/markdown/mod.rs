@@ -118,7 +118,11 @@ pub(crate) fn body(
             title,
             (&content.content, bundle, *revision),
             &readings.reviews,
-            &|source: &str| read_source(source, None),
+            (&|source: &str| read_source(source, None), {
+                let mut h = std::hash::DefaultHasher::new();
+                std::hash::Hash::hash(&(session, &version.3, version.4, &kept), &mut h);
+                std::hash::Hasher::finish(&h)
+            }),
             t,
         );
     }

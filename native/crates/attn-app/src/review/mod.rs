@@ -93,7 +93,10 @@ impl<'a> Reading<'a> {
         let last = self.places.len().checked_sub(1)?;
         self.places
             .iter()
-            .position(|p| &p.spot == spot)
+            .enumerate()
+            .filter(|(_, p)| &p.spot == spot)
+            .map(|(i, _)| i)
+            .min_by_key(|i| i.abs_diff(review.at))
             .or(Some(review.at.min(last)))
     }
 }
@@ -180,14 +183,15 @@ fn hash(text: &str) -> u64 {
 
 /// The body of review tile `tile`: the document `source` with the review `bundle` drawn in
 /// it, read in the scroll view keyed `view` and named `title`, and the keys under it. `read`
-/// renders a block of the document's markdown, and `revision` moves when the content does.
+/// renders a block of the document's markdown and draws it again when `read_version` moves,
+/// and `revision` moves when the content does.
 pub(crate) fn body(
     tile: &str,
     view: &str,
     title: &str,
     (source, bundle, revision): (&str, &ReviewBundle, u64),
     reviews: &Reviews,
-    read: &dyn Fn(&str) -> El,
+    (read, read_version): (&dyn Fn(&str) -> El, u64),
     t: &Tokens,
 ) -> El {
     let review = reviews.tiles.get(tile).cloned().unwrap_or_default();
@@ -202,7 +206,9 @@ pub(crate) fn body(
         match part {
             Part::Prose { source: range, .. } => {
                 let text = &reading.source[range.clone()];
-                let block = memo(format!("{key}.text"), (text, *t), || read(text));
+                let block = memo(format!("{key}.text"), (text, read_version, *t), || {
+                    read(text)
+                });
                 cursor_frame(col().key(key).w_full().child(block), current.is_some(), t)
             }
             Part::Summary => keys::summary(
