@@ -451,7 +451,6 @@ fn agents_toggle(key: String, open: bool, more: usize, t: &Tokens) -> El {
     };
     let tokens = *t;
     Button::new(label.clone())
-        .expanded(open)
         .variant(ButtonVariant::Ghost)
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
         .label_with(move |_, _| {
@@ -470,6 +469,7 @@ fn agents_toggle(key: String, open: bool, more: usize, t: &Tokens) -> El {
                 .child(text(label).font(type_::SECTION).color(tokens.text_tertiary))
         })
         .build(attn_ui::kit(t))
+        .expanded(open)
         .key(key)
         .w_full()
         .h(ROW_HEIGHT)

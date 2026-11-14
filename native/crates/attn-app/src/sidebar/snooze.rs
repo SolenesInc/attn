@@ -194,6 +194,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     };
     let mode = if menu.standby { "standby" } else { "snooze" };
     let mut kit_menu = rune_kit::Menu::new(format!("{MENU}.{mode}"))
+        .standard()
         .gutter(4.0)
         .min_width(260.0)
         .label(title.clone())

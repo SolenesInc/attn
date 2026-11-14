@@ -275,7 +275,6 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
         .gap(2.0)
         .child(
             Button::new("Snoozed")
-                .expanded(open)
                 .variant(ButtonVariant::Ghost)
                 .on_press(|state: &mut State| {
                     state.window.home_snoozed_open = !state.window.home_snoozed_open
@@ -296,6 +295,7 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
                         .child(group_label("Snoozed", Some(count), &tokens))
                 })
                 .build(attn_ui::kit(t))
+                .expanded(open)
                 .key("home.group.snoozed.toggle")
                 .h(20.0)
                 .px(0.0)

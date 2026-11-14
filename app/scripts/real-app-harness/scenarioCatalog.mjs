@@ -225,7 +225,7 @@ export const scenarioCatalog = [
   {
     id: 'native-sidebar-session',
     runnerId: 'NATIVE-SIDEBAR-SESSION',
-    label: 'The native app launches parked, lists a shell session in its sidebar and takes a press on its row',
+    label: 'The native app launches parked, lists a shell session in its sidebar, takes a press on its row and paints the session menu row that keys reach',
     command: ['node', 'scripts/real-app-harness/scenario-native-sidebar-session.mjs'],
     app: 'native',
   },

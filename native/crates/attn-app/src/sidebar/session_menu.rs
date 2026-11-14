@@ -263,6 +263,7 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         "Mark priority"
     };
     let mut kit_menu = rune_kit::Menu::new(MENU)
+        .standard()
         .anchor(menu.under.clone())
         .placement(Placement::BottomEnd)
         .gutter(4.0)

@@ -143,6 +143,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.bg_deep = t.bg_app;
     p.layer_01 = t.bg_elevated;
     p.surface_raised = t.bg_elevated;
+    p.surface_raised_hover = t.bg_selected;
     p.bg_button_neutral = t.bg_button;
     p.layer_04 = t.border_hover;
     p.bg_accent = t.accent;
