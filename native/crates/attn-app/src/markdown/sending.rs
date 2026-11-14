@@ -657,7 +657,7 @@ fn notes(
             })
             .collect()
     };
-    col()
+    let surface = col()
         .key(key(tile, "notes.dialog"))
         .role("dialog")
         .label("Review notes")
@@ -665,9 +665,6 @@ fn notes(
         .max_h(480.0)
         .gap(8.0)
         .padding(10.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .on_press(|_: &mut State| {})
         .child(head)
         .child(
@@ -677,7 +674,8 @@ fn notes(
                     stick_bottom: false,
                 })
                 .children(body),
-        )
+        );
+    rune_kit::popover::raised(attn_ui::kit(t), surface, super::annotating::SURFACE_RADIUS)
 }
 
 /// A text button in the review notes' head: `label` names it, `face` shows in `ink`.

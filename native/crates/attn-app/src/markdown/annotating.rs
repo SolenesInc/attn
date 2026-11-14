@@ -594,18 +594,16 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
             t,
         )
     });
-    col()
+    let surface = col()
         .key(key(tile, "toolbar"))
         .role("toolbar")
         .label("Annotate selection")
         .keeps_text_selection()
         .padding(4.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .on_press(|_: &mut State| {})
         .child(row().items_center().gap(2.0).children(parts))
-        .children(list)
+        .children(list);
+    rune_kit::popover::raised(attn_ui::kit(t), surface, SURFACE_RADIUS)
 }
 
 fn on_picker(tile: &str) -> impl Fn(&mut State) + 'static {
@@ -616,6 +614,9 @@ fn on_picker(tile: &str) -> impl Fn(&mut State) + 'static {
         }
     }
 }
+
+/// The corner radius of the toolbar and the comment box, as the Tauri reader rounds them.
+pub(crate) const SURFACE_RADIUS: f32 = 8.0;
 
 fn composer_box(
     tile: &str,
@@ -693,16 +694,13 @@ fn composer_box(
         .fill(t.bg_input)
         .border(1.0, t.border)
         .color(t.text_primary);
-    col()
+    let surface = col()
         .key(key(tile, "composer"))
         .role("dialog")
         .label(if overall { "Overall Note" } else { "Comment" })
         .w(width)
         .gap(8.0)
         .padding(10.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .on_press(|_: &mut State| {})
         .modal_tx(true, move |state: &mut State, tx: &mut Tx| {
             close_if_empty(state, &outside, tx)
@@ -750,8 +748,8 @@ fn composer_box(
                         .build(attn_ui::kit(t))
                         .key(key(tile, "composer.save")),
                 ),
-        )
-        .absolute(left, top)
+        );
+    rune_kit::popover::raised(attn_ui::kit(t), surface, SURFACE_RADIUS).absolute(left, top)
 }
 
 /// The text tile `tile`'s comment box edits; a box that closed edits nothing that stays.
