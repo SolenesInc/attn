@@ -314,7 +314,11 @@ impl Window {
             }
         }
         let kept = self.keyboard.as_ref().is_some_and(|holder| {
-            holder.desktop == desktop.id && desktop.panes.iter().any(|p| p.pane_id == holder.pane)
+            holder.desktop == desktop.id
+                && (desktop.panes.iter().any(|p| p.pane_id == holder.pane)
+                    || crate::sidebar::model::leaves(&desktop.tree_json)
+                        .iter()
+                        .any(|leaf| matches!(leaf, crate::sidebar::model::Leaf::Tile { id, .. } if *id == holder.pane)))
         });
         if kept {
             return;

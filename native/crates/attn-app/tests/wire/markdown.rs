@@ -894,3 +894,19 @@ fn a_diagram_that_cannot_draw_says_so_above_its_source() {
         1
     );
 }
+
+#[test]
+fn a_pressed_document_tile_keeps_the_keyboard_when_its_file_changes() {
+    let mut world = start();
+    world.daemon.emit(content("# Plan\n\nFirst step."));
+    world.settle();
+    world.gesture(|app| app.click(Target::key("tile.m.document")));
+    let holder = |world: &mut World| {
+        world.automate("state", json!({"of": "window"})).unwrap()["keyboard"]["pane"].clone()
+    };
+    assert_eq!(holder(&mut world), "m");
+
+    world.daemon.emit(content("# Plan\n\nSecond step."));
+    world.settle();
+    assert_eq!(holder(&mut world), "m");
+}
