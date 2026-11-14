@@ -5,7 +5,7 @@ use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Tx, row, text};
 
-use super::pages::{block, button, named_button, row_card, segmented, setting_field};
+use super::pages::{NUMBER_FIELD, block, button, named_button, row_card, segmented, setting_field};
 use crate::State;
 use crate::action::Action;
 use crate::sidebar::width;
@@ -247,6 +247,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         NARROWEST_TILE_COLS,
                         "Narrowest tile width (columns)",
                         "",
+                        NUMBER_FIELD,
                         t,
                     ),
                 ),
@@ -268,6 +269,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                             width::SETTING,
                             "Sidebar width (pixels)",
                             &default_width,
+                            NUMBER_FIELD,
                             t,
                         )),
                 ),

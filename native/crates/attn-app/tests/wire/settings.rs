@@ -13,6 +13,9 @@ use serde_json::{Value, json};
 
 mod analytics;
 mod bus;
+mod desktop;
+mod hygiene;
+mod plugins;
 mod tasks;
 mod updates;
 

@@ -8,11 +8,12 @@ use attn_protocol::{
     GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
     KittyImageResultMessage, KittyPlacementsMessage, NotificationListResultMessage,
     NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
-    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
-    ReposUpdatedMessage, RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
-    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
-    SessionsUpdatedMessage, SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage,
-    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
+    PluginsUpdatedMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
+    PtyDesyncMessage, PtyResizedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
+    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
+    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
+    SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent,
+    WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -288,6 +289,15 @@ struct Header {
     protocol_version: Option<String>,
 }
 
+/// The request id under which a `list_plugins` waits for its answer.
+pub const LIST_PLUGINS: &str = "list_plugins";
+
+/// The request id under which a plugin command waits for the `plugin_action_result` that
+/// names its `action`: `install`, `remove` or `set_priority`.
+pub fn plugin_action(action: &str) -> String {
+    format!("plugin_action:{action}")
+}
+
 /// The id a pull request action is answered under: the daemon answers `approve_pr` and
 /// `merge_pr` by the action and the pull request, not by a request id.
 pub fn pr_action_id(action: &str, pr: &str) -> String {
@@ -302,11 +312,15 @@ impl Header {
     /// The request this message answers: its `request_id`, for `spawn_result`,
     /// `rename_result` and `reload_session_result` the session id the request named, for
     /// `pty_input_probe_result` the input's `probe_id`, and for `pr_action_result` and
-    /// `refresh_prs_result` the ids above. The arrangement a spawn changes carries
+    /// `refresh_prs_result` the ids above. The plugin commands carry no id:
+    /// `plugins_updated` answers `list_plugins` as [`LIST_PLUGINS`], and
+    /// `plugin_action_result` answers its action as [`plugin_action`] names it. The arrangement a spawn changes carries
     /// that id too, ahead of `spawn_result`, and answers nothing.
     fn answers(&self) -> Option<String> {
         match self.event.as_str() {
             "spawn_result" | "rename_result" | "reload_session_result" => self.id.clone(),
+            "plugins_updated" => Some(LIST_PLUGINS.into()),
+            "plugin_action_result" => self.action.as_deref().map(plugin_action),
             "pty_input_probe_result" => self.probe_id.clone(),
             "pr_action_result" => Some(pr_action_id(self.action.as_deref()?, self.id.as_deref()?)),
             "refresh_prs_result" => Some(REFRESH_PRS_ID.to_owned()),
@@ -552,6 +566,14 @@ impl Task {
                         false,
                     );
                 }
+                None
+            }
+            "plugins_updated" => {
+                let message: PluginsUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_plugins(crate::store::Plugins {
+                    plugins: message.plugins,
+                    issues: message.issues.unwrap_or_default(),
+                });
                 None
             }
             "outposts_updated" => {

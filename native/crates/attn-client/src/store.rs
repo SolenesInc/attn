@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
     Ask, AuthorState, Desktop, DesktopTileContentMessage, GitOperation, InitialStateMessage,
-    OutpostInfo, PR, Profile, RepoState, Seed, Session, SessionLedgerEntry, UpdateRun, Vent,
-    Worktree, WorktreeSweepEntry,
+    OutpostInfo, PR, PluginInfo, PluginIssue, Profile, RepoState, Seed, Session,
+    SessionLedgerEntry, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -41,6 +41,15 @@ pub struct Facts {
     /// The latest update run, open or finished, when the home has had one.
     pub update_run: Arc<Option<UpdateRun>>,
     pub pull_requests: Arc<PullRequests>,
+    /// The installed plugins and the plugin folders that failed to load, as the daemon last
+    /// listed them; empty until the first list.
+    pub plugins: Arc<Plugins>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Plugins {
+    pub plugins: Vec<PluginInfo>,
+    pub issues: Vec<PluginIssue>,
 }
 
 /// The user's pull requests and review requests the daemon polled from GitHub, with the
@@ -275,7 +284,8 @@ impl Slices {
     pub const VENTS: Slices = Slices(1 << 16);
     pub const UPDATE_RUN: Slices = Slices(1 << 17);
     pub const PULL_REQUESTS: Slices = Slices(1 << 18);
-    pub const ALL: Slices = Slices((1 << 19) - 1);
+    pub const PLUGINS: Slices = Slices(1 << 19);
+    pub const ALL: Slices = Slices((1 << 20) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -458,6 +468,13 @@ impl Store {
                 return Slices::NONE;
             }
             Slices::NOTIFICATIONS
+        });
+    }
+
+    pub(crate) fn set_plugins(&self, plugins: Plugins) {
+        self.change(|facts| {
+            facts.plugins = Arc::new(plugins);
+            Slices::PLUGINS
         });
     }
 

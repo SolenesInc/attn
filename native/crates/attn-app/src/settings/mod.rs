@@ -4,7 +4,10 @@ mod analytics;
 mod appearance;
 pub(crate) mod autosave;
 mod bus;
+mod desktop;
+mod hygiene;
 mod pages;
+mod plugins;
 mod sections;
 mod tasks;
 mod updates;
@@ -25,6 +28,11 @@ pub(crate) use view::dialog;
 const TEXT_FIELDS: &[(&str, bool)] = &[
     (appearance::NARROWEST_TILE_COLS, true),
     (crate::sidebar::width::SETTING, true),
+    (desktop::EDITOR, false),
+    (desktop::PROJECTS_DIRECTORY, false),
+    (desktop::NOTEBOOK_ROOT, false),
+    (hygiene::AUTO_SETTLE_ARM, true),
+    (hygiene::AUTO_SETTLE_COUNTDOWN, true),
 ];
 
 /// The dialog's page, search and edits. They outlast the dialog closing, as the Tauri app's
@@ -38,6 +46,8 @@ pub(crate) struct Dialog {
     analytics: analytics::Analytics,
     updates: updates::Updates,
     bus: bus::Bus,
+    plugins: plugins::Plugins,
+    hygiene: hygiene::Hygiene,
     /// The text field the focus was in at the last frame.
     editing: Option<String>,
     /// What waits for the fields to land: the dialog closing, or another page.
@@ -83,6 +93,7 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
     state.window.settings.after_flush = None;
     state.window.layer = Some(Layer::Settings);
     tx.blur();
+    plugins::open(state, tx);
     arrive(state, tx);
 }
 
@@ -163,13 +174,15 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
 }
 
 /// Before each frame: commits a text field the focus just left, reads the event bus when its
-/// refresh is due, and lets Saved marks go.
+/// refresh is due, forgets unmutes the daemon has taken, and lets Saved marks go; whether one
+/// went.
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
-    let focused = tx
-        .focused()
+    hygiene::poll(state);
+    let focus = tx.focused().map(str::to_owned).filter(|_| is_open(state));
+    let focused = focus
+        .as_deref()
         .and_then(setting_of_field)
-        .map(str::to_owned)
-        .filter(|_| is_open(state));
+        .map(str::to_owned);
     let left = match &state.window.settings.editing {
         Some(was) if Some(was) != focused.as_ref() => Some(was.clone()),
         _ => None,
@@ -179,7 +192,8 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         autosave::commit_on_leave(state, &key, tx);
     }
     bus::poll(state, now, tx);
-    state.window.settings.autosave.expire(now)
+    let plugin_marks_went = plugins::poll(state, focus.as_deref(), now, tx);
+    state.window.settings.autosave.expire(now) | plugin_marks_went
 }
 
 /// Runs the settings actions a key or the palette can ask for.

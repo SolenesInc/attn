@@ -119,6 +119,11 @@ pub(super) fn switch(
         }))
 }
 
+/// The width of a field that holds a number.
+pub(super) const NUMBER_FIELD: f32 = 160.0;
+/// The width of a field that holds a path or a command.
+pub(super) const PATH_FIELD: f32 = 320.0;
+
 /// A field that edits the setting `key`: it saves on Enter and when the focus leaves it, and
 /// shows its Saved mark and its refusal beside it.
 pub(super) fn setting_field(
@@ -126,6 +131,7 @@ pub(super) fn setting_field(
     key: &'static str,
     label: &str,
     placeholder: &str,
+    width: f32,
     t: &Tokens,
 ) -> El {
     let field_key = super::field_key(key);
@@ -138,7 +144,7 @@ pub(super) fn setting_field(
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
-        .width(Some(160.0))
+        .width(Some(width))
         .build(attn_ui::kit(t));
     let saved = state
         .window
@@ -380,6 +386,59 @@ pub(super) fn github_hosts(state: &State, t: &Tokens) -> Vec<El> {
         t,
         body.into_iter().chain(hint).collect(),
     )]
+}
+
+/// A switch that turns the boolean setting `key` on and off, saved as soon as it flips.
+pub(super) fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> El {
+    let on = setting::on(&state.facts.settings, key);
+    switch(
+        format!("settings.switch.{key}"),
+        label,
+        on,
+        false,
+        t,
+        move |state, tx| autosave::apply(state, key, if on { "false" } else { "true" }, tx),
+    )
+}
+
+/// How a pill reads: good news, something to look at, a problem, or a plain count.
+#[derive(Clone, Copy)]
+pub(super) enum Tone {
+    Good,
+    Warn,
+    Bad,
+    Plain,
+}
+
+/// A small status marker: a page's state beside its heading, or a plugin's.
+pub(super) fn pill(key: String, label: String, tone: Tone, t: &Tokens) -> El {
+    let ink = match tone {
+        Tone::Good => t.success,
+        Tone::Warn => t.warning,
+        Tone::Bad => t.error,
+        Tone::Plain => t.text_secondary,
+    };
+    text(label.clone())
+        .key(key)
+        .role("status")
+        .label(label)
+        .font(CAPTION)
+        .color(ink)
+        .px(space::S2)
+        .py(2.0)
+        .radius(999.0)
+        .border(1.0, t.border)
+}
+
+/// A warning line, as the Tauri pages show a plugin's trouble.
+pub(super) fn warning(key: String, message: String, t: &Tokens) -> El {
+    text(message.clone())
+        .key(key)
+        .role("alert")
+        .label(message)
+        .font(CAPTION)
+        .color(t.warning)
+        .wrap()
 }
 
 /// A page another part of attn has not brought to the native app yet.

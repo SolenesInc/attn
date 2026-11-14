@@ -5,7 +5,7 @@ use rune_kit::{Dialog, TextInput};
 
 use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
-use super::{analytics, appearance, bus, pages, tasks, updates};
+use super::{analytics, appearance, bus, desktop, hygiene, pages, plugins, tasks, updates};
 use crate::State;
 use crate::setting;
 
@@ -140,6 +140,13 @@ fn body(state: &State, t: &Tokens) -> El {
         .children(
             item.feature
                 .map(|key| pages::feature_switch(state, key, true, t)),
+        )
+        .child(
+            row()
+                .key("settings.pills")
+                .gap(space::S2)
+                .items_center()
+                .children(pills(state, section, t)),
         );
     let off = item
         .feature
@@ -204,6 +211,19 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<El> {
         Section::EventBus => bus::page(state, state.window.now_ms, t),
         Section::Analytics => analytics::page(state, t),
         Section::Updates => updates::page(state, t),
+        Section::Desktop => desktop::page(state, t),
+        Section::Hygiene => hygiene::page(state, t),
+        Section::Plugins => plugins::page(state, t),
         other => pages::not_yet(other.item().label, t),
+    }
+}
+
+/// The page's state beside its heading, for the pages that show one.
+fn pills(state: &State, section: Section, t: &Tokens) -> Vec<El> {
+    match section {
+        Section::Desktop => desktop::pills(state, t),
+        Section::Hygiene => hygiene::pills(state, t),
+        Section::Plugins => plugins::pills(state, t),
+        _ => Vec::new(),
     }
 }
