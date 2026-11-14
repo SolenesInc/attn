@@ -73,6 +73,8 @@ macro_rules! actions {
             StartUpdate,
             /// Open the attention drawer and take the keyboard into it.
             OpenAttention,
+            /// Replay the tour of what this release brings.
+            OpenWhatsNew,
         }
 
         impl Action {
@@ -105,6 +107,7 @@ macro_rules! actions {
                     Action::OpenShortcutEditor => "shortcuts.edit",
                     Action::StartUpdate => "update.start",
                     Action::OpenAttention => "attention.open",
+                    Action::OpenWhatsNew => "whatsNew.open",
                 }
             }
 
@@ -134,6 +137,7 @@ macro_rules! actions {
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
                     Action::StartUpdate => "Update attn",
                     Action::OpenAttention => "Open attention drawer",
+                    Action::OpenWhatsNew => "What's new",
                 }
             }
 

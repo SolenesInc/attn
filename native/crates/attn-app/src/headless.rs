@@ -44,6 +44,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         system_dark: true,
         scale: 2.0,
     };
+    crate::use_prefs(crate::whats_new::seen_prefs());
     host.run(crate::app().headless_runtime(VIEWPORT, env), inbox);
     drop(link);
     unreachable!("the windowless host runs for the process's life")

@@ -11,7 +11,8 @@ const KEY: &str = "window.frame";
 type Saved = ((i32, i32), (u32, u32), bool, bool);
 
 thread_local! {
-    static MAIN: RefCell<Option<(Prefs, WindowHandle)>> = const { RefCell::new(None) };
+    static MAIN: RefCell<Option<WindowHandle>> = const { RefCell::new(None) };
+    static PREFS: RefCell<Option<Prefs>> = const { RefCell::new(None) };
     static TILES: RefCell<Vec<WindowHandle>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -32,18 +33,20 @@ pub(crate) fn restored(app: App<State>, bundle_id: &str) -> App<State> {
     };
     let mut prefs = Some(prefs);
     app.on_window(move |window| {
-        let prefs = prefs
-            .take()
-            .unwrap_or_else(|| MAIN.take().map(|(p, _)| p).unwrap_or_else(Prefs::memory));
-        MAIN.set(Some((prefs, window.clone())));
+        if let Some(prefs) = prefs.take() {
+            use_prefs(prefs);
+        }
+        MAIN.set(Some(window.clone()));
     })
 }
 
 pub(crate) fn save(_: &mut State, _: &mut Tx) {
-    MAIN.with_borrow_mut(|main| {
-        let Some((prefs, window)) = main else { return };
-        let Some(p) = window.placement() else { return };
-        let saved: Saved = (p.position, p.content_size, p.maximized, p.full_screen);
+    let Some(p) = MAIN.with_borrow(|main| main.as_ref()?.placement()) else {
+        return;
+    };
+    let saved: Saved = (p.position, p.content_size, p.maximized, p.full_screen);
+    PREFS.with_borrow_mut(|prefs| {
+        let Some(prefs) = prefs else { return };
         if let Err(why) = prefs.set(KEY, &saved) {
             eprintln!("attn-app: the window's frame was not saved: {why}");
         }
@@ -53,21 +56,27 @@ pub(crate) fn save(_: &mut State, _: &mut Tx) {
 /// Shows the main window, restored and in front.
 pub(crate) fn open_main() {
     MAIN.with_borrow(|main| {
-        if let Some((_, window)) = main {
+        if let Some(window) = main {
             window.open();
         }
     });
 }
 
-/// The app's own setting `key`, as a string, from the main window's prefs.
-pub(crate) fn pref_string(key: &str) -> Option<String> {
-    MAIN.with_borrow(|main| main.as_ref()?.0.get::<String>(key))
+/// Where the app keeps its own settings on this thread: the instance's prefs file once the
+/// main window opens, or the store a windowless run gives it.
+pub fn use_prefs(prefs: Prefs) {
+    PREFS.set(Some(prefs));
 }
 
-/// Keeps the app's own setting `key` in the main window's prefs.
+/// The app's own setting `key`, as a string.
+pub(crate) fn pref_string(key: &str) -> Option<String> {
+    PREFS.with_borrow(|prefs| prefs.as_ref()?.get::<String>(key))
+}
+
+/// Keeps the app's own setting `key`.
 pub(crate) fn set_pref_string(key: &str, value: &str) {
-    MAIN.with_borrow_mut(|main| {
-        let Some((prefs, _)) = main else { return };
+    PREFS.with_borrow_mut(|prefs| {
+        let Some(prefs) = prefs else { return };
         if let Err(why) = prefs.set(key, &value.to_owned()) {
             eprintln!("attn-app: {key} was not saved: {why}");
         }
@@ -78,7 +87,7 @@ pub(crate) fn set_pref_string(key: &str, value: &str) {
 pub(crate) fn main_content_origin() -> (f64, f64) {
     MAIN.with_borrow(|main| {
         main.as_ref()
-            .and_then(|(_, window)| window.placement())
+            .and_then(|window| window.placement())
             .map_or((0.0, 0.0), |p| {
                 let (x, y) = p.content_position;
                 (f64::from(x) / p.scale, f64::from(y) / p.scale)
@@ -90,7 +99,7 @@ pub(crate) fn main_content_origin() -> (f64, f64) {
 /// and sizes its content to `bounds`' size, in points. Call it on the UI thread.
 pub(crate) fn move_main(bounds: Bounds) -> Result<(), String> {
     MAIN.with_borrow(|main| {
-        let (_, window) = main.as_ref().ok_or("the app has no window open")?;
+        let window = main.as_ref().ok_or("the app has no window open")?;
         let p = window.placement().ok_or("the app has no window open")?;
         window.set_position((
             (bounds.x * p.scale).round() as i32,
@@ -105,7 +114,7 @@ pub(crate) fn move_main(bounds: Bounds) -> Result<(), String> {
 /// on the UI thread.
 pub(crate) fn main_bounds() -> Option<WindowBounds> {
     MAIN.with_borrow(|main| {
-        let p = main.as_ref()?.1.placement()?;
+        let p = main.as_ref()?.placement()?;
         Some(WindowBounds {
             scale_factor: p.scale,
             minimized: p.minimized,
@@ -122,7 +131,7 @@ pub(crate) fn main_bounds() -> Option<WindowBounds> {
 /// Brings the main window to the front.
 pub(crate) fn raise_main() {
     MAIN.with_borrow(|main| {
-        if let Some((_, window)) = main {
+        if let Some(window) = main {
             window.focus();
         }
     });
@@ -132,7 +141,7 @@ pub(crate) fn raise_main() {
 /// UI thread.
 pub(crate) fn main_window() -> Option<WindowInfo> {
     MAIN.with_borrow(|main| {
-        let (_, window) = main.as_ref()?;
+        let window = main.as_ref()?;
         window.placement()?;
         Some(WindowInfo {
             id: platform_id(window)?,

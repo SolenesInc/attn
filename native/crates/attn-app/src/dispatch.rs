@@ -54,6 +54,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
         Action::DockAttention => crate::attention::toggle(state, tx),
         Action::OpenAttention => crate::attention::open(state, tx),
+        Action::OpenWhatsNew => crate::whats_new::open(state, tx),
         Action::SessionRefreshPrs => crate::attention::refresh(state, tx),
         Action::DockAsks if crate::asks::available(&state.facts) => crate::asks::toggle(state, tx),
         Action::DockAsks => return Outcome::Unavailable,

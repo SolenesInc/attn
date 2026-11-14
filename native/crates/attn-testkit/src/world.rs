@@ -192,6 +192,17 @@ impl World {
 
     /// [`World::start`] with a window `size` points wide and tall.
     pub fn start_sized(daemon: Daemon, size: (f32, f32)) -> World {
+        World::start_with(daemon, size, attn_app::whats_new::seen_prefs())
+    }
+
+    /// [`World::start`] for someone whose app settings are `prefs`, such as a first launch's
+    /// empty store or a file an earlier world saved to.
+    pub fn start_with_prefs(daemon: Daemon, prefs: rune::prefs::Prefs) -> World {
+        World::start_with(daemon, VIEWPORT, prefs)
+    }
+
+    fn start_with(daemon: Daemon, size: (f32, f32), prefs: rune::prefs::Prefs) -> World {
+        attn_app::use_prefs(prefs);
         let store = Store::default();
         let pulse = daemon.pulse();
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();

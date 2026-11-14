@@ -25,6 +25,7 @@ pub struct Window {
     pub drawers: Vec<Drawer>,
     pub layer: Option<Layer>,
     pub(crate) callout: Option<crate::callouts::Callout>,
+    pub(crate) whats_new: crate::whats_new::Tour,
     pub notice: Option<Notice>,
     pub(crate) leader: Option<Leader>,
     /// The tile that takes keys while nothing else in the window has focus. It is apart from
@@ -109,6 +110,8 @@ pub enum Layer {
     /// The confirmation before closing a desktop that holds tiles; `Window::closing_desktop`
     /// holds it.
     CloseDesktop,
+    /// The tour of what this release brings; `Window::whats_new` holds it.
+    WhatsNew,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -512,6 +515,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         )),
         Some(Layer::ShortcutEditor) => crate::shortcut_editor::view(state, t, &mut layers),
         Some(Layer::ProfileSwitcher) => layers.extend(crate::profile_switcher::view(state, t)),
+        Some(Layer::WhatsNew) => crate::whats_new::dialog(state, t, &mut layers),
         None => {}
     }
     if let Some(leader) = &window.leader {

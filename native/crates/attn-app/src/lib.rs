@@ -37,6 +37,7 @@ pub mod sidebar;
 pub mod tauri_settings;
 mod terminal;
 mod update_run;
+pub mod whats_new;
 pub mod window_host;
 
 use std::sync::Arc;
@@ -49,6 +50,7 @@ use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 pub use action::{Action, Category};
 pub use deep_link::open_link;
 pub use dispatch::dispatch;
+pub use frame::use_prefs;
 pub use keymap::{Binding, Keymap};
 pub use requests::ReplyInbox;
 pub use shell::{Drawer, Holder, Layer, View, Window};
@@ -269,10 +271,12 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let settings = settings::poll(state, now, tx);
     let updating = update_run::poll(state, now, tx) | attention::poll(state, now);
     let pointed = callouts::poll(state, tx);
+    let greeted = whats_new::greet(state, tx);
     shell::expire(state, now, tx)
         || settings
         || updating
         || pointed
+        || greeted
         || recounted
         || told
         || aged

@@ -83,7 +83,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) opens on home and shows the Sessions card by state in desktop flow, "Your turn" and "Settled" in queue flow, "All settled" with its follow checkbox, the snoozed group with each agent's wake button, the Asks group ([asks.md](asks.md)), and the notifications panel with its bell and critical strip. What's new and its banner, toasts, the PR card and the rate-limit banner drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) opens on home and shows the Sessions card by state in desktop flow, "Your turn" and "Settled" in queue flow, "All settled" with its follow checkbox, the snoozed group with each agent's wake button, the Asks group ([asks.md](asks.md)), the notifications panel with its bell and critical strip, and What's new with its banner. Toasts, the PR card and the rate-limit banner drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 
@@ -91,9 +91,13 @@ Preconditions:
 - Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
 - The steps press the macOS chords. On Linux press `mod+alt+k` for `mod+shift+k`, `mod+alt+h` for `mod+shift+h`, `mod+alt+e` for `mod+shift+e` and `mod+alt+b` for `mod+b`.
 - Make `P` and `A` with the fixture above and start `home-a` with `wsctl add-session --cwd $A --agent claude --label home-a --id home-a --place`.
+- The native app keeps What's new and its banner in its own prefs, `~/.config/<bundle id>/` on Linux, apart from the instance's data. A freshly installed instance greets with What's new; one that already showed this release does not, and the first step is unreached there.
 
 Steps:
 
+- **What's new on a fresh app.** Before anything else, `bridge wait '{"target":{"key":"whats-new-dialog"}}'` answers, a dialog named "What's new". `whats-new.count` reads "1 of 7" and `whats-new.title` "One profile per world". `whats-new.scene` is an image named for the step, and `whats-new.scene.press` is named for the keys that make it happen. Press `Right`: "2 of 7". Press `Enter`: "3 of 7". Press `Left`: "2 of 7". Press `Escape`: the dialog goes and `home.intro-banner` shows on home.
+- **Replay and dismiss the banner.** Run `bridge press '{"target":{"key":"home.intro-banner.replay"}}'`: the tour opens on "1 of 7". Press `Escape`, then press `home.intro-banner.dismiss`: `home.intro-banner` goes. Quit and launch the app again: neither the tour nor the banner shows.
+- **What's new from the palette.** Press `mod+shift+k`, run `bridge type '{"text":"whats new"}'` and press `Enter`: `whats-new-dialog` shows on "1 of 7". Press `whats-new.shortcuts`: the tour closes and the keyboard shortcuts dialog shows. Press `Escape`.
 - **Home groups agents by state.** `bridge wait '{"target":{"key":"home.session.home-a"}}'` answers inside `home.group.waiting`, or the group for the state `wsctl list` shows.
 - **Open an agent from home, and home with the key.** Run `bridge press '{"target":{"key":"home.session.home-a"}}'`: `bridge state '{"of":"window"}'` shows `view: "Desktop"` and `on_screen: "home-a"`. Press `bridge key '{"chord":"mod+shift+h"}'`: `view` is `Home`.
 - **Home from the sidebar and the rail.** Open `home-a` again and run `bridge press '{"target":{"key":"sidebar.home"}}'`: `view` is `Home`. Open it again, press `mod+b` and run `bridge press '{"target":{"key":"rail.home"}}'`: `view` is `Home`. Press `mod+b` to expand.
@@ -105,7 +109,7 @@ Steps:
 - **Read a notification.** Raise a critical notification with the plugin from the Tauri steps above. When attn parks it, `bridge wait '{"target":{"key":"sidebar.critical"}}'` answers above `sidebar.home`, named "1 unread critical notification: Plugin stopped: home-crash. Open notifications.". A wait gives up after 30 s, so repeat it. Press the strip: the panel opens, and its row `notifications.row.<id>` has the value "critical, unread". Press `notifications.row.<id>.head`: `notifications.row.<id>.detail` shows, the row's value turns "critical", and the strip goes.
 - **Mark all read.** Uninstall the plugin and install it again. When the strip comes back, press the bell, then `notifications.mark-all`: every row loses "unread" and "Mark all read" is disabled. Press `Escape`: the bell's value is 0. Uninstall the plugin.
 - **Settings and a new agent from home.** Run `bridge press '{"target":{"key":"home.settings"}}'` and `bridge press '{"target":{"key":"home.new"}}'`: each opens its feature, whose recipe is in its own file.
-- **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each way home, the `./attn` commands' output and `bridge tree` after each step on home. Capture `bridge shot '{"path":"<P>/native-home.png"}'` with the agent in a state group, `<P>/native-home-all-settled.png` with "All settled", `<P>/native-critical-strip.png` with the strip and `<P>/native-notifications.png` with the panel open, with `<P>` written out.
+- **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each way home, the `./attn` commands' output and `bridge tree` after each step on home. Capture `bridge shot '{"path":"<P>/native-home.png"}'` with the agent in a state group, `<P>/native-home-all-settled.png` with "All settled", `<P>/native-critical-strip.png` with the strip, `<P>/native-notifications.png` with the panel open and `<P>/native-whats-new.png` with the tour open, with `<P>` written out.
 
 ## Contexts
 
@@ -114,12 +118,12 @@ Steps:
 - **Outposts**: an agent whose outpost is offline is marked offline on home, never sits under "Your turn", and has no unsnooze button.
 - **Profiles**: home lists the selected profile's sessions and asks. A notification about something a profile owns shows only in that profile: a failure for a session or a Garden review item shows in the profile that owns it, and a Notebook conflict in the profiles that use its folder. Notifications about the daemon itself, such as a stopped plugin, show in every profile. The unread count follows the selected profile.
 - **Performance and idle cost**: home re-reads the clock for turn ages every 30 seconds, and the GitHub rate-limit banner ticks every second only while the banner shows. Nothing measures home's idle cost. When a change touches home's rendering, check it for repaints with `docs/internal/perf-testing.md`.
-- **Keyboard and native input**: ⌘⇧H reaches home from anywhere, a text field included. The intro takes ←, →, Enter and Escape. Home's session rows take clicks only (see Gotchas).
+- **Keyboard and native input**: ⌘⇧H reaches home from anywhere, a text field included. The intro takes ←, →, Enter and Escape. → stops on the last step; only Enter or Got it there closes the tour. In the native app the tour draws each step's scene as it rests after the change, without the Tauri app's motion. Home's session rows take clicks only (see Gotchas).
 - **Flow**: in desktop flow, the Sessions card groups by state. Queue flow puts "Your turn" first and the rest under "Settled", and shows "All settled" when no agent is owed a turn. The snoozed group shows in both.
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/home.rs` and `native/crates/attn-app/tests/wire/notifications.rs` (the native app), `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/home.rs`, `native/crates/attn-app/tests/wire/notifications.rs` and `native/crates/attn-app/tests/wire/whats_new.rs` (the native app), `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
 - Scenario: `native-agent-queue` (the native app's All settled and wake), `focusless-native` (parked macOS native input), `home-dock`.
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
 - App: `app/src/App.dashboard.test.tsx`, `app/src/App.homeDock.test.tsx`, `app/src/App.notifications.test.tsx`, `app/src/App.criticalNotifications.test.tsx`, `app/src/App.whatsNew.test.tsx`, `app/src/components/Toast.lifecycle.test.tsx`.

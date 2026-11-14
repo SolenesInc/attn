@@ -125,6 +125,15 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .describe("Show sessions and pull requests that need a response")
         .shortcut(Some(Action::DockAttention)),
     );
+    commands.push(
+        Command::new(
+            "whats-new",
+            "What's new",
+            &["whats new", "intro", "tour", "changes", "release", "help"],
+            Action::OpenWhatsNew,
+        )
+        .describe("Replay the intro to profiles, desktops, the queue and the palettes"),
+    );
     if crate::asks::available(facts) {
         commands.push(
             Command::new(

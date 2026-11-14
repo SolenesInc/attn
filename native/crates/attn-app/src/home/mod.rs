@@ -29,6 +29,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         window.now_ms,
         window.follow_next_turn,
         window.home_snoozed_open,
+        window.whats_new.banner_dismissed(),
         state.pictures.logo().map(Image::id),
         *t,
     );
@@ -46,6 +47,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .gap(space::S3)
             .fill(t.bg_app)
             .child(header(state.pictures.logo(), t))
+            .children(crate::whats_new::banner(state, t))
             .children(
                 home.all_settled
                     .as_ref()

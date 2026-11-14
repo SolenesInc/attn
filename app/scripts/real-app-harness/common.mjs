@@ -325,6 +325,11 @@ export async function launchFreshNativeAppAndConnect(client, observer) {
   await client.launchFreshApp();
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
+  const { layer } = await client.request('state', { of: 'window' });
+  if (layer === 'WhatsNew') {
+    await client.request('key', { chord: 'Escape' });
+    await client.request('wait', { target: { key: 'whats-new-dialog' }, gone: true });
+  }
   await observer.connect();
   await sweepStaleHarnessSessions(observer);
 }

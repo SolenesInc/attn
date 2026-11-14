@@ -41,4 +41,5 @@ mod wire {
     mod terminal_view;
     mod tile_header;
     mod update_run;
+    mod whats_new;
 }
