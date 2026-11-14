@@ -280,6 +280,14 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-browser',
+    runnerId: 'NATIVE-BROWSER',
+    label: 'An agent drives a browser tile in the native app: open, wait, type, click, a dialog, history, captures, cookies, and the close key',
+    command: ['node', 'scripts/real-app-harness/scenario-native-browser.mjs'],
+    app: 'native',
+    skipOn: { linux: 'The native app runs browser pages in WKWebView, which only macOS has; the Linux tile says browser tiles are unavailable' },
+  },
+  {
     id: 'native-tile-windows',
     runnerId: 'NATIVE-TILE-WINDOWS',
     label: 'A document tile in the native app pops out into its own window, which hides when the tile comes back and shows again for the next pop-out',

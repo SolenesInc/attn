@@ -65,7 +65,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) answers callouts as the Tauri app does. The card, `callout`, is a dialog named "Callout from <agent>". It holds `callout.count` ("<i> of <n>"), `callout.text`, `callout.next` named "↵ Next", "↵ Done" or "↵ Go there", and `callout.end` named "End callout". A step whose anchor is not on screen shows `callout.unanchored`. The ring, `callout.ring`, is drawn but not in the accessibility tree, so `bridge tree` does not list it; see it in a `bridge shot`. The card takes the keyboard when it shows, and when it ends nothing has focus, so keys go to the window and the terminal holding it. The native app draws tiles and the card in one window, so no tile hides while a callout shows. `crew` is never on screen, because the native app has no crew section yet.
+The native app (`native/`) answers callouts as the Tauri app does. The card, `callout`, is a dialog named "Callout from <agent>". It holds `callout.count` ("<i> of <n>"), `callout.text`, `callout.next` named "↵ Next", "↵ Done" or "↵ Go there", and `callout.end` named "End callout". A step whose anchor is not on screen shows `callout.unanchored`. The ring, `callout.ring`, is drawn but not in the accessibility tree, so `bridge tree` does not list it; see it in a `bridge shot`. The card takes the keyboard when it shows, and when it ends nothing has focus, so keys go to the window and the terminal holding it. The native app draws tiles and the card in one window, so only a browser tile's page, a native view over the window, hides while a callout shows ([browser.md](browser.md)). `crew` is never on screen, because the native app has no crew section yet.
 
 Preconditions:
 

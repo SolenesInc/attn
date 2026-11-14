@@ -93,6 +93,22 @@ Preconditions:
 - **Refusals.** `./attn browser open file:///etc/hosts` exits 1 with `open_browser: only http and https urls are supported`. `./attn browser find` exits 1 with `attn browser find: --using and --value are required`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek web-agent` after each agent step, `wsctl list` after the open, the person's navigation and the close, and the screenshot and PDF the agent saved. Capture the page with `bridge capture_native_window_screenshot '{"path":"<P>/browser-native.png"}'`, `<P>` written out, since the page is a native view the web view capture leaves out. Name each file for its way in, such as `browser-agent-snapshot-peek.txt`.
 
+### In the native app
+
+The native app (`native/`) runs each browser tile's page in a `WKWebView` on macOS, over the tile's page area `tile.tile-browser.page`. The header holds `tile.tile-browser.address`, a field named "Browser address" in place of the title, and `tile.tile-browser.reload` named "Reload browser". The page is not in the accessibility tree and `bridge shot` leaves it out: read it with `attn browser snapshot` and see it in a VM recording. It hides while the palette, a dialog, a menu, a popover, a callout or a drag shows. A click in the page gives it the keyboard and makes its tile the active one; the window takes back only the keys attn binds, and the page keeps ⌘C, ⌘V, ⌘X, ⌘A, ⌘Z and ⇧⌘Z. On Linux the page area says "Browser tiles are not available in this app on this platform yet.", the app does not offer itself as the browser host, and every verb but `open` fails with `no in-app browser host is connected`. A popped-out browser tile's window says "This window does not show browser pages yet. Bring the tile back to its desktop to see its page.", its header has no address field or reload button, and the agent verbs fail with `the browser tile is popped out into its own window, where this app shows no page yet`. The tile's sidebar row, `sidebar.tile.<desktop>.tile-browser`, holds `sidebar.tile.<desktop>.tile-browser.reload`, named "Reload <title>"; it has no Close button yet.
+
+Preconditions:
+
+- On macOS, in the VM ([macOS VM](../../../../docs/internal/macos-vm.md)): install the instance with `make install INSTANCE=<name> APP=native` and launch it as [../SKILL.md](../SKILL.md) says for a native instance. Make `$P`, the page server and `$A` with the fixture as above, and start `web-agent` the same way.
+
+Steps:
+
+- **Agent verbs.** Send `web-open`, `web-snapshot`, `web-find`, `web-type`, `web-click attn-element-<n>`, `web-keys`, `web-history`, `web-cookies` and `web-capture` as above. Each peek reads as above; `bridge wait '{"target":{"key":"tile.tile-browser.page"}}'` matches after `web-open`.
+- **The person navigates.** Press `tile.tile-browser.address` (`bridge press '{"target":{"key":"tile.tile-browser.address"}}'`), press `mod+a`, type `127.0.0.1:8765/page.html` and press `Enter`. The field reads `http://127.0.0.1:8765/page.html`, and `wsctl list` shows `tile_params` there. Press `tile.tile-browser.reload`, then the sidebar row's `sidebar.tile.<desktop>.tile-browser.reload`: each reloads the page, and the page stays where it is.
+- **Close.** In the VM recording, click the page, then press ⌘W: the browser tile closes and the agent's tile stays. With the address field focused, ⌘W closes the browser tile too.
+- **Under overlays.** Open the palette over the tile, then a callout (`./attn callout show --session web-agent desktops "Here"`): the page hides under each and comes back when it closes, in the VM recording.
+- **Proof.** Keep what the Tauri recipe keeps, and the VM recording of the page, the focus handoff and the close.
+
 ## Contexts
 
 - **Durability across restarts**: the browser tile and its last URL come back with the desktop after any restart, and cookies and local storage persist, so a sign-in survives.
@@ -108,7 +124,8 @@ Preconditions:
 
 - Packaged CLI: `browser-wait-navigation` checks the verbs on a tile that opened on the shelf, with the screen unchanged and the page kept when the tile comes on screen. It checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks that closing the tile frees its web view: a request the page holds open ends when the tile closes. It also checks `command wait_for` immediately after navigation. It starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending. It also verifies that an asynchronous action executes once, and that later actions keep the action's element reference.
 
-- Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
+- Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`, and `native/crates/attn-app/tests/wire/browser.rs` for the native app.
+- Native scenario: `native-browser`, macOS only, drives the agent verbs, a dialog, history, captures, cookies and the close key in the native app.
 - Stack: `cmd/attnd/agent_commands_stack_test.go`.
 - Scenario: `callouts`.
 - Kernel: the Rust tests in `app/src-tauri/core/src/browser_host.rs` and `app/src-tauri/core/src/browser_alerts.rs`.
