@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
     Ask, AuthorState, Desktop, DesktopTileContentMessage, GitOperation, InitialStateMessage,
-    OutpostInfo, PR, PluginInfo, PluginIssue, Profile, RepoState, Seed, Session,
-    SessionLedgerEntry, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
+    OutpostInfo, PR, PairedSender, PhonesUpdatedMessage, PluginInfo, PluginIssue, Profile,
+    RepoState, Seed, Session, SessionLedgerEntry, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -21,6 +21,14 @@ pub struct Facts {
     pub settings: Arc<BTreeMap<String, String>>,
     /// The machines that host remote sessions, by the id a session's `host` names.
     pub outposts: Arc<Vec<OutpostInfo>>,
+    /// The build the home daemon runs, which an outpost on another build is offered.
+    pub home_build: String,
+    /// The phones' link to Attn Cloud, their pairings and the pairing codes shown; `None` until
+    /// the daemon first lists them.
+    pub phones: Arc<Option<PhonesUpdatedMessage>>,
+    /// The programs paired to send as the selected profile; `None` until the daemon first
+    /// lists them.
+    pub senders: Arc<Option<Vec<PairedSender>>>,
     /// What each document tile holds, as the daemon last sent it.
     pub tile_contents: Arc<TileContents>,
     pub garden: Arc<Garden>,
@@ -288,7 +296,9 @@ impl Slices {
     pub const PULL_REQUESTS: Slices = Slices(1 << 18);
     pub const PLUGINS: Slices = Slices(1 << 19);
     pub const DELEGATION: Slices = Slices(1 << 20);
-    pub const ALL: Slices = Slices((1 << 21) - 1);
+    pub const PHONES: Slices = Slices(1 << 21);
+    pub const SENDERS: Slices = Slices(1 << 22);
+    pub const ALL: Slices = Slices((1 << 23) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -403,6 +413,7 @@ impl Store {
             }
             facts.settings = Arc::new(state.settings.unwrap_or_default());
             facts.outposts = Arc::new(state.outposts.unwrap_or_default());
+            facts.home_build = state.home_build.unwrap_or_default();
             let seeds: Vec<Arc<Seed>> = state
                 .seeds
                 .unwrap_or_default()
@@ -580,6 +591,20 @@ impl Store {
         self.change(|facts| {
             change(Arc::make_mut(&mut facts.pull_requests));
             Slices::PULL_REQUESTS
+        });
+    }
+
+    pub(crate) fn set_phones(&self, phones: PhonesUpdatedMessage) {
+        self.change(|facts| {
+            facts.phones = Arc::new(Some(phones));
+            Slices::PHONES
+        });
+    }
+
+    pub(crate) fn set_senders(&self, senders: Vec<PairedSender>) {
+        self.change(|facts| {
+            facts.senders = Arc::new(Some(senders));
+            Slices::SENDERS
         });
     }
 

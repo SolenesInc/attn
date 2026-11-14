@@ -67,6 +67,30 @@ pub(crate) fn clock(ms: i64) -> String {
     format!("{}:{:02}", local.hour, local.minute)
 }
 
+/// `ms` on the user's clock as the Tauri app's `toLocaleTimeString` words it: "6:00:00 PM".
+pub(crate) fn time_of_day(ms: i64) -> String {
+    let local = LocalTime::at(ms);
+    let hour = match local.hour % 12 {
+        0 => 12,
+        h => h,
+    };
+    let half = if local.hour < 12 { "AM" } else { "PM" };
+    format!("{hour}:{:02}:{:02} {half}", local.minute, local.second)
+}
+
+/// `ms` on the user's calendar and clock as the Tauri app's `toLocaleString` words it:
+/// "10/18/2026, 6:00:00 PM".
+pub(crate) fn date_time(ms: i64) -> String {
+    let local = LocalTime::at(ms);
+    format!(
+        "{}/{}/{}, {}",
+        local.month,
+        local.day,
+        local.year,
+        time_of_day(ms)
+    )
+}
+
 /// `ms` as the Tauri app sends an instant, `Date.toISOString`: UTC to the millisecond.
 pub(crate) fn iso(ms: i64) -> String {
     let t = LocalTime::at_offset(ms, 0);

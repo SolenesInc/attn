@@ -12,10 +12,13 @@ mod desktop;
 mod harnesses;
 mod hygiene;
 mod models;
+pub(crate) mod outposts;
 mod pages;
+pub(crate) mod phones;
 mod plugins;
 mod route;
 mod sections;
+mod senders;
 mod tasks;
 mod updates;
 mod view;
@@ -62,6 +65,9 @@ pub(crate) struct Dialog {
     harnesses: harnesses::Harnesses,
     catalogs: catalogs::Catalogs,
     delegation: delegation::Delegation,
+    outposts: outposts::Outposts,
+    phones: phones::Phones,
+    senders: senders::Senders,
     route_picker: Option<route::Picker>,
     /// Whether what the page lists changed since it was last brought up to date: the
     /// settings, plugins, harnesses or connection, or the page itself.
@@ -173,6 +179,9 @@ fn arrive(state: &mut State, tx: &mut Tx) {
     analytics::arrive(state, tx);
     updates::arrive(state);
     delegation::arrive(state, tx);
+    outposts::arrive(state);
+    phones::arrive(state);
+    senders::arrive(state);
 }
 
 /// Closes the dialog once every field has landed; a refused field keeps it open, showing why.
@@ -252,13 +261,17 @@ pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
     state.window.settings.autosave.sync(&settings);
     catalogs::follow(state);
     tasks::follow(state, tx);
+    outposts::follow(state, changed);
+    phones::follow(state, changed);
+    senders::follow(state, changed);
 }
 
 /// Before each frame: commits a text field the focus just left, reads the event bus when its
-/// refresh is due, forgets unmutes the daemon has taken, and lets Saved marks go; whether one
-/// went.
+/// refresh is due, forgets unmutes the daemon has taken, cancels pairing codes the Phones page
+/// left, and lets Saved marks go; whether one went.
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     hygiene::poll(state);
+    phones::poll(state, tx);
     let open = is_open(state);
     let focused = tx
         .focused()

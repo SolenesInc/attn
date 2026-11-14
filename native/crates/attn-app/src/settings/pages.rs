@@ -493,12 +493,3 @@ pub(super) fn warning(key: String, message: String, t: &Tokens) -> El {
         .color(t.warning)
         .wrap()
 }
-
-/// A page another part of attn has not brought to the native app yet.
-pub(super) fn not_yet(label: &str, t: &Tokens) -> Vec<El> {
-    vec![
-        text(format!("{label} is not in the native app yet."))
-            .font(type_::BODY)
-            .color(t.text_secondary),
-    ]
-}

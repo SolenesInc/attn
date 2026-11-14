@@ -10,10 +10,10 @@ use attn_protocol::{
     NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
     PluginsUpdatedMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
     PtyDesyncMessage, PtyResizedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
-    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
-    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent,
-    WorktreeSweptEvent, go_values,
+    SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
+    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
+    SessionsUpdatedMessage, SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage,
+    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -579,6 +579,15 @@ impl Task {
             "outposts_updated" => {
                 let message: OutpostsUpdatedMessage = parse(&header.event, text)?;
                 self.store.set_outposts(message.outposts);
+                None
+            }
+            "phones_updated" => {
+                self.store.set_phones(parse(&header.event, text)?);
+                None
+            }
+            "senders_updated" => {
+                let message: SendersUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_senders(message.senders);
                 None
             }
             "asks_updated" => {

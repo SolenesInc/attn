@@ -21,7 +21,10 @@ mod harness_catalogs;
 mod harnesses;
 mod hygiene;
 mod models;
+mod outposts;
+mod phones;
 mod plugins;
+mod senders;
 mod tasks;
 mod updates;
 

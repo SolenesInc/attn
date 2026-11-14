@@ -46,11 +46,11 @@ impl Countdown {
     }
 }
 
-fn is_open(run: &UpdateRun) -> bool {
+pub(crate) fn is_open(run: &UpdateRun) -> bool {
     !matches!(run.phase.as_str(), "done" | "failed")
 }
 
-fn failed_outposts(run: &UpdateRun) -> Vec<&UpdateOutpostProgress> {
+pub(crate) fn failed_outposts(run: &UpdateRun) -> Vec<&UpdateOutpostProgress> {
     if run.phase != "failed" {
         return Vec::new();
     }
@@ -79,8 +79,9 @@ fn phase_text(phase: &str) -> &str {
     }
 }
 
-fn outpost_text(outpost: &UpdateOutpostProgress) -> String {
-    let step = match outpost.state.as_str() {
+/// The step `outpost` is at in a run, in the Tauri app's words.
+pub(crate) fn outpost_step(outpost: &UpdateOutpostProgress) -> &str {
+    match outpost.state.as_str() {
         "staging" => match outpost.detail.as_deref() {
             Some("connecting") => "Connecting.",
             Some("building") => "Building attn for Linux.",
@@ -93,8 +94,11 @@ fn outpost_text(outpost: &UpdateOutpostProgress) -> String {
         "switching" => "Switching to the new build.",
         "done" => "Up to date.",
         state => outpost.detail.as_deref().unwrap_or(state),
-    };
-    format!("{}: {step}", outpost.name)
+    }
+}
+
+fn outpost_text(outpost: &UpdateOutpostProgress) -> String {
+    format!("{}: {}", outpost.name, outpost_step(outpost))
 }
 
 /// The run the band shows: the daemon's last, unless this window or the last launch

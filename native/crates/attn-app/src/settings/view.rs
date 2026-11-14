@@ -6,8 +6,8 @@ use rune_kit::{Dialog, TextInput};
 use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
 use super::{
-    agents, analytics, appearance, background, bus, delegation, desktop, hygiene, models, pages,
-    plugins, route, tasks, updates,
+    agents, analytics, appearance, background, bus, delegation, desktop, hygiene, models, outposts,
+    pages, phones, plugins, route, senders, tasks, updates,
 };
 use crate::State;
 use crate::setting;
@@ -222,7 +222,9 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<El> {
         Section::Desktop => desktop::page(state, t),
         Section::Hygiene => hygiene::page(state, t),
         Section::Plugins => plugins::page(state, t),
-        other => pages::not_yet(other.item().label, t),
+        Section::Outposts => outposts::page(state, t),
+        Section::Phones => phones::page(state, t),
+        Section::Senders => senders::page(state, t),
     }
 }
 

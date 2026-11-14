@@ -210,6 +210,8 @@ pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
         if let Some(waiting) = waiting.and_then(|id| state.requests.waiting.remove(&id)) {
             (waiting.then)(state, Answer::Reply(reply), tx);
             answered = true;
+        } else if crate::settings::outposts::refused(state, &reply) {
+            answered = true;
         } else if let Some(text) = unasked_refusal(&reply) {
             state.window.notify(text, tx);
             answered = true;

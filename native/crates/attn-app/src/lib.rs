@@ -94,6 +94,7 @@ impl State {
             .chain(home::next_change(&self.facts, now_ms))
             .chain(palette::next_change(self, now_ms))
             .chain(asks::next_change(self, now_ms))
+            .chain(settings::phones::next_change(self, now_ms))
             .min()
             .map(|at| (at - self.epoch_ms) as f64 / 1000.0);
         if let Some(at) = self.age_wake {

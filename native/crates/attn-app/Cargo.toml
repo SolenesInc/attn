@@ -13,6 +13,7 @@ attn-ui = { path = "../attn-ui" }
 base64 = "0.22"
 libc = "0.2"
 percent-encoding = "2.3"
+qrcodegen = "1.8"
 pulldown-cmark = { version = "0.13", default-features = false }
 rune = { workspace = true, features = ["native-file-dialog"] }
 rune-kit = { workspace = true, features = ["markdown", "mermaid"] }
