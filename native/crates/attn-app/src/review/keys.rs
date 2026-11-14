@@ -8,6 +8,7 @@ use attn_ui::Tokens;
 use rune::tok::{radius, space, type_};
 use rune::{El, col, row, text};
 
+use super::frames::Frame;
 use super::{Review, Spot, cursor_frame};
 
 fn short(commit: &str) -> &str {
@@ -175,15 +176,47 @@ pub(super) fn not_shown(key: &str, bundle: &ReviewBundle, cursor: Option<&Spot>,
         }))
 }
 
-const KEYS: &[(&str, &str)] = &[("↑ ↓", "line"), ("← →", "stop"), ("↵", "show the files")];
-
-/// The keys for what the review shows, under the tile.
-pub(super) fn key_line(prefix: &str, t: &Tokens) -> El {
+/// The keys for what the review shows in `frame`, under the tile, after the frames it offers.
+pub(super) fn key_line(
+    prefix: &str,
+    frame: Frame,
+    offered: &[Frame],
+    sides: bool,
+    t: &Tokens,
+) -> El {
     let entry = |keys: &str, what: &str| {
         text(format!("{keys} {what}"))
             .font(type_::LABEL)
             .color(t.text_secondary)
     };
+    let mut keys = vec![("↑ ↓", "line")];
+    keys.push(match frame {
+        Frame::Map => ("← →", "arrow"),
+        _ => ("← →", "stop"),
+    });
+    if sides {
+        keys.push(("b", "before, after"));
+    }
+    let tabs = (offered.len() > 1).then(|| {
+        row()
+            .role("tablist")
+            .label("Frames")
+            .gap(space::S2)
+            .children(
+                Frame::ALL
+                    .iter()
+                    .filter(|(f, _, _)| offered.contains(f))
+                    .map(|(f, key, name)| {
+                        let on = *f == frame;
+                        text(format!("{key} {name}"))
+                            .font(type_::LABEL)
+                            .color(if on { t.text_primary } else { t.text_tertiary })
+                            .role("tab")
+                            .label(format!("{key} {name}"))
+                            .checked(on)
+                    }),
+            )
+    });
     row()
         .key(format!("{prefix}.keys"))
         .role("toolbar")
@@ -193,14 +226,29 @@ pub(super) fn key_line(prefix: &str, t: &Tokens) -> El {
         .px(space::S3)
         .py(space::S1)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.5))
-        .children(KEYS.iter().map(|(k, w)| entry(k, w)))
+        .children(tabs)
+        .children(keys.into_iter().map(|(k, w)| entry(k, w)))
         .child(col().grow(1.0))
         .child(entry("?", "all keys"))
 }
 
 const ALL_KEYS: &[(&str, &str)] = &[
-    ("↑ ↓", "Move by line in code and by block in prose."),
-    ("← →", "The previous or next stop."),
+    (
+        "1 2 3",
+        "Brief: the document top to bottom. Map: the sequence diagram beside the step of the review that explains the current arrow. A frame the document cannot fill is left out.",
+    ),
+    (
+        "↑ ↓",
+        "Move by line in code, by block in prose, by arrow with a stop in a drawn diagram.",
+    ),
+    (
+        "← →",
+        "The previous or next stop; in the Map, the previous or next arrow with a stop.",
+    ),
+    (
+        "b",
+        "Switch between the diagrams before and after the change, when the document has both. Every frame shows the same side.",
+    ),
     (
         "↵",
         "On the change's facts under the title, show or hide the changed files.",

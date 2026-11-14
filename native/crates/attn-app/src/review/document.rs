@@ -22,6 +22,8 @@ pub(crate) enum Part {
     Stop(usize),
     /// The bundle's Not shown entries, in place of their list.
     NotShown,
+    /// The bundle's drawn sequence diagram at this index of its flows, in place of its fence.
+    Diagram(usize),
 }
 
 impl Part {
@@ -61,9 +63,11 @@ pub(crate) fn parts(source: &str, bundle: &ReviewBundle) -> Vec<Part> {
     let within = |items: &[i64], lines: &HashSet<i64>| {
         !items.is_empty() && items.iter().all(|line| lines.contains(line))
     };
+    let diagram_at = |line: i64| bundle.flows.iter().position(|f| f.drawn && f.line == line);
     let mut parts = Vec::new();
     for block in blocks(source) {
         let part = match &block.kind {
+            Kind::Other if let Some(flow) = diagram_at(block.line) => Part::Diagram(flow),
             Kind::Heading(3) if let Some(stop) = stop_at(block.line) => Part::Stop(stop),
             Kind::List(items) if within(items, &note_lines) => continue,
             Kind::List(items) if within(items, &not_shown_lines) => Part::NotShown,
