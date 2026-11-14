@@ -246,6 +246,40 @@ fn retries_an_unanswered_handover_under_the_same_request_and_a_refused_one_under
 }
 
 #[test]
+fn a_handover_after_the_app_restarts_starts_a_new_agent() {
+    let operations: Arc<Mutex<Vec<String>>> = Arc::default();
+    let hand_over_once = |operations: &Arc<Mutex<Vec<String>>>| {
+        let operations = operations.clone();
+        let mut world = opened(vec![continued(placed())], move |r| {
+            let id = r["request_id"].as_str().unwrap().to_owned();
+            let mut operations = operations.lock().unwrap();
+            let operation = match operations.iter().position(|known| *known == id) {
+                Some(earlier) => earlier,
+                None => {
+                    operations.push(id.clone());
+                    operations.len() - 1
+                }
+            };
+            Some(message(DelegateResultMessage {
+                request_id: Some(id),
+                success: true,
+                result: Some(DelegateResult {
+                    session_id: format!("tender-{operation}"),
+                    ..DelegateResult::default()
+                }),
+                ..DelegateResultMessage::new()
+            }))
+        });
+        click(&mut world, "Handover");
+        cmd_enter(&mut world);
+        world.daemon.sent_of("desktop_show_session").last().unwrap()["session_id"].clone()
+    };
+
+    assert_eq!(hand_over_once(&operations), "tender-0");
+    assert_eq!(hand_over_once(&operations), "tender-1");
+}
+
+#[test]
 fn waits_for_the_seeds_current_revision_before_offering_handover() {
     let holding = Arc::new(Mutex::new(false));
     let held = holding.clone();

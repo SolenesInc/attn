@@ -91,7 +91,6 @@ impl ReplyInbox {
 pub struct Requests {
     pub(crate) inbox: ReplyInbox,
     waiting: HashMap<String, Waiting>,
-    next: u64,
     sent: u64,
 }
 
@@ -118,10 +117,10 @@ impl State {
         self.ask_as(id, &command, then, tx);
     }
 
-    /// An id no other request of this window has carried.
-    pub(crate) fn next_request_id(&mut self) -> String {
-        self.requests.next += 1;
-        format!("native-{}", self.requests.next)
+    /// An id no other request has carried, from any window or run of the app, since the daemon
+    /// keeps the ids it has answered.
+    pub(crate) fn next_request_id(&self) -> String {
+        format!("native-{}", uuid::Uuid::new_v4())
     }
 
     /// Sends `command`, whose answer names `id`, and runs `then` with that answer.
