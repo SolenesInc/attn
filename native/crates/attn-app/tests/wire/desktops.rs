@@ -3513,3 +3513,61 @@ fn the_palette_offers_no_move_with_delegates_when_the_only_delegate_is_on_anothe
     assert!(palette_rows(&mut world, "Move with delegates").is_empty());
     assert!(sent(&world, "desktop_move_leaf").is_empty());
 }
+
+/// Desktop 1 holds the root agent, its delegate and a lone agent; this window shows `alone`
+/// by itself while another window on the desktop selects `elsewhere`.
+fn alone_here_selected_elsewhere(alone: &str, elsewhere: &str) -> World {
+    let source = |active: &str| {
+        let tree = row([pane("root"), pane("delegate"), pane("lone")]);
+        let mut target = desktop(2, "x", None);
+        target.name = "Target".into();
+        vec![with_active(desktop(1, "root", Some(tree)), active), target]
+    };
+    let [first, second] = <[Desktop; 2]>::try_from(source(alone)).unwrap();
+    let state = InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile(&first.id)]),
+        desktops: Some(vec![first, second]),
+        sessions: Some(vec![
+            session("root"),
+            Session {
+                dispatcher_session_id: Some("s-root".into()),
+                ..session("delegate")
+            },
+            session("lone"),
+        ]),
+        ..InitialStateMessage::new()
+    };
+    let mut world = World::start_sized(super::palette::daemon(state, vec![]), TWO_FIT);
+    world.open_desktop();
+    press(&mut world, Action::TerminalToggleMaximize);
+    arrange(&mut world, "work/desktop_1", source(elsewhere));
+    world
+}
+
+#[test]
+fn the_palette_moves_with_delegates_the_tile_shown_alone_while_another_window_selects_another() {
+    let mut world = alone_here_selected_elsewhere("root", "lone");
+    assert!(shows(&world, "Agent root") && !shows(&world, "Agent lone"));
+    assert_eq!(
+        palette_rows(&mut world, "Move with delegates"),
+        ["Move with delegates to Target"]
+    );
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Enter,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_2",
+                "leaf_id":"root","with_delegates":true}"#
+        )]
+    );
+
+    let mut world = alone_here_selected_elsewhere("lone", "root");
+    assert!(shows(&world, "Agent lone") && !shows(&world, "Agent root"));
+    assert!(palette_rows(&mut world, "Move with delegates").is_empty());
+}

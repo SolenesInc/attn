@@ -64,16 +64,19 @@ impl Command {
     }
 }
 
-/// Whether one of `agent`'s delegates has a pane on `desktop`.
+/// Whether the agent of `leaf` has a delegate with a pane on `desktop`.
 fn has_delegate_on(
     facts: &attn_client::Facts,
-    agent: &str,
     desktop: &attn_protocol::Desktop,
+    leaf: &str,
 ) -> bool {
+    let Some(agent) = desktop.panes.iter().find(|p| p.pane_id == leaf) else {
+        return false;
+    };
     facts
         .sessions
         .iter()
-        .filter(|s| s.dispatcher_session_id.as_deref() == Some(agent))
+        .filter(|s| s.dispatcher_session_id.as_deref() == Some(agent.session_id.as_str()))
         .any(|delegate| desktop.panes.iter().any(|p| p.session_id == delegate.id))
 }
 
@@ -220,7 +223,8 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         );
     }
     if let Some(current) = facts.current_desktop()
-        && on_screen.is_some_and(|agent| has_delegate_on(facts, &agent.id, current))
+        && state.window.view == crate::shell::View::Desktop
+        && has_delegate_on(facts, current, &state.window.desk.acting_leaf(current))
     {
         for desktop in model::ordered_desktops(&desktops)
             .into_iter()
