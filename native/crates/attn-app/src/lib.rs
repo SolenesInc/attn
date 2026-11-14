@@ -1,6 +1,7 @@
 mod action;
 pub mod annotations;
 mod asks;
+mod attention;
 pub mod automation;
 mod calendar;
 mod connection;
@@ -264,7 +265,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | desktop::follow_settling(state, state.wall_ms(tx));
     let settings = settings::poll(state, now, tx);
     shortcut_editor::focus_recording(state, tx);
-    let updating = update_run::poll(state, now, tx);
+    let updating = update_run::poll(state, now, tx) | attention::poll(state, now);
     shell::expire(state, now, tx)
         || settings
         || updating

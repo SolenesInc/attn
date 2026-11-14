@@ -108,6 +108,27 @@ Preconditions:
 
   Name each file for its way in, such as `pr-shortcut-drawer.txt`.
 
+### In the native app
+
+The native app (`native/`) has the attention drawer, `attention`, a region named "Needs Attention": the agents waiting for the user, then "Review Requested" and "Your PRs", each pull request with Approve, Merge and Mute. It has no pull requests on the home screen, on a tile header or in Settings yet.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`, with the mock GitHub running as for the Tauri app. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and use the Linux chords: `mod+alt+p` for the drawer, `mod+shift+r` to refresh and `mod+alt+k` for the command palette.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
+- Each `bridge` call takes a few seconds. Wait for a short-lived state with `bridge wait` on the role and name, as below, instead of reading the tree after a sleep.
+
+Steps:
+
+- **Open the drawer with its key.** Press `mod+shift+p` (`bridge key '{"chord":"mod+shift+p"}'`), then `bridge wait '{"target":{"key":"attention"}}'`. The drawer holds the keyboard. `attention.count` is named "<n> need attention", and `attention.review` and `attention.yours` list the fixture's pull requests as `attention.pr.<id>`, each with `.open` named "<repo> #<number>: <title>". Press Escape: `attention` goes.
+- **Open it from the palette.** Press `mod+shift+k`, run `bridge type '{"text":"attention"}'` and press `Enter`: `attention` shows with the keyboard.
+- **The agents waiting for the user.** Run `wsctl add-session --cwd $A --agent claude --label waiting-agent --id waiting-agent --place` and wait until `./attn agent list` shows it idle with a turn owed. Run `./attn settings set queue_mode_enabled true`: `attention.session.waiting-agent` shows under "Sessions Needing Attention". Outside the queue, the drawer lists only agents waiting for input or approval. Press that row: the agent's desktop shows, and the daemon log has `desktop_show_session`.
+- **Refresh.** Press `mod+r`: the `requestCount` in `curl -s "$ATTN_MOCK_GH_URL/__control"` grows. A failed poll shows its reason in `notice.text`, after "Refresh failed: ".
+- **Approve.** Press a review request's `attention.pr.<id>.approve`: `bridge wait '{"target":{"role":"button","name":"Approved"}}'` answers, and `requests` in `/__control` gains a `POST` to that pull request's `/reviews`. The button reads "Approve" again 1.5 s later. Once the daemon marks it approved, the pull request leaves the drawer.
+- **Merge asks first.** Press one of your pull requests' `attention.pr.<id>.merge`: `attention.merge-dialog` shows, a dialog named "Merge PR #<number>?". Press Escape: the dialog goes and the Merge button holds the keyboard. Press Merge again, then `attention.merge.confirm`: `bridge wait '{"target":{"role":"button","name":"Merged"}}'` answers and `requests` gains a `PUT` to its `/merge`.
+- **Mute.** Press a pull request's `attention.pr.<id>.mute`: it leaves the drawer at once and `attention.count` drops by one. Mute toggles in the daemon, so the row stays hidden until the daemon reports the pull request muted.
+- **Proof.** In `$P`, keep `bridge tree` with the drawer open and at the end, `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge, and `bridge shot '{"path":"<P>/native-attention-drawer.png"}'` with the drawer open, with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: recorded pull requests, watches and what each watch already reported, and muted pull requests, repositories and authors are daemon records and come back after any restart. A watch made by a crew member or the chief belongs to the mailbox of the crew member or chief who made it, and outlives the session that made it. `wait-ready` keeps its cursor in the data folder's `pr-wait`, so a later run reports only what is new until `--reset` or `--since`.
@@ -121,7 +142,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/attention.rs` (the native app's attention drawer), `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attnd/pr_stack_test.go`, `app/e2e/pr-actions.spec.ts`.
 - Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `cli/attn/src/hooks/detect.rs`.
 - App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`, `app/src/components/SettingsModal.agents.test.tsx`.

@@ -69,6 +69,8 @@ macro_rules! actions {
             OpenShortcutEditor,
             /// Ask the daemon to update attn.
             StartUpdate,
+            /// Open the attention drawer and take the keyboard into it.
+            OpenAttention,
         }
 
         impl Action {
@@ -99,6 +101,7 @@ macro_rules! actions {
                     Action::ToggleNotifications => "notifications.toggle",
                     Action::OpenShortcutEditor => "shortcuts.edit",
                     Action::StartUpdate => "update.start",
+                    Action::OpenAttention => "attention.open",
                 }
             }
 
@@ -126,6 +129,7 @@ macro_rules! actions {
                     Action::ToggleNotifications => "Show or hide notifications",
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
                     Action::StartUpdate => "Update attn",
+                    Action::OpenAttention => "Open attention drawer",
                 }
             }
 

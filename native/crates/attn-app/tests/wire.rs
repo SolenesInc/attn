@@ -1,5 +1,6 @@
 mod wire {
     mod asks;
+    mod attention;
     mod automation;
     mod connection;
     mod covered;

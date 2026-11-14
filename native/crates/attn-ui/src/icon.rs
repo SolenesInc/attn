@@ -33,3 +33,5 @@ pub const GRABBER: &str = "\u{f4a6}";
 pub const SEEDLING: &str = "\u{f06c}";
 pub const BELL: &str = "\u{f0f3}";
 pub const COPY: &str = "\u{f0c5}";
+pub const MERGE: &str = "\u{f419}";
+pub const BELL_SLASH: &str = "\u{f1f6}";

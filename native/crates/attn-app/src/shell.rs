@@ -14,7 +14,6 @@ pub(crate) const LEADER_TIMEOUT: f64 = 0.6;
 /// How long a notice stays, as the Tauri app's toast does.
 const NOTICE_SECONDS: f64 = 6.0;
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
-const DRAWER_WIDTH: f32 = 360.0;
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
 /// desktop are the daemon's; this is the window's own.
@@ -65,6 +64,7 @@ pub struct Window {
     pub(crate) tile: Option<crate::desktop::TileWindow>,
     pub(crate) garden: crate::garden::Garden,
     pub(crate) asks: crate::asks::Asks,
+    pub(crate) attention: crate::attention::Attention,
     pub(crate) ledger: crate::ledger::Ledger,
     pub(crate) notifications: crate::notifications::Panel,
     pub(crate) update_run: crate::update_run::Banner,
@@ -86,16 +86,6 @@ pub enum Drawer {
     Attention,
     Asks,
     Garden,
-}
-
-impl Drawer {
-    fn label(self) -> &'static str {
-        match self {
-            Drawer::Attention => "PRs",
-            Drawer::Asks => "Asks",
-            Drawer::Garden => "Garden",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -169,7 +159,7 @@ pub(crate) fn escape_drawers(state: &mut State, tx: &mut Tx) -> bool {
     match state.window.newest_drawer() {
         Some(Drawer::Garden) => crate::garden::close(state),
         Some(Drawer::Asks) => crate::asks::close(state, tx),
-        Some(drawer) => state.window.close_drawer(drawer),
+        Some(Drawer::Attention) => crate::attention::close(state, tx),
         None => return false,
     }
     true
@@ -243,14 +233,6 @@ impl Window {
 
     pub(crate) fn close_drawer(&mut self, drawer: Drawer) {
         self.drawers.retain(|d| *d != drawer);
-    }
-
-    pub(crate) fn toggle_drawer(&mut self, drawer: Drawer) {
-        if self.shows(drawer) {
-            self.close_drawer(drawer);
-        } else {
-            self.open_drawer(drawer);
-        }
     }
 
     pub(crate) fn toggle_layer(&mut self, layer: Layer, tx: &mut Tx) {
@@ -490,7 +472,7 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
             }
             Drawer::Garden => crate::garden::panel(state, t),
             Drawer::Asks => crate::asks::drawer(state, t),
-            drawer => self::drawer(*drawer, t),
+            Drawer::Attention => crate::attention::drawer(state, t),
         }))
 }
 
@@ -503,19 +485,6 @@ impl Window {
         self.queue_cursor = None;
         tx.blur();
     }
-}
-
-fn drawer(drawer: Drawer, t: &Tokens) -> El {
-    col()
-        .key(format!("drawer.{}", drawer.label().to_lowercase()))
-        .role("complementary")
-        .label(drawer.label())
-        .w(DRAWER_WIDTH)
-        .h_full()
-        .fill(t.bg_panel)
-        .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
-        .padding(space::S3)
-        .child(section_title(drawer.label(), t))
 }
 
 fn layers(state: &State, t: &Tokens) -> Vec<El> {
@@ -553,6 +522,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
             t,
         ));
     }
+    layers.extend(crate::attention::merge_confirmation(state, t));
     layers.extend(crate::garden::frame_layer(state, t));
     layers.extend(crate::desktop::cap_menu(state, t));
     layers.extend(crate::desktop::peek(state, t));

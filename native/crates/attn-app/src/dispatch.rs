@@ -5,7 +5,7 @@ use crate::State;
 use crate::action::Action;
 use crate::palette::Face;
 use crate::picker::{self, Direction};
-use crate::shell::{Drawer, Layer, Palette};
+use crate::shell::{Layer, Palette};
 
 /// What became of an action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,7 +52,9 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
     let window = &mut state.window;
     match action {
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
-        Action::DockAttention => window.toggle_drawer(Drawer::Attention),
+        Action::DockAttention => crate::attention::toggle(state, tx),
+        Action::OpenAttention => crate::attention::open(state, tx),
+        Action::SessionRefreshPrs => crate::attention::refresh(state, tx),
         Action::DockAsks if crate::asks::available(&state.facts) => crate::asks::toggle(state, tx),
         Action::DockAsks => return Outcome::Unavailable,
         Action::ShowAsks { ask } if crate::asks::available(&state.facts) => {

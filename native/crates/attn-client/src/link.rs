@@ -3,16 +3,16 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use attn_protocol::{
-    AsksUpdatedMessage, AttachResultMessage, ClientHelloMessage, CommandErrorMessage,
-    GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
-    GitOperationStartedMessage, InitialStateMessage, KittyImageResultMessage,
-    KittyPlacementsMessage, NotificationListResultMessage, NotificationsUpdatedMessage,
-    OutpostsUpdatedMessage, PROTOCOL_VERSION, ProfileArrangementChangedMessage,
-    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, RuntimeRespawnedMessage,
-    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
-    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent,
-    WorktreeSweptEvent, go_values,
+    AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage, ClientHelloMessage,
+    CommandErrorMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
+    GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
+    KittyImageResultMessage, KittyPlacementsMessage, NotificationListResultMessage,
+    NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
+    ReposUpdatedMessage, RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
+    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
+    SessionsUpdatedMessage, SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage,
+    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -283,18 +283,33 @@ struct Header {
     #[serde(default)]
     probe_id: Option<String>,
     #[serde(default)]
+    action: Option<String>,
+    #[serde(default)]
     protocol_version: Option<String>,
 }
 
+/// The id a pull request action is answered under: the daemon answers `approve_pr` and
+/// `merge_pr` by the action and the pull request, not by a request id.
+pub fn pr_action_id(action: &str, pr: &str) -> String {
+    format!("{action}:{pr}")
+}
+
+/// The id `refresh_prs` is answered under: its answer carries no request id, so refreshes in
+/// flight share it.
+pub const REFRESH_PRS_ID: &str = "refresh_prs";
+
 impl Header {
     /// The request this message answers: its `request_id`, for `spawn_result`,
-    /// `rename_result` and `reload_session_result` the session id the request named, and for
-    /// `pty_input_probe_result` the input's `probe_id`. The arrangement a spawn changes carries
+    /// `rename_result` and `reload_session_result` the session id the request named, for
+    /// `pty_input_probe_result` the input's `probe_id`, and for `pr_action_result` and
+    /// `refresh_prs_result` the ids above. The arrangement a spawn changes carries
     /// that id too, ahead of `spawn_result`, and answers nothing.
     fn answers(&self) -> Option<String> {
         match self.event.as_str() {
             "spawn_result" | "rename_result" | "reload_session_result" => self.id.clone(),
             "pty_input_probe_result" => self.probe_id.clone(),
+            "pr_action_result" => Some(pr_action_id(self.action.as_deref()?, self.id.as_deref()?)),
+            "refresh_prs_result" => Some(REFRESH_PRS_ID.to_owned()),
             "profile_arrangement_changed" => None,
             _ => self.request_id.clone(),
         }
@@ -562,6 +577,24 @@ impl Task {
             "vents_updated" => {
                 let message: VentsUpdatedMessage = parse(&header.event, text)?;
                 self.store.set_vents(&message.profile_id, message.vents);
+                None
+            }
+            "prs_updated" => {
+                let message: PRsUpdatedMessage = parse(&header.event, text)?;
+                let prs = message.prs.unwrap_or_default();
+                self.store.change_pull_requests(|p| p.prs = prs);
+                None
+            }
+            "repos_updated" => {
+                let message: ReposUpdatedMessage = parse(&header.event, text)?;
+                let repos = message.repos.unwrap_or_default();
+                self.store.change_pull_requests(|p| p.repos = repos);
+                None
+            }
+            "authors_updated" => {
+                let message: AuthorsUpdatedMessage = parse(&header.event, text)?;
+                let authors = message.authors.unwrap_or_default();
+                self.store.change_pull_requests(|p| p.authors = authors);
                 None
             }
             "update_changed" => {

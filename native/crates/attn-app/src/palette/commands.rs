@@ -115,6 +115,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             .pin(),
         );
     }
+    commands.push(
+        Command::new(
+            "attention",
+            "Open attention drawer",
+            &["waiting", "pull requests", "prs", "notifications"],
+            Action::OpenAttention,
+        )
+        .describe("Show sessions and pull requests that need a response")
+        .shortcut(Some(Action::DockAttention)),
+    );
     if crate::asks::available(facts) {
         commands.push(
             Command::new(
