@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,20 @@ func (d *Daemon) lockRepositoryStore(identity string) (unlock func()) {
 
 func (d *Daemon) repositoryStorePath(identity string) string {
 	return filepath.Join(d.dataRoot, "repos", attngit.RepositoryCacheKey(identity))
+}
+
+func preStoreAutomationCache(root, identity string) string {
+	return filepath.Join(root, "automation", "repos", attngit.RepositoryCacheKey(identity), "repo")
+}
+
+func (d *Daemon) worktreeBelongsTo(ctx context.Context, worktree, mainRepo string) bool {
+	belongs, _ := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (bool, error) {
+		if _, err := os.Stat(worktree); err != nil {
+			return false, nil
+		}
+		return attngit.CanonicalizePath(client.ResolveMainRepoPath(runCtx, worktree)) == attngit.CanonicalizePath(mainRepo), nil
+	})
+	return belongs
 }
 
 func (d *Daemon) gitHTTPSAuthorization(host string) string {

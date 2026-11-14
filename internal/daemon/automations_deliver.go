@@ -633,37 +633,11 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			return automation.PreparedLocation{}, errors.New("automation reviewer pull-request identity changed; refusing to reuse its worktree")
 		}
 	}
-	identity := pr.RepositoryIdentity()
-	authorization := d.gitHTTPSAuthorization(pr.Host)
-	defer d.lockRepositoryStore(identity)()
-	source := req.Location.RepositorySources.Default
-	mainRepo := ""
-	if override, ok := req.Location.RepositorySources.Overrides[identity]; ok {
-		source = override
-		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (string, error) {
-			return client.ValidateLocalClone(runCtx, source.Path, identity)
-		})
-		if err != nil {
-			return automation.PreparedLocation{}, fmt.Errorf("local repository override: %w", err)
-		}
-	} else {
-		mainRepo, err = d.ensureRepositoryStore(ctx, identity, authorization)
-		if err != nil {
-			return automation.PreparedLocation{}, automationRepositoryError(pr.Host, fmt.Errorf("repository store: %w", err))
-		}
-	}
-	d.store.MonitorWorktreeRepository(mainRepo)
-	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
-		return client.EnsurePullRequestRevision(runCtx, mainRepo, "origin", pr.Number, pr.HeadSHA, authorization)
-	}); err != nil {
-		return automation.PreparedLocation{}, automationRepositoryError(pr.Host, err)
-	}
-	repoName := pr.Repository
 	root := strings.TrimSpace(d.dataRoot)
 	if root == "" {
 		root = filepath.Dir(d.socketPath)
 	}
-	worktree := filepath.Join(root, "automation", "worktrees", string(req.IDs.SessionID), repoName)
+	worktree := filepath.Join(root, "automation", "worktrees", string(req.IDs.SessionID), pr.Repository)
 	sessionPersisted := false
 	if d.store != nil {
 		if existing := d.store.Get(req.IDs.SessionID); existing != nil {
@@ -685,6 +659,33 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			return automation.PreparedLocation{}, fmt.Errorf("inspect reviewer continuity worktree: %w", err)
 		}
 		sessionPersisted = true
+	}
+	identity := pr.RepositoryIdentity()
+	authorization := d.gitHTTPSAuthorization(pr.Host)
+	defer d.lockRepositoryStore(identity)()
+	source := req.Location.RepositorySources.Default
+	mainRepo := ""
+	if override, ok := req.Location.RepositorySources.Overrides[identity]; ok {
+		source = override
+		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+			return client.ValidateLocalClone(runCtx, source.Path, identity)
+		})
+		if err != nil {
+			return automation.PreparedLocation{}, fmt.Errorf("local repository override: %w", err)
+		}
+	} else if preStore := preStoreAutomationCache(root, identity); sessionPersisted && d.worktreeBelongsTo(ctx, worktree, preStore) {
+		mainRepo = preStore
+	} else {
+		mainRepo, err = d.ensureRepositoryStore(ctx, identity, authorization)
+		if err != nil {
+			return automation.PreparedLocation{}, automationRepositoryError(pr.Host, fmt.Errorf("repository store: %w", err))
+		}
+	}
+	d.store.MonitorWorktreeRepository(mainRepo)
+	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
+		return client.EnsurePullRequestRevision(runCtx, mainRepo, "origin", pr.Number, pr.HeadSHA, authorization)
+	}); err != nil {
+		return automation.PreparedLocation{}, automationRepositoryError(pr.Host, err)
 	}
 	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
 		_, runErr := client.EnsureAutomationSessionWorktree(runCtx, mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted)
