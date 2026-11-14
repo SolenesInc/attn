@@ -9,7 +9,7 @@ use attn_protocol::{
     DelegationSelection, Harness, HarnessModelsResultMessage, SettingsUpdatedMessage, TierDefaults,
 };
 use attn_testkit::{Request, Target, World, message};
-use rune::{Key, KeyEvent, Mods};
+use rune::Key;
 use serde_json::{Value, json};
 
 use super::harness_catalogs::{
@@ -397,7 +397,7 @@ fn status(world: &World, key: &str) -> String {
 }
 
 /// Types `text` into the field `key` in place of what it holds, as one edit; each newline
-/// goes in as Shift+Return, which breaks the line where Return alone would submit.
+/// goes in as Return.
 fn type_into(world: &mut World, key: &str, text: &str) {
     click(world, key);
     for _ in 0..value(world, key).chars().count() {
@@ -405,15 +405,7 @@ fn type_into(world: &mut World, key: &str, text: &str) {
     }
     for (i, line) in text.split('\n').enumerate() {
         if i > 0 {
-            world.gesture(|app| {
-                app.key(KeyEvent {
-                    key: Key::Enter,
-                    mods: Mods {
-                        shift: true,
-                        ..Mods::default()
-                    },
-                })
-            });
+            press(world, Key::Enter);
         }
         world.gesture(|app| app.type_text(line));
     }
@@ -449,6 +441,20 @@ fn sent_instructions(world: &World) -> Vec<(i64, String)> {
         .map(saved)
         .map(|p| (p.revision, p.fallback.instructions))
         .collect()
+}
+
+#[test]
+fn return_in_a_multi_line_field_breaks_the_line_and_saves_both_lines() {
+    let (mut world, server) = open_fallback(Spec::default());
+    click(&mut world, FALLBACK_FIELD);
+    world.gesture(|app| app.type_text("first"));
+    press(&mut world, Key::Enter);
+    world.gesture(|app| app.type_text("second"));
+    assert_eq!(value(&world, FALLBACK_FIELD), "first\nsecond");
+    assert!(saves(&world).is_empty(), "Return does not save the field");
+
+    leave_field(&mut world, FALLBACK_FIELD);
+    assert_eq!(server.preferences().fallback.instructions, "first\nsecond");
 }
 
 #[test]

@@ -437,6 +437,7 @@ fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Toke
     let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
     let field = text_input(&popup.comment, type_::LABEL)
         .key(draft::comment_field_key(id))
+        .return_breaks_line()
         .label("Annotation comment")
         .placeholder("What should change here?", t.text_muted)
         .on_edit(move |state: &mut State| state.terminals.popup_comment(&edited))
@@ -583,6 +584,7 @@ fn panel(id: &str, marking: &Marking, send_key: Option<&str>, t: &Tokens) -> El 
     let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
     let note = text_input(&marking.note, type_::LABEL)
         .key(format!("terminal.{id}.annotation.note.field"))
+        .return_breaks_line()
         .label("Note sent with these annotations")
         .placeholder("Anything else to say with these?", t.text_muted)
         .on_edit(move |state: &mut State| state.terminals.note(&edited))

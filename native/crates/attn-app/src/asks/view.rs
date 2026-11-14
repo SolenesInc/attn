@@ -671,6 +671,7 @@ fn field(
     let empty = rune::TextEdit::default();
     text_input(edit.unwrap_or(&empty), type_::BODY)
         .key(key.to_owned())
+        .return_breaks_line()
         .label(label.to_owned())
         .placeholder(placeholder.to_owned(), t.text_muted)
         .w_full()

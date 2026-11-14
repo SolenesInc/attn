@@ -663,6 +663,7 @@ fn composer_box(
     };
     let field = text_input(&composer.text, type_::BODY)
         .key(key(tile, "composer.field"))
+        .return_breaks_line()
         .label(if overall { "Overall note" } else { "Comment" })
         .placeholder(
             if overall {

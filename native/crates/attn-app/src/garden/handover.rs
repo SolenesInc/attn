@@ -267,6 +267,7 @@ impl Field<'_> {
         self.boxed(
             text_input(words, type_::BODY)
                 .key(self.spot.field())
+                .return_breaks_line()
                 .label("What should the new agent know? (optional)")
                 .on_edit(move |state: &mut State| edited.words_mut(state))
                 .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {

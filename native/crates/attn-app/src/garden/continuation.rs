@@ -109,6 +109,7 @@ impl Sheet<'_> {
             .child(
                 text_input(written, type_::BODY)
                     .key(spot.field())
+                    .return_breaks_line()
                     .label("What should Chief know? (optional)")
                     .on_edit(move |state: &mut State| edited.words_mut(state))
                     .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
