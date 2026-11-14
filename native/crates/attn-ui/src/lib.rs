@@ -162,10 +162,20 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.pressed = t.bg_selected;
     p.scrim = t.bg_overlay;
     kit.elevation.button_neutral = Vec::new();
+    kit.elevation = std::mem::take(&mut kit.elevation).with_input(vec![input_ring(t)]);
     kit.elevation.floating = vec![popover_shadow()];
     kit.elevation.md = vec![popover_shadow()];
     kit.elevation.overlay = vec![popover_shadow()];
     kit
+}
+
+/// The Tauri app's field outline, `border: 1px solid var(--color-border)`.
+fn input_ring(t: &Tokens) -> Shadow {
+    Shadow {
+        spread: 1.0,
+        color: t.border,
+        ..Shadow::default()
+    }
 }
 
 /// The Tauri app's popover shadow, `0 16px 36px rgba(0, 0, 0, 0.42)` in both appearances.

@@ -532,7 +532,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         }
         Some(Layer::Notifications) => layers.push(crate::notifications::panel(state, t)),
         Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
-        Some(Layer::Settings) => layers.extend(crate::settings::dialog(state, t)),
+        Some(Layer::Settings) => crate::settings::dialog(state, t, &mut layers),
         Some(Layer::Shortcuts) => layers.push(dialog(
             "shortcuts",
             "Keyboard shortcuts",

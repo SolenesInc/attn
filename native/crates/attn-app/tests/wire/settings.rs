@@ -119,6 +119,15 @@ fn click(world: &mut World, key: &str) {
         .unwrap_or_else(|why| panic!("press {key}: {why}"));
 }
 
+fn press_close(world: &mut World) {
+    world
+        .automate(
+            "press",
+            json!({"target": {"role": "button", "name": "Close"}}),
+        )
+        .unwrap_or_else(|why| panic!("press Close: {why}"));
+}
+
 fn state(world: &mut World) -> Value {
     world
         .automate("state", json!({"of": "settings"}))
@@ -230,7 +239,7 @@ fn escape_the_close_button_and_the_backdrop_each_close_the_dialog() {
     assert_eq!(state(&mut world)["open"], false);
 
     open(&mut world);
-    click(&mut world, "settings.close");
+    press_close(&mut world);
     assert_eq!(state(&mut world)["open"], false);
 
     open(&mut world);
@@ -682,11 +691,11 @@ fn closing_commits_the_focused_field_and_a_refusal_keeps_the_dialog_open() {
     retype(&mut world, &key, "0");
     click(&mut world, "settings.retry.narrowest_tile_cols");
     assert_eq!(writes(&world).len(), 2);
-    click(&mut world, "settings.close");
+    press_close(&mut world);
     assert_eq!(state(&mut world)["open"], true);
 
     retype(&mut world, &key, "90");
-    click(&mut world, "settings.close");
+    press_close(&mut world);
     assert_eq!(state(&mut world)["open"], false);
     assert_eq!(stored.lock().unwrap()["narrowest_tile_cols"], "90");
 

@@ -3,8 +3,8 @@
 use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Tx, col, row, text, text_input};
-use rune_kit::{Button, ControlSize, SegmentedControl, Switch};
+use rune::{El, Tx, col, row, text};
+use rune_kit::{Button, ControlSize, SegmentedControl, Switch, TextInput};
 
 use super::autosave;
 use crate::State;
@@ -129,22 +129,17 @@ pub(super) fn setting_field(
     t: &Tokens,
 ) -> El {
     let field_key = super::field_key(key);
-    let draft = state.window.settings.autosave.field(key).map(|f| &f.draft);
+    let field = state.window.settings.autosave.field(key);
     let empty = rune::TextEdit::default();
-    let input = text_input(draft.unwrap_or(&empty), type_::BODY)
+    let input = TextInput::new(field.map_or(&empty, |f| &f.draft))
         .key(field_key)
-        .single_line()
         .label(label.to_owned())
-        .placeholder(placeholder.to_owned(), t.text_muted)
+        .placeholder(placeholder.to_owned())
+        .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
-        .w(160.0)
-        .px(space::S2)
-        .py(space::S1)
-        .radius(4.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .color(t.text_primary);
+        .width(Some(160.0))
+        .build(attn_ui::kit(t));
     let saved = state
         .window
         .settings

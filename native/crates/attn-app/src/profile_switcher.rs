@@ -8,7 +8,7 @@ use attn_protocol::{
 };
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, el, icon, row, text};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col, icon, row, text};
 use rune_kit::{Button, ButtonVariant, Kit, Placement, TextInput, popover};
 
 use crate::requests::{Answer, Refused};
@@ -556,19 +556,18 @@ fn name_form(renaming: Option<String>, draft: &TextEdit, busy: bool, t: &Tokens,
     } else {
         "Rename"
     };
-    let field = el().key(NAME_FIELD).w_full().child(
-        TextInput::new(draft)
-            .label(label.clone())
-            .disabled(busy)
-            .on_edit(
-                |state: &mut State| match &mut state.window.profile_switcher.mode {
-                    Mode::Name { draft, .. } => &mut **draft,
-                    _ => unreachable!("the name field shows only while naming"),
-                },
-            )
-            .on_submit(submit_name)
-            .build(k),
-    );
+    let field = TextInput::new(draft)
+        .key(NAME_FIELD)
+        .label(label.clone())
+        .disabled(busy)
+        .on_edit(
+            |state: &mut State| match &mut state.window.profile_switcher.mode {
+                Mode::Name { draft, .. } => &mut **draft,
+                _ => unreachable!("the name field shows only while naming"),
+            },
+        )
+        .on_submit(submit_name)
+        .build(k);
     col()
         .key("profile-switcher.form")
         .w_full()

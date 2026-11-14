@@ -1,7 +1,7 @@
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Tx, col, el, row, text, text_input};
-use rune_kit::{IconButton, IconButtonVariant};
+use rune::{El, Tx, col, row, text};
+use rune_kit::{Dialog, TextInput};
 
 use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
@@ -12,97 +12,34 @@ use crate::setting;
 const SEARCH_FIELD: &str = "settings.search.field";
 
 /// The settings dialog over the window, while it is open.
-pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
-    if !super::is_open(state) {
-        return None;
-    }
-    let panel = col()
-        .key("settings.dialog")
-        .role("dialog")
-        .label("Settings")
-        .modal_tx(true, super::close)
-        .w_full()
-        .max_w(960.0)
-        .h_full()
-        .max_h(720.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .child(header(state, t))
-        .child(
-            row()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(nav(state, t))
-                .child(body(state, t)),
-        )
-        .children(analytics::toast(state, t));
-    Some(
-        el().key("settings")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .child(
-                el().key("settings.backdrop")
-                    .role("button")
-                    .label("Dismiss settings")
-                    .absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .fill(t.bg_overlay)
-                    .on_press_tx(super::close),
-            )
-            .child(
-                col()
-                    .w_full()
-                    .h_full()
-                    .padding(space::S6)
-                    .center()
-                    .child(panel),
-            ),
-    )
-}
-
-fn header(state: &State, t: &Tokens) -> El {
-    let kit = attn_ui::kit(t);
-    let search = text_input(&state.window.settings.search, type_::BODY)
+pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
+    let k = attn_ui::kit(t);
+    let search = TextInput::new(&state.window.settings.search)
         .key(SEARCH_FIELD)
-        .single_line()
         .label("Search settings")
-        .placeholder("Search settings", t.text_muted)
+        .placeholder("Search settings")
         .on_edit(|state: &mut State| &mut state.window.settings.search)
-        .w(220.0)
-        .px(space::S2)
-        .py(space::S1)
-        .radius(4.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .color(t.text_primary);
-    row()
-        .key("settings.header")
+        .width(Some(220.0))
+        .build(k);
+    let content = row()
         .w_full()
-        .items_center()
-        .gap(space::S3)
-        .px(S4)
-        .py(space::S3)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-        .child(text("Settings").font(type_::TITLE).color(t.text_primary))
-        .child(
-            text("local daemon")
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .grow(1.0),
-        )
-        .child(search)
-        .child(
-            IconButton::new(kit.glyph.close)
-                .variant(IconButtonVariant::Ghost)
-                .label("Close settings")
-                .on_press_tx(super::close)
-                .build(kit)
-                .key("settings.close"),
-        )
+        .grow(1.0)
+        .min_h(0.0)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
+        .child(nav(state, t))
+        .child(body(state, t));
+    let mut dialog = Dialog::new("settings", "Settings")
+        .description("local daemon")
+        .open(super::is_open(state))
+        .width(960.0)
+        .max_height(720.0)
+        .header(search)
+        .on_close_tx(super::close)
+        .child(content);
+    if let Some(toast) = analytics::toast(state, t) {
+        dialog = dialog.child(toast);
+    }
+    dialog.build(k, layers);
 }
 
 fn nav(state: &State, t: &Tokens) -> El {
