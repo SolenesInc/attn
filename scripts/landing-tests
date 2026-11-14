@@ -102,6 +102,7 @@ go ./internal/daemon TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionD
 go ./internal/daemon TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten
 go ./internal/daemon TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing
 go ./internal/daemon TestADelegateStartsOnASeedPointerBesideItsCaller
+go ./cmd/attnd TestAnInstallPastItsLimitFailsAndNamesTheLimit
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal

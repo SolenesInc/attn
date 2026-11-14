@@ -26,6 +26,7 @@ build-app:
 	printf '{"app":"%s"}' "$(or $(APP),tauri)" > "$(STAGED)/build-identity.json"
 	cp "$(TARGET_DIR)/attn" attn
 	cp "$(TARGET_DIR)/attnd" attnd
+	@if [ -n "$(TARGET_ENV)" ]; then printf '#!/bin/sh\nexec env %s "%s" "$$@"\n' "$(TARGET_ENV)" "$(TARGET_DIR)/attnd" > attnd; fi
 	git rev-parse HEAD >> "$(BUILT)"
 	@if [ -n "$(HOLD)" ]; then cat "$(HOLD)" >/dev/null; fi
 
@@ -683,7 +684,7 @@ func TestAFetchPastItsLimitFailsAndNamesTheLimit(t *testing.T) {
 }
 
 func TestAnInstallPastItsLimitFailsAndNamesTheLimit(t *testing.T) {
-	install := newSourceInstall(t, "HOLD_INSTALL="+holdingFifo(t), selfupdate.StepTimeoutEnv+"=200ms")
+	install := newSourceInstall(t, "HOLD_INSTALL="+holdingFifo(t), "TARGET_ENV="+selfupdate.StepTimeoutEnv+"=200ms")
 	app := install.start(t)
 
 	startUpdate(t, app)
