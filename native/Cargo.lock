@@ -70,7 +70,8 @@ dependencies = [
 [[package]]
 name = "accesskit_windows"
 version = "0.35.2"
-source = "git+https://github.com/SolenesInc/rune?rev=359e0bf07b80edcbea6173db2601a8107f7446e5#359e0bf07b80edcbea6173db2601a8107f7446e5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "498668b90da9995302a0055aaecad4756932333da2ddef6baee1c00844c430fc"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -4184,8 +4185,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-hal"
-version = "30.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=359e0bf07b80edcbea6173db2601a8107f7446e5#359e0bf07b80edcbea6173db2601a8107f7446e5"
+version = "30.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a57452fe453658e141aafdb09de1028afa498805fab518238ddf372a518813ff"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -4478,7 +4480,8 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 [[package]]
 name = "winit"
 version = "0.30.13"
-source = "git+https://github.com/SolenesInc/rune?rev=359e0bf07b80edcbea6173db2601a8107f7446e5#359e0bf07b80edcbea6173db2601a8107f7446e5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
 dependencies = [
  "ahash",
  "android-activity",

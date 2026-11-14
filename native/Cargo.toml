@@ -13,10 +13,7 @@ rune-mac = { git = "https://github.com/SolenesInc/rune", rev = "359e0bf07b80edcb
 # Rune's own [patch.crates-io], repeated: cargo ignores a dependency's [patch].
 # Keep this list equal to Rune's at the pinned rev.
 [patch.crates-io]
-wgpu-hal = { git = "https://github.com/SolenesInc/rune", rev = "359e0bf07b80edcbea6173db2601a8107f7446e5" }
-winit = { git = "https://github.com/SolenesInc/rune", rev = "359e0bf07b80edcbea6173db2601a8107f7446e5" }
 parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "359e0bf07b80edcbea6173db2601a8107f7446e5" }
-accesskit_windows = { git = "https://github.com/SolenesInc/rune", rev = "359e0bf07b80edcbea6173db2601a8107f7446e5" }
 
 # Named instances' app: release, with the app's own crate unoptimized, so an
 # edit to it rebuilds fast. What ships is always release.

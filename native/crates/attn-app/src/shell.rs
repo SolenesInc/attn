@@ -432,7 +432,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .w_full()
         .h(TITLE_BAR_HEIGHT)
         .pl(cx.chrome_insets().leading.max(8.0))
-        .pr(cx.chrome_insets().trailing.max(8.0))
+        .pr(8.0)
         .fill(t.bg_panel)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .items_center()
