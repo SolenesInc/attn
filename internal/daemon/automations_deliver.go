@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -635,24 +634,8 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 		}
 	}
 	identity := pr.RepositoryIdentity()
-	authorization := ""
-	if d.ghRegistry != nil {
-		if client, ok := d.ghRegistry.Get(pr.Host); ok {
-			authorization = client.GitHTTPSAuthorizationHeader()
-		}
-	}
-	d.automationRepoMu.Lock()
-	if d.automationRepos == nil {
-		d.automationRepos = make(map[string]*sync.Mutex)
-	}
-	repoLock := d.automationRepos[identity]
-	if repoLock == nil {
-		repoLock = &sync.Mutex{}
-		d.automationRepos[identity] = repoLock
-	}
-	d.automationRepoMu.Unlock()
-	repoLock.Lock()
-	defer repoLock.Unlock()
+	authorization := d.gitHTTPSAuthorization(pr.Host)
+	defer d.lockRepositoryStore(identity)()
 	source := req.Location.RepositorySources.Default
 	mainRepo := ""
 	if override, ok := req.Location.RepositorySources.Overrides[identity]; ok {
@@ -664,18 +647,9 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			return automation.PreparedLocation{}, fmt.Errorf("local repository override: %w", err)
 		}
 	} else {
-		root := strings.TrimSpace(d.dataRoot)
-		if root == "" {
-			root = filepath.Dir(d.socketPath)
-		}
-		target := filepath.Join(root, "automation", "repos", attngit.RepositoryCacheKey(identity), "repo")
-		cloneURL := "https://" + identity + ".git"
-		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (string, error) {
-			mainRepo, _, runErr := client.EnsureManagedClone(runCtx, cloneURL, target, identity, authorization)
-			return mainRepo, runErr
-		})
+		mainRepo, err = d.ensureRepositoryStore(ctx, identity, authorization)
 		if err != nil {
-			return automation.PreparedLocation{}, automationRepositoryError(pr.Host, fmt.Errorf("managed repository cache: %w", err))
+			return automation.PreparedLocation{}, automationRepositoryError(pr.Host, fmt.Errorf("repository store: %w", err))
 		}
 	}
 	d.store.MonitorWorktreeRepository(mainRepo)

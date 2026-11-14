@@ -320,7 +320,7 @@ func TestDisablingOrDeletingAnAutomationCancelsItsPendingRunAndKeepsItsHistory(t
 			if len(held) != 1 || held[0].State != "pending" {
 				t.Fatalf("runs = %+v, want one pending run waiting for GitHub authentication", held)
 			}
-			if _, err := os.Stat(filepath.Join(w.Dir, "automation", "repos")); !os.IsNotExist(err) {
+			if _, err := os.Stat(filepath.Join(w.Dir, "repos")); !os.IsNotExist(err) {
 				t.Errorf("a clone started without GitHub authentication (%v)", err)
 			}
 			awaitAutomationChanged(app, 1)

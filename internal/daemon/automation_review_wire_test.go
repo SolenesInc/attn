@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -86,7 +87,7 @@ func TestAReviewWhoseCodeIsOutOfReachWaitsForItAcrossARestartOrFails(t *testing.
 			t.Errorf("the stray clone's run failed with %q, want an origin mismatch", protocol.Deref(run.LastError))
 		}
 	}
-	if _, err := os.Stat(filepath.Join(r.w.Dir, "automation", "repos")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(r.w.Dir, "repos")); !os.IsNotExist(err) {
 		t.Errorf("a failed override fell back to a managed clone (%v)", err)
 	}
 
@@ -379,6 +380,54 @@ type automationReviewWorld struct {
 	head   string
 }
 
+func TestAReviewWithNoOverrideFetchesIntoTheRepositoryStoreOverThePersonsOwnRemote(t *testing.T) {
+	forge := t.TempDir()
+	source := newRepo(t, "shop-source")
+	head := commitFile(t, source, "change.go", "package change\n")
+	served := filepath.Join(forge, "acme", "shop.git")
+	runGit(t, forge, "clone", "--bare", source, served)
+	runGit(t, served, "update-ref", "refs/pull/42/head", head)
+	sshServer := filepath.Join(t.TempDir(), "forge-ssh")
+	if err := os.WriteFile(sshServer, []byte("#!/bin/sh\nfor command; do :; done\ncd \""+forge+"\" && exec sh -c \"$command\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_SSH_COMMAND", sshServer)
+	t.Setenv("GIT_SSH_VARIANT", "simple")
+
+	github := newAutomationGitHub(t)
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	projects := t.TempDir()
+	own := filepath.Join(projects, "shop")
+	runGit(t, projects, "init", "-b", "main", own)
+	runGit(t, own, "remote", "add", "origin", "git@github.test:acme/shop.git")
+	if updated := gardenAdvisorSetSetting(app, "projects_directory", projects); !protocol.Deref(updated.Success) {
+		t.Fatalf("set projects_directory: %+v", updated)
+	}
+	store := filepath.Join(w.Dir, "repos", base64.RawURLEncoding.EncodeToString([]byte("github.test/acme/shop")))
+	w.SetClaudeFolderTrust(store)
+	applyAutomation(t, cli, automationReviewSpec("store", "github_review_requested", ""))
+	refreshAutomationPRs(t, app)
+	github.request(42, head, false)
+	refreshAutomationPRs(t, app)
+
+	r := &automationReviewWorld{t: t, w: w, app: app, cli: cli, github: github}
+	delivered := r.awaitNewRun(1, "delivered")
+	reviewer := testworld.AwaitSession(app, string(protocol.Deref(delivered.SessionID)), func(s protocol.Session) bool { return s.Label == "shop#42 · sonnet" })
+	if got := strings.TrimSpace(runGit(t, reviewer.Directory, "rev-parse", "HEAD")); got != head {
+		t.Errorf("the reviewer's checkout is at %s, want %s", got, head)
+	}
+	if origin := strings.TrimSpace(runGit(t, store, "config", "remote.origin.url")); origin != "git@github.test:acme/shop.git" {
+		t.Errorf("the repository store's origin is %q, want the transport of the person's own clone", origin)
+	}
+	if bitmaps, _ := filepath.Glob(filepath.Join(store, ".git", "objects", "pack", "*.bitmap")); len(bitmaps) == 0 {
+		t.Error("the repository store has no pack bitmap")
+	}
+	if enabled := strings.TrimSpace(runGit(t, store, "config", "repack.writeBitmaps")); enabled != "true" {
+		t.Errorf("repack.writeBitmaps = %q, want true so later repacks keep bitmaps", enabled)
+	}
+}
+
 func newAutomationReviewWorld(t *testing.T, backlog ...int) *automationReviewWorld {
 	t.Helper()
 	r := &automationReviewWorld{t: t, github: newAutomationGitHub(t)}
@@ -398,10 +447,15 @@ func newAutomationReviewWorld(t *testing.T, backlog ...int) *automationReviewWor
 
 func (r *automationReviewWorld) refresh() {
 	r.t.Helper()
-	result := testworld.Request(r.app, protocol.RefreshPRsMessage{Cmd: protocol.CmdRefreshPRs}, protocol.EventRefreshPRsResult,
+	refreshAutomationPRs(r.t, r.app)
+}
+
+func refreshAutomationPRs(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	result := testworld.Request(app, protocol.RefreshPRsMessage{Cmd: protocol.CmdRefreshPRs}, protocol.EventRefreshPRsResult,
 		func(protocol.RefreshPRsResultMessage) bool { return true })
 	if !result.Success {
-		r.t.Fatalf("refresh_prs: %s", protocol.Deref(result.Error))
+		t.Fatalf("refresh_prs: %s", protocol.Deref(result.Error))
 	}
 }
 

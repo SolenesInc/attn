@@ -136,8 +136,7 @@ type Daemon struct {
 	automationMu            sync.Mutex
 	automationLaunchResults sync.Map
 	automationLaunchWaits   sync.Map
-	automationRepoMu        sync.Mutex
-	automationRepos         map[string]*sync.Mutex
+	repositoryStores        repositoryStores
 	wsWriteTimeout          time.Duration
 	wsPingInterval          time.Duration
 	wsPingTimeout           time.Duration
