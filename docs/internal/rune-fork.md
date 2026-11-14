@@ -137,8 +137,11 @@ fails, names it and prints its output.
 Compiling `rune`'s lib tests is one `rustc` that peaks at 3.6 GB of resident
 memory and takes 55 s on ai-sandbox (22 cores, 64 GB). It instantiates 188,000
 items. Two full ledger runs started together from two checkouts both finish,
-with a combined peak of 21.7 GB: most of it is cargo building one checkout's
-integration-test crates in parallel, not the lib tests. Measured 2026-11-14 on
+with a combined peak of 21.7 GB. Most of it, 19 GB, was cargo building the
+colder checkout's integration-test crates in parallel, one `rustc` per core; the
+lib tests are a small part. So a run from a cold checkout peaks near 19 GB, and
+three cold runs at once can exhaust a 64 GB machine; pass `-j` to `scripts/test.sh`
+to build fewer crates at a time. Measured 2026-11-14 on
 the fork's `main` at `e659f048` and on `test-lock-removal` at `5383df81`.
 
 Before that, the build peaked at 24.8 GB and took 425 s (2.53 million items,
