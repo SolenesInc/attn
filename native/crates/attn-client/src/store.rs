@@ -264,9 +264,40 @@ pub enum Connection {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Refusal {
-    ProtocolMismatch { app: String, daemon: String },
-    InstanceMismatch { app: String, daemon: String },
+    ProtocolMismatch {
+        app: String,
+        daemon: String,
+    },
+    InstanceMismatch {
+        app: String,
+        daemon: String,
+    },
     Unauthorized(String),
+    /// Starting the daemon failed, and it left a marker saying a data migration failed: the
+    /// user takes the details to someone who can repair the data.
+    MigrationFailed(MigrationMarker),
+}
+
+/// The daemon's `migration-failure.json`, as the app found it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MigrationMarker {
+    pub path: String,
+    /// The file's text, or why it could not be read.
+    pub contents: Result<String, String>,
+}
+
+impl MigrationMarker {
+    /// The marker at `path`, if the daemon left one there.
+    pub fn read(path: &std::path::Path) -> Option<MigrationMarker> {
+        let contents = match std::fs::read_to_string(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+            read => read.map_err(|error| error.to_string()),
+        };
+        Some(MigrationMarker {
+            path: path.display().to_string(),
+            contents,
+        })
+    }
 }
 
 /// Which slices of `Facts` a change touched, and which a window reads.

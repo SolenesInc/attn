@@ -16,6 +16,7 @@ mod wire {
     mod ledger;
     mod markdown;
     mod markdown_annotations;
+    mod migration_failure;
     mod notifications;
     mod opener;
     mod palette;

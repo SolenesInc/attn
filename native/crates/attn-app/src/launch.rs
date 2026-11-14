@@ -62,6 +62,7 @@ impl Launch {
             terminals,
             replies,
             start_daemon: Some(Arc::new(daemon::ensure)),
+            migration_marker: Some(self.instance.data_dir.join("migration-failure.json")),
         }
     }
 }

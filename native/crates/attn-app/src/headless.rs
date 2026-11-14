@@ -81,5 +81,6 @@ fn link_config() -> Result<impl FnOnce(TerminalSink, ReplySink) -> LinkConfig, S
         terminals,
         replies,
         start_daemon: None,
+        migration_marker: None,
     })
 }

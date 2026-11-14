@@ -23,7 +23,7 @@ use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::frame::Frame;
-use crate::{CLIENT_KIND, Clock, Connection, Pulse, Refusal, Store};
+use crate::{CLIENT_KIND, Clock, Connection, MigrationMarker, Pulse, Refusal, Store};
 
 const FIRST_RETRY: Duration = Duration::from_secs(1);
 const LAST_RETRY: Duration = Duration::from_secs(5);
@@ -60,6 +60,9 @@ pub struct LinkConfig {
     /// failure is shown and retried, and no connection is tried. `None` leaves starting the
     /// daemon to whoever runs it.
     pub start_daemon: Option<StartDaemon>,
+    /// Where the daemon leaves `migration-failure.json` when a data migration fails at start.
+    /// A failed start that finds the marker stops the link instead of retrying.
+    pub migration_marker: Option<std::path::PathBuf>,
 }
 
 /// A daemon message that names the request it answers.
@@ -339,6 +342,13 @@ impl Task {
                 failed = self.start_daemon() => failed,
                 _ = stopped.wait_for(|stop| *stop) => return,
             };
+            if start_failed.is_some()
+                && let Some(marker) = self.migration_failed()
+            {
+                return self
+                    .refuse(Refusal::MigrationFailed(marker), &mut stopped)
+                    .await;
+            }
             if start_failed.is_none() {
                 let ended = tokio::select! {
                     ended = self.session() => ended,
@@ -347,12 +357,7 @@ impl Task {
                 self.shared.close();
                 match ended {
                     Ended::Stopped => return,
-                    Ended::Refused(refusal) => {
-                        self.store.set_connection(Connection::Refused(refusal));
-                        self.park(Parked::Stopped);
-                        let _ = stopped.wait_for(|stop| *stop).await;
-                        return;
-                    }
+                    Ended::Refused(refusal) => return self.refuse(refusal, &mut stopped).await,
                     Ended::Lost { greeted } => {
                         if greeted {
                             retry = FIRST_RETRY;
@@ -388,6 +393,17 @@ impl Task {
             .await
             .unwrap_or_else(|_| Err("starting the daemon panicked".into()))
             .err()
+    }
+
+    /// Shows `refusal` and stops trying until the link is stopped.
+    async fn refuse(&self, refusal: Refusal, stopped: &mut watch::Receiver<bool>) {
+        self.store.set_connection(Connection::Refused(refusal));
+        self.park(Parked::Stopped);
+        let _ = stopped.wait_for(|stop| *stop).await;
+    }
+
+    fn migration_failed(&self) -> Option<MigrationMarker> {
+        MigrationMarker::read(self.config.migration_marker.as_deref()?)
     }
 
     fn park(&self, parked: Parked) {

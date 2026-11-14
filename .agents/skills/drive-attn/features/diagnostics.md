@@ -67,6 +67,21 @@ Preconditions:
 - **The diagnostics endpoint.** Quit the app if it runs (`./attn instance stop-app`), run `./attn daemon stop`, then start the daemon again with a port of your own that nothing else holds: `ATTN_PPROF=<port> ./attn daemon ensure` prints `"status": "started"`. `./attn debug daemon-log --grep "diagnostics endpoint listening"` shows `diagnostics endpoint listening on http://127.0.0.1:<port>/ (pprof + /debug/vars)`, `curl -s http://127.0.0.1:<port>/debug/vars` prints JSON that includes `worker_pids`, and `curl -s http://127.0.0.1:<port>/` lists the endpoints. Stop that daemon and run `./attn daemon ensure` without the variable to close the port.
 - **Proof.** In `$P`, keep each `./attn` command with its stdout, stderr and exit code. Also keep `./attn bus status --json` from before and after each toggle, `bridge dom_text` of `[data-testid="bus-consumers"]` after each click, `bridge capture_screenshot '{"path":"<P>/event-bus.png"}'` with **Settings → Event bus** open (where `<P>` is the folder's path written out), the report file, and `./attn seed ls` from before and after the restore. Name each file for its way in, such as `diagnostics-bus-cli-disable.txt`.
 
+### In the native app
+
+The native app (`native/`) opens on the migration failure screen as the Tauri app does. The event bus and task runner sections are in its settings ([settings.md](settings.md)). The diagnostic report drives only in the Tauri app for now.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+
+Steps:
+
+- **A failed migration stops the app on its details.** Quit the app with `./attn instance stop-app` and stop the daemon with `./attn daemon stop`. Move `<data-dir>/attn.db` aside and make a folder named `attn.db` in its place. `./attn daemon ensure` now exits 1, and the daemon leaves `<data-dir>/migration-failure.json` with an error that reads `is a directory`. Launch the app: `bridge wait '{"target":{"key":"migration-failure"}}'` answers. `migration-failure.title` reads "attn seems broken after migration", and `migration-failure.facts` lists each fact as `<label>: <value>`, from "Daemon log" through "Failed at", then "Failure marker" with the marker's path. No What's new opens over it. The app makes no second try at starting the daemon.
+- **Copy details.** Run `bridge press '{"target":{"key":"migration-failure.copy"}}'`: the button reads "Copied", and the clipboard holds "attn failed to migrate its data at startup." followed by one line per fact.
+- **Repair.** Quit the app, remove the `attn.db` folder, move the database back, and delete `migration-failure.json`. Launch the app: it opens on home.
+- **Proof.** In `$P`, keep `bridge tree` with the screen open, the clipboard's text, and `bridge shot '{"path":"<P>/native-migration-failure.png"}'`, with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: the daemon takes a backup at every start and every 6 hours and keeps the newest 12 backups, and keeps the pre-migration snapshots as well. A restore keeps the database it replaces. A restore also pins again each conversation archive that the restored backup records. The daemon stores a consumer's cursor and enabled bit, so a disabled consumer stays disabled across restarts. `daemon.log` is kept across restarts, and the daemon trims it once it grows past 20 MiB.
@@ -82,6 +97,7 @@ Preconditions:
 - Wire: `internal/daemon/bus_status_wire_test.go`, `internal/daemon/bus_health_wire_test.go`, `internal/daemon/bus_lag_wire_test.go`, `internal/daemon/bus_pin_alarm_wire_test.go`, `internal/daemon/daemon_warnings_wire_test.go`, `internal/daemon/diag_wire_test.go`, `internal/daemon/support_snapshot_wire_test.go`, `internal/daemon/backup_wire_test.go`, `internal/daemon/backup_rotation_wire_test.go`, `internal/daemon/tasks_wire_test.go`, `internal/daemon/tasks_protocol_wire_test.go`, `internal/daemon/tasks_restart_wire_test.go`.
 - Stack: `cmd/attnd/debug_stack_test.go`, `cmd/attnd/preflight_stack_test.go`, `cmd/attnd/db_stack_test.go`, `cmd/attnd/bus_stack_test.go`.
 - Kernel: `cmd/attnd/bus_test.go`, `internal/daemon/bus_pin_alarm_test.go`, `internal/store/backup_test.go`, `internal/bus/*_test.go`, `internal/jobs/*_test.go`.
+- Wire (the native app): `native/crates/attn-app/tests/wire/migration_failure.rs`.
 - App: `app/src/App.diagnosticReport.test.tsx`, `app/src/App.eventBusSettings.test.tsx`, `app/src/App.backgroundTasks.test.tsx`, `app/src/application/useAppDiagnostics.test.tsx`, `app/src/components/MigrationFailureScreen.facts.test.tsx`.
 
 ## Gotchas
@@ -94,4 +110,4 @@ Preconditions:
 - `ATTN_BUS_PIN_ALARM_AGE` and `ATTN_BUS_RETENTION` change the daemon and `attn bus` separately. Set them for both, or the table and the notification disagree. On a young instance a trim removes little, since the default window is 30 days.
 - The diagnostic report goes to the real Downloads folder and Finder opens on it. The report may contain terminal output the user ticked. Check it for private text before sharing.
 - `attn debug incidents`, `diagnostics` and `input` read the app's files: on a daemon-only instance they exit 1 with `no such file:`.
-- The migration failure screen cannot be driven on the baseline: it needs a migration that really failed. You reach Retry and the failed-task notification only when a task has failed or died. If **Settings → Task runner** shows none, report them as not reached.
+- The migration failure screen needs a migration that really failed. [In the native app](#in-the-native-app) makes one by putting a folder where `attn.db` was, which fails the start in either app. You reach Retry and the failed-task notification only when a task has failed or died. If **Settings → Task runner** shows none, report them as not reached.

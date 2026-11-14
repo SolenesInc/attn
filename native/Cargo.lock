@@ -445,6 +445,7 @@ dependencies = [
  "rune",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-tungstenite",
 ]

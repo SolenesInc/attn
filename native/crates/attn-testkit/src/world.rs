@@ -238,6 +238,7 @@ impl World {
                 }),
                 replies: answers,
                 start_daemon: Some(daemon.starter()),
+                migration_marker: Some(daemon.migration_marker()),
             },
             store.clone(),
         );

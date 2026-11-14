@@ -59,5 +59,12 @@ fn explain(refusal: &Refusal) -> (&'static str, String) {
             ),
         ),
         Refusal::Unauthorized(reason) => ("The daemon refused this app", reason.clone()),
+        Refusal::MigrationFailed(marker) => (
+            "attn seems broken after migration",
+            format!(
+                "A data migration failed at startup; its details are in {}.",
+                marker.path
+            ),
+        ),
     }
 }

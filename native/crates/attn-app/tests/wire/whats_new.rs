@@ -299,3 +299,21 @@ fn a_dismissed_banner_stays_away_across_launches_and_the_palette_still_replays()
     replay_from_palette(&mut world);
     assert_eq!(title(&world), "One profile per world");
 }
+
+#[test]
+fn a_failed_migration_shows_its_screen_and_not_the_tour() {
+    let dir = tempfile::tempdir().unwrap();
+    let daemon = daemon(&[]);
+    daemon.fail_migration(attn_testkit::Marker::Text(
+        r#"{"error":"conversion aborted"}"#,
+    ));
+    let world = World::start_with_prefs(daemon, Prefs::at(after_update(dir.path())));
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("migration-failure"))
+            .is_some()
+    );
+    assert!(!open(&world));
+}

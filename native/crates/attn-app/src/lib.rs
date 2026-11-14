@@ -20,6 +20,7 @@ mod keys;
 pub mod launch;
 mod ledger;
 mod markdown;
+mod migration_failure;
 mod notifications;
 mod opener;
 mod palette;

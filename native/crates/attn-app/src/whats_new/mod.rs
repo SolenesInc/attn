@@ -145,11 +145,14 @@ fn step_count(state: &State) -> usize {
     steps(&state.keymap).len()
 }
 
-/// Opens the tour on the first launch of a release, once per window's life. A tile window
-/// never greets.
+/// Opens the tour on the first launch of a release, once per window's life, once the window
+/// reaches the daemon. A tile window never greets.
 pub(crate) fn greet(state: &mut State, tx: &mut Tx) -> bool {
     let tour = &mut state.window.whats_new;
-    if tour.greeted || state.window.tile.is_some() {
+    if tour.greeted
+        || state.window.tile.is_some()
+        || state.facts.connection != attn_client::Connection::Connected
+    {
         return false;
     }
     tour.greeted = true;

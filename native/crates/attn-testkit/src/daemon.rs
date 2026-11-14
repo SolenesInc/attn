@@ -111,10 +111,17 @@ struct Shared {
     pulse: Pulse,
 }
 
+/// The `migration-failure.json` a daemon leaves when a data migration fails at start.
+pub enum Marker<'a> {
+    Text(&'a str),
+    Unreadable,
+}
+
 /// The daemon side of a wire test: a WebSocket server on a loopback port that answers the
 /// app from a script the test writes. Also serves `/health`, as the real daemon does.
 pub struct Daemon {
     shared: Arc<Shared>,
+    data_dir: tempfile::TempDir,
     address: SocketAddr,
     stop: watch::Sender<bool>,
     thread: Option<JoinHandle<()>>,
@@ -160,6 +167,7 @@ impl Daemon {
             .expect("the daemon's thread");
         let daemon = Daemon {
             shared,
+            data_dir: tempfile::tempdir().expect("a data folder for the scripted daemon"),
             address,
             stop,
             thread: Some(thread),
@@ -317,6 +325,24 @@ impl Daemon {
     /// While set, the app's tries to start the daemon fail with `reason`.
     pub fn fail_starts(&self, reason: Option<&str>) {
         self.shared.script.lock().unwrap().start_fails = reason.map(str::to_owned);
+    }
+
+    /// Where this daemon leaves `migration-failure.json`, in a data folder of its own.
+    pub fn migration_marker(&self) -> std::path::PathBuf {
+        self.data_dir.path().join("migration-failure.json")
+    }
+
+    /// A data migration fails at start, as the real daemon's does: every try to start it fails,
+    /// and it leaves `marker` as its `migration-failure.json`. A `marker` that is not a file
+    /// stands for one the app cannot read.
+    pub fn fail_migration(&self, marker: Marker) {
+        let path = self.migration_marker();
+        match marker {
+            Marker::Text(text) => std::fs::write(&path, text),
+            Marker::Unreadable => std::fs::create_dir(&path),
+        }
+        .expect("the daemon's data folder takes the marker");
+        self.fail_starts(Some("attnd daemon ensure failed: data migration failed"));
     }
 
     /// What the app runs to start this daemon, as `attnd daemon ensure` starts the real one.

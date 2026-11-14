@@ -1,4 +1,4 @@
-use attn_client::{Connection, Facts};
+use attn_client::{Connection, Facts, Refusal};
 use attn_ui::{Appearance, Tokens};
 use rune::tok::{space, type_};
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
@@ -73,6 +73,8 @@ pub struct Window {
     pub(crate) settings: crate::settings::Dialog,
     pub(crate) shortcut_editor: crate::shortcut_editor::Editor,
     pub(crate) profile_switcher: crate::profile_switcher::Switcher,
+    /// The migration failure screen's details went to the clipboard.
+    pub(crate) migration_details_copied: bool,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -366,6 +368,9 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     let body = match connection {
         Connection::Connected | Connection::Reconnecting { .. } => shell(state, &t, cx.env().scale),
         Connection::Connecting => centered(&t, connection::connecting(&t)),
+        Connection::Refused(Refusal::MigrationFailed(marker)) => {
+            centered(&t, crate::migration_failure::screen(state, marker, &t))
+        }
         Connection::Refused(refusal) => centered(&t, connection::refused(&t, refusal)),
     };
     let banner = match connection {

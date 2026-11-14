@@ -98,6 +98,7 @@ impl App {
                 terminals,
                 replies,
                 start_daemon: None,
+                migration_marker: None,
             },
             WALL_START_MS,
             host.frames.clone(),
