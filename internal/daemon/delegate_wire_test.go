@@ -74,8 +74,8 @@ func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 			}
 			seed := shown.Seed
 			if seed.Body != "Migrate the store to the new schema" || seed.Title != "Store migration" || seed.Status != "growing" ||
-				planterSessionOf(seed) != source || tenderSessionOf(seed) != result.SessionID {
-				t.Errorf("the delegation planted %+v; want the brief, growing, planted by %s and tended by %s", seed, source, result.SessionID)
+				seed.Planter.Ref != "user" || tenderSessionOf(seed) != result.SessionID {
+				t.Errorf("the app's delegation planted %+v; want the brief, growing, planted by the user and tended by %s", seed, result.SessionID)
 			}
 
 			if protocol.Deref(result.DesktopID) != sourceDesktop || result.Directory != cwd {

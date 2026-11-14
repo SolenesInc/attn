@@ -24,6 +24,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type wsClient struct {
@@ -43,6 +44,7 @@ type wsClient struct {
 
 	webOrigin                string
 	browserHostAuthenticated bool
+	caller                   who.Actor
 
 	pid             int
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
@@ -554,6 +556,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		gone:            make(chan struct{}),
 		connectedAt:     time.Now(),
 		webOrigin:       origin,
+		caller:          appCaller(),
 		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 	release, held := d.life.Hold("handleWS")

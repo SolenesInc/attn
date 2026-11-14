@@ -18,11 +18,12 @@ type seedResumeOutcome struct {
 func (d *Daemon) resumeSeedFromReview(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
+	by who.Actor,
 ) (*seedResumeOutcome, error) {
 	var outcome *seedResumeOutcome
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var resumeErr error
-		outcome, resumeErr = d.resumeSeedFromReviewProtected(protection, seedID, review)
+		outcome, resumeErr = d.resumeSeedFromReviewProtected(protection, seedID, review, by)
 		return resumeErr
 	})
 	return outcome, err
@@ -32,6 +33,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	protection foregroundCleanupProtection,
 	seedID string,
 	review *protocol.SeedReviewActionContext,
+	by who.Actor,
 ) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
@@ -56,6 +58,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
 	return d.resumeSeedTender(protection, seed, tenderResumeCause{
+		by: by,
 		tend: func(claimant who.Party, actor who.Actor) error {
 			_, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
 				seedID, garden.VerbTend, garden.Ask{Actor: actor, Claimant: claimant}, "", expectedRev)
@@ -70,6 +73,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 }
 
 type tenderResumeCause struct {
+	by     who.Actor
 	tend   func(claimant who.Party, actor who.Actor) error
 	settle func()
 	mail   bool
@@ -94,7 +98,7 @@ func (d *Daemon) resumeFromContinuation(protection foregroundCleanupProtection, 
 		executed = continuation.Execution.SessionID
 	}
 	if key, member := d.seedResumeMember(seed, executed); member {
-		return d.resumeMemberSeed(seed, key, tend, settle, seed.Tender.IsZero())
+		return d.resumeMemberSeed(seed, key, cause.by, tend, settle, seed.Tender.IsZero())
 	}
 	if continuation == nil {
 		if !seed.Tender.IsZero() {
@@ -181,13 +185,13 @@ func (d *Daemon) seedResumeMember(seed garden.Seed, executed protocol.SessionID)
 }
 
 func (d *Daemon) resumeMemberSeed(
-	seed garden.Seed, key who.MemberKey, tend func(who.Party, who.Actor) error, settle func(), claim bool,
+	seed garden.Seed, key who.MemberKey, by who.Actor, tend func(who.Party, who.Actor) error, settle func(), claim bool,
 ) (*seedResumeOutcome, error) {
 	if retired, ok := d.retiredCrewMember(key.String()); ok {
 		return nil, blockedResume(retiredMemberError(retired))
 	}
 	if claim {
-		if err := tend(who.Member(key), who.User()); err != nil {
+		if err := tend(who.Member(key), by); err != nil {
 			return nil, err
 		}
 	}
@@ -205,7 +209,7 @@ func (d *Daemon) resumeMemberSeed(
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review)
+	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review, client.caller)
 	response := protocol.SeedResumeResultMessage{
 		Event:     protocol.EventSeedResumeResult,
 		RequestID: requestID,

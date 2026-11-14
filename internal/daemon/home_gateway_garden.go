@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/homegateway"
-	"github.com/victorarias/attn/internal/who"
 )
 
 const homeGatewayClosedSeedShownFor = 24 * time.Hour
@@ -288,7 +287,7 @@ func (d *Daemon) homeGatewaySeedNote(conn *homeGatewayConn, command homegateway.
 		result.Error = protocol.Ptr(err.Error())
 		return homeGatewaySend(conn, result)
 	}
-	if _, err := d.appendSeedNote(command.SeedID, command.Body, who.User(), "", nil, false, ""); err != nil {
+	if _, err := d.appendSeedNote(command.SeedID, command.Body, conn.caller, "", nil, false, ""); err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
 	return homeGatewaySend(conn, result)
@@ -317,7 +316,7 @@ func (d *Daemon) homeGatewayMoveSeed(conn *homeGatewayConn, command homegateway.
 	if _, err := d.homeGatewayProfileSeed(conn, command.SeedID); err != nil {
 		return err
 	}
-	ask := garden.Ask{Actor: who.User(), Force: true}
+	ask := garden.Ask{Actor: conn.caller, Force: true}
 	comment := ""
 	switch verb {
 	case garden.VerbHarvest, garden.VerbWither:
@@ -326,7 +325,7 @@ func (d *Daemon) homeGatewayMoveSeed(conn *homeGatewayConn, command homegateway.
 		comment = command.Text
 	case garden.VerbReplant:
 		if command.Text != "" {
-			if _, err := d.appendSeedNote(command.SeedID, command.Text, who.User(), "", nil, false, ""); err != nil {
+			if _, err := d.appendSeedNote(command.SeedID, command.Text, conn.caller, "", nil, false, ""); err != nil {
 				return err
 			}
 		}

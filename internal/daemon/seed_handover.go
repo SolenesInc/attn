@@ -49,7 +49,7 @@ func (d *Daemon) prepareSeedHandover(
 		return plan, nil
 	}
 	if msg.Authorization != "" {
-		if err := d.checkSeedStanding(seed, d.actorOfSession(protocol.TrimID(protocol.Deref(msg.SourceSessionID))), "set its authorization"); err != nil {
+		if err := d.checkSeedStanding(seed, msg.By, "set its authorization"); err != nil {
 			return nil, err
 		}
 	}
@@ -148,12 +148,12 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, err
 	}
 	cause := protocol.SessionID(strings.TrimSpace(string(protocol.Deref(msg.SourceSessionID))))
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seedCause{session: cause, by: d.actorOfSession(cause), notifiedSession: sessionID, directlyNotified: who.Session(sessionID)})
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seedCause{session: cause, by: msg.By, notifiedSession: sessionID, directlyNotified: who.Session(sessionID)})
 	if err != nil {
 		return nil, err
 	}
 	change := seedChange{
-		author: d.actorOfSession(cause), cause: cause,
+		author: msg.By, cause: cause,
 		events: []seedEvent{{occurrence: tended, detail: "handed over to " + string(sessionID)}},
 	}
 	if handoff != nil {
@@ -236,7 +236,7 @@ func (d *Daemon) handoverDispatchCommits(
 	newDispatch = mergeGardenExecution(newDispatch, observed)
 	newDispatch.Crown = seed.ID
 	newDispatch.SupersededBy = ""
-	newDispatch.Dispatcher = d.actorOfSession(protocol.Deref(msg.SourceSessionID))
+	newDispatch.Dispatcher = msg.By
 	newDispatch.FromChief = fromChief
 	newDispatch.OperationID = operationID
 	if newDispatch.Cwd == "" {
@@ -291,6 +291,6 @@ func (d *Daemon) handoffNote(seedID string, msg *resolvedDelegationLaunch) (*gar
 	}
 	return &garden.Note{
 		ID: strings.TrimSpace(protocol.Deref(msg.Handover.NoteID)), Seed: seedID, Kind: garden.NoteKindHandoff, Body: handoff,
-		Author: d.actorOfSession(protocol.Deref(msg.SourceSessionID)),
+		Author: msg.By,
 	}, nil
 }

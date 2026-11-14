@@ -6,9 +6,9 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) actorOfSession(id protocol.SessionID) who.Actor {
+func (d *Daemon) sessionOrAttn(id protocol.SessionID) who.Actor {
 	if id = protocol.TrimID(id); id == "" {
-		return who.User()
+		return who.Attn()
 	}
 	return d.partyOfSession(id).Actor()
 }

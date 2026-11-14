@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var delegationGitTask = gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}
@@ -408,7 +409,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 				return nil, inspectErr
 			}
 			observed := d.delegationExecution(sessionID, agent, inspection)
-			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, cmp.Or(msg.SeedTitle, existing.Label), seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
+			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.By, msg.ParentSeedID, brief, cmp.Or(msg.SeedTitle, existing.Label), seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, existing.ProfileID)
 			if err != nil {
 				return nil, err
 			}
@@ -526,7 +527,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 	} else {
 		observed := d.delegationExecution(sessionID, agent, inspection)
-		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, seedTitle, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
+		seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.By, msg.ParentSeedID, brief, seedTitle, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew, profile.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -695,12 +696,11 @@ func (d *Daemon) delegatedSeedPrompt(profileID, seedID, seedTitle, guidance stri
 }
 
 func (d *Daemon) saveDelegationAuthorization(msg *resolvedDelegationLaunch, seedID string) error {
-	source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	return d.saveSeedAuthorization(seedID, msg.Authorization, d.actorOfSession(source), source)
+	return d.saveSeedAuthorization(seedID, msg.Authorization, msg.By, protocol.TrimID(protocol.Deref(msg.SourceSessionID)))
 }
 
-func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protocol.DelegateMessage) {
-	operation, err := d.startDelegation(ctx, msg)
+func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protocol.DelegateMessage, by who.Actor) {
+	operation, err := d.startDelegation(ctx, msg, by)
 	if err != nil {
 		d.sendError(conn, "delegate: "+err.Error())
 		return
@@ -724,7 +724,7 @@ func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatu
 }
 
 func (d *Daemon) handleDelegateWS(client *wsClient, msg *protocol.DelegateMessage) {
-	operation, err := d.startDelegation(context.Background(), msg)
+	operation, err := d.startDelegation(context.Background(), msg, client.caller)
 	if err == nil {
 		operation, err = d.awaitDelegationSettled(operation.OperationID, client.gone)
 		if errors.Is(err, errCallerGone) {

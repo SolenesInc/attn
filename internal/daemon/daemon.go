@@ -2116,7 +2116,7 @@ func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTea
 	}
 	session := d.store.Get(sessionID)
 	terminals := d.terminalsOf(sessionID)
-	if err := d.closeSession(sessionID, store.SessionClose{By: who.User()}); err != nil {
+	if err := d.closeSession(sessionID, store.SessionClose{By: who.Attn()}); err != nil {
 		lifecycleLock.Unlock()
 		d.logf("session teardown recovery close failed for %s: %v", sessionID, err)
 		return nil
@@ -2910,6 +2910,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		}
 	}
 	caller := d.callerSession(ctx, data)
+	by := d.socketCaller(ctx, data)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -2942,7 +2943,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
 		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:
-		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage))
+		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage), by)
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
 		d.handleAutomationCommand(conn, cmd, msg)
 	case protocol.CmdDelegationRoles:
@@ -2996,7 +2997,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdJournalAppend:
 		d.handleJournalAppend(conn, msg.(*protocol.JournalAppendMessage))
 	case protocol.CmdUnregister:
-		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage))
+		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage), by)
 	case protocol.CmdState:
 		d.handleState(conn, msg.(*protocol.StateMessage))
 	case protocol.CmdHookNotification:
@@ -3092,9 +3093,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdAgentMsgStatus:
 		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
 	case protocol.CmdSeedPlant:
-		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage))
+		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage), by)
 	case protocol.CmdSeedPlot:
-		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage))
+		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage), by)
 	case protocol.CmdSeedList:
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
 	case protocol.CmdSeedSearch:
@@ -3102,35 +3103,35 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdSeedShow:
 		d.handleSeedShow(ctx, conn, msg.(*protocol.SeedShowMessage))
 	case protocol.CmdSeedArtifactTransfer:
-		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage))
+		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage), by)
 	case protocol.CmdSeedEdit:
-		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
+		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage), by)
 	case protocol.CmdSeedRollback:
-		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage))
+		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage), by)
 	case protocol.CmdSeedAuthorization:
-		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage))
+		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage), by)
 	case protocol.CmdSeedReminder:
-		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage))
+		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage), by)
 	case protocol.CmdSeedStandby:
-		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage))
+		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage), by)
 	case protocol.CmdSeedTransition:
-		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
+		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage), by)
 	case protocol.CmdSeedNote:
-		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage))
+		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage), by)
 	case protocol.CmdSeedCheck:
-		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage))
+		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage), by)
 	case protocol.CmdSeedNotes:
 		d.handleSeedNotes(conn, msg.(*protocol.SeedNotesMessage))
 	case protocol.CmdSeedWatch:
 		d.handleSeedWatch(conn, msg.(*protocol.SeedWatchMessage))
 	case protocol.CmdSeedLink:
-		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage))
+		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage), by)
 	case protocol.CmdSeedReady:
 		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
 	case protocol.CmdSeedReviewStart:
 		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
 	case protocol.CmdSeedSendToChief:
-		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage))
+		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage), by)
 	case protocol.CmdSeedReviewShow:
 		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
 	case protocol.CmdSeedReviewCancel:
@@ -3293,13 +3294,13 @@ func (d *Daemon) projectSessionUnregistered(ev bus.Event) {
 	})
 }
 
-func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
+func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage, by who.Actor) {
 	teardown, err := d.prepareSessionTeardown(msg.ID)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return
 	}
-	if err := d.commitSessionUnregister(msg.ID, store.SessionClose{By: who.User()}); err != nil {
+	if err := d.commitSessionUnregister(msg.ID, store.SessionClose{By: by}); err != nil {
 		d.cancelSessionTeardown(msg.ID, teardown)
 		d.sendError(conn, fmt.Sprintf("close session: %v", err))
 		return

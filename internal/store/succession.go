@@ -47,7 +47,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) (S
 			return fmt.Errorf("succeed session %s: %w", sc.From, err)
 		}
 		if sc.Close.By.IsZero() {
-			sc.Close.By = who.User()
+			sc.Close.By = who.Attn()
 		}
 		at := time.Now().UTC().Format(time.RFC3339Nano)
 		var exists int

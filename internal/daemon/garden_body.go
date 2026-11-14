@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seedBodyConflictError string
@@ -81,7 +82,7 @@ func (d *Daemon) adoptInlineSeedBody(seedSchema docstore.CollectionSchema, inlin
 		_, err := d.commitSeedBodyEdit(&protocol.SeedEditMessage{
 			SeedID: inline.ID, Body: inline.Body, BaseBodySHA256: garden.BodySHA256(current),
 			Note: protocol.Ptr("written by an older attn build, which could not see the previous text; that text stays in the previous body version"),
-		})
+		}, who.Attn())
 		return err
 	}
 	seed, doc, err := d.readSeed(inline.ID)
@@ -182,8 +183,8 @@ func (d *Daemon) latestSeedBodyVersion(id string) (garden.BodyVersion, error) {
 	return garden.DecodeBodyVersion(read.Documents[0].Body)
 }
 
-func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage) {
-	result, err := d.applySeedBodyEdit(msg)
+func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage, by who.Actor) {
+	result, err := d.applySeedBodyEdit(msg, by)
 	if err != nil {
 		var conflict seedBodyConflictError
 		if errors.As(err, &conflict) {
@@ -195,8 +196,8 @@ func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage) {
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedEditResult: result})
 }
 
-func (d *Daemon) handleSeedRollback(conn net.Conn, msg *protocol.SeedRollbackMessage) {
-	result, err := d.rollbackSeedBody(msg)
+func (d *Daemon) handleSeedRollback(conn net.Conn, msg *protocol.SeedRollbackMessage, by who.Actor) {
+	result, err := d.rollbackSeedBody(msg, by)
 	if err != nil {
 		d.sendGardenError(conn, "rollback", err)
 		return
@@ -204,7 +205,7 @@ func (d *Daemon) handleSeedRollback(conn net.Conn, msg *protocol.SeedRollbackMes
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedRollbackResult: result})
 }
 
-func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.SeedRollbackResult, error) {
+func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage, by who.Actor) (*protocol.SeedRollbackResult, error) {
 	seed, _, err := d.readSeed(msg.SeedID)
 	if err != nil {
 		return nil, err
@@ -247,7 +248,7 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 	edit, err := d.applySeedBodyEdit(&protocol.SeedEditMessage{
 		SeedID: seed.ID, Body: target.Body, BaseBodySHA256: garden.BodySHA256(body),
 		SourceSessionID: msg.SourceSessionID, Note: protocol.Ptr(fmt.Sprintf("rollback to v%d", version)),
-	})
+	}, by)
 	if err != nil {
 		var conflict seedBodyConflictError
 		if errors.As(err, &conflict) {
@@ -265,20 +266,20 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 	}, nil
 }
 
-func (d *Daemon) applySeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.SeedEditResult, error) {
+func (d *Daemon) applySeedBodyEdit(msg *protocol.SeedEditMessage, by who.Actor) (*protocol.SeedEditResult, error) {
 	if err := garden.ValidateBodyEdit(msg.Body); err != nil {
 		return nil, err
 	}
 	var result *protocol.SeedEditResult
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(_ foregroundCleanupProtection) error {
 		var err error
-		result, err = d.commitSeedBodyEdit(msg)
+		result, err = d.commitSeedBodyEdit(msg, by)
 		return err
 	})
 	return result, err
 }
 
-func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.SeedEditResult, error) {
+func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage, by who.Actor) (*protocol.SeedEditResult, error) {
 	seedSchema, err := d.seedsCollection()
 	if err != nil {
 		return nil, err
@@ -325,12 +326,12 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 		if text := strings.Join(strings.Fields(protocol.Deref(msg.Note)), " "); text != "" {
 			detail += " — " + text
 		}
-		edited, err := seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().BodyEdited, seed.ID, seedEvents.CausePayload{CausedBySessionID: author, CausedBy: d.actorOfSession(author).String()})
+		edited, err := seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().BodyEdited, seed.ID, seedEvents.CausePayload{CausedBySessionID: author, CausedBy: by.String()})
 		if err != nil {
 			return nil, err
 		}
 		log, err := d.seedChangeLog(seedChange{
-			author: d.actorOfSession(author), cause: author,
+			author: by, cause: author,
 			events: []seedEvent{{occurrence: edited, detail: detail}},
 		})
 		if err != nil {

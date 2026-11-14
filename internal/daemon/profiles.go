@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/who"
 )
 
 type profileActionOutcome struct {
@@ -754,7 +753,7 @@ func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 		d.detachSession(client, tile.RuntimeID)
 		return nil
 	}
-	closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: who.User()}, client)
+	closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: client.caller}, client)
 	if err != nil {
 		return err
 	}

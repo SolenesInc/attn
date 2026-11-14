@@ -14,7 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID string, sessionID protocol.SessionID, plannerSessionID protocol.SessionID, parentSeedID string, brief string, name string, seedID string, observed garden.Execution, fromChief, createSeed bool, profileID ...string) (string, error) {
+func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID string, sessionID protocol.SessionID, plannerSessionID protocol.SessionID, by who.Actor, parentSeedID string, brief string, name string, seedID string, observed garden.Execution, fromChief, createSeed bool, profileID ...string) (string, error) {
 	if dispatch, found := d.gardenDispatch(sessionID); found && activeDispatchCrown(dispatch) != "" {
 		bound := activeDispatchCrown(dispatch)
 		if err := d.requireSeedInProfile(bound, firstProfile(profileID), false); err != nil {
@@ -48,7 +48,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if strings.TrimSpace(seedID) == "" {
 			return "", fmt.Errorf("new delegation seed identity was not reserved")
 		}
-		seed = garden.Seed{ProfileID: firstProfile(profileID), ID: seedID, Title: title, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: d.actorOfSession(plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
+		seed = garden.Seed{ProfileID: firstProfile(profileID), ID: seedID, Title: title, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: by, Edges: []garden.Edge{}, Vars: []garden.Var{}}
 		if parent := strings.TrimSpace(parentSeedID); parent != "" {
 			seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: parent})
 		}
@@ -88,7 +88,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	}
 	dispatch := observed
 	dispatch.Crown = seed.ID
-	dispatch.Dispatcher = d.actorOfSession(plannerSessionID)
+	dispatch.Dispatcher = by
 	dispatch.FromChief = fromChief
 	dispatch.OperationID = strings.TrimSpace(operationID)
 	dispatchBody, err := dispatch.Encode()

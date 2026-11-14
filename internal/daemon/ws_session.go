@@ -15,8 +15,8 @@ func (d *Daemon) handleClearWarningsWS() {
 	d.clearWarnings()
 }
 
-func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose {
-	closed := store.SessionClose{By: who.User(), Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason))}
+func unregisterSessionClose(msg *protocol.UnregisterMessage, by who.Actor) store.SessionClose {
+	closed := store.SessionClose{By: by, Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason))}
 	if by := protocol.TrimID(protocol.Deref(msg.ClosedBy)); by != "" && by != "user" {
 		closed.By = who.Session(protocol.SessionID(by)).Actor()
 	}
@@ -25,7 +25,7 @@ func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose 
 
 func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMessage) {
 	d.logf("Unregistering session %s via WebSocket", msg.ID)
-	closing, err := d.beginSessionCloseAsUser(msg.ID, unregisterSessionClose(msg), client)
+	closing, err := d.beginSessionCloseAsUser(msg.ID, unregisterSessionClose(msg, client.caller), client)
 	if err != nil {
 		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
 		d.answerSessionClose(client, msg.ID, err)

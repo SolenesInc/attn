@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/who"
 )
 
 // HomeGatewayPhone is a phone the caller has already authenticated, with the profile its pairing reaches.
@@ -77,6 +78,7 @@ type homeGatewayConns struct {
 
 type homeGatewayConn struct {
 	phone         HomeGatewayPhone
+	caller        who.Actor
 	stream        HomeGatewayStream
 	sendMu        sync.Mutex
 	changed       chan struct{}
@@ -166,7 +168,7 @@ func (d *Daemon) ServeHomeGateway(phone HomeGatewayPhone, stream HomeGatewayStre
 	stopClosing := context.AfterFunc(d.life.Context(), func() { stream.Close() })
 	defer stopClosing()
 
-	conn := &homeGatewayConn{phone: phone, stream: stream, changed: make(chan struct{}, 1), gardenChanged: make(chan struct{}, 1), pinged: make(chan struct{}, 1), terminals: map[protocol.TerminalID]*homeGatewayTerminal{}}
+	conn := &homeGatewayConn{phone: phone, caller: phoneCaller(phone), stream: stream, changed: make(chan struct{}, 1), gardenChanged: make(chan struct{}, 1), pinged: make(chan struct{}, 1), terminals: map[protocol.TerminalID]*homeGatewayTerminal{}}
 	d.homeGateway.add(conn)
 	defer d.homeGateway.remove(conn)
 	if err := d.homeGatewayWelcome(conn); err != nil {

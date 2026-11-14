@@ -40,7 +40,9 @@ func newGardenDaemon(t *testing.T) *Daemon {
 func plant(t *testing.T, d *Daemon, msg protocol.SeedPlantMessage) protocol.Seed {
 	t.Helper()
 	msg.Cmd = protocol.CmdSeedPlant
-	resp := gardenCall(t, func(c net.Conn) { d.handleSeedPlant(c, &msg) })
+	resp := gardenCall(t, func(c net.Conn) {
+		d.handleSeedPlant(c, &msg, d.sessionOrOwner(protocol.TrimID(protocol.Deref(msg.SourceSessionID))))
+	})
 	if !resp.Ok {
 		t.Fatalf("plant %q: %v", msg.Title, protocol.Deref(resp.Error))
 	}
@@ -79,5 +81,5 @@ func transition(t *testing.T, d *Daemon, session, seedID string, verb garden.Ver
 	if assignee != "" {
 		msg.Assignee = protocol.Ptr(assignee)
 	}
-	return gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+	return gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg, d.sessionOrOwner(protocol.SessionID(session))) })
 }

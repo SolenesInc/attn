@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type codeNavSetupKey struct {
@@ -75,7 +76,7 @@ func (d *Daemon) withCodeNavSetups(host string, review *protocol.ReviewBundle) *
 func (d *Daemon) handleCodeNavSetupWS(client *wsClient, msg *protocol.CodeNavSetupMessage) {
 	d.life.Go("handleCodeNavSetupWS", func() {
 		result := protocol.CodeNavSetupResultMessage{Event: protocol.EventCodeNavSetupResult, RequestID: msg.RequestID}
-		if session, err := d.startCodeNavSetup(d.life.Context(), msg); err != nil {
+		if session, err := d.startCodeNavSetup(d.life.Context(), msg, client.caller); err != nil {
 			result.Error = protocol.Ptr(err.Error())
 		} else {
 			result.Success, result.SessionID = true, protocol.Ptr(session)
@@ -88,7 +89,7 @@ func (d *Daemon) handleCodeNavSetupWS(client *wsClient, msg *protocol.CodeNavSet
 // language's server: the user's delegation fallback when they configured one,
 // else the harness they picked for new sessions. It answers once the agent
 // runs, so a launch that fails reaches the reader with its reason.
-func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSetupMessage) (protocol.SessionID, error) {
+func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSetupMessage, by who.Actor) (protocol.SessionID, error) {
 	if !d.on(setting.CodeReviewEnabled) {
 		return "", errors.New(codeNavOff())
 	}
@@ -107,7 +108,7 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 	if !d.codeNavSetups.begin(key) {
 		return "", fmt.Errorf("a setup of %s in %s is already starting", msg.Language, msg.Repository)
 	}
-	session, err := d.launchCodeNavSetup(ctx, msg, desktop.ProfileID)
+	session, err := d.launchCodeNavSetup(ctx, msg, desktop.ProfileID, by)
 	if err == nil {
 		err = d.store.RecordCodeNavSetup(host, msg.Repository, msg.Language, session)
 	}
@@ -119,7 +120,7 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 	return session, nil
 }
 
-func (d *Daemon) launchCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSetupMessage, profileID string) (protocol.SessionID, error) {
+func (d *Daemon) launchCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSetupMessage, profileID string, by who.Actor) (protocol.SessionID, error) {
 	host := protocol.Deref(msg.Host)
 	brief := prompts.RenderText("code-navigation", "setup", prompts.Values{
 		"language":   msg.Language,
@@ -153,7 +154,7 @@ func (d *Daemon) launchCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSe
 	} else {
 		delegate.Cwd = "~"
 	}
-	operation, err := d.startDelegationForeground(ctx, delegate)
+	operation, err := d.startDelegationForeground(ctx, delegate, by)
 	if err == nil {
 		operation, err = d.awaitDelegationSettled(operation.OperationID, nil)
 	}

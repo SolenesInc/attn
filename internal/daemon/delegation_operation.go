@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type acceptedDelegationRequest struct {
@@ -23,15 +24,16 @@ type acceptedDelegationRequest struct {
 }
 
 type delegationTarget struct {
-	Host string `json:"resolved_host"`
-	Cwd  string `json:"resolved_cwd"`
+	Host string    `json:"resolved_host"`
+	Cwd  string    `json:"resolved_cwd"`
+	By   who.Actor `json:"resolved_by"`
 }
 
-func (d *Daemon) startDelegation(ctx context.Context, msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
-	return d.startDelegationForeground(ctx, msg)
+func (d *Daemon) startDelegation(ctx context.Context, msg *protocol.DelegateMessage, by who.Actor) (*protocol.DelegationOperation, error) {
+	return d.startDelegationForeground(ctx, msg, by)
 }
 
-func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
+func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.DelegateMessage, by who.Actor) (*protocol.DelegationOperation, error) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
 		requestID = uuid.NewString()
@@ -170,7 +172,7 @@ func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.De
 			return nil, fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", base)
 		}
 	}
-	encoded, err = json.Marshal(acceptedDelegationRequest{DelegateMessage: *msg, delegationTarget: delegationTarget{Host: host, Cwd: inspection.Cwd}})
+	encoded, err = json.Marshal(acceptedDelegationRequest{DelegateMessage: *msg, delegationTarget: delegationTarget{Host: host, Cwd: inspection.Cwd, By: by}})
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +318,7 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
 		&msg, protocol.Deref(record.Operation.SeedID), record.BaseCommit, record.HandoffNoteID,
 		record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath),
-		record.HandoverSeedRev, record.HandoverTender, id, record.ParentSeedID,
+		record.HandoverSeedRev, record.HandoverTender, id, record.ParentSeedID, d.delegationCaller(target, msg.SourceSessionID),
 	)
 	if err != nil {
 		d.finishDelegationFailure(id, err)

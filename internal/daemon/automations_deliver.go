@@ -143,10 +143,7 @@ func (d *Daemon) automationWorkReadyOccurrence(run *store.AutomationRun) (seedEv
 	if !continuation {
 		causedBySessionID = run.SessionID
 	}
-	causedBy := who.Attn()
-	if causedBySessionID != "" {
-		causedBy = d.actorOfSession(causedBySessionID)
-	}
+	causedBy := d.sessionOrAttn(causedBySessionID)
 	return seedEvents.Occur(
 		gardenSeedEventModel(), gardenSeedEventVocabulary().WorkReady, run.SeedID,
 		seedEvents.WorkReadyPayload{AutomationRunID: run.ID, CausedBySessionID: causedBySessionID, CausedBy: causedBy.String()},
@@ -191,7 +188,7 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 			if !continuation {
 				causedBySessionID = run.SessionID
 			}
-			if _, err := d.appendSeedNote(run.SeedID, body, d.actorOfSession(run.SessionID), garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
+			if _, err := d.appendSeedNote(run.SeedID, body, d.sessionOrAttn(run.SessionID), garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
 				return fmt.Errorf("record automation outcome: append note: %w", err)
 			}
 		}
@@ -596,7 +593,7 @@ func (d *Daemon) ensureAutomationOccurrenceNote(req automation.WorkRequest) erro
 			return nil
 		}
 	}
-	if _, err := d.appendSeedNote(req.IDs.SeedID, body, d.actorOfSession(req.IDs.SessionID), garden.NoteKindNote, nil, false, req.IDs.SessionID); err != nil {
+	if _, err := d.appendSeedNote(req.IDs.SeedID, body, d.sessionOrAttn(req.IDs.SessionID), garden.NoteKindNote, nil, false, req.IDs.SessionID); err != nil {
 		return err
 	}
 	return nil

@@ -23,10 +23,10 @@ type seedCheckOutcome struct {
 	attached       []protocol.SeedCheckAttachment
 }
 
-func (d *Daemon) handleSeedCheck(ctx context.Context, conn net.Conn, msg *protocol.SeedCheckMessage) {
+func (d *Daemon) handleSeedCheck(ctx context.Context, conn net.Conn, msg *protocol.SeedCheckMessage, by who.Actor) {
 	ctx, cancel := d.connectionContext(ctx, conn)
 	defer cancel()
-	outcome, err := d.applySeedCheck(ctx, msg)
+	outcome, err := d.applySeedCheck(ctx, msg, by)
 	if err != nil {
 		d.sendGardenError(conn, "check", err)
 		return
@@ -44,7 +44,7 @@ func (d *Daemon) handleSeedCheckWS(client *wsClient, msg *protocol.SeedCheckMess
 		Event:     protocol.EventSeedCheckResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	outcome, err := d.applySeedCheck(d.life.Context(), msg)
+	outcome, err := d.applySeedCheck(d.life.Context(), msg, client.caller)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
@@ -56,7 +56,7 @@ func (d *Daemon) handleSeedCheckWS(client *wsClient, msg *protocol.SeedCheckMess
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMessage) (seedCheckOutcome, error) {
+func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMessage, actor who.Actor) (seedCheckOutcome, error) {
 	verb, err := garden.ParseCheckVerb(msg.Verb)
 	if err != nil {
 		return seedCheckOutcome{}, err
@@ -70,7 +70,6 @@ func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMess
 		return seedCheckOutcome{}, err
 	}
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	actor := d.actorOfSession(sessionID)
 	move := garden.CheckMove{
 		Verb: verb, CheckID: strings.TrimSpace(protocol.Deref(msg.CheckID)), Text: protocol.Deref(msg.Text), Shared: protocol.Deref(msg.Shared),
 		Summary: protocol.Deref(msg.Summary), Evidence: msg.Evidence, Commit: protocol.Deref(msg.Commit),
@@ -168,7 +167,7 @@ func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedChe
 		copied, err := d.submitSeedArtifactTransfer(ctx, &protocol.SeedArtifactTransferMessage{
 			Cmd: protocol.CmdSeedArtifactTransfer, ProfileID: msg.ProfileID, SeedID: seedID, Operation: "copy",
 			SourcePath: protocol.Ptr(path), SourceSessionID: msg.SourceSessionID,
-		})
+		}, move.Actor)
 		if err != nil {
 			return nil, nil, fmt.Errorf("copy %s onto %s: %w; nothing was reported, and the same command run again copies what is left and records the report", path, seedID, err)
 		}

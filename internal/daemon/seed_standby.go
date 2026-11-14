@@ -13,8 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) handleSeedStandby(conn net.Conn, msg *protocol.SeedStandbyMessage) {
-	result, closeSelf, err := d.seedStandbyRequest(msg)
+func (d *Daemon) handleSeedStandby(conn net.Conn, msg *protocol.SeedStandbyMessage, setter who.Actor) {
+	result, closeSelf, err := d.seedStandbyRequest(msg, setter)
 	if err != nil {
 		d.sendGardenError(conn, "standby", err)
 		return
@@ -35,10 +35,9 @@ func (d *Daemon) handleSeedStandby(conn net.Conn, msg *protocol.SeedStandbyMessa
 	}
 }
 
-func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol.SeedStandbyResult, *protocol.AgentCloseMessage, error) {
+func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage, setter who.Actor) (*protocol.SeedStandbyResult, *protocol.AgentCloseMessage, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	callerID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	setter := d.actorOfSession(callerID)
 	note := strings.TrimSpace(protocol.Deref(msg.Note))
 	stay := protocol.Deref(msg.Stay)
 	at, in := protocol.Deref(msg.At), protocol.Deref(msg.In)

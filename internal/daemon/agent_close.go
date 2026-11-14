@@ -207,7 +207,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 		}
 		onStandby := standby != nil && standby.Tender == who.Session(target.ID)
 		body := agentCloseSeedNote(target, caller, rule, reason, onStandby)
-		if _, err := d.appendSeedNote(doc.ID, body, d.actorOfSession(caller.ID), garden.NoteKindNote, nil, false, caller.ID); err != nil {
+		if _, err := d.appendSeedNote(doc.ID, body, d.partyOfSession(caller.ID).Actor(), garden.NoteKindNote, nil, false, caller.ID); err != nil {
 			d.logf("agent close: noting the close of %s on %s: %v", target.ID, doc.ID, err)
 			continue
 		}
