@@ -412,24 +412,30 @@ fn pick(
     } else {
         index.to_string()
     };
-    row()
-        .key(format!("{key}.pick.{}", label.id))
-        .role("button")
-        .label(label.text)
-        .items_center()
-        .gap(8.0)
-        .px(6.0)
-        .py(3.0)
-        .radius(5.0)
-        .child(text(label.emoji.to_owned()).font(type_::BODY))
-        .child(
-            text(label.text.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary)
-                .grow(1.0),
-        )
-        .children((index <= 10).then(|| text(digit).font(type_::LABEL).color(t.text_tertiary)))
+    let (emoji, words, ink, hint) = (label.emoji, label.text, t.text_primary, t.text_tertiary);
+    Button::new(label.text)
+        .variant(ButtonVariant::Ghost)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| on_pick(state, picked, tx))
+        .label_with(move |_, _| {
+            row()
+                .w_full()
+                .items_center()
+                .gap(8.0)
+                .child(text(emoji.to_owned()).font(type_::BODY))
+                .child(
+                    text(words.to_owned())
+                        .font(type_::LABEL)
+                        .color(ink)
+                        .grow(1.0),
+                )
+                .children((index <= 10).then(|| text(digit).font(type_::LABEL).color(hint)))
+        })
+        .build(attn_ui::kit(t))
+        .key(format!("{key}.pick.{}", label.id))
+        .w_full()
+        .h(type_::BODY.line_px() + 6.0)
+        .px(6.0)
+        .radius(5.0)
 }
 
 fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Tokens) -> El {

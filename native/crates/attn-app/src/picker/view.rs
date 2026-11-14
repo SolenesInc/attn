@@ -1,7 +1,7 @@
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant, TextInput};
+use rune_kit::{Button, ButtonVariant, Dialog, TextInput};
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
 use super::{Catalog, Picker, Which, agents, listed, numbered, paths};
@@ -27,10 +27,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
         })
         .w_full()
         .max_w(640.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .padding(space::S3);
+    let frame = rune_kit::popover::raised(attn_ui::kit(t), frame, 8.0);
     Some(
         el().key("new-session.layer")
             .absolute(0.0, 0.0)
@@ -690,56 +688,45 @@ fn delete_prompt(w: &str, delete: &Delete, t: &Tokens) -> El {
 /// worktree could not be made.
 pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
     let setup = state.window.launching.worktree.as_ref()?;
+    let k = attn_ui::kit(t);
     if let (Some(error), true) = (&setup.failed, setup.opened) {
         let dismiss = link("Dismiss", type_::BODY, t, |state, _| {
             state.window.launching.worktree = None
         })
         .key("worktree-setup.dismiss");
+        let failure = col()
+            .key("worktree-setup.error")
+            .role("alert")
+            .label(format!("Create failed: {error}"))
+            .child(text("Create failed").font(type_::BODY).color(t.error))
+            .child(
+                text(error.clone())
+                    .font(type_::BODY)
+                    .color(t.text_secondary),
+            );
+        let mut layers = Vec::new();
+        Dialog::new("worktree-setup", "Session was not created")
+            .description("Action needed")
+            .open(true)
+            .fit()
+            .width(480.0)
+            .on_close(|state: &mut State| state.window.launching.worktree = None)
+            .child(
+                col()
+                    .w_full()
+                    .gap(space::S2)
+                    .px(16.0)
+                    .pb(16.0)
+                    .child(failure)
+                    .child(dismiss),
+            )
+            .build(k, &mut layers);
         return Some(
             el().key("worktree-setup.layer")
                 .absolute(0.0, 0.0)
                 .w_full()
                 .h_full()
-                .child(
-                    col().w_full().h_full().center().child(
-                        col()
-                            .key("worktree-setup")
-                            .role("dialog")
-                            .label("Session was not created")
-                            .modal(true, |state: &mut State| {
-                                state.window.launching.worktree = None
-                            })
-                            .max_w(480.0)
-                            .padding(space::S3)
-                            .gap(space::S2)
-                            .radius(8.0)
-                            .fill(t.bg_elevated)
-                            .border(1.0, t.border)
-                            .child(
-                                text("Action needed")
-                                    .font(type_::LABEL)
-                                    .color(t.text_tertiary),
-                            )
-                            .child(
-                                text("Session was not created")
-                                    .font(type_::TITLE)
-                                    .color(t.text_primary),
-                            )
-                            .child(
-                                col()
-                                    .key("worktree-setup.error")
-                                    .role("alert")
-                                    .label(format!("Create failed: {error}"))
-                                    .child(text("Create failed").font(type_::BODY).color(t.error))
-                                    .child(
-                                        text(error.clone())
-                                            .font(type_::BODY)
-                                            .color(t.text_secondary),
-                                    ),
-                            )
-                            .child(dismiss),
-                    ),
-                ),
+                .children(layers),
         );
     }
     let (title, detail) = match &setup.failed {
@@ -749,47 +736,42 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
         ),
         None => ("Creating worktree".to_owned(), setup.branch.clone()),
     };
-    let mut corner = col()
-        .key("worktree-setup")
-        .role(if setup.failed.is_some() {
-            "button"
-        } else {
-            "status"
-        })
-        .label(format!("{title}: {detail}"))
-        .padding(space::S2)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
+    let last = match setup.failed {
+        Some(_) => "open to resolve".to_owned(),
+        None => format!("git worktree add · {}", paths::tildify(&setup.repo)),
+    };
+    let lines = col()
+        .items_start()
         .child(
             text("Session setup")
                 .font(type_::LABEL)
                 .color(t.text_tertiary),
         )
-        .child(text(title).font(type_::BODY).color(t.text_primary))
-        .child(text(detail).font(type_::LABEL).color(t.text_secondary));
-    if setup.failed.is_some() {
-        corner = corner
-            .child(
-                text("open to resolve")
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary),
-            )
-            .on_press_tx(|state: &mut State, _: &mut Tx| {
+        .child(text(title.clone()).font(type_::BODY).color(t.text_primary))
+        .child(
+            text(detail.clone())
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
+        .child(text(last).font(type_::LABEL).color(t.text_tertiary));
+    let name = format!("{title}: {detail}");
+    let corner = if setup.failed.is_some() {
+        let height = 3.0 * type_::LABEL.line_px() + type_::BODY.line_px() + 2.0 * space::S2;
+        Button::new(name)
+            .variant(ButtonVariant::Ghost)
+            .on_press(|state: &mut State| {
                 if let Some(setup) = &mut state.window.launching.worktree {
                     setup.opened = true;
                 }
-            });
+            })
+            .label_with(move |_, _| lines)
+            .build(k)
+            .h(height)
+            .px(space::S2)
     } else {
-        corner = corner.child(
-            text(format!(
-                "git worktree add · {}",
-                paths::tildify(&setup.repo)
-            ))
-            .font(type_::LABEL)
-            .color(t.text_tertiary),
-        );
-    }
+        lines.role("status").label(name).padding(space::S2)
+    };
+    let corner = rune_kit::popover::raised(k, corner.key("worktree-setup"), 6.0);
     Some(
         el().key("worktree-setup.corner")
             .absolute(0.0, 0.0)

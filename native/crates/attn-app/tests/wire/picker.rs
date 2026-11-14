@@ -1236,7 +1236,7 @@ fn a_worktree_that_cannot_be_made_is_reported_once_in_the_corner_without_launchi
         let opened = world
             .screen()
             .get(Target::role("dialog").name("Session was not created"));
-        assert_eq!(opened.key.as_deref(), Some("worktree-setup"));
+        assert_eq!(opened.key.as_deref(), Some("worktree-setup-dialog"));
         let shown = world.screen().get(Target::key("worktree-setup.error")).name;
         assert!(
             shown.as_deref().is_some_and(|s| s.contains(error)),

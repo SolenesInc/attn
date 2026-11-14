@@ -1,7 +1,7 @@
 use attn_ui::Tokens;
 use rune::tok::type_;
 use rune::{Color, El, Key, KeyEvent, Span, Tx, col, el, row, text};
-use rune_kit::TextInput;
+use rune_kit::{Button, ButtonVariant, TextInput};
 
 use crate::State;
 use crate::terminal::{Filtered, Filtering, filter_field_key};
@@ -107,19 +107,25 @@ fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
                 ..Span::new(m.start, m.end)
             })
             .collect();
-        text(&line.text)
-            .key(format!("terminal.{id}.filter.line.{offset}"))
-            .role("button")
-            .label("Scroll to line")
-            .font(type_::MONO_CAPTION)
-            .color(t.text_primary)
-            .single_line()
-            .spans(spans)
-            .w_full()
-            .px(6.0)
-            .py(2.0)
-            .radius(4.0)
+        let (words, ink) = (line.text.clone(), t.text_primary);
+        let key = format!("terminal.{id}.filter.line.{offset}");
+        Button::new("Scroll to line")
+            .variant(ButtonVariant::Ghost)
             .on_press(move |state: &mut State| state.terminals.scroll_to_filtered(&id, offset))
+            .label_with(move |_, _| {
+                text(words)
+                    .font(type_::MONO_CAPTION)
+                    .color(ink)
+                    .single_line()
+                    .spans(spans)
+                    .w_full()
+            })
+            .build(attn_ui::kit(t))
+            .key(key)
+            .w_full()
+            .h(type_::MONO_CAPTION.line_px() + 4.0)
+            .px(6.0)
+            .radius(4.0)
     }))
 }
 

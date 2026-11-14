@@ -53,13 +53,11 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .modal_tx(true, super::close)
         .w_full()
         .max_w(640.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .padding(space::S3)
         .gap(space::S2)
         .child(field)
         .child(list);
+    let panel = rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0);
     el().key("opener")
         .absolute(0.0, 0.0)
         .w_full()

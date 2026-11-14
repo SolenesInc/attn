@@ -281,9 +281,6 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             stick_bottom: false,
         })
         .padding(16.0)
-        .radius(12.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_hover)
         .child(
             text(format!(
                 "{profile} · {count} {}",
@@ -299,6 +296,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 .pb(12.0),
         )
         .child(grid);
+    let dialog = rune_kit::popover::raised(attn_ui::kit(t), dialog, 12.0);
     Some(
         el().key("overview")
             .absolute(0.0, 0.0)
