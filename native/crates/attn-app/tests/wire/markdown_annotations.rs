@@ -1287,6 +1287,27 @@ fn a_comment_box_stays_with_its_document_when_the_desktop_changes() {
 }
 
 #[test]
+fn the_comment_box_leaves_its_passage_in_view_in_a_short_document() {
+    let (mut world, _) = start();
+    let [_, line_top, _, line_h] = world
+        .screen()
+        .bounds(Target::role("label").name("Cache the tile layout before the first paint."))
+        .expect("the paragraph");
+    select_in_paragraph(&mut world, 0.2, 0.5);
+    click(&mut world, "toolbar.comment");
+    let screen = world.screen();
+    let [_, top, _, h] = screen
+        .bounds(Target::key("tile.m.document.composer"))
+        .unwrap_or_else(|| panic!("no comment box:\n{screen}"));
+    assert!(
+        top >= line_top + line_h || top + h <= line_top,
+        "the box ({top}..{}) covers the passage ({line_top}..{})",
+        top + h,
+        line_top + line_h
+    );
+}
+
+#[test]
 fn the_toolbar_and_the_comment_box_move_with_their_passage_when_the_document_scrolls() {
     let doc = format!("{DOC}\n{}", "A paragraph that takes room.\n\n".repeat(60));
     let (mut world, _kept) = start_with(&doc, Kept::default());
