@@ -138,7 +138,7 @@ try {
   };
   const closeDocument = async (leaf) => {
     if (!(await screen()).includes(leaf)) await driver.click({ key: `shelf.chip.${leaf}` });
-    await driver.click({ key: `tile.${leaf}.header` });
+    await driver.click({ key: `tile.${leaf}.header` }, { at: [0.05, 0.5] });
     await observer.waitFor(() => active() === leaf, 'the document is active');
     await driver.pressKey(keys.close);
     await waitForRow((current) => !current.includes(leaf), 'the document leaves the row');
