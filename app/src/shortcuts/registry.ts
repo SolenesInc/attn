@@ -231,7 +231,7 @@ export const LINUX_SHORTCUTS = {
   'ui.showShortcuts': { key: '/', code: 'Slash', meta: true, shift: true },
   'ui.increaseFontSize': { key: '=', code: 'Equal', meta: true, shift: true },
   'ui.decreaseFontSize': { key: '-', code: 'Minus', meta: true, shift: true },
-  'ui.resetFontSize': { key: '0', meta: true, shift: true },
+  'ui.resetFontSize': { key: '0', code: 'Digit0', meta: true, shift: true },
 
   'notebook.openTile': { key: 'n', code: 'KeyN', meta: true, alt: true, shift: true },
   'notebook.openFullscreen': { key: 'f', code: 'KeyF', meta: true, alt: true, shift: true },
