@@ -24,6 +24,7 @@ pub struct Window {
     /// The open drawers, oldest first: they stand side by side, and Escape closes the newest.
     pub drawers: Vec<Drawer>,
     pub layer: Option<Layer>,
+    pub(crate) callout: Option<crate::callouts::Callout>,
     pub notice: Option<Notice>,
     pub(crate) leader: Option<Leader>,
     /// The tile that takes keys while nothing else in the window has focus. It is apart from
@@ -390,6 +391,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .children(layers(state, &t))
         .children(crate::markdown::annotating::layers(state, cx, &t))
         .children(crate::markdown::sending::layers(state, cx, &t))
+        .children(crate::callouts::layers(state, cx, &t))
 }
 
 /// The band the window drags by, over which the window's own controls sit; what it holds

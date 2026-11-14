@@ -378,7 +378,7 @@ fn the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them()
     assert_eq!(
         world
             .screen()
-            .children(Target::key("queue-bar"))
+            .children(Target::key("queue-bar.desktops"))
             .into_iter()
             .filter(|n| n
                 .key

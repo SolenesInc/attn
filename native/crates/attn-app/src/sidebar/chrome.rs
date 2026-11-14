@@ -251,12 +251,20 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
                 .radius(4.0)
                 .hover(t.bg_elevated),
         )
-        .children(
-            chips
-                .iter()
-                .map(|c| chip("rail.desktop", c, Mark::Dot, None, t)),
+        .child(
+            col()
+                .key("rail.desktops")
+                .role("group")
+                .label("Desktops")
+                .items_center()
+                .gap(space::S1)
+                .children(
+                    chips
+                        .iter()
+                        .map(|c| chip("rail.desktop", c, Mark::Dot, None, t)),
+                )
+                .children(extras_chip("rail.desktop-extras", extras, Mark::Dot, t)),
         )
-        .children(extras_chip("rail.desktop-extras", extras, Mark::Dot, t))
 }
 
 /// The title bar's own controls on the left: New agent, Commands, the flow switch and the
@@ -387,14 +395,23 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                 .fill(t.bg_button)
                 .hover(t.bg_elevated),
         )
-        .children(chips.iter().map(|c| {
-            let drop = drop_on(state, &c.desktop);
-            chip("queue-bar.desktop", c, Mark::Count, drop, t)
-        }))
-        .children(extras_chip(
-            "queue-bar.desktop-extras",
-            extras,
-            Mark::Count,
-            t,
-        ))
+        .child(
+            row()
+                .key("queue-bar.desktops")
+                .role("group")
+                .label("Desktops")
+                .h_full()
+                .items_center()
+                .gap(space::S2)
+                .children(chips.iter().map(|c| {
+                    let drop = drop_on(state, &c.desktop);
+                    chip("queue-bar.desktop", c, Mark::Count, drop, t)
+                }))
+                .children(extras_chip(
+                    "queue-bar.desktop-extras",
+                    extras,
+                    Mark::Count,
+                    t,
+                )),
+        )
 }

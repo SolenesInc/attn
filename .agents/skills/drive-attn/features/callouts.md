@@ -62,6 +62,25 @@ Preconditions:
 - **No app.** Quit the app with `./attn instance stop-app`, then run `./attn callout anchors --session co-agent`. It lists the anchors and exits 1 with `callout anchors: the attn app is not showing your profile`. `./attn callout show --session co-agent garden "x"` exits 1 with the same reason. Launch the app again with `bridge --launch --wait-ready ping`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek co-agent` after each agent call, and `bridge dom_text '{"selector":".callout-card"}'` at each step. Capture `bridge capture_native_window_screenshot '{"path":"<P>/callouts-tour.png"}'` on the first step and `<P>/callouts-agent.png` with the agent ring, `<P>` written out. Name each file for its way in, such as `callouts-agent-tour-peek.txt`.
 
+
+### In the native app
+
+The native app (`native/`) answers callouts as the Tauri app does. The card, `callout`, is a dialog named "Callout from <agent>". It holds `callout.count` ("<i> of <n>"), `callout.text`, `callout.next` named "↵ Next", "↵ Done" or "↵ Go there", and `callout.end` named "End callout". A step whose anchor is not on screen shows `callout.unanchored`. The ring, `callout.ring`, is drawn but not in the accessibility tree, so `bridge tree` does not list it; see it in a `bridge shot`. The card takes the keyboard when it shows. `crew` is never on screen, because the native app has no crew section yet.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native` and launch it as [../SKILL.md](../SKILL.md) says for a native instance. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and use the Linux chords: `mod+alt+k` for the command palette.
+- Make `$A` with the fixture above and start `co-agent` and `co-shell` as above.
+
+Steps:
+
+- **List anchors.** Send `list-anchors`. Peek lists `sidebar`, `home`, `commands`, `garden`, `asks`, `desktops` and `settings-button` on screen on home in desktop flow.
+- **Show a tour and step through it.** Send `point-tour`, then `bridge wait '{"target":{"key":"callout","name":"Callout from co-agent"}}'`. `callout.count` reads "1 of 3". Press `Enter`, then `Right`: `callout.text` reads "Your first desktop" and `callout.next` is named "↵ Go there". Press `Enter`: `callout` goes and the window shows desktop 1.
+- **Point at an agent.** Send `point-agent`: the card shows beside `sidebar.session.co-shell`. Press `Enter`: the callout ends and the shell's desktop shows.
+- **End it.** Show `point-garden` and press `Escape`: `callout` goes. Show it and press `callout.end`; show it and press anywhere outside the card: each ends it. Show `point-tour`, open the palette and close it: the card comes back on the same step. Press outside it: the card stays, and `Enter` goes to the window until you press the card.
+- **A missing anchor refuses the whole callout.** Send `point-queue` in desktop flow: peek shows `not on screen: queue`, and no card shows.
+- **Proof.** In `$P`, keep peek after each agent call, `bridge tree` with the card open, and `bridge shot '{"path":"<P>/native-callout-tour.png"}'` on the first step and `<P>/native-callout-agent.png` with the agent ring, with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: a showing callout ends when the app relaunches, and attn does not tell the agent.
@@ -78,6 +97,7 @@ Preconditions:
 - Stack: `cmd/attnd/callout_stack_test.go`.
 - Scenario: `callouts`.
 - App: `app/src/App.callouts.test.tsx`.
+- Native wire: `native/crates/attn-app/tests/wire/callouts.rs`.
 
 ## Gotchas
 

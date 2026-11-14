@@ -199,6 +199,10 @@ pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
     let replies = state.requests.inbox.take();
     let mut answered = false;
     for reply in replies {
+        if crate::callouts::receive(state, &reply, tx) {
+            answered = true;
+            continue;
+        }
         let waiting = if reply.event == "command_error" {
             oldest_waiting(
                 &state.requests,

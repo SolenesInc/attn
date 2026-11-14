@@ -2,6 +2,7 @@ mod wire {
     mod asks;
     mod attention;
     mod automation;
+    mod callouts;
     mod connection;
     mod covered;
     mod deep_link;

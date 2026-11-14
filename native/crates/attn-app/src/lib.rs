@@ -4,6 +4,7 @@ mod asks;
 mod attention;
 pub mod automation;
 mod calendar;
+mod callouts;
 mod connection;
 pub mod daemon;
 mod deep_link;
@@ -267,9 +268,11 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | desktop::follow_settling(state, state.wall_ms(tx));
     let settings = settings::poll(state, now, tx);
     let updating = update_run::poll(state, now, tx) | attention::poll(state, now);
+    let pointed = callouts::poll(state, tx);
     shell::expire(state, now, tx)
         || settings
         || updating
+        || pointed
         || recounted
         || told
         || aged
