@@ -226,7 +226,6 @@ fn notification(state: &State, n: &Notification, k: &rune_kit::Kit, t: &Tokens) 
     let head = Button::new(format!("{} · {word} · {ago}", n.title))
         .variant(ButtonVariant::Ghost)
         .control_size(ControlSize::Large)
-        .expanded(expanded)
         .label_with(move |font, _| {
             row()
                 .w_full()
@@ -254,6 +253,7 @@ fn notification(state: &State, n: &Notification, k: &rune_kit::Kit, t: &Tokens) 
         })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| super::toggle_row(state, &id, tx))
         .build(k)
+        .expanded(expanded)
         .key(format!("{key}.head"))
         .w_full();
     let preview = if n.impact.is_empty() {
