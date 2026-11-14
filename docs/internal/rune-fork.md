@@ -26,6 +26,12 @@ names, and fails when `FORK.md` does not record a commit on `main` that
 upstream's `dev` lacks. A commit records itself by changing `FORK.md`. Changes
 made before that rule list their commits by hash.
 
+The fork's `.gitattributes` merges `FORK.md` by union, so branches that each
+append a row merge without a conflict. Union also keeps both versions of a line
+that both sides changed, such as a row two branches extend, so
+`scripts/rune-bump` refuses a `main` whose `FORK.md` still holds both versions,
+and names them. Make each pair into one line on the branch, in any later commit.
+
 ## Change the library
 
 Put a change in the fork when it makes attn simpler or better there than in
@@ -39,14 +45,20 @@ than pieces, since a deleted area can no longer take picks.
 3. Write the change with a test that fails without it. Put tests in the sibling
    test file the fork's `AGENTS.md` names; overlay tests go in
    `crates/rune/src/overlay/fork_tests.rs`.
-4. Run `cargo test -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid`
-   for the areas you touched. A test that runs only on macOS runs in the fork's
+4. Run `scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid`
+   for the areas you touched. `scripts/test.sh` passes its arguments to
+   `cargo test` and lets one run at a time per machine, as
+   [Test builds and memory](#test-builds-and-memory) explains; it says whose
+   run it waits for. A test that runs only on macOS runs in the fork's
    `fork macOS tests` workflow (`.github/workflows/fork-macos.yml`), on each
    push to `main` and on request.
 5. Add a row under "Our changes" in `FORK.md`: what the change does, why it
-   lives in Rune, and its tests, each by its path in backticks, followed by
-   `(macOS)` when it runs only on macOS. Commit the row with the change; a
-   later commit to the same change extends its row.
+   lives in Rune, and its tests in backticks, followed by `(macOS)` when a test
+   runs only on macOS. Name a unit test by its path in its crate, such as
+   `overlay::tests::a_press_before_the_first_frame_after_show_reaches_the_view`, and an integration test by its
+   file, such as `crates/rune/tests/press_keeps_focus.rs`, which runs the whole
+   file, or with `::<test>` after the file to run one of its tests. Commit the
+   row with the change; a later commit to the same change extends its row.
 6. Push the branch and name it on your seed. The Orchestrator brings it into
    `main` with `scripts/rune-bump --branch <branch>`.
 
@@ -80,8 +92,9 @@ In order, it:
    worktree with `git cherry-pick -x`, and records it under "Picked from
    upstream" in `FORK.md` in the same commit;
 3. checks that `FORK.md` records every commit on `main`;
-4. runs every test `FORK.md` names, on this machine's OS, and fails when one
-   fails or does not run, so a stale row is caught;
+4. runs every test `FORK.md` names, through the new `main`'s
+   `scripts/test.sh` on this machine's OS, and fails when one fails or does not
+   run, so a stale row is caught;
 5. pushes `main`;
 6. moves the pin, as below.
 
@@ -100,8 +113,9 @@ suite fails does not land.
 - `scripts/rune-bump --branch <fork-branch>` merges a fork branch, such as a
   Builder's, into `main`, checks the ledger, runs its tests, pushes `main` and
   moves the pin. It refuses a branch that carries commits of upstream's `dev`
-  that `main` lacks. When the merge conflicts, bring the branch up to `main`,
-  resolve, and push it again.
+  that `main` lacks, and one whose `FORK.md` keeps two versions of a line.
+  When the merge conflicts, bring the branch up to `main`, resolve, and push it
+  again.
 - `scripts/rune-bump --rev <rev>` moves the pin to a revision already on
   `main`. It refuses a revision that is not on `main` or whose ledger lacks a
   row.
@@ -118,3 +132,31 @@ The script then replaces the rev in `native/Cargo.toml`, runs
 pin move uncommitted. Commit it and land it with `scripts/land.sh`, which runs
 the native suite again on CI's Linux. The script stops at the first step that
 fails, names it and prints its output.
+
+## Test builds and memory
+
+Compiling `rune`'s lib tests is one `rustc` that peaks at 24 GB of resident
+memory and takes about 9 minutes on ai-sandbox (22 cores, 64 GB), measured
+2026-11-13 on `main` at `caf8af7d` and `b9d85323`. The rest of the ledger's
+build stays near 2 GB. Several agents running the ledger at once exhausted
+ai-sandbox's memory, so `scripts/test.sh` lets one run at a time per machine,
+under a lock in `~/.cargo`: Rune's test builds on a machine now take 24 GB at
+most, not 24 GB for each agent that runs one.
+
+The peak comes from monomorphization. The runtime is generic over the app
+state, `Runtime<S>`, and the tests use 271 state types, so the test build
+instantiates 2.43 million items where the library alone instantiates 78,000.
+Collecting them takes 160 s and 6.8 GB, and generating LLVM IR for them takes
+the rest. Build settings barely move it:
+
+| Setting | Peak | Wall time |
+|---|---|---|
+| defaults (`debug = "line-tables-only"`, incremental) | 24.0 GB | 595 s |
+| `debug = false` | 21.6 GB | 486 s |
+| incremental off | 28.7 GB | 475 s |
+| `debug = false`, incremental off | 22.6 GB | 403 s |
+| `-j8` or `-j4` | 24.4 GB, 24.1 GB | 537 s, 648 s |
+| `codegen-units = 1024` | 24.3 GB | 591 s |
+
+Lowering the peak means taking the work that does not need `S` out of the
+generic runtime, as `runtime/commit/text_layout.rs` does for Taffy's layout.

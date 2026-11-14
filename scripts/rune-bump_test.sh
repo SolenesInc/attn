@@ -98,6 +98,10 @@ EOF
 
 Last upstream commit reviewed: none.
 EOF
+  printf 'FORK.md merge=union\n' >"$patch/.gitattributes"
+  mkdir -p "$patch/scripts"
+  printf '#!/usr/bin/env bash\n: >>"$TMPDIR/through-test-sh"\nexec cargo test "$@"\n' >"$patch/scripts/test.sh"
+  chmod +x "$patch/scripts/test.sh"
   commit "$patch" "Patch the answer"
   local sha
   sha="$(git -C "$patch" rev-parse --short=8 HEAD)"
@@ -200,6 +204,7 @@ fork_md | sed -n '/^## Picked from upstream/,$p' | grep -qF "${first:0:8}" || fa
 grep -qF "$(fork_rev main)" "$work/attn/native/Cargo.lock" || fail "did not move native/Cargo.lock to the new main"
 [ -n "$(git -C "$work/attn" status --porcelain -- native/Cargo.toml native/Cargo.lock)" ] || fail "committed the pin move"
 grep -qF "ok tests::the_answer_holds" "$work/out" || fail "did not run the tests FORK.md lists"
+[ -f "$work/through-test-sh" ] || fail "ran the fork's tests without its scripts/test.sh"
 grep -qF "ok tests::the_kit_holds" "$work/out" || fail "did not run every test of a row FORK.md lists"
 grep -qF "ok tests::a_wrong_answer_panics" "$work/out" || fail "missed a should_panic test FORK.md lists"
 grep -qF "ok tests::the_shapes_hold" "$work/out" || fail "missed a rune-mermaid test FORK.md lists"
@@ -349,5 +354,92 @@ merged_main="$(fork_rev main)"
 bump --branch topic && fail "merged a branch that merged upstream's dev"
 grep -qF "carries commits of upstream's dev that main lacks" "$work/out" || fail "did not say the branch merged upstream"
 [ "$(fork_rev main)" = "$merged_main" ] || fail "pushed main though the branch merged upstream"
+
+setup integration
+src="$work/integration-src"
+git clone -q -b main "$work/fork.git" "$src"
+git -C "$src" checkout -q -b outside
+mkdir -p "$src/crates/rune/tests" "$src/crates/rune-kit/tests/kit_from_outside"
+printf '#[test]\nfn the_answer_holds_from_outside() { assert_eq!(rune::answer(), 42); }\n#[test]\nfn the_greeting_holds_from_outside() { assert_eq!(rune::greeting(), "hi"); }\n' >"$src/crates/rune/tests/outside.rs"
+printf '#[cfg(feature = "mermaid")]\n#[test]\nfn a_diagram_draws_from_outside() { assert_eq!(rune_kit::kit(), 1); }\n' >"$src/crates/rune-kit/tests/kit_from_outside/main.rs"
+cat >>"$src/FORK.md.row" <<'EOF2'
+| Rune answers apps from outside | The answer is Rune's | `crates/rune/tests/outside.rs::the_answer_holds_from_outside`, `crates/rune-kit/tests/kit_from_outside/main.rs` | |
+EOF2
+sed -i.bak '/^| The shapes hold/r '"$src/FORK.md.row" "$src/FORK.md" && rm "$src/FORK.md.bak" "$src/FORK.md.row"
+commit "$src" "Test Rune from outside"
+git -C "$src" push -q origin outside
+bump --branch outside || fail "refused integration tests FORK.md names"
+grep -qF "ok crates/rune/tests/outside.rs::the_answer_holds_from_outside" "$work/out" || fail "did not run an integration test FORK.md names"
+grep -qF "ok crates/rune-kit/tests/kit_from_outside/main.rs" "$work/out" || fail "did not run an integration test file FORK.md names"
+grep -qF "ok tests::the_answer_holds" "$work/out" || fail "skipped the unit tests beside an integration test"
+[ "$(pinned)" = "$(fork_rev main)" ] || fail "did not pin a main whose integration tests pass"
+git -C "$work/attn" checkout -q -- native
+sed -i.bak 's/outside.rs::the_answer_holds_from_outside/outside.rs::renamed_away/; s/kit_from_outside\/main.rs/gone.rs/' "$src/FORK.md" && rm "$src/FORK.md.bak"
+commit "$src" "Name integration tests that do not exist"
+git -C "$src" push -q origin outside
+old_main="$(fork_rev main)"
+bump --branch outside && fail "accepted integration tests FORK.md names that do not run"
+grep -qF "crates/rune/tests/outside.rs::renamed_away" "$work/out" || fail "did not name the integration test that did not run"
+grep -qF "crates/rune-kit/tests/gone.rs" "$work/out" || fail "did not name the integration test file that does not exist"
+[ "$(fork_rev main)" = "$old_main" ] || fail "pushed main though a listed integration test did not run"
+
+setup parallel-rows
+for branch in left right; do
+  src="$work/$branch-src"
+  git clone -q -b main "$work/fork.git" "$src"
+  git -C "$src" checkout -q -b "$branch"
+  echo "// $branch" >>"$src/crates/rune-mermaid/src/$branch.rs"
+  printf '| The %s change | Inside Rune | `tests::the_shapes_hold` | |\n' "$branch" >"$src/row"
+  sed -i.bak '/^| The shapes hold/r '"$src/row" "$src/FORK.md" && rm "$src/FORK.md.bak" "$src/row"
+  commit "$src" "The $branch change"
+  git -C "$src" push -q origin "$branch"
+done
+bump --branch left || fail "--branch failed for the first of two branches that each add a FORK.md row"
+git -C "$work/attn" checkout -q -- native
+bump --branch right || fail "the second of two branches that each add a FORK.md row did not merge"
+fork_md | grep -qF "| The left change |" || fail "lost the first branch's FORK.md row"
+fork_md | grep -qF "| The right change |" || fail "lost the second branch's FORK.md row"
+git -C "$work/fork.git" merge-base --is-ancestor right main || fail "did not bring the second branch into main"
+
+setup parallel-edits
+for branch in left right; do
+  src="$work/$branch-src"
+  git clone -q -b main "$work/fork.git" "$src"
+  git -C "$src" checkout -q -b "$branch"
+  echo "// $branch" >>"$src/crates/rune-mermaid/src/$branch.rs"
+  sed -i.bak "s/^| The answer stays 42/| The answer stays 42, and $branch/; s/^Last upstream commit reviewed: none./Last upstream commit reviewed: $branch./" "$src/FORK.md" && rm "$src/FORK.md.bak"
+  commit "$src" "The $branch change"
+  git -C "$src" push -q origin "$branch"
+done
+bump --branch left || fail "--branch failed for the first of two branches that extend one FORK.md row"
+git -C "$work/attn" checkout -q -- native
+old_main="$(fork_rev main)"
+bump --branch right && fail "merged a second branch that extends the same FORK.md row, leaving the row twice"
+grep -qF "| The answer stays 42, and left (" "$work/out" || fail "did not name main's version of the row both branches extended"
+grep -qF "| The answer stays 42, and right (" "$work/out" || fail "did not name the branch's version of the row both branches extended"
+grep -qF "Last upstream commit reviewed: right." "$work/out" || fail "did not name the reviewed-upstream line both branches moved"
+[ "$(fork_rev main)" = "$old_main" ] || fail "pushed main with a FORK.md row twice"
+pin_unchanged || fail "moved the pin though FORK.md has a row twice"
+src="$work/right-src"
+git -C "$src" pull -q --no-rebase --no-edit origin main 2>/dev/null
+grep -qF "| The answer stays 42, and right (" "$src/FORK.md" || fail "the union merge of main into the branch lost a row"
+sed -i.bak '/^| The answer stays 42, and left (/d; s/^| The answer stays 42, and right/| The answer stays 42, and left, and right/; /^Last upstream commit reviewed: left./d' "$src/FORK.md" && rm "$src/FORK.md.bak"
+commit "$src" "Make the doubled FORK.md lines one"
+git -C "$src" push -q origin right
+bump --branch right || fail "refused a branch whose later commit made the doubled FORK.md lines one"
+
+setup same-deletion
+for branch in left right; do
+  src="$work/$branch-src"
+  git clone -q -b main "$work/fork.git" "$src"
+  git -C "$src" checkout -q -b "$branch"
+  echo "// $branch" >>"$src/crates/rune-mermaid/src/$branch.rs"
+  sed -i.bak '/^| The shapes hold/d' "$src/FORK.md" && rm "$src/FORK.md.bak"
+  commit "$src" "The $branch change drops the shapes row"
+  git -C "$src" push -q origin "$branch"
+done
+bump --branch left || fail "--branch failed for the first of two branches that drop one FORK.md row"
+git -C "$work/attn" checkout -q -- native
+bump --branch right || fail "refused a second branch that drops the same FORK.md row"
 
 echo "rune-bump tests passed"

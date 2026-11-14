@@ -94,6 +94,38 @@ check_ledger() {
 a commit records itself by changing FORK.md: add or extend its row under \"Our changes\", or under \"Picked from upstream\" for a pick"
 }
 
+fork_md_at() { git -C "$clone" show "$1:FORK.md" 2>/dev/null || true; }
+doubled_lines() {
+  git merge-file -p --diff3 "$2" "$1" "$3" 2>/dev/null | awk '
+    /^<<<<<<< / { part = "ours"; n = 0; next }
+    /^\|\|\|\|\|\|\| / { part = "base"; changed = 0; next }
+    /^=======$/ && part == "base" { part = "theirs"; next }
+    /^>>>>>>> / { if (changed) for (i = 1; i <= n; i++) print hunk[i]; part = ""; next }
+    part == "ours" || part == "theirs" { hunk[++n] = part "\t" $0; next }
+    part == "base" { changed = 1 }
+  '
+}
+check_union_merges() {
+  local merge dir final side line kept_ours kept_theirs doubled
+  final="$(fork_md_at "$1")" dir="$logs/union"
+  mkdir -p "$dir"
+  for merge in $(git -C "$clone" rev-list --merges "$1" "^$trunk"); do
+    fork_md_at "$(git -C "$clone" merge-base "$merge^1" "$merge^2")" >"$dir/base"
+    fork_md_at "$merge^1" >"$dir/ours"
+    fork_md_at "$merge^2" >"$dir/theirs"
+    kept_ours="" kept_theirs="" doubled=""
+    while IFS=$'\t' read -r side line; do
+      grep -qxF -- "$line" <<<"$final" || continue
+      doubled+="
+  $line"
+      if [ "$side" = ours ]; then kept_ours=1; else kept_theirs=1; fi
+    done < <(doubled_lines "$dir/base" "$dir/ours" "$dir/theirs")
+    [ -z "$kept_ours" ] || [ -z "$kept_theirs" ] ||
+      die "FORK.md keeps both sides' versions of lines that both sides of $(git -C "$clone" log -1 --format='%h %s' "$merge") changed:$doubled
+FORK.md merges by union, so a row two branches extend, or two moves of the last reviewed upstream commit, come out twice. On the branch, make each pair into one line, commit, push it and run scripts/rune-bump --branch again"
+  done
+}
+
 record_pick() {
   local commit="$1" row last
   row="| \`$(git -C "$clone" rev-parse --short=8 "$commit")\` | $(git -C "$clone" log -1 --format=%s "$commit" | sed 's/|/\\|/g') |"
@@ -160,6 +192,7 @@ bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --bra
 
   step "check FORK.md lists every commit on main"
   check_ledger "$new"
+  check_union_merges "$new"
 
   step "run the tests FORK.md lists"
   ledger="$(ledger_section "$(cat "$worktree/FORK.md")" "Our changes" | awk -F'|' -v os="$(uname -s)" '{
@@ -174,13 +207,36 @@ bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --bra
       }
     }')"
   [ -n "$ledger" ] || die "FORK.md lists no tests"
-  # shellcheck disable=SC2086
-  (cd "$worktree" && run env CARGO_TARGET_DIR="$clone/target" cargo test -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid --lib -- $ledger)
-  missing=""
+  [ -x "$worktree/scripts/test.sh" ] || die "the new main has no scripts/test.sh, which runs the fork's tests one run at a time per machine"
+  test_cargo() {
+    run env CARGO_TARGET_DIR="$clone/target" scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid "$@" </dev/null
+  }
+  passed() { grep -qxF -e "test $1 ... ok" -e "test $1 - should panic ... ok" "$2"; }
+  unit_tests=() integration_tests=() missing=""
   while IFS= read -r test; do
-    grep -qxF -e "test $test ... ok" -e "test $test - should panic ... ok" "$log" && say "  ok $test" || missing+=" $test"
+    case "$test" in
+      crates/*/tests/*) integration_tests+=("$test") ;;
+      *) unit_tests+=("$test") ;;
+    esac
   done <<<"$ledger"
-  [ -z "$missing" ] || die "FORK.md lists tests that did not run:$missing; fix FORK.md or the test names"
+  if [ "${#unit_tests[@]}" -gt 0 ]; then
+    (cd "$worktree" && test_cargo --lib -- "${unit_tests[@]}")
+    for test in "${unit_tests[@]}"; do
+      passed "$test" "$log" && say "  ok $test" || missing+=" $test"
+    done
+  fi
+  for test in ${integration_tests[@]+"${integration_tests[@]}"}; do
+    file="${test%%::*}" name=""
+    [ "$file" = "$test" ] || name="${test#*::}"
+    if [[ ! "$file" =~ ^crates/rune(-kit|-mermaid)?/tests/([^/]+)(\.rs|/main\.rs)$ ]] || [ ! -f "$worktree/$file" ]; then
+      missing+=" $test"
+      continue
+    fi
+    target_log="$logs/$(tr '/:' '__' <<<"$test").log"
+    (cd "$worktree" && log="$target_log" test_cargo --test "${BASH_REMATCH[2]}" -- ${name:+"$name"})
+    if [ -z "$name" ] || passed "$name" "$target_log"; then say "  ok $test"; else missing+=" $test"; fi
+  done
+  [ -z "$missing" ] || die "FORK.md lists tests that did not run:$missing; name a unit test by its path in its crate, or an integration test by its file, such as crates/rune/tests/focus.rs, with ::<test> to run one of its tests"
 
   step "push the fork's main"
   run git -C "$worktree" push "$fork" "HEAD:refs/heads/main"
