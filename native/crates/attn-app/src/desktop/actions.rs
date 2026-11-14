@@ -618,19 +618,8 @@ fn close(state: &mut State, tx: &mut Tx) {
         .iter()
         .find(|p| p.pane_id == leaf_id)
         .map(|p| p.session_id.clone());
-    let refused = Refused::Prefixed("Could not close that tile");
     match kind {
-        LeafKind::Tile { .. } => state.act(
-            |request_id| DesktopRemoveLeafMessage {
-                request_id,
-                desktop_id,
-                leaf_id,
-                ..DesktopRemoveLeafMessage::new()
-            },
-            refused,
-            |_, _, _| {},
-            tx,
-        ),
+        LeafKind::Tile { .. } => remove_tile(state, desktop_id, leaf_id, tx),
         LeafKind::Pane => {
             state.act(
                 |request_id| DesktopCloseTileMessage {
@@ -639,7 +628,7 @@ fn close(state: &mut State, tx: &mut Tx) {
                     tile_id: leaf_id,
                     ..DesktopCloseTileMessage::new()
                 },
-                refused,
+                Refused::Prefixed(CLOSE_REFUSED),
                 |_, _, _| {},
                 tx,
             );
@@ -648,6 +637,23 @@ fn close(state: &mut State, tx: &mut Tx) {
             }
         }
     }
+}
+
+const CLOSE_REFUSED: &str = "Could not close that tile";
+
+/// The document or browser tile `leaf` leaves `desktop`.
+pub(super) fn remove_tile(state: &mut State, desktop_id: String, leaf_id: String, tx: &mut Tx) {
+    state.act(
+        |request_id| DesktopRemoveLeafMessage {
+            request_id,
+            desktop_id,
+            leaf_id,
+            ..DesktopRemoveLeafMessage::new()
+        },
+        Refused::Prefixed(CLOSE_REFUSED),
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// Walks back or forward through the tiles this window showed, skipping ones that are gone,

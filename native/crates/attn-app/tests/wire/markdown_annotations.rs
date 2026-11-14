@@ -988,7 +988,7 @@ fn the_send_key_sends_the_marks_of_the_document_tile_that_holds_the_keyboard() {
         DOC,
         holding(vec![held("m1", "comment", "first paint", Some("hm"))]),
     );
-    world.gesture(|app| app.click(Target::key("tile.m.header")));
+    world.gesture(|app| app.click(Target::key("tile.m")));
     world.settle();
     let chord = if cfg!(target_os = "macos") {
         "cmd+enter"

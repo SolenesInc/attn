@@ -1103,6 +1103,61 @@ fn the_header_focuses_its_agent_until_return_to_row_and_leaving_the_desktop_ends
 }
 
 #[test]
+fn a_document_tiles_header_focuses_it_and_every_tiles_header_closes_it() {
+    let mut world = start(vec![desktop(
+        1,
+        "a",
+        Some(row([pane("a"), tile("m", "markdown")])),
+    )]);
+    assert_eq!(
+        header_label(&world, "tile.m.focus").as_deref(),
+        Some("Focus document")
+    );
+    assert_eq!(
+        header_label(&world, "tile.m.close").as_deref(),
+        Some("Close tile")
+    );
+    assert!(
+        header_label(&world, "tile.a.close").is_none(),
+        "an agent's header has no close button, as in the Tauri app"
+    );
+
+    world.gesture(|app| app.click(Target::key("tile.m.focus")));
+    assert!(shows(&world, "markdown") && !shows(&world, "Agent a"));
+    assert_eq!(sent(&world, "desktop_show_leaf")[0]["leaf_id"], "m");
+    assert!(header_label(&world, "tile.m.focus").is_none());
+    world.gesture(|app| app.click(Target::key("tile.m.return")));
+    assert!(shows(&world, "markdown") && shows(&world, "Agent a"));
+
+    world.gesture(|app| app.click(Target::key("tile.m.close")));
+    assert_eq!(
+        sent(&world, "desktop_remove_leaf"),
+        [json(r#"{"desktop_id":"work/desktop_1","leaf_id":"m"}"#)]
+    );
+
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(
+            1,
+            "w",
+            Some(row([pane("a"), tile("w", "browser")])),
+        )],
+    );
+    assert!(
+        header_label(&world, "tile.w.focus").is_none(),
+        "only a document's header has a focus button, as in the Tauri app"
+    );
+    world.gesture(|app| app.click(Target::key("tile.w.close")));
+    assert_eq!(
+        sent(&world, "desktop_remove_leaf")[1],
+        json(r#"{"desktop_id":"work/desktop_1","leaf_id":"w"}"#)
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn an_agents_header_shows_its_short_session_id_and_copies_the_whole_id() {
     let mut world = start(vec![desktop(1, "a1b2c3d4e5", Some(pane("a1b2c3d4e5")))]);
     let id = world.screen().get(Target::key("tile.a1b2c3d4e5.id"));
