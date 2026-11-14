@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use attn_protocol::{
     SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage,
-    SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedDocument, SeedNoteMessage,
+    SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedCheckEvidence, SeedDocument,
+    SeedNoteMessage,
 };
 use rune::tok::{space, type_};
 use rune::{El, FileDialogOptions, Tx, col, row, text};
@@ -11,6 +12,7 @@ use super::sheet::{Sheet, meta_word};
 use super::spot::Spot;
 use super::view::kit_button;
 use crate::State;
+use crate::requests::Refused;
 
 /// How a linked artifact reads in its row: what it is, the part a person recognizes, where it
 /// sits, and the file or page it opens.
@@ -159,12 +161,22 @@ impl Sheet<'_> {
                 kit_button("Open")
                     .disabled(shown.busy)
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        open_kept(&opened, state, &target, tx)
+                        open_kept(&opened, state, &target, Show::Open, tx)
                     })
                     .build(kit)
                     .key(spot.key("open")),
             );
         }
+        let revealed = spot.clone();
+        actions = actions.child(
+            kit_button("Reveal")
+                .disabled(shown.busy)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    open_kept(&revealed, state, &target, Show::Reveal, tx)
+                })
+                .build(kit)
+                .key(spot.key("reveal")),
+        );
         let (moved, filename) = (spot.clone(), artifact.filename.clone());
         actions = actions.child(
             kit_button("Move out")
@@ -314,36 +326,147 @@ impl Sheet<'_> {
     }
 }
 
-/// Asks the daemon where the seed keeps `target`, and has the system open it.
-fn open_kept(spot: &Spot, state: &mut State, target: &str, tx: &mut Tx) {
+/// How the system shows a file the seed keeps: opened in its app, or selected in the file
+/// manager.
+#[derive(Clone, Copy)]
+pub(super) enum Show {
+    Open,
+    Reveal,
+}
+
+/// Asks the daemon where the seed keeps `target`, and has the system show it.
+fn open_kept(spot: &Spot, state: &mut State, target: &str, how: Show, tx: &mut Tx) {
     let (seed_id, relative_target) = (spot.seed().to_owned(), target.to_owned());
+    let home = spot.key(match how {
+        Show::Open => "open",
+        Show::Reveal => "reveal",
+    });
     spot.send_as(
         state,
         None,
-        |request_id| SeedArtifactTargetMessage {
-            seed_id,
-            relative_target,
-            purpose: "artifact".into(),
-            request_id,
-            ..SeedArtifactTargetMessage::new()
-        },
-        spot.key("open"),
-        |state, answer, tx| {
+        |request_id| target_of(seed_id, relative_target, request_id),
+        home,
+        move |state, answer, tx| {
             let path = answer
                 .parse::<SeedArtifactTargetResultMessage>()
                 .filter(|r| r.success)
                 .and_then(|r| r.result)
                 .and_then(|r| r.path);
-            if let Some(path) = path
-                && let Err(why) = tx.open_uri(&attn_term::links::file_url(&path))
-            {
-                state
-                    .window
-                    .notify(format!("Could not open {path}: {why}"), tx);
+            if let Some(path) = path {
+                show(state, &path, how, tx);
             }
         },
         tx,
     );
+}
+
+/// Where a check's evidence opens.
+pub(super) enum Opens {
+    Kept { target: String, how: Show },
+    Page(String),
+    Markdown(String),
+}
+
+/// Where `evidence` opens: its link, or the kept file or linked artifact of `document` it
+/// names; nothing when it names neither.
+pub(super) fn opens(
+    evidence: &SeedCheckEvidence,
+    document: Option<&SeedDocument>,
+) -> Option<Opens> {
+    if let Some(url) = &evidence.url {
+        return Some(Opens::Page(url.clone()));
+    }
+    let named = evidence.artifact.as_deref()?;
+    let document = document?;
+    if let Some(kept) = document.artifacts.iter().find(|a| a.filename == named) {
+        let how = if crate::markdown::links::is_safe_local(&kept.filename) {
+            Show::Open
+        } else {
+            Show::Reveal
+        };
+        return Some(Opens::Kept {
+            target: kept.relative_target.clone(),
+            how,
+        });
+    }
+    let reference = document.references.iter().find(|r| label_of(r) == named)?;
+    match (&reference.url, reference.kind.as_str(), &reference.path) {
+        (Some(url), _, _) => Some(Opens::Page(url.clone())),
+        (None, "markdown_file", Some(path)) => Some(Opens::Markdown(path.clone())),
+        _ => None,
+    }
+}
+
+/// The part of a linked artifact a person recognizes, as evidence names it.
+fn label_of(reference: &SeedArtifactReference) -> &str {
+    [
+        &reference.path,
+        &reference.notebook_document_id,
+        &reference.url,
+        &reference.repository,
+    ]
+    .into_iter()
+    .flatten()
+    .map(String::as_str)
+    .find(|s| !s.is_empty())
+    .unwrap_or(&reference.kind)
+}
+
+/// Opens a check's evidence of seed `seed`, saying why when it cannot.
+pub(super) fn open_evidence(state: &mut State, seed: &str, opens: &Opens, tx: &mut Tx) {
+    match opens {
+        Opens::Kept { target, how } => {
+            let (seed_id, relative_target, how) = (seed.to_owned(), target.clone(), *how);
+            state.act(
+                |request_id| target_of(seed_id, relative_target, request_id),
+                Refused::Prefixed("Could not open the evidence"),
+                move |state, reply, tx| {
+                    let path = reply
+                        .parse::<SeedArtifactTargetResultMessage>()
+                        .and_then(|r| r.result)
+                        .and_then(|r| r.path);
+                    if let Some(path) = path {
+                        show(state, &path, how, tx);
+                    }
+                },
+                tx,
+            );
+        }
+        Opens::Page(url) => {
+            if let Err(why) = tx.open_url(url) {
+                state
+                    .window
+                    .notify(format!("Could not open {url}: {why}"), tx);
+            }
+        }
+        Opens::Markdown(path) => crate::opener::open_markdown(state, path.clone(), None, None, tx),
+    }
+}
+
+fn target_of(
+    seed_id: String,
+    relative_target: String,
+    request_id: String,
+) -> SeedArtifactTargetMessage {
+    SeedArtifactTargetMessage {
+        seed_id,
+        relative_target,
+        purpose: "artifact".into(),
+        request_id,
+        ..SeedArtifactTargetMessage::new()
+    }
+}
+
+fn show(state: &mut State, path: &str, how: Show, tx: &mut Tx) {
+    let shown = match how {
+        Show::Open => tx.open_uri(&attn_term::links::file_url(path)),
+        Show::Reveal => tx.reveal_path(path),
+    };
+    if let Err(why) = shown {
+        state
+            .window
+            .notify(format!("Could not show {path}: {why}"), tx);
+    }
 }
 
 /// Asks where to put the seed's file `filename`, then moves it there out of the seed.

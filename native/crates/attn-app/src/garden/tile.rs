@@ -103,7 +103,7 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
         .children(sheet.chief_form(document))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))
-        .children(sheet.checks(here))
+        .children(sheet.checks(here, document))
         .children(sheet.seeds("plot", "Plot", children))
         .children(sheet.seeds("related", "Related", related))
         .children(sheet.artifacts(document))

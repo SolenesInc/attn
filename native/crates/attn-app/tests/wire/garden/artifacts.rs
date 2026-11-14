@@ -129,7 +129,7 @@ fn transfers(world: &World) -> Vec<Value> {
 }
 
 #[test]
-fn opens_a_kept_document_and_moves_it_out_where_the_user_chooses() {
+fn opens_reveals_and_moves_out_a_kept_document_where_the_user_chooses() {
     let mut world = opened(vec![kept("report.pdf", 1234)], Vec::new(), &[], None);
 
     let item = row(&world, "artifact.report.pdf");
@@ -146,6 +146,12 @@ fn opens_a_kept_document_and_moves_it_out_where_the_user_chooses() {
     assert_eq!(
         world.opened_links(),
         vec!["file:///notebook/seeds/s-ship11/report.pdf".to_owned()]
+    );
+
+    press(&mut world, "artifact.report.pdf", "reveal");
+    assert_eq!(
+        world.revealed_paths(),
+        vec!["/notebook/seeds/s-ship11/report.pdf".to_owned()]
     );
 
     press(&mut world, "artifact.report.pdf", "move-out");
@@ -170,7 +176,7 @@ fn opens_a_kept_document_and_moves_it_out_where_the_user_chooses() {
 }
 
 #[test]
-fn offers_no_open_for_a_kept_file_the_system_would_run() {
+fn only_reveals_a_kept_file_the_system_would_run() {
     let mut world = opened(vec![kept("setup.command", 12)], Vec::new(), &[], None);
 
     assert!(
@@ -178,6 +184,11 @@ fn offers_no_open_for_a_kept_file_the_system_would_run() {
             .screen()
             .find(Target::key("garden.artifact.setup.command.open"))
             .is_none()
+    );
+    press(&mut world, "artifact.setup.command", "reveal");
+    assert_eq!(
+        world.revealed_paths(),
+        vec!["/notebook/seeds/s-ship11/setup.command".to_owned()]
     );
     press(&mut world, "artifact.setup.command", "move-out");
     world.answer_file_dialog(None);

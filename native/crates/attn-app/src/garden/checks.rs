@@ -1,4 +1,6 @@
-use attn_protocol::{ActorView, Seed, SeedCheck, SeedCheckMessage, SeedSharedCheck};
+use attn_protocol::{
+    ActorView, Seed, SeedCheck, SeedCheckEvidence, SeedCheckMessage, SeedDocument, SeedSharedCheck,
+};
 use attn_ui::GlyphButton;
 use rune::tok::{space, type_};
 use rune::{El, KeyEvent, Tx, col, row, text, text_input};
@@ -56,7 +58,7 @@ fn evidence_label(evidence: &attn_protocol::SeedCheckEvidence) -> String {
 impl Sheet<'_> {
     /// The seed's checks, each with the moves that judge it, then the checks it shares with
     /// every child, then the removed ones while shown.
-    pub(super) fn checks(&self, here: &Seed) -> Option<El> {
+    pub(super) fn checks(&self, here: &Seed, document: Option<&SeedDocument>) -> Option<El> {
         let checks: Vec<&SeedCheck> = here.checks.iter().flatten().collect();
         let shared: Vec<&SeedSharedCheck> = here.shared_checks.iter().flatten().collect();
         if checks.is_empty() && shared.is_empty() {
@@ -74,7 +76,7 @@ impl Sheet<'_> {
             );
         }
         let live = checks.iter().filter(|c| !c.removed);
-        list = list.children(live.map(|c| self.check_row(here, c)));
+        list = list.children(live.map(|c| self.check_row(here, document, c)));
         let live_shared: Vec<_> = shared.iter().filter(|c| !c.removed).collect();
         if !live_shared.is_empty() {
             list = list
@@ -100,7 +102,7 @@ impl Sheet<'_> {
                         checks
                             .iter()
                             .filter(|c| c.removed)
-                            .map(|c| self.check_row(here, c)),
+                            .map(|c| self.check_row(here, document, c)),
                     )
                     .children(
                         shared
@@ -113,7 +115,7 @@ impl Sheet<'_> {
         Some(list)
     }
 
-    fn check_row(&self, here: &Seed, check: &SeedCheck) -> El {
+    fn check_row(&self, here: &Seed, document: Option<&SeedDocument>, check: &SeedCheck) -> El {
         let t = self.t;
         let kit = attn_ui::kit(t);
         let spot = Spot::new(&self.prefix, &here.id, &format!("check.{}", check.id));
@@ -196,6 +198,9 @@ impl Sheet<'_> {
                     .color(t.text_secondary)
                     .wrap(),
             );
+            if !report.evidence.is_empty() {
+                main = main.child(self.evidence(here, document, &check.id, &report.evidence));
+            }
         }
         if let Some(verdict) = &check.verdict {
             let mut words = format!(
@@ -398,4 +403,36 @@ fn reject(spot: &Spot, state: &mut State, reason: String, tx: &mut Tx) {
         return;
     }
     judge(spot, state, "reject", Some(reason), tx);
+}
+
+impl Sheet<'_> {
+    /// A report's evidence as controls, each opening where the Artifacts section opens it: a
+    /// kept document opens and another kept file shows in the file manager, a link opens in the
+    /// browser and a linked file in a markdown tile. Evidence that names nothing the seed holds
+    /// stays words in the report.
+    fn evidence(
+        &self,
+        here: &Seed,
+        document: Option<&SeedDocument>,
+        check: &str,
+        evidence: &[SeedCheckEvidence],
+    ) -> El {
+        let kit = attn_ui::kit(self.t);
+        let mut shown = row().flex_wrap().gap(space::S1);
+        for (n, piece) in evidence.iter().enumerate() {
+            let Some(opens) = super::artifacts::opens(piece, document) else {
+                continue;
+            };
+            let seed = here.id.clone();
+            shown = shown.child(
+                kit_button(evidence_label(piece))
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        super::artifacts::open_evidence(state, &seed, &opens, tx)
+                    })
+                    .build(kit)
+                    .key(self.key(&format!("check.{check}.evidence.{n}"))),
+            );
+        }
+        shown
+    }
 }

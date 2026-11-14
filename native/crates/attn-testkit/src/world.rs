@@ -629,6 +629,12 @@ impl World {
         self.runtime.take_url_requests()
     }
 
+    /// The paths the app asked the file manager to show since the last call, which a test run
+    /// keeps instead of showing.
+    pub fn revealed_paths(&mut self) -> Vec<String> {
+        self.runtime.take_reveal_requests()
+    }
+
     /// The file dialog the app shows, and its title.
     pub fn file_dialog(&self) -> Option<(rune::FileDialogKind, String)> {
         self.runtime

@@ -1082,7 +1082,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         .children(sheet.chief_form(document))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))
-        .children(sheet.checks(here));
+        .children(sheet.checks(here, document));
     if stacked && model::is_plot(here) {
         page = page.child(plot_children(place, here, t));
     }

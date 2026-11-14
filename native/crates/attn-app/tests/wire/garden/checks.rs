@@ -3,6 +3,7 @@ use attn_protocol::{
     SeedCheckVerdict, SeedSharedCheck,
 };
 use attn_testkit::{Request, Target, World};
+use serde_json::json;
 
 use super::*;
 
@@ -239,5 +240,105 @@ fn a_plots_shared_check_opens_to_the_seeds_that_prove_it_and_removed_checks_wait
     click(&mut world, "C2 lands green · 1 of 2 confirmed");
     click(&mut world, "Settings unit · planted · open");
     assert_eq!(heading(&world).as_deref(), Some("Settings unit"));
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn opens_each_piece_of_evidence_where_the_seeds_artifacts_open_it_and_leaves_unknown_names_as_words()
+ {
+    let evidence = |artifact: &str| SeedCheckEvidence {
+        artifact: Some(artifact.into()),
+        ..SeedCheckEvidence::default()
+    };
+    let reported = with(judged(), |s| {
+        let report = s.checks.as_mut().unwrap()[1].report.as_mut().unwrap();
+        report.evidence = vec![
+            evidence("verify-migration.tar.gz"),
+            evidence("notes.md"),
+            evidence("https://ci.example.test/run/9"),
+            evidence("/repo/plan.md"),
+            evidence("gone.log"),
+            SeedCheckEvidence {
+                url: Some("https://github.com/acme/app/pull/12".into()),
+                ..SeedCheckEvidence::default()
+            },
+        ];
+    });
+    let held = reported.clone();
+    let daemon = daemon(vec![reported], Vec::new());
+    daemon.on("seed_document_get", move |r: &Request| {
+        let kept = |name: &str| attn_protocol::SeedArtifact {
+            filename: name.into(),
+            relative_target: name.into(),
+            size: 1,
+            modified_at: "2026-11-13T09:00:00Z".into(),
+        };
+        let linked = |kind: &str, url: Option<&str>, path: Option<&str>| {
+            attn_protocol::SeedArtifactReference {
+                kind: kind.into(),
+                url: url.map(str::to_owned),
+                path: path.map(str::to_owned),
+                ..attn_protocol::SeedArtifactReference::default()
+            }
+        };
+        message(SeedDocumentGetResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            document: Some(SeedDocument {
+                seed: held.clone(),
+                artifacts: vec![kept("verify-migration.tar.gz"), kept("notes.md")],
+                references: vec![
+                    linked("url", Some("https://ci.example.test/run/9"), None),
+                    linked("markdown_file", None, Some("/repo/plan.md")),
+                ],
+                ..SeedDocument::default()
+            }),
+            ..SeedDocumentGetResultMessage::new()
+        })
+    });
+    daemon.on("seed_artifact_target", |r: &Request| {
+        json!({
+            "event": "seed_artifact_target_result",
+            "request_id": r["request_id"],
+            "success": true,
+            "result": {
+                "relative_target": r["relative_target"],
+                "path": format!("/notebook/seeds/s-judge1/{}", r["relative_target"].as_str().unwrap()),
+            },
+        })
+    });
+    let mut world = open_garden_with(daemon);
+    open_row(&mut world, "Cache store migration");
+
+    let press = |world: &mut World, n: usize| {
+        world.gesture(|app| app.click(Target::key(format!("garden.check.C2.evidence.{n}"))))
+    };
+    press(&mut world, 0);
+    assert_eq!(
+        world.revealed_paths(),
+        vec!["/notebook/seeds/s-judge1/verify-migration.tar.gz".to_owned()]
+    );
+    press(&mut world, 1);
+    press(&mut world, 2);
+    press(&mut world, 5);
+    assert_eq!(
+        world.opened_links(),
+        [
+            "file:///notebook/seeds/s-judge1/notes.md",
+            "https://ci.example.test/run/9",
+            "https://github.com/acme/app/pull/12",
+        ]
+    );
+    press(&mut world, 3);
+    assert_eq!(
+        world.daemon.sent_of("open_markdown")[0]["path"],
+        "/repo/plan.md"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.check.C2.evidence.4"))
+            .is_none()
+    );
     assert!(rests(&mut world));
 }
