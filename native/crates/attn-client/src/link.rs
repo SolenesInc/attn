@@ -628,6 +628,10 @@ impl Task {
                 self.store.tasks_changed();
                 None
             }
+            "delegation_preferences_changed" => {
+                self.store.delegation_changed();
+                None
+            }
             "kept_conversations_changed" => {
                 self.store.kept_conversations_changed();
                 None

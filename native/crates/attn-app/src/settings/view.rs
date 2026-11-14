@@ -5,7 +5,10 @@ use rune_kit::{Dialog, TextInput};
 
 use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
-use super::{analytics, appearance, bus, desktop, hygiene, pages, plugins, tasks, updates};
+use super::{
+    agents, analytics, appearance, background, bus, delegation, desktop, hygiene, models, pages,
+    plugins, route, tasks, updates,
+};
 use crate::State;
 use crate::setting;
 
@@ -40,6 +43,11 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         dialog = dialog.child(toast);
     }
     dialog.build(k, layers);
+    if super::is_open(state) {
+        delegation::overlay(state, t, layers);
+        route::overlay(state, t, layers);
+        agents::overlay(state, t, layers);
+    }
 }
 
 fn nav(state: &State, t: &Tokens) -> El {
@@ -107,6 +115,7 @@ fn nav(state: &State, t: &Tokens) -> El {
 }
 
 fn body(state: &State, t: &Tokens) -> El {
+    state.window.settings.anchors.clear();
     let section = state.window.settings.section;
     let item = section.item();
     let lead: Vec<El> = match item.feature {
@@ -179,12 +188,7 @@ fn body(state: &State, t: &Tokens) -> El {
 /// Saving…, Saved, or the refusals no field shows beside itself.
 fn status(state: &State, t: &Tokens) -> El {
     let saves = &state.window.settings.autosave;
-    let beside_a_field = |key: &str| super::TEXT_FIELDS.iter().any(|(k, _)| *k == key);
-    let refusals: Vec<El> = saves
-        .refusals()
-        .filter(|(key, _)| !beside_a_field(key))
-        .map(|(key, reason)| pages::refusal_row(key.to_owned(), reason, t))
-        .collect();
+    let refusals = pages::unanchored_refusals(state, t);
     let said = if saves.saving() {
         Some("Saving…")
     } else if saves.saved() {
@@ -210,6 +214,10 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<El> {
         Section::BackgroundTasks => tasks::page(state, state.window.now_ms, t),
         Section::EventBus => bus::page(state, state.window.now_ms, t),
         Section::Analytics => analytics::page(state, t),
+        Section::BackgroundAgents => background::page(state, t),
+        Section::Delegation => delegation::page(state, t),
+        Section::Agents => agents::page(state, t),
+        Section::Models => models::page(state, t),
         Section::Updates => updates::page(state, t),
         Section::Desktop => desktop::page(state, t),
         Section::Hygiene => hygiene::page(state, t),
@@ -224,6 +232,7 @@ fn pills(state: &State, section: Section, t: &Tokens) -> Vec<El> {
         Section::Desktop => desktop::pills(state, t),
         Section::Hygiene => hygiene::pills(state, t),
         Section::Plugins => plugins::pills(state, t),
+        Section::Delegation => delegation::pill(state, t).into_iter().collect(),
         _ => Vec::new(),
     }
 }

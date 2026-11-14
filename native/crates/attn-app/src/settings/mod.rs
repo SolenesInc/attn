@@ -1,18 +1,26 @@
 //! The settings dialog: its pages, its search and the autosave that keeps each change.
 
+mod agents;
 mod analytics;
 mod appearance;
 pub(crate) mod autosave;
+mod background;
 mod bus;
+mod catalogs;
+mod delegation;
 mod desktop;
+mod harnesses;
 mod hygiene;
+mod models;
 mod pages;
 mod plugins;
+mod route;
 mod sections;
 mod tasks;
 mod updates;
 mod view;
 
+use attn_client::Slices;
 use rune::{TextEdit, Tx};
 
 use crate::State;
@@ -42,13 +50,23 @@ pub(crate) struct Dialog {
     pub(crate) section: Section,
     pub(crate) search: TextEdit,
     pub(crate) autosave: autosave::Autosave,
+    anchors: pages::Anchors,
     tasks: tasks::Tasks,
     analytics: analytics::Analytics,
     updates: updates::Updates,
     bus: bus::Bus,
     plugins: plugins::Plugins,
     hygiene: hygiene::Hygiene,
-    /// The text field the focus was in at the last frame.
+    background: background::Background,
+    agents: agents::Agents,
+    harnesses: harnesses::Harnesses,
+    catalogs: catalogs::Catalogs,
+    delegation: delegation::Delegation,
+    route_picker: Option<route::Picker>,
+    /// Whether what the page lists changed since it was last brought up to date: the
+    /// settings, plugins, harnesses or connection, or the page itself.
+    stale: bool,
+    /// The key of the text field the focus was in at the last frame.
     editing: Option<String>,
     /// What waits for the fields to land: the dialog closing, or another page.
     after_flush: Option<Leave>,
@@ -68,8 +86,50 @@ pub(crate) fn field_key(setting: &str) -> String {
     format!("{FIELD_PREFIX}{setting}{FIELD_SUFFIX}")
 }
 
+/// The key of the field that edits `part` of the setting `setting`, for a setting several fields
+/// edit together.
+pub(crate) fn part_field_key(setting: &str, part: &str) -> String {
+    format!("{FIELD_PREFIX}{setting}#{part}{FIELD_SUFFIX}")
+}
+
 fn setting_of_field(key: &str) -> Option<&str> {
-    key.strip_prefix(FIELD_PREFIX)?.strip_suffix(FIELD_SUFFIX)
+    let field = key.strip_prefix(FIELD_PREFIX)?.strip_suffix(FIELD_SUFFIX)?;
+    field.split('#').next()
+}
+
+/// The fields the page shows besides the dialog's own, each with how it reads and saves.
+fn page_fields(state: &State) -> Vec<(String, autosave::Codec)> {
+    match state.window.settings.section {
+        Section::Agents => agents::fields(state),
+        Section::BackgroundAgents => background::fields(),
+        Section::Models => models::fields(),
+        _ => Vec::new(),
+    }
+}
+
+/// Follows the fields the page shows, before it first draws them; whether one is new.
+fn ensure_page_fields(state: &mut State) -> bool {
+    let mut added = false;
+    for (key, codec) in page_fields(state) {
+        let fields = &mut state.window.settings.autosave;
+        added |= fields.field(&key).is_none();
+        fields.ensure(&key, &state.facts.settings, codec);
+    }
+    added
+}
+
+/// Brings the page up to what it lists: its fields, the drafts its own fields show, the
+/// harnesses and the model catalogs. Runs once each time one of them changed.
+fn refresh(state: &mut State, tx: &mut Tx) -> bool {
+    let mut shown = ensure_page_fields(state);
+    shown |= background::follow(state);
+    shown |= agents::follow(state);
+    shown | harnesses::ensure(state, tx) | discover(state, tx)
+}
+
+/// Has the page brought up to date before the next frame.
+fn invalidate(state: &mut State) {
+    state.window.settings.stale = true;
 }
 
 pub(crate) fn is_open(state: &State) -> bool {
@@ -86,10 +146,18 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
 }
 
 pub(crate) fn open(state: &mut State, tx: &mut Tx) {
+    let settings = state.facts.settings.clone();
     for (key, trim) in TEXT_FIELDS {
-        let actual = state.facts.settings.get(*key).cloned().unwrap_or_default();
-        state.window.settings.autosave.ensure(key, &actual, *trim);
+        let codec = if *trim {
+            autosave::TRIMMED
+        } else {
+            autosave::PLAIN
+        };
+        state.window.settings.autosave.ensure(key, &settings, codec);
     }
+    ensure_page_fields(state);
+    invalidate(state);
+    harnesses::opened(state);
     state.window.settings.after_flush = None;
     hygiene::forget(state);
     state.window.layer = Some(Layer::Settings);
@@ -104,6 +172,7 @@ fn arrive(state: &mut State, tx: &mut Tx) {
     bus::arrive(state, tx);
     analytics::arrive(state, tx);
     updates::arrive(state);
+    delegation::arrive(state, tx);
 }
 
 /// Closes the dialog once every field has landed; a refused field keeps it open, showing why.
@@ -135,18 +204,15 @@ pub(crate) fn flushed(state: &mut State, tx: &mut Tx) {
     let Some(to) = state.window.settings.after_flush.take() else {
         return;
     };
-    let refused_field = state
-        .window
-        .settings
+    let dialog = &state.window.settings;
+    let refused = dialog
         .autosave
         .refusals()
-        .map(|(key, _)| key)
-        .find(|key| TEXT_FIELDS.iter().any(|(field, _)| field == key))
-        .map(field_key);
-    match refused_field {
-        Some(field) => tx.focus(field, false),
-        None if state.window.settings.autosave.refusals().next().is_none() => go(state, to, tx),
-        None => {}
+        .next()
+        .map(|(key, _)| dialog.anchors.focus(key));
+    match refused {
+        Some(focus) => tx.focus(focus, false),
+        None => go(state, to, tx),
     }
 }
 
@@ -154,12 +220,16 @@ fn go(state: &mut State, to: Leave, tx: &mut Tx) {
     match to {
         Leave::Close => {
             if is_open(state) {
+                state.window.settings.route_picker = None;
                 state.window.layer = None;
                 crate::picker::refocus_inline(state, tx);
             }
         }
         Leave::Show(section) if section != state.window.settings.section => {
             state.window.settings.section = section;
+            state.window.settings.route_picker = None;
+            ensure_page_fields(state);
+            invalidate(state);
             arrive(state, tx);
         }
         Leave::Show(_) => {}
@@ -173,9 +243,14 @@ pub(crate) fn disconnected(state: &mut State) {
 
 /// Takes the daemon's settings into the fields the user has not changed, and reads the tasks
 /// again when they changed under the Task runner page.
-pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
+pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
+    let listed = Slices::SETTINGS | Slices::PLUGINS | Slices::DELEGATION | Slices::CONNECTION;
+    if changed.intersects(listed) {
+        invalidate(state);
+    }
     let settings = state.facts.settings.clone();
     state.window.settings.autosave.sync(&settings);
+    catalogs::follow(state);
     tasks::follow(state, tx);
 }
 
@@ -184,22 +259,44 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
 /// went.
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     hygiene::poll(state);
-    let focus = tx.focused().map(str::to_owned).filter(|_| is_open(state));
-    let focused = focus
-        .as_deref()
-        .and_then(setting_of_field)
-        .map(str::to_owned);
-    let left = match &state.window.settings.editing {
-        Some(was) if Some(was) != focused.as_ref() => Some(was.clone()),
-        _ => None,
-    };
-    state.window.settings.editing = focused;
-    if let Some(key) = left {
-        autosave::commit_on_leave(state, &key, tx);
+    let open = is_open(state);
+    let focused = tx
+        .focused()
+        .filter(|key| open && setting_of_field(key).is_some());
+    if state.window.settings.editing.as_deref() != focused {
+        let was = std::mem::replace(
+            &mut state.window.settings.editing,
+            focused.map(str::to_owned),
+        );
+        if let Some(key) = was.as_deref().and_then(setting_of_field) {
+            let key = key.to_owned();
+            autosave::commit_on_leave(state, &key, tx);
+        }
+    }
+    let focus = tx.focused().map(str::to_owned).filter(|_| open);
+    let mut shown = false;
+    if is_open(state) {
+        if std::mem::take(&mut state.window.settings.stale) {
+            shown |= refresh(state, tx);
+        }
+        agents::poll(state, tx);
     }
     bus::poll(state, now, tx);
+    shown |= delegation::poll(state, tx);
     let plugin_marks_went = plugins::poll(state, focus.as_deref(), now, tx);
-    state.window.settings.autosave.expire(now) | plugin_marks_went
+    state.window.settings.autosave.expire(now) | plugin_marks_went | shown
+}
+
+/// Discovers the models the page's route fields and the open picker show.
+fn discover(state: &mut State, tx: &mut Tx) -> bool {
+    let wanted = match state.window.settings.section {
+        Section::Agents => agents::wanted(state),
+        Section::BackgroundAgents => background::wanted(state),
+        Section::Delegation => delegation::wanted(state),
+        Section::Models => models::wanted(state),
+        _ => Vec::new(),
+    };
+    route::discover_wanted(state, wanted, tx)
 }
 
 /// Runs the settings actions a key or the palette can ask for.

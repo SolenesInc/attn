@@ -184,7 +184,7 @@ pub fn bind(
             ledger::follow(state, was, tx);
             notifications::follow(state, was, tx);
             update_run::follow(state, tx);
-            settings::follow(state, tx);
+            settings::follow(state, changed, tx);
             shortcut_editor::follow(state);
             sidebar::advance(state, tx);
             garden::follow(state, tx);

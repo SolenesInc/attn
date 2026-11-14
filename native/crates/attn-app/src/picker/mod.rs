@@ -1,4 +1,4 @@
-mod agents;
+pub(crate) mod agents;
 mod names;
 mod paths;
 mod repo;

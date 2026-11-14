@@ -1,5 +1,7 @@
 //! The controls the settings pages share, and the pages with little of their own.
 
+use std::cell::RefCell;
+
 use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
@@ -172,8 +174,62 @@ pub(super) fn setting_field(
         .children(refusal(state, key, t))
 }
 
-/// Why the daemon refused `key`'s value, with Retry, beside the control that edits it.
-pub(super) fn refusal(state: &State, key: &'static str, t: &Tokens) -> Option<El> {
+/// The refusals the page draws beside their controls, by setting, with where a refused close
+/// leaves the keyboard: Tauri's anchored refusals. Each drawing of the dialog sets them anew.
+#[derive(Default)]
+pub(crate) struct Anchors(RefCell<Vec<(String, String)>>);
+
+impl Anchors {
+    fn anchor(&self, key: &str, focus: String) {
+        self.0.borrow_mut().push((key.to_owned(), focus));
+    }
+
+    pub(super) fn clear(&self) {
+        self.0.borrow_mut().clear();
+    }
+
+    /// Where a refused close leaves the keyboard for `key`: beside its control when the page
+    /// draws its refusal there, else the footer's Retry.
+    pub(super) fn focus(&self, key: &str) -> String {
+        self.0
+            .borrow()
+            .iter()
+            .find(|(anchored, _)| anchored == key)
+            .map_or_else(|| retry_key(key), |(_, focus)| focus.clone())
+    }
+
+    fn has(&self, key: &str) -> bool {
+        self.0.borrow().iter().any(|(anchored, _)| anchored == key)
+    }
+}
+
+/// The refusals no control on the page shows beside itself, for the dialog's footer. Call it
+/// once the page is drawn.
+pub(super) fn unanchored_refusals(state: &State, t: &Tokens) -> Vec<El> {
+    let dialog = &state.window.settings;
+    dialog
+        .autosave
+        .refusals()
+        .filter(|(key, _)| !dialog.anchors.has(key))
+        .map(|(key, reason)| refusal_row(key.to_owned(), reason, t))
+        .collect()
+}
+
+fn retry_key(key: &str) -> String {
+    format!("settings.retry.{key}")
+}
+
+/// Why the daemon refused `key`'s value, with Retry, beside the control that edits it: the
+/// field keyed for `key`, where a refused close leaves the keyboard.
+pub(super) fn refusal(state: &State, key: &str, t: &Tokens) -> Option<El> {
+    refusal_beside(state, key, super::field_key(key), t)
+}
+
+/// Why the daemon refused `key`'s value, with Retry, beside the control that edits it, which
+/// keeps the refusal out of the dialog's footer. A refused close leaves the keyboard on
+/// `focus`.
+pub(super) fn refusal_beside(state: &State, key: &str, focus: String, t: &Tokens) -> Option<El> {
+    state.window.settings.anchors.anchor(key, focus);
     let reason = state
         .window
         .settings
@@ -184,8 +240,8 @@ pub(super) fn refusal(state: &State, key: &'static str, t: &Tokens) -> Option<El
     Some(refusal_row(key.to_owned(), reason, t))
 }
 
-pub(super) fn refusal_row(key: String, reason: &str, t: &Tokens) -> El {
-    let retry_key = key.clone();
+fn refusal_row(key: String, reason: &str, t: &Tokens) -> El {
+    let retried = key.clone();
     row()
         .key(format!("settings.refusal.{key}"))
         .role("alert")
@@ -193,12 +249,9 @@ pub(super) fn refusal_row(key: String, reason: &str, t: &Tokens) -> El {
         .gap(space::S2)
         .items_center()
         .child(text(reason.to_owned()).font(CAPTION).color(t.error).wrap())
-        .child(button(
-            format!("settings.retry.{key}"),
-            "Retry",
-            t,
-            move |state, tx| autosave::commit(state, &retry_key, tx),
-        ))
+        .child(button(retry_key(&key), "Retry", t, move |state, tx| {
+            autosave::commit(state, &retried, tx)
+        }))
 }
 
 /// The choice among `options` for the setting `key`, saved when one is picked.

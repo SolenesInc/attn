@@ -33,6 +33,8 @@ pub struct Facts {
     pub kept_conversations: u64,
     /// Rises each time the daemon says its background tasks changed.
     pub tasks_changed: u64,
+    /// Rises each time the daemon says the delegation preferences changed.
+    pub delegation_changed: u64,
     pub github: Arc<GitHub>,
     pub worktrees: Arc<WorktreePushes>,
     /// The paths git operations run on now, by operation id.
@@ -285,7 +287,8 @@ impl Slices {
     pub const UPDATE_RUN: Slices = Slices(1 << 17);
     pub const PULL_REQUESTS: Slices = Slices(1 << 18);
     pub const PLUGINS: Slices = Slices(1 << 19);
-    pub const ALL: Slices = Slices((1 << 20) - 1);
+    pub const DELEGATION: Slices = Slices(1 << 20);
+    pub const ALL: Slices = Slices((1 << 21) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -591,6 +594,13 @@ impl Store {
         self.change(|facts| {
             facts.tasks_changed += 1;
             Slices::TASKS
+        });
+    }
+
+    pub(crate) fn delegation_changed(&self) {
+        self.change(|facts| {
+            facts.delegation_changed += 1;
+            Slices::DELEGATION
         });
     }
 

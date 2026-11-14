@@ -8,6 +8,30 @@ use crate::State;
 /// How long a field's Saved mark shows once its value lands, as in the Tauri app.
 const SAVED_MARK_SECONDS: f64 = 1.6;
 
+/// How a field reads its draft from the daemon's settings, and the value a draft saves as, or
+/// why it can't be saved.
+#[derive(Clone, Copy)]
+pub(crate) struct Codec {
+    pub(crate) actual: fn(&BTreeMap<String, String>, &str) -> String,
+    pub(crate) serialize: fn(&str, &str) -> Result<String, String>,
+}
+
+fn stored(settings: &BTreeMap<String, String>, key: &str) -> String {
+    settings.get(key).cloned().unwrap_or_default()
+}
+
+/// The setting as the daemon holds it, saved as typed.
+pub(crate) const PLAIN: Codec = Codec {
+    actual: stored,
+    serialize: |_, draft| Ok(draft.to_owned()),
+};
+
+/// The setting as the daemon holds it, saved trimmed.
+pub(crate) const TRIMMED: Codec = Codec {
+    actual: stored,
+    serialize: |_, draft| Ok(draft.trim().to_owned()),
+};
+
 /// The dialog's settings as the user edits them, each saved to the daemon as soon as it is
 /// committed. A field keeps what the user typed while the daemon's value moves underneath it,
 /// and keeps a refused value with its reason until the user changes or retries it.
@@ -16,7 +40,6 @@ pub(crate) struct Autosave {
     fields: BTreeMap<String, Field>,
 }
 
-#[derive(Default)]
 pub(crate) struct Field {
     pub(crate) draft: TextEdit,
     /// The value the daemon holds, as far as this field knows.
@@ -33,8 +56,24 @@ pub(crate) struct Field {
     confirmed: bool,
     /// The field's Saved mark shows until this time.
     saved_mark: Option<f64>,
-    /// Whether the value goes to the daemon trimmed.
-    trim: bool,
+    codec: Codec,
+}
+
+impl Default for Field {
+    fn default() -> Field {
+        Field {
+            draft: TextEdit::default(),
+            saved: String::new(),
+            actual: String::new(),
+            attempting: None,
+            pending: false,
+            requested: false,
+            error: None,
+            confirmed: false,
+            saved_mark: None,
+            codec: PLAIN,
+        }
+    }
 }
 
 impl Field {
@@ -58,13 +97,16 @@ impl Autosave {
 
     /// Starts following `key`, seeded with the daemon's value. A field it already follows
     /// keeps its state.
-    pub(crate) fn ensure(&mut self, key: &str, actual: &str, trim: bool) {
-        self.fields.entry(key.to_owned()).or_insert_with(|| Field {
-            draft: TextEdit::new(actual),
-            saved: actual.to_owned(),
-            actual: actual.to_owned(),
-            trim,
-            ..Field::default()
+    pub(crate) fn ensure(&mut self, key: &str, settings: &BTreeMap<String, String>, codec: Codec) {
+        self.fields.entry(key.to_owned()).or_insert_with(|| {
+            let actual = (codec.actual)(settings, key);
+            Field {
+                draft: TextEdit::new(actual.clone()),
+                saved: actual.clone(),
+                actual,
+                codec,
+                ..Field::default()
+            }
         });
     }
 
@@ -72,7 +114,7 @@ impl Autosave {
     /// field with a change of its own keeps it.
     pub(crate) fn sync(&mut self, settings: &BTreeMap<String, String>) {
         for (key, field) in &mut self.fields {
-            let actual = settings.get(key).cloned().unwrap_or_default();
+            let actual = (field.codec.actual)(settings, key);
             if field.actual == actual {
                 continue;
             }
@@ -88,6 +130,11 @@ impl Autosave {
         self.fields
             .values()
             .any(|f| f.pending || f.draft.text != f.saved || f.error.is_some())
+    }
+
+    /// Whether `key`'s save is out.
+    pub(crate) fn sending(&self, key: &str) -> bool {
+        self.fields.get(key).is_some_and(|f| f.pending)
     }
 
     pub(crate) fn saving(&self) -> bool {
@@ -136,9 +183,9 @@ fn autosave(state: &mut State) -> &mut Autosave {
 
 /// Sets `key` to `value` and saves it: a switch or a choice the user clicked.
 pub(crate) fn apply(state: &mut State, key: &str, value: &str, tx: &mut Tx) {
-    let actual = state.facts.settings.get(key).cloned().unwrap_or_default();
+    let settings = state.facts.settings.clone();
     let fields = autosave(state);
-    fields.ensure(key, &actual, false);
+    fields.ensure(key, &settings, PLAIN);
     let field = fields.fields.get_mut(key).expect("ensured");
     field.draft = TextEdit::new(value);
     field.confirmed = false;
@@ -161,12 +208,16 @@ pub(crate) fn commit(state: &mut State, key: &str, tx: &mut Tx) {
         return;
     }
     let draft = field.draft.text.clone();
-    let value = if field.trim {
-        draft.trim().to_owned()
-    } else {
-        draft.clone()
-    };
     field.attempting = Some(draft.clone());
+    let value = match (field.codec.serialize)(key, &draft) {
+        Ok(value) => value,
+        Err(reason) => {
+            field.error = Some(reason);
+            field.confirmed = false;
+            super::flushed(state, tx);
+            return;
+        }
+    };
     field.pending = true;
     let key = key.to_owned();
     let sent = key.clone();

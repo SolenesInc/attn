@@ -11,10 +11,16 @@ use attn_testkit::{Daemon, Node, Request, Target, World, key_event, message};
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::{Value, json};
 
+mod agents;
 mod analytics;
+mod background;
 mod bus;
+mod delegation;
 mod desktop;
+mod harness_catalogs;
+mod harnesses;
 mod hygiene;
+mod models;
 mod plugins;
 mod tasks;
 mod updates;
