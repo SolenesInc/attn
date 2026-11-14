@@ -64,3 +64,17 @@ item	statement	native_test	reason
 54	The ledger's Copy the path writes the row's directory to the clipboard	attn-app/tests/wire/ledger.rs::the_keys_walk_rows_open_the_menu_copy_the_path_and_back_out_one_layer_at_a_time	
 56	The native diagnostic report names the webview's disk-diagnostic streams as not collected by the native app, as the Orchestrator approved	attn-app/tests/wire/diagnostic_report.rs::clearing_the_output_saves_only_metadata_and_names_no_webview_evidence	
 56	The native app writes its own terminal input trace to the diagnostics directory		gap: s-mny1vm
+59	A browser tile opens its page at the stored address over its page area, follows its tile through layout changes and closes with it	attn-app/tests/wire/browser.rs::the_tile_points_the_open_page_at_a_new_address_in_place_and_closes_it_with_the_tile	
+59	A click in the page gives it the keyboard and makes its tile the active one; a click elsewhere takes the keyboard back	attn-app/tests/wire/browser.rs::a_click_in_the_page_gives_it_the_keyboard_and_the_window_takes_back_only_the_keys_attn_binds	
+59	An agent's action runs on the page and the daemon hears its answer or its error	attn-app/tests/wire/browser.rs::an_agents_action_runs_on_the_page_and_the_daemon_hears_its_answer	
+60	Every action in the daemon's browser allowlist answers from the native app's WKWebView		gap: s-psphmg
+61	A dialog the page opens during an agent's action ends the action and is the agent's to read, type into and close	attn-app/tests/wire/browser.rs::a_dialog_the_page_opens_during_an_agents_action_is_the_agents_to_read_type_into_and_close	
+62	Close with a browser page focused closes that browser tile, not the tile beside it or the window	attn-app/tests/wire/browser.rs::close_from_a_focused_page_closes_the_browser_tile_it_targets	
+62	Close with a browser tile's address field focused closes that browser tile	attn-app/tests/wire/browser.rs::a_click_in_the_address_field_makes_close_act_on_its_browser_tile	
+63	A browsed page reaches no app channel		n/a: the native app registers no script message handler and keeps its browser-host token in its own process, so a page has nothing to call
+64	The WebDriver element and shadow reference format survives across navigation		n/a: the native app runs the same browser runtime bundle as the Tauri app (app/src-tauri/generated/browser-runtime.js), so the format is the bundle's
+65	Cookie reads and deletes are scoped to the page, writes refuse another domain, and one persistent store keeps sign-ins		gap: s-psphmg
+66	wait_for asks the page every 50 ms and gives up at its timeout, at most 120 s, with the Tauri app's error	attn-app/tests/wire/browser.rs::wait_for_asks_the_page_until_its_element_is_ready_or_its_time_runs_out	
+67	An action on a desktop the window has not loaded says to open that desktop	attn-app/tests/wire/browser.rs::an_action_on_a_desktop_the_window_has_not_loaded_says_to_open_that_desktop	
+67	An answer past 24 MiB fails and says why, under the daemon's 32 MiB read limit	attn-app/tests/wire/browser.rs::an_answer_too_large_for_the_daemon_to_read_fails_and_says_why	
+68	A page that browses elsewhere stores its address once and loads nothing when the daemon stores it	attn-app/tests/wire/browser.rs::a_page_that_browses_elsewhere_stores_its_address_and_loads_nothing_when_the_daemon_stores_it	

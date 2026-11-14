@@ -513,6 +513,35 @@ impl Window {
 
 fn layers(state: &State, t: &Tokens) -> Vec<El> {
     let window = &state.window;
+    let mut layers = over_tiles(state, t);
+    if let Some(leader) = &window.leader {
+        layers.push(floating_status(
+            "leader",
+            format!(
+                "{} then…",
+                state.keymap.label(crate::Binding::Chord(leader.chord))
+            ),
+            t,
+        ));
+    }
+    if let Some(notice) = &window.notice {
+        layers.push(match &notice.offer {
+            None => floating_status("notice", notice.text.clone(), t),
+            Some(offer) => offering(notice, offer, t),
+        });
+    }
+    layers
+}
+
+/// Whether the window draws something over its tiles, under which a browser tile's page hides:
+/// a dialog, the palette, a menu, a popover, a callout or a drag. A notice and a sequence's
+/// hint sit at the window's foot and leave the page showing.
+pub(crate) fn covers_tiles(state: &State) -> bool {
+    state.window.callout.is_some() || !over_tiles(state, &attn_ui::tokens(true)).is_empty()
+}
+
+fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
+    let window = &state.window;
     let mut layers = Vec::new();
     match window.layer {
         Some(Layer::Palette(Palette::Search)) => layers.push(crate::palette::view(state, t)),
@@ -534,16 +563,6 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         None => {}
     }
-    if let Some(leader) = &window.leader {
-        layers.push(floating_status(
-            "leader",
-            format!(
-                "{} then…",
-                state.keymap.label(crate::Binding::Chord(leader.chord))
-            ),
-            t,
-        ));
-    }
     layers.extend(crate::attention::merge_confirmation(state, t));
     layers.extend(crate::garden::frame_layer(state, t));
     crate::notebook::root_picker_overlay(state, t, &mut layers);
@@ -555,12 +574,6 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::desktop::width_label(state, t));
     layers.extend(crate::desktop::drag_overlay(state, t));
     layers.extend(crate::picker::worktree_setup(state, t));
-    if let Some(notice) = &window.notice {
-        layers.push(match &notice.offer {
-            None => floating_status("notice", notice.text.clone(), t),
-            Some(offer) => offering(notice, offer, t),
-        });
-    }
     layers
 }
 

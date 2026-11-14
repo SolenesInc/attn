@@ -90,6 +90,7 @@ impl App {
                 client_token: CLIENT_TOKEN.into(),
                 host_token: None,
                 instance: INSTANCE.into(),
+                browser_host: false,
                 profile_id: None,
                 client_id: "covered-window".into(),
                 app_pid: std::process::id(),

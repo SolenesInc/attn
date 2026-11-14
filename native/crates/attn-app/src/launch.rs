@@ -54,6 +54,7 @@ impl Launch {
             client_token: self.client_token.clone(),
             host_token: Some(self.host_token.clone()),
             instance: self.instance.label().to_string(),
+            browser_host: cfg!(target_os = "macos"),
             profile_id: None,
             client_id: format!("native-{}-{process_nonce:016x}", std::process::id()),
             app_pid: std::process::id(),

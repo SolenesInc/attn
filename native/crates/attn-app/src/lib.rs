@@ -3,6 +3,7 @@ pub mod annotations;
 mod asks;
 mod attention;
 pub mod automation;
+pub mod browser;
 mod calendar;
 mod callouts;
 mod connection;
@@ -75,6 +76,7 @@ pub struct State {
     pub readings: markdown::Readings,
     pub opener: opener::Opener,
     pub notebook: notebook::Notebook,
+    pub(crate) browser: browser::Browsers,
     daemon: Commands,
     requests: requests::Requests,
     /// Wall-clock milliseconds when the runtime's clock read zero.
@@ -173,6 +175,7 @@ pub fn bind(
                 if let Some(menus) = &state.menus {
                     menus(&keymap);
                 }
+                browser::claim_keys(&keymap);
                 state.keymap = keymap;
             }
             state.window.follow(&state.facts);
@@ -281,13 +284,16 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let pointed = callouts::poll(state, tx);
     let greeted = whats_new::greet(state, tx);
     let reported = diagnostic_report::poll(state, now, tx);
-    shell::expire(state, now, tx)
+    let expired = shell::expire(state, now, tx) || expired;
+    let browsed_pages = browser::follow(state, tx);
+    expired
         || settings
         || updating
         || pointed
         || greeted
         || reported
         || recounted
+        || browsed_pages
         || told
         || aged
         || answered
@@ -297,7 +303,6 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         || noted
         || drafted
         || drains
-        || expired
 }
 
 /// The app as every window runs it, and as `App::headless_runtime` runs it in tests.

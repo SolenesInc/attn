@@ -128,7 +128,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 crate::garden::model::has_chief(&facts.sessions, &facts.profiles.selected),
             ),
             (state.drafts.revision, state.readings.revision),
-            state.notebook.revision,
+            (state.notebook.revision, state.browser.revision()),
         ),
     );
     let launcher = desktop
@@ -148,6 +148,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     &state.notebook,
                     &seed_reads(state),
                     (&state.drafts, &state.readings),
+                    &state.browser,
                 ),
                 (t, scale),
             ))
@@ -410,6 +411,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         notebook: &state.notebook,
         facts: &state.facts,
         marks: (&state.drafts, &state.readings),
+        browsers: &state.browser,
         annotates: false,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
         shared: &super::shared_conversation::notices(
@@ -437,12 +439,13 @@ fn screen(
     facts: &attn_client::Facts,
     (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
-    (terminals, pictures, notebook, seeds, marks): (
+    (terminals, pictures, notebook, seeds, marks, browsers): (
         &Terminals,
         &crate::markdown::Pictures,
         &crate::notebook::Notebook,
         &crate::garden::TileReads,
         (&crate::markdown::Drafts, &crate::markdown::Readings),
+        &crate::browser::Browsers,
     ),
     (t, scale): (&Tokens, f32),
 ) -> El {
@@ -492,6 +495,7 @@ fn screen(
                     notebook,
                     facts,
                     marks,
+                    browsers,
                     annotates: true,
                     stale: &stale,
                     shared: &shared,
@@ -568,6 +572,7 @@ struct TileCx<'a> {
     notebook: &'a crate::notebook::Notebook,
     facts: &'a attn_client::Facts,
     marks: (&'a crate::markdown::Drafts, &'a crate::markdown::Readings),
+    browsers: &'a crate::browser::Browsers,
     /// Whether its document tiles take annotations, which a tile window's do not.
     annotates: bool,
     /// Sessions whose terminal runs an older build, with the notice still up.
@@ -815,6 +820,10 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             crate::notebook::tile_body(cx.notebook, &leaf.id, t),
             &holder,
         ),
+        (LeafKind::Tile { kind, .. }, _) if kind == crate::browser::KIND => takes(
+            crate::browser::page_area(&browser_page(desktop, leaf), t),
+            &holder,
+        ),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
     };
     let look = super::spotlight::Look::of(
@@ -848,6 +857,13 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         .children(look.veil(&key, below, t))
         .children(look.marks(&key, t))
         .children(super::arrival::overlay(cx.rings, &leaf.id, t))
+}
+
+fn browser_page(desktop: &Desktop, leaf: &Leaf) -> attn_client::TileKey {
+    attn_client::TileKey {
+        desktop: desktop.id.clone(),
+        tile: leaf.id.clone(),
+    }
 }
 
 fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
@@ -1034,14 +1050,22 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                     .min_w(0.0)
                     .h_full()
                     .items_center()
-                    .child(
-                        text(title.to_owned())
+                    .child(match &leaf.kind {
+                        LeafKind::Tile { kind, params, .. } if kind == crate::browser::KIND => {
+                            crate::browser::address_field(
+                                cx.browsers,
+                                &browser_page(cx.desktop, leaf),
+                                params.as_deref().unwrap_or(""),
+                                t,
+                            )
+                        }
+                        _ => text(title.to_owned())
                             .font(type_::LABEL)
                             .color(look.title(t))
                             .single_line()
                             .truncate()
                             .grow(1.0),
-                    )
+                    })
                     .child(actions),
             );
     let sub = cx
@@ -1085,6 +1109,10 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .children(
             (is_document && !focused && !popped)
                 .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
+        )
+        .children(
+            matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
+                .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
         )
         .children(is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
         .children(is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)));

@@ -1008,3 +1008,35 @@ fn a_document_popped_out_into_its_own_window_shows_its_local_images() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_document_tile_that_returns_waits_for_its_content_again_instead_of_showing_what_it_held() {
+    let mut world = start();
+    world.daemon.emit(content("# Notes"));
+    world.settle();
+    assert!(
+        shown(&world).iter().any(|t| t == "Notes"),
+        "{:?}",
+        shown(&world)
+    );
+
+    arrange(&mut world, pane("a"), 2);
+    arrange(
+        &mut world,
+        row(vec![pane("a"), document_tile("m", PLAN)]),
+        3,
+    );
+    let returned = shown(&world);
+    assert!(returned.iter().any(|t| t == "Loading…"), "{returned:?}");
+    assert!(!returned.iter().any(|t| t == "Notes"), "{returned:?}");
+
+    world.daemon.emit(content("# Notes"));
+    world.settle();
+    assert!(
+        shown(&world).iter().any(|t| t == "Notes"),
+        "{:?}",
+        shown(&world)
+    );
+    world.advance(std::time::Duration::from_secs(2));
+    assert!(world.runtime_is_at_rest());
+}

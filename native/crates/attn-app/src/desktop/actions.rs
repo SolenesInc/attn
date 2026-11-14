@@ -622,7 +622,9 @@ fn close(state: &mut State, tx: &mut Tx) {
         super::close::request(state, &desktop_id, tx);
         return;
     };
-    let Some(Node::Leaf(leaf)) = tree.find_leaf(&state.window.desk.acting_leaf(desktop)) else {
+    let acting = crate::browser::address_tile(tx.focused())
+        .map_or_else(|| state.window.desk.acting_leaf(desktop), str::to_owned);
+    let Some(Node::Leaf(leaf)) = tree.find_leaf(&acting) else {
         return;
     };
     let (leaf_id, kind) = (leaf.id.clone(), leaf.kind.clone());

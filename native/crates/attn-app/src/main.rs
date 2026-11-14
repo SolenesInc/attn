@@ -43,7 +43,16 @@ fn main() -> ExitCode {
             }
         });
     let handle = app.handle();
-    let _automation = enabled(&launch.instance.name)
+    let automation = enabled(&launch.instance.name);
+    #[cfg(target_os = "macos")]
+    let app = app.on_ready({
+        let pages = handle.clone();
+        move |window| {
+            let pages = pages.clone();
+            attn_app::browser::mac::install(window, move || pages.wake(), automation);
+        }
+    });
+    let _automation = automation
         .then(|| {
             let host = Arc::new(WindowHost {
                 handle: handle.clone(),

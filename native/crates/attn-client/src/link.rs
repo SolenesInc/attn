@@ -28,6 +28,7 @@ use crate::{CLIENT_KIND, Clock, Connection, MigrationMarker, Pulse, Refusal, Sto
 const FIRST_RETRY: Duration = Duration::from_secs(1);
 const LAST_RETRY: Duration = Duration::from_secs(5);
 const CAPABILITIES: [&str; 2] = ["binary_pty_output", "kitty_images"];
+const BROWSER_HOST: &str = "browser_host";
 
 /// Where the link hands what it hears about terminals.
 pub type TerminalSink = Box<dyn Fn(TerminalEvent) + Send + Sync>;
@@ -45,6 +46,9 @@ pub struct LinkConfig {
     pub host_token: Option<String>,
     /// The instance this app was built for, `default` for production.
     pub instance: String,
+    /// Whether this client runs browser tiles' pages, so the daemon sends it agents'
+    /// `attn browser` actions.
+    pub browser_host: bool,
     /// The profile to ask for until the daemon has said which one this client is scoped to.
     pub profile_id: Option<String>,
     pub client_id: String,
@@ -470,7 +474,11 @@ impl Task {
         ClientHelloMessage {
             client_kind: CLIENT_KIND.into(),
             version: format!("protocol-{PROTOCOL_VERSION}"),
-            capabilities: CAPABILITIES.map(String::from).to_vec(),
+            capabilities: CAPABILITIES
+                .iter()
+                .chain(self.config.browser_host.then_some(&BROWSER_HOST))
+                .map(|c| c.to_string())
+                .collect(),
             client_token: Some(self.config.client_token.clone()),
             browser_host_token: self.config.host_token.clone(),
             client_id: Some(self.config.client_id.clone()),

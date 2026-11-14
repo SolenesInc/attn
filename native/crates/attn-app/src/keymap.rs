@@ -172,6 +172,11 @@ impl Keymap {
         }
     }
 
+    /// The chord of every binding, and the first chord of every sequence.
+    pub fn chords(&self) -> impl Iterator<Item = Chord> + '_ {
+        self.entries.iter().map(|entry| entry.binding.first())
+    }
+
     pub fn binding(&self, action: &Action) -> Option<Binding> {
         self.entries
             .iter()

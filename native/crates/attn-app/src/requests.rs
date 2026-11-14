@@ -205,7 +205,8 @@ pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
     let mut answered = false;
     let mut unclaimed = Vec::new();
     for reply in replies {
-        if crate::callouts::receive(state, &reply, tx) {
+        if crate::callouts::receive(state, &reply, tx) || crate::browser::receive(state, &reply, tx)
+        {
             answered = true;
             continue;
         }

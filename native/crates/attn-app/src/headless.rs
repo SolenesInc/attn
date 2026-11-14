@@ -73,6 +73,7 @@ fn link_config() -> Result<impl FnOnce(TerminalSink, ReplySink) -> LinkConfig, S
         client_token,
         host_token: Some(host_token),
         instance: instance.unwrap_or_else(|| "default".into()),
+        browser_host: false,
         profile_id: None,
         client_id: format!("native-headless-{}", std::process::id()),
         app_pid: std::process::id(),
