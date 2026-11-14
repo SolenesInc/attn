@@ -18,6 +18,12 @@ printf '\033[3;4H\033[0c\033[6n'
 IFS= read -rs -d c d; IFS= read -rs -d R e
 printf '\033[20;1H'
 `
+	secondaryDeviceAndExtendedCursorQueries = `printf '\033[>c'
+IFS= read -rs -d c a
+printf '\033[5;7H\033[?6n'
+IFS= read -rs -d R b
+printf '\033[20;1H'
+`
 	colorQueries = `printf '\033]11;?\007\033]11;?\007\033]10;?\007\033]12;?\007\033]11;#000000\033\\\033[0c'
 IFS= read -rs -d c a
 `
@@ -36,6 +42,20 @@ func TestProgramsGetCursorAndDeviceRepliesInTheOrderTheyAsked(t *testing.T) {
 	got := runTerminalQueries(w, transportPeer(w), shell, cursorAndDeviceQueries, `"${a}R|${b}c|${d}c|${e}R"`)
 	if want := "\x1b[5;7R|\x1b[?1;2c|\x1b[?1;2c|\x1b[3;4R"; got != want {
 		t.Errorf("the program read %q, want the cursor at 5;7 then DA1, then DA1 then the cursor at 3;4: %q", got, want)
+	}
+}
+
+func TestProgramsGetSecondaryDeviceAndExtendedCursorRepliesToo(t *testing.T) {
+	w := newWorld(t)
+	shell := w.Spawn(w.App(), shellHarness, w.Path("shop"))
+
+	got := runTerminalQueries(w, transportPeer(w), shell, secondaryDeviceAndExtendedCursorQueries, `"${a}c|${b}R"`)
+	secondary, cursor, _ := strings.Cut(got, "|")
+	if !strings.HasPrefix(secondary, "\x1b[>") || !strings.HasSuffix(secondary, "c") {
+		t.Errorf("the program read %q for its DA2 query, want a reply starting ESC[>", secondary)
+	}
+	if want := "\x1b[?5;7;1R"; cursor != want {
+		t.Errorf("the program read %q for its extended cursor query, want %q", cursor, want)
 	}
 }
 

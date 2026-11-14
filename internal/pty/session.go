@@ -542,9 +542,8 @@ func stripScannerOwnedResponses(resp []byte) []byte {
 				i = len(resp)
 				continue
 			}
-			final := resp[j]
 			seq := resp[i : j+1]
-			if final != 'R' && final != 'c' {
+			if !isScannerOwnedReport(seq) {
 				out = append(out, seq...)
 			}
 			i = j + 1
@@ -572,6 +571,17 @@ func stripScannerOwnedResponses(resp []byte) []byte {
 		}
 	}
 	return out
+}
+
+func isScannerOwnedReport(seq []byte) bool {
+	final, params := seq[len(seq)-1], seq[2:len(seq)-1]
+	switch final {
+	case 'R':
+		return len(params) == 0 || params[0] != '?'
+	case 'c':
+		return len(params) > 0 && params[0] == '?'
+	}
+	return false
 }
 
 func isOSCColorReport(seq []byte) bool {

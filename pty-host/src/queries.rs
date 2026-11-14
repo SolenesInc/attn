@@ -203,7 +203,7 @@ fn strip_scanner_owned(responses: &[u8]) -> Vec<u8> {
                     result.extend_from_slice(&responses[index..]);
                     break;
                 }
-                if !matches!(responses[end], b'R' | b'c') {
+                if !is_scanner_owned_report(&responses[index..=end]) {
                     result.extend_from_slice(&responses[index..=end]);
                 }
                 index = end + 1;
@@ -233,6 +233,15 @@ fn strip_scanner_owned(responses: &[u8]) -> Vec<u8> {
         }
     }
     result
+}
+
+fn is_scanner_owned_report(sequence: &[u8]) -> bool {
+    let params = &sequence[2..sequence.len() - 1];
+    match sequence[sequence.len() - 1] {
+        b'R' => params.first() != Some(&b'?'),
+        b'c' => params.first() == Some(&b'?'),
+        _ => false,
+    }
 }
 
 fn is_osc_color_report(sequence: &[u8]) -> bool {
