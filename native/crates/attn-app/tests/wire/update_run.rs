@@ -138,6 +138,28 @@ fn a_running_update_shows_its_phase_and_each_outposts_step_and_cannot_be_dismiss
 }
 
 #[test]
+fn outposts_at_the_same_step_share_one_note() {
+    let world = showing(run(
+        "r1",
+        "staging",
+        vec![
+            outpost("o1", "sandbox", "staging", Some("sending")),
+            outpost("o2", "oma", "staging", Some("sending")),
+            outpost("o3", "laptop", "staging", Some("verifying")),
+        ],
+    ));
+    assert_eq!(
+        name(&world, "update-run.outpost.o1").as_deref(),
+        Some("sandbox and oma: Copying it over.")
+    );
+    assert!(!has(&world, "update-run.outpost.o2"));
+    assert_eq!(
+        name(&world, "update-run.outpost.o3").as_deref(),
+        Some("laptop: Checking it runs.")
+    );
+}
+
+#[test]
 fn a_failed_run_retries_whole_or_without_the_outpost_that_failed() {
     let mut world = showing(run(
         "r1",

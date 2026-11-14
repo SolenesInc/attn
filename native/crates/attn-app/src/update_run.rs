@@ -1,5 +1,5 @@
-//! The band under the title bar that follows an update run: its phase and each outpost's step
-//! while it runs, then its outcome, with Retry and Update without the outposts that failed. A
+//! The band under the title bar that follows an update run: its phase and each outpost's step,
+//! with outposts at the same step named together, while it runs, then its outcome, with Retry and Update without the outposts that failed. A
 //! run that ends well closes on its own after a countdown that holds while the pointer is over
 //! the band; any other ended run stays until dismissed.
 
@@ -97,8 +97,27 @@ pub(crate) fn outpost_step(outpost: &UpdateOutpostProgress) -> &str {
     }
 }
 
-fn outpost_text(outpost: &UpdateOutpostProgress) -> String {
-    format!("{}: {}", outpost.name, outpost_step(outpost))
+/// One note per step, naming every outpost at it, keyed by the first of them.
+fn outpost_notes(outposts: &[UpdateOutpostProgress]) -> Vec<(&str, String)> {
+    let mut groups: Vec<(&str, Vec<&UpdateOutpostProgress>)> = Vec::new();
+    for outpost in outposts {
+        let step = outpost_step(outpost);
+        match groups.iter_mut().find(|(said, _)| *said == step) {
+            Some((_, group)) => group.push(outpost),
+            None => groups.push((step, vec![outpost])),
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(step, group)| {
+            let names = match group.as_slice() {
+                [one] => one.name.clone(),
+                [a, b] => format!("{} and {}", a.name, b.name),
+                many => format!("{} outposts", many.len()),
+            };
+            (group[0].id.as_str(), format!("{names}: {step}"))
+        })
+        .collect()
 }
 
 /// The run the band shows: the daemon's last, unless this window or the last launch
@@ -212,9 +231,9 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
         run.outcome.clone().unwrap_or_default()
     };
     let outposts = open.then(|| {
-        run.outposts.iter().map(|outpost| {
-            text(outpost_text(outpost))
-                .key(format!("update-run.outpost.{}", outpost.id))
+        outpost_notes(&run.outposts).into_iter().map(|(id, note)| {
+            text(note)
+                .key(format!("update-run.outpost.{id}"))
                 .font(type_::BODY)
                 .color(t.text_secondary)
         })
