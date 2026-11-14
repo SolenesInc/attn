@@ -3,11 +3,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { PNG } from 'pngjs';
 import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
+
+const ACCENT_LEAD = 40;
 
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
@@ -84,7 +87,15 @@ try {
     const dialog = await driver.waitFor({ key: 'close_desktop-dialog' });
     runner.assert(/^Close .+\?$/.test(dialog.name ?? ''), 'the confirmation names the desktop', dialog);
     runner.assert(observer.desktop(desktop.id), 'nothing closes before the confirmation', observer.describeArrangement());
-    await driver.screenshot(path.join(runner.runDir, 'close-confirmation.png'));
+    const confirmation = path.join(runner.runDir, 'close-confirmation.png');
+    await driver.screenshot(confirmation);
+    const image = PNG.sync.read(fs.readFileSync(confirmation));
+    const window = await driver.find({ key: 'window' });
+    const scale = Math.max(1, Math.round(image.width / window.rect[2]));
+    const [x, y, , h] = (await driver.find({ key: 'close_desktop.confirm' })).rect;
+    const at = (Math.round((y + h / 2) * scale) * image.width + Math.round((x + 4) * scale)) * 4;
+    const [r, g, b] = image.data.subarray(at, at + 3);
+    runner.assert(b - Math.max(r, g) >= ACCENT_LEAD, `the confirm button fills with the accent, its blue ${ACCENT_LEAD} levels or more above red and green`, { scale, fill: [r, g, b] });
     const ended = observer.waitForMessage((message) => message.event === 'session_unregistered' && message.session?.id === id && message, 'the shell ended');
     await driver.click({ key: 'close_desktop.confirm' });
     await observer.waitFor(() => !observer.desktop(desktop.id), 'the desktop closed');
