@@ -6,11 +6,11 @@ use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage, ClientHelloMessage,
     CommandErrorMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
     GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
-    KittyImageResultMessage, KittyPlacementsMessage, NotificationListResultMessage,
-    NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
-    PluginsUpdatedMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
-    PtyDesyncMessage, PtyResizedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
-    SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
+    KittyImageResultMessage, KittyPlacementsMessage, MigrationChangedMessage,
+    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
+    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
+    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, ReposUpdatedMessage,
+    RuntimeRespawnedMessage, SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
     SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
     SessionsUpdatedMessage, SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage,
     WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
@@ -530,6 +530,11 @@ impl Task {
                 if let Some(settings) = message.settings {
                     self.store.set_settings(settings);
                 }
+                None
+            }
+            "migration_changed" => {
+                let message: MigrationChangedMessage = parse(&header.event, text)?;
+                self.store.set_migration_phase(&message.state.phase);
                 None
             }
             "profile_arrangement_changed" => {

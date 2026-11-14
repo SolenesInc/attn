@@ -21,6 +21,7 @@ pub mod launch;
 mod ledger;
 mod markdown;
 mod migration_failure;
+mod migration_gate;
 mod notifications;
 mod opener;
 mod palette;

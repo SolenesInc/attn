@@ -152,6 +152,7 @@ pub(crate) fn greet(state: &mut State, tx: &mut Tx) -> bool {
     if tour.greeted
         || state.window.tile.is_some()
         || state.facts.connection != attn_client::Connection::Connected
+        || state.facts.pending_migration.is_some()
     {
         return false;
     }

@@ -35,6 +35,9 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
 /// [`dispatch`] with no notice, for keys: a key whose action did not run goes on, as an
 /// unhandled key does in the Tauri app.
 pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
+    if crate::migration_gate::holds(state) && !crate::migration_gate::lets_through(&action) {
+        return Outcome::Unavailable;
+    }
     if state.window.tile.is_some() {
         return if crate::desktop::forward_to_main(state, action) {
             Outcome::Ran

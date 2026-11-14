@@ -54,6 +54,27 @@ pub struct Facts {
     /// The installed plugins and the plugin folders that failed to load, as the daemon last
     /// listed them; empty until the first list.
     pub plugins: Arc<Plugins>,
+    /// The step of the move from workspaces to profiles the user has yet to finish, which only
+    /// the Tauri app's picker finishes; `None` once the home has finished it or never had one.
+    pub pending_migration: Option<PendingMigration>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PendingMigration {
+    /// Placing each old workspace's sessions on desktops.
+    Placement,
+    /// Choosing which desktops launch.
+    Launch,
+}
+
+impl PendingMigration {
+    fn from_phase(phase: Option<&str>) -> Option<PendingMigration> {
+        match phase? {
+            "placement_required" => Some(PendingMigration::Placement),
+            "launch_required" => Some(PendingMigration::Launch),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -329,7 +350,8 @@ impl Slices {
     pub const DELEGATION: Slices = Slices(1 << 20);
     pub const PHONES: Slices = Slices(1 << 21);
     pub const SENDERS: Slices = Slices(1 << 22);
-    pub const ALL: Slices = Slices((1 << 23) - 1);
+    pub const MIGRATION: Slices = Slices(1 << 23);
+    pub const ALL: Slices = Slices((1 << 24) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -469,7 +491,20 @@ impl Store {
                 polling_off_reason: state.github_polling_off_reason.filter(|r| !r.is_empty()),
             });
             facts.git_running = Arc::default();
+            facts.pending_migration =
+                PendingMigration::from_phase(state.migration_phase.as_deref());
             Slices::ALL
+        });
+    }
+
+    pub(crate) fn set_migration_phase(&self, phase: &str) {
+        self.change(|facts| {
+            let pending = PendingMigration::from_phase(Some(phase));
+            if facts.pending_migration == pending {
+                return Slices::NONE;
+            }
+            facts.pending_migration = pending;
+            Slices::MIGRATION
         });
     }
 

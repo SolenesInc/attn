@@ -17,6 +17,7 @@ mod wire {
     mod markdown;
     mod markdown_annotations;
     mod migration_failure;
+    mod migration_gate;
     mod notifications;
     mod opener;
     mod palette;
