@@ -79,21 +79,30 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) follows an update run in a band under the title bar, `update-run`, a region named "attn update" whose value is the run's phase, and offers **Update attn** in the palette. Its Settings dialog is driven from its own recipe.
+The native app (`native/`) has the Settings dialog with its sections, search, autosave and refusals, the text size keys, and the update band: a band under the title bar, `update-run`, a region named "attn update" whose value is the run's phase. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation) such as `press`, `type`, `key`, `wait`, `find`, `state`, `tree` and `shot`, not the Tauri reads and native input above. Elements are found by key: `{"target":{"key":"settings.nav.general"}}`.
 
 Preconditions:
 
-- Install the instance with `make install INSTANCE=<name> APP=native`, from a worktree with nothing uncommitted: Update attn rebuilds a named instance from the worktree it was installed from. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+alt+k` for `mod+shift+k`.
-- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Run `./attn settings set self_update_enabled true`.
+- Install the instance with `make install INSTANCE=<name> APP=native`, from a worktree with nothing uncommitted: Update attn rebuilds a named instance from the worktree it was installed from. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`. The chords below are Linux's; on macOS, Settings is `mod+,`, the palette `mod+shift+k` and text size `mod+=`, `mod+-` and `mod+0`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Make `P` as above.
 
 Steps:
 
-- **Update attn from the palette.** Press `mod+shift+k`, run `bridge type '{"text":"update attn"}'` and press `Enter`. `bridge wait '{"target":{"key":"update-run"}}'` answers, and `update-run.text` reads the phase, such as "Building the update.". A wait gives up after 30 s, so repeat it. Read `bridge tree` as the run moves through staging and applying.
+- **Open and close with the shortcut.** Run `bridge key '{"chord":"mod+shift+,"}'`: `bridge wait '{"target":{"key":"settings-dialog"}}'` answers, `bridge state '{"of":"settings"}'` shows `open: true`, and on the first open `settings.heading` reads "GitHub hosts" with `activeSection: "connectivity"`. Press the chord again: `bridge wait '{"target":{"key":"settings-dialog"},"gone":true}'` answers.
+- **Open from the palette and the home screen.** Press `mod+alt+k`, run `bridge type '{"text":"Settings"}'`, wait for `palette.row.command:settings` and press `Enter`: the dialog opens. Press `Escape`. `bridge press '{"target":{"key":"home.settings"}}'`, the gear, opens it too.
+- **Change in the dialog, read from the shell.** Press `settings.nav.general`: `bridge state '{"of":"settings","includes":"general"}'` answers. Press `{"role":"radio","name":"Light"}`: `./attn settings get theme` prints `light` once the daemon has it.
+- **Text size from the keyboard.** Press `mod+shift+=`: `./attn settings get uiScale` prints `1.1`. `mod+shift+0` puts it back to `1`.
+- **Search.** `bridge type '{"target":{"key":"settings.search.field"},"text":"sweep"}'`: `state` of `settings` shows `search: "sweep"`, and the only `settings.nav.<section>` left is `settings.nav.desktop`, "Files and locations". Clear the field with `Backspace`: `settings.nav.general` comes back.
+- **A change from the shell shows in the dialog.** Press `settings.nav.desktop`. Run `./attn settings set worktree_sweep_enabled false`: in `bridge tree`, `settings.switch.worktree_sweep_enabled` reads `unchecked`. Press the switch: `./attn settings get worktree_sweep_enabled` prints `true`.
+- **Autosave, a refusal and Retry.** Press `settings.input.projects_directory.field`, press `mod+a`, type `relative/dir` and press `Enter`. `bridge wait '{"target":{"key":"settings.refusal.projects_directory"}}'` answers with the reason, `projects directory must be an absolute path`, and `settings.retry.projects_directory` is beside it. Press `mod+a`, type the proof folder's path, written out, and press `Enter`: `settings.saved.projects_directory` answers and `./attn settings get projects_directory` prints the path.
+- **Agents and models.** Drive them in [harnesses.md](harnesses.md).
+- **Close.** Press `settings-layer` at its left edge, `{"target":{"key":"settings-layer"},"at":[0.005,0.5]}`: the dialog goes. Open it again and press `Escape`: it goes, and `state` of `settings` shows `saving: false`.
+- **Update attn.** Run `./attn settings set self_update_enabled true`. Press `settings.nav.updates`, then `settings.updates.start`, or press `mod+alt+k`, type `update attn` and press `Enter`. `bridge wait '{"target":{"key":"update-run"}}'` answers, and `update-run.text` reads the phase, such as "Building the update.". A wait gives up after 30 s, so repeat it. Read `bridge tree` as the run moves through staging and applying.
 - **The app restarts.** Applying quits the app, and the update opens it again. `bridge ping` reaches the new app. On the new app, `update-run` shows the run once it reconnects.
 - **The run ends well.** When `./attn update status` shows the run done, `update-run.text` reads the outcome, such as "attn is now running 0.15.0 (…)", and `update-run.countdown` reads "Closing in Ns". The band goes after five seconds, and does not come back for that run after `./attn instance stop-app` and a relaunch. To reach this step without a build, run Update attn on an instance already at its worktree's commit: the run ends at once with "Already running …".
 - **A refusal.** Start the daemon from the checkout with `./attn daemon ensure` instead of the installed app, then run Update attn: `notice.text` reads the refusal, "attn cannot update itself here: … is not inside this install's app …".
 - **Only where attn can update.** Run `./attn settings set self_update_enabled false`: the palette no longer offers Update attn. Turn the setting back on.
-- **Proof.** In `$P`, keep `bridge tree` at each phase, `./attn update status` before and after, and `bridge shot '{"path":"<P>/native-update-run.png"}'` while the run is open, with `<P>` written out.
+- **Proof.** In `$P`, keep each `bridge state '{"of":"settings"}'` and `./attn settings` answer, `bridge tree` at each update phase, `./attn update status` before and after, and `bridge shot '{"path":"<P>/native-settings-dialog.png"}'` with the dialog open on Files and locations, with `<P>` written out. The `native-settings` scenario runs the dialog steps, and `native-self-update` runs Update attn from Settings and the palette.
 
 ## Contexts
 
@@ -106,14 +115,12 @@ Steps:
 
 ## Tests
 
-- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/update_run.rs` (the native app's update band and Update attn).
+- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/settings.rs` and `native/crates/attn-app/tests/wire/settings/*.rs` (the native dialog and each section), `native/crates/attn-app/tests/wire/update_run.rs` (the native app's update band and Update attn).
 - Stack: `cmd/attnd/update_run_stack_test.go`, `cmd/attnd/update_release_stack_test.go`, `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
-- Scenario: `focusless-native` (parked macOS native input), `agent-settings`, `self-update`.
+- Scenario: `focusless-native` (parked macOS native input), `agent-settings`, `self-update`, `native-settings`, `native-agent-settings`, `native-self-update`.
 - App: `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`.
 
 ## Gotchas
-
-- Updating an instance installed with `APP=native` reinstalls the Tauri app, so the native app does not come back after the native recipe's update steps (seed `s-nf6bsw`). Until that seed lands, check the native band on a run that ends without installing, and reinstall with `APP=native` after a real update.
 
 - The dialog first opens on GitHub hosts (`connectivity`), not Appearance, and keeps the last section and the last search while the app runs. A search that leaves a section out hides its nav button: when `bridge settings_get_state` shows a `search`, clear it as the GitHub hosts step does before clicking a `settings-nav-<section>` button.
 - The dialog shows the shell's `theme light` only because a fresh instance has no theme yet, and the app takes the first value it sees. On an instance that already had a theme, run the theme steps from the dialog first.

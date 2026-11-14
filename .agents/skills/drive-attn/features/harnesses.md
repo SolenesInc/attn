@@ -66,6 +66,24 @@ Preconditions:
 
 - **Proof.** In `$P`, keep each `./attn` command with its output and exit code, `bridge dom_text` of the "Session agent" group before and after the key, `./attn settings get new_session_agent` after it, `./attn plugin list` before and after each install, and `bridge capture_screenshot '{"path":"<P>/harness-logos.png"}'` with the logos on and `<P>/harness-plugins.png` with the Plugins section open. Name each file for its way in, such as `harnesses-settings-plugins.png`.
 
+### In the native app
+
+The native app (`native/`) has Settings → Agents and models: the default agent, the agent switches, each harness's executable and default context cap, and model price overrides. This recipe covers Agents and models; the picker, logo and plugin steps above drive the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Open Settings as [settings.md](settings.md) says for the native app and press `settings.nav.agents`.
+
+Steps:
+
+- **The default agent.** Press `settings.default-agent.codex`: `./attn settings get new_session_agent` prints `codex`. Press `settings.default-agent.claude` to put it back.
+- **The switches.** Press `settings.toggle.auto_approve_enabled`, then `settings.toggle.direct_agent_launch_enabled`: `./attn settings get` follows each, and a second press saves the old value back.
+- **A harness executable.** Press `settings.agent.codex.toggle`, then `settings.agent.codex.advanced`, so the Codex card and its advanced fields are open. Make an executable file, press `settings.input.codex_executable.field`, type its path, written out, and press `Enter`: `settings.saved.codex_executable` answers and `./attn settings get codex_executable` prints the path. The daemon refuses a path with no executable file. Clear the field and press `Enter`: the setting is empty again and attn uses the `codex` on PATH.
+- **A refused cap.** In `settings.input.default_context_window_cap_codex.field`, type `1` and press `Enter`: `settings.refusal.default_context_window_cap_codex` reads `context window cap must be between` and the range. Press `settings.nav.general`: `state` of `settings` still shows `activeSection: "agents"`, because a refused field keeps its page. Type `192000` and press `Enter`: the refusal goes and the setting reads `192000`.
+- **A price override.** Press `settings.pricing` to open the model price overrides, then `bridge scroll '{"target":{"key":"settings.body"},"dy":3000}'`. Type a model in `settings.price-new.model` and a rate in each of `settings.price-new.<rate>`, the five rates of `session_cost.price.<model>`, and press `Enter`: `settings.price.<model>` answers and `./attn settings get session_cost.price.<model>` prints the five rates. Press `settings.price.<model>.remove`: the row goes and the setting is empty.
+- **Proof.** Keep each `./attn settings get` answer and `bridge shot '{"path":"<P>/native-agents.png"}'` with Agents and models open, `<P>` written out. The `native-agent-settings` scenario runs these steps and the headless cap in [usage.md](usage.md).
+
 ## Contexts
 
 - **Durability across restarts**: installed plugins start again with the daemon, and the daemon hands a reconnecting driver its own runs. A run keeps its input route even when its plugin is absent. Older runs wait for their owning driver to register before choosing a route. Harness settings are kept.
@@ -79,9 +97,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/plugin_server_wire_test.go`, `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_run_input_wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`, `internal/daemon/app_server_wire_test.go`, `internal/daemon/plugin_server_recovery_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/settings/agents.rs`, `native/crates/attn-app/tests/wire/settings/models.rs` and `native/crates/attn-app/tests/wire/settings/plugins.rs` (the native Settings sections), `internal/daemon/plugin_server_wire_test.go`, `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_run_input_wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`, `internal/daemon/app_server_wire_test.go`, `internal/daemon/plugin_server_recovery_wire_test.go`.
 - Stack: `cmd/attnd/plugin_server_stack_test.go`, `scripts/verify-plugin-server.sh`, `cmd/attnd/plugin_author_stack_test.go`, `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_runtime_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`, `internal/daemon/plugin_run_input_stack_test.go`, `scripts/verify-plugin-run-input.sh`.
-- Scenario: `agent-settings`, `claude-shared-conversation`.
+- Scenario: `agent-settings`, `claude-shared-conversation`, `native-agent-settings`.
 - Kernel: `sdk/plugin/test/*.test.ts` (run by `TestThePluginSDKPassesItsOwnTests`), `internal/plugins/*_test.go`, `internal/pty/harness_signals_test.go`, `internal/daemon/plugin_runtime_test.go`.
 - App: `app/src/components/Sidebar.harnessIcons.test.tsx`, `app/src/App.modelTierSettings.test.tsx`.
 

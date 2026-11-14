@@ -50,3 +50,13 @@ item	statement	native_test	reason
 48	A markdown passage's toolbar and comment box stay beside it while the document scrolls under them	attn-app/tests/wire/markdown_annotations.rs::the_toolbar_and_the_comment_box_move_with_their_passage_when_the_document_scrolls	
 48	A seed's body takes marks as a file does, and they go to the session tending it or as a note on the seed	attn-app/tests/wire/markdown_annotations.rs::a_seeds_marks_go_to_its_tender_or_onto_the_seed_as_a_note	
 49	A deletion mark draws a line through the words it removes	attn-app/tests/wire/markdown_annotations.rs::delete_strikes_exactly_the_selected_words_and_a_selection_loses_the_whitespace_at_its_edges	
+33	Every shortcut in the native keymap runs its own action in the window	attn-app/tests/wire/keys.rs::every_app_shortcut_runs_its_own_action	
+33	A combination recorded in the native shortcut editor runs its action once the editor closes	attn-app/tests/wire/shortcut_editor.rs::a_recorded_combination_runs_its_action_once_the_editor_closes	
+33	A chord recorded in the native shortcut editor runs its action once the daemon has it	attn-app/tests/wire/shortcut_editor.rs::a_recorded_chord_runs_its_action_once_the_daemon_has_it	
+33	On Linux, physical keys recorded in the packaged native app's shortcut editor rebind an action, and the new keys and a recorded chord then run it	live:s-qjaqty/native-shortcut-editor.tgz	
+33	On macOS, a shortcut rebound in the native editor reaches the packaged bundle through AppKit, with no menu item taking it		gap: s-qjaqty
+54	Settings' Browse saves the folder the native dialog returns	attn-app/tests/wire/settings/desktop.rs::the_projects_directory_pill_says_edited_until_the_path_saves_and_browse_saves_the_chosen_folder	
+54	A cancelled folder dialog in Settings saves nothing	attn-app/tests/wire/settings/desktop.rs::a_cancelled_folder_dialog_saves_nothing	
+54	Settings' Browse opens the system folder dialog from the packaged bundle		gap: s-qjaqty
+71	The settings, agent settings, self-update, shortcut, profile and session usage scenarios have native copies that pass on Linux	live:s-qjaqty/slice6-scenarios.tgz	
+71	The native copies of the settings, agent settings, profile and session usage scenarios pass on macOS		gap: s-qjaqty

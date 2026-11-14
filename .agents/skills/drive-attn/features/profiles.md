@@ -61,6 +61,26 @@ Preconditions:
 - **The migration picker.** On an install upgraded from before profiles, the app opens on the picker's welcome. Confirm, move or merge each desktop, then finish: the picker closes on "Your Default profile is ready." This needs copied data the baseline lacks, as Gotchas says.
 - **Proof.** In `$P`, keep `bridge get_state` after each create, switch, rename and delete. Keep each `./attn seed` command's output with its exit code, and `bridge dom_text` of the switcher's refusals. Capture `bridge capture_screenshot '{"path":"<P>/profile-switcher.png"}'` with the switcher open on two profiles, where `<P>` is the folder's path written out. Name each file for its way in, such as `profiles-palette-state.json`.
 
+### In the native app
+
+The native app (`native/`) has the profile switcher, the title bar pill, the palette's switch commands, and create, rename and delete with their refusals. It has no migration picker. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`. The chords below are Linux's; on macOS, the switcher is `mod+shift+u` and the palette `mod+shift+k`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Make `P` as above. `bridge state '{"of":"profiles"}'` prints `selected` and `all`, each profile with its `id`, `name` and `revision`.
+
+Steps:
+
+- **Create.** Press `mod+alt+u`: `bridge wait '{"target":{"key":"profile-switcher"}}'` answers. Press `n`, wait for `profile-switcher.name`, type `Drive B` and press `Enter`. The switcher goes, `state` of `profiles` lists `Drive B` as `selected`, and `bridge find '{"target":{"key":"titlebar.profile"}}'` names it. Call its id `<drive>`.
+- **An agent keeps its profile.** Run `wsctl add-session --cwd $P --agent shell --label drive-b-shell --id drive-b-shell --profile <drive> --place`: `sidebar.session.drive-b-shell` answers, and `bridge state '{"of":"sessions"}'` gives it `profile_id` `<drive>`.
+- **Switch from the pill and the palette.** Press `titlebar.profile`, then `profile-switcher.choose.<default>`: `selected` is `<default>` and the shell's sidebar row goes. Press `mod+alt+k`, type `Switch to Drive B`, wait for `palette.row.command:profile-<drive>` and press `Enter`: `selected` is `<drive>` again.
+- **Rename.** Press `mod+alt+u`, then `r`: `profile-switcher.name` is named `Rename Drive B` and holds the name. Press `End` and `Backspace` once, type `C` and press `Enter`: `state` of `profiles` names `<drive>` `Drive C`, and `profile-switcher.choose.<drive>` reads it. Press `Escape`.
+- **Delete is refused while the profile holds work.** Press `mod+alt+u`, then `Backspace`: `profile-switcher.delete.ask` reads `Delete Drive C? Clean up its agents, crew, automations and tiles first.`. Press `Enter`: `profile-switcher.refusal` starts with `profile "Drive C" is not empty:`. Press `Escape` twice.
+- **Delete the empty profile.** Run `wsctl rm-session --id drive-b-shell`. Open the switcher, press `Backspace`, then `Enter`: `state` of `profiles` no longer lists `<drive>` and selects the profile used before it.
+- **The last profile stays.** With one profile left and the switcher still open, press `Backspace`: `profile-switcher.refusal` reads `Default is the last profile, and attn always keeps one.`.
+- **Proof.** In `$P`, keep `bridge state '{"of":"profiles"}'` after each create, switch, rename and delete, `bridge find` of each refusal, and `bridge shot '{"path":"<P>/native-profile-switcher.png"}'` with the switcher open on two profiles, `<P>` written out. The `native-profile-lifecycle` scenario runs these steps.
+
 ## Contexts
 
 - **Durability across restarts**: profiles, their desktops and the selected profile are daemon records and come back after any restart, and the app comes back on the profile it showed last. Deleting the profile a window shows moves that window to the most recently used remaining profile.
@@ -73,9 +93,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/profiles_protocol_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/garden_profile*_wire_test.go`, `internal/daemon/chief_profiles_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/profile.rs` (the native switcher), `internal/daemon/profiles_protocol_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/garden_profile*_wire_test.go`, `internal/daemon/chief_profiles_wire_test.go`.
 - Stack: `cmd/attnd/automation_profile_stack_test.go`.
-- Scenario: `profile-lifecycle`, `garden-profile-scope`, `desktop-migration`.
+- Scenario: `profile-lifecycle`, `garden-profile-scope`, `desktop-migration`, `native-profile-lifecycle`.
 - Kernel: `internal/profilemigration/*_test.go`, `internal/store/profile*_test.go`.
 - App: `app/src/App.migrationPicker.test.tsx`, `app/src/components/ProfileSwitcher.keyboard.test.tsx`, `app/src/components/MigrationPicker/MigrationPicker.flow.test.tsx`, `app/src/utils/selectedProfile.test.ts`, `app/src/hooks/useDaemonSocket.profiles.test.tsx`, `app/src/components/ledger/SessionsTab.profiles.test.tsx`.
 

@@ -61,6 +61,28 @@ Preconditions:
 - **Linux bindings.** On a Linux app, `bridge shortcut_binding '{"shortcutId":"ui.showShortcuts"}'` returns `/` with `meta` and `shift`, where `meta` means Ctrl. Scenario `linux-shortcuts` drives them through xdotool, and a Mac run cannot.
 - **Proof.** In `$P`, keep `bridge shortcut_binding` before the rebind, after it, after the chord and after the restore. Keep `./attn settings get keybindings_config` after each change, with its exit code, and `bridge dom_text` of the row error and the reassign prompt. Capture `bridge capture_screenshot '{"path":"<P>/shortcut-editor.png"}'` with the editor open on the customized row, and `<P>/cheatsheet.png` with the cheat sheet open, where `<P>` is the folder's path written out. Name each file for its way in, such as `shortcuts-palette-editor.png`.
 
+### In the native app
+
+The native app (`native/`) has the cheat sheet and the shortcut editor, with rebinds, chords, the reassign prompt, refusals for keys a required action holds, Unbind, Reset and Restore Defaults. It has no dock and no Menu bar badge. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above. The editor's recorder hears only physical keys, and `bridge key` sends logical ones, so record with `xdotool` on Linux. A Mac recipe has no way to record yet.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Run `./attn settings set keybindings_config ""` and make `P` as above.
+- Send physical keys to the main window: take its `id` from `bridge native_windows` where `label` is `main`, and run `xdotool windowfocus --sync <id> key <keys>`.
+
+Steps:
+
+- **The cheat sheet with its shortcut.** Send `ctrl+shift+slash`: `bridge wait '{"target":{"key":"shortcuts.dialog"}}'` answers, and `bridge find '{"target":{"key":"shortcut.ui.showShortcuts"}}'` reads "Keyboard shortcuts, Ctrl+Shift+/". Each row is keyed `shortcut.<action id>` and named for its action and keys.
+- **The editor from the cheat sheet.** Press `shortcuts.edit`: `shortcut-editor-dialog` answers, the cheat sheet goes, and `shortcut-editor.filter` holds the keyboard. The palette's `Customize keyboard shortcuts`, `palette.row.command:customize-shortcuts`, opens it too.
+- **Rebind.** `bridge type '{"target":{"key":"shortcut-editor.filter"},"text":"Keyboard shortcuts"}'`, press `shortcut-editor.keys.ui.showShortcuts` and send `ctrl+shift+y`. `shortcut-editor.badge.ui.showShortcuts.customized` and `shortcut-editor.reset.ui.showShortcuts` answer, and `./attn settings get keybindings_config` prints JSON whose `overrides` holds `ui.showShortcuts`. Press `shortcut-editor.done`, then send `ctrl+shift+y`: the cheat sheet opens and its row reads "Keyboard shortcuts, Ctrl+Shift+Y".
+- **Conflicts.** Press the key button again and send `ctrl+alt+b`: `shortcut-editor.pending.text` names “Toggle sidebar”, with `shortcut-editor.reassign` and `shortcut-editor.cancel` beside it. Press Cancel: `shortcut-editor.pending` goes and `keybindings_config` is unchanged. Press the key button and send `ctrl+shift+comma`: `bridge wait '{"target":{"role":"alert"}}'` reads "Ctrl+Shift+, is reserved by “Settings” and can’t be reassigned." Press `shortcut-editor.filter` to stop recording.
+- **A chord.** Press `shortcut-editor.chord.ui.showShortcuts` and send `ctrl+shift+y`: `shortcut-editor.then.lead` answers. Send `j`: `keybindings_config` holds a `then` for `ui.showShortcuts`. Close the editor and send `ctrl+shift+y j` in one `xdotool` call, so both keys land within the chord's window: the cheat sheet opens.
+- **Unbind and reset.** Filter to `Toggle sidebar` and press `shortcut-editor.unbind.session.toggleSidebar`: `overrides` holds `session.toggleSidebar` as `null`. Press `shortcut-editor.reset.session.toggleSidebar`: the override goes.
+- **Restore Defaults.** Rebind any row, then press `shortcut-editor.restore`: no `.badge.<id>.customized` is left and `keybindings_config` holds empty `overrides`. Send `ctrl+shift+slash`: the cheat sheet opens.
+- **Restore from the shell.** `./attn settings set keybindings_config ""` prints `keybindings_config = ` and the default keys work again.
+- **Proof.** In `$P`, keep `./attn settings get keybindings_config` after each change, `bridge find` of the cheat sheet row before and after the rebind, and `bridge shot '{"path":"<P>/native-shortcut-editor.png"}'` with the editor open on the customized row, `<P>` written out. The `native-shortcut-editor` scenario runs these steps on Linux.
+
 ## Contexts
 
 - **Durability across restarts**: rebinds and the dock live in the daemon's `keybindings_config` and come back after any restart, in every window.
@@ -73,8 +95,9 @@ Preconditions:
 
 ## Tests
 
+- Wire: `native/crates/attn-app/tests/wire/keys.rs` and `native/crates/attn-app/tests/wire/shortcut_editor.rs` (the native app's keymap, cheat sheet and editor).
 - Stack: `app/e2e/keyboard-shortcuts.spec.ts`.
-- Scenario: `session-creation-shortcuts`, `linux-shortcuts`.
+- Scenario: `session-creation-shortcuts`, `linux-shortcuts`, `native-shortcut-editor` (Linux only).
 - App: `app/src/App.keyboardShortcuts.test.tsx`, `app/src/App.shortcutCheatsheet.test.tsx`, `app/src/App.shortcutEditor.test.tsx`, `app/src/shortcuts/*.test.ts`.
 
 ## Gotchas
