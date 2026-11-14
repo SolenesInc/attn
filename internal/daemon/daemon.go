@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -2874,6 +2875,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	}
 	defer release()
 	cmd, msg, err := protocol.ParseMessage(data)
+	identity := parseSocketFrameIdentity(data)
+	caller := d.callerSession(ctx, identity.terminal)
 	if origin, remote := OriginOf(ctx); remote && !d.isOutpostConn(origin.Host, origin.bridge) {
 		d.sendError(conn, "outpost bridge was replaced")
 		return
@@ -2904,13 +2907,12 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && d.answerUpdateStatusFromNotice(conn) {
 					return
 				}
-				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, d.callerSession(ctx, data))
+				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, caller)
 				return
 			}
 		}
 	}
-	caller := d.callerSession(ctx, data)
-	by := d.socketCaller(ctx, data)
+	by := socketCaller{daemon: d, session: cmp.Or(identity.source, caller)}
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -2943,7 +2945,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
 		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:
-		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage), by)
+		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage), by.Actor())
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
 		d.handleAutomationCommand(conn, cmd, msg)
 	case protocol.CmdDelegationRoles:
@@ -2997,7 +2999,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdJournalAppend:
 		d.handleJournalAppend(conn, msg.(*protocol.JournalAppendMessage))
 	case protocol.CmdUnregister:
-		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage), by)
+		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage), by.Actor())
 	case protocol.CmdState:
 		d.handleState(conn, msg.(*protocol.StateMessage))
 	case protocol.CmdHookNotification:
@@ -3093,9 +3095,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdAgentMsgStatus:
 		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
 	case protocol.CmdSeedPlant:
-		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage), by)
+		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage), by.Actor())
 	case protocol.CmdSeedPlot:
-		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage), by)
+		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage), by.Actor())
 	case protocol.CmdSeedList:
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
 	case protocol.CmdSeedSearch:
@@ -3103,35 +3105,35 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdSeedShow:
 		d.handleSeedShow(ctx, conn, msg.(*protocol.SeedShowMessage))
 	case protocol.CmdSeedArtifactTransfer:
-		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage), by)
+		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage), by.Actor())
 	case protocol.CmdSeedEdit:
-		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage), by)
+		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage), by.Actor())
 	case protocol.CmdSeedRollback:
-		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage), by)
+		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage), by.Actor())
 	case protocol.CmdSeedAuthorization:
-		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage), by)
+		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage), by.Actor())
 	case protocol.CmdSeedReminder:
-		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage), by)
+		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage), by.Actor())
 	case protocol.CmdSeedStandby:
-		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage), by)
+		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage), by.Actor())
 	case protocol.CmdSeedTransition:
-		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage), by)
+		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage), by.Actor())
 	case protocol.CmdSeedNote:
-		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage), by)
+		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage), by.Actor())
 	case protocol.CmdSeedCheck:
-		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage), by)
+		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage), by.Actor())
 	case protocol.CmdSeedNotes:
 		d.handleSeedNotes(conn, msg.(*protocol.SeedNotesMessage))
 	case protocol.CmdSeedWatch:
 		d.handleSeedWatch(conn, msg.(*protocol.SeedWatchMessage))
 	case protocol.CmdSeedLink:
-		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage), by)
+		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage), by.Actor())
 	case protocol.CmdSeedReady:
 		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
 	case protocol.CmdSeedReviewStart:
 		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
 	case protocol.CmdSeedSendToChief:
-		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage), by)
+		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage), by.Actor())
 	case protocol.CmdSeedReviewShow:
 		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
 	case protocol.CmdSeedReviewCancel:

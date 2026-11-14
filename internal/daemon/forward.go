@@ -193,10 +193,9 @@ func socketPair() (*net.UnixConn, *net.UnixConn, error) {
 	return server.(*net.UnixConn), relay.(*net.UnixConn), nil
 }
 
-func (d *Daemon) callerSession(ctx context.Context, frame []byte) protocol.SessionID {
+func (d *Daemon) callerSession(ctx context.Context, terminal protocol.TerminalID) protocol.SessionID {
 	if origin, remote := OriginOf(ctx); remote {
 		return origin.Caller
 	}
-	_, terminal := socketFrameCaller(frame)
 	return d.sessionInTerminal(terminal)
 }
