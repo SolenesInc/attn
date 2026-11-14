@@ -176,6 +176,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
 /// it, and the chips its first line fits beside the title.
 #[derive(Clone, Debug, PartialEq, Hash)]
 struct Subline {
+    seed: Option<super::seed_chip::Chip>,
     role: Option<super::chain::Trigger>,
     host: Option<String>,
     usage: Option<super::usage::Badge>,
@@ -223,12 +224,14 @@ fn sublines(
     desk: &super::Desk,
 ) -> Vec<(String, Subline)> {
     let settles = settles(desktop, &facts.sessions);
+    let seeds = facts.garden.of(&facts.profiles.selected);
     desktop
         .panes
         .iter()
         .filter_map(|p| {
             let s = facts.sessions.iter().find(|s| s.id == p.session_id)?;
             let mut sub = Subline {
+                seed: super::seed_chip::of(s, seeds, &crate::sidebar::display_name(s)),
                 role: super::chain::trigger(s, &facts.sessions),
                 host: super::host::name(s, &facts.outposts),
                 usage: super::usage::badge(s),
@@ -267,6 +270,9 @@ fn sublines(
             let available = tile_w.map(|w| w - SUBLINE_LEFT - SUBLINE_RIGHT);
             if let Some(available) = available {
                 let pieces: Vec<(Piece, Widths)> = [
+                    sub.seed
+                        .as_ref()
+                        .map(|c| (Piece::Seed, super::seed_chip::widths(c, SUBLINE_TYPE))),
                     sub.role
                         .as_ref()
                         .map(|r| (Piece::Role, super::chain::widths(r, SUBLINE_TYPE))),
@@ -297,6 +303,7 @@ fn sublines(
                         What::Details => Piece::Provenance,
                         What::Chain => Piece::Role,
                         What::Ask => Piece::Ask,
+                        What::Seed => Piece::Seed,
                     })
                     .into_iter()
                     .collect();
@@ -1090,12 +1097,23 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .children(track)
 }
 
-/// The agent header's second line: its delegation role, the machine it runs on, its usage, where
+/// The agent header's second line: its seed, its delegation role, the machine it runs on, its usage, where
 /// it came from, and its short id, which copies the whole id.
 fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Tokens) -> El {
     let short = short_id(session);
     let id = session.to_owned();
     let at = |piece| sub.and_then(|sub| sub.shows(piece));
+    let seed = sub.and_then(|sub| {
+        let level = at(Piece::Seed)?;
+        Some(super::seed_chip::piece(
+            leaf,
+            session,
+            sub.seed.as_ref()?,
+            level,
+            SUBLINE_TYPE,
+            t,
+        ))
+    });
     let role = sub.and_then(|sub| {
         let level = at(Piece::Role)?;
         Some(super::chain::piece(
@@ -1142,6 +1160,7 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
         .gap(SUBLINE_GAP)
         .pl(SUBLINE_LEFT)
         .pr(SUBLINE_RIGHT)
+        .children(seed)
         .children(role)
         .children(host)
         .children(usage)

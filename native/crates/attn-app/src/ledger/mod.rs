@@ -8,13 +8,13 @@ mod view;
 use std::collections::HashMap;
 
 use attn_protocol::{
-    KeptConversationKeepMessage, OpenSeedMessage, SessionLedgerEntry, SessionLedgerFacets,
-    SessionListResultMessage, SessionReopenMessage, SessionReopenResultMessage, SetSettingMessage,
+    KeptConversationKeepMessage, SessionLedgerEntry, SessionLedgerFacets, SessionListResultMessage,
+    SessionReopenMessage, SessionReopenResultMessage, SetSettingMessage,
 };
 use rune::{TextEdit, Tx};
 
 use crate::State;
-use crate::requests::{Answer, Refused};
+use crate::requests::Answer;
 use crate::shell::Layer;
 use query::{Filters, ProfileChoice, Scope, Verdict};
 
@@ -776,16 +776,7 @@ pub(crate) fn run(state: &mut State, id: &str, verb: Verb, tx: &mut Tx) {
 /// Leaves the ledger for a seed's tile.
 pub(crate) fn open_seed(state: &mut State, id: String, tx: &mut Tx) {
     close(state, tx);
-    state.act(
-        |request_id| OpenSeedMessage {
-            seed_id: id,
-            request_id: Some(request_id),
-            ..OpenSeedMessage::new()
-        },
-        Refused::Prefixed("Could not open the seed"),
-        |_, _, _| {},
-        tx,
-    );
+    crate::garden::open_tile(state, &id, None, tx);
 }
 
 fn keep_conversation(state: &mut State, id: String, keep: bool, tx: &mut Tx) {

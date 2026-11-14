@@ -498,6 +498,22 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
+        if crate::desktop::seed_chip::shown(session, &state.facts) {
+            commands.push(
+                Command::new(
+                    "show-tended-seeds",
+                    &format!("Show {name}'s seeds"),
+                    &[
+                        "seed", "seeds", "tend", "tending", "garden", "plot", "agent", "session",
+                    ],
+                    Action::ShowSessionSeeds {
+                        session: session.id.clone(),
+                    },
+                )
+                .describe("The seeds this agent is tending, and what it reports to")
+                .pin(),
+            );
+        }
     }
     let snoozed = on_screen.filter(|s| {
         queue_on

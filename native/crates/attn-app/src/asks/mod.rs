@@ -153,16 +153,7 @@ pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
         crate::garden::open_seed(state, id, tx);
         return;
     }
-    state.act(
-        |request_id| attn_protocol::OpenSeedMessage {
-            seed_id: id.to_owned(),
-            request_id: Some(request_id),
-            ..attn_protocol::OpenSeedMessage::new()
-        },
-        crate::requests::Refused::Prefixed("Could not open the seed"),
-        |_, _, _| {},
-        tx,
-    );
+    crate::garden::open_tile(state, id, None, tx);
 }
 
 /// The agent an ask waits on: whoever the garden says tends its seed, its crew member's

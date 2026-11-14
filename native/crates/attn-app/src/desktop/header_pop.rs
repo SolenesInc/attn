@@ -14,6 +14,8 @@ pub(crate) enum What {
     Chain,
     /// The agent's open asks.
     Ask,
+    /// The seeds the agent tends and the one it reports to.
+    Seed,
 }
 
 impl What {
@@ -23,6 +25,7 @@ impl What {
             What::Details => "details",
             What::Chain => "role",
             What::Ask => "ask",
+            What::Seed => "seed",
         }
     }
 
@@ -32,13 +35,15 @@ impl What {
             What::Details => super::provenance::pull_request(session).is_some(),
             What::Chain => super::chain::shown(session, &facts.sessions),
             What::Ask => !crate::asks::of_session(facts, session).is_empty(),
+            What::Seed => super::seed_chip::shown(session, facts),
         }
     }
 
     /// The row a popover listing several things picks first.
-    fn first_pick(self, session: &str, sessions: &[attn_protocol::Session]) -> usize {
+    fn first_pick(self, session: &str, facts: &attn_client::Facts) -> usize {
         match self {
-            What::Chain => super::chain::current_row(session, sessions),
+            What::Chain => super::chain::current_row(session, &facts.sessions),
+            What::Seed => super::seed_chip::first_pick(session, facts),
             What::Usage | What::Details | What::Ask => 0,
         }
     }
@@ -54,7 +59,7 @@ impl What {
     /// before the popover closes, in seconds.
     fn delays(self) -> (f64, f64) {
         match self {
-            What::Usage | What::Ask => (0.16, 0.24),
+            What::Usage | What::Ask | What::Seed => (0.16, 0.24),
             What::Details | What::Chain => (0.0, 0.12),
         }
     }
@@ -135,7 +140,7 @@ pub(crate) fn hovers(piece: El, leaf: &str, session: &str, what: What) -> El {
 }
 
 fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
-    let first = what.first_pick(session, &state.facts.sessions);
+    let first = what.first_pick(session, &state.facts);
     let pop = &mut state.window.desk.header_pop;
     let here = |p: &Pop| p.leaf == leaf && p.what == what;
     if pop.open.as_ref().is_some_and(here) {
@@ -211,7 +216,7 @@ pub(crate) fn press(state: &mut State, leaf: &str, session: &str, what: What, tx
 }
 
 fn pinned(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
-    let first = what.first_pick(session, &state.facts.sessions);
+    let first = what.first_pick(session, &state.facts);
     let pop = &mut state.window.desk.header_pop;
     pop.timer = None;
     pop.picked = first;
@@ -224,6 +229,7 @@ fn pinned(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx)
     tx.focus(open.surface(), true);
     what.reveal(&open, first, tx);
     pop.open = Some(open);
+    crate::garden::follow(state, tx);
 }
 
 /// Pins the popover of `what` on the tile on screen that shows `session`.

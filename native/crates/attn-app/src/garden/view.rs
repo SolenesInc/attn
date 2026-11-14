@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use attn_protocol::{OpenSeedMessage, Seed};
+use attn_protocol::Seed;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, ScrollSpec, Span, Tx, col, el, memo, rich, row, text, text_input};
@@ -13,7 +13,6 @@ use super::search::{self, Lookups, Match, Partial, Query};
 use super::sheet::{Go, Sheet, note, section};
 use super::{BODY, Mode, SEARCH_FIELD};
 use crate::State;
-use crate::requests::Refused;
 
 thread_local! {
     pub(super) static ROWS_BUILT: Cell<usize> = const { Cell::new(0) };
@@ -1094,21 +1093,8 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
 
 fn open_as_tile(id: &str, t: &Tokens) -> El {
     let id = id.to_owned();
-    button("garden.open-tile".into(), "Open as tile", t).on_press_tx(
-        move |state: &mut State, tx: &mut Tx| {
-            let seed_id = id.clone();
-            state.act(
-                |request_id| OpenSeedMessage {
-                    seed_id,
-                    request_id: Some(request_id),
-                    ..OpenSeedMessage::new()
-                },
-                Refused::Prefixed("Could not open the seed"),
-                |_, _, _| {},
-                tx,
-            );
-        },
-    )
+    button("garden.open-tile".into(), "Open as tile", t)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::open_tile(state, &id, None, tx))
 }
 
 fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> El {

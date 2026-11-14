@@ -15,12 +15,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use attn_protocol::{
-    FsExistsMessage, FsExistsResultMessage, Seed, SeedDocument, SeedDocumentGetMessage,
-    SeedDocumentGetResultMessage,
+    FsExistsMessage, FsExistsResultMessage, OpenSeedMessage, Seed, SeedDocument,
+    SeedDocumentGetMessage, SeedDocumentGetResultMessage,
 };
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col};
 
 use crate::State;
+use crate::requests::Refused;
 use crate::shell::Drawer;
 
 pub(crate) use tile::{Reads as TileReads, body as tile_body, climb as climb_tile};
@@ -236,6 +237,7 @@ fn shown_seeds(state: &State) -> HashSet<String> {
     if mode(state) != Mode::Closed {
         shown.extend(living_trail(state).pop());
     }
+    shown.extend(crate::desktop::seed_chip::told(state));
     shown
 }
 
@@ -429,6 +431,21 @@ pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
         show(state, Mode::Dock, tx);
     }
     open_found(state, id, tx);
+}
+
+/// Opens seed `id` in a tile, beside `session` when one asks for it.
+pub(crate) fn open_tile(state: &mut State, id: &str, session: Option<&str>, tx: &mut Tx) {
+    state.act(
+        |request_id| OpenSeedMessage {
+            seed_id: id.to_owned(),
+            request_id: Some(request_id),
+            session_id: session.map(str::to_owned),
+            ..OpenSeedMessage::new()
+        },
+        Refused::Prefixed("Could not open the seed"),
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// Opens a found seed under the whole path of plots above it, and ends the search.

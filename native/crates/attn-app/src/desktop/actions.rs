@@ -24,6 +24,9 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShowDelegationChain { session } => {
             super::header_pop::pin(state, session, super::header_pop::What::Chain, tx)
         }
+        ShowSessionSeeds { session } => {
+            super::header_pop::pin(state, session, super::header_pop::What::Seed, tx)
+        }
         OpenTile { desktop, tile } => show_leaf(state, desktop, tile, tx),
         ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop, tx),

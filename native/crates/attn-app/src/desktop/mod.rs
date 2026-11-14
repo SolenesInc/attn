@@ -18,6 +18,7 @@ mod overview;
 mod peek;
 mod provenance;
 mod role_icon;
+pub(crate) mod seed_chip;
 mod shared_conversation;
 mod shelf;
 mod spotlight;
@@ -207,6 +208,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
         header_pop::What::Details => provenance::popover(state, pop, t),
         header_pop::What::Chain => chain::popover(state, pop, t),
         header_pop::What::Ask => crate::asks::preview(state, pop, t),
+        header_pop::What::Seed => seed_chip::popover(state, pop, t),
     }
 }
 
@@ -215,8 +217,11 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
 /// and the header popover, and the peek's reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
     let now = tx.clock();
-    let switched =
-        drag::expire(state, tx) | peek::expire(state, tx) | header_pop::expire(state, now);
+    let popped = header_pop::expire(state, now);
+    if popped {
+        crate::garden::follow(state, tx);
+    }
+    let switched = drag::expire(state, tx) | peek::expire(state, tx) | popped;
     let flashes = &mut state.window.desk.flashes;
     let before = flashes.len();
     flashes.retain(|f| f.until > now);
