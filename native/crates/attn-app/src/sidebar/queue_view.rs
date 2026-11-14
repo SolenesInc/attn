@@ -2,8 +2,8 @@ use std::rc::Rc;
 
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
-use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row, text, text_input};
-use rune_kit::{Button, ButtonVariant};
+use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row, text};
+use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::model::{AgentRow, display_name, ordered_desktops};
 use super::queue::{self, Bands, QueueRow};
@@ -492,15 +492,18 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
                 .color(t.text_tertiary),
         )
         .child(
-            text_input(&state.window.agent_filter, type_::BODY)
+            TextInput::new(&state.window.agent_filter)
                 .key(FILTER_FIELD)
-                .single_line()
+                .plain()
+                .text_style(type_::BODY)
+                .height(type_::BODY.line_px())
+                .width(None)
                 .label("Filter agents")
-                .placeholder("filter agents", t.text_muted)
+                .placeholder("filter agents")
                 .on_edit(|state: &mut State| &mut state.window.agent_filter)
-                .on_input_key(super::actions::filter_key)
-                .grow(1.0)
-                .color(t.text_primary),
+                .on_key(super::actions::filter_key)
+                .build(attn_ui::kit(t))
+                .grow(1.0),
         )
 }
 

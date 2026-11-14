@@ -1,6 +1,7 @@
 use attn_ui::Tokens;
 use rune::tok::type_;
-use rune::{Color, El, Key, KeyEvent, Span, Tx, col, el, row, text, text_input};
+use rune::{Color, El, Key, KeyEvent, Span, Tx, col, el, row, text};
+use rune_kit::TextInput;
 
 use crate::State;
 use crate::terminal::{Filtered, Filtering, filter_field_key};
@@ -18,23 +19,23 @@ fn match_wash() -> Color {
 /// each a press away from its row.
 pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &Tokens) -> El {
     let (edit, edited, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
-    let field = text_input(&filtering.query, type_::MONO_CAPTION)
+    let field = TextInput::new(&filtering.query)
         .key(filter_field_key(id))
-        .single_line()
+        .plain()
+        .text_style(type_::MONO_CAPTION)
+        .height(type_::MONO_CAPTION.line_px())
+        .width(Some(200.0))
         .label("Filter block output")
-        .placeholder("Filter block output", t.text_muted)
+        .placeholder("Filter block output")
         .on_edit(move |state: &mut State| state.terminals.filter_query(&edit))
-        .on_input_change(move |state: &mut State, _: &mut Tx| {
-            state.terminals.filter_edited(&edited)
-        })
-        .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+        .on_change(move |state: &mut State, _: &mut Tx| state.terminals.filter_edited(&edited))
+        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             ev.key == Key::Escape && {
                 state.terminals.close_filter(&keyed, tx);
                 true
             }
         })
-        .w(200.0)
-        .color(t.text_primary);
+        .build(attn_ui::kit(t));
     let case = filter_button(
         id,
         "case",

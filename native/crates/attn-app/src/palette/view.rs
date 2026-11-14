@@ -1,6 +1,7 @@
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Tx, col, el, row, text, text_input};
+use rune::{El, Tx, col, el, row, text};
+use rune_kit::TextInput;
 
 use super::{Look, Mode, Row};
 use crate::{Action, State};
@@ -22,16 +23,19 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         ),
         Mode::Snooze { name } => (format!("Snooze {name}"), format!("Snooze {name}")),
     };
-    let field = text_input(&search.query, type_::BODY)
+    let field = TextInput::new(&search.query)
         .key(super::field_key())
-        .single_line()
+        .plain()
+        .text_style(type_::BODY)
+        .height(type_::BODY.line_px())
+        .width(None)
         .label(label.clone())
-        .placeholder(placeholder, t.text_muted)
+        .placeholder(placeholder)
         .on_edit(|state: &mut State| &mut state.window.search.query)
-        .on_input_change(super::edited)
-        .on_input_key(super::on_key)
-        .grow(1.0)
-        .color(t.text_primary);
+        .on_change(super::edited)
+        .on_key(super::on_key)
+        .build(attn_ui::kit(t))
+        .grow(1.0);
     let header = row()
         .key("palette.header")
         .w_full()

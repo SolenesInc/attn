@@ -3,8 +3,8 @@ use attn_protocol::{
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, TextEdit, Tx, col, text, text_input};
-use rune_kit::{MenuItem, Placement};
+use rune::{El, TextEdit, Tx, col, text};
+use rune_kit::{MenuItem, Placement, TextInput};
 
 use crate::State;
 use crate::requests::Refused;
@@ -302,9 +302,12 @@ fn rename_popover(edit: &TextEdit, refused: Option<&str>, t: &Tokens) -> El {
             state.window.session_menu = None
         })
         .child(
-            text_input(edit, type_::BODY)
+            TextInput::new(edit)
                 .key(RENAME_FIELD)
-                .single_line()
+                .plain()
+                .text_style(type_::BODY)
+                .height(type_::BODY.line_px())
+                .width(None)
                 .label("Rename session")
                 .on_edit(|state: &mut State| {
                     state
@@ -315,8 +318,7 @@ fn rename_popover(edit: &TextEdit, refused: Option<&str>, t: &Tokens) -> El {
                         .expect("the rename field shows only while renaming")
                 })
                 .on_submit(submit_rename)
-                .w_full()
-                .color(t.text_primary),
+                .build(attn_ui::kit(t)),
         )
         .children(refused.map(|why| {
             text(why.to_owned())

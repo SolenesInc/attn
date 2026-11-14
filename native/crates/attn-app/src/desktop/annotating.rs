@@ -1,7 +1,7 @@
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::type_;
-use rune::{Drag, El, Key, KeyEvent, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant};
+use rune::{Drag, El, Key, KeyEvent, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant, TextArea};
 
 use crate::State;
 use crate::annotations::{self, QuickLabel, draft};
@@ -12,9 +12,8 @@ const MARGIN: f32 = 8.0;
 const GAP: f32 = 10.0;
 /// A label button's side.
 const CHIP: f32 = 28.0;
-/// The comment box's width and least height.
+/// The comment box's width.
 const COMPOSE_W: f32 = 320.0;
-const COMMENT_H: f32 = 64.0;
 /// The panel's width, and how far it sits from the slot's bottom right corner.
 const PANEL_W: f32 = 300.0;
 const PANEL_INSET: f32 = 20.0;
@@ -435,26 +434,19 @@ fn pick(
 
 fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Tokens) -> El {
     let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
-    let field = text_input(&popup.comment, type_::LABEL)
+    let field = TextArea::new(&popup.comment)
         .key(draft::comment_field_key(id))
-        .return_breaks_line()
+        .width(None)
         .label("Annotation comment")
-        .placeholder("What should change here?", t.text_muted)
+        .placeholder("What should change here?")
         .on_edit(move |state: &mut State| state.terminals.popup_comment(&edited))
-        .on_input_change(move |state: &mut State, tx: &mut Tx| {
+        .on_change(move |state: &mut State, tx: &mut Tx| {
             draft::comment_edited(state, &changed, tx);
         })
-        .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             on_comment_key(state, &keyed, ev, tx)
         })
-        .w_full()
-        .min_h(COMMENT_H)
-        .px(8.0)
-        .py(6.0)
-        .radius(6.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .color(t.text_primary);
+        .build(attn_ui::kit(t));
     let (removed, gone, dismissed, saved) =
         (id.to_owned(), mark.id.clone(), id.to_owned(), id.to_owned());
     let actions = row()
@@ -582,31 +574,24 @@ fn panel(id: &str, marking: &Marking, send_key: Option<&str>, t: &Tokens) -> El 
         })
         .children(marking.marks.iter().map(|m| card(id, m, t)));
     let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
-    let note = text_input(&marking.note, type_::LABEL)
+    let note = TextArea::new(&marking.note)
         .key(format!("terminal.{id}.annotation.note.field"))
-        .return_breaks_line()
+        .width(None)
         .label("Note sent with these annotations")
-        .placeholder("Anything else to say with these?", t.text_muted)
+        .placeholder("Anything else to say with these?")
         .on_edit(move |state: &mut State| state.terminals.note(&edited))
-        .on_input_change(move |state: &mut State, tx: &mut Tx| {
+        .on_change(move |state: &mut State, tx: &mut Tx| {
             draft::edited(state, &changed, tx);
         })
-        .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             if ev.key == Key::Enter && (ev.mods.cmd || ev.mods.ctrl) {
                 draft::send(state, &keyed, tx);
                 return true;
             }
             false
         })
-        .mx(8.0)
-        .mt(6.0)
-        .min_h(44.0)
-        .px(8.0)
-        .py(6.0)
-        .radius(6.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .color(t.text_primary);
+        .build(attn_ui::kit(t));
+    let note = el().px(8.0).pt(6.0).child(note);
     let said = match &marking.outcome {
         Some(Outcome::Skipped) => Some("Not sent — the session is waiting on an approval, where the sending Enter would answer it. Send again once you have answered.".to_owned()),
         Some(Outcome::Failed(why)) => Some(why.clone()),

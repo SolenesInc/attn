@@ -1008,6 +1008,7 @@ fn a_refused_send_keeps_the_marks_and_the_note_and_says_the_daemons_reason() {
         (state["marks"].as_array().unwrap().len(), &state["note"]),
         (1, &json!("Keep me"))
     );
+    world.advance(Duration::from_millis(400));
     assert!(world.runtime_is_at_rest());
 }
 

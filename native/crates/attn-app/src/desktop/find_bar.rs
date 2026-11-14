@@ -1,7 +1,7 @@
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, Tx, el, row, text, text_input};
-use rune_kit::ButtonVariant;
+use rune::{El, Key, KeyEvent, Tx, el, row, text};
+use rune_kit::{ButtonVariant, TextInput};
 
 use crate::State;
 use crate::terminal::{Finding, Toward, find_field_key};
@@ -10,18 +10,18 @@ use crate::terminal::{Finding, Toward, find_field_key};
 /// field, Match case, the count, and the keys to step through the matches or close it.
 pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
     let (edit, edited, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
-    let field = text_input(&finding.query, type_::MONO_CAPTION)
+    let field = TextInput::new(&finding.query)
         .key(find_field_key(id))
-        .single_line()
+        .plain()
+        .text_style(type_::MONO_CAPTION)
+        .height(type_::MONO_CAPTION.line_px())
+        .width(Some(160.0))
         .label("Find")
-        .placeholder("Find", t.text_muted)
+        .placeholder("Find")
         .on_edit(move |state: &mut State| state.terminals.find_query(&edit))
-        .on_input_change(move |state: &mut State, _: &mut Tx| state.terminals.find_edited(&edited))
-        .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-            on_key(state, &keyed, ev, tx)
-        })
-        .w(160.0)
-        .color(t.text_primary);
+        .on_change(move |state: &mut State, _: &mut Tx| state.terminals.find_edited(&edited))
+        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| on_key(state, &keyed, ev, tx))
+        .build(attn_ui::kit(t));
     let case = find_button(
         id,
         "case",

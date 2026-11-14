@@ -1,7 +1,7 @@
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{space, type_};
-use rune::{El, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant};
+use rune::{El, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
 use super::{Catalog, Picker, Which, agents, listed, numbered, paths};
@@ -277,20 +277,21 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
         .w_full()
         .items_center()
         .child(
-            text_input(&picker.input, type_::BODY)
+            TextInput::new(&picker.input)
                 .key(field_key)
-                .single_line()
+                .plain()
+                .text_style(type_::BODY)
+                .height(type_::BODY.line_px())
+                .width(None)
                 .label("Path")
-                .placeholder("Type path (e.g., ~/projects) or search...", t.text_muted)
+                .placeholder("Type path (e.g., ~/projects) or search...")
                 .on_edit(move |state: &mut State| state.window.launching.input_mut(which))
-                .on_input_change(move |state: &mut State, tx: &mut Tx| {
-                    super::edited(state, which, tx)
-                })
-                .on_input_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+                .on_change(move |state: &mut State, tx: &mut Tx| super::edited(state, which, tx))
+                .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
                     super::on_key(state, which, ev, tx)
                 })
-                .grow(1.0)
-                .color(t.text_primary),
+                .build(attn_ui::kit(t))
+                .grow(1.0),
         )
         .children(ghost.map(|g| {
             text(g)
@@ -538,18 +539,21 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                 .items_center()
                 .child(text("+").font(type_::BODY).color(t.text_secondary))
                 .child(
-                    text_input(&chooser.name, type_::BODY)
+                    TextInput::new(&chooser.name)
                         .key(repo::name_key(which))
-                        .single_line()
+                        .plain()
+                        .text_style(type_::BODY)
+                        .height(type_::BODY.line_px())
+                        .width(None)
                         .label("Branch name")
-                        .placeholder("Branch name...", t.text_muted)
+                        .placeholder("Branch name...")
                         .on_edit(move |state: &mut State| name_edit(state, which))
-                        .on_input_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+                        .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
                             repo::enter_form(state, which);
                             super::on_key(state, which, ev, tx)
                         })
-                        .grow(1.0)
-                        .color(t.text_primary),
+                        .build(attn_ui::kit(t))
+                        .grow(1.0),
                 )
                 .child(
                     GlyphButton::new(icon::REFRESH, "Pick another name")

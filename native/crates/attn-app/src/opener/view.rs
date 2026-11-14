@@ -1,6 +1,7 @@
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Tx, col, el, row, text, text_input};
+use rune::{El, Tx, col, el, row, text};
+use rune_kit::TextInput;
 
 use super::Row;
 use crate::State;
@@ -12,16 +13,18 @@ const LABEL: &str = "Open a markdown file";
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let (rows, empty) = super::rows(state);
     let at = super::highlighted(&state.opener, &rows);
-    let field = text_input(&state.opener.query, type_::BODY)
+    let field = TextInput::new(&state.opener.query)
         .key(super::FIELD)
-        .single_line()
+        .plain()
+        .text_style(type_::BODY)
+        .height(type_::BODY.line_px())
+        .width(None)
         .label(LABEL)
-        .placeholder("Open a markdown file…", t.text_muted)
+        .placeholder("Open a markdown file…")
         .on_edit(|state: &mut State| &mut state.opener.query)
-        .on_input_change(super::edited)
-        .on_input_key(super::on_key)
-        .w_full()
-        .color(t.text_primary);
+        .on_change(super::edited)
+        .on_key(super::on_key)
+        .build(attn_ui::kit(t));
     let list = col()
         .key("opener.list")
         .role("listbox")
