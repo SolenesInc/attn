@@ -944,7 +944,7 @@ fn keys_typed_into_the_filter_are_never_recorded_and_typing_drops_a_reassign() {
 
     record(&mut world, &Action::SessionNew, &holder.to_string());
     assert!(pending(&world).is_some());
-    click(&mut world, "input");
+    click(&mut world, "shortcut-editor.filter");
     filter(&mut world, "new session");
     assert_eq!(pending(&world), None);
     assert!(!shows(&world, "button", "Reassign"));
@@ -956,7 +956,7 @@ fn keys_typed_into_the_filter_are_never_recorded_and_typing_drops_a_reassign() {
         shown(&world, &Action::TerminalToggleMaximize),
         "Press shortcut"
     );
-    click(&mut world, "input");
+    click(&mut world, "shortcut-editor.filter");
     filter(&mut world, "zoom");
 
     assert_eq!(filter_text(&world), "zoom");

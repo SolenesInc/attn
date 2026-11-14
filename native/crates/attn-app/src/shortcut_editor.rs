@@ -9,8 +9,8 @@ use attn_protocol::SetSettingMessage;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{
-    Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx, col, el,
-    row, text,
+    Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx, col, row,
+    text,
 };
 use rune_kit::{
     Badge, BadgeVariant, Button, ButtonVariant, Dialog, Kit, ShortcutRecorder,
@@ -147,29 +147,6 @@ fn recorder_of<'a>(state: &'a mut State, action: &Action) -> &'a mut ShortcutRec
         }
     }
     recorder
-}
-
-/// Gives the keyboard to the recorder that records. A press leaves focus where it was on a
-/// control, so a recorder a click started would not hear the keys it waits for.
-pub(crate) fn focus_recording(state: &State, tx: &mut Tx) {
-    if !is_open(state) {
-        return;
-    }
-    let editor = &state.window.shortcut_editor;
-    let recording = if editor.then.is_recording() {
-        Some(THEN_RECORDER.to_owned())
-    } else {
-        editor
-            .recorders
-            .iter()
-            .find(|(_, recorder)| recorder.is_recording())
-            .map(|(action, _)| keys_key(action))
-    };
-    if let Some(key) = recording
-        && tx.focused() != Some(key.as_str())
-    {
-        tx.focus(key, false);
-    }
 }
 
 fn record_chord(state: &mut State, action: &Action, tx: &mut Tx) {
@@ -609,18 +586,18 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             .font(type_::BODY)
             .color(t.text_tertiary)
     });
-    let filter = el().key(FILTER).w_full().child(
-        TextInput::new(&editor.filter)
-            .placeholder("Filter shortcuts…")
-            .label("Filter shortcuts")
-            .on_edit(|state: &mut State| &mut state.window.shortcut_editor.filter)
-            .on_change(|state: &mut State, _: &mut Tx| {
-                let editor = &mut state.window.shortcut_editor;
-                editor.pending = None;
-                editor.recording = None;
-            })
-            .build(k),
-    );
+    let filter = TextInput::new(&editor.filter)
+        .key(FILTER)
+        .width(None)
+        .placeholder("Filter shortcuts…")
+        .label("Filter shortcuts")
+        .on_edit(|state: &mut State| &mut state.window.shortcut_editor.filter)
+        .on_change(|state: &mut State, _: &mut Tx| {
+            let editor = &mut state.window.shortcut_editor;
+            editor.pending = None;
+            editor.recording = None;
+        })
+        .build(k);
     let body = col()
         .key("shortcut-editor.body")
         .w_full()

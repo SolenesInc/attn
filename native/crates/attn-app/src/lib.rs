@@ -266,7 +266,6 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
     let settings = settings::poll(state, now, tx);
-    shortcut_editor::focus_recording(state, tx);
     let updating = update_run::poll(state, now, tx) | attention::poll(state, now);
     shell::expire(state, now, tx)
         || settings
