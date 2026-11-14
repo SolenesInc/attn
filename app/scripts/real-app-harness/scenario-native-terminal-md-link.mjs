@@ -75,7 +75,7 @@ try {
 
   await runner.step('echo_the_paths', async () => {
     await driver.click(terminal);
-    await driver.typeInto(null, 'clear; echo ./alpha.md; echo ./beta.md');
+    await driver.typeInto(null, "clear; echo ./alpha''.md; echo ./beta''.md");
     await driver.pressKey('Enter');
     await screen('./beta.md');
   });
