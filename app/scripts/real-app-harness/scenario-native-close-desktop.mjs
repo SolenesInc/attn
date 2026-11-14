@@ -81,7 +81,7 @@ try {
     await observer.waitForDesktopOf(id, (entry) => entry.id === desktop.id && entry.panes.length === 1, 'the shell on its desktop');
     await driver.hover({ key: `sidebar.desktop.${desktop.id}` });
     await driver.click({ key: `sidebar.desktop.${desktop.id}.close` });
-    const dialog = await driver.waitFor({ key: 'close_desktop.dialog' });
+    const dialog = await driver.waitFor({ key: 'close_desktop-dialog' });
     runner.assert(/^Close .+\?$/.test(dialog.name ?? ''), 'the confirmation names the desktop', dialog);
     runner.assert(observer.desktop(desktop.id), 'nothing closes before the confirmation', observer.describeArrangement());
     await driver.screenshot(path.join(runner.runDir, 'close-confirmation.png'));
@@ -89,7 +89,7 @@ try {
     await driver.click({ key: 'close_desktop.confirm' });
     await observer.waitFor(() => !observer.desktop(desktop.id), 'the desktop closed');
     await ended;
-    await driver.waitFor({ key: 'close_desktop.dialog' }, { gone: true });
+    await driver.waitFor({ key: 'close_desktop-dialog' }, { gone: true });
     await driver.waitFor({ key: `sidebar.desktop.${desktop.id}` }, { gone: true });
   });
 

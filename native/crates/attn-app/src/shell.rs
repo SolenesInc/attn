@@ -3,7 +3,7 @@ use attn_ui::{Appearance, Tokens};
 use rune::tok::{space, type_};
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
 use rune_kit::popover::raised;
-use rune_kit::{Button, ButtonVariant};
+use rune_kit::{Button, ButtonVariant, Dialog};
 
 use crate::action::{Action, Category};
 use crate::keymap::Keymap;
@@ -502,12 +502,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Notifications) => layers.push(crate::notifications::panel(state, t)),
         Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
         Some(Layer::Settings) => crate::settings::dialog(state, t, &mut layers),
-        Some(Layer::Shortcuts) => layers.push(dialog(
-            "shortcuts",
-            "Keyboard shortcuts",
-            t,
-            cheat_sheet(&state.keymap, t),
-        )),
+        Some(Layer::Shortcuts) => shortcuts(state, t, &mut layers),
         Some(Layer::ShortcutEditor) => crate::shortcut_editor::view(state, t, &mut layers),
         Some(Layer::ProfileSwitcher) => layers.extend(crate::profile_switcher::view(state, t)),
         None => {}
@@ -541,61 +536,27 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     layers
 }
 
-fn scrim(key: &str, t: &Tokens) -> El {
-    el().key(format!("{key}.scrim"))
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .fill(t.bg_overlay)
-        .a11y_hidden()
-}
-
 fn close_layer(state: &mut State, tx: &mut Tx) {
     state.window.layer = None;
     crate::picker::refocus_inline(state, tx);
 }
 
-fn dialog(key: &str, title: &str, t: &Tokens, body: Vec<El>) -> El {
-    let panel = col()
-        .key(format!("{key}.dialog"))
-        .role("dialog")
-        .label(title)
-        .modal_tx(true, close_layer)
-        .w_full()
-        .max_w(560.0)
-        .h_full()
-        .max_h(600.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .padding(space::S6)
-        .gap(space::S3)
-        .child(text(title).font(type_::TITLE).color(t.text_primary))
+fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
+    let k = attn_ui::kit(t);
+    Dialog::new("shortcuts", "Keyboard shortcuts")
+        .open(true)
+        .width(560.0)
+        .max_height(600.0)
+        .on_close_tx(close_layer)
         .child(
             col()
                 .key("body")
                 .w_full()
-                .grow(1.0)
-                .min_h(0.0)
                 .gap(space::S2)
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .children(body),
-        );
-    el().key(key)
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(scrim(key, t))
-        .child(
-            col()
-                .w_full()
-                .h_full()
                 .padding(space::S6)
-                .center()
-                .child(panel),
+                .children(cheat_sheet(&state.keymap, t)),
         )
+        .build(k, layers);
 }
 
 fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
