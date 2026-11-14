@@ -63,7 +63,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) has the cheat sheet and the shortcut editor, with rebinds, chords, the reassign prompt, refusals for keys a required action holds, Unbind, Reset and Restore Defaults. It has no dock and no Menu bar badge. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above. The editor's recorder hears only physical keys, and `bridge key` sends logical ones, so record with `xdotool` on Linux. A Mac recipe has no way to record yet.
+The native app (`native/`) has the cheat sheet and the shortcut editor, with rebinds, chords, the reassign prompt, refusals for keys a required action holds, Unbind, Reset and Restore Defaults. It has no dock and no Menu bar badge. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above. The editor's recorder hears only physical keys, and `bridge key` sends logical ones, so record with `xdotool` on Linux, and with real keys in the macOS VM (`scripts/vm`), where the chords are the Mac ones: Cmd+/ opens the cheat sheet.
 
 Preconditions:
 

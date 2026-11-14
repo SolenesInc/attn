@@ -54,9 +54,9 @@ item	statement	native_test	reason
 33	A combination recorded in the native shortcut editor runs its action once the editor closes	attn-app/tests/wire/shortcut_editor.rs::a_recorded_combination_runs_its_action_once_the_editor_closes	
 33	A chord recorded in the native shortcut editor runs its action once the daemon has it	attn-app/tests/wire/shortcut_editor.rs::a_recorded_chord_runs_its_action_once_the_daemon_has_it	
 33	On Linux, physical keys recorded in the packaged native app's shortcut editor rebind an action, and the new keys and a recorded chord then run it	live:s-qjaqty/native-shortcut-editor.tgz	
-33	On macOS, a shortcut rebound in the native editor reaches the packaged bundle through AppKit, with no menu item taking it		gap: s-qjaqty
+33	On macOS, a shortcut rebound in the native editor reaches the packaged bundle through AppKit, with no menu item taking it	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
 54	Settings' Browse saves the folder the native dialog returns	attn-app/tests/wire/settings/desktop.rs::the_projects_directory_pill_says_edited_until_the_path_saves_and_browse_saves_the_chosen_folder	
 54	A cancelled folder dialog in Settings saves nothing	attn-app/tests/wire/settings/desktop.rs::a_cancelled_folder_dialog_saves_nothing	
-54	Settings' Browse opens the system folder dialog from the packaged bundle		gap: s-qjaqty
+54	Settings' Browse opens the system folder dialog from the packaged bundle	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
 71	The settings, agent settings, self-update, shortcut, profile and session usage scenarios have native copies that pass on Linux	live:s-qjaqty/slice6-scenarios.tgz	
-71	The native copies of the settings, agent settings, profile and session usage scenarios pass on macOS		gap: s-qjaqty
+71	The native copies of the settings, agent settings, profile and session usage scenarios pass on macOS	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
