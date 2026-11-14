@@ -129,11 +129,8 @@ impl Sheet<'_> {
         Some(
             kit_button("Handover")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    opened.write(state, "", tx);
-                    if state.window.garden.shown(&opened).writing {
-                        state.window.garden.handover =
-                            Some(Handover::suggested(Some(&continuation)));
-                    }
+                    let draft = Handover::suggested(Some(&continuation));
+                    opened.write_with(state, "", Some(draft), tx)
                 })
                 .build(attn_ui::kit(self.t))
                 .key(spot.key("open")),
@@ -145,7 +142,7 @@ impl Sheet<'_> {
         let seed = &document?.seed;
         let spot = spot(self, seed);
         let shown = self.garden.shown(&spot);
-        let draft = self.garden.handover.as_ref().filter(|_| shown.writing)?;
+        let (draft, written) = (shown.handover?, shown.words?);
         let t = self.t;
         let kit = attn_ui::kit(t);
         let field = Field { spot: &spot, t };
@@ -159,20 +156,20 @@ impl Sheet<'_> {
             .radius(6.0)
             .fill(t.bg_elevated)
             .border(1.0, t.border)
-            .child(field.note(&self.garden.words))
+            .child(field.note(written))
             .child(field.line("cwd", "Working folder", "", &draft.cwd, |h| &mut h.cwd));
         let mut choices = RadioGroup::new().label("Git checkout");
         for choice in Checkout::ALL {
             choices = choices.item(
-                RadioItem::new(choice.label(), draft.checkout == choice).on_select(
+                RadioItem::new(choice.label(), draft.checkout == choice).on_select({
+                    let spot = spot.clone();
                     move |state: &mut State| {
-                        let garden = &mut state.window.garden;
-                        if let Some(draft) = garden.handover.as_mut() {
+                        if let Some(draft) = spot.handover_mut(state) {
                             draft.checkout = choice;
                         }
-                        garden.revision += 1;
-                    },
-                ),
+                        state.window.garden.revision += 1;
+                    }
+                }),
             );
         }
         form = form.child(choices.build(kit).key(spot.key("checkout")));
@@ -200,12 +197,14 @@ impl Sheet<'_> {
             form = form.child(
                 Checkbox::new(draft.share)
                     .label("Allow sharing an occupied checkout")
-                    .on_toggle(|state: &mut State| {
-                        let garden = &mut state.window.garden;
-                        if let Some(draft) = garden.handover.as_mut() {
-                            draft.share = !draft.share;
+                    .on_toggle({
+                        let spot = spot.clone();
+                        move |state: &mut State| {
+                            if let Some(draft) = spot.handover_mut(state) {
+                                draft.share = !draft.share;
+                            }
+                            state.window.garden.revision += 1;
                         }
-                        garden.revision += 1;
                     })
                     .build(kit)
                     .key(spot.key("share")),
@@ -264,16 +263,12 @@ struct Field<'a> {
 
 impl Field<'_> {
     fn note(&self, words: &TextEdit) -> El {
-        let typed = self.spot.clone();
+        let (typed, edited) = (self.spot.clone(), self.spot.clone());
         self.boxed(
             text_input(words, type_::BODY)
                 .key(self.spot.field())
                 .label("What should the new agent know? (optional)")
-                .on_edit(|state: &mut State| {
-                    let garden = &mut state.window.garden;
-                    garden.revision += 1;
-                    &mut garden.words
-                })
+                .on_edit(move |state: &mut State| edited.words_mut(state))
                 .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                     keyed(&typed, state, ev, Sends::CmdReturn, tx)
                 })
@@ -289,18 +284,14 @@ impl Field<'_> {
         edit: &TextEdit,
         pick: fn(&mut Handover) -> &mut TextEdit,
     ) -> El {
-        let typed = self.spot.clone();
+        let (typed, edited) = (self.spot.clone(), self.spot.clone());
         self.boxed(
             text_input(edit, type_::BODY)
                 .key(self.spot.key(part))
                 .single_line()
                 .label(label.to_owned())
                 .placeholder(placeholder.to_owned(), self.t.text_muted)
-                .on_edit(move |state: &mut State| {
-                    let garden = &mut state.window.garden;
-                    garden.revision += 1;
-                    pick(garden.handover.get_or_insert_with(Handover::default))
-                })
+                .on_edit(move |state: &mut State| pick(edited.handover_draft(state)))
                 .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                     keyed(&typed, state, ev, Sends::Return, tx)
                 }),
@@ -341,7 +332,7 @@ fn source_session(state: &State) -> Option<String> {
 }
 
 fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
-    let Some(draft) = state.window.garden.handover.as_ref() else {
+    let Some(draft) = spot.handover_mut(state) else {
         return;
     };
     let words = |edit: &TextEdit| edit.text.trim().to_owned();
@@ -369,11 +360,11 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
     let agent = Some(words(&draft.agent)).filter(|a| !a.is_empty());
     let share = draft.share.then_some(true);
     let request = draft.request.clone();
-    let note = Some(state.window.garden.words.text.trim().to_owned()).filter(|n| !n.is_empty());
+    let note = Some(spot.words(state)).filter(|n| !n.is_empty());
     let source_session_id = source_session(state);
     let seed_id = spot.seed().to_owned();
     let id = request.unwrap_or_else(|| state.next_request_id());
-    if let Some(draft) = state.window.garden.handover.as_mut() {
+    if let Some(draft) = spot.handover_mut(state) {
         draft.request = Some(id.clone());
     }
     spot.send_as(
@@ -395,20 +386,20 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
             ..DelegateMessage::new()
         },
         spot.key("open"),
-        settled,
+        {
+            let spot = spot.clone();
+            move |state, answer, tx| settled(&spot, state, answer, tx)
+        },
         tx,
     );
 }
 
 /// Goes to the agent a handover started. A refusal takes a new request for the next try; a
 /// handover the daemon never answered keeps its request, so it can tell a retry from another.
-fn settled(state: &mut State, answer: &Answer, tx: &mut Tx) {
+fn settled(spot: &Spot, state: &mut State, answer: &Answer, tx: &mut Tx) {
     match answer {
         Answer::Reply(reply) if reply.body["success"] == true => {
-            let garden = &mut state.window.garden;
-            garden.handover = None;
-            garden.edit = None;
-            garden.revision += 1;
+            spot.forget(state);
             let session = answer
                 .parse::<DelegateResultMessage>()
                 .and_then(|r| r.result)
@@ -418,7 +409,7 @@ fn settled(state: &mut State, answer: &Answer, tx: &mut Tx) {
             }
         }
         Answer::Reply(_) => {
-            if let Some(draft) = state.window.garden.handover.as_mut() {
+            if let Some(draft) = spot.handover_mut(state) {
                 draft.request = None;
             }
         }

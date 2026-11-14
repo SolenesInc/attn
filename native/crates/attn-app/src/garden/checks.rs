@@ -120,7 +120,7 @@ impl Sheet<'_> {
         let kit = attn_ui::kit(t);
         let spot = Spot::new(&self.prefix, &here.id, &format!("check.{}", check.id));
         let shown = self.garden.shown(&spot);
-        let (busy, rejecting) = (shown.busy, shown.writing);
+        let (busy, rejecting) = (shown.busy, shown.words);
         let state = check.state.as_str();
         let mark = if check.removed {
             text(box_glyph(state))
@@ -231,19 +231,15 @@ impl Sheet<'_> {
                     .wrap(),
             );
         }
-        if rejecting {
-            let typed = spot.clone();
+        if let Some(written) = rejecting {
+            let (typed, edited) = (spot.clone(), spot.clone());
             main = main.child(
-                text_input(&self.garden.words, type_::BODY)
+                text_input(written, type_::BODY)
                     .key(spot.field())
                     .single_line()
                     .label(format!("Reject {}: what would prove it", check.id))
                     .placeholder("what would prove it", t.text_muted)
-                    .on_edit(|state: &mut State| {
-                        let garden = &mut state.window.garden;
-                        garden.revision += 1;
-                        &mut garden.words
-                    })
+                    .on_edit(move |state: &mut State| edited.words_mut(state))
                     .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                         let home = typed.key("box");
                         typed.field_key(
@@ -274,7 +270,7 @@ impl Sheet<'_> {
             );
         }
         let mut actions = row().gap(space::S1);
-        if !check.removed && !rejecting {
+        if !check.removed && rejecting.is_none() {
             let action = |word: &str, verb: &'static str, name: String, part: &str| {
                 let pressed = spot.clone();
                 kit_button(word)

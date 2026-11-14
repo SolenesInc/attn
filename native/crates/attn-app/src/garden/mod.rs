@@ -86,10 +86,8 @@ pub(crate) struct Garden {
     /// Rises with every change a seed page shows besides the seeds: a reading's answer, a
     /// check's move, a fold opened.
     pub(crate) revision: u64,
-    /// What one part of a seed page is doing, and the words being written for it.
-    edit: Option<spot::Edit>,
-    words: TextEdit,
-    handover: Option<handover::Handover>,
+    /// What each part of a seed page is doing, and the words being written for it.
+    edits: HashMap<spot::Spot, spot::Edit>,
     /// The folds open on seed pages, by the key of the control that opens each.
     folds: HashSet<String>,
     pub(crate) board_walk: board::Board,

@@ -84,11 +84,11 @@ impl Sheet<'_> {
                     .wrap(),
             );
         }
-        if shown.writing {
-            let typed = spot.clone();
+        if let Some(written) = shown.words {
+            let (typed, edited) = (spot.clone(), spot.clone());
             section = section
                 .child(
-                    text_input(&self.garden.words, type_::BODY)
+                    text_input(written, type_::BODY)
                         .key(spot.field())
                         .label(format!(
                             "Authorize {}: the steps agents take beyond the project's guidance, and where they stop",
@@ -98,11 +98,7 @@ impl Sheet<'_> {
                             "Land on main once the checks pass. Ask me before releasing.",
                             t.text_muted,
                         )
-                        .on_edit(|state: &mut State| {
-                            let garden = &mut state.window.garden;
-                            garden.revision += 1;
-                            &mut garden.words
-                        })
+                        .on_edit(move |state: &mut State| edited.words_mut(state))
                         .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                             let home = typed.key("edit");
                             let had = !words.is_empty();

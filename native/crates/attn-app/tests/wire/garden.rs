@@ -15,6 +15,7 @@ mod authorization;
 mod board;
 mod checks;
 mod continuation;
+mod drafts;
 mod handover;
 mod scale;
 mod tile;

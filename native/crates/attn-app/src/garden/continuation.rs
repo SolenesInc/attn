@@ -85,13 +85,11 @@ impl Sheet<'_> {
         let seed = &document?.seed;
         let spot = self.chief_spot(seed);
         let shown = self.garden.shown(&spot);
-        if !shown.writing || !self.chief {
-            return None;
-        }
+        let written = shown.words.filter(|_| self.chief)?;
         let t = self.t;
         let kit = attn_ui::kit(t);
         let rev = seed.rev;
-        let typed = spot.clone();
+        let (typed, edited) = (spot.clone(), spot.clone());
         let mut form = col()
             .key(spot.key("form"))
             .role("form")
@@ -109,14 +107,10 @@ impl Sheet<'_> {
                     .a11y_hidden(),
             )
             .child(
-                text_input(&self.garden.words, type_::BODY)
+                text_input(written, type_::BODY)
                     .key(spot.field())
                     .label("What should Chief know? (optional)")
-                    .on_edit(|state: &mut State| {
-                        let garden = &mut state.window.garden;
-                        garden.revision += 1;
-                        &mut garden.words
-                    })
+                    .on_edit(move |state: &mut State| edited.words_mut(state))
                     .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                         let home = typed.key("open");
                         typed.field_key(
@@ -169,7 +163,7 @@ impl Sheet<'_> {
                 .child(
                     kit_button("Send to Chief")
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            let words = state.window.garden.words.text.trim().to_owned();
+                            let words = sent.words(state);
                             send_to_chief(&sent, state, rev, words, tx)
                         })
                         .build(kit)
