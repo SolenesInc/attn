@@ -9,8 +9,8 @@ use attn_protocol::{
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, ScrollSpec, TextEdit, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant};
+use rune::{El, ScrollSpec, TextEdit, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::layout::{LeafKind, Node};
 use super::shelf::Shelf;
@@ -832,31 +832,31 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
             .fill(t.bg_panel)
             .child(text(words).font(type_::LABEL).color(t.text_secondary))
     });
-    let field = text_input(&peeks.field, type_::LABEL)
+    let field = TextInput::new(&peeks.field)
         .key(field_key(&open.leaf))
-        .single_line()
+        .plain()
+        .text_style(type_::LABEL)
+        .height(type_::LABEL.line_px())
+        .width(None)
         .label("Reply")
         .read_only(matches!(
             reply,
             Some(Reply::Sending(_) | Reply::Typed { .. })
         ))
-        .placeholder(
-            if blocked.is_some() {
-                "A reply cannot be sent now"
-            } else {
-                "Reply without changing the layout"
-            },
-            t.text_muted,
-        )
+        .placeholder(if blocked.is_some() {
+            "A reply cannot be sent now"
+        } else {
+            "Reply without changing the layout"
+        })
         .on_edit(|state: &mut State| &mut state.window.desk.peeks.field)
-        .on_input_change(|state: &mut State, _: &mut Tx| edited(state))
+        .on_change(|state: &mut State, _: &mut Tx| edited(state))
         .on_submit(submit)
-        .on_input_key(|state: &mut State, ev: &rune::KeyEvent, _: &mut Tx| {
+        .on_key(|state: &mut State, ev: &rune::KeyEvent, _: &mut Tx| {
             ev.key == rune::Key::Escape && close(state)
         })
+        .build(attn_ui::kit(t))
         .grow(1.0)
-        .min_w(0.0)
-        .color(t.text_primary);
+        .min_w(0.0);
     let reply_row = row()
         .w_full()
         .items_center()

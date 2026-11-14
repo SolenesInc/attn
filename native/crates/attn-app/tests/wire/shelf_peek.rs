@@ -739,6 +739,12 @@ fn after_the_text_lands_and_return_fails_enter_on_the_reopened_peek_sends_only_r
 fn the_field_of_a_reply_whose_return_failed_ignores_typing_and_keeps_the_keyboard() {
     let mut world = repeeking_a_reply_whose_return_failed();
 
+    assert!(
+        world
+            .screen()
+            .get(Target::key("shelf.peek.c.field"))
+            .is("read-only")
+    );
     world.gesture(|app| app.type_text("!"));
     assert_eq!(field(&world), "ship it", "the typed text cannot change");
     key(&mut world, rune::Key::Enter);
