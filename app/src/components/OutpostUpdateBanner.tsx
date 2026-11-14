@@ -28,9 +28,20 @@ export function outpostUpdateText(row: OutpostInfo): string {
   }[row.update.phase];
 }
 
-function names(rows: OutpostInfo[]): string {
+function names(rows: { name: string }[]): string {
   if (rows.length > 2) return `${rows.length} outposts`;
   return rows.map(row => row.name).join(' and ');
+}
+
+export function OutpostNotes<T extends { id: string; name: string }>({ rows, text }: { rows: T[]; text: (row: T) => string }) {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const said = text(row);
+    const group = groups.get(said);
+    if (group) group.push(row);
+    else groups.set(said, [row]);
+  }
+  return <>{[...groups].map(([said, group]) => <span key={group[0].id} className="banner-note"> {names(group)}: {said}</span>)}</>;
 }
 
 function outpostBannerHeadline(different: OutpostInfo[], updated: OutpostInfo[]): string {
@@ -92,7 +103,7 @@ export function OutpostUpdateBanner() {
     >
       <span>
         {outpostBannerHeadline(different, updated)}
-        {!done && updated.filter(row => row.update?.phase !== 'done').map(row => <span key={row.id} className="banner-note"> {row.name}: {outpostUpdateText(row)}</span>)}
+        {!done && <OutpostNotes rows={updated.filter(row => row.update?.phase !== 'done')} text={outpostUpdateText} />}
         {api.outpostCommandError && <span className="banner-note"> {api.outpostCommandError}</span>}
       </span>
       {!!different.length && <button type="button" className="banner-button" disabled={!api.isConnected || busy} onClick={() => different.forEach(row => api.sendUpdateOutpost(row.id))}>{busy ? 'Updating…' : 'Update outposts'}</button>}

@@ -106,6 +106,14 @@ describe('outpost build updates', () => {
     expect(banner()).toHaveTextContent('Updated Studio.');
   });
 
+  it('names outposts updating at the same step together', async () => {
+    await renderApp({ initialState: { ...initial, outposts: [
+      { ...old, update: { phase: 'sending' } },
+      { ...old, id: 'oma', name: 'oma', update: { phase: 'sending' } },
+    ] } });
+    expect(banner()).toHaveTextContent('Updating outposts. Studio and oma: Copying it over.');
+  });
+
   it('stays hidden with no known mismatch or with Outposts off', async () => {
     const view = await renderApp({ initialState: { ...initial, outposts: [{ ...old, build: homeBuild }] } });
     expect(banner()).toBeNull();

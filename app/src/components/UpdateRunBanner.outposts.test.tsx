@@ -26,6 +26,17 @@ describe('update run banner with outposts', () => {
     expect(banner().getByText(/sandbox: Copying it over\./)).toBeTruthy();
   });
 
+  it('names outposts at the same step together', async () => {
+    const view = await renderApp();
+    view.daemon.emit({ event: 'update_changed', run: run({ outposts: [
+      { id: 'a', name: 'sandbox', state: 'staging', detail: 'sending' },
+      { id: 'b', name: 'oma', state: 'staging', detail: 'sending' },
+      { id: 'c', name: 'laptop', state: 'staging', detail: 'verifying' },
+    ] }) });
+    await view.daemon.idle();
+    expect(screen.getByRole('region', { name: 'attn update' })).toHaveTextContent('Getting the update ready. sandbox and oma: Copying it over. laptop: Checking it runs.');
+  });
+
   it('offers Update without it after a staging failure and leaves that outpost out', async () => {
     const view = await renderApp();
     const started: unknown[] = [];

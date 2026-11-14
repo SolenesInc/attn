@@ -52,7 +52,7 @@ removes outposts in Settings. Agents open shells and delegate onto them with
 
 - The home dials each outpost, holds the bridge with heartbeats every 0.5 seconds, marks it stalled after 3 seconds of silence and lost after 60, and redials (`internal/daemon/outposts.go`, `internal/bridge`).
 - With `self_update_enabled` on, an update run stages each reachable outpost before the home restarts and switches it afterwards. The Update run banner and the outpost's row show each outpost, and a staging failure offers **Update without it** (`internal/daemon/update_outposts.go`).
-- After a new home build, the banner offers to update every outpost on a different build. Update builds or downloads, sends, verifies and reconnects on the home's build (`internal/daemon/outpost_update.go`). Outposts on one platform that update at once wait on one build instead of each making their own (`internal/outpostbuild/acquire.go`). The native app's Update run band names the outposts at the same step together.
+- After a new home build, the banner offers to update every outpost on a different build. Update builds or downloads, sends, verifies and reconnects on the home's build (`internal/daemon/outpost_update.go`). Outposts on one platform that update at once wait on one build instead of each making their own (`internal/outpostbuild/acquire.go`). The Outpost updates banner and the Update run banner, in both apps, name the outposts at the same step together.
 - A message or ring to an agent on an unreachable outpost waits at the home and is delivered when the outpost reconnects. See [inbox.md](inbox.md) for delivery.
 
 ## Driving it
