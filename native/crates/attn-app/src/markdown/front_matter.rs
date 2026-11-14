@@ -126,7 +126,11 @@ pub(crate) fn card(yaml: &str, t: &Tokens) -> El {
         .border(1.0, t.border.alpha(0.5))
         .children(entries.into_iter().map(|(key, value)| {
             let value = match value {
-                Value::Text(value) => text(value).font(SMALL).color(t.text_primary).shrink(),
+                Value::Text(value) => text(value)
+                    .font(SMALL)
+                    .color(t.text_primary)
+                    .wrap()
+                    .shrink(),
                 Value::List(items) => {
                     row()
                         .wrap()

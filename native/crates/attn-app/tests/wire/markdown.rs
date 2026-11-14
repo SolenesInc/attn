@@ -647,6 +647,49 @@ fn a_documents_front_matter_shows_as_a_card_of_its_top_level_fields() {
 }
 
 #[test]
+fn a_long_front_matter_value_wraps_inside_its_card() {
+    let mut world = start();
+    let repository = "/srv/checkouts/attn--compare-code-review-prototype/14087774-f9b4-45e0-9633-7747f63a8141/scratchpad/subject";
+    world.daemon.emit(content(&format!(
+        "---\nframe: brief\nrepository: {repository}\n---\n# Body\n"
+    )));
+    world.settle();
+    let screen = world.screen();
+    let [_, _, _, line] = screen
+        .bounds(Target::role("label").name("brief"))
+        .expect("a short value");
+    let [_, _, _, value] = screen
+        .bounds(Target::role("label").name(repository))
+        .expect("the repository value");
+    assert!(
+        value > line * 1.5,
+        "the value is {value} high where a one-line value is {line}: it runs past the card"
+    );
+}
+
+#[test]
+fn a_long_code_line_stays_one_line() {
+    let mut world = start();
+    let long = "plugins/attn-pi/src/driver.ts      PiDriver (620 lines): the contract with the daemon lives here, and every report it sends goes through it";
+    world
+        .daemon
+        .emit(content(&format!("```\nshort\n```\n\n```\n{long}\n```\n")));
+    world.settle();
+    let screen = world.screen();
+    let height = |name: &str| {
+        screen
+            .bounds(Target::role("label").name(name))
+            .unwrap_or_else(|| panic!("{name} is shown"))
+    };
+    let [_, _, _, short] = height("short");
+    let [_, _, _, wide] = height(long);
+    assert!(
+        wide < short * 1.5,
+        "the long line wraps: {wide} high, a short one {short}"
+    );
+}
+
+#[test]
 fn a_details_block_opens_as_its_tag_says_and_a_press_on_its_summary_opens_or_closes_it_through_edits()
  {
     let mut world = start();
