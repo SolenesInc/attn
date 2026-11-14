@@ -66,8 +66,9 @@ func (e *ErrLedgerLimitTooLarge) Error() string {
 }
 
 type SessionClosure struct {
-	Recorded bool
-	Asks     []string
+	Recorded             bool
+	Asks                 []string
+	ReleasedConversation string
 }
 
 func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now time.Time) (SessionClosure, error) {
@@ -114,6 +115,10 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 	if err != nil || !closedNow {
 		return SessionClosure{}, err
 	}
+	released, err := conversationReleasedByTx(tx, id)
+	if err != nil {
+		return SessionClosure{}, fmt.Errorf("close session %s: %w", id, err)
+	}
 	if err := tx.Commit(); err != nil {
 		return SessionClosure{}, fmt.Errorf("close session %s: %w", id, err)
 	}
@@ -122,7 +127,18 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 		s.announceEmptyDesktop(now)
 	}
 	s.forgetSessionCost(id)
-	return SessionClosure{Recorded: true, Asks: asks}, nil
+	return SessionClosure{Recorded: true, Asks: asks, ReleasedConversation: released}, nil
+}
+
+func conversationReleasedByTx(tx *sql.Tx, id protocol.SessionID) (string, error) {
+	var conversation string
+	err := tx.QueryRow(`SELECT closed.resume_session_id FROM sessions AS closed
+		WHERE closed.id = ? AND TRIM(closed.resume_session_id) != ''
+		AND NOT EXISTS (SELECT 1 FROM sessions AS other WHERE other.resume_session_id = closed.resume_session_id AND other.closed_at = '' AND other.id != closed.id)`, id).Scan(&conversation)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return strings.TrimSpace(conversation), err
 }
 
 // closeSessionTx closes an open session's row, unplaces it, finalizes its cost and closes the asks

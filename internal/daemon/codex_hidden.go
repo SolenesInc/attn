@@ -325,9 +325,8 @@ func (r *codexShared) archiveConversation(profile string, closed protocol.Sessio
 	}
 }
 
-func (r *codexShared) sessionClosed(sessionID protocol.SessionID, profile, conversation string) {
-	archive := r.d.store.OtherOpenSessionHolding(conversation, "") == ""
-	if _, err := r.d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(conversation), Archive: protocol.Ptr(archive)}); err != nil {
+func (r *codexShared) sessionClosed(sessionID protocol.SessionID, profile, released string) {
+	if _, err := r.d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released), Archive: protocol.Ptr(released != "")}); err != nil {
 		r.d.logf("machine close archive: %v", err)
 	}
 }

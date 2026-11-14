@@ -2222,35 +2222,42 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) error {
 	if d.unreachableSessionHost(sessionID) != "" {
-		return d.closeSessionRecord(sessionID, closed)
+		_, err := d.closeSessionRecord(sessionID, closed)
+		return err
 	}
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
-		return d.closeSessionRecord(sessionID, closed)
+		_, err := d.closeSessionRecord(sessionID, closed)
+		return err
 	}
 	if err := d.drainAgentBeforeClose(sessionID); err != nil {
 		return err
 	}
 	session := d.store.Get(sessionID)
 	link := d.linkOf(sessionID)
-	if err := d.closeSessionRecord(sessionID, closed); err != nil {
+	closure, err := d.closeSessionRecord(sessionID, closed)
+	if err != nil {
 		return err
 	}
 	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
 		d.logf("machine close: %v", err)
 	}
 	if link != nil && session != nil {
-		profile, conversation := session.ProfileID, d.store.GetSessionConversation(sessionID).NativeID
+		profile, released := session.ProfileID, closure.ReleasedConversation
 		d.life.Go("linkAfterSessionClose", func() {
 			lifecycle := d.sessionLifecycleLockFor(sessionID)
 			lifecycle.Lock()
 			defer lifecycle.Unlock()
-			link.sessionClosed(sessionID, profile, conversation)
+			pausepoint.At(pausepoint.SessionCloseReleasing)
+			if d.store.OtherOpenSessionHolding(released, sessionID) != "" {
+				released = ""
+			}
+			link.sessionClosed(sessionID, profile, released)
 		})
 	}
 	return nil
 }
 
-func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.SessionClose) error {
+func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.SessionClose) (store.SessionClosure, error) {
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
 		d.decorateSessionWithTitle(session)
 		closed.FallbackLabel = protocol.Deref(session.Title)
@@ -2261,7 +2268,7 @@ func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.S
 	return d.recordSessionClose(sessionID, d.store.Get(sessionID), func() (store.SessionClosure, error) { return d.store.CloseSession(sessionID, closed, time.Now()) })
 }
 
-func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *protocol.Session, commit func() (store.SessionClosure, error)) error {
+func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *protocol.Session, commit func() (store.SessionClosure, error)) (store.SessionClosure, error) {
 	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
@@ -2274,7 +2281,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *proto
 	closure, err := commit()
 	if err != nil {
 		d.logf("close session %s: %v", sessionID, err)
-		return err
+		return store.SessionClosure{}, err
 	}
 	unregistered := d.sessionForBroadcast(closing)
 	if _, pending := d.sessionMonitor(sessionID).PendingConversation(); !pending {
@@ -2297,7 +2304,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *proto
 	}
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
-	return nil
+	return closure, nil
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {

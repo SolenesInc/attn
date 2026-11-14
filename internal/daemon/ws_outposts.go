@@ -72,7 +72,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 					<-d.terminateSessionAsync(session.ID, syscall.SIGTERM, closing.teardown)
 				}
 			} else {
-				if err := d.closeSessionRecord(session.ID, closed); err != nil {
+				if _, err := d.closeSessionRecord(session.ID, closed); err != nil {
 					return err
 				}
 			}

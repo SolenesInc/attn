@@ -30,7 +30,7 @@ type linkRuntime interface {
 
 	renamed(sessionID protocol.SessionID, label string)
 	profileReleased(profile string)
-	sessionClosed(sessionID protocol.SessionID, profile, conversation string)
+	sessionClosed(sessionID protocol.SessionID, profile, released string)
 	restore(profile, conversation string) error
 	transcriptPath(path string) string
 

@@ -377,9 +377,9 @@ func userName() string {
 	return "you"
 }
 
-func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conversation string) {
+func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, released string) {
 	declaration := l.b.declaration.Load()
-	if declaration == nil || declaration.OnClose == "leave-running" || conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
+	if declaration == nil || declaration.OnClose == "leave-running" || released == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)
@@ -393,8 +393,8 @@ func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conve
 		return
 	}
 	defer release()
-	if err := c.Call(ctx, "conversation/interrupt", map[string]any{"conversation": conversation}, nil); err != nil {
-		l.logf("interrupting conversation %s of closed session %s: %v", conversation, sessionID, err)
+	if err := c.Call(ctx, "conversation/interrupt", map[string]any{"conversation": released}, nil); err != nil {
+		l.logf("interrupting conversation %s of closed session %s: %v", released, sessionID, err)
 	}
 }
 
