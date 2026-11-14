@@ -142,6 +142,11 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
     }
 }
 
+/// Opens the ledger on the list it was last left on, as the title bar's Open Ledger does.
+pub(crate) fn open_last(state: &mut State, tx: &mut Tx) {
+    open(state, state.window.ledger.tab, tx);
+}
+
 /// Opens the ledger on `tab`, the Sessions list on the filters it was last left with, and reads
 /// what `tab` shows.
 pub(crate) fn open(state: &mut State, tab: Tab, tx: &mut Tx) {

@@ -1051,3 +1051,49 @@ fn tab_reaches_every_button_of_the_sessions_list() {
         Vec::<String>::new()
     );
 }
+
+fn shown_list(world: &World) -> Option<String> {
+    ["sessions", "worktrees", "conversations"]
+        .into_iter()
+        .find(|tab| {
+            world
+                .screen()
+                .find(Target::key(format!("ledger.tab.{tab}")))
+                .is_some_and(|n| n.value.as_deref() == Some("pressed"))
+        })
+        .map(str::to_owned)
+}
+
+#[test]
+fn the_title_bar_opens_the_ledger_and_its_close_button_closes_it() {
+    let mut world = world();
+    assert!(name(&world, "titlebar.ledger").starts_with("Open Ledger ("));
+
+    click(&mut world, "titlebar.ledger");
+    assert_eq!(shown_list(&world).as_deref(), Some("sessions"));
+    assert_eq!(rows(&world), ["api", "docs", "ledger"]);
+
+    click(&mut world, "ledger.close");
+    assert!(!has(&world, "ledger.panel"));
+    assert!(has(&world, "titlebar.ledger"));
+}
+
+#[test]
+fn the_title_bar_opens_the_list_last_shown_and_the_shortcut_opens_sessions() {
+    let mut world = world();
+    world.daemon.on("worktree_list", |r| {
+        serde_json::json!({"event": "worktree_list_result", "request_id": r["request_id"], "success": true, "worktree_list_result": {"worktrees": [], "repositories": [], "omitted": 0}})
+    });
+    click(&mut world, "titlebar.ledger");
+    click(&mut world, "ledger.tab.worktrees");
+    assert_eq!(shown_list(&world).as_deref(), Some("worktrees"));
+
+    open(&mut world);
+    assert!(!has(&world, "ledger.panel"));
+    click(&mut world, "titlebar.ledger");
+    assert_eq!(shown_list(&world).as_deref(), Some("worktrees"));
+
+    open(&mut world);
+    open(&mut world);
+    assert_eq!(shown_list(&world).as_deref(), Some("sessions"));
+}

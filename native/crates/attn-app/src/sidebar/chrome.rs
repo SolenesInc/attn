@@ -297,6 +297,7 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             t,
             crate::garden::toggle_from_icon,
         ),
+        ledger_button(state, t),
         tool(
             "titlebar.commands",
             "Commands",
@@ -325,6 +326,21 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             |state, _| state.window.sidebar_hidden = !state.window.sidebar_hidden,
         ),
     ]
+}
+
+fn ledger_button(state: &State, t: &Tokens) -> El {
+    let keys = state
+        .keymap
+        .binding(&crate::Action::SessionsOpen)
+        .map(|b| format!(" ({})", state.keymap.label(b)))
+        .unwrap_or_default();
+    tool(
+        "titlebar.ledger",
+        &format!("Open Ledger{keys}"),
+        attn_ui::icon::CLOCK,
+        t,
+        crate::ledger::open_last,
+    )
 }
 
 fn tool(
