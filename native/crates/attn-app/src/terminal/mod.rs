@@ -952,6 +952,27 @@ impl Terminals {
         Some((FONT_SIZE * h / metrics.cell_h, h))
     }
 
+    /// Whether terminal `id` has its screen from the daemon, so its output can be read.
+    pub(crate) fn has_output(&self, id: &str) -> bool {
+        self.panes
+            .get(id)
+            .is_some_and(|term| matches!(term.phase, Phase::Live | Phase::Stopped))
+    }
+
+    /// Terminal `id`'s history and screen as text, one line per row.
+    pub(crate) fn text(&mut self, id: &str) -> Option<String> {
+        if !self.has_output(id) {
+            return None;
+        }
+        let vt = &mut self.panes.get_mut(id)?.vt;
+        let cols = vt.size().0;
+        let rows = vt.history() + u32::from(vt.size().1);
+        let lines: Vec<String> = (0..rows)
+            .map(|row| vt.row_text(row, 0..cols).trim_end().to_owned())
+            .collect();
+        Some(lines.join("\n"))
+    }
+
     /// The text of a terminal's screen as the window last drew it, row by row.
     pub fn drawn_text(&self, id: &str) -> Option<Vec<String>> {
         Some(self.panes.get(id)?.grid.text_lines())

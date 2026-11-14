@@ -32,6 +32,8 @@ pub struct World {
     pub daemon: Daemon,
     /// The clipboard the app copies to and pastes from, in place of the system's.
     pub clipboard: rune::clipboard::MemoryClipboard,
+    /// The user's folders the app saves into: `Downloads` and `home` under one temporary folder.
+    files: tempfile::TempDir,
     runtime: Runtime<State>,
     screens: Screens,
     covered: bool,
@@ -203,6 +205,12 @@ impl World {
 
     fn start_with(daemon: Daemon, size: (f32, f32), prefs: rune::prefs::Prefs) -> World {
         attn_app::use_prefs(prefs);
+        let files = tempfile::tempdir().expect("a temporary folder for the user's files");
+        std::fs::create_dir(files.path().join("Downloads")).expect("a Downloads folder");
+        attn_app::use_folders(attn_app::Folders {
+            downloads: Some(files.path().join("Downloads")),
+            home: Some(files.path().join("home")),
+        });
         let store = Store::default();
         let pulse = daemon.pulse();
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
@@ -279,6 +287,7 @@ impl World {
             runtime.update(move |state, _| state.open_tile_windows(opener, main));
         }
         let mut world = World {
+            files,
             daemon,
             clipboard,
             runtime,
@@ -639,6 +648,16 @@ impl World {
     /// keeps instead of opening.
     pub fn opened_links(&mut self) -> Vec<String> {
         self.runtime.take_url_requests()
+    }
+
+    /// The temporary folder that holds the user's `Downloads` and `home`.
+    pub fn files(&self) -> &std::path::Path {
+        self.files.path()
+    }
+
+    /// Gives the app other folders to save into, such as a machine that names no Downloads.
+    pub fn use_folders(&self, folders: attn_app::Folders) {
+        attn_app::use_folders(folders);
     }
 
     /// The paths the app asked the file manager to show since the last call, which a test run

@@ -100,6 +100,11 @@ if [ "$app_shell" = native ]; then
     ATTN_BUILD_INSTANCE="$instance" \
     ATTN_BUILD_WS_PORT="$ws_port" \
     ATTN_BUILD_BUNDLE_ID="$bundle_id" \
+    ATTN_BUILD_VERSION="$VERSION" \
+    ATTN_BUILD_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
+    ATTN_BUILD_SOURCE_DIRTY_PATHS_BASE64="$SOURCE_DIRTY_PATHS_BASE64" \
+    ATTN_BUILD_GIT_COMMIT="$GIT_COMMIT" \
+    ATTN_BUILD_TIME="$BUILD_TIME" \
       cargo build --locked --profile "$native_profile" -p attn-app
   )
   native_profile_dir="$native_profile"

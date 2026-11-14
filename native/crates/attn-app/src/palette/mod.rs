@@ -129,7 +129,13 @@ pub(crate) struct Listing {
 pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
     if matches!(
         state.window.layer,
-        Some(Layer::Settings | Layer::Shortcuts | Layer::ShortcutEditor | Layer::WhatsNew)
+        Some(
+            Layer::Settings
+                | Layer::Shortcuts
+                | Layer::ShortcutEditor
+                | Layer::WhatsNew
+                | Layer::DiagnosticReport
+        )
     ) {
         return;
     }

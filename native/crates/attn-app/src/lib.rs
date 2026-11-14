@@ -9,6 +9,7 @@ mod connection;
 pub mod daemon;
 mod deep_link;
 pub mod desktop;
+mod diagnostic_report;
 mod dispatch;
 mod frame;
 pub mod garden;
@@ -52,7 +53,7 @@ use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 pub use action::{Action, Category};
 pub use deep_link::open_link;
 pub use dispatch::dispatch;
-pub use frame::use_prefs;
+pub use frame::{Folders, use_folders, use_prefs};
 pub use keymap::{Binding, Keymap};
 pub use requests::ReplyInbox;
 pub use shell::{Drawer, Holder, Layer, View, Window};
@@ -85,7 +86,7 @@ pub struct State {
 pub type Menus = Arc<dyn Fn(&Keymap) + Send + Sync>;
 
 impl State {
-    fn wall_ms(&self, tx: &Tx) -> i64 {
+    pub(crate) fn wall_ms(&self, tx: &Tx) -> i64 {
         self.epoch_ms + (tx.clock() * 1000.0) as i64
     }
 
@@ -274,11 +275,13 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let updating = update_run::poll(state, now, tx) | attention::poll(state, now);
     let pointed = callouts::poll(state, tx);
     let greeted = whats_new::greet(state, tx);
+    let reported = diagnostic_report::poll(state, now, tx);
     shell::expire(state, now, tx)
         || settings
         || updating
         || pointed
         || greeted
+        || reported
         || recounted
         || told
         || aged

@@ -106,6 +106,15 @@ pub(crate) fn iso(ms: i64) -> String {
     )
 }
 
+/// `ms` as a file name stamps it: UTC to the second, "20261114-050112Z".
+pub(crate) fn file_stamp(ms: i64) -> String {
+    let t = LocalTime::at_offset(ms, 0);
+    format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}Z",
+        t.year, t.month, t.day, t.hour, t.minute, t.second
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -26,6 +26,7 @@ pub struct Window {
     pub layer: Option<Layer>,
     pub(crate) callout: Option<crate::callouts::Callout>,
     pub(crate) whats_new: crate::whats_new::Tour,
+    pub(crate) diagnostic_report: Option<crate::diagnostic_report::Draft>,
     pub notice: Option<Notice>,
     pub(crate) leader: Option<Leader>,
     /// The tile that takes keys while nothing else in the window has focus. It is apart from
@@ -114,6 +115,8 @@ pub enum Layer {
     CloseDesktop,
     /// The tour of what this release brings; `Window::whats_new` holds it.
     WhatsNew,
+    /// The dialog that saves a diagnostic report; `Window::diagnostic_report` holds it.
+    DiagnosticReport,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -526,6 +529,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::ShortcutEditor) => crate::shortcut_editor::view(state, t, &mut layers),
         Some(Layer::ProfileSwitcher) => layers.extend(crate::profile_switcher::view(state, t)),
         Some(Layer::WhatsNew) => crate::whats_new::dialog(state, t, &mut layers),
+        Some(Layer::DiagnosticReport) => crate::diagnostic_report::dialog(state, t, &mut layers),
         None => {}
     }
     if let Some(leader) = &window.leader {

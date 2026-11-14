@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 
 use attn_automation::{Bounds, WindowBounds, WindowInfo};
 use rune::prefs::Prefs;
@@ -14,6 +15,7 @@ thread_local! {
     static MAIN: RefCell<Option<WindowHandle>> = const { RefCell::new(None) };
     static PREFS: RefCell<Option<Prefs>> = const { RefCell::new(None) };
     static TILES: RefCell<Vec<WindowHandle>> = const { RefCell::new(Vec::new()) };
+    static FOLDERS: RefCell<Folders> = RefCell::new(Folders::default());
 }
 
 /// Opens the main window where it was when it last closed, from the instance's own prefs
@@ -32,10 +34,12 @@ pub(crate) fn restored(app: App<State>, bundle_id: &str) -> App<State> {
         None => app,
     };
     let mut prefs = Some(prefs);
+    let folders = Folders::of_this_machine(bundle_id);
     app.on_window(move |window| {
         if let Some(prefs) = prefs.take() {
             use_prefs(prefs);
         }
+        use_folders(folders.clone());
         MAIN.set(Some(window.clone()));
     })
 }
@@ -66,6 +70,32 @@ pub(crate) fn open_main() {
 /// main window opens, or the store a windowless run gives it.
 pub fn use_prefs(prefs: Prefs) {
     PREFS.set(Some(prefs));
+}
+
+/// The user's folders the app saves files into for them.
+#[derive(Clone, Debug, Default)]
+pub struct Folders {
+    pub downloads: Option<PathBuf>,
+    pub home: Option<PathBuf>,
+}
+
+impl Folders {
+    pub fn of_this_machine(bundle_id: &str) -> Folders {
+        Folders {
+            downloads: rune::dirs::AppDirs::new(bundle_id)
+                .and_then(|dirs| dirs.downloads().map(Path::to_path_buf)),
+            home: rune::dirs::home(),
+        }
+    }
+}
+
+/// Where the app saves files for the user on this thread.
+pub fn use_folders(folders: Folders) {
+    FOLDERS.set(folders);
+}
+
+pub(crate) fn folders() -> Folders {
+    FOLDERS.with_borrow(Folders::clone)
 }
 
 /// The app's own setting `key`, as a string.

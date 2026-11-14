@@ -134,6 +134,17 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         )
         .describe("Replay the intro to profiles, desktops, the queue and the palettes"),
     );
+    commands.push(
+        Command::new(
+            "create-diagnostic-report",
+            "Create diagnostic report",
+            &[
+                "debug", "report", "logs", "dump", "keyboard", "typing", "stuck", "frozen", "error",
+            ],
+            Action::CreateDiagnosticReport,
+        )
+        .describe("Save a private troubleshooting report you can share"),
+    );
     if crate::asks::available(facts) {
         commands.push(
             Command::new(

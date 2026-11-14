@@ -75,6 +75,8 @@ macro_rules! actions {
             OpenAttention,
             /// Replay the tour of what this release brings.
             OpenWhatsNew,
+            /// Save a report for tracing a stuck terminal.
+            CreateDiagnosticReport,
         }
 
         impl Action {
@@ -108,6 +110,7 @@ macro_rules! actions {
                     Action::StartUpdate => "update.start",
                     Action::OpenAttention => "attention.open",
                     Action::OpenWhatsNew => "whatsNew.open",
+                    Action::CreateDiagnosticReport => "diagnosticReport.create",
                 }
             }
 
@@ -138,6 +141,7 @@ macro_rules! actions {
                     Action::StartUpdate => "Update attn",
                     Action::OpenAttention => "Open attention drawer",
                     Action::OpenWhatsNew => "What's new",
+                    Action::CreateDiagnosticReport => "Create diagnostic report",
                 }
             }
 
