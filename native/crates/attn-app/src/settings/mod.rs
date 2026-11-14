@@ -91,6 +91,7 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
         state.window.settings.autosave.ensure(key, &actual, *trim);
     }
     state.window.settings.after_flush = None;
+    hygiene::forget(state);
     state.window.layer = Some(Layer::Settings);
     tx.blur();
     plugins::open(state, tx);
@@ -163,6 +164,11 @@ fn go(state: &mut State, to: Leave, tx: &mut Tx) {
         }
         Leave::Show(_) => {}
     }
+}
+
+/// Forgets the unmutes the lost connection may have dropped, so their rows show again.
+pub(crate) fn disconnected(state: &mut State) {
+    hygiene::forget(state);
 }
 
 /// Takes the daemon's settings into the fields the user has not changed, and reads the tasks

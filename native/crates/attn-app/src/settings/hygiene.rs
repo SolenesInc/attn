@@ -21,12 +21,17 @@ const QUIET_NOTIFICATIONS: &str = "queue_quiet_notifications";
 const HIDDEN_SESSIONS: &str = "queue_show_hidden_sessions";
 const CREW: &str = "queue_crew_enabled";
 
-/// Names the user unmuted, hidden until the daemon reports them unmuted or gone: its mute
-/// commands toggle, so a second press on a row still shown would mute it again.
+/// Unmutes the live connection took, hidden until the daemon reports them unmuted or gone, the
+/// connection drops, or the dialog opens again: the daemon's mute commands toggle, so a second
+/// press on a row still shown would mute it again.
 #[derive(Default)]
 pub(super) struct Hygiene {
     unmuting_repos: BTreeSet<String>,
     unmuting_authors: BTreeSet<String>,
+}
+
+pub(super) fn forget(state: &mut State) {
+    state.window.settings.hygiene = Hygiene::default();
 }
 
 pub(super) fn poll(state: &mut State) {
@@ -65,35 +70,45 @@ fn muted_authors(state: &State) -> Vec<String> {
 }
 
 fn unmute_repo(state: &mut State, repo: &str) {
-    if !state
-        .window
-        .settings
-        .hygiene
-        .unmuting_repos
-        .insert(repo.to_owned())
-    {
+    if state.window.settings.hygiene.unmuting_repos.contains(repo) {
         return;
     }
-    let _ = state.daemon.send(&MuteRepoMessage {
+    let sent = state.daemon.send(&MuteRepoMessage {
         repo: repo.to_owned(),
         ..MuteRepoMessage::new()
     });
+    if sent.is_ok() {
+        state
+            .window
+            .settings
+            .hygiene
+            .unmuting_repos
+            .insert(repo.to_owned());
+    }
 }
 
 fn unmute_author(state: &mut State, author: &str) {
-    if !state
+    if state
         .window
         .settings
         .hygiene
         .unmuting_authors
-        .insert(author.to_owned())
+        .contains(author)
     {
         return;
     }
-    let _ = state.daemon.send(&MuteAuthorMessage {
+    let sent = state.daemon.send(&MuteAuthorMessage {
         author: author.to_owned(),
         ..MuteAuthorMessage::new()
     });
+    if sent.is_ok() {
+        state
+            .window
+            .settings
+            .hygiene
+            .unmuting_authors
+            .insert(author.to_owned());
+    }
 }
 
 fn muted_list(

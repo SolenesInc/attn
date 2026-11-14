@@ -154,6 +154,7 @@ pub fn bind(
             state.facts = facts;
             if was && !is {
                 requests::forget(state, tx);
+                settings::disconnected(state);
             }
             if !was && is {
                 picker::reconnected(state, tx);
