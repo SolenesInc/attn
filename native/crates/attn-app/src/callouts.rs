@@ -213,7 +213,7 @@ fn show(state: &mut State, request: CalloutShowRequestMessage, tx: &mut Tx) {
     };
     state.window.callout = Some(callout);
     reveal(state, tx);
-    tx.focus(CARD, false);
+    take_keys(state, tx);
 }
 
 /// Another layer holds the window, so a callout would sit under it.
@@ -257,7 +257,7 @@ fn advance(state: &mut State, tx: &mut Tx) {
     if !callout.last() {
         callout.index += 1;
         reveal(state, tx);
-        tx.focus(CARD, false);
+        take_keys(state, tx);
         return;
     }
     let step = callout.step().clone();
@@ -291,7 +291,8 @@ fn pressed_outside(state: &mut State, tx: &mut Tx) {
     }
 }
 
-fn pressed_card(state: &mut State, tx: &mut Tx) {
+/// The card has the keyboard again: shown, stepped or pressed.
+fn take_keys(state: &mut State, tx: &mut Tx) {
     if let Some(callout) = &mut state.window.callout {
         callout.released = false;
         tx.focus(CARD, false);
@@ -441,7 +442,7 @@ fn card(callout: &Callout, unanchored: bool, t: &Tokens) -> El {
         .focusable(true)
         .no_focus_ring()
         .on_key(on_key)
-        .on_press_tx(pressed_card)
+        .on_press_tx(take_keys)
         .on_press_outside(pressed_outside)
         .w(CARD_WIDTH)
         .padding(space::S3)

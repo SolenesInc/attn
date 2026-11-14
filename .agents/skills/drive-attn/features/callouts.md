@@ -65,7 +65,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) answers callouts as the Tauri app does. The card, `callout`, is a dialog named "Callout from <agent>". It holds `callout.count` ("<i> of <n>"), `callout.text`, `callout.next` named "↵ Next", "↵ Done" or "↵ Go there", and `callout.end` named "End callout". A step whose anchor is not on screen shows `callout.unanchored`. The ring, `callout.ring`, is drawn but not in the accessibility tree, so `bridge tree` does not list it; see it in a `bridge shot`. The card takes the keyboard when it shows. `crew` is never on screen, because the native app has no crew section yet.
+The native app (`native/`) answers callouts as the Tauri app does. The card, `callout`, is a dialog named "Callout from <agent>". It holds `callout.count` ("<i> of <n>"), `callout.text`, `callout.next` named "↵ Next", "↵ Done" or "↵ Go there", and `callout.end` named "End callout". A step whose anchor is not on screen shows `callout.unanchored`. The ring, `callout.ring`, is drawn but not in the accessibility tree, so `bridge tree` does not list it; see it in a `bridge shot`. The card takes the keyboard when it shows, and when it ends nothing has focus, so keys go to the window and the terminal holding it. The native app draws tiles and the card in one window, so no tile hides while a callout shows. `crew` is never on screen, because the native app has no crew section yet.
 
 Preconditions:
 
@@ -75,9 +75,9 @@ Preconditions:
 Steps:
 
 - **List anchors.** Send `list-anchors`. Peek lists `sidebar`, `home`, `commands`, `garden`, `asks`, `desktops` and `settings-button` on screen on home in desktop flow.
-- **Show a tour and step through it.** Send `point-tour`, then `bridge wait '{"target":{"key":"callout","name":"Callout from co-agent"}}'`. `callout.count` reads "1 of 3". Press `Enter`, then `Right`: `callout.text` reads "Your first desktop" and `callout.next` is named "↵ Go there". Press `Enter`: `callout` goes and the window shows desktop 1.
+- **Show a tour and step through it.** Press `mod+2` first, so the window is not on desktop 1. Send `point-tour`, then `bridge wait '{"target":{"key":"callout","name":"Callout from co-agent"}}'`. `callout.count` reads "1 of 3". Press `Enter`, then `Right`: `callout.text` reads "Your first desktop" and `callout.next` is named "↵ Go there". Press `Enter`: `callout` goes and the window shows desktop 1.
 - **Point at an agent.** Send `point-agent`: the card shows beside `sidebar.session.co-shell`. Press `Enter`: the callout ends and the shell's desktop shows.
-- **End it.** Show `point-garden` and press `Escape`: `callout` goes. Show it and press `callout.end`; show it and press anywhere outside the card: each ends it. Show `point-tour`, open the palette and close it: the card comes back on the same step. Press outside it: the card stays, and `Enter` goes to the window until you press the card.
+- **End it.** Show `point-garden` and press `Escape`: `callout` goes. Show it and press `callout.end` (`bridge press '{"target":{"key":"callout.end"}}'`); show a one-step callout on `sidebar` and press `sidebar.home` beside it: each ends it. The garden card sits over the top of the sidebar, so a press aimed at `sidebar.home` then lands on the card. Show `point-tour`, open the palette with `mod+alt+k` and close it with `Escape`: the card comes back on the same step with the keyboard. Press `sidebar.home`: the card stays, and `Enter` goes to the window until you press `callout.text`.
 - **A missing anchor refuses the whole callout.** Send `point-queue` in desktop flow: peek shows `not on screen: queue`, and no card shows.
 - **Proof.** In `$P`, keep peek after each agent call, `bridge tree` with the card open, and `bridge shot '{"path":"<P>/native-callout-tour.png"}'` on the first step and `<P>/native-callout-agent.png` with the agent ring, with `<P>` written out.
 
@@ -86,18 +86,17 @@ Steps:
 - **Durability across restarts**: a showing callout ends when the app relaunches, and attn does not tell the agent.
 - **Linux**: `attn callout` works the same where the daemon and CLI run on Linux. It needs an app showing the profile, wherever that app runs.
 - **Profiles**: a callout reaches only an app showing the caller's profile. `agent:` and `desktop:` resolve only in that profile, so another profile's agent is refused as `is not an agent in your profile`. A profile switch ends the callout.
-- **Performance and idle cost**: an open card runs no animations once placed (`callouts` checks it). A browser tile hides while a callout shows and returns when the callout ends.
+- **Performance and idle cost**: an open card runs no animations once placed (`callouts` checks it). In the Tauri app, a browser tile hides while a callout shows and returns when the callout ends.
 - **Harnesses**: every harness points with the same `attn callout` verbs and reads the same reference.
-- **Keyboard and native input**: Enter, → and Esc drive the card, and any shortcut that opens another overlay ends a one-step callout and hides a longer one until the overlay closes. Focus goes back where it was when the card ends, so typing reaches the terminal again.
+- **Keyboard and native input**: Enter, → and Esc drive the card, and any shortcut that opens another overlay ends a one-step callout and hides a longer one until the overlay closes. When the card ends, typing reaches the terminal again: the Tauri app gives the terminal focus back, and the native app leaves nothing focused.
 - **Flow**: which fixed anchors are on screen follows the sidebar's shape. `queue` is there only in queue flow. With the queue bar or the collapsed sidebar, `sidebar` and `desktops` point at the strip, and an agent step reveals the agent list when it can.
 
 ## Tests
 
-- Wire: `internal/daemon/callouts_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/callouts.rs` (the native app), `internal/daemon/callouts_wire_test.go`.
 - Stack: `cmd/attnd/callout_stack_test.go`.
 - Scenario: `callouts`.
 - App: `app/src/App.callouts.test.tsx`.
-- Native wire: `native/crates/attn-app/tests/wire/callouts.rs`.
 
 ## Gotchas
 

@@ -277,6 +277,25 @@ fn a_tour_waits_under_another_layer_and_gives_keys_back_after_a_press_elsewhere(
     key(&mut world, Key::Enter);
     assert_eq!(card(&world).as_deref(), Some("Second"));
 
+    show(
+        &mut world,
+        "next",
+        vec![
+            step("commands", "One"),
+            step("garden", "Two"),
+            step("home", "Three"),
+        ],
+    );
+    press_elsewhere(&mut world);
+    click(&mut world, "callout.next");
+    assert_eq!(card(&world).as_deref(), Some("Two"));
+    key(&mut world, Key::Enter);
+    assert_eq!(
+        card(&world).as_deref(),
+        Some("Three"),
+        "the Next button gives the card the keys back"
+    );
+
     show(&mut world, "single", vec![step("sidebar", "Only")]);
     world.gesture(|app| app.key(chord(Action::UiCommandPalette)));
     key(&mut world, Key::Escape);
