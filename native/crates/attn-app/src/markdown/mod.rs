@@ -17,7 +17,7 @@ use std::rc::Rc;
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{radius, space, type_};
 use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
-use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle};
+use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
 
 use crate::State;
 
@@ -175,7 +175,7 @@ pub(crate) fn seed_reader(
 pub(crate) fn reader(
     source: &str,
     document: Document,
-    pictures: Rc<HashMap<String, Image>>,
+    pictures: Rc<HashMap<String, Option<Image>>>,
     kept: annotating::Kept,
     marking: Option<Marking>,
     t: &Tokens,
@@ -189,6 +189,7 @@ pub(crate) fn reader(
         document.view = format!("{}/{root}", document.view);
     }
     let path = document.path.clone();
+    let named_path = path.clone();
     let verdict = {
         let path = document.path.clone();
         let outpost = document.outpost.as_ref().map(|o| o.name.clone());
@@ -212,13 +213,27 @@ pub(crate) fn reader(
             links::follow(state, &document, href, tx)
         })
         .link_help(move |href| help(href).help)
+        .missing_image_frame({
+            let (path, pictures, t) = (named_path, pictures.clone(), *t);
+            move |_, image| {
+                let failed = match links::resolve(&path, image.src) {
+                    Some(links::Target::Local(file))
+                        if !path.is_empty() && links::is_image(&file) =>
+                    {
+                        Some(matches!(pictures.get(&file), Some(None)))
+                    }
+                    _ => None,
+                };
+                missing(image, failed, &t)
+            }
+        })
         .images(move |src| match links::resolve(&path, src) {
-            Some(links::Target::Local(file)) => pictures.get(&file).cloned(),
+            Some(links::Target::Local(file)) => pictures.get(&file).cloned().flatten(),
             _ => None,
         })
         .diagram_frame({
             let t = *t;
-            move |card, frame| leaves_out(card, frame, &t)
+            move |card, frame| leaves_out(framed(card, frame, &t), frame, &t)
         })
         .diagram_source_frame({
             let t = *t;
@@ -283,9 +298,10 @@ fn details_order(source: &str) -> Rc<dyn Fn(usize) -> usize> {
 }
 
 /// The Tauri reader's type and marks (MarkdownReader.css): 15 point paragraphs, 22, 19 and 16
-/// point headings, 13 point code that keeps its lines whole and scrolls sideways, tables at
-/// their columns' natural widths, and round task checkboxes.
-fn look(t: &Tokens) -> MarkdownStyle {
+/// point headings, 14 point list items with their markers in the accent, 13 point code that
+/// keeps its lines whole and scrolls sideways, tables at their columns' natural widths, and
+/// round task checkboxes.
+pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     let kit = attn_ui::kit(t);
     let body = TextStyle {
         size: 15.0,
@@ -304,6 +320,13 @@ fn look(t: &Tokens) -> MarkdownStyle {
         .heading_font(2, heading(19.0, 600.0, 26.6))
         .heading_font(3, heading(16.0, 600.0, 24.8))
         .heading_font(4, heading(16.0, 600.0, 24.8))
+        .deep_heading(t.text_primary)
+        .list_font(TextStyle {
+            size: 14.0,
+            line_height: 22.75,
+            ..body
+        })
+        .list_marker(t.accent.alpha(0.6))
         .inline_code_font(14.0 / 15.0, 400.0)
         .code_block_font(TextStyle {
             size: 13.0,
@@ -325,6 +348,36 @@ fn look(t: &Tokens) -> MarkdownStyle {
             Color::TRANSPARENT,
             t.text_secondary.alpha(0.5),
         )
+}
+
+/// An image with no picture to show, in the Tauri reader's words: for a document's local file,
+/// missing when its read `failed` and loading until then; blocked for anything else.
+fn missing(image: &MissingImage<'_>, failed: Option<bool>, t: &Tokens) -> El {
+    let named = if image.alt.is_empty() {
+        image.src.rsplit('/').next().unwrap_or(image.src)
+    } else {
+        image.alt
+    };
+    let words = match failed {
+        Some(true) => format!("[missing image: {named}]"),
+        Some(false) => format!("[loading image: {named}]"),
+        None => {
+            let named = [image.alt, image.src]
+                .into_iter()
+                .find(|s| !s.is_empty())
+                .unwrap_or("unknown source");
+            format!("[blocked image: {named}]")
+        }
+    };
+    text(words)
+        .font(TextStyle {
+            size: 15.0,
+            line_height: 24.4,
+            italic: true,
+            ..attn_ui::kit(t).ty.body
+        })
+        .color(t.text_tertiary)
+        .wrap()
 }
 
 /// `source` as the reader reads it, which a mark's passage is found in.
@@ -377,6 +430,73 @@ fn not_drawn(source: El, t: &Tokens) -> El {
                 .color(t.error),
         )
         .child(source)
+}
+
+/// The widest a diagram's card draws in a document, the kit's default.
+const DIAGRAM_ROOM: f32 = 680.0;
+/// A diagram whose card would draw it smaller than this share of its natural size shows at its
+/// natural size instead, scrolling, as the Tauri reader's `OVERSIZED_FIT_RATIO` does.
+const LEAST_FIT: f32 = 0.8;
+/// The tallest a large diagram's scroll box grows, as the Tauri reader's `min(52vh, 410px)`.
+const LARGE_HEIGHT: f32 = 410.0;
+
+/// A diagram as the Tauri reader frames it: a `diagram` bar over its card, and a diagram too
+/// wide to read fitted shows at its natural size in a box that scrolls, its bar saying so and
+/// offering to focus it, which opens it over the window to zoom and pan.
+fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
+    let style = look(t);
+    let large = (!frame.open)
+        .then(|| rune_kit::mermaid::drawing(frame.source, &style, DIAGRAM_ROOM))
+        .flatten()
+        .filter(|fitted| fitted.scale < LEAST_FIT)
+        .and_then(|_| rune_kit::mermaid::drawing(frame.source, &style, images::NATURAL));
+    let label = text("diagram")
+        .font(TextStyle {
+            size: 11.0,
+            line_height: 16.0,
+            tracking: 0.2,
+            ..attn_ui::kit(t).ty.mono
+        })
+        .color(t.text_tertiary);
+    let Some(drawing) = large else {
+        return col().w_full().gap(space::S1).child(label).child(card);
+    };
+    let source = frame.source.to_owned();
+    let bar = rune::row()
+        .w_full()
+        .items_center()
+        .gap(space::S2)
+        .child(label.grow(1.0))
+        .child(
+            rune::row()
+                .items_center()
+                .gap(space::S1)
+                .child(rune::el().size(6.0, 6.0).radius(3.0).fill(t.warning))
+                .child(
+                    text("Large diagram · 100%")
+                        .font(TextStyle::new(11.0, 400.0))
+                        .color(t.text_tertiary),
+                ),
+        )
+        .child(
+            rune_kit::Button::new("Focus diagram")
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    images::show_diagram(state, &source, tx)
+                })
+                .build(attn_ui::kit(t))
+                .key("focus"),
+        );
+    let scrolled = col()
+        .key("large")
+        .w_full()
+        .max_h(LARGE_HEIGHT)
+        .padding(16.0)
+        .radius(radius::MD)
+        .border(1.0, drawing.surface_border)
+        .fill(drawing.surface)
+        .scroll_xy()
+        .child(drawing.el);
+    col().w_full().gap(space::S1).child(bar).child(scrolled)
 }
 
 /// A drawn diagram, with what it leaves out because it cannot read it said under it.

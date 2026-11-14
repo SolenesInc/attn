@@ -489,15 +489,15 @@ fn a_documents_local_images_show_through_the_daemon_and_open_larger() {
         .filter(|n| n.role == "image")
         .map(|n| n.name.unwrap_or_default())
         .collect();
-    assert_eq!(pictures, ["chart", "gone", "script", "remote"]);
-
-    world.gesture(|app| app.click(Target::role("image").name("gone")));
-    assert!(
-        world
-            .screen()
-            .find(Target::key("image-preview.picture"))
-            .is_none()
-    );
+    assert_eq!(pictures, ["chart"]);
+    let shown = shown(&world);
+    for words in [
+        "[missing image: gone]",
+        "[blocked image: script]",
+        "[blocked image: remote]",
+    ] {
+        assert!(shown.iter().any(|t| t == words), "{words}: {shown:?}");
+    }
 
     world.gesture(|app| app.click(Target::role("image").name("chart")));
     let preview = world.screen().get(Target::key("image-preview.picture"));
@@ -524,6 +524,44 @@ fn a_documents_local_images_show_through_the_daemon_and_open_larger() {
 
 /// An 8×2 green PNG.
 const GREEN: &str = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAACCAIAAADq9gq6AAAAEElEQVR4nGNg+M+AHeGSAACOsQ/xb1SVcwAAAABJRU5ErkJggg==";
+
+#[test]
+fn an_image_that_failed_stays_missing_until_its_document_changes() {
+    let mut world = start();
+    world.daemon.on("tile_asset_read", |r| {
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: false,
+            error: Some("no such file".to_owned()),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.daemon.emit(content("![gone](img/gone.png)\n"));
+    world.settle();
+    world.daemon.emit(content("![gone](img/gone.png)\n"));
+    world.settle();
+    assert_eq!(world.daemon.sent_of("tile_asset_read").len(), 1);
+    assert!(shown(&world).iter().any(|t| t == "[missing image: gone]"));
+
+    world
+        .daemon
+        .emit(content("![gone](img/gone.png)\n\nNow written.\n"));
+    world.settle();
+    assert_eq!(world.daemon.sent_of("tile_asset_read").len(), 2);
+}
+
+#[test]
+fn an_image_says_it_is_loading_until_the_daemon_answers() {
+    let mut world = start();
+    world.daemon.emit(content("![chart](img/chart.png)\n"));
+    world.settle();
+    let shown = shown(&world);
+    assert!(
+        shown.iter().any(|t| t == "[loading image: chart]"),
+        "{shown:?}"
+    );
+}
 
 #[test]
 fn a_reopened_document_shows_its_image_as_the_file_is_now() {
@@ -755,6 +793,48 @@ fn a_diagram_that_draws_without_a_statement_it_cannot_read_says_which() {
         1
     );
     rest(&mut world);
+}
+
+#[test]
+fn a_diagram_too_wide_to_read_fitted_shows_at_its_size_and_opens_over_the_window() {
+    let mut world = start();
+    world.daemon.emit(content(
+        "```mermaid\nflowchart LR\n  A --> B\n```\n\n```mermaid\nsequenceDiagram\n  participant B as Browser on a laptop\n  participant E as Edge cache in front\n  participant A as Auth service cluster\n  participant P as Payments API server\n  participant W as Billing worker pool\n  participant S as Search index shard\n  participant L as Long-running audit log\n  B->>E: a request arrives at the edge\n  E->>A: is this session token still valid?\n  A-->>E: yes\n  E->>P: forward the call\n  P->>W: enqueue the invoice\n  W->>S: index it\n  W->>L: record the change\n```\n",
+    ));
+    world.settle();
+    let shown = shown(&world);
+    let labels = shown.iter().filter(|t| *t == "diagram").count();
+    assert_eq!(labels, 2, "each diagram has its bar: {shown:?}");
+    let large =
+        |world: &World, name: &str| world.screen().all(Target::role("label").name(name)).len();
+    assert_eq!(
+        large(&world, "Large diagram · 100%"),
+        1,
+        "only the wide one"
+    );
+    assert_eq!(
+        world
+            .screen()
+            .all(Target::role("button").name("Focus diagram"))
+            .len(),
+        1
+    );
+
+    world.gesture(|app| app.click(Target::role("button").name("Focus diagram")));
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("diagram-preview.drawing"))
+            .is_some()
+    );
+    escape(&mut world);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("diagram-preview.drawing"))
+            .is_none()
+    );
 }
 
 #[test]

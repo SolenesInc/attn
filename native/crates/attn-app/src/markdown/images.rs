@@ -9,7 +9,8 @@ use attn_protocol::{
 };
 use base64::Engine;
 use pulldown_cmark::{Event, Parser, Tag};
-use rune::{El, Image, ImageCache, Tx, el};
+use rune::tok::radius;
+use rune::{El, Icon, Image, ImageCache, Tx, el};
 use rune_kit::{ImageZoom, Preview, image_zoom};
 
 use super::links::{self, Target};
@@ -72,10 +73,25 @@ pub struct Pictures {
     window: [f32; 2],
 }
 
-struct Shown {
-    image: Image,
-    alt: String,
+/// What is open larger over the window.
+enum Shown {
+    Image { image: Image, alt: String },
+    Diagram { source: String },
 }
+
+/// The width a diagram drawn at its natural size is laid out for: more than any draws.
+pub(crate) const NATURAL: f32 = 1.0e6;
+
+static ZOOM_OUT: Icon = Icon {
+    name: "zoom-out",
+    view: 20.0,
+    body: r#"<rect x="5" y="9.5" width="10" height="1" fill="currentColor"/>"#,
+};
+static ZOOM_IN: Icon = Icon {
+    name: "zoom-in",
+    view: 20.0,
+    body: r#"<rect x="5" y="9.5" width="10" height="1" fill="currentColor"/><rect x="9.5" y="5" width="1" height="10" fill="currentColor"/>"#,
+};
 
 impl Pictures {
     /// Decodes on worker threads that call `wake` when a picture is ready.
@@ -95,26 +111,34 @@ impl Pictures {
         self.loads.values().any(|l| matches!(l, Load::Decoding(..)))
     }
 
-    /// The ready pictures of a document on `host`, by the paths its images resolve to.
-    pub(crate) fn of(&self, host: Option<&str>) -> Rc<HashMap<String, Image>> {
-        self.read_by(&Reader::Tile {
+    /// The pictures of a document on `host`, by the paths its images resolve to: the one each
+    /// shows, or `None` for an image that could not be read. An image still loading for the
+    /// first time is not there.
+    pub(crate) fn of(&self, host: Option<&str>) -> Rc<HashMap<String, Option<Image>>> {
+        Rc::new(self.read_by(&Reader::Tile {
             host: host.map(str::to_owned),
-        })
+        }))
     }
 
     /// The ready pictures of ask `ask`, by the paths its images resolve to.
     pub(crate) fn of_ask(&self, ask: &str) -> Rc<HashMap<String, Image>> {
-        self.read_by(&Reader::Ask(ask.to_owned()))
-    }
-
-    fn read_by(&self, reader: &Reader) -> Rc<HashMap<String, Image>> {
         Rc::new(
-            self.loads
-                .iter()
-                .filter(|(source, _)| source.reader == *reader)
-                .filter_map(|(source, load)| Some((source.path.clone(), load.shown()?.clone())))
+            self.read_by(&Reader::Ask(ask.to_owned()))
+                .into_iter()
+                .filter_map(|(path, image)| Some((path, image?)))
                 .collect(),
         )
+    }
+
+    fn read_by(&self, reader: &Reader) -> HashMap<String, Option<Image>> {
+        self.loads
+            .iter()
+            .filter(|(source, _)| source.reader == *reader)
+            .filter_map(|(source, load)| match load {
+                Load::Failed => Some((source.path.clone(), None)),
+                _ => Some((source.path.clone(), Some(load.shown()?.clone()))),
+            })
+            .collect()
     }
 }
 
@@ -205,8 +229,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
             .loads
             .retain(|source, _| wanted.contains(source));
         for source in wanted {
-            let unread = matches!(state.pictures.loads.get(&source), None | Some(Load::Failed));
-            if unread || changed.contains(&source) {
+            if !state.pictures.loads.contains_key(&source) || changed.contains(&source) {
                 read(state, source, tx);
             }
         }
@@ -306,9 +329,18 @@ fn decoded(data_uri: &str) -> Option<Vec<u8>> {
 /// Opens `image` larger, over the window.
 pub(crate) fn show(state: &mut State, image: Image, alt: &str, tx: &mut Tx) {
     state.pictures.zoom.reset();
-    state.pictures.shown = Some(Shown {
+    state.pictures.shown = Some(Shown::Image {
         image,
         alt: alt.to_owned(),
+    });
+    tx.focus(image_zoom::KEY, false);
+}
+
+/// Opens the diagram `source` draws over the window, at its natural size, to zoom and pan.
+pub(crate) fn show_diagram(state: &mut State, source: &str, tx: &mut Tx) {
+    state.pictures.zoom.reset();
+    state.pictures.shown = Some(Shown::Diagram {
+        source: source.to_owned(),
     });
     tx.focus(image_zoom::KEY, false);
 }
@@ -326,30 +358,45 @@ pub(crate) fn over(root: El, state: &State, reduced_motion: bool, t: &attn_ui::T
 }
 
 fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<El> {
-    let shown = state.pictures.shown.as_ref()?;
-    let [w, h] = shown.image.size()?;
-    let label = if shown.alt.is_empty() {
-        "Image preview"
-    } else {
-        shown.alt.as_str()
+    fn lens(s: &mut State) -> &mut ImageZoom {
+        &mut s.pictures.zoom
+    }
+    let preview = match state.pictures.shown.as_ref()? {
+        Shown::Image { image, alt } => {
+            let [w, h] = image.size()?;
+            let label = if alt.is_empty() {
+                "Image preview"
+            } else {
+                alt.as_str()
+            };
+            let picture = el()
+                .key("image-preview.picture")
+                .role("image")
+                .label(label)
+                .pixels(image.pixels());
+            Preview::new(lens, [w as f32, h as f32], picture)
+        }
+        Shown::Diagram { source } => {
+            let drawing = rune_kit::mermaid::drawing(source, &super::look(t), NATURAL)?;
+            let drawn = el()
+                .key("diagram-preview.drawing")
+                .size(drawing.size[0], drawing.size[1])
+                .radius(radius::MD)
+                .border(1.0, drawing.surface_border)
+                .fill(drawing.surface)
+                .child(drawing.el);
+            Preview::new(lens, drawing.size, drawn).scale_content()
+        }
     };
-    let picture = el()
-        .key("image-preview.picture")
-        .role("image")
-        .label(label)
-        .pixels(shown.image.pixels());
-    let preview = Preview::new(
-        |s: &mut State| &mut s.pictures.zoom,
-        [w as f32, h as f32],
-        picture,
-    )
-    .on_close(|s: &mut State, _| s.pictures.shown = None)
-    .build(
-        &state.pictures.zoom,
-        attn_ui::kit(t),
-        state.pictures.window,
-        reduced_motion,
-    );
+    let preview = preview
+        .icons(&ZOOM_OUT, &ZOOM_IN)
+        .on_close(|s: &mut State, _| s.pictures.shown = None)
+        .build(
+            &state.pictures.zoom,
+            attn_ui::kit(t),
+            state.pictures.window,
+            reduced_motion,
+        );
     Some(
         el().key("image-preview.scrim")
             .absolute(0.0, 0.0)
