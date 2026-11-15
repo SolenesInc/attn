@@ -125,5 +125,5 @@ if [ "$total" -gt "$budget_kib" ]; then
   echo "native-build-clean: still over the budget of $(gib "$budget_kib"): every build left is in use or recent; raise ATTN_NATIVE_BUILD_BUDGET_MIB or free a checkout" >&2
 fi
 if [ "$free" -lt "$floor_kib" ]; then
-  echo "native-build-clean: the disk is still under its free-space floor of $(gib "$floor_kib"): every native build left is in use; free space elsewhere or lower ATTN_NATIVE_BUILD_FREE_FLOOR_MIB" >&2
+  echo "native-build-clean: the disk is still under its free-space floor of $(gib "$floor_kib"): no native build left can go; free space elsewhere or lower ATTN_NATIVE_BUILD_FREE_FLOOR_MIB" >&2
 fi
