@@ -68,7 +68,9 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         TilePopOut => super::windows::toggle(state, tx),
         TerminalFind => find(state, tx),
         MarkdownSendAnnotations => {
-            crate::markdown::sending::send_key(state, tx);
+            if !crate::review::open_send(state, tx) {
+                crate::markdown::sending::send_key(state, tx);
+            }
             return true;
         }
         TerminalSendAnnotations => {

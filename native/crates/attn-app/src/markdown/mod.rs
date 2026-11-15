@@ -180,6 +180,7 @@ pub(crate) fn body(
                 std::hash::Hasher::finish(&h)
             }),
             marking,
+            drafts.get(&uri).map_or(&[][..], |d| &d.marks[..]),
             t,
         );
     }

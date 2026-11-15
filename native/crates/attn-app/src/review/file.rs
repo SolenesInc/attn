@@ -192,7 +192,7 @@ pub(super) fn view(
     tile: &str,
     file: &OpenFile,
     (depth, stage): (usize, bool),
-    notes: &[&ReviewNote],
+    (notes, marks): (&[&ReviewNote], Vec<El>),
     colors: Option<Rc<Colors>>,
     t: &Tokens,
 ) -> El {
@@ -247,6 +247,7 @@ pub(super) fn view(
         .iter()
         .filter(|n| line.is_some_and(|l| n.now_from > 0 && l >= n.now_from && l <= n.now_to))
         .map(|n| super::stop::note(n, t))
+        .chain(marks)
         .collect();
     let strip = (!strip.is_empty()).then(|| {
         col()

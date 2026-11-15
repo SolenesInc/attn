@@ -192,7 +192,7 @@ impl Draft {
         self.unplaced = false;
         let (mut painted, mut orphans, mut moved) = (Vec::new(), Vec::new(), false);
         for mark in &mut self.marks {
-            let Some(anchor) = mark.anchor.as_ref() else {
+            let Some(anchor) = mark.anchor.as_ref().filter(|a| a.file.is_none()) else {
                 continue;
             };
             let found = match passages.blocks.resolve(anchor) {
@@ -464,11 +464,32 @@ pub(crate) fn save_now(state: &mut State, uri: &str, tx: &mut Tx) {
     save(state, uri, true, tx);
 }
 
+/// What a review document's send carries beyond the plain one: the marks to send alone, as a
+/// question goes at once; the verdict, as the review goes; and its marks whose lines moved.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Review {
+    pub(crate) only_ids: Option<Vec<String>>,
+    pub(crate) verdict: Option<String>,
+    pub(crate) moved: Vec<String>,
+}
+
 /// Sends document `uri`'s draft where `to` says, telling `done` how it went.
 pub(crate) fn submit(
     state: &mut State,
     uri: &str,
     to: To,
+    done: impl FnOnce(&mut State, Sent, &mut Tx) + 'static,
+    tx: &mut Tx,
+) {
+    submit_review(state, uri, to, Review::default(), done, tx);
+}
+
+/// As `submit`, for a review document's send.
+pub(crate) fn submit_review(
+    state: &mut State,
+    uri: &str,
+    to: To,
+    review: Review,
     done: impl FnOnce(&mut State, Sent, &mut Tx) + 'static,
     tx: &mut Tx,
 ) {
@@ -486,7 +507,18 @@ pub(crate) fn submit(
     save(state, uri, true, tx);
     let draft = &state.drafts.drafts[uri];
     let (source_kind, path, host, seed_id) = draft.source.fields();
-    let orphaned_ids = Some(draft.orphans.clone()).filter(|o| !o.is_empty());
+    let orphaned_ids = Some(
+        draft
+            .orphans
+            .iter()
+            .chain(&review.moved)
+            .cloned()
+            .collect::<Vec<_>>(),
+    )
+    .filter(|o| !o.is_empty());
+    let Review {
+        only_ids, verdict, ..
+    } = review;
     let (target_session_id, target_seed_id) = match to {
         To::Session(id) => (Some(id), None),
         To::Seed(id) => (None, Some(id)),
@@ -503,6 +535,8 @@ pub(crate) fn submit(
             target_session_id,
             target_seed_id,
             orphaned_ids,
+            only_ids,
+            verdict,
             ..MarkdownAnnotationsSubmitMessage::new()
         },
         move |state, answer, tx| {

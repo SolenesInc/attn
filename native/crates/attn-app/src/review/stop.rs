@@ -47,7 +47,8 @@ pub(super) fn stop(
     key: &str,
     stop: &ReviewStop,
     rows: &[ReviewRow],
-    cursor: Option<usize>,
+    (cursor, selected): (Option<usize>, Option<(usize, usize)>),
+    marks: &[(i64, &attn_protocol::MarkdownAnnotation)],
     file: Option<&Colors>,
     t: &Tokens,
 ) -> El {
@@ -86,7 +87,18 @@ pub(super) fn stop(
             .now
             .is_some_and(|n| n >= stop.now_from && n <= stop.now_to);
         let line = code_row(r, &spans(j, r), digits, in_range, true, t).key(row_key(key, j));
-        std::iter::once(super::cursor_frame(line, cursor == Some(j), t)).chain(notes)
+        let line = match selected {
+            Some((a, b)) if j >= a && j <= b && cursor != Some(j) => line.fill(t.accent.alpha(0.1)),
+            _ => line,
+        };
+        let marked: Vec<El> = marks
+            .iter()
+            .filter(|(at, _)| r.now == Some(*at))
+            .map(|(_, m)| super::marks::mark_row(m, t))
+            .collect();
+        std::iter::once(super::cursor_frame(line, cursor == Some(j), t))
+            .chain(notes)
+            .chain(marked)
     });
     let lines: Vec<El> = lines.collect();
     let empty = rows.is_empty().then(|| {

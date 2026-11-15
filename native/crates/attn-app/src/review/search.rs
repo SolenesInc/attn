@@ -69,31 +69,29 @@ pub(crate) struct Answered {
 pub(crate) struct Search {
     pub(crate) tile: String,
     pub(crate) source: (Option<String>, String),
-    pub(crate) query: TextEdit,
     answer: Option<Answered>,
     selected: usize,
     asked: u64,
 }
 
 impl Search {
-    pub(crate) fn new(tile: &str, source: (Option<String>, String), query: &str) -> Search {
+    pub(crate) fn new(tile: &str, source: (Option<String>, String)) -> Search {
         Search {
             tile: tile.to_owned(),
             source,
-            query: TextEdit::new(query.to_owned()),
             answer: None,
             selected: 0,
             asked: 0,
         }
     }
 
-    fn found(&self, files: &[ReviewFile]) -> Vec<Found> {
-        if self.query.text.trim().is_empty() {
+    fn found(&self, query: &TextEdit, files: &[ReviewFile]) -> Vec<Found> {
+        if query.text.trim().is_empty() {
             return files.iter().cloned().map(Found::Changed).collect();
         }
         self.answer
             .as_ref()
-            .filter(|a| a.query == self.query.text)
+            .filter(|a| a.query == query.text)
             .map(|a| a.found.clone())
             .unwrap_or_default()
     }
@@ -107,7 +105,8 @@ pub(crate) fn open(
     query: &str,
     tx: &mut Tx,
 ) {
-    state.readings.reviews.search = Some(Search::new(tile, source, query));
+    state.readings.reviews.search = Some(Search::new(tile, source));
+    state.readings.reviews.search_query = TextEdit::new(query.to_owned());
     if !query.trim().is_empty() {
         ask(state, tx);
     }
@@ -121,13 +120,8 @@ fn close(state: &mut State, tx: &mut Tx) {
     state.readings.revision += 1;
 }
 
-fn query(state: &mut State) -> &mut TextEdit {
-    &mut state
-        .readings
-        .reviews
-        .search
-        .get_or_insert_with(|| Search::new("", (None, String::new()), ""))
-        .query
+fn query_field(state: &mut State) -> &mut TextEdit {
+    &mut state.readings.reviews.search_query
 }
 
 /// Asks the daemon for what the box's query finds; an answer to an older query is dropped.
@@ -136,7 +130,10 @@ fn ask(state: &mut State, tx: &mut Tx) {
         return;
     };
     search.selected = 0;
-    let text = search.query.text.to_owned();
+    let text = state.readings.reviews.search_query.text.to_owned();
+    let Some(search) = state.readings.reviews.search.as_mut() else {
+        return;
+    };
     if text.trim().is_empty() {
         search.answer = None;
         return;
@@ -217,7 +214,7 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let files = super::bundle_of(state, &tile)
         .map(|b| b.files.clone())
         .unwrap_or_default();
-    let found = search.found(&files);
+    let found = search.found(&state.readings.reviews.search_query, &files);
     let ctrl =
         |c: char| matches!(ev.key, Key::Command(k) if k.eq_ignore_ascii_case(&c)) && ev.mods.ctrl;
     let step = match ev.key {
@@ -249,9 +246,9 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 /// The search over review tile `tile`, when it is open there.
-pub(crate) fn view(search: &Search, bundle: &ReviewBundle, t: &Tokens) -> El {
-    let found = search.found(&bundle.files);
-    let field = TextInput::new(&search.query)
+pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: &Tokens) -> El {
+    let found = search.found(query, &bundle.files);
+    let field = TextInput::new(query)
         .key(FIELD)
         .plain()
         .text_style(type_::BODY)
@@ -259,7 +256,7 @@ pub(crate) fn view(search: &Search, bundle: &ReviewBundle, t: &Tokens) -> El {
         .width(None)
         .label("Search")
         .placeholder("Search files by name and lines by text")
-        .on_edit(query)
+        .on_edit(query_field)
         .on_change(changed)
         .on_key(on_key)
         .build(attn_ui::kit(t));
@@ -276,13 +273,13 @@ pub(crate) fn view(search: &Search, bundle: &ReviewBundle, t: &Tokens) -> El {
             .wrap()
             .role(if alert { "alert" } else { "status" })
     });
-    let empty = (!search.query.text.trim().is_empty()
+    let empty = (!query.text.trim().is_empty()
         && search
             .answer
             .as_ref()
             .is_some_and(|a| a.found.is_empty() && a.error.is_none()))
     .then(|| {
-        text(format!("Nothing matches {}", search.query.text))
+        text(format!("Nothing matches {}", query.text))
             .font(type_::BODY)
             .color(t.text_tertiary)
     });

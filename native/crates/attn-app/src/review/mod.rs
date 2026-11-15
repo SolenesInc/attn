@@ -7,6 +7,7 @@ mod document;
 mod file;
 mod frames;
 mod keys;
+mod marks;
 mod search;
 mod stop;
 
@@ -96,6 +97,10 @@ pub(crate) struct Review {
     /// The stop the Walkthrough's stage shows, by its path, its first line at head and its
     /// place among the stops, which keeps it when the document changes.
     stage: Option<(String, i64, usize)>,
+    /// The other end of rows selected in a stop, which ends at the cursor.
+    select_from: Option<Spot>,
+    /// The send sheet, open with the verdict picked and where the review goes.
+    sending: Option<(marks::Verdict, Option<crate::markdown::drafts::To>)>,
     /// Counts the reads the tile asks for, so an answer to an older read of a file or a stop
     /// never lands over a newer one.
     asked: u64,
@@ -125,6 +130,12 @@ pub struct Reviews {
     oversize: Vec<(String, String)>,
     /// The search open over a review tile.
     search: Option<search::Search>,
+    /// The note or question being written in a review tile.
+    composer: Option<marks::Composer>,
+    /// The text of the composer's box and of the search's box. They outlive their boxes, so
+    /// an edit that lands after a box closed opens nothing.
+    composer_text: rune::TextEdit,
+    search_query: rune::TextEdit,
 }
 
 impl Reviews {
@@ -487,11 +498,35 @@ pub(crate) fn body(
     reviews: &Reviews,
     (read, read_version): (&dyn Fn(std::ops::Range<usize>) -> El, u64),
     marking: Vec<El>,
+    draft: &[attn_protocol::MarkdownAnnotation],
     t: &Tokens,
 ) -> El {
     let fresh = Review::default();
     let review = reviews.tiles.get(tile).unwrap_or(&fresh);
     let reading = Reading::new(tile, source, bundle, review);
+    let placed = placements(review, bundle, draft);
+    let marks_on = |path: &str| -> Vec<(i64, &attn_protocol::MarkdownAnnotation)> {
+        placed
+            .iter()
+            .filter_map(|(m, p, at)| match at {
+                marks::Placed::Line(line) if p == path => Some((*line, *m)),
+                _ => None,
+            })
+            .collect()
+    };
+    let marks_at = |open: &file::OpenFile| -> Vec<El> {
+        let line = open.line();
+        marks_on(&open.target.path)
+            .into_iter()
+            .filter(|(at, _)| Some(*at) == line)
+            .map(|(_, m)| marks::mark_row(m, t))
+            .collect()
+    };
+    let moved: Vec<&attn_protocol::MarkdownAnnotation> = placed
+        .iter()
+        .filter(|(_, _, at)| *at == marks::Placed::Moved)
+        .map(|(m, _, _)| *m)
+        .collect();
     let cursor = reading.cursor(review);
     let cursor_key = cursor.map(|i| reading.places[i].key.clone());
     let prefix = prefix(tile);
@@ -530,9 +565,26 @@ pub(crate) fn body(
                 let s = &bundle.stops[*index];
                 let colors = reviews.colors(&s.path, &s.file_hash);
                 let rows = reading.rows_of(*index);
-                let version = (revision, row, colors.is_some(), rows.len(), *t);
+                let on = marks_on(&s.path);
+                let selected = current
+                    .filter(|_| review.select_from.is_some())
+                    .and_then(|c| selected_rows(&reading, review, c))
+                    .map(|(_, a, b)| (a, b));
+                let marked: Vec<_> = on
+                    .iter()
+                    .map(|(l, m)| (*l, m.id.clone(), m.text.clone(), m.answer.clone()))
+                    .collect();
+                let version = (
+                    revision,
+                    row,
+                    selected,
+                    colors.is_some(),
+                    rows.len(),
+                    marked,
+                    *t,
+                );
                 memo(key.clone(), version, || {
-                    stop::stop(&key, s, rows, row, colors.as_deref(), t)
+                    stop::stop(&key, s, rows, (row, selected), &on, colors.as_deref(), t)
                 })
             }
             Part::NotShown => {
@@ -570,6 +622,22 @@ pub(crate) fn body(
         .fill(t.bg_panel)
         .border(1.0, t.border.alpha(0.5))
         .children(parts)
+        .children((!moved.is_empty()).then(|| {
+            col()
+                .key(format!("{prefix}.moved"))
+                .role("region")
+                .label("Moved notes")
+                .w_full()
+                .gap(space::S1)
+                .child(text("Moved notes").font(type_::TITLE).color(t.text_primary))
+                .child(
+                    text("The lines these were written on changed. They still go with the review, marked as moved.")
+                        .font(type_::BODY)
+                        .color(t.text_secondary)
+                        .wrap(),
+                )
+                .children(moved.iter().map(|m| marks::mark_row(m, t)))
+        }))
         .children(marking);
     let mut document = col()
         .key(view)
@@ -610,7 +678,7 @@ pub(crate) fn body(
                         tile,
                         open,
                         (review.files.len(), true),
-                        &notes,
+                        (&notes, marks_at(open)),
                         colors,
                         t,
                     )
@@ -646,7 +714,7 @@ pub(crate) fn body(
                 tile,
                 open,
                 (review.files.len(), false),
-                &notes,
+                (&notes, marks_at(open)),
                 colors,
                 t,
             );
@@ -670,10 +738,39 @@ pub(crate) fn body(
         .child(keys::key_line(&prefix, reading.frame, &offered, sides, t))
         .children(review.help.then(|| keys::sheet(&prefix, t)))
         .children(
-            reviews.search.as_ref().filter(|s| s.tile == tile).map(|s| {
-                search::view(s, bundle, t).pin(Some(0.0), Some(space::S6), Some(0.0), None)
-            }),
+            reviews
+                .composer
+                .as_ref()
+                .filter(|c| c.tile == tile)
+                .map(|c| {
+                    marks::composer_view(c, &reviews.composer_text, t).pin(
+                        Some(0.0),
+                        Some(space::S6),
+                        Some(0.0),
+                        None,
+                    )
+                }),
         )
+        .children(review.sending.as_ref().map(|(verdict, destination)| {
+            let sent: Vec<&attn_protocol::MarkdownAnnotation> = draft
+                .iter()
+                .filter(|m| m.anchor.as_ref().is_some_and(|a| a.file.is_some()))
+                .collect();
+            marks::sheet(&sent, *verdict, destination.as_ref(), t).pin(
+                Some(0.0),
+                Some(space::S6),
+                Some(0.0),
+                None,
+            )
+        }))
+        .children(reviews.search.as_ref().filter(|s| s.tile == tile).map(|s| {
+            search::view(s, &reviews.search_query, bundle, t).pin(
+                Some(0.0),
+                Some(space::S6),
+                Some(0.0),
+                None,
+            )
+        }))
 }
 
 /// The Before and After switch over a diagram, with `b`.
@@ -837,6 +934,35 @@ pub(crate) fn cursor_frame(el: El, current: bool, t: &Tokens) -> El {
     }
 }
 
+/// The send key on a review tile that holds the keyboard: the send sheet opens with request
+/// changes picked. False when no review tile holds the keyboard.
+pub(crate) fn open_send(state: &mut State, tx: &mut Tx) -> bool {
+    let Some((tile, _)) = held(state) else {
+        return false;
+    };
+    if state.readings.reviews.composer.is_some() {
+        tx.focus(marks::FIELD, false);
+        return true;
+    }
+    let Some((uri, to)) = crate::markdown::sending::destination_of(state, &tile) else {
+        return false;
+    };
+    let marked = state.drafts.get(&uri).is_some_and(|d| {
+        d.marks
+            .iter()
+            .any(|m| m.anchor.as_ref().is_some_and(|a| a.file.is_some()))
+    });
+    let verdict = if marked {
+        marks::Verdict::RequestChanges
+    } else {
+        marks::Verdict::Approve
+    };
+    let review = state.readings.reviews.tiles.entry(tile).or_default();
+    review.sending = Some((verdict, to));
+    state.readings.revision += 1;
+    true
+}
+
 /// The review tile that holds the keyboard, with what the daemon last sent it.
 fn held(
     state: &State,
@@ -884,6 +1010,24 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Text(typed) => typed.as_str(),
         _ => "",
     };
+    if let Some((verdict, to)) = review.sending.clone() {
+        let picked = marks::Verdict::of_key(typed);
+        match ev.key {
+            Key::Escape => review.sending = None,
+            Key::Enter => {
+                if let Some(to) = to {
+                    review.sending = None;
+                    let moved = moved_marks(state, &tile, &message, bundle);
+                    let uri = drafts_uri(&message);
+                    marks::send(state, &uri, to, verdict, moved, tx);
+                }
+            }
+            _ if let Some(picked) = picked => review.sending = Some((picked, to)),
+            _ => {}
+        }
+        state.readings.revision += 1;
+        return true;
+    }
     if back_key {
         if reading.frame == Frame::Walkthrough && review.files.len() <= 1 {
             return false;
@@ -946,6 +1090,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             review.help = false;
             None
         }
+        (Key::Escape, _) if review.select_from.is_some() => {
+            review.select_from = None;
+            None
+        }
         (_, "1" | "2" | "3") => {
             let Some((frame, _, _)) = Frame::ALL.iter().find(|(_, key, _)| *key == typed) else {
                 return false;
@@ -1000,6 +1148,11 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             Some(Move::Open(target, typed == "z"))
         }
         (_, "/") => Some(Move::Search(String::new())),
+        (_, "c" | "a") => Some(Move::Mark(if typed == "a" {
+            marks::Kind::Question
+        } else {
+            marks::Kind::Note
+        })),
         (_, "e") if !viewing => {
             let Some(stop) = cursor.and_then(|i| reading.places[i].stop) else {
                 return true;
@@ -1016,6 +1169,11 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     match to {
         Some(Move::Line(i)) if !reading.places.is_empty() => {
             let i = i.min(reading.places.len() - 1);
+            review.select_from = match (ev.mods.shift, review.select_from.take()) {
+                (false, _) => None,
+                (true, Some(from)) => Some(from),
+                (true, None) => cursor.map(|c| reading.places[c].spot.clone()),
+            };
             let place = &reading.places[i];
             review.cursor = Some(place.spot.clone());
             review.at = i;
@@ -1045,6 +1203,32 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         Some(Move::Open(target, fill)) => {
             open_file(state, &tile, source_of(&message), target, fill, tx);
+        }
+        Some(Move::Mark(kind)) => {
+            if let Some(anchor) = mark_target(state, &tile, bundle, &reading, cursor)
+                && let Some((uri, to)) = crate::markdown::sending::destination_of(state, &tile)
+            {
+                if kind == marks::Kind::Question && to.is_none() {
+                    state.window.notify(
+                        "No session takes a question: bind the document to a session first."
+                            .to_owned(),
+                        tx,
+                    );
+                    state.readings.revision += 1;
+                    return true;
+                }
+                marks::compose(
+                    state,
+                    marks::Composer {
+                        tile: tile.clone(),
+                        kind,
+                        anchor,
+                        uri,
+                        to,
+                    },
+                    tx,
+                );
+            }
         }
         Some(Move::Search(query)) => {
             search::open(state, &tile, source_of(&message), &query, tx);
@@ -1086,6 +1270,8 @@ enum Move {
     Stage(usize, Option<i64>),
     /// Open the search with this in its box.
     Search(String),
+    /// Write a note or a question on what the cursor stands on.
+    Mark(marks::Kind),
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.
@@ -1272,6 +1458,137 @@ fn open_found(
 ) {
     open_file(state, tile, source, target, false, tx);
     state.readings.revision += 1;
+}
+
+/// The rows of stop `stop` selected in the document: from the selection's other end to the
+/// cursor, both in that stop, as indices of its rows. The cursor's row alone with no selection.
+fn selected_rows(
+    reading: &Reading,
+    review: &Review,
+    cursor: usize,
+) -> Option<(usize, usize, usize)> {
+    let stop = reading.places[cursor].stop?;
+    let first = reading.places.iter().position(|p| p.stop == Some(stop))?;
+    let from = review
+        .select_from
+        .as_ref()
+        .and_then(|spot| {
+            reading
+                .places
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| &p.spot == spot && p.stop == Some(stop))
+                .map(|(i, _)| i)
+                .min_by_key(|i| i.abs_diff(cursor))
+        })
+        .unwrap_or(cursor);
+    Some((stop, from.min(cursor) - first, from.max(cursor) - first))
+}
+
+/// The anchor of a mark on what the cursor stands on: the rows selected in the file view or
+/// the stage, else the rows selected in a stop, else the cursor's row.
+fn mark_target(
+    state: &State,
+    tile: &str,
+    bundle: &ReviewBundle,
+    reading: &Reading,
+    cursor: Option<usize>,
+) -> Option<attn_protocol::MarkdownAnnotationAnchor> {
+    let review = state.readings.reviews.tiles.get(tile)?;
+    let doc_line = |path: &str, head: Option<i64>| {
+        let stops: Vec<_> = bundle.stops.iter().filter(|s| s.path == path).collect();
+        stops
+            .iter()
+            .find(|s| head.is_some_and(|h| h >= s.from && h <= s.to))
+            .or(stops.first())
+            .map_or(reading.source.lines().count() as i64 + 1, |s| {
+                s.heading_line
+            })
+    };
+    let viewing = !review.files.is_empty() && reading.frame != Frame::Walkthrough;
+    if viewing || reading.frame == Frame::Walkthrough {
+        let open = review.files.last()?;
+        let rows = open.rows.as_deref()?;
+        let (from, to) = open.selected();
+        let picked = &rows[from..=to.min(rows.len().checked_sub(1)?)];
+        let head = picked.iter().find_map(|r| r.head);
+        return marks::anchor(
+            &open.target.path,
+            picked,
+            &rows[to + 1..],
+            doc_line(&open.target.path, head),
+        );
+    }
+    let (stop, from, to) = selected_rows(reading, review, cursor?)?;
+    let rows = reading.rows_of(stop);
+    let s = &bundle.stops[stop];
+    marks::anchor(&s.path, &rows[from..=to], &rows[to + 1..], s.heading_line)
+}
+
+/// Where each of `draft`'s file marks shows: under a line of its file, or moved; a mark no
+/// shown rows cover is left out.
+fn placements<'m>(
+    review: &Review,
+    bundle: &ReviewBundle,
+    draft: &'m [attn_protocol::MarkdownAnnotation],
+) -> Vec<(&'m attn_protocol::MarkdownAnnotation, String, marks::Placed)> {
+    draft
+        .iter()
+        .filter(|m| m.r#type == "comment" || m.r#type == "question")
+        .filter_map(|m| {
+            let anchor = m.anchor.as_ref()?;
+            let path = anchor.file.as_deref()?;
+            let lists: Vec<marks::Rows> = review
+                .files
+                .iter()
+                .filter(|f| f.target.path == path)
+                .filter_map(|f| f.rows.as_deref())
+                .map(|rows| marks::Rows { rows, covers: None })
+                .chain(
+                    bundle
+                        .stops
+                        .iter()
+                        .filter(|s| s.path == path)
+                        .map(|s| marks::Rows {
+                            rows: &s.rows,
+                            covers: Some((s.from, s.to)),
+                        }),
+                )
+                .collect();
+            let placed = marks::place(anchor, &lists)?;
+            Some((m, path.to_owned(), placed))
+        })
+        .collect()
+}
+
+/// The ids of tile `tile`'s marks whose lines changed since they were written.
+fn moved_marks(
+    state: &State,
+    tile: &str,
+    message: &attn_protocol::DesktopTileContentMessage,
+    bundle: &ReviewBundle,
+) -> Vec<String> {
+    let Some(review) = state.readings.reviews.tiles.get(tile) else {
+        return Vec::new();
+    };
+    let uri = drafts_uri(message);
+    let Some(draft) = state.drafts.get(&uri) else {
+        return Vec::new();
+    };
+    placements(review, bundle, &draft.marks)
+        .into_iter()
+        .filter(|(_, _, p)| *p == marks::Placed::Moved)
+        .map(|(m, _, _)| m.id.clone())
+        .collect()
+}
+
+/// The address of the annotation draft of the document `message` shows.
+fn drafts_uri(message: &attn_protocol::DesktopTileContentMessage) -> String {
+    crate::markdown::drafts::Source::File {
+        path: message.path.clone(),
+        host: message.host.clone().filter(|h| !h.is_empty()),
+    }
+    .uri()
 }
 
 /// Where a read puts the file view's cursor.

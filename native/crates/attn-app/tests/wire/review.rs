@@ -134,15 +134,21 @@ fn bundle() -> ReviewBundle {
 }
 
 fn start() -> World {
-    let tree = row(vec![
-        pane("a"),
-        json!({
-            "type": "tile",
-            "tile_id": "m",
-            "tile_kind": "markdown",
-            "tile_params": json!({ "path": DOC }).to_string(),
-        }),
-    ]);
+    start_with_session(None)
+}
+
+/// The fixture's desktop, with the document tile bound to `session` when given.
+fn start_with_session(session: Option<&str>) -> World {
+    let mut document = json!({
+        "type": "tile",
+        "tile_id": "m",
+        "tile_kind": "markdown",
+        "tile_params": json!({ "path": DOC }).to_string(),
+    });
+    if let Some(session) = session {
+        document["tile_session_id"] = json!(session);
+    }
+    let tree = row(vec![pane("a"), document]);
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
@@ -1348,6 +1354,16 @@ fn a_selection_dragged_across_the_briefs_blocks_keeps_to_the_block_it_starts_in(
 }
 
 fn calc_file() -> Vec<ReviewRow> {
+    calc_rows()
+        .into_iter()
+        .map(|mut r| {
+            r.head = r.now;
+            r
+        })
+        .collect()
+}
+
+fn calc_rows() -> Vec<ReviewRow> {
     let mut rows = vec![
         line(" ", Some(1), Some(1), "package calc"),
         line(" ", Some(2), Some(2), ""),
@@ -2213,5 +2229,360 @@ fn enter_on_a_not_shown_folder_searches_its_path() {
             .last()
             .map(|r| r["query"].clone()),
         Some(json!("vendor/"))
+    );
+}
+
+type Marks = std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>;
+
+/// Keeps the review document's annotation draft as the daemon does, and records each send.
+fn keep_drafts(world: &World) -> (Marks, Marks, Generation) {
+    let kept: Marks = Default::default();
+    let sends: Marks = Default::default();
+    let answer =
+        |marks: &[serde_json::Value], r: &serde_json::Value, event: &str, generation: usize| {
+            json!({
+                "event": event,
+                "request_id": r["request_id"],
+                "document_uri": r["document_uri"],
+                "source_kind": r["source_kind"],
+                "success": true,
+                "status": "delivered",
+                "annotations": marks,
+                "generation": generation,
+            })
+        };
+    let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1));
+    let (read, c) = (kept.clone(), count.clone());
+    world.daemon.on("markdown_annotations_get", move |r| {
+        let g = c.load(std::sync::atomic::Ordering::SeqCst);
+        answer(
+            &read.lock().unwrap(),
+            r,
+            "markdown_annotations_get_result",
+            g,
+        )
+    });
+    let (written, c) = (kept.clone(), count.clone());
+    world.daemon.on("markdown_annotations_save", move |r| {
+        let mut marks = written.lock().unwrap();
+        let removed: Vec<_> = r["removed_ids"].as_array().cloned().unwrap_or_default();
+        marks.retain(|m| !removed.contains(&m["id"]));
+        for up in r["upserts"].as_array().into_iter().flatten() {
+            marks.retain(|m| m["id"] != up["id"]);
+            marks.push(up.clone());
+        }
+        let g = c.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        answer(&marks, r, "markdown_annotations_save_result", g)
+    });
+    let (left, sent, c) = (kept.clone(), sends.clone(), count.clone());
+    world.daemon.on("markdown_annotations_submit", move |r| {
+        sent.lock().unwrap().push(r.clone());
+        let mut marks = left.lock().unwrap();
+        if r["only_ids"].is_null() {
+            marks.clear();
+        }
+        let g = c.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        answer(&marks, r, "markdown_annotations_submit_result", g)
+    });
+    (kept, sends, count)
+}
+
+type Generation = std::sync::Arc<std::sync::atomic::AtomicUsize>;
+
+/// The fixture with each row's line at head as its line now, as a review just presented has.
+fn presented() -> ReviewBundle {
+    let mut review = bundle();
+    for stop in &mut review.stops {
+        for r in &mut stop.rows {
+            r.head = r.now;
+        }
+    }
+    review
+}
+
+fn open_marking(review: ReviewBundle) -> (World, Marks, Marks) {
+    let (world, kept, sends, _) = open_marking_counted(review);
+    (world, kept, sends)
+}
+
+fn open_marking_counted(review: ReviewBundle) -> (World, Marks, Marks, Generation) {
+    let mut world = start_with_session(Some("s-a"));
+    serve(&world);
+    let (kept, sends, generation) = keep_drafts(&world);
+    deliver(&mut world, DOCUMENT, Some(review));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    (world, kept, sends, generation)
+}
+
+/// Presses the send key as this platform binds it.
+fn send_key(world: &mut World) {
+    let ev = match attn_app::Keymap::from_setting(None, rune::KeyPlatform::current())
+        .binding(&attn_app::Action::MarkdownSendAnnotations)
+    {
+        Some(attn_app::Binding::Chord(chord)) => attn_testkit::key_event(&chord),
+        other => panic!("the send has no single chord: {other:?}"),
+    };
+    world.gesture(|app| app.key(ev));
+}
+
+fn shift(world: &mut World, key: Key) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key,
+            mods: Mods {
+                shift: true,
+                ..Mods::default()
+            },
+        })
+    });
+}
+
+fn write(world: &mut World, words: &str) {
+    world.gesture(|app| app.type_text(words));
+    press(world, Key::Enter);
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+}
+
+#[test]
+fn writes_a_note_on_the_selected_lines_of_a_stop_quoting_them_and_shows_it_under_the_last_line() {
+    let (mut world, kept, _) = open_marking(presented());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    shift(&mut world, Key::Down);
+    type_key(&mut world, "c");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Write a note"))
+            .is_some()
+    );
+    write(&mut world, "Name it once");
+
+    let marks = kept.lock().unwrap().clone();
+    assert_eq!(marks.len(), 1, "{marks:?}");
+    let anchor = &marks[0]["anchor"];
+    assert_eq!(anchor["file"], "calc.go");
+    assert_eq!(
+        (
+            anchor["file_start_line"].clone(),
+            anchor["file_end_line"].clone()
+        ),
+        (json!(4), json!(4))
+    );
+    assert_eq!(anchor["exact"], "-\treturn a + b\n+\tsum := a + b");
+    assert_eq!(marks[0]["type"], "comment");
+    let lines = stop_lines(&world, &stop_key(&world, "calc.go"));
+    let under = lines
+        .iter()
+        .position(|l| l == "you L4: Name it once")
+        .unwrap();
+    assert_eq!(
+        lines[under - 2],
+        "added line 4: \tsum := a + b",
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn asks_a_question_at_once_keeps_it_and_shows_the_answer_when_the_daemon_says_the_draft_moved() {
+    let (mut world, kept, sends, generation) = open_marking_counted(presented());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    type_key(&mut world, "a");
+    let dialog = world
+        .screen()
+        .get(Target::role("dialog").name("Ask a question"));
+    let said: Vec<String> = world
+        .screen()
+        .descendants(Target::key(dialog.key.unwrap()))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(said.iter().any(|t| t == "Sent to s-a at once"), "{said:?}");
+    write(&mut world, "Why a name?");
+
+    let sent = sends.lock().unwrap().clone();
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    let id = kept.lock().unwrap()[0]["id"].clone();
+    assert_eq!(sent[0]["only_ids"], json!([id]));
+    assert_eq!(sent[0]["target_session_id"], "s-a");
+    let waiting = shown(&world);
+    assert!(
+        waiting
+            .iter()
+            .any(|t| t == "Asked — waiting for the answer"),
+        "{waiting:?}"
+    );
+
+    kept.lock().unwrap()[0]["answer"] = json!("It reads better.");
+    world.daemon.emit(DesktopTileContentMessage {
+        desktop_id: DESKTOP.into(),
+        tile_id: "m".into(),
+        tile_kind: "markdown".into(),
+        path: DOC.into(),
+        content: DOCUMENT.into(),
+        review: Some(presented()),
+        annotations_generation: Some(
+            generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst) as i64 + 1,
+        ),
+        ..DesktopTileContentMessage::new()
+    });
+    world.settle();
+    world.advance(std::time::Duration::from_secs(1));
+    let answered = shown(&world);
+    assert!(
+        answered.iter().any(|t| t == "answer: It reads better."),
+        "{answered:?}"
+    );
+}
+
+#[test]
+fn sends_the_review_with_the_verdict_picked_in_the_sheet() {
+    let (mut world, _, sends) = open_marking(presented());
+    press(&mut world, Key::Right);
+    type_key(&mut world, "c");
+    write(&mut world, "Fine");
+    send_key(&mut world);
+    let sheet = world
+        .screen()
+        .get(Target::role("dialog").name("Send the review"));
+    let said: Vec<String> = world
+        .screen()
+        .descendants(Target::key(sheet.key.unwrap()))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        said.iter().any(|t| t == "note calc.go L3: Fine"),
+        "{said:?}"
+    );
+    let picked = world
+        .screen()
+        .all(Target::role("radio-button"))
+        .into_iter()
+        .find(|n| n.is("checked"))
+        .and_then(|n| n.name);
+    assert_eq!(picked.as_deref(), Some("request changes"));
+
+    type_key(&mut world, "a");
+    press(&mut world, Key::Enter);
+    let sent = sends.lock().unwrap().clone();
+    assert_eq!(
+        sent.last().map(|s| s["verdict"].clone()),
+        Some(json!("approve"))
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Send the review"))
+            .is_none()
+    );
+}
+
+#[test]
+fn sends_a_verdict_with_no_notes() {
+    let (mut world, _, sends) = open_marking(presented());
+    press(&mut world, Key::Down);
+    send_key(&mut world);
+    let picked = world
+        .screen()
+        .all(Target::role("radio-button"))
+        .into_iter()
+        .find(|n| n.is("checked"))
+        .and_then(|n| n.name);
+    assert_eq!(
+        picked.as_deref(),
+        Some("approve"),
+        "with no notes, approve is picked"
+    );
+    press(&mut world, Key::Enter);
+    let sent = sends.lock().unwrap().clone();
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert_eq!(sent[0]["verdict"], "approve");
+}
+
+#[test]
+fn a_review_bound_to_no_session_keeps_its_send_and_asks_nothing() {
+    let mut world = start();
+    serve(&world);
+    let (_, sends, _) = keep_drafts(&world);
+    deliver(&mut world, DOCUMENT, Some(presented()));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    press(&mut world, Key::Right);
+    type_key(&mut world, "a");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Ask a question"))
+            .is_none()
+    );
+
+    send_key(&mut world);
+    press(&mut world, Key::Enter);
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Send the review"))
+            .is_some()
+    );
+    assert!(sends.lock().unwrap().is_empty());
+}
+
+#[test]
+fn closes_the_composer_first_on_escape_then_the_selection_then_the_file_view() {
+    let (mut world, _, _) = open_marking(presented());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Enter);
+    shift(&mut world, Key::Down);
+    type_key(&mut world, "c");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Write a note"))
+            .is_some()
+    );
+    press(&mut world, Key::Escape);
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Write a note"))
+            .is_none()
+    );
+    assert!(file_view(&world).is_some());
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_some(), "the selection goes first");
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_none());
+}
+
+#[test]
+fn shows_a_mark_as_moved_when_its_code_is_gone_and_sends_it_marked_as_moved() {
+    let (mut world, kept, sends) = open_marking(presented());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    type_key(&mut world, "c");
+    write(&mut world, "This line");
+    let id = kept.lock().unwrap()[0]["id"].clone();
+
+    let mut changed = presented();
+    changed.stops[0].rows.retain(|r| r.head != Some(4));
+    deliver(&mut world, DOCUMENT, Some(changed));
+    let moved: Vec<String> = world
+        .screen()
+        .descendants(Target::key("tile.m.review.moved"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(moved.iter().any(|t| t == "you L4: This line"), "{moved:?}");
+
+    send_key(&mut world);
+    press(&mut world, Key::Enter);
+    let sent = sends.lock().unwrap().clone();
+    assert_eq!(
+        sent.last().map(|s| s["orphaned_ids"].clone()),
+        Some(json!([id]))
     );
 }

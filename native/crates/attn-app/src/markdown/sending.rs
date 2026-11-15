@@ -289,6 +289,27 @@ fn tile_of<'a>(state: &'a State, tile: &str) -> Option<Tiled<'a>> {
     })
 }
 
+/// Where tile `tile`'s marks go, as its header says, with its draft's address.
+pub(crate) fn destination_of(state: &State, tile: &str) -> Option<(String, Option<To>)> {
+    let tiled = tile_of(state, tile)?;
+    let to = match &tiled.kind {
+        Kind::File { bound } => destination(
+            &state.readings,
+            tiled.desktop,
+            &state.facts.sessions,
+            tile,
+            bound.as_deref(),
+        )
+        .map(|s| To::Session(s.id.clone())),
+        Kind::Seed {
+            tender: Some(session),
+            ..
+        } => Some(To::Session(session.clone())),
+        Kind::Seed { id, tender: None } => Some(To::Seed(id.clone())),
+    };
+    Some((tiled.uri, to))
+}
+
 /// Sends tile `tile`'s marks to where its header says.
 pub(crate) fn send(state: &mut State, tile: &str, tx: &mut Tx) {
     let Some(tiled) = tile_of(state, tile) else {
