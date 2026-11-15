@@ -167,10 +167,7 @@ impl Surface {
 
 impl Open {
     pub(crate) fn read(path: String, kind: FileKind, content: String, hash: String) -> Open {
-        let mut draft = Draft::of(kind, &content);
-        if let Draft::Note(editor) = &mut draft {
-            editor.note_dir = super::links::note_dir(&path).to_owned();
-        }
+        let draft = Draft::of(kind, &content);
         Open {
             path,
             kind,

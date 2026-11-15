@@ -50,7 +50,16 @@ pub(crate) fn view(
             },
             move |state: &State, i| match read(state, &build_key) {
                 Some(editor) if i < editor.doc.len() => {
-                    line_row(editor, &state.pictures, &build_key, i, access, &tokens)
+                    let place =
+                        crate::notebook::place_of_editor(state, &build_key).unwrap_or_default();
+                    line_row(
+                        editor,
+                        (&state.pictures, &place),
+                        &build_key,
+                        i,
+                        access,
+                        &tokens,
+                    )
                 }
                 _ => el(),
             },
@@ -107,7 +116,7 @@ pub(crate) fn view(
 
 fn line_row(
     editor: &Editor,
-    pictures: &crate::markdown::Pictures,
+    (pictures, place): (&crate::markdown::Pictures, &(Option<String>, String)),
     key: &str,
     i: usize,
     access: Access,
@@ -137,7 +146,7 @@ fn line_row(
             }
         }
         LineKind::Image { alt, src } if !editor.active(i) => {
-            image_row(editor, pictures, alt, src, t)
+            image_row(editor, (pictures, place), alt, src, t)
                 .key(row_key)
                 .with_press(key, i, access)
         }
@@ -165,7 +174,7 @@ fn line_row(
         _ => {
             let shown = editor.shown(i);
             let (_, style) = editor.styled(&shown);
-            let spans = with_theme(editor, &shown, t);
+            let spans = with_theme(editor, &shown, &place.1, t);
             text_row(
                 editor,
                 key,
@@ -178,7 +187,7 @@ fn line_row(
                 t,
             )
             .key(row_key)
-            .description(if editor.broken_on(&shown) {
+            .description(if editor.broken_on(&shown, &place.1) {
                 "Link target not found in the notebook"
             } else {
                 ""
@@ -220,22 +229,19 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
 
 impl Editor {
     /// Whether a link the line shows points at a note the daemon said is missing.
-    fn broken_on(&self, shown: &Shown) -> bool {
-        shown.links.iter().any(|(_, href)| {
-            self.note_of(href)
-                .is_some_and(|p| self.missing.contains(&p))
-        })
+    fn broken_on(&self, shown: &Shown, dir: &str) -> bool {
+        shown
+            .links
+            .iter()
+            .any(|(_, href)| Editor::note_of(href, dir).is_some_and(|p| self.missing.contains(&p)))
     }
 }
 
 /// The line's spans in the window's colours, with a link to a missing note marked broken.
-fn with_theme(editor: &Editor, shown: &Shown, t: &Tokens) -> Vec<Span> {
+fn with_theme(editor: &Editor, shown: &Shown, dir: &str, t: &Tokens) -> Vec<Span> {
     let mut out = spans(shown, Some(t));
     for (range, href) in &shown.links {
-        if editor
-            .note_of(href)
-            .is_some_and(|p| editor.missing.contains(&p))
-        {
+        if Editor::note_of(href, dir).is_some_and(|p| editor.missing.contains(&p)) {
             out.push(
                 Span::new(range.start, range.end)
                     .color(t.error)
@@ -454,18 +460,16 @@ fn table_grid(editor: &Editor, key: &str, start: usize, access: Access, t: &Toke
 /// it could not be found.
 fn image_row(
     editor: &Editor,
-    pictures: &crate::markdown::Pictures,
+    (pictures, (root, dir)): (&crate::markdown::Pictures, &(Option<String>, String)),
     alt: &str,
     src: &str,
     t: &Tokens,
 ) -> El {
     let name = if alt.is_empty() { src } else { alt }.to_owned();
-    let found = editor.note_of(src).and_then(|path| {
-        pictures
-            .of_notebook(editor.asset_root.as_deref())
-            .get(&path)
-            .cloned()
-    });
+    let found = match Editor::note_of(src, dir) {
+        Some(path) => pictures.of_notebook(root.as_deref()).get(&path).cloned(),
+        None => Some(None),
+    };
     let body = match found {
         Some(Some(image)) => {
             let [w, h] = image.size().unwrap_or([1, 1]).map(|v| v.max(1) as f32);

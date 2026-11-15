@@ -37,10 +37,6 @@ pub(crate) struct Editor {
     pub(crate) preedit: Option<String>,
     /// A press that toggled a task box: the rest of its gesture moves nothing.
     pub(crate) toggling: bool,
-    /// The folder the note's images are read from, as the note was: `None` is the notebook.
-    pub(crate) asset_root: Option<String>,
-    /// The folder of the note, which its relative links start from.
-    pub(crate) note_dir: String,
     /// The notes the links point at that the daemon said are missing, and every note asked
     /// about, by path from the root.
     pub(crate) missing: std::collections::BTreeSet<String>,
@@ -63,8 +59,6 @@ impl Editor {
             width: 600.0,
             preedit: None,
             toggling: false,
-            note_dir: String::new(),
-            asset_root: None,
             missing: Default::default(),
             checked: Default::default(),
             links_revision: None,
@@ -288,31 +282,34 @@ impl Editor {
             .map(|(_, href)| href.clone())
     }
 
-    /// The note a link points at, by path from the root; `None` for a link out of the notebook.
-    pub(crate) fn note_of(&self, href: &str) -> Option<String> {
-        match crate::notebook::links::resolve(href, &self.note_dir) {
+    /// The note a link in a note in folder `dir` points at, by path from the root; `None` for a
+    /// link out of the notebook.
+    pub(crate) fn note_of(href: &str, dir: &str) -> Option<String> {
+        match crate::notebook::links::resolve(href, dir) {
             crate::notebook::links::NoteLink::Note { path, .. } => Some(path),
             _ => None,
         }
     }
 
     /// The image files the note shows on lines of their own, by path from its folder.
-    pub(crate) fn images(&self) -> Vec<String> {
+    pub(crate) fn images(&self, dir: &str) -> Vec<String> {
         self.kinds()
             .iter()
             .filter_map(|k| match k {
-                LineKind::Image { src, .. } => self.note_of(src),
+                LineKind::Image { src, .. } => Editor::note_of(src, dir),
                 _ => None,
             })
             .collect()
     }
 
     /// The notes the document's links point at that nobody asked about yet.
-    pub(crate) fn unchecked_links(&self) -> Vec<String> {
+    pub(crate) fn unchecked_links(&self, dir: &str) -> Vec<String> {
         let mut paths = std::collections::BTreeSet::new();
         for line in self.doc.lines().iter().filter(|l| l.contains("](")) {
             for (_, href) in markdown::shown(line, true).links {
-                if let Some(path) = self.note_of(&href).filter(|p| !self.checked.contains(p)) {
+                if let Some(path) =
+                    Editor::note_of(&href, dir).filter(|p| !self.checked.contains(p))
+                {
                     paths.insert(path);
                 }
             }
