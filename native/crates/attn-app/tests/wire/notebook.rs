@@ -1353,3 +1353,32 @@ fn opening_another_note_while_a_save_is_in_flight_waits_for_it_then_opens() {
     world.advance(Duration::from_secs(3));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_link_to_a_missing_note_is_marked_and_each_note_is_asked_about_once() {
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        "[here](/journal/2026-11-14.md) [gone](gone.md) [again](gone.md) [web](https://example.com)\n",
+    )]);
+    let mut world = start(&disk);
+    world.daemon.on("fs_exists", |req| {
+        json!({ "event": "fs_exists_result", "success": true,
+            "result": { "path": req["path"], "exists": req["path"] != "knowledge/gone.md" } })
+    });
+    open_fullscreen(&mut world);
+    let mut asked: Vec<String> = world
+        .daemon
+        .sent_of("fs_exists")
+        .iter()
+        .map(|r| r["path"].as_str().unwrap().to_owned())
+        .collect();
+    asked.sort();
+    assert_eq!(asked, ["journal/2026-11-14.md", "knowledge/gone.md"]);
+    let row = world.screen().get(Target::key("notebook.editor.line.0"));
+    assert_eq!(
+        row.description.as_deref(),
+        Some("Link target not found in the notebook")
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}

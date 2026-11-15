@@ -5,7 +5,7 @@ mod editor;
 mod file_kind;
 mod finder;
 mod io;
-mod links;
+pub(crate) mod links;
 mod model;
 mod outline;
 mod params;
@@ -245,6 +245,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     for id in ids {
         changed |= follow_disk(state, &id, tx);
         changed |= follow_save(state, &id, now, tx);
+        follow_links(state, &id, tx);
     }
     state.notebook.revision = before + u64::from(changed);
     changed
@@ -399,6 +400,15 @@ fn follow_disk(state: &mut State, id: &SurfaceId, tx: &mut Tx) -> bool {
         .collect();
     if let Some(surface) = state.notebook.surface_mut(id) {
         surface.changes = now;
+        if let Some(model::Open {
+            draft: model::Draft::Note(editor),
+            ..
+        }) = surface.open_mut()
+        {
+            editor.checked.retain(|p| !editor.missing.contains(p));
+            editor.missing.clear();
+            editor.links_revision = None;
+        }
     }
     for folder in folders {
         io::list(state, id, &folder, tx);
@@ -651,4 +661,63 @@ pub(crate) fn ime(state: &mut State, ime: &rune::Ime, tx: &mut Tx) -> bool {
     }
     edited_editor(state, &key, tx);
     true
+}
+
+/// Asks whether each note the open note links to exists, once per note, after the note
+/// changes; a link to a missing note shows as broken, as the Tauri editor marks it.
+fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
+    let root = state.notebook.surface(id).and_then(|s| io::root(state, s));
+    let Some(model::Open {
+        draft: model::Draft::Note(editor),
+        path: note,
+        ..
+    }) = state.notebook.surface(id).and_then(Surface::open)
+    else {
+        return;
+    };
+    if editor.links_revision == Some(editor.doc.revision) {
+        return;
+    }
+    let (asked, note) = (editor.unchecked_links(), note.clone());
+    if let Some(model::Open {
+        draft: model::Draft::Note(editor),
+        ..
+    }) = state.notebook.surface_mut(id).and_then(Surface::open_mut)
+    {
+        editor.links_revision = Some(editor.doc.revision);
+        editor.checked.extend(asked.iter().cloned());
+    }
+    for path in asked {
+        let (id, note, root, asked) = (id.clone(), note.clone(), root.clone(), path.clone());
+        state.ask(
+            move |request_id| attn_protocol::FsExistsMessage {
+                path: asked,
+                root,
+                request_id: Some(request_id),
+                ..attn_protocol::FsExistsMessage::new()
+            },
+            move |state, answer, _| {
+                let missing = answer
+                    .parse::<attn_protocol::FsExistsResultMessage>()
+                    .filter(|r| r.success)
+                    .and_then(|r| r.result)
+                    .is_some_and(|r| !r.exists);
+                if !missing {
+                    return;
+                }
+                if let Some(model::Open {
+                    draft: model::Draft::Note(editor),
+                    ..
+                }) = state
+                    .notebook
+                    .surface_mut(&id)
+                    .and_then(Surface::open_mut)
+                    .filter(|o| o.path == note)
+                {
+                    editor.missing.insert(path);
+                }
+            },
+            tx,
+        );
+    }
 }
