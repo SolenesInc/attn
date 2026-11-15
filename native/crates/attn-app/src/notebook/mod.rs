@@ -678,7 +678,7 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
     if editor.links_revision == Some(editor.doc.revision) {
         return;
     }
-    let (asked, note) = (editor.unchecked_links(), note.clone());
+    let (asked, note) = (editor.unchecked_links(links::note_dir(note)), note.clone());
     if let Some(model::Open {
         draft: model::Draft::Note(editor),
         ..
@@ -730,10 +730,26 @@ pub(crate) fn images(state: &State) -> Vec<(Option<String>, String)> {
         .fullscreen
         .iter()
         .chain(notebook.tiles.values())
-        .filter_map(|s| match &s.open()?.draft {
-            model::Draft::Note(editor) => Some(editor),
-            model::Draft::Field(_) => None,
+        .filter_map(|s| {
+            let open = s.open()?;
+            match &open.draft {
+                model::Draft::Note(editor) => Some((
+                    io::root(state, s),
+                    editor.images(links::note_dir(&open.path)),
+                )),
+                model::Draft::Field(_) => None,
+            }
         })
-        .flat_map(|e| e.images().into_iter().map(|p| (e.asset_root.clone(), p)))
+        .flat_map(|(root, paths)| paths.into_iter().map(move |p| (root.clone(), p)))
         .collect()
+}
+
+/// Where the note in the editor keyed `key` reads its images from, and its folder.
+pub(crate) fn place_of_editor(state: &State, key: &str) -> Option<(Option<String>, String)> {
+    let surface = state.notebook.surface(&surface_of_editor(key)?)?;
+    let open = surface.open()?;
+    Some((
+        io::root(state, surface),
+        links::note_dir(&open.path).to_owned(),
+    ))
 }

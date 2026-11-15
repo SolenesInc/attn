@@ -1388,7 +1388,7 @@ fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_s
     use base64::Engine;
     let disk = Disk::with(&[(
         "knowledge/index.md",
-        "# Pictures\n\n![a cat](img/cat.png)\n\n![gone](missing.png)\n",
+        "# Pictures\n\n![a cat](img/cat.png)\n\n![gone](missing.png)\n\n![badge](https://example.com/b.png)\n",
     )]);
     let mut world = start(&disk);
     let png =
@@ -1416,6 +1416,14 @@ fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_s
             .screen()
             .find(Target::role("label").name("image not found"))
             .is_some()
+    );
+    let badge = world
+        .screen()
+        .bounds(Target::role("image").name("badge"))
+        .unwrap();
+    assert!(
+        (badge[3] - 220.0).abs() > 1.0,
+        "a remote image holds no room forever: {badge:?}"
     );
     let cat = world
         .screen()
@@ -1446,6 +1454,10 @@ fn a_table_shows_as_a_grid_until_the_caret_enters_it_and_only_that_table_shows_i
 
     world.gesture(|d| d.click(Target::key("notebook.editor.line.4")));
     assert_eq!(world.screen().all(Target::role("table")).len(), 2);
+    world.gesture(|d| d.click(Target::key("notebook.editor.table.0")));
+    assert!(shows_line(&world, "| a | b |"));
+    assert_eq!(world.screen().all(Target::role("table")).len(), 1);
+    world.gesture(|d| d.click(Target::key("notebook.editor.line.4")));
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }

@@ -144,7 +144,7 @@ pub(crate) fn read(state: &mut State, id: &SurfaceId, path: String, tx: &mut Tx)
         path: path.clone(),
         shown,
     };
-    let (load, id, asked, assets) = (surface.load, id.clone(), path.clone(), root.clone());
+    let (load, id, asked) = (surface.load, id.clone(), path.clone());
     state.ask(
         move |request_id| FsReadMessage {
             path: asked,
@@ -164,10 +164,7 @@ pub(crate) fn read(state: &mut State, id: &SurfaceId, path: String, tx: &mut Tx)
             };
             match read {
                 Ok(file) => {
-                    let mut open = Open::read(path.clone(), kind, file.content, file.hash);
-                    if let super::model::Draft::Note(editor) = &mut open.draft {
-                        editor.asset_root = assets;
-                    }
+                    let open = Open::read(path.clone(), kind, file.content, file.hash);
                     surface.doc = Doc::Open(Box::new(open));
                     if kind == FileKind::Markdown && surface.on_notebook() {
                         backlinks(state, &id, path, tx);
