@@ -119,7 +119,7 @@ try {
   await runner.step('an_edit_on_disk_shows_in_the_open_note', async () => {
     const now = fs.readFileSync(file, 'utf8');
     fs.writeFileSync(file, `${now}\nExternal refresh probe.\n`, 'utf8');
-    await driver.waitFor({ role: 'label', name: 'External refresh probe.' });
+    await driver.waitFor({ role: 'text', name: 'External refresh probe.' });
   });
 
   await runner.step('the_terminal_kept_its_zoom', async () => {
