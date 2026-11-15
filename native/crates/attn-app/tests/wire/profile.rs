@@ -369,6 +369,31 @@ fn n_names_a_new_profile_then_switches_to_it_and_closes() {
 }
 
 #[test]
+fn the_new_profile_name_field_fills_its_popover_with_an_even_inset() {
+    let mut world = three("work");
+    open_switcher(&mut world);
+    letter(&mut world, "n");
+
+    let rect = |world: &mut World, key: &str| -> [f64; 4] {
+        let found = world
+            .automate("find", json!({"target": {"key": key}}))
+            .unwrap();
+        serde_json::from_value(found["rect"].clone()).unwrap()
+    };
+    let [mx, _, mw, _] = rect(&mut world, "profile-switcher");
+    let [formx, _, formw, _] = rect(&mut world, "profile-switcher.form");
+    let [fx, _, fw, _] = rect(&mut world, "profile-switcher.name");
+    assert!(formx + formw <= mx + mw, "the form fits the popover");
+    let left = fx - formx;
+    let right = formx + formw - (fx + fw);
+    assert!(
+        (left - right).abs() <= 1.0,
+        "the field keeps the same inset on both sides of the form: left {left}, right {right}"
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_refused_rename_shows_in_place_and_keeps_the_draft() {
     let mut world = three("work");
     open_switcher(&mut world);

@@ -559,6 +559,7 @@ fn name_form(renaming: Option<String>, draft: &TextEdit, busy: bool, t: &Tokens,
     let field = TextInput::new(draft)
         .key(NAME_FIELD)
         .label(label.clone())
+        .width(None)
         .disabled(busy)
         .on_edit(
             |state: &mut State| match &mut state.window.profile_switcher.mode {
