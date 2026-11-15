@@ -387,6 +387,7 @@ fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<E
                 .scale_content()
                 .actual_size("Actual size")
                 .escape_returns()
+                .format_level(|_| "Fit".to_owned())
         }
     };
     let preview = preview
