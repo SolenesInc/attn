@@ -1,7 +1,8 @@
 use attn_protocol::{
     Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage, Profile, ReviewBundle,
     ReviewFile, ReviewFileResultMessage, ReviewFlow, ReviewFlowGroup, ReviewFlowMessage,
-    ReviewFlowParticipant, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Session,
+    ReviewFlowParticipant, ReviewNotShown, ReviewNote, ReviewRow, ReviewSearchHit,
+    ReviewSearchResultMessage, ReviewStop, Session,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Node, Target, World};
@@ -2018,5 +2019,199 @@ fn switches_frames_with_1_2_and_3_and_keeps_the_stop_and_line_the_cursor_is_on()
     assert_eq!(
         cursor(&world).name.as_deref(),
         Some("unchanged line 1: package calc")
+    );
+}
+
+fn serve_search(world: &World) {
+    world.daemon.on("review_search", |r| {
+        let calc = r["query"] == "calc";
+        serde_json::to_value(ReviewSearchResultMessage {
+            success: true,
+            files: Some(if calc { vec!["calc.go".into()] } else { vec![] }),
+            hits: Some(vec![ReviewSearchHit {
+                path: "calc.go".into(),
+                line: 9,
+                text: "\treturn b - a".into(),
+            }]),
+            ..ReviewSearchResultMessage::new()
+        })
+        .unwrap()
+    });
+}
+
+fn options(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::key("review.search.list"))
+        .into_iter()
+        .filter(|n| {
+            n.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("review.search.option."))
+        })
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+fn search(world: &mut World, query: &str) {
+    world.gesture(|app| app.type_text(query));
+}
+
+#[test]
+fn lists_the_changed_files_in_an_empty_search_searches_the_repository_by_name_and_text_and_opens_what_it_finds()
+ {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    serve_search(&world);
+    type_key(&mut world, "/");
+    let changed = ["calc.go +3 −2", "util.go +1 −0", "go.sum +1 −1"];
+    assert_eq!(options(&world), changed);
+    assert!(world.daemon.sent_of("review_search").is_empty());
+
+    search(&mut world, "calc");
+    let asked: Vec<(String, String)> = world
+        .daemon
+        .sent_of("review_search")
+        .iter()
+        .map(|r| {
+            (
+                r["document"].as_str().unwrap_or_default().to_owned(),
+                r["query"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(asked.last(), Some(&(DOC.to_owned(), "calc".to_owned())));
+    assert_eq!(options(&world), ["calc.go file", "return b - a calc.go:9"]);
+
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert!(world.screen().find(Target::key("review.search")).is_none());
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 9: \treturn b - a")
+    );
+}
+
+#[test]
+fn opens_a_file_found_over_the_one_open_and_goes_back_to_it() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    serve_search(&world);
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Left);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("removed line 4: \treturn a + b")
+    );
+
+    type_key(&mut world, "/");
+    search(&mut world, "sub");
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 9: \treturn b - a")
+    );
+    let back = world
+        .screen()
+        .descendants(Target::key("tile.m.review.view"))
+        .into_iter()
+        .any(|n| {
+            n.name
+                .as_deref()
+                .is_some_and(|t| t.starts_with("← back ") && t != "← back")
+        });
+    assert!(back);
+
+    ctrl_o(&mut world);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("removed line 4: \treturn a + b")
+    );
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_none());
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+}
+
+#[test]
+fn reads_every_file_on_the_stack_again_not_only_the_top_one() {
+    let (mut world, calc) = open_served(
+        DOCUMENT,
+        ReviewBundle {
+            frame: "walkthrough".into(),
+            ..bundle()
+        },
+    );
+    serve_search(&world);
+    press(&mut world, Key::Down);
+    type_key(&mut world, "/");
+    search(&mut world, "sub");
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 9: \treturn b - a")
+    );
+
+    *calc.lock().unwrap() = calc_with_two_lines_above();
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(ReviewBundle {
+            frame: "walkthrough".into(),
+            head: "aaaaaaa".into(),
+            ..bundle()
+        }),
+    );
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 11: \treturn b - a")
+    );
+
+    ctrl_o(&mut world);
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+    assert!(
+        file_view(&world)
+            .unwrap()
+            .iter()
+            .any(|t| t == "added line 4: // It names the sum.")
+    );
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 7: \treturn sum")
+    );
+}
+
+#[test]
+fn enter_on_a_not_shown_folder_searches_its_path() {
+    let mut review = bundle();
+    review.not_shown[0].path = "vendor/".into();
+    let document = DOCUMENT.replace("- go.sum: checksums only.", "- vendor/: copied as is.");
+    let (mut world, _) = open_served(&document, review);
+    serve_search(&world);
+    for _ in 0..30 {
+        press(&mut world, Key::Down);
+        let at = cursor(&world).name.unwrap_or_default();
+        if at.starts_with("vendor/") {
+            break;
+        }
+    }
+    press(&mut world, Key::Enter);
+    let field = world.screen().get(Target::key("review.search.field"));
+    assert_eq!(field.value.as_deref(), Some("vendor/"), "{field:?}");
+    assert_eq!(
+        world
+            .daemon
+            .sent_of("review_search")
+            .last()
+            .map(|r| r["query"].clone()),
+        Some(json!("vendor/"))
     );
 }

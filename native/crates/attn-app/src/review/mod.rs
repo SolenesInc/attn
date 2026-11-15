@@ -7,6 +7,7 @@ mod document;
 mod file;
 mod frames;
 mod keys;
+mod search;
 mod stop;
 
 use std::collections::HashMap;
@@ -122,6 +123,8 @@ pub struct Reviews {
     colors: Vec<((String, String), Rc<stop::Colors>)>,
     /// Files too long to color, by path and hash, which are not read again to color them.
     oversize: Vec<(String, String)>,
+    /// The search open over a review tile.
+    search: Option<search::Search>,
 }
 
 impl Reviews {
@@ -666,6 +669,11 @@ pub(crate) fn body(
         .child(frame)
         .child(keys::key_line(&prefix, reading.frame, &offered, sides, t))
         .children(review.help.then(|| keys::sheet(&prefix, t)))
+        .children(
+            reviews.search.as_ref().filter(|s| s.tile == tile).map(|s| {
+                search::view(s, bundle, t).pin(Some(0.0), Some(space::S6), Some(0.0), None)
+            }),
+        )
 }
 
 /// The Before and After switch over a diagram, with `b`.
@@ -975,11 +983,23 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             None
         }
         (Key::Enter, _) | (_, "z") if !viewing => {
+            if let Some(Spot::NotShown(dir)) = cursor.map(|i| &reading.places[i].spot)
+                && dir.ends_with('/')
+            {
+                return match ev.key {
+                    Key::Enter => {
+                        search::open(state, &tile, source_of(&message), dir, tx);
+                        true
+                    }
+                    _ => true,
+                };
+            }
             let Some(target) = cursor.and_then(|i| target_of(&reading, i)) else {
                 return ev.key == Key::Enter;
             };
             Some(Move::Open(target, typed == "z"))
         }
+        (_, "/") => Some(Move::Search(String::new())),
         (_, "e") if !viewing => {
             let Some(stop) = cursor.and_then(|i| reading.places[i].stop) else {
                 return true;
@@ -1026,6 +1046,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Some(Move::Open(target, fill)) => {
             open_file(state, &tile, source_of(&message), target, fill, tx);
         }
+        Some(Move::Search(query)) => {
+            search::open(state, &tile, source_of(&message), &query, tx);
+        }
         Some(Move::Stage(stop, line)) => {
             show_stage(state, &tile, source_of(&message), bundle, stop, line, tx);
             if let Some(at) = reading.parts.iter().position(|p| *p == Part::Stop(stop)) {
@@ -1061,6 +1084,8 @@ enum Move {
     Expand(usize, usize),
     /// Put this stop's file on the Walkthrough's stage, at this line or where it opens.
     Stage(usize, Option<i64>),
+    /// Open the search with this in its box.
+    Search(String),
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.
@@ -1221,6 +1246,32 @@ fn lead_in(reading: &Reading, at: usize) -> usize {
         }
     }
     start
+}
+
+/// The review bundle tile `tile` of the current desktop shows.
+fn bundle_of<'a>(state: &'a State, tile: &str) -> Option<&'a ReviewBundle> {
+    state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .find(|(key, _)| key.tile == tile)?
+        .1
+        .message
+        .review
+        .as_ref()
+}
+
+/// Opens what a search found on top of tile `tile`'s files.
+fn open_found(
+    state: &mut State,
+    tile: &str,
+    source: (Option<String>, String),
+    target: file::Target,
+    tx: &mut Tx,
+) {
+    open_file(state, tile, source, target, false, tx);
+    state.readings.revision += 1;
 }
 
 /// Where a read puts the file view's cursor.
