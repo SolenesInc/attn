@@ -23,7 +23,7 @@ pub(crate) use root_picker::{overlay as root_picker_overlay, trigger as root_pic
 pub(crate) use view::{fullscreen, tile_body};
 
 use io::{Target, write};
-use model::{Doc, Surface, SurfaceId, shelf_key};
+use model::{Doc, Home, Surface, SurfaceId, shelf_key};
 use params::Params;
 
 use crate::State;
@@ -54,11 +54,14 @@ pub(crate) fn notebook_root_of(facts: &attn_client::Facts) -> Option<String> {
 /// Opens the notebook over the whole window, on the file it showed last.
 pub(crate) fn open_fullscreen(state: &mut State, tx: &mut Tx) {
     state.window.layer = Some(Layer::Notebook);
-    if state.notebook.fullscreen.is_some() {
-        return;
+    if state.notebook.fullscreen.is_none() {
+        start_fullscreen(state, tx);
     }
+}
+
+fn start_fullscreen(state: &mut State, tx: &mut Tx) {
     let changes = changes_of(state, None);
-    state.notebook.fullscreen = Some(Surface::new(None, changes));
+    state.notebook.fullscreen = Some(Surface::new(None, notebook_root(state), changes));
     let id = SurfaceId::Fullscreen;
     io::list(state, &id, "", tx);
     match state.notebook.last_path.clone() {
@@ -234,6 +237,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let mut changed = follow_focus(state, tx);
     changed |= place_tiles(state, tx);
     changed |= follow_watches(state, tx);
+    changed |= follow_notebook(state, tx);
     let ids: Vec<SurfaceId> = state
         .notebook
         .fullscreen
@@ -280,7 +284,7 @@ fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
             let save = open.dirty() && open.save.writing.is_none() && open.save.conflict.is_none();
             state.notebook.shelved.insert(key.clone(), *open);
             if save {
-                write(state, Target::Shelved(key), None, tx, None);
+                write(state, Target::Shelved(key), None, tx);
             }
         }
     }
@@ -290,10 +294,13 @@ fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
         }
         changed = true;
         let changes = changes_of(state, params.root.as_deref());
-        let mut surface = Surface::new(params.root.clone(), changes);
+        let mut surface = Surface::new(params.root.clone(), notebook_root(state), changes);
         let key = shelf_key(&tile, params.root.as_deref());
         let returning = state.notebook.shelved.remove(&key);
         if let Some(open) = returning.as_ref() {
+            if let Home::Notebook(read_in) = &open.home {
+                surface.notebook.clone_from(read_in);
+            }
             surface.doc = Doc::Open(Box::new(open.clone()));
         }
         state.notebook.tiles.insert(tile.clone(), surface);
@@ -383,6 +390,45 @@ fn unwatch(state: &mut State, root: String, tx: &mut Tx) {
     );
 }
 
+/// Moves each surface on the profile's notebook to the folder the notebook is now, once its
+/// edit is saved into the folder it was read from. A surface whose save conflicts or fails
+/// stays until the user settles it.
+fn follow_notebook(state: &mut State, tx: &mut Tx) -> bool {
+    let now = notebook_root(state);
+    let notebook = &state.notebook;
+    let moving: Vec<SurfaceId> = notebook
+        .fullscreen
+        .iter()
+        .map(|s| (SurfaceId::Fullscreen, s))
+        .chain(
+            notebook
+                .tiles
+                .iter()
+                .map(|(t, s)| (SurfaceId::Tile(t.clone()), s)),
+        )
+        .filter(|(id, s)| {
+            s.on_notebook()
+                && s.notebook != now
+                && !notebook.after_save.contains_key(id)
+                && s.open()
+                    .is_none_or(|o| o.save.conflict.is_none() && o.save.error.is_none())
+        })
+        .map(|(id, _)| id)
+        .collect();
+    let changed = !moving.is_empty();
+    for id in moving {
+        let reopened = id.clone();
+        io::leave_then(state, &id, tx, move |state, tx| match reopened {
+            SurfaceId::Fullscreen => start_fullscreen(state, tx),
+            SurfaceId::Tile(tile) => {
+                state.notebook.tiles.remove(&tile);
+                place_tiles(state, tx);
+            }
+        });
+    }
+    changed
+}
+
 /// Lists the tree again and reads the open file when files under the surface's folder changed.
 fn follow_disk(state: &mut State, id: &SurfaceId, tx: &mut Tx) -> bool {
     let Some(surface) = state.notebook.surface(id) else {
@@ -442,7 +488,7 @@ fn follow_save(state: &mut State, id: &SurfaceId, now: f64, tx: &mut Tx) -> bool
     }
     open.edited_at = None;
     let path = open.path.clone();
-    write(state, Target::Surface(id.clone(), path), None, tx, None);
+    write(state, Target::Surface(id.clone(), path), None, tx);
     true
 }
 
@@ -463,13 +509,7 @@ pub(crate) fn overwrite(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
     };
     let base = open.save.conflict.clone().unwrap_or(None);
     let path = open.path.clone();
-    write(
-        state,
-        Target::Surface(id.clone(), path),
-        Some(base),
-        tx,
-        None,
-    );
+    write(state, Target::Surface(id.clone(), path), Some(base), tx);
 }
 
 /// Drops the edit and reads what disk holds now.

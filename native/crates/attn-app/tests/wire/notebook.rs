@@ -12,6 +12,8 @@ use attn_testkit::{Answer, Daemon, Target, World, key_event};
 use rune::KeyPlatform;
 use serde_json::{Value, json};
 
+mod saves;
+
 const NOTEBOOK: &str = "/home/me/attn-notebook";
 const DESKTOP: &str = "work/desktop_1";
 
@@ -549,6 +551,14 @@ fn an_edit_made_just_before_the_tile_leaves_the_screen_is_saved_and_comes_back_w
     disk.put("plan.md", "changed on disk\n");
     arrange(&mut world, row(vec![pane("a")]), 4);
     assert_eq!(disk.get("plan.md").as_deref(), Some("changed on disk\n"));
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("Could not save plan.md: it changed on disk")
+    );
     arrange(&mut world, row(vec![pane("a"), tile()]), 5);
     let screen = world.screen();
     assert!(
@@ -564,7 +574,7 @@ fn an_edit_made_just_before_the_tile_leaves_the_screen_is_saved_and_comes_back_w
 
     world.gesture(|d| d.click(Target::key("notebook.tile.n.document.overwrite")));
     assert!(disk.get("plan.md").unwrap().contains("Again."));
-    world.advance(Duration::from_secs(3));
+    world.advance(Duration::from_secs(6));
     assert!(world.runtime_is_at_rest());
 }
 

@@ -44,6 +44,10 @@ writers never collide. The chief treats the notebook as its home.
 
 - An outpost's copies sync with the home's folders while Outposts is on (`internal/daemon/notebook_sync.go`). The home pushes the folder list on connect and when a profile's folder, or the set of profiles, changes (`internal/daemon/notebook_folders.go`). When the outpost rejects the list, the Outposts row shows the rejection and the home tries again on its own, every 2 s at first and backing off to every 10 s; the outpost's Notebook stream opens only after it accepts a list. When the stream closes while the bridge stays up, such as when one side sends an index for a folder the other just dropped, the Outposts row shows `Notebook stream: connection closed` and the home reopens the stream on the same bridge, every 2 s at first and backing off to every 10 s.
 
+### In the native app
+
+The native app (`native/crates/attn-app/src/notebook/`) shows the notebook fullscreen and in editor tiles, and saves an edit as the Tauri app does. An edit typed while its save is in flight saves again before the notebook closes, opens another note or lets a tile leave the screen. A tile's edit that fails or conflicts off screen also shows a notice in the window. When the profile's Notebook folder changes with a note open, the edit saves into the folder it was read from, and the notebook then opens on the new folder. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+
 ## Driving it
 
 Preconditions:
@@ -144,7 +148,7 @@ Steps:
 
 ## Tests
 
-- Wire: `internal/daemon/notebook_wire_test.go`, `internal/daemon/notebook_profiles_wire_test.go`, `internal/daemon/notebook_containment_wire_test.go`, `internal/daemon/journal_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/notebook.rs` (the native app), `internal/daemon/notebook_wire_test.go`, `internal/daemon/notebook_profiles_wire_test.go`, `internal/daemon/notebook_containment_wire_test.go`, `internal/daemon/journal_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`.
 - Stack: `cmd/attnd/notebook_sync_stack_test.go`, `cmd/attnd/agent_commands_stack_test.go`, `app/e2e/notebook-tile.spec.ts`, `app/e2e/notebook-tile-finder.spec.ts`, `app/e2e/notebook-browser.spec.ts`, `app/e2e/live-markdown-editor.spec.ts`, `app/e2e/broken-links.spec.ts`, `app/e2e/frontmatter-card.spec.ts`.
 - Scenario: `notebook-editor-undo`, `native-notebook-editor-undo`, `native-notebook-link-nav`, `native-notebook-tile-close`, `notebook-sync`, and outside the catalog, `app/scripts/real-app-harness/scenario-notebook-link-nav.mjs` and `scenario-notebook-tile-close.mjs`.
 - Kernel: `internal/notebook/*_test.go`.

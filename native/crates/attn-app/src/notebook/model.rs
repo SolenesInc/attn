@@ -21,7 +21,7 @@ pub struct Notebook {
     pub(crate) watches: BTreeMap<String, Option<String>>,
     /// The connection the watches were asked on: a new one asks again.
     pub(crate) finder: Option<super::finder::Finder>,
-    /// What waits for a surface's save in flight: opening another file, closing, switching
+    /// What waits for a surface's edit to reach disk: opening another file, closing, switching
     /// the root. A save that conflicts or fails drops it.
     pub(crate) after_save: BTreeMap<SurfaceId, super::io::Then>,
     /// The editor tile whose "Editor root" list is open.
@@ -42,6 +42,8 @@ pub(crate) enum SurfaceId {
 pub(crate) struct Surface {
     /// The folder it reads; `None` is the profile's notebook.
     pub(crate) root: Option<String>,
+    /// The profile's notebook folder when the surface opened on it.
+    pub(crate) notebook: Option<String>,
     /// Its width in points as last laid out, which folds a narrow tile's panes.
     pub(crate) width: f32,
     pub(crate) tree: Tree,
@@ -85,6 +87,7 @@ pub(crate) enum Doc {
 /// A file open for editing: what disk held when it was read or last saved, and the edit.
 #[derive(Clone)]
 pub(crate) struct Open {
+    pub(crate) home: Home,
     pub(crate) path: String,
     pub(crate) kind: FileKind,
     pub(crate) disk: String,
@@ -93,6 +96,14 @@ pub(crate) struct Open {
     pub(crate) save: Save,
     /// When the draft last changed, for the autosave that follows it.
     pub(crate) edited_at: Option<f64>,
+}
+
+/// The folder a file was read from, which every save of its edit goes back to.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum Home {
+    /// The profile's notebook, as the folder it was when the file was read.
+    Notebook(Option<String>),
+    Folder(String),
 }
 
 #[derive(Clone, Default)]
@@ -121,8 +132,9 @@ pub(crate) struct Folds {
 }
 
 impl Surface {
-    pub(crate) fn new(root: Option<String>, changes: u64) -> Surface {
+    pub(crate) fn new(root: Option<String>, notebook: Option<String>, changes: u64) -> Surface {
         Surface {
+            notebook: notebook.filter(|_| root.is_none()),
             root,
             width: 0.0,
             tree: Tree::default(),
@@ -166,9 +178,16 @@ impl Surface {
 }
 
 impl Open {
-    pub(crate) fn read(path: String, kind: FileKind, content: String, hash: String) -> Open {
+    pub(crate) fn read(
+        home: Home,
+        path: String,
+        kind: FileKind,
+        content: String,
+        hash: String,
+    ) -> Open {
         let draft = Draft::of(kind, &content);
         Open {
+            home,
             path,
             kind,
             draft,
