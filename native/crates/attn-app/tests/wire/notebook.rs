@@ -1382,3 +1382,49 @@ fn a_link_to_a_missing_note_is_marked_and_each_note_is_asked_about_once() {
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_so() {
+    use base64::Engine;
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        "# Pictures\n\n![a cat](img/cat.png)\n\n![gone](missing.png)\n",
+    )]);
+    let mut world = start(&disk);
+    let png =
+        base64::engine::general_purpose::STANDARD.encode(include_bytes!("../../src/home/logo.png"));
+    world.daemon.on("fs_read_asset", move |req| {
+        if req["path"] == "knowledge/img/cat.png" {
+            json!({ "event": "fs_read_asset_result", "success": true,
+                "result": { "path": req["path"], "mime_type": "image/png", "data_base64": png } })
+        } else {
+            json!({ "event": "fs_read_asset_result", "success": false, "error": "fsdoc: not found" })
+        }
+    });
+    open_fullscreen(&mut world);
+    world.advance(Duration::from_millis(100));
+    let mut asked: Vec<String> = world
+        .daemon
+        .sent_of("fs_read_asset")
+        .iter()
+        .map(|r| r["path"].as_str().unwrap().to_owned())
+        .collect();
+    asked.sort();
+    assert_eq!(asked, ["knowledge/img/cat.png", "knowledge/missing.png"]);
+    assert!(
+        world
+            .screen()
+            .find(Target::role("label").name("image not found"))
+            .is_some()
+    );
+    let cat = world
+        .screen()
+        .bounds(Target::role("image").name("a cat"))
+        .unwrap();
+    assert!(
+        (cat[3] - 220.0).abs() > 1.0,
+        "the picture, not the room held for it: {cat:?}"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}

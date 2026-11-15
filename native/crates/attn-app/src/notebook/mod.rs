@@ -721,3 +721,19 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
         );
     }
 }
+
+/// The images the open notes show, with the folder each is read from, for the window's
+/// pictures to read.
+pub(crate) fn images(state: &State) -> Vec<(Option<String>, String)> {
+    let notebook = &state.notebook;
+    notebook
+        .fullscreen
+        .iter()
+        .chain(notebook.tiles.values())
+        .filter_map(|s| match &s.open()?.draft {
+            model::Draft::Note(editor) => Some(editor),
+            model::Draft::Field(_) => None,
+        })
+        .flat_map(|e| e.images().into_iter().map(|p| (e.asset_root.clone(), p)))
+        .collect()
+}

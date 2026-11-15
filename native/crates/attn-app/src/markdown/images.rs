@@ -32,6 +32,9 @@ enum Reader {
     Tile { host: Option<String> },
     /// An ask, from the copy of its images the home keeps.
     Ask(String),
+    /// A note in the notebook or an editor tile's folder: `root` is the folder, `None` the
+    /// notebook, and the path is from that folder.
+    Notebook { root: Option<String> },
 }
 
 /// A picture's read, with the picture read before it, shown until this one is ready.
@@ -127,6 +130,13 @@ impl Pictures {
         )
     }
 
+    /// The pictures notes under `root` show, by their paths from it; `None` is the notebook.
+    pub(crate) fn of_notebook(&self, root: Option<&str>) -> HashMap<String, Option<Image>> {
+        self.read_by(&Reader::Notebook {
+            root: root.map(str::to_owned),
+        })
+    }
+
     fn read_by(&self, reader: &Reader) -> HashMap<String, Option<Image>> {
         self.loads
             .iter()
@@ -182,10 +192,12 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         .shows(crate::shell::Drawer::Asks)
         .then(|| state.window.asks.selected.clone())
         .flatten();
+    let notebook = crate::notebook::images(state);
     let followed = hash(&(
         contents.revision,
         std::sync::Arc::as_ptr(&state.facts.asks) as usize,
         &shown_ask,
+        &notebook,
     ));
     if state.pictures.followed != Some(followed) {
         state.pictures.followed = Some(followed);
@@ -220,6 +232,12 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
                     path,
                 });
             }
+        }
+        for (root, path) in notebook {
+            wanted.insert(Source {
+                reader: Reader::Notebook { root },
+                path,
+            });
         }
         state
             .pictures
@@ -272,6 +290,28 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
                     .and_then(|reply| reply.parse::<TileAssetReadResultMessage>())
                     .and_then(|result| result.data_uri)
                     .and_then(|uri| decoded(&uri));
+                arrived(state, source, bytes);
+            },
+            tx,
+        ),
+        Reader::Notebook { root } => state.ask(
+            |id| attn_protocol::FsReadAssetMessage {
+                path,
+                root,
+                request_id: Some(id),
+                ..attn_protocol::FsReadAssetMessage::new()
+            },
+            move |state, answer: Answer, _| {
+                let bytes = answer
+                    .outcome()
+                    .ok()
+                    .and_then(|reply| reply.parse::<attn_protocol::FsReadAssetResultMessage>())
+                    .and_then(|result| result.result)
+                    .and_then(|r| {
+                        base64::engine::general_purpose::STANDARD
+                            .decode(r.data_base64)
+                            .ok()
+                    });
                 arrived(state, source, bytes);
             },
             tx,
