@@ -1218,6 +1218,111 @@ fn find_shows_every_match_and_moves_the_selection_to_the_next_and_the_previous()
 }
 
 #[test]
+fn find_matches_on_a_line_whose_lowercase_changes_length_and_replaces_exactly_the_match() {
+    let disk = Disk::with(&[("knowledge/index.md", "# Index\n\nİstanbul lantern\n")]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor.line.0"));
+        d.press("mod+f");
+    });
+    world.gesture(|d| d.type_text("lantern"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notebook.editor.findcount"))
+            .name
+            .as_deref(),
+        Some("1 match")
+    );
+    world.gesture(|d| d.press("enter"));
+    world.gesture(|d| d.press("escape"));
+    world.gesture(|d| d.type_text("lamp"));
+    assert!(
+        editor_text(&world, "notebook.editor").contains("\nİstanbul lamp\n"),
+        "{}",
+        editor_text(&world, "notebook.editor")
+    );
+    world.advance(Duration::from_millis(700));
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest());
+}
+
+fn word(key: &str) -> String {
+    let word = if cfg!(target_os = "macos") {
+        "alt"
+    } else {
+        "ctrl"
+    };
+    format!("{word}+{key}")
+}
+
+#[test]
+fn word_motion_and_word_deletion_cross_line_breaks_and_a_join_undoes_in_one_step() {
+    let text = "# Index\n\nfirst words\nsecond line\n";
+    let disk = Disk::with(&[("knowledge/index.md", text)]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor.line.3"));
+        d.press("home");
+    });
+    world.gesture(|d| d.press(&word("backspace")));
+    assert_eq!(
+        editor_text(&world, "notebook.editor"),
+        "# Index\n\nfirst wordssecond line\n"
+    );
+    world.gesture(|d| d.press("mod+z"));
+    assert_eq!(editor_text(&world, "notebook.editor"), text);
+
+    world.gesture(|d| {
+        d.press("mod+up");
+        d.press("down");
+        d.press("down");
+        d.press("end");
+    });
+    world.gesture(|d| d.press(&word("delete")));
+    assert_eq!(
+        editor_text(&world, "notebook.editor"),
+        "# Index\n\nfirst wordssecond line\n"
+    );
+    world.gesture(|d| d.press("mod+z"));
+    assert_eq!(editor_text(&world, "notebook.editor"), text);
+
+    world.gesture(|d| {
+        d.press("mod+up");
+        d.press("down");
+        d.press("down");
+        d.press("down");
+    });
+    world.gesture(|d| {
+        d.press(&word("left"));
+        d.type_text("<");
+    });
+    assert!(editor_text(&world, "notebook.editor").contains("first words<\nsecond"));
+
+    world.gesture(|d| {
+        d.press(&word("right"));
+        d.type_text(">");
+    });
+    assert!(editor_text(&world, "notebook.editor").contains("first words<\n>second"));
+
+    world.gesture(|d| d.press("home"));
+    world.gesture(|d| {
+        d.press(&word("shift+left"));
+        d.type_text("|");
+    });
+    assert!(
+        editor_text(&world, "notebook.editor").contains("first words<|>second"),
+        "{}",
+        editor_text(&world, "notebook.editor")
+    );
+    world.advance(Duration::from_millis(700));
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn pressing_a_task_box_checks_it_without_moving_the_caret() {
     let disk = Disk::with(&[("knowledge/index.md", "- [ ] todo\n- [x] done\n")]);
     let mut world = start(&disk);

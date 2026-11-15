@@ -283,10 +283,8 @@ fn text_row(
         }
     }
     if let Some(find) = editor.query() {
-        let lower = shown.text.to_lowercase();
-        let needle = find.to_lowercase();
-        for (m, _) in lower.match_indices(&needle) {
-            highlights.push(TextHighlight::new(m..m + needle.len(), find_color(t)));
+        for m in super::find::find_in(&shown.text, find) {
+            highlights.push(TextHighlight::new(m, find_color(t)));
         }
     }
     let (display, spans) = match (&editor.preedit, caret_here) {

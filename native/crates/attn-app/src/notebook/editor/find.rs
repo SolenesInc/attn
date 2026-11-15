@@ -23,23 +23,21 @@ impl Editor {
             .filter(|q| !q.is_empty())
     }
 
-    /// Every match of the query, start and end, in document order.
+    /// Every match of the query, start and end, in document order, ignoring case.
     pub(crate) fn matches(&self) -> Vec<(Pos, Pos)> {
         let Some(query) = self.query() else {
             return Vec::new();
         };
-        let needle = query.to_lowercase();
-        let mut out = Vec::new();
-        for (i, line) in self.doc.lines().iter().enumerate() {
-            let lower = line.to_lowercase();
-            if lower.len() != line.len() {
-                continue;
-            }
-            for (at, _) in lower.match_indices(&needle) {
-                out.push((Pos::new(i, at), Pos::new(i, at + needle.len())));
-            }
-        }
-        out
+        self.doc
+            .lines()
+            .iter()
+            .enumerate()
+            .flat_map(|(i, line)| {
+                find_in(line, query)
+                    .into_iter()
+                    .map(move |m| (Pos::new(i, m.start), Pos::new(i, m.end)))
+            })
+            .collect()
     }
 
     /// Selects the next match after the selection, or the one before it, wrapping around.
@@ -64,6 +62,34 @@ impl Editor {
         self.doc.select(s, e);
         Some(self.doc.id(s.line) as usize)
     }
+}
+
+/// The byte ranges of `text` that match `query` ignoring case, each spanning whole characters
+/// of `text` however lowercasing changes their length.
+pub(crate) fn find_in(text: &str, query: &str) -> Vec<std::ops::Range<usize>> {
+    let needle: String = query.chars().flat_map(fold).collect();
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let mut folded = String::with_capacity(text.len());
+    let mut chars = Vec::new();
+    for (at, c) in text.char_indices() {
+        chars.push((folded.len(), at));
+        folded.extend(fold(c));
+    }
+    let source = |folded_at: usize| chars.partition_point(|(f, _)| *f <= folded_at) - 1;
+    folded
+        .match_indices(&needle)
+        .map(|(at, _)| {
+            let (first, last) = (source(at), source(at + needle.len() - 1));
+            chars[first].1..chars.get(last + 1).map_or(text.len(), |(_, s)| *s)
+        })
+        .collect()
+}
+
+/// `c` as find compares it: lowercased, with final sigma as sigma.
+fn fold(c: char) -> impl Iterator<Item = char> {
+    c.to_lowercase().map(|l| if l == 'ς' { 'σ' } else { l })
 }
 
 fn field_key(key: &str) -> String {
@@ -194,4 +220,35 @@ fn close(state: &mut State, key: &str, access: super::view::Access, tx: &mut Tx)
         tx.focus(key.to_owned(), false);
     }
     state.notebook.revision += 1;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_ignores_case_and_selects_the_exact_source_text_where_case_changes_length() {
+        for (line, query, want) in [
+            (
+                "a Lantern and a lantern",
+                "LANTERN",
+                vec!["Lantern", "lantern"],
+            ),
+            ("İstanbul lantern", "lantern", vec!["lantern"]),
+            ("İstanbul", "i̇stanbul", vec!["İstanbul"]),
+            ("STRAẞE strasse", "straße", vec!["STRAẞE"]),
+            ("ΟΔΟΣ οδος", "οδοσ", vec!["ΟΔΟΣ", "οδος"]),
+            ("ΟΔΟΣ οδος", "ΟΔΟΣ", vec!["ΟΔΟΣ", "οδος"]),
+            (
+                "cafe\u{301} CAFE\u{301} lamp",
+                "cafe\u{301}",
+                vec!["cafe\u{301}", "CAFE\u{301}"],
+            ),
+            ("cafe\u{301} CAFE\u{301} lamp", "LAMP", vec!["lamp"]),
+            ("plain text", "nothing", vec![]),
+        ] {
+            let found: Vec<&str> = find_in(line, query).into_iter().map(|m| &line[m]).collect();
+            assert_eq!(found, want, "{query:?} in {line:?}");
+        }
+    }
 }

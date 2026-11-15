@@ -24,18 +24,14 @@ pub(crate) fn on_key(editor: &mut Editor, ev: &KeyEvent, now: f64, tx: &mut Tx) 
         Key::Text(t) if !m.cmd && !m.ctrl => editor.doc.replace(t, Kind::Typing, now),
         Key::Enter if !m.cmd => newline(editor, now),
         Key::Tab if !m.cmd && !m.ctrl => editor.doc.replace("\t", Kind::Other, now),
-        Key::Backspace if word => {
-            if !editor.doc.has_selection() {
-                editor.within_row(true, |s, l| s.previous_visual_word(l, true));
-            }
-            editor.doc.replace("", Kind::Other, now);
-        }
+        Key::Backspace if word => delete_word(editor, true, now),
+        Key::Delete if word => delete_word(editor, false, now),
         Key::Backspace => editor.doc.backspace(now),
         Key::Delete => editor.doc.delete_forward(now),
         Key::Left if line_jump => editor.within_row(shift, |s, l| s.line_start(l, shift)),
         Key::Right if line_jump => editor.within_row(shift, |s, l| s.line_end(l, shift)),
-        Key::Left if word => editor.within_row(shift, |s, l| s.previous_visual_word(l, shift)),
-        Key::Right if word => editor.within_row(shift, |s, l| s.next_visual_word(l, shift)),
+        Key::Left if word => move_word(editor, true, shift),
+        Key::Right if word => move_word(editor, false, shift),
         Key::Left if editor.doc.has_selection() && !shift => {
             let (a, _) = editor.doc.range();
             editor.move_to(a, false, false);
@@ -122,6 +118,31 @@ pub(crate) fn on_key(editor: &mut Editor, ev: &KeyEvent, now: f64, tx: &mut Tx) 
     }
     editor.edited();
     true
+}
+
+/// Moves the caret a word back or forward; at a line's edge the line break is the word, so the
+/// caret crosses to the neighbouring line, as CodeMirror moves by group.
+fn move_word(editor: &mut Editor, back: bool, extend: bool) {
+    let c = editor.doc.caret;
+    let len = editor.doc.line(c.line).len();
+    if back && c.col == 0 && c.line > 0 {
+        let to = Pos::new(c.line - 1, editor.doc.line(c.line - 1).len());
+        editor.move_to(to, extend, false);
+    } else if !back && c.col == len && c.line + 1 < editor.doc.len() {
+        editor.move_to(Pos::new(c.line + 1, 0), extend, false);
+    } else if back {
+        editor.within_row(extend, |s, l| s.previous_visual_word(l, extend));
+    } else {
+        editor.within_row(extend, |s, l| s.next_visual_word(l, extend));
+    }
+}
+
+/// Removes the selection, or the word before or after the caret as one undo step.
+fn delete_word(editor: &mut Editor, back: bool, now: f64) {
+    if !editor.doc.has_selection() {
+        move_word(editor, back, true);
+    }
+    editor.doc.replace("", Kind::Other, now);
 }
 
 /// Pastes `text` over the selection.
