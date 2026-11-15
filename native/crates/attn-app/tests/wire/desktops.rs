@@ -31,6 +31,7 @@ fn session(id: &str) -> Session {
         label: format!("Agent {id}"),
         directory: format!("/work/{id}"),
         profile_id: "work".into(),
+        state: "idle".into(),
         ..Session::default()
     }
 }

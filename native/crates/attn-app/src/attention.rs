@@ -14,9 +14,8 @@ use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
 
 use crate::State;
 use crate::requests::{Answer, Refused};
-use crate::setting;
 use crate::shell::Drawer;
-use crate::sidebar::model::{AgentRow, AgentState};
+use crate::sidebar::model::AgentRow;
 use crate::sidebar::queue;
 
 pub(crate) const DRAWER: &str = "attention";
@@ -76,27 +75,7 @@ struct Lists<'a> {
 
 impl<'a> Lists<'a> {
     fn of(facts: &'a Facts, muting: &HashSet<String>) -> Lists<'a> {
-        let settings = &facts.settings;
-        let queue_flow = setting::on(settings, queue::QUEUE_MODE);
-        let crew_in_queue = setting::on(settings, queue::QUEUE_CREW);
-        let places = queue::Places::of(facts);
-        let sessions = places
-            .agents()
-            .filter(|s| s.command_terminal != Some(true))
-            .filter(|s| !crate::asks::offline(s, &facts.outposts))
-            .filter(|s| {
-                if queue_flow {
-                    queue::participates(s, crew_in_queue) && s.turn_owed == Some(true)
-                } else {
-                    matches!(
-                        AgentState::parse(&s.state),
-                        AgentState::WaitingInput
-                            | AgentState::PendingApproval
-                            | AgentState::Unknown
-                    )
-                }
-            })
-            .collect();
+        let sessions = queue::wanting(facts);
         let pulls = &facts.pull_requests;
         let needing: Vec<&PR> = pulls
             .prs

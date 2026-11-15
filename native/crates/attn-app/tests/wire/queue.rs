@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use attn_app::Action;
 use attn_protocol::{
-    Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
-    SessionStateChangedMessage, SessionUnregisteredMessage,
+    AutomationProvenance, Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
+    Session, SessionStateChangedMessage, SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
 
@@ -162,6 +162,74 @@ fn the_waiting_head_and_the_jump_key_open_the_oldest_turn_and_say_so_when_nothin
     world.gesture(|app| app.click(Target::key("queue.waiting-head")));
     world.gesture(|app| app.key(chord(Action::SessionJumpToWaiting)));
     assert!(shown(&world).is_empty());
+}
+
+#[test]
+fn in_desktop_flow_the_jump_key_opens_the_oldest_agent_waiting_for_the_user_runs_and_crew_included()
+{
+    let idle_owed = Session {
+        turn_owed: Some(true),
+        turn_opened_at: Some(ago(300)),
+        ..session("idle-owed", "idle")
+    };
+    let waiting = |id: &str, minutes: i64| Session {
+        turn_opened_at: Some(ago(minutes)),
+        ..session(id, "waiting_input")
+    };
+    let run = Session {
+        automation: Some(AutomationProvenance {
+            definition_name: "nightly".into(),
+            run_id: "r1".into(),
+            ..AutomationProvenance::default()
+        }),
+        ..waiting("run", 60)
+    };
+    let member = Session {
+        crew_member: Some("ops".into()),
+        ..waiting("member", 90)
+    };
+    let mut world = World::start(Daemon::scripted().state(one_desktop(vec![
+        idle_owed,
+        waiting("plain", 10),
+        run,
+        member,
+    ])));
+
+    world.gesture(|app| app.key(chord(Action::SessionJumpToWaiting)));
+    assert_eq!(shown(&world), ["member"]);
+
+    changes(
+        &mut world,
+        Session {
+            state: "working".into(),
+            ..waiting("member", 90)
+        },
+    );
+    world.gesture(|app| app.key(chord(Action::SessionJumpToWaiting)));
+    assert_eq!(shown(&world), ["member", "run"]);
+}
+
+#[test]
+fn in_queue_flow_moving_focus_up_or_down_past_the_last_tile_steps_the_queue_not_the_desktop() {
+    let alone = |d: &str, order: &str, slot: i64, s: &str| {
+        slotted(
+            desktop(d, order, "", vec![pane(d, &format!("p-{s}"), s)]),
+            slot,
+        )
+    };
+    let mut world = World::start(Daemon::scripted().state(queue(state(
+        vec![turn("t-new", 5), turn("t-old", 120), turn("t-mid", 60)],
+        vec![
+            alone("d2", "b", 2, "t-old"),
+            alone("d1", "a", 1, "t-new"),
+            alone("d3", "c", 3, "t-mid"),
+        ],
+    ))));
+    world.gesture(|app| app.click(Target::key("queue-turn.t-old")));
+    world.gesture(|app| app.key(chord(Action::TerminalFocusDown)));
+    world.gesture(|app| app.key(chord(Action::TerminalFocusUp)));
+
+    assert_eq!(shown(&world), ["t-old", "t-mid", "t-new"]);
 }
 
 #[test]

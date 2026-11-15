@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use attn_client::Facts;
 use attn_protocol::Session;
 
-use super::model::{desktop_title, ordered_desktops};
+use super::model::{AgentState, desktop_title, ordered_desktops};
 use crate::setting;
 
 pub const QUEUE_MODE: &str = "queue_mode_enabled";
@@ -131,6 +131,35 @@ pub fn participates(session: &Session, crew_in_queue: bool) -> bool {
     session.command_terminal != Some(true)
         && session.automation.is_none()
         && (session.crew_member.as_deref().unwrap_or("").is_empty() || crew_in_queue)
+}
+
+/// The agents that want the user, in place order, as the Tauri app's `wantsAttention`: in
+/// queue flow the queue's owed turns, in desktop flow every agent waiting for input or approval,
+/// runs and crew included. An unreachable outpost's agents want no one.
+pub fn wanting(facts: &Facts) -> Vec<&Session> {
+    let queue_flow = setting::on(&facts.settings, QUEUE_MODE);
+    let crew_in_queue = setting::on(&facts.settings, QUEUE_CREW);
+    Places::of(facts)
+        .agents()
+        .filter(|s| !crate::asks::offline(s, &facts.outposts))
+        .filter(|s| {
+            if queue_flow {
+                participates(s, crew_in_queue) && s.turn_owed == Some(true)
+            } else {
+                matches!(
+                    AgentState::parse(&s.state),
+                    AgentState::WaitingInput | AgentState::PendingApproval | AgentState::Unknown
+                )
+            }
+        })
+        .collect()
+}
+
+/// The turn ⌘J opens: the oldest of the agents that want the user, as `oldestWantedTurn`.
+pub fn oldest_wanted(facts: &Facts) -> Option<&Session> {
+    wanting(facts)
+        .into_iter()
+        .min_by(|a, b| compare_turn_order(a, b))
 }
 
 /// What the queue lets the user do to an agent, as the Tauri app's `queueActions`.

@@ -408,8 +408,8 @@ pub(crate) fn give_keyboard(state: &mut State, desktop: &str, leaf: &str, tx: &m
 }
 
 /// Moves the active tile to its neighbour on screen: along the row by columns for left and
-/// right, by geometry within a column and for up and down. Past the edge it leaves for the
-/// neighbouring desktop.
+/// right, by geometry within a column and for up and down. Past the edge it leaves the pane, as
+/// `leave_pane` says.
 fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
     let edge = match toward {
         Toward::Left | Toward::Up => -1,
@@ -420,7 +420,7 @@ fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
     };
     let desk = &state.window.desk;
     let Some((tree, plan)) = desk.plan(&state.facts, desktop) else {
-        return step_desktop(state, edge, tx);
+        return leave_pane(state, toward, edge, tx);
     };
     let active = desktop.active_pane_id.as_str();
     let row_state = desk.row(&desktop.id);
@@ -447,7 +447,18 @@ fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
     let desktop = desktop.id.clone();
     match next {
         Some(leaf) => show_leaf(state, &desktop, &leaf, tx),
-        None => step_desktop(state, edge, tx),
+        None => leave_pane(state, toward, edge, tx),
+    }
+}
+
+/// Past the last tile, left and right step desktops. In queue flow up and down step the queue,
+/// a vertical list; in desktop flow they step desktops too.
+fn leave_pane(state: &mut State, toward: Toward, edge: i32, tx: &mut Tx) {
+    let vertical = matches!(toward, Toward::Up | Toward::Down);
+    if vertical && crate::sidebar::queue_flow(state) {
+        crate::sidebar::step(state, edge as isize, tx);
+    } else {
+        step_desktop(state, edge, tx);
     }
 }
 
