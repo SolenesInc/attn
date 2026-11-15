@@ -222,9 +222,9 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             .shortcut(desktop.shortcut_slot.and_then(Action::desktop_select)),
         );
     }
-    if let Some(current) = facts.current_desktop()
+    if let Some((current, leaf)) = state.window.acting(facts)
         && state.window.view == crate::shell::View::Desktop
-        && has_delegate_on(facts, current, &state.window.desk.acting_leaf(current))
+        && has_delegate_on(facts, current, &leaf)
     {
         for desktop in model::ordered_desktops(&desktops)
             .into_iter()

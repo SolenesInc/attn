@@ -1,4 +1,5 @@
 use attn_client::{Connection, Facts, Refusal};
+use attn_protocol::Desktop;
 use attn_ui::{Appearance, Tokens};
 use rune::tok::{space, type_};
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
@@ -214,16 +215,28 @@ impl Window {
             .flatten()
     }
 
-    /// The agent the window shows: the active pane's agent of the current desktop.
+    /// The desktop and the tile this window's keys, commands and finders act on: a tile
+    /// window's own tile, else the current desktop's acting leaf.
+    pub(crate) fn acting<'f>(&self, facts: &'f Facts) -> Option<(&'f Desktop, String)> {
+        if let Some(tile) = &self.tile {
+            let desktop = facts.desktops.iter().find(|d| d.id == tile.desktop)?;
+            return Some((desktop, tile.leaf.clone()));
+        }
+        let desktop = facts.current_desktop()?;
+        let leaf = self.desk.acting_leaf(desktop);
+        (!leaf.is_empty()).then_some((desktop, leaf))
+    }
+
+    /// The agent the window shows: the agent of the tile it acts on.
     pub(crate) fn on_screen(&self, facts: &Facts) -> Option<String> {
         if self.view != View::Desktop {
             return None;
         }
-        let desktop = facts.current_desktop()?;
+        let (desktop, leaf) = self.acting(facts)?;
         desktop
             .panes
             .iter()
-            .find(|p| p.pane_id == desktop.active_pane_id)
+            .find(|p| p.pane_id == leaf)
             .map(|p| p.session_id.clone())
             .filter(|id| !id.is_empty())
     }

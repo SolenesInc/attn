@@ -39,6 +39,9 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         return Outcome::Unavailable;
     }
     if state.window.tile.is_some() {
+        if action == Action::FileOpen && crate::notebook::find_note(state, tx) {
+            return Outcome::Ran;
+        }
         return if crate::desktop::forward_to_main(state, action) {
             Outcome::Ran
         } else {

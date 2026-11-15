@@ -2,12 +2,14 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, FsChangedMessage, InitialStateMessage, Profile,
     ProfileArrangementChangedMessage, Session,
 };
 use attn_testkit::tree::{pane, row};
-use attn_testkit::{Answer, Daemon, Target, World};
+use attn_testkit::{Answer, Daemon, Target, World, key_event};
+use rune::KeyPlatform;
 use serde_json::{Value, json};
 
 const NOTEBOOK: &str = "/home/me/attn-notebook";
@@ -1700,4 +1702,87 @@ fn an_image_written_after_the_note_opened_shows_once_its_folder_changes() {
     assert_eq!(world.daemon.sent_of("fs_read_asset").len(), 2);
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_finder_finds_in_the_editor_tile_shown_alone_while_another_window_selects_another_tile() {
+    let disk = Disk::with(&[("plan.md", PLAN), ("README.md", "# Read me\n")]);
+    let tiles = || {
+        row(vec![
+            pane("a"),
+            editor_tile("n", r#"{"root":"/work/n","path":"plan.md"}"#),
+        ])
+    };
+    let mut world = start_with(&disk, Some(tiles()));
+    world.daemon.on("fs_index", |req| {
+        json!({ "event": "fs_index_result", "success": true, "root": req["root"],
+            "files": ["README.md", "plan.md"] })
+    });
+    let selected = |leaf: &str, revision: i64| {
+        let mut desktop = desktop(tiles(), revision);
+        desktop.active_pane_id = leaf.into();
+        ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: DESKTOP.into(),
+                ..Profile::default()
+            },
+            desktops: vec![desktop],
+            ..ProfileArrangementChangedMessage::new()
+        }
+    };
+    world.daemon.emit(selected("n", 2));
+    world.settle();
+    world
+        .automate("run", json!({ "name": "terminal.toggleMaximize" }))
+        .unwrap();
+    world.settle();
+    world.daemon.emit(selected("a", 3));
+    world.settle();
+
+    world
+        .automate("run", json!({ "name": "file.open" }))
+        .unwrap();
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Find a note"))
+            .is_some()
+    );
+    assert!(world.screen().find(Target::key("opener")).is_none());
+    let index = world.daemon.sent_of("fs_index");
+    assert_eq!(index.len(), 1);
+    assert_eq!(index[0]["root"], "/private/work/n");
+}
+
+#[test]
+fn the_finder_finds_in_a_popped_out_editor_tile_from_its_own_window() {
+    let disk = Disk::with(&[("plan.md", PLAN), ("README.md", "# Read me\n")]);
+    let tile = || editor_tile("n", r#"{"root":"/work/n","path":"plan.md"}"#);
+    let mut world = start_with(&disk, Some(row(vec![pane("a"), tile()])));
+    world.daemon.on("fs_index", |req| {
+        json!({ "event": "fs_index_result", "success": true, "root": req["root"],
+            "files": ["README.md", "plan.md"] })
+    });
+    arrange(&mut world, row(vec![pane("a"), popped_out(tile())]), 2);
+    let window = world.tile_windows()[0].key.clone();
+
+    let open = match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::FileOpen) {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("file.open has no single chord: {other:?}"),
+    };
+    world.tile_gesture(&window, |d| d.key(open));
+    let finder = Target::role("dialog").name("Find a note");
+    assert!(
+        world.tile_screen(&window).find(finder.clone()).is_some(),
+        "{}",
+        world.tile_screen(&window)
+    );
+    assert!(world.screen().find(Target::key("opener")).is_none());
+    assert!(world.screen().find(finder).is_none());
+    let index = world.daemon.sent_of("fs_index");
+    assert_eq!(index.len(), 1);
+    assert_eq!(index[0]["root"], "/private/work/n");
 }

@@ -17,10 +17,9 @@ const MIN_HEIGHT: f64 = 200.0;
 
 /// Pops the current desktop's active tile out, or brings it back when it is out.
 pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
-    let Some(desktop) = state.facts.current_desktop() else {
+    let Some((desktop, leaf)) = state.window.acting(&state.facts) else {
         return;
     };
-    let leaf = state.window.desk.acting_leaf(desktop);
     let desktop = desktop.id.clone();
     toggle_leaf(state, &desktop, &leaf, tx);
 }

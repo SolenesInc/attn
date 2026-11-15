@@ -147,14 +147,14 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
     );
 }
 
-/// The session of the tile the screen shows as active: its agent, or the agent a document
-/// tile was opened for.
+/// The session of the tile the window acts on: its agent, or the agent a document tile was
+/// opened for.
 pub(crate) fn behind_screen(state: &State) -> Option<&attn_protocol::Session> {
     if state.window.view != crate::shell::View::Desktop {
         return None;
     }
-    let desktop = state.facts.current_desktop()?;
-    let session = crate::desktop::session_of_leaf(desktop, &desktop.active_pane_id)?;
+    let (desktop, leaf) = state.window.acting(&state.facts)?;
+    let session = crate::desktop::session_of_leaf(desktop, &leaf)?;
     state.facts.sessions.iter().find(|s| s.id == session)
 }
 

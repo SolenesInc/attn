@@ -45,22 +45,22 @@ fn switch(state: &mut State, desktop: &str, tx: &mut Tx) {
     crate::sidebar::open_desktop(state, desktop, tx);
 }
 
-/// Whether the active tile of the current desktop can go to `desktop`.
+/// Whether the tile the window acts on can go to `desktop`.
 fn can_send_to(state: &State, desktop: &str) -> bool {
     state
-        .facts
-        .current_desktop()
-        .is_some_and(|c| !c.active_pane_id.is_empty() && c.id != desktop)
+        .window
+        .acting(&state.facts)
+        .is_some_and(|(source, _)| source.id != desktop)
 }
 
 fn send(state: &mut State, desktop: &str, tx: &mut Tx) {
-    let Some(source) = state.facts.current_desktop() else {
+    let Some((source, leaf)) = state.window.acting(&state.facts) else {
         return;
     };
     let message = DesktopMoveLeafMessage {
         source_desktop_id: source.id.clone(),
         target_desktop_id: Some(desktop.to_owned()),
-        leaf_id: source.active_pane_id.clone(),
+        leaf_id: leaf,
         ..DesktopMoveLeafMessage::new()
     };
     close(state, tx);

@@ -909,7 +909,7 @@ fn target(state: &State, desktop: Option<&str>, anchor: Option<&str>) -> Option<
     let anchor = anchor
         .filter(|a| desktop.panes.iter().any(|p| p.pane_id == *a))
         .map(str::to_owned)
-        .or_else(|| (!desktop.active_pane_id.is_empty()).then(|| desktop.active_pane_id.clone()));
+        .or_else(|| Some(state.window.desk.acting_leaf(desktop)).filter(|leaf| !leaf.is_empty()));
     let spawned_from = anchor
         .as_ref()
         .and_then(|a| desktop.panes.iter().find(|p| p.pane_id == *a))

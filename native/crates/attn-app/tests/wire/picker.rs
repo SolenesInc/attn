@@ -2124,3 +2124,40 @@ fn an_agent_started_from_home_is_shown_holding_the_keyboard() {
     assert_eq!(window["keyboard"]["pane"], "p-new", "{window}");
     rest(&mut world);
 }
+
+#[test]
+fn a_new_agent_lands_beside_the_tile_shown_alone_while_another_window_selects_another() {
+    let two = |active: &str| Desktop {
+        tree_json: attn_testkit::tree::row([
+            attn_testkit::tree::pane("p1"),
+            attn_testkit::tree::pane("p2"),
+        ])
+        .to_string(),
+        active_pane_id: active.into(),
+        ..desktop("d1", "Desktop 1", vec![pane("d1", "p1"), pane("d1", "p2")])
+    };
+    let mut world = World::start_sized(
+        daemon(initial(vec![two("p1")], &[]), &["/home/me/src/attn"]),
+        (1600.0, 900.0),
+    );
+    world.open_desktop();
+    press_action(&mut world, &Action::TerminalToggleMaximize);
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            current_desktop_id: "d1".into(),
+            ..Profile::default()
+        },
+        desktops: vec![two("p2")],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+
+    open_dialog(&mut world);
+    press(&mut world, Key::Enter);
+    let spawned = spawns(&world);
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0]["placement"]["anchor_pane_id"], "p1");
+    assert_eq!(spawned[0]["spawned_from"], "s-p1");
+}

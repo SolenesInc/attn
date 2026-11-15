@@ -3572,3 +3572,42 @@ fn the_palette_moves_with_delegates_the_tile_shown_alone_while_another_window_se
     assert!(shows(&world, "Agent lone") && !shows(&world, "Agent root"));
     assert!(palette_rows(&mut world, "Move with delegates").is_empty());
 }
+
+#[test]
+fn the_opener_opens_on_the_folder_of_the_tile_shown_alone_while_another_window_selects_another() {
+    let mut world = alone_here_selected_elsewhere("root", "lone");
+    press(&mut world, Action::FileOpen);
+    let recents = sent(&world, "recent_files");
+    assert_eq!(recents.len(), 1);
+    assert_eq!(recents[0]["root"], "/work/root");
+}
+
+#[test]
+fn the_palette_reloads_the_agent_shown_alone_while_another_window_selects_another() {
+    let mut world = alone_here_selected_elsewhere("root", "lone");
+    assert_eq!(
+        palette_rows(&mut world, "Reload this agent"),
+        ["Reload this agent"]
+    );
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Enter,
+            mods: rune::Mods::default(),
+        })
+    });
+    let reloaded = sent(&world, "reload_session");
+    assert_eq!(reloaded.len(), 1);
+    assert_eq!(reloaded[0]["id"], "s-root");
+}
+
+#[test]
+fn the_overview_sends_the_tile_shown_alone_while_another_window_selects_another() {
+    let mut world = alone_here_selected_elsewhere("root", "lone");
+    press(&mut world, Action::DesktopOverview);
+    key(&mut world, rune::Key::Right, false);
+    key(&mut world, rune::Key::Enter, true);
+    let moved = sent(&world, "desktop_move_leaf");
+    assert_eq!(moved.len(), 1);
+    assert_eq!(moved[0]["leaf_id"], "root");
+    assert_eq!(moved[0]["target_desktop_id"], "work/desktop_2");
+}

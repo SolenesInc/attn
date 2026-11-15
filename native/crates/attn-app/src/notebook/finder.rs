@@ -238,15 +238,15 @@ fn option(path: &str, highlighted: bool, t: &Tokens) -> El {
 }
 
 /// The surface ⌘P finds a note in: the fullscreen notebook while it shows, else the editor
-/// tile that is the active leaf.
+/// tile the window acts on.
 pub(crate) fn target(state: &State) -> Option<SurfaceId> {
     if state.window.layer == Some(crate::shell::Layer::Notebook) {
         return Some(SurfaceId::Fullscreen);
     }
-    let desktop = state.facts.current_desktop()?;
+    let (_, leaf) = state.window.acting(&state.facts)?;
     state
         .notebook
         .tiles
-        .contains_key(&desktop.active_pane_id)
-        .then(|| SurfaceId::Tile(desktop.active_pane_id.clone()))
+        .contains_key(&leaf)
+        .then_some(SurfaceId::Tile(leaf))
 }

@@ -256,11 +256,10 @@ fn send_to_slot(state: &mut State, slot: u32, follow: bool, tx: &mut Tx) {
     let Some(profile_id) = profile(state) else {
         return;
     };
-    let Some(source) = state.facts.current_desktop() else {
+    let Some((source, leaf)) = state.window.acting(&state.facts) else {
         return;
     };
-    let leaf = state.window.desk.acting_leaf(source);
-    if source.shortcut_slot == Some(slot as i64) || leaf.is_empty() {
+    if source.shortcut_slot == Some(slot as i64) {
         return;
     }
     let source_desktop_id = source.id.clone();
@@ -291,11 +290,10 @@ fn ordered_desktops(state: &State) -> Vec<&Desktop> {
 
 /// Moves the active tile and its delegates to `desktop`, without following them.
 fn move_with_delegates(state: &mut State, desktop: &str, tx: &mut Tx) {
-    let Some(source) = state.facts.current_desktop() else {
+    let Some((source, leaf)) = state.window.acting(&state.facts) else {
         return;
     };
-    let leaf = state.window.desk.acting_leaf(source);
-    if leaf.is_empty() || source.id == desktop {
+    if source.id == desktop {
         return;
     }
     let source_desktop_id = source.id.clone();
@@ -424,7 +422,8 @@ fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
     let Some((tree, plan)) = desk.plan(&state.facts, desktop) else {
         return leave_pane(state, toward, edge, tx);
     };
-    let active = desktop.active_pane_id.as_str();
+    let active = desk.acting_leaf(desktop);
+    let active = active.as_str();
     let row_state = desk.row(&desktop.id);
     let sideways = matches!(toward, Toward::Left | Toward::Right);
     let next = if sideways && !matches!(row_state.view, View::Focused(_)) {
@@ -467,10 +466,9 @@ fn leave_pane(state: &mut State, toward: Toward, edge: i32, tx: &mut Tx) {
 /// Opens a shell beside or below the active terminal tile, in its session's folder. A
 /// column already as tall as its tiles allow gets the shell beside instead.
 fn split(state: &mut State, direction: Direction, tx: &mut Tx) {
-    let Some(desktop) = state.facts.current_desktop() else {
+    let Some((desktop, leaf)) = state.window.acting(&state.facts) else {
         return;
     };
-    let leaf = state.window.desk.acting_leaf(desktop);
     let desktop = desktop.id.clone();
     split_at(state, &desktop, &leaf, direction, tx);
 }
@@ -567,13 +565,9 @@ pub(super) fn return_to_row(state: &mut State, desktop: &str, tx: &mut Tx) {
 /// Zoom gives the active tile most of the room and follows the active tile; focus shows the
 /// active tile alone. Each turns the other off.
 fn toggle_view(state: &mut State, focus: bool, tx: &mut Tx) {
-    let Some(desktop) = state.facts.current_desktop() else {
+    let Some((desktop, active)) = state.window.acting(&state.facts) else {
         return;
     };
-    let active = desktop.active_pane_id.clone();
-    if active.is_empty() {
-        return;
-    }
     let row = state.window.desk.row_mut(&desktop.id);
     let was_alone = matches!(row.view, View::Focused(_));
     row.view = match (&row.view, focus) {
