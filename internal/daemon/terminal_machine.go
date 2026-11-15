@@ -213,10 +213,8 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 		return struct{}{}, err
 	}
 	opts.LoginShellEnv = loginEnv
-	d.monitors().registry.DropPendingConversations(msg.TerminalID)
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
-	d.syncMonitorConversation(sessionID)
 	d.sessionMonitor(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)
 	opts = withLifecycleID(opts)
@@ -227,6 +225,9 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if removeErr := d.ptyBackend.Remove(ctx, terminal); removeErr != nil {
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
+	d.codexShared().retireConnections(terminal)
+	d.monitors().registry.DropPendingConversations(terminal)
+	d.syncMonitorConversation(sessionID)
 	opts.DaemonEnv = d.runEnv(opts.LifecycleID)
 	d.sessionMonitor(sessionID).HarnessStarting(opts.Agent)
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
