@@ -863,7 +863,7 @@ fn a_diagram_that_draws_without_a_statement_it_cannot_read_says_which() {
 fn a_diagram_too_wide_to_read_fitted_shows_at_its_size_and_opens_over_the_window() {
     let mut world = start();
     world.daemon.emit(content(
-        "```mermaid\nflowchart LR\n  A --> B\n```\n\n```mermaid\nsequenceDiagram\n  participant B as Browser on a laptop\n  participant E as Edge cache in front\n  participant A as Auth service cluster\n  participant P as Payments API server\n  participant W as Billing worker pool\n  participant S as Search index shard\n  participant L as Long-running audit log\n  B->>E: a request arrives at the edge\n  E->>A: is this session token still valid?\n  A-->>E: yes\n  E->>P: forward the call\n  P->>W: enqueue the invoice\n  W->>S: index it\n  W->>L: record the change\n```\n",
+        "```mermaid\nflowchart LR\n  A --> B\n```\n\n```mermaid\nsequenceDiagram\n  participant B as Browser on a laptop\n  participant E as Edge cache in front\n  participant A as Auth service cluster\n  participant P as Payments API server\n  participant W as Billing worker pool\n  participant S as Search index shard\n  participant L as Long-running audit log\n  participant Q as Queue of retried jobs\n  participant M as Metrics collector node\n  participant N as Notification fan-out\n  participant R as Read replica in region two\n  participant X as Export worker for the nightly batch\n  participant Y as Archive store on cold storage\n  B->>E: a request arrives at the edge\n  E->>A: is this session token still valid?\n  A-->>E: yes\n  E->>P: forward the call\n  P->>W: enqueue the invoice\n  W->>S: index it\n  W->>L: record the change\n  L->>Q: retry later\n  Q->>M: count it\n  M->>N: tell someone\n  N->>R: read it back\n  R->>X: export it\n  X->>Y: archive it\n```\n",
     ));
     world.settle();
     let shown = shown(&world);
@@ -884,12 +884,19 @@ fn a_diagram_too_wide_to_read_fitted_shows_at_its_size_and_opens_over_the_window
         1
     );
 
+    let width = |world: &World, target: Target| world.screen().bounds(target).expect("drawn")[2];
+    let in_document = width(&world, Target::role("figure").name("Sequence diagram"));
     world.gesture(|app| app.click(Target::role("button").name("Focus diagram")));
     world.settle();
+    let focused = width(&world, Target::key("diagram-preview.drawing"));
+    assert!(
+        (in_document - focused).abs() < 1.0,
+        "it opens at 100%, as wide as its natural size in the document: {in_document} and {focused}"
+    );
     assert!(
         world
             .screen()
-            .find(Target::key("diagram-preview.drawing"))
+            .find(Target::role("button").name("100%"))
             .is_some()
     );
     escape(&mut world);

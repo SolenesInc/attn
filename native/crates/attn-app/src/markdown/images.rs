@@ -333,9 +333,10 @@ pub(crate) fn show(state: &mut State, image: Image, alt: &str, tx: &mut Tx) {
     tx.focus(image_zoom::KEY, false);
 }
 
-/// Opens the diagram `source` draws over the window, at its natural size, to zoom and pan.
-pub(crate) fn show_diagram(state: &mut State, source: &str, tx: &mut Tx) {
-    state.pictures.zoom.reset();
+/// Opens diagram `source`, `size` points at its natural size, over the window at 100% from its
+/// start, as the Tauri reader's Focus diagram does.
+pub(crate) fn show_diagram(state: &mut State, source: &str, size: [f32; 2], tx: &mut Tx) {
+    state.pictures.zoom.open_actual(size, state.pictures.window);
     state.pictures.shown = Some(Shown::Diagram {
         source: source.to_owned(),
     });
@@ -382,7 +383,10 @@ fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<E
                 .border(1.0, drawing.surface_border)
                 .fill(drawing.surface)
                 .child(drawing.el);
-            Preview::new(lens, drawing.size, drawn).scale_content()
+            Preview::new(lens, drawing.size, drawn)
+                .scale_content()
+                .actual_size("Actual size")
+                .escape_returns()
         }
     };
     let preview = preview

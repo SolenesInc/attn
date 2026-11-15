@@ -592,7 +592,7 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
     let Some(drawing) = large else {
         return col().w_full().gap(space::S1).child(label).child(card);
     };
-    let source = frame.source.to_owned();
+    let (source, size) = (frame.source.to_owned(), drawing.size);
     let bar = rune::row()
         .w_full()
         .items_center()
@@ -612,7 +612,7 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
         .child(
             rune_kit::Button::new("Focus diagram")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    images::show_diagram(state, &source, tx)
+                    images::show_diagram(state, &source, size, tx)
                 })
                 .build(attn_ui::kit(t))
                 .key("focus"),
