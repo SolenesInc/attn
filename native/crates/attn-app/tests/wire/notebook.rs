@@ -1428,3 +1428,24 @@ fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_s
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_table_shows_as_a_grid_until_the_caret_enters_it_and_only_that_table_shows_its_source() {
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        "| a | b |\n| --- | --: |\n| 1 | 2 |\n\ntext\n\n| x |\n| --- |\n| y |\n",
+    )]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    assert_eq!(world.screen().all(Target::role("table")).len(), 2);
+    assert!(!shows_line(&world, "| 1 | 2 |"));
+
+    world.gesture(|d| d.click(Target::key("notebook.editor.table.2")));
+    assert!(shows_line(&world, "| 1 | 2 |"));
+    assert_eq!(world.screen().all(Target::role("table")).len(), 1);
+
+    world.gesture(|d| d.click(Target::key("notebook.editor.line.4")));
+    assert_eq!(world.screen().all(Target::role("table")).len(), 2);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}

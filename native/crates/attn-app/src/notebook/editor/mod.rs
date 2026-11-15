@@ -6,6 +6,7 @@ pub(crate) mod doc;
 pub(crate) mod find;
 mod keys;
 pub(crate) mod markdown;
+mod table;
 mod view;
 
 use rune::TextStyle;
@@ -260,6 +261,12 @@ impl Editor {
         self.doc.select(kept.0, kept.1);
         self.edited();
         true
+    }
+
+    /// Whether the selection touches any of `lines` while the editor has the keyboard.
+    pub(crate) fn touches(&self, lines: &std::ops::Range<usize>) -> bool {
+        let (a, b) = self.doc.range();
+        self.focused && a.line < lines.end && b.line >= lines.start
     }
 
     /// Whether the caret is in the front matter, which then shows as YAML.
