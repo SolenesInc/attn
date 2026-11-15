@@ -13,6 +13,15 @@ release_lock() {
 trap 'release_lock; rm -rf "$work"' EXIT
 export ATTN_NATIVE_BUILD_ROOT="$work/build root"
 checkouts="$work/check outs"
+mkdir "$work/bin"
+cat >"$work/bin/df" <<'DF'
+#!/usr/bin/env bash
+build_kib="$(du -sk "$ATTN_NATIVE_BUILD_ROOT" | cut -f1)"
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "fake $((disk_mib * 1024)) $((other_mib * 1024 + build_kib)) $(((disk_mib - other_mib) * 1024 - build_kib)) 50% /"
+DF
+chmod +x "$work/bin/df"
+export PATH="$work/bin:$PATH" disk_mib=1048576 other_mib=0
 
 build() {
   local checkout="$checkouts/$1" mib="$2" dir
@@ -90,5 +99,27 @@ grep -qF "is over its budget of 0.0 GiB" "$work/out" || fail "did not say the ou
 present older && fail "kept the least recently built output while over budget"
 present newer || fail "removed more than the budget needed"
 grep -qF "least recently built while over budget" "$work/out" || fail "did not say why it removed the older build"
+
+rm -rf "$ATTN_NATIVE_BUILD_ROOT" "$checkouts"
+build oldest 2
+age 2 oldest
+build middle 2
+age 1 middle
+build newest 2
+disk_mib=100 other_mib=92 ATTN_NATIVE_BUILD_FREE_FLOOR_MIB=5 "$root/scripts/native-build-clean" >"$work/out" 2>"$work/err"
+present oldest && fail "kept the least recently built output while the disk was under its free-space floor"
+present middle && fail "stopped removing before the disk was back over its free-space floor"
+present newest || fail "removed more than the free-space floor needed"
+grep -qF "free-space floor 0.0 GiB" "$work/out" || fail "did not print the free-space floor"
+grep -qF "free, under its floor of 0.0 GiB" "$work/out" || fail "did not say the disk was under its free-space floor"
+grep -qF "least recently built while the disk has" "$work/out" || fail "did not say why it removed the oldest builds"
+[ ! -s "$work/err" ] || fail "warned though it brought the disk back over its floor"
+
+hold_lock newest .cargo-build-lock
+disk_mib=100 other_mib=97 ATTN_NATIVE_BUILD_FREE_FLOOR_MIB=5 "$root/scripts/native-build-clean" >"$work/out" 2>"$work/err"
+present newest || fail "removed a build in use to reach the free-space floor"
+grep -qF "kept $ATTN_NATIVE_BUILD_ROOT$checkouts/newest/native" "$work/out" || fail "did not name the build it kept because it is in use"
+grep -qF "still under its free-space floor" "$work/err" || fail "did not warn that the disk stayed under its free-space floor"
+release_lock
 
 echo 'native build clean: OK'
