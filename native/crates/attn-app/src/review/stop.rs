@@ -135,6 +135,41 @@ fn header(stop: &ReviewStop, rows: &[ReviewRow], t: &Tokens) -> El {
         .children(changed)
 }
 
+/// A stop in the Walkthrough's script: where it is and what the agent says; the code is on the
+/// stage beside it. The stop the stage shows is marked.
+pub(super) fn script(key: &str, stop: &ReviewStop, stage: Option<Option<i64>>, t: &Tokens) -> El {
+    let current = stage.is_some();
+    let line = stage.flatten();
+    let at =
+        |n: &ReviewNote| line.is_some_and(|l| n.now_from > 0 && l >= n.now_from && l <= n.now_to);
+    let el = col()
+        .key(key.to_owned())
+        .role("listitem")
+        .label(format!("{} {}", stop.path, range(stop, &stop.rows)))
+        .w_full()
+        .radius(radius::MD)
+        .border(
+            1.0,
+            if current {
+                t.accent
+            } else {
+                t.border.alpha(0.6)
+            },
+        )
+        .padding(space::S2)
+        .gap(space::S1)
+        .child(header(stop, &stop.rows, t))
+        .children(stop.notes.iter().map(|n| {
+            let el = note(n, t);
+            if at(n) { el.border(1.0, t.accent) } else { el }
+        }));
+    if current {
+        el.fill(t.bg_selected).focus_selected(true)
+    } else {
+        el
+    }
+}
+
 pub(super) fn note(note: &ReviewNote, t: &Tokens) -> El {
     let who = if note.look { "look here" } else { "agent" };
     let tone = if note.look { t.warning } else { t.accent };

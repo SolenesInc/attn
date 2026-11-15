@@ -27,7 +27,10 @@ use frames::{Frame, MapPlace, Side};
 const CARD_MAX_WIDTH: f32 = 832.0;
 const CARD_PADDING: f32 = 20.0;
 /// The frames the reader draws.
-const BUILT: [Frame; 2] = [Frame::Brief, Frame::Map];
+const BUILT: [Frame; 3] = [Frame::Brief, Frame::Walkthrough, Frame::Map];
+/// The Walkthrough's script column is this wide, at most this share of the tile.
+const SCRIPT_WIDTH: f32 = 440.0;
+const SCRIPT_SHARE: f32 = 0.38;
 /// The file view beside the document is this wide, at most this share of the tile.
 const FILE_VIEW_WIDTH: f32 = 780.0;
 const FILE_VIEW_SHARE: f32 = 0.64;
@@ -89,6 +92,9 @@ pub(crate) struct Review {
     expansions: HashMap<(String, i64), Expansion>,
     /// The content revision the open files and expansions were last read for.
     seen: u64,
+    /// The stop the Walkthrough's stage shows, by its path, its first line at head and its
+    /// place among the stops, which keeps it when the document changes.
+    stage: Option<(String, i64, usize)>,
     /// Counts the reads the tile asks for, so an answer to an older read of a file or a stop
     /// never lands over a newer one.
     asked: u64,
@@ -169,6 +175,8 @@ pub(crate) struct Reading<'a> {
     places: Vec<Place>,
     /// The rows `e` widened each stop to, by the stop's index.
     widened: Vec<Option<Rc<[ReviewRow]>>>,
+    /// In the Walkthrough, the stop the stage shows and the line its cursor stands on.
+    stage: Option<(usize, Option<i64>)>,
 }
 
 impl<'a> Reading<'a> {
@@ -193,7 +201,14 @@ impl<'a> Reading<'a> {
             }
             _ => (0..parts.len(), None),
         };
+        let stage = (frame == Frame::Walkthrough)
+            .then(|| {
+                let stop = stage_stop(bundle, review.stage.as_ref())?;
+                Some((stop, review.files.first().and_then(file::OpenFile::line)))
+            })
+            .flatten();
         let mut reading = Reading {
+            stage,
             source,
             bundle,
             frame,
@@ -237,6 +252,9 @@ impl<'a> Reading<'a> {
     }
 
     fn places_of(&self, tile: &str, files_shown: bool) -> Vec<Place> {
+        if self.frame == Frame::Walkthrough {
+            return Vec::new();
+        }
         let prefix = prefix(tile);
         let bundle = self.bundle;
         let mut seen: HashMap<u64, usize> = HashMap::new();
@@ -356,6 +374,9 @@ impl<'a> Reading<'a> {
     /// The stop and line the cursor stands on: a row's, an arrow's stop, or the next stop after
     /// prose.
     fn place(&self, cursor: Option<usize>) -> Option<(usize, Option<i64>)> {
+        if self.frame == Frame::Walkthrough {
+            return self.stage;
+        }
         let at = cursor?;
         let place = &self.places[at];
         if let Some(stop) = place.arrow {
@@ -373,6 +394,37 @@ impl<'a> Reading<'a> {
             _ => None,
         })
     }
+}
+
+/// The stop a Walkthrough's stage named `key` shows now: the one at the same path and first
+/// line, else the one at its place, else the last; the first when it named none.
+fn stage_stop(bundle: &ReviewBundle, key: Option<&(String, i64, usize)>) -> Option<usize> {
+    let last = bundle.stops.len().checked_sub(1)?;
+    let Some((path, from, index)) = key else {
+        return Some(0);
+    };
+    bundle
+        .stops
+        .iter()
+        .position(|s| &s.path == path && s.from == *from)
+        .or(Some((*index).min(last)))
+}
+
+/// Where the Walkthrough opens a stop's file: the place to look, else its first change, else
+/// its first line.
+fn stage_line(stop: &attn_protocol::ReviewStop) -> Option<i64> {
+    let look = stop.notes.iter().find(|n| n.look && n.now_from > 0);
+    if let Some(look) = look {
+        return Some(look.now_from);
+    }
+    let change = stop.rows.iter().find(|r| {
+        r.kind == "+"
+            && r.now
+                .is_some_and(|n| n >= stop.now_from && n <= stop.now_to)
+    });
+    change
+        .and_then(|r| r.now)
+        .or((stop.now_from > 0).then_some(stop.now_from))
 }
 
 /// The parts of the step that holds stop `stop`: from the `#` or `##` heading above it to the
@@ -462,6 +514,13 @@ pub(crate) fn body(
                 current.map(|i| &reading.places[i].spot),
                 t,
             ),
+            Part::Stop(index) if reading.frame == Frame::Walkthrough => {
+                let stage = reading
+                    .stage
+                    .filter(|(s, _)| s == index)
+                    .map(|(_, line)| line);
+                stop::script(&key, &bundle.stops[*index], stage, t)
+            }
             Part::Stop(index) => {
                 let first = reading.places.iter().position(on).unwrap_or(0);
                 let row = current.map(|i| i - first);
@@ -527,7 +586,43 @@ pub(crate) fn body(
     }
     let frame = match reading.frame {
         Frame::Map => map(&prefix, &reading, document, revision, t),
-        _ => document,
+        Frame::Walkthrough => {
+            let width = rune::memo::layout(&prefix).map_or(0.0, |r| r[2]);
+            let script = (!review.filled).then(|| {
+                document
+                    .w(SCRIPT_WIDTH.min(width * SCRIPT_SHARE))
+                    .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
+            });
+            let stage = match review.files.last() {
+                Some(open) => {
+                    let notes: Vec<&attn_protocol::ReviewNote> = bundle
+                        .stops
+                        .iter()
+                        .filter(|s| s.path == open.target.path)
+                        .flat_map(|s| &s.notes)
+                        .collect();
+                    let colors = reviews.colors(&open.target.path, &open.hash);
+                    file::view(
+                        &prefix,
+                        tile,
+                        open,
+                        (review.files.len(), true),
+                        &notes,
+                        colors,
+                        t,
+                    )
+                    .grow(1.0)
+                }
+                None => col().grow(1.0),
+            };
+            row()
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .children(script)
+                .child(stage)
+        }
+        Frame::Brief => document,
     };
     let frame = match review
         .files
@@ -543,7 +638,15 @@ pub(crate) fn body(
                 .flat_map(|s| &s.notes)
                 .collect();
             let colors = reviews.colors(&open.target.path, &open.hash);
-            let view = file::view(&prefix, tile, open, review.files.len(), &notes, colors, t);
+            let view = file::view(
+                &prefix,
+                tile,
+                open,
+                (review.files.len(), false),
+                &notes,
+                colors,
+                t,
+            );
             let width = rune::memo::layout(&prefix).map_or(0.0, |r| r[2]);
             let view = if review.filled {
                 view.pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -774,9 +877,52 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         _ => "",
     };
     if back_key {
+        if reading.frame == Frame::Walkthrough && review.files.len() <= 1 {
+            return false;
+        }
         let went = back(review);
         state.readings.revision += 1;
         return went;
+    }
+    if reading.frame == Frame::Walkthrough && !review.help && typed != "?" {
+        let stage = reading.stage.map(|(s, _)| s);
+        match &ev.key {
+            Key::Right | Key::Left if !ev.mods.shift => {
+                let Some(at) = stage else { return true };
+                let next = if ev.key == Key::Right {
+                    (at + 1).min(bundle.stops.len().saturating_sub(1))
+                } else {
+                    at.saturating_sub(1)
+                };
+                if next != at {
+                    show_stage(state, &tile, source_of(&message), bundle, next, None, tx);
+                    if let Some(part) = reading.parts.iter().position(|p| *p == Part::Stop(next)) {
+                        tx.scroll_into_view(format!("{}.part.{part}", prefix(&tile)));
+                    }
+                }
+                state.readings.revision += 1;
+                return true;
+            }
+            Key::Text(t) if t == "z" => {
+                review.filled = !review.filled;
+                state.readings.revision += 1;
+                return true;
+            }
+            Key::Escape if review.files.len() > 1 => {
+                review.files.truncate(1);
+                state.readings.revision += 1;
+                return true;
+            }
+            Key::Escape if review.files.last().is_none_or(|f| f.select_from.is_none()) => {
+                return false;
+            }
+            Key::Up | Key::Down | Key::PageUp | Key::PageDown | Key::Escape => {
+                let handled = file_key(review, &prefix(&tile), ev, tx);
+                state.readings.revision += 1;
+                return handled;
+            }
+            _ => {}
+        }
     }
     let viewing = !review.files.is_empty() && reading.frame != Frame::Walkthrough;
     if viewing && !review.help && typed != "?" && file_key(review, &prefix(&tile), ev, tx) {
@@ -799,8 +945,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             if *frame == reading.frame || !frames::offered(bundle, &BUILT).contains(frame) {
                 return true;
             }
-            switch_frame(review, &reading, cursor, *frame);
-            Some(Move::Shown)
+            match switch_frame(review, &reading, cursor, *frame) {
+                Some((stop, line)) => Some(Move::Stage(stop, line)),
+                None => Some(Move::Shown),
+            }
         }
         (_, "b") if frames::has_sides(bundle) => {
             switch_side(review, &reading, cursor);
@@ -878,6 +1026,12 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Some(Move::Open(target, fill)) => {
             open_file(state, &tile, source_of(&message), target, fill, tx);
         }
+        Some(Move::Stage(stop, line)) => {
+            show_stage(state, &tile, source_of(&message), bundle, stop, line, tx);
+            if let Some(at) = reading.parts.iter().position(|p| *p == Part::Stop(stop)) {
+                tx.scroll_into_view(format!("{}.part.{at}", prefix(&tile)));
+            }
+        }
         Some(Move::Expand(stop, extra)) => {
             expand(
                 state,
@@ -905,6 +1059,8 @@ enum Move {
     Open(file::Target, bool),
     /// Show this many lines on each side of this stop.
     Expand(usize, usize),
+    /// Put this stop's file on the Walkthrough's stage, at this line or where it opens.
+    Stage(usize, Option<i64>),
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.
@@ -936,14 +1092,24 @@ fn show_lead_in(tile: &str, reading: &Reading, place: &Place, tx: &mut Tx) {
 }
 
 /// Switches to `frame`, keeping the stop and line the cursor stands on.
-fn switch_frame(review: &mut Review, reading: &Reading, cursor: Option<usize>, frame: Frame) {
+fn switch_frame(
+    review: &mut Review,
+    reading: &Reading,
+    cursor: Option<usize>,
+    frame: Frame,
+) -> Option<(usize, Option<i64>)> {
     let here = reading.place(cursor);
     review.frame = Some(frame);
+    review.files.clear();
+    review.filled = false;
+    if frame == Frame::Walkthrough {
+        return Some(here.unwrap_or((0, None)));
+    }
     if frame != Frame::Map {
         if let Some((stop, line)) = here {
             review.cursor = stop_spot(reading.bundle, stop, line);
         }
-        return;
+        return None;
     }
     let bundle = reading.bundle;
     let find = |side: Side| {
@@ -964,6 +1130,7 @@ fn switch_frame(review: &mut Review, reading: &Reading, cursor: Option<usize>, f
         (Some(_), Some((stop, line))) => stop_spot(bundle, stop, line),
         _ => None,
     };
+    None
 }
 
 /// Switches the diagrams to the other side: the Map to the arrow of the same stop there, the
@@ -1165,6 +1332,58 @@ fn load(
     );
 }
 
+/// Puts stop `stop`'s file on tile `tile`'s Walkthrough stage, with its cursor on `line`, or
+/// where the Walkthrough opens the stop, and the stop's lines marked. The files opened over
+/// the stage go. The stage keeps the rows it shows while it reads the same file again.
+fn show_stage(
+    state: &mut State,
+    tile: &str,
+    source: (Option<String>, String),
+    bundle: &ReviewBundle,
+    stop: usize,
+    line: Option<i64>,
+    tx: &mut Tx,
+) {
+    let Some(s) = bundle.stops.get(stop) else {
+        return;
+    };
+    let range = (s.now_from > 0).then_some((s.now_from, s.now_to));
+    let target = file::Target {
+        path: s.path.clone(),
+        line: line.or_else(|| stage_line(s)),
+        range,
+    };
+    let review = state
+        .readings
+        .reviews
+        .tiles
+        .entry(tile.to_owned())
+        .or_default();
+    review.stage = Some((s.path.clone(), s.from, stop));
+    let kept = review
+        .files
+        .first()
+        .filter(|f| f.target.path == s.path)
+        .map(|f| (f.rows.clone(), f.hash.clone()));
+    review.files.clear();
+    review.next_file += 1;
+    let id = review.next_file;
+    let (rows, hash) = kept.unwrap_or_default();
+    let cursor = rows
+        .as_deref()
+        .map_or(0, |r| file::row_index_of(r, target.line));
+    let land = Land::Line(target.line);
+    review.files.push(file::OpenFile {
+        id,
+        target,
+        rows,
+        hash,
+        cursor,
+        ..file::OpenFile::default()
+    });
+    load(state, tile, source, (id, s.path.clone()), land, tx);
+}
+
 /// `shown`, a stop's rows, widened by `lines` on each side from `file`, the whole file.
 fn widen(shown: &[ReviewRow], file: &[ReviewRow], lines: usize) -> Option<Rc<[ReviewRow]>> {
     let at = |r: &ReviewRow| file.iter().position(|f| f.old == r.old && f.now == r.now);
@@ -1245,10 +1464,39 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
             .tiles
             .entry(tile.clone())
             .or_default();
+        let walkthrough = review
+            .frame
+            .filter(|f| frames::offered(bundle, &BUILT).contains(f))
+            .unwrap_or_else(|| frames::opening(bundle, &BUILT))
+            == Frame::Walkthrough;
+        if walkthrough && review.files.is_empty() {
+            if let Some(stop) = stage_stop(bundle, review.stage.as_ref()) {
+                review.seen = revision;
+                show_stage(state, &tile, source_of(&message), bundle, stop, None, tx);
+                warm(state, &tile, &message, bundle, tx);
+            }
+            continue;
+        }
         if review.seen == revision {
             continue;
         }
         review.seen = revision;
+        if walkthrough && let Some(stop) = stage_stop(bundle, review.stage.as_ref()) {
+            let s = &bundle.stops[stop];
+            if review
+                .files
+                .first()
+                .is_some_and(|f| f.target.path != s.path)
+            {
+                show_stage(state, &tile, source_of(&message), bundle, stop, None, tx);
+                warm(state, &tile, &message, bundle, tx);
+                continue;
+            }
+            review.stage = Some((s.path.clone(), s.from, stop));
+            if let Some(stage) = review.files.first_mut() {
+                stage.target.range = (s.now_from > 0).then_some((s.now_from, s.now_to));
+            }
+        }
         let files: Vec<(u64, String)> = review
             .files
             .iter()

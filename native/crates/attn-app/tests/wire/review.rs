@@ -747,7 +747,7 @@ fn opens_in_the_map_the_document_picks_and_walks_the_messages_tied_to_stops_with
  {
     let mut world = open_map(map_bundle("map"));
 
-    assert_eq!(frame_tabs(&world), ["1 Brief", "3 Map *"]);
+    assert_eq!(frame_tabs(&world), ["1 Brief", "2 Walkthrough", "3 Map *"]);
     assert_eq!(map_diagrams(&world), [["Add(a, b)", "helper()", "returns"]]);
     assert_eq!(map_current(&world).as_deref(), Some("Add(a, b)"));
     assert_eq!(
@@ -851,7 +851,7 @@ fn switches_with_b_to_a_before_diagram_that_ties_no_message_to_a_stop_and_back()
 #[test]
 fn switches_frames_with_1_and_3_and_keeps_the_stop_and_line_the_cursor_is_on() {
     let mut world = open_map(map_bundle("brief"));
-    assert_eq!(frame_tabs(&world), ["1 Brief *", "3 Map"]);
+    assert_eq!(frame_tabs(&world), ["1 Brief *", "2 Walkthrough", "3 Map"]);
     press(&mut world, Key::Right);
     press(&mut world, Key::Down);
     press(&mut world, Key::Down);
@@ -984,12 +984,7 @@ fn leaves_out_a_frame_the_document_cannot_fill() {
     let mut review = map_bundle("map");
     review.flows.drain(..2);
     let mut world = open_map(review);
-    assert!(
-        world
-            .screen()
-            .find(Target::role("tab-list").name("Frames"))
-            .is_none()
-    );
+    assert_eq!(frame_tabs(&world), ["1 Brief *", "2 Walkthrough"]);
     type_key(&mut world, "3");
     assert!(
         world
@@ -1841,4 +1836,187 @@ fn colors_each_stops_file_once_however_often_the_bundle_changes_while_it_reads()
         }),
     );
     assert_eq!(file_reads(&world), ["calc.go", "util.go"]);
+}
+
+/// The stop the Walkthrough's stage shows, by its path: the script's marked stop.
+fn stage_stop(world: &World) -> Option<String> {
+    world.screen().find(Target::key("tile.m.document"))?;
+    world
+        .screen()
+        .descendants(Target::key("tile.m.document"))
+        .into_iter()
+        .find(|n| n.role == "list-item" && n.is("selected"))
+        .and_then(|n| n.name)
+        .map(|name| name.split(' ').next().unwrap_or_default().to_owned())
+}
+
+fn marks_strip(world: &World) -> Vec<String> {
+    match world.screen().find(Target::key("tile.m.review.view.marks")) {
+        Some(_) => world
+            .screen()
+            .descendants(Target::key("tile.m.review.view.marks"))
+            .into_iter()
+            .filter_map(|n| n.name)
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+#[test]
+fn opens_in_the_walkthrough_the_document_picks_the_stops_as_a_script_beside_the_file_of_the_current_stop()
+ {
+    let (mut world, _) = open_served(
+        DOCUMENT,
+        ReviewBundle {
+            frame: "walkthrough".into(),
+            ..bundle()
+        },
+    );
+    assert_eq!(frame_tabs(&world), ["1 Brief", "2 Walkthrough *"]);
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+    let script: Vec<String> = world
+        .screen()
+        .descendants(Target::key("tile.m.document"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        script.iter().any(|t| t == "Add keeps its result"),
+        "{script:?}"
+    );
+    assert!(
+        !script.iter().any(|t| t.starts_with("added line")),
+        "{script:?}"
+    );
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+    assert!(
+        marks_strip(&world)
+            .iter()
+            .any(|t| t == "look here L4: The sum gets a name.")
+    );
+
+    press(&mut world, Key::Down);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+    let strip = marks_strip(&world);
+    assert!(
+        strip.iter().any(|t| t == "agent L5: Then it is returned."),
+        "{strip:?}"
+    );
+    assert!(
+        !strip.iter().any(|t| t.contains("The sum gets a name.")),
+        "{strip:?}"
+    );
+
+    press(&mut world, Key::Right);
+    assert_eq!(stage_stop(&world).as_deref(), Some("util.go"));
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 2: func helper() {}")
+    );
+    press(&mut world, Key::Right);
+    assert_eq!(stage_stop(&world).as_deref(), Some("util.go"));
+    press(&mut world, Key::Left);
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+
+    world.gesture(|app| app.type_text("z"));
+    assert!(stage_stop(&world).is_none(), "the script hides");
+    world.gesture(|app| app.type_text("z"));
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+
+    ctrl_o(&mut world);
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_some());
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn follows_the_agent_editing_the_document_the_stage_shows_the_stop_that_takes_the_place_of_a_removed_one()
+ {
+    let (mut world, _) = open_served(
+        DOCUMENT,
+        ReviewBundle {
+            frame: "walkthrough".into(),
+            ..bundle()
+        },
+    );
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+
+    let mut util = bundle().stops[1].clone();
+    util.heading_line -= 4;
+    for n in &mut util.notes {
+        n.line -= 4;
+    }
+    let mut edited = ReviewBundle {
+        frame: "walkthrough".into(),
+        stops: vec![util],
+        ..bundle()
+    };
+    for entry in &mut edited.not_shown {
+        entry.line -= 4;
+    }
+    let content = DOCUMENT.replace(
+        "### calc.go:3-6\n\n- L4!: The sum gets a name.\n- L5: Then it is returned.\n",
+        "",
+    );
+    deliver(&mut world, &content, Some(edited));
+    assert_eq!(stage_stop(&world).as_deref(), Some("util.go"));
+    assert!(file_view(&world).unwrap().iter().any(|t| t == "util.go"));
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 2: func helper() {}")
+    );
+}
+
+#[test]
+fn switches_frames_with_1_2_and_3_and_keeps_the_stop_and_line_the_cursor_is_on() {
+    let (mut world, _) = open_served(&map_document(), map_bundle("brief"));
+    assert_eq!(frame_tabs(&world), ["1 Brief *", "2 Walkthrough", "3 Map"]);
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("added line 2: func helper() {}")
+    );
+
+    type_key(&mut world, "2");
+    assert_eq!(stage_stop(&world).as_deref(), Some("util.go"));
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 2: func helper() {}")
+    );
+
+    press(&mut world, Key::Left);
+    press(&mut world, Key::Down);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+    type_key(&mut world, "3");
+    assert_eq!(map_current(&world).as_deref(), Some("Add(a, b)"));
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+
+    press(&mut world, Key::Right);
+    type_key(&mut world, "1");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.m.review.map"))
+            .is_none()
+    );
+    assert!(cursor_in_stop(&world, "util.go"));
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("unchanged line 1: package calc")
+    );
 }

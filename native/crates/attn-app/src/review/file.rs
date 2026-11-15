@@ -122,6 +122,30 @@ fn noted(notes: &[&ReviewNote], line: Option<i64>) -> Option<bool> {
         .reduce(|a, b| a || b)
 }
 
+/// Which of `rows` stand inside `range`, lines now: a removed row stands inside when a line
+/// next to it does.
+fn rows_inside(rows: &[ReviewRow], (from, to): (i64, i64)) -> Vec<bool> {
+    let inside = |line: Option<i64>| line.is_some_and(|l| l >= from && l <= to);
+    let mut result: Vec<bool> = rows.iter().map(|r| inside(r.now)).collect();
+    let mut previous = None;
+    for (i, r) in rows.iter().enumerate() {
+        if r.now.is_some() {
+            previous = r.now;
+        } else if inside(previous) {
+            result[i] = true;
+        }
+    }
+    let mut next = None;
+    for (i, r) in rows.iter().enumerate().rev() {
+        if r.now.is_some() {
+            next = r.now;
+        } else if inside(next) {
+            result[i] = true;
+        }
+    }
+    result
+}
+
 /// How many columns `text` takes, with tabs to the next multiple of 8.
 fn columns(text: &str) -> usize {
     text.chars()
@@ -167,7 +191,7 @@ pub(super) fn view(
     prefix: &str,
     tile: &str,
     file: &OpenFile,
-    depth: usize,
+    (depth, stage): (usize, bool),
     notes: &[&ReviewNote],
     colors: Option<Rc<Colors>>,
     t: &Tokens,
@@ -201,7 +225,7 @@ pub(super) fn view(
         )
         .children(lines.map(|l| text(l).font(type_::LABEL).color(t.text_tertiary)))
         .child(col().grow(1.0))
-        .child(text("close esc").font(type_::LABEL).color(t.text_secondary));
+        .children((!stage).then(|| text("close esc").font(type_::LABEL).color(t.text_secondary)));
     let problem = file.problem.clone().map(|p| {
         text(p)
             .font(type_::LABEL)
@@ -216,7 +240,7 @@ pub(super) fn view(
             t.text_tertiary,
             t,
         ),
-        (Some(rows), None) => rows_view(prefix, tile, rows, file, notes, colors, t),
+        (Some(rows), None) => rows_view(prefix, tile, rows, (file, stage), notes, colors, t),
     };
     let line = file.line();
     let strip: Vec<El> = notes
@@ -261,7 +285,7 @@ fn rows_view(
     prefix: &str,
     tile: &str,
     rows: &Rc<[ReviewRow]>,
-    file: &OpenFile,
+    (file, stage): (&OpenFile, bool),
     notes: &[&ReviewNote],
     colors: Option<Rc<Colors>>,
     t: &Tokens,
@@ -275,6 +299,9 @@ fn rows_view(
         .to_string()
         .len();
     let range = file.target.range;
+    let inside: Option<Rc<[bool]>> = stage
+        .then(|| range.map(|r| rows_inside(rows, r).into()))
+        .flatten();
     let (from, to) = file.selected();
     let selecting = file.select_from.is_some();
     let cursor = file.cursor;
@@ -310,6 +337,10 @@ fn rows_view(
                     Some(true) => line.border_sides([0.0, 0.0, 0.0, 3.0], tokens.warning),
                     Some(false) => line.border_sides([0.0, 0.0, 0.0, 3.0], tokens.text_tertiary),
                     None => line,
+                };
+                let line = match &inside {
+                    Some(inside) if !inside[i] => line.group_opacity(0.45, 0.45),
+                    _ => line,
                 };
                 let line = if selecting && i >= from && i <= to && i != cursor {
                     line.fill(tokens.accent.alpha(0.1))
