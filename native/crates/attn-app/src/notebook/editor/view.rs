@@ -170,8 +170,8 @@ fn line_row(editor: &Editor, key: &str, i: usize, access: Access, t: &Tokens) ->
         }
         _ => {
             let shown = editor.shown(i);
-            let (spans, style) = editor.styled(&shown);
-            let spans = with_theme(&shown, spans, t);
+            let (_, style) = editor.styled(&shown);
+            let spans = with_theme(editor, &shown, t);
             text_row(
                 editor,
                 key,
@@ -184,6 +184,11 @@ fn line_row(editor: &Editor, key: &str, i: usize, access: Access, t: &Tokens) ->
                 t,
             )
             .key(row_key)
+            .description(if editor.broken_on(&shown) {
+                "Link target not found in the notebook"
+            } else {
+                ""
+            })
             .children(shown.quote.then(|| {
                 el().absolute(-space::S2, 0.0)
                     .w(2.0)
@@ -219,8 +224,32 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
     spans
 }
 
-fn with_theme(shown: &Shown, _: Vec<Span>, t: &Tokens) -> Vec<Span> {
-    spans(shown, Some(t))
+impl Editor {
+    /// Whether a link the line shows points at a note the daemon said is missing.
+    fn broken_on(&self, shown: &Shown) -> bool {
+        shown.links.iter().any(|(_, href)| {
+            self.note_of(href)
+                .is_some_and(|p| self.missing.contains(&p))
+        })
+    }
+}
+
+/// The line's spans in the window's colours, with a link to a missing note marked broken.
+fn with_theme(editor: &Editor, shown: &Shown, t: &Tokens) -> Vec<Span> {
+    let mut out = spans(shown, Some(t));
+    for (range, href) in &shown.links {
+        if editor
+            .note_of(href)
+            .is_some_and(|p| editor.missing.contains(&p))
+        {
+            out.push(
+                Span::new(range.start, range.end)
+                    .color(t.error)
+                    .underline(t.error),
+            );
+        }
+    }
+    out
 }
 
 #[allow(clippy::too_many_arguments)]

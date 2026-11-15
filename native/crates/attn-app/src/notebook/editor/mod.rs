@@ -36,6 +36,14 @@ pub(crate) struct Editor {
     pub(crate) preedit: Option<String>,
     /// A press that toggled a task box: the rest of its gesture moves nothing.
     pub(crate) toggling: bool,
+    /// The folder of the note, which its relative links start from.
+    pub(crate) note_dir: String,
+    /// The notes the links point at that the daemon said are missing, and every note asked
+    /// about, by path from the root.
+    pub(crate) missing: std::collections::BTreeSet<String>,
+    pub(crate) checked: std::collections::BTreeSet<String>,
+    /// The document revision whose links were last looked at.
+    pub(crate) links_revision: Option<u64>,
     /// The find bar's query, while it is open.
     pub(crate) find: Option<find::Find>,
     kinds: (u64, Vec<LineKind>),
@@ -52,6 +60,10 @@ impl Editor {
             width: 600.0,
             preedit: None,
             toggling: false,
+            note_dir: String::new(),
+            missing: Default::default(),
+            checked: Default::default(),
+            links_revision: None,
             find: None,
             kinds,
         }
@@ -264,6 +276,27 @@ impl Editor {
             .iter()
             .find(|(r, _)| r.start <= at && at <= r.end)
             .map(|(_, href)| href.clone())
+    }
+
+    /// The note a link points at, by path from the root; `None` for a link out of the notebook.
+    pub(crate) fn note_of(&self, href: &str) -> Option<String> {
+        match crate::notebook::links::resolve(href, &self.note_dir) {
+            crate::notebook::links::NoteLink::Note { path, .. } => Some(path),
+            _ => None,
+        }
+    }
+
+    /// The notes the document's links point at that nobody asked about yet.
+    pub(crate) fn unchecked_links(&self) -> Vec<String> {
+        let mut paths = std::collections::BTreeSet::new();
+        for line in self.doc.lines().iter().filter(|l| l.contains("](")) {
+            for (_, href) in markdown::shown(line, true).links {
+                if let Some(path) = self.note_of(&href).filter(|p| !self.checked.contains(p)) {
+                    paths.insert(path);
+                }
+            }
+        }
+        paths.into_iter().collect()
     }
 
     pub(crate) fn edited(&mut self) {
