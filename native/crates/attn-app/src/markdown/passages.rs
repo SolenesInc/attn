@@ -129,18 +129,45 @@ impl Passages {
     /// The anchor of `selection`, whose pieces' paths run through `root`, the reader's key, as
     /// the Tauri reader takes one: the block the selection starts in owns it, an end past that
     /// block stops at its end, and whitespace at either edge is left out.
+    ///
+    /// With `part`, the reader draws only the document's source from byte `part.0` on, which
+    /// is `part.1`, and the selection's pieces are found where the whole document draws them.
     pub(crate) fn anchor(
         &self,
         selection: &TextSelection,
         root: &str,
+        part: Option<(usize, &str)>,
     ) -> Option<MarkdownAnnotationAnchor> {
+        let in_part = part.and_then(|(start, source)| {
+            let first = self
+                .drawn
+                .blocks()
+                .iter()
+                .position(|b| b.contains(&start))?;
+            Some((first, super::read_as(source).drawn(&Kit::neutral(true))))
+        });
+        let text_at = |within: &str| match part {
+            None => self.drawn.at(within),
+            Some(_) => {
+                let (first, drawn) = in_part.as_ref()?;
+                let local = drawn.texts().get(drawn.at(within)?)?.at();
+                let (DrawnStep::Block(block), rest) = local.split_first()? else {
+                    return None;
+                };
+                let top = DrawnStep::Block(first + block);
+                self.drawn
+                    .texts()
+                    .iter()
+                    .position(|t| t.at().split_first() == Some((&top, rest)))
+            }
+        };
         let pieces: Vec<(&Placed, Range<usize>)> = selection
             .texts()
             .iter()
             .filter(|t| t.is_selected())
             .filter_map(|t| {
                 let within = t.path().split_once(&format!("{root}/"))?.1;
-                let placed = self.placed.get(self.drawn.at(within)?)?.as_ref()?;
+                let placed = self.placed.get(text_at(within)?)?.as_ref()?;
                 Some((placed, t.authored()))
             })
             .collect();

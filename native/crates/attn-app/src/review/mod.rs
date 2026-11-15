@@ -305,6 +305,11 @@ fn prefix(tile: &str) -> String {
     format!("tile.{tile}.review")
 }
 
+/// The key of review tile `tile`'s card, which its marks' toolbar and comment box sit over.
+pub(crate) fn card_key(tile: &str) -> String {
+    format!("{}.card", prefix(tile))
+}
+
 fn arrow_key(part: &str, line: i64) -> String {
     format!("{part}.arrow.{line}")
 }
@@ -325,15 +330,18 @@ fn hash(text: &str) -> u64 {
 
 /// The body of review tile `tile`: the document `source` with the review `bundle` drawn in
 /// it, read in the scroll view keyed `view` and named `title`, and the keys under it. `read`
-/// renders a block of the document's markdown and draws it again when `read_version` moves,
-/// and `revision` moves when the content does.
+/// renders the block of the document's markdown at those source bytes and draws it again when
+/// `read_version` moves, `revision` moves when the content does, and `marking` sits over the
+/// card.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn body(
     tile: &str,
     view: &str,
     title: &str,
     (source, bundle, revision): (&str, &ReviewBundle, u64),
     reviews: &Reviews,
-    (read, read_version): (&dyn Fn(&str) -> El, u64),
+    (read, read_version): (&dyn Fn(std::ops::Range<usize>) -> El, u64),
+    marking: Vec<El>,
     t: &Tokens,
 ) -> El {
     let review = reviews.tiles.get(tile).cloned().unwrap_or_default();
@@ -352,9 +360,8 @@ pub(crate) fn body(
         Some(match part {
             Part::Prose { source: range, .. } => {
                 let text = &reading.source[range.clone()];
-                let block = memo(format!("{key}.text"), (text, read_version, *t), || {
-                    read(text)
-                });
+                let at = (text, range.start, read_version, *t);
+                let block = memo(format!("{key}.text"), at, || read(range.clone()));
                 cursor_frame(col().key(key).w_full().child(block), current.is_some(), t)
             }
             Part::Summary => keys::summary(
@@ -397,7 +404,7 @@ pub(crate) fn body(
         })
     });
     let card = col()
-        .key(format!("{prefix}.card"))
+        .key(card_key(tile))
         .w_full()
         .max_w(CARD_MAX_WIDTH)
         .padding(CARD_PADDING)
@@ -405,7 +412,8 @@ pub(crate) fn body(
         .radius(radius::LG)
         .fill(t.bg_panel)
         .border(1.0, t.border.alpha(0.5))
-        .children(parts);
+        .children(parts)
+        .children(marking);
     let mut document = col()
         .key(view)
         .role("document")

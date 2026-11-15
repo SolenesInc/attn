@@ -1221,3 +1221,132 @@ fn tells_the_story_beside_the_diagram_captions_groups_and_the_step_that_holds_th
     assert!(cursor_in_stop(&world, "util.go"));
     assert!(world.runtime_is_at_rest());
 }
+
+/// The review's tile, with the daemon keeping its draft, showing the fixture as a review or,
+/// without `review`, as plain markdown, and then `edited` when given; then a comment, started
+/// with `?`, which the review's keys would take, written on a drag from `from` to `to`: each a
+/// text and a fraction of its width along its first line. What the daemon saved.
+fn comment(
+    review: Option<ReviewBundle>,
+    edited: Option<&str>,
+    from: (&str, f32),
+    to: (&str, f32),
+) -> (World, serde_json::Value) {
+    let mut world = start();
+    let kept = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+    let draft = |marks: &[serde_json::Value], r: &serde_json::Value, event: &str| {
+        json!({
+            "event": event,
+            "request_id": r["request_id"],
+            "document_uri": r["document_uri"],
+            "source_kind": r["source_kind"],
+            "success": true,
+            "annotations": marks,
+            "generation": marks.len(),
+        })
+    };
+    let read = kept.clone();
+    world.daemon.on("markdown_annotations_get", move |r| {
+        draft(&read.lock().unwrap(), r, "markdown_annotations_get_result")
+    });
+    let written = kept.clone();
+    world.daemon.on("markdown_annotations_save", move |r| {
+        let mut marks = written.lock().unwrap();
+        marks.extend(r["upserts"].as_array().into_iter().flatten().cloned());
+        draft(&marks, r, "markdown_annotations_save_result")
+    });
+    deliver(&mut world, DOCUMENT, review.clone());
+    if let Some(edited) = edited {
+        deliver(&mut world, edited, review);
+    }
+    let point = |world: &World, (words, along): (&str, f32)| {
+        let [x, y, w, _] = world
+            .screen()
+            .bounds(Target::role("label").name(words))
+            .or_else(|| world.screen().bounds(Target::role("heading").name(words)))
+            .unwrap_or_else(|| panic!("no {words:?}:\n{}", world.screen()));
+        (x + 1.0 + (w - 2.0) * along, y + 8.0)
+    };
+    let (start, end) = (point(&world, from), point(&world, to));
+    world.gesture(|app| {
+        app.drag_from(start, end);
+        app.release(end);
+    });
+    world.settle();
+    world.gesture(|app| app.type_text("?"));
+    world.settle();
+    world.gesture(|app| app.type_text(" Why a name"));
+    world.settle();
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        })
+    });
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    let saved = kept.lock().unwrap().clone();
+    assert_eq!(saved.len(), 1, "one comment is saved: {saved:?}");
+    (world, saved[0].clone())
+}
+
+const FIRST: &str = "Add used to return its sum directly.";
+const LATER: &str = "A paragraph between the stops.";
+
+#[test]
+fn a_passage_selected_in_the_briefs_prose_is_commented_on_as_in_plain_markdown_and_takes_the_keys_typed()
+ {
+    let whole = |review| comment(review, None, (FIRST, 0.0), (FIRST, 1.0));
+    let (_, plain) = whole(None);
+    let (world, reviewed) = whole(Some(bundle()));
+    assert_eq!(reviewed["text"], "? Why a name");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Review keys"))
+            .is_none(),
+        "the typed ? went to the comment"
+    );
+    assert_eq!(reviewed["anchor"]["exact"], FIRST);
+    assert_eq!(
+        reviewed["anchor"], plain["anchor"],
+        "the review anchors the comment where plain markdown does"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("button").name(FIRST))
+            .is_some(),
+        "the mark paints over its passage:\n{}",
+        world.screen()
+    );
+}
+
+#[test]
+fn a_selection_in_the_briefs_prose_anchors_as_plain_markdown_after_the_text_above_it_changes() {
+    let edited = DOCUMENT.replace(FIRST, "Add used to return the sum of a and b directly.");
+    let later = |review| comment(review, Some(&edited), (LATER, 0.0), (LATER, 1.0));
+    let (_, plain) = later(None);
+    let (_, reviewed) = later(Some(bundle()));
+    assert_eq!(reviewed["anchor"]["exact"], LATER);
+    assert_eq!(reviewed["anchor"], plain["anchor"]);
+}
+
+#[test]
+fn a_selection_dragged_across_the_briefs_blocks_keeps_to_the_block_it_starts_in() {
+    let across = |review| comment(review, None, (FIRST, 0.15), ("Add keeps its result", 0.1));
+    let (_, plain) = across(None);
+    let (_, reviewed) = across(Some(bundle()));
+    let kept = |anchor: &serde_json::Value| {
+        ["block_id", "end", "end_line", "suffix"].map(|field| anchor[field].clone())
+    };
+    assert_eq!(kept(&reviewed["anchor"]), kept(&plain["anchor"]));
+    let exact = reviewed["anchor"]["exact"].as_str().unwrap_or_default();
+    assert!(
+        FIRST.ends_with(exact) && exact.len() > 10,
+        "the passage runs from where the drag started to its block's end: {exact:?}"
+    );
+}

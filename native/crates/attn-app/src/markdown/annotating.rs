@@ -165,6 +165,11 @@ pub(crate) fn root_key(tile: &str) -> String {
     format!("tile.{tile}.document.md")
 }
 
+/// The key of the reader in tile `tile` of the document's part from source byte `start` on.
+pub(crate) fn part_key(tile: &str, start: usize) -> String {
+    format!("{}.{start}", root_key(tile))
+}
+
 fn key(tile: &str, part: &str) -> String {
     format!("tile.{tile}.document.{part}")
 }
@@ -230,11 +235,13 @@ pub(crate) fn highlights(
 }
 
 /// A selection in tile `tile`'s document changed: let go over a passage, the toolbar opens on
-/// it; gone, the toolbar closes.
+/// it; gone, the toolbar closes. With `part`, the reader draws only the document's source from
+/// byte `part.0` on, which is `part.1`.
 pub(crate) fn selection_changed(
     state: &mut State,
     tile: &str,
     uri: &str,
+    part: Option<(usize, &str)>,
     change: &SelectionChange,
     tx: &mut Tx,
 ) {
@@ -243,7 +250,8 @@ pub(crate) fn selection_changed(
     }
     let pending = change.selection().and_then(|selection| {
         let passages = state.drafts.get(uri)?.passages.as_ref()?.1.clone();
-        let anchor = passages.anchor(selection, &root_key(tile))?;
+        let root = part.map_or_else(|| root_key(tile), |(start, _)| part_key(tile, start));
+        let anchor = passages.anchor(selection, &root, part)?;
         let Resolved::Exact(found) = passages.blocks.resolve(&anchor) else {
             return None;
         };
@@ -492,15 +500,21 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
 }
 
 /// The toolbar, or the comment box on a passage, of tile `tile`, placed beside their passage in
-/// the card that holds its reader `inset` points in, so they scroll with it.
-pub(crate) fn in_document(readings: &Readings, tile: &str, inset: f32, t: &Tokens) -> Vec<El> {
+/// the card that holds the element keyed `frame` `inset` points in, so they scroll with it.
+pub(crate) fn in_document(
+    readings: &Readings,
+    tile: &str,
+    frame: &str,
+    inset: f32,
+    t: &Tokens,
+) -> Vec<El> {
     let Some(reading) = readings.tiles.get(tile) else {
         return Vec::new();
     };
     let shown =
         reading.pending.is_some() || reading.composer.as_ref().is_some_and(|c| c.about.is_some());
     let (Some(reader), Some(passage)) = (
-        shown.then(|| rune::memo::layout(&root_key(tile))).flatten(),
+        shown.then(|| rune::memo::layout(frame)).flatten(),
         rune::memo::layout(&key(tile, "pending")),
     ) else {
         return Vec::new();

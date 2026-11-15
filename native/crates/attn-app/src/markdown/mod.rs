@@ -150,17 +150,36 @@ pub(crate) fn body(
         )
     };
     if let Some(bundle) = content.review.as_ref() {
+        let read_part = |part: std::ops::Range<usize>| {
+            let marking = annotates.then(|| Marking {
+                tile: tile.to_owned(),
+                uri: uri.clone(),
+                highlights: within(&marks, &part),
+                part: Some(part.start),
+            });
+            read_source(&content.content[part], marking)
+        };
+        let card = crate::review::card_key(tile);
+        let marking = if annotates {
+            annotating::in_document(readings, tile, &card, 0.0, t)
+        } else {
+            Vec::new()
+        };
         return crate::review::body(
             tile,
             &view,
             title,
             (&content.content, bundle, *revision),
             &readings.reviews,
-            (&|source: &str| read_source(source, None), {
+            (&read_part, {
                 let mut h = std::hash::DefaultHasher::new();
-                std::hash::Hash::hash(&(session, &version.3, version.4, &kept), &mut h);
+                std::hash::Hash::hash(
+                    &(session, &version.3, version.4, &kept, &marks, annotates),
+                    &mut h,
+                );
                 std::hash::Hasher::finish(&h)
             }),
+            marking,
             t,
         );
     }
@@ -174,16 +193,40 @@ pub(crate) fn body(
             tile: tile.to_owned(),
             uri,
             highlights: marks,
+            part: None,
         }))
     });
-    scroll(card(reading).children(annotating::in_document(readings, tile, padding, t)))
+    let marking = annotating::in_document(readings, tile, &root, padding, t);
+    scroll(card(reading).children(marking))
 }
 
 /// The marks a reader in tile `tile` paints over document `uri`, and where its selections go.
+/// With `part`, the reader draws only the document's source from that byte on, and paints
+/// marks by where they sit in it.
 pub(crate) struct Marking {
     tile: String,
     uri: String,
     highlights: Vec<(Vec<std::ops::Range<usize>>, rune_kit::Highlight)>,
+    part: Option<usize>,
+}
+
+/// The marks `highlights` paints on the document, as a reader of its bytes `part` alone
+/// paints them.
+fn within(
+    highlights: &[(Vec<std::ops::Range<usize>>, rune_kit::Highlight)],
+    part: &std::ops::Range<usize>,
+) -> Vec<(Vec<std::ops::Range<usize>>, rune_kit::Highlight)> {
+    highlights
+        .iter()
+        .filter_map(|(ranges, highlight)| {
+            let inside: Vec<_> = ranges
+                .iter()
+                .filter(|r| r.start < part.end && part.start < r.end)
+                .map(|r| r.start.max(part.start) - part.start..r.end.min(part.end) - part.start)
+                .collect();
+            (!inside.is_empty()).then(|| (inside, highlight.clone()))
+        })
+        .collect()
 }
 
 /// The reader of seed `seed`'s body in tile `tile`, with the marks `drafts` hold on it, where
@@ -207,10 +250,12 @@ pub(crate) fn seed_reader(
                 tile: tile.to_owned(),
                 uri,
                 highlights,
+                part: None,
             }))
         },
     );
-    (reading, annotating::in_document(readings, tile, 0.0, t))
+    let marking = annotating::in_document(readings, tile, &annotating::root_key(tile), 0.0, t);
+    (reading, marking)
 }
 
 /// `source` as a document at `document.path` reads: its links go where the reader sends them,
@@ -218,7 +263,8 @@ pub(crate) fn seed_reader(
 /// ready `pictures` by the paths they resolve to, opening larger on a press. Its `<details>`
 /// blocks open as their tags say, or as `folds` says people left them, by their order in the
 /// document, and a press on a summary opens or closes its block. With `marking`, it paints
-/// marks, a press on one picks it, and a selection let go opens the toolbar.
+/// marks, a press on one picks it, and a selection let go opens the toolbar; a reader of a part
+/// of the document sits in a column of its own, which whoever lays out the parts may key.
 pub(crate) fn reader(
     source: &str,
     document: Document,
@@ -232,7 +278,10 @@ pub(crate) fn reader(
     let folded = document.view.clone();
     let copied_in = document.view.clone();
     let nth = details_order(source);
-    let root = marking.as_ref().map(|m| annotating::root_key(&m.tile));
+    let root = marking.as_ref().map(|m| match m.part {
+        None => annotating::root_key(&m.tile),
+        Some(start) => annotating::part_key(&m.tile, start),
+    });
     if let Some(root) = &root {
         document.view = format!("{}/{root}", document.view);
     }
@@ -319,6 +368,7 @@ pub(crate) fn reader(
             tile,
             uri,
             highlights,
+            part,
         }),
         Some(root),
     ) = (marking, root)
@@ -326,7 +376,9 @@ pub(crate) fn reader(
         return markdown.build(attn_ui::kit(t));
     };
     let pressed = tile.clone();
-    markdown
+    let in_part = part.is_some();
+    let part = part.map(|start| (start, source.to_owned()));
+    let reading = markdown
         .highlights(highlights)
         .on_highlight(move |state: &mut State, key: &str, _: &mut Tx| {
             annotating::mark_pressed(state, &pressed, key)
@@ -334,8 +386,16 @@ pub(crate) fn reader(
         .build(attn_ui::kit(t))
         .key(root)
         .on_selection_change(move |state: &mut State, change, tx: &mut Tx| {
-            annotating::selection_changed(state, &tile, &uri, change, tx)
-        })
+            let part = part
+                .as_ref()
+                .map(|(start, source)| (*start, source.as_str()));
+            annotating::selection_changed(state, &tile, &uri, part, change, tx)
+        });
+    if in_part {
+        col().w_full().child(reading)
+    } else {
+        reading
+    }
 }
 
 /// Which of `source`'s `<details>` blocks the one whose tag starts at a source byte is, counted
