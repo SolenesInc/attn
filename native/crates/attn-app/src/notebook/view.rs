@@ -22,7 +22,7 @@ const NOTE: TextStyle = TextStyle::new(14.0, 400.0).lh(23.0);
 const HEADING: TextStyle = TextStyle::new(18.0, 600.0);
 const INSET: f32 = 24.0;
 
-fn key(id: &SurfaceId, part: &str) -> String {
+pub(super) fn key(id: &SurfaceId, part: &str) -> String {
     match id {
         SurfaceId::Fullscreen => format!("notebook.{part}"),
         SurfaceId::Tile(tile) => format!("notebook.tile.{tile}.{part}"),
@@ -635,6 +635,11 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
             .pl(space::S2 + (h.level.saturating_sub(1)) as f32 * INDENT)
             .role("button")
             .label(h.text)
+            .focusable(true)
+            .on_press_tx({
+                let id = id.clone();
+                move |state: &mut State, tx: &mut Tx| super::reveal_heading(state, &id, i, tx)
+            })
     });
     let outline_count = outline(&note).len();
     let backlinks: Vec<El> = match &surface.backlinks {
@@ -708,7 +713,13 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
                             .px(space::S3),
                     )
                 } else {
-                    col().px(space::S2).children(outline_items)
+                    col()
+                        .key(key(id, "outline.headings"))
+                        .role("list")
+                        .label("Headings")
+                        .focus_group()
+                        .px(space::S2)
+                        .children(outline_items)
                 }
             }))
             .child(section(

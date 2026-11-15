@@ -575,20 +575,34 @@ pub(crate) fn follow_link(state: &mut State, key: &str, href: &str, tx: &mut Tx)
 
 /// Puts the caret on the heading `anchor` names and scrolls it to the top.
 fn scroll_to_heading(state: &mut State, key: &str, anchor: &str, tx: &mut Tx) {
-    let Some(editor) = editor_of_mut(state, key) else {
+    let Some(editor) = editor_of(state, key) else {
         return;
     };
     let slug = links::heading_slug(anchor);
-    let text = editor.text();
-    let heading = outline::outline(&text)
+    let line = outline::outline(&editor.text())
         .into_iter()
-        .find(|h| links::heading_slug(&h.text) == slug || h.text.eq_ignore_ascii_case(anchor));
-    if let Some(h) = heading {
-        let line = h.line - 1;
+        .find(|h| links::heading_slug(&h.text) == slug || h.text.eq_ignore_ascii_case(anchor))
+        .map(|h| h.line);
+    reveal_line(state, key, line, tx);
+}
+
+/// Puts the caret on the surface's `index`th outline heading and scrolls it to the top.
+pub(crate) fn reveal_heading(state: &mut State, id: &SurfaceId, index: usize, tx: &mut Tx) {
+    let key = view::key(id, "editor");
+    let line = editor_of(state, &key)
+        .and_then(|editor| outline::outline(&editor.text()).into_iter().nth(index))
+        .map(|h| h.line);
+    reveal_line(state, &key, line, tx);
+}
+
+fn reveal_line(state: &mut State, key: &str, line: Option<usize>, tx: &mut Tx) {
+    if let (Some(line), Some(editor)) = (line, editor_of_mut(state, key)) {
+        let line = line - 1;
         editor.move_to(editor::Pos::new(line, 0), false, false);
         editor.focused = true;
-        let id = editor.doc.id(line);
-        tx.scroll_into_view(format!("{key}.line.{id}"));
+        let row = format!("{key}.line.{}", editor.doc.id(line));
+        tx.scroll_into_view(row.clone());
+        tx.scroll_key_to(row, 0.0);
         tx.focus(key.to_owned(), false);
     }
     state.notebook.revision += 1;

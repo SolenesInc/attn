@@ -1067,6 +1067,77 @@ fn shows_line(world: &World, words: &str) -> bool {
         .is_some()
 }
 
+/// `# Plan`, then `## Steps` on line 2 and again on line 63, each followed by sixty lines.
+fn twice_titled_note() -> String {
+    let filler: String = (0..60).map(|i| format!("Step detail {i}.\n")).collect();
+    format!("# Plan\n\n## Steps\n{filler}## Steps\n{filler}")
+}
+
+fn top_of(world: &World, key: &str) -> f32 {
+    world
+        .screen()
+        .bounds(Target::key(key))
+        .unwrap_or_else(|| panic!("{key} is not on screen"))[1]
+}
+
+fn shift_tab_to(world: &mut World, key: &str) {
+    for _ in 0..200 {
+        world.gesture(|d| d.press("shift+tab"));
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some(key) {
+            return;
+        }
+    }
+    panic!("moving focus backward never reached {key}");
+}
+
+#[test]
+fn an_outline_heading_puts_the_caret_on_its_own_heading_at_the_top_of_the_note() {
+    let disk = Disk::with(&[("knowledge/index.md", &twice_titled_note())]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    let viewport = top_of(&world, "notebook.scroll");
+
+    world.gesture(|d| d.click(Target::key("notebook.outline.2")));
+    assert_eq!(top_of(&world, "notebook.editor.line.63"), viewport);
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("notebook.editor")
+    );
+    assert!(shows_line(&world, "## Steps"));
+
+    world.gesture(|d| d.click(Target::key("notebook.outline.1")));
+    assert_eq!(top_of(&world, "notebook.editor.line.2"), viewport);
+    assert!(shows_line(&world, "## Steps"));
+    assert!(top_of(&world, "notebook.editor.line.63") > viewport + 500.0);
+
+    world.gesture(|d| d.click(Target::key("notebook.title")));
+    shift_tab_to(&mut world, "notebook.outline.0");
+    world.gesture(|d| d.press("end"));
+    world.gesture(|d| d.press("enter"));
+    assert_eq!(top_of(&world, "notebook.editor.line.63"), viewport);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn an_outline_heading_in_an_editor_tile_on_the_notebook_scrolls_that_tile_to_it() {
+    let disk = Disk::with(&[("knowledge/plan.md", &twice_titled_note())]);
+    let params = r#"{"path":"knowledge/plan.md"}"#;
+    let mut world = start_with(&disk, Some(row(vec![pane("a"), editor_tile("n", params)])));
+    let viewport = top_of(&world, "notebook.tile.n.scroll");
+
+    world.gesture(|d| d.click(Target::key("notebook.tile.n.fold.rail")));
+    world.gesture(|d| d.click(Target::key("notebook.tile.n.outline.2")));
+
+    assert_eq!(top_of(&world, "notebook.tile.n.editor.line.63"), viewport);
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("notebook.tile.n.editor")
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn command_z_undoes_typing_in_the_editor_and_shift_command_z_redoes_it() {
     let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
