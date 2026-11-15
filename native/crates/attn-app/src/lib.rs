@@ -265,6 +265,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let launched = picker::follow(state, tx);
     let browsed = browsed | opener::browse_due(state, tx);
     let pictured = markdown::follow_images(state, now, tx);
+    review::follow(state, tx);
     let noted = notebook::follow(state, now, tx);
     let drafted = markdown::drafts::follow(state, now, tx)
         | markdown::annotating::expire(state, now)

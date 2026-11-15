@@ -4,6 +4,7 @@
 
 mod diagram;
 mod document;
+mod file;
 mod frames;
 mod keys;
 mod stop;
@@ -11,6 +12,7 @@ mod stop;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
+use std::rc::Rc;
 
 use attn_protocol::{ReviewBundle, ReviewFlow, ReviewRow};
 use attn_ui::Tokens;
@@ -26,6 +28,9 @@ const CARD_MAX_WIDTH: f32 = 832.0;
 const CARD_PADDING: f32 = 20.0;
 /// The frames the reader draws.
 const BUILT: [Frame; 2] = [Frame::Brief, Frame::Map];
+/// The file view beside the document is this wide, at most this share of the tile.
+const FILE_VIEW_WIDTH: f32 = 780.0;
+const FILE_VIEW_SHARE: f32 = 0.64;
 /// The Map's diagram column takes this share of the tile's width when it sits beside the step.
 const DIAGRAM_SHARE: f32 = 0.44;
 
@@ -64,7 +69,7 @@ pub(crate) struct Place {
 }
 
 /// What people did in one review tile.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub(crate) struct Review {
     /// The frame picked with 1, 2 or 3; the document's own until then.
     frame: Option<Frame>,
@@ -75,12 +80,78 @@ pub(crate) struct Review {
     at: usize,
     files_shown: bool,
     help: bool,
+    /// The files opened from the review, the last on top.
+    files: Vec<file::OpenFile>,
+    /// Whether the file view fills the tile.
+    filled: bool,
+    next_file: u64,
+    /// The rows `e` widened each stop to, by its path and first line at head.
+    expansions: HashMap<(String, i64), Expansion>,
+    /// The content revision the open files and expansions were last read for.
+    seen: u64,
+    /// Counts the reads the tile asks for, so an answer to an older read of a file or a stop
+    /// never lands over a newer one.
+    asked: u64,
+    /// The latest read asked for each widened stop.
+    widening: HashMap<(String, i64), u64>,
+    /// The files the running warm-up still means to color, and its round: a warm-up whose
+    /// round has passed stops.
+    warming: (u64, Vec<(String, String)>),
 }
+
+/// A stop's rows widened by `extra` lines on each side, from its whole file.
+pub(crate) struct Expansion {
+    rows: Rc<[ReviewRow]>,
+    extra: usize,
+}
+
+/// Lines of files the reader keeps colors for, past which it forgets the oldest.
+const COLORED_LINES: usize = 25_000;
 
 /// Each review tile's reading, by tile.
 #[derive(Default)]
 pub struct Reviews {
     tiles: HashMap<String, Review>,
+    /// Each file's colors, by its path and the hash of its content, oldest first.
+    colors: Vec<((String, String), Rc<stop::Colors>)>,
+    /// Files too long to color, by path and hash, which are not read again to color them.
+    oversize: Vec<(String, String)>,
+}
+
+impl Reviews {
+    fn colors(&self, path: &str, hash: &str) -> Option<Rc<stop::Colors>> {
+        self.colors
+            .iter()
+            .find(|((p, h), _)| p == path && h == hash)
+            .map(|(_, c)| c.clone())
+    }
+
+    /// Keeps the colors of `path` at `hash` from its `rows`, forgetting the oldest past
+    /// `COLORED_LINES`; a file longer than that is noted as too long and not colored.
+    fn keep_colors(&mut self, path: &str, hash: &str, rows: &[ReviewRow]) {
+        let key = (path.to_owned(), hash.to_owned());
+        if hash.is_empty() || self.colors(path, hash).is_some() || self.oversize.contains(&key) {
+            return;
+        }
+        if rows.len() > COLORED_LINES {
+            self.oversize.push(key);
+            return;
+        }
+        let colors = Rc::new(stop::Colors::read(path, rows));
+        self.colors
+            .push(((path.to_owned(), hash.to_owned()), colors.clone()));
+        while self.colors.len() > 1
+            && self.colors.iter().map(|(_, c)| c.len()).sum::<usize>() > COLORED_LINES
+        {
+            self.colors.remove(0);
+        }
+    }
+
+    /// Whether the reader has colors for `path` at `hash`, or knows it is too long for them.
+    fn colored(&self, path: &str, hash: &str) -> bool {
+        self.colors(path, hash).is_some()
+            || self.oversize.iter().any(|(p, h)| p == path && h == hash)
+    }
 }
 
 /// The review `bundle` presents in `source`, laid out for reading in its frame.
@@ -96,6 +167,8 @@ pub(crate) struct Reading<'a> {
     /// The Map's current arrow, among the arrows its diagrams tie to stops.
     map: Option<(usize, usize)>,
     places: Vec<Place>,
+    /// The rows `e` widened each stop to, by the stop's index.
+    widened: Vec<Option<Rc<[ReviewRow]>>>,
 }
 
 impl<'a> Reading<'a> {
@@ -129,9 +202,26 @@ impl<'a> Reading<'a> {
             shown,
             map,
             places: Vec::new(),
+            widened: bundle
+                .stops
+                .iter()
+                .map(|s| {
+                    review
+                        .expansions
+                        .get(&(s.path.clone(), s.from))
+                        .map(|e| e.rows.clone())
+                })
+                .collect(),
         };
         reading.places = reading.places_of(tile, review.files_shown);
         reading
+    }
+
+    /// The rows stop `stop` shows: its own, or the ones `e` widened it to.
+    fn rows_of(&self, stop: usize) -> &[ReviewRow] {
+        self.widened[stop]
+            .as_deref()
+            .unwrap_or(&self.bundle.stops[stop].rows)
     }
 
     /// Whether part `at` shows in the frame's document.
@@ -184,7 +274,7 @@ impl<'a> Reading<'a> {
                     }
                 }
                 Part::Stop(stop) => {
-                    let rows = &bundle.stops[*stop].rows;
+                    let rows = self.rows_of(*stop);
                     places.extend(rows.iter().zip(0..).map(|(row, j)| Place {
                         stop: Some(*stop),
                         ..place(
@@ -344,9 +434,10 @@ pub(crate) fn body(
     marking: Vec<El>,
     t: &Tokens,
 ) -> El {
-    let review = reviews.tiles.get(tile).cloned().unwrap_or_default();
-    let reading = Reading::new(tile, source, bundle, &review);
-    let cursor = reading.cursor(&review);
+    let fresh = Review::default();
+    let review = reviews.tiles.get(tile).unwrap_or(&fresh);
+    let reading = Reading::new(tile, source, bundle, review);
+    let cursor = reading.cursor(review);
     let cursor_key = cursor.map(|i| reading.places[i].key.clone());
     let prefix = prefix(tile);
     let sides = frames::has_sides(bundle);
@@ -367,15 +458,19 @@ pub(crate) fn body(
             Part::Summary => keys::summary(
                 &prefix,
                 bundle,
-                &review,
+                review,
                 current.map(|i| &reading.places[i].spot),
                 t,
             ),
             Part::Stop(index) => {
                 let first = reading.places.iter().position(on).unwrap_or(0);
                 let row = current.map(|i| i - first);
-                memo(key.clone(), (revision, row, *t), || {
-                    stop::stop(&key, &bundle.stops[*index], row, t)
+                let s = &bundle.stops[*index];
+                let colors = reviews.colors(&s.path, &s.file_hash);
+                let rows = reading.rows_of(*index);
+                let version = (revision, row, colors.is_some(), rows.len(), *t);
+                memo(key.clone(), version, || {
+                    stop::stop(&key, s, rows, row, colors.as_deref(), t)
                 })
             }
             Part::NotShown => {
@@ -433,6 +528,31 @@ pub(crate) fn body(
     let frame = match reading.frame {
         Frame::Map => map(&prefix, &reading, document, revision, t),
         _ => document,
+    };
+    let frame = match review
+        .files
+        .last()
+        .filter(|_| reading.frame != Frame::Walkthrough)
+    {
+        None => frame,
+        Some(open) => {
+            let notes: Vec<&attn_protocol::ReviewNote> = bundle
+                .stops
+                .iter()
+                .filter(|s| s.path == open.target.path)
+                .flat_map(|s| &s.notes)
+                .collect();
+            let colors = reviews.colors(&open.target.path, &open.hash);
+            let view = file::view(&prefix, tile, open, review.files.len(), &notes, colors, t);
+            let width = rune::memo::layout(&prefix).map_or(0.0, |r| r[2]);
+            let view = if review.filled {
+                view.pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            } else {
+                view.pin(None, Some(0.0), Some(0.0), Some(0.0))
+                    .w(FILE_VIEW_WIDTH.min(width * FILE_VIEW_SHARE))
+            };
+            col().w_full().grow(1.0).min_h(0.0).child(frame).child(view)
+        }
     };
     let offered = frames::offered(bundle, &BUILT);
     col()
@@ -628,7 +748,11 @@ fn held(
 /// switches the diagrams' side, Enter shows the changed files from the facts, `?` shows the
 /// keys and Escape closes them.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if tx.focused().is_some() || ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
+    let back_key = matches!(ev.key, Key::Command(c) if c.eq_ignore_ascii_case(&'o'))
+        && ev.mods.ctrl
+        && !ev.mods.cmd
+        && !ev.mods.alt;
+    if tx.focused().is_some() || (!back_key && (ev.mods.cmd || ev.mods.ctrl || ev.mods.alt)) {
         return false;
     }
     let Some((tile, message)) = held(state) else {
@@ -649,6 +773,16 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Text(typed) => typed.as_str(),
         _ => "",
     };
+    if back_key {
+        let went = back(review);
+        state.readings.revision += 1;
+        return went;
+    }
+    let viewing = !review.files.is_empty() && reading.frame != Frame::Walkthrough;
+    if viewing && !review.help && typed != "?" && file_key(review, &prefix(&tile), ev, tx) {
+        state.readings.revision += 1;
+        return true;
+    }
     let to = match (&ev.key, typed) {
         (_, "?") => {
             review.help = !review.help;
@@ -692,6 +826,23 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             review.files_shown = !review.files_shown;
             None
         }
+        (Key::Enter, _) | (_, "z") if !viewing => {
+            let Some(target) = cursor.and_then(|i| target_of(&reading, i)) else {
+                return ev.key == Key::Enter;
+            };
+            Some(Move::Open(target, typed == "z"))
+        }
+        (_, "e") if !viewing => {
+            let Some(stop) = cursor.and_then(|i| reading.places[i].stop) else {
+                return true;
+            };
+            let s = &bundle.stops[stop];
+            let extra = review
+                .expansions
+                .get(&(s.path.clone(), s.from))
+                .map_or(0, |e| e.extra);
+            Some(Move::Expand(stop, extra + MORE_LINES))
+        }
         _ => return false,
     };
     match to {
@@ -724,6 +875,19 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 }
             }
         }
+        Some(Move::Open(target, fill)) => {
+            open_file(state, &tile, source_of(&message), target, fill, tx);
+        }
+        Some(Move::Expand(stop, extra)) => {
+            expand(
+                state,
+                &tile,
+                source_of(&message),
+                &bundle.stops[stop],
+                extra,
+                tx,
+            );
+        }
         _ => {}
     }
     state.readings.revision += 1;
@@ -737,6 +901,10 @@ enum Move {
     Arrow,
     /// The frame or the side changed: the cursor stays where the new reading puts it.
     Shown,
+    /// Open this file in the view, filling the tile when true.
+    Open(file::Target, bool),
+    /// Show this many lines on each side of this stop.
+    Expand(usize, usize),
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.
@@ -886,4 +1054,408 @@ fn lead_in(reading: &Reading, at: usize) -> usize {
         }
     }
     start
+}
+
+/// Where a read puts the file view's cursor.
+#[derive(Clone, Copy)]
+enum Land {
+    /// On this line now, or the first after it.
+    Line(Option<i64>),
+    /// On the row it stood on before the read.
+    Refresh,
+}
+
+/// What the daemon needs to read a review's files: the machine and the document.
+fn source_of(message: &attn_protocol::DesktopTileContentMessage) -> (Option<String>, String) {
+    (
+        message.host.clone().filter(|h| !h.is_empty()),
+        message.path.clone(),
+    )
+}
+
+/// Opens `target` in tile `tile`'s file view, on top of the files open there.
+fn open_file(
+    state: &mut State,
+    tile: &str,
+    source: (Option<String>, String),
+    target: file::Target,
+    fill: bool,
+    tx: &mut Tx,
+) {
+    let review = state
+        .readings
+        .reviews
+        .tiles
+        .entry(tile.to_owned())
+        .or_default();
+    review.next_file += 1;
+    let id = review.next_file;
+    let line = target.line;
+    let path = target.path.clone();
+    review.files.push(file::OpenFile {
+        id,
+        target,
+        ..file::OpenFile::default()
+    });
+    if fill {
+        review.filled = true;
+    }
+    load(state, tile, source, (id, path), Land::Line(line), tx);
+}
+
+/// Reads file `path` into open file `id` of tile `tile`, putting the cursor where `land` says.
+fn load(
+    state: &mut State,
+    tile: &str,
+    (host, document): (Option<String>, String),
+    (id, path): (u64, String),
+    land: Land,
+    tx: &mut Tx,
+) {
+    let Some(review) = state.readings.reviews.tiles.get_mut(tile) else {
+        return;
+    };
+    review.asked += 1;
+    let asked = review.asked;
+    let Some(open) = review.files.iter_mut().find(|f| f.id == id) else {
+        return;
+    };
+    open.asked = asked;
+    let tile = tile.to_owned();
+    let p = path.clone();
+    file::read(
+        state,
+        (host, document, path),
+        move |state, read, tx| {
+            if let Ok(m) = &read
+                && let (Some(rows), Some(hash)) = (m.rows.as_deref(), m.hash.as_deref())
+            {
+                state.readings.reviews.keep_colors(&p, hash, rows);
+            }
+            let prefix = prefix(&tile);
+            let Some(review) = state.readings.reviews.tiles.get_mut(&tile) else {
+                return;
+            };
+            let Some(open) = review
+                .files
+                .iter_mut()
+                .find(|f| f.id == id && f.asked == asked)
+            else {
+                return;
+            };
+            match read {
+                Ok(m) => {
+                    let rows: Rc<[ReviewRow]> = m.rows.unwrap_or_default().into();
+                    open.cursor = match land {
+                        Land::Line(line) => file::row_index_of(&rows, line),
+                        Land::Refresh => file::row_index_after_refresh(&rows, open),
+                    };
+                    open.select_from = None;
+                    open.rows = Some(rows);
+                    open.hash = m.hash.unwrap_or_default();
+                    open.problem = m.problem.filter(|p| !p.is_empty());
+                    open.error = None;
+                    tx.scroll_center(file::row_key(&prefix, open.cursor));
+                }
+                Err(why) => open.error = Some(why),
+            }
+            state.readings.revision += 1;
+        },
+        tx,
+    );
+}
+
+/// `shown`, a stop's rows, widened by `lines` on each side from `file`, the whole file.
+fn widen(shown: &[ReviewRow], file: &[ReviewRow], lines: usize) -> Option<Rc<[ReviewRow]>> {
+    let at = |r: &ReviewRow| file.iter().position(|f| f.old == r.old && f.now == r.now);
+    let first = at(shown.first()?)?;
+    let last = at(shown.last()?)?;
+    Some(file[first.saturating_sub(lines)..(last + lines + 1).min(file.len())].into())
+}
+
+/// Shows `extra` lines on each side of stop `stop` of tile `tile`, read from its file now.
+fn expand(
+    state: &mut State,
+    tile: &str,
+    source: (Option<String>, String),
+    stop: &attn_protocol::ReviewStop,
+    extra: usize,
+    tx: &mut Tx,
+) {
+    let key = (stop.path.clone(), stop.from);
+    let review = state
+        .readings
+        .reviews
+        .tiles
+        .entry(tile.to_owned())
+        .or_default();
+    review.asked += 1;
+    let asked = review.asked;
+    review.widening.insert(key.clone(), asked);
+    let (tile, shown) = (tile.to_owned(), stop.rows.clone());
+    let (host, document) = source;
+    file::read(
+        state,
+        (host, document, stop.path.clone()),
+        move |state, read, _| {
+            let Ok(m) = read else { return };
+            let Some(review) = state.readings.reviews.tiles.get_mut(&tile) else {
+                return;
+            };
+            if review.widening.get(&key) != Some(&asked) {
+                return;
+            }
+            review.widening.remove(&key);
+            let Some(rows) = widen(&shown, m.rows.as_deref().unwrap_or_default(), extra) else {
+                return;
+            };
+            review.expansions.insert(key, Expansion { rows, extra });
+            state.readings.revision += 1;
+        },
+        tx,
+    );
+}
+
+/// The lines `e` shows around a stop.
+const MORE_LINES: usize = 10;
+
+/// Keeps each shown review current: when its content changed, the open files are read again
+/// with the cursor on its row, and the widened stops are widened again; a stop's file that has
+/// no colors yet is read once to color it, one file at a time.
+pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
+    let shown: Vec<(
+        String,
+        u64,
+        std::sync::Arc<attn_protocol::DesktopTileContentMessage>,
+    )> = state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .filter(|(_, c)| c.message.review.is_some())
+        .map(|(key, c)| (key.tile.clone(), c.revision, c.message.clone()))
+        .collect();
+    for (tile, revision, message) in shown {
+        let Some(bundle) = message.review.as_ref() else {
+            continue;
+        };
+        let review = state
+            .readings
+            .reviews
+            .tiles
+            .entry(tile.clone())
+            .or_default();
+        if review.seen == revision {
+            continue;
+        }
+        review.seen = revision;
+        let files: Vec<(u64, String)> = review
+            .files
+            .iter()
+            .map(|f| (f.id, f.target.path.clone()))
+            .collect();
+        review.expansions.retain(|(path, from), _| {
+            bundle
+                .stops
+                .iter()
+                .any(|s| &s.path == path && s.from == *from)
+        });
+        let widened: Vec<(attn_protocol::ReviewStop, usize)> = bundle
+            .stops
+            .iter()
+            .filter_map(|s| {
+                let e = review.expansions.get(&(s.path.clone(), s.from))?;
+                Some((s.clone(), e.extra))
+            })
+            .collect();
+        for (id, path) in files {
+            load(
+                state,
+                &tile,
+                source_of(&message),
+                (id, path),
+                Land::Refresh,
+                tx,
+            );
+        }
+        for (stop, extra) in widened {
+            expand(state, &tile, source_of(&message), &stop, extra, tx);
+        }
+        warm(state, &tile, &message, bundle, tx);
+    }
+}
+
+/// Reads the stops' files the reader has no colors for, one after another, to color them.
+/// A warm-up already running for those files goes on; one for other files gives way.
+fn warm(
+    state: &mut State,
+    tile: &str,
+    message: &std::sync::Arc<attn_protocol::DesktopTileContentMessage>,
+    bundle: &ReviewBundle,
+    tx: &mut Tx,
+) {
+    let reviews = &state.readings.reviews;
+    let mut wanted: Vec<(String, String)> = Vec::new();
+    for stop in &bundle.stops {
+        let key = (stop.path.clone(), stop.file_hash.clone());
+        if !stop.file_hash.is_empty() && !reviews.colored(&key.0, &key.1) && !wanted.contains(&key)
+        {
+            wanted.push(key);
+        }
+    }
+    let Some(review) = state.readings.reviews.tiles.get_mut(tile) else {
+        return;
+    };
+    if wanted.iter().all(|w| review.warming.1.contains(w)) {
+        return;
+    }
+    review.warming = (review.warming.0 + 1, wanted.clone());
+    let round = review.warming.0;
+    warm_next(state, tile.to_owned(), round, source_of(message), tx);
+}
+
+fn warm_next(
+    state: &mut State,
+    tile: String,
+    round: u64,
+    source: (Option<String>, String),
+    tx: &mut Tx,
+) {
+    let reviews = &mut state.readings.reviews;
+    let Some(review) = reviews
+        .tiles
+        .get_mut(&tile)
+        .filter(|r| r.warming.0 == round)
+    else {
+        return;
+    };
+    let known = |(path, hash): &(String, String)| {
+        reviews
+            .colors
+            .iter()
+            .any(|((p, h), _)| p == path && h == hash)
+            || reviews.oversize.iter().any(|(p, h)| p == path && h == hash)
+    };
+    let pending: Vec<(String, String)> = review
+        .warming
+        .1
+        .iter()
+        .filter(|w| !known(w))
+        .cloned()
+        .collect();
+    review.warming.1 = pending;
+    let Some((path, wanted)) = review.warming.1.first().cloned() else {
+        return;
+    };
+    let (host, document) = source.clone();
+    file::read(
+        state,
+        (host, document, path.clone()),
+        move |state, read, tx| {
+            if let Ok(m) = read
+                && let (Some(rows), Some(hash)) = (m.rows.as_deref(), m.hash.as_deref())
+            {
+                state.readings.reviews.keep_colors(&path, hash, rows);
+                state.readings.revision += 1;
+            }
+            if let Some(review) = state.readings.reviews.tiles.get_mut(&tile)
+                && review.warming.0 == round
+            {
+                review.warming.1.retain(|w| w.0 != path || w.1 != wanted);
+            }
+            warm_next(state, tile, round, source, tx);
+        },
+        tx,
+    );
+}
+
+/// The file a place opens: a stop's row at its line with the stop's lines marked, an arrow's
+/// stop, a changed file or a Not shown file.
+fn target_of(reading: &Reading, at: usize) -> Option<file::Target> {
+    let place = &reading.places[at];
+    let stop_target = |stop: usize, line: Option<i64>| {
+        let s = &reading.bundle.stops[stop];
+        let range = (s.now_from > 0).then_some((s.now_from, s.now_to));
+        file::Target {
+            path: s.path.clone(),
+            line: line.or(range.map(|r| r.0)),
+            range,
+        }
+    };
+    match &place.spot {
+        Spot::Row { now, .. } => place.stop.map(|s| stop_target(s, *now)),
+        Spot::Arrow(_) => place.arrow.map(|s| stop_target(s, None)),
+        Spot::File(path) => Some(file::Target {
+            path: path.clone(),
+            ..file::Target::default()
+        }),
+        Spot::NotShown(path) if !path.ends_with('/') => Some(file::Target {
+            path: path.clone(),
+            ..file::Target::default()
+        }),
+        _ => None,
+    }
+}
+
+/// The file view's keys: ↑/↓ by row, with ⇧ to select, PageUp/PageDown by a page, ←/→ by
+/// change, `z` fills the tile, ⌃o goes back and Escape drops the selection, then closes.
+fn file_key(review: &mut Review, prefix: &str, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let Some(open) = review.files.last_mut() else {
+        return false;
+    };
+    let rows = open.rows.clone();
+    let count = rows.as_ref().map_or(0, |r| r.len());
+    let to = |n: isize| n.clamp(0, count as isize - 1) as usize;
+    let cursor = open.cursor as isize;
+    let next = match &ev.key {
+        Key::Down => Some(to(cursor + 1)),
+        Key::Up => Some(to(cursor - 1)),
+        Key::PageDown => Some(to(cursor + file::PAGE_ROWS as isize)),
+        Key::PageUp => Some(to(cursor - file::PAGE_ROWS as isize)),
+        Key::Right | Key::Left => {
+            let starts = rows.as_deref().map(file::change_starts).unwrap_or_default();
+            let at = open.cursor;
+            Some(if ev.key == Key::Right {
+                starts.iter().copied().find(|&s| s > at).unwrap_or(at)
+            } else {
+                starts.iter().copied().rev().find(|&s| s < at).unwrap_or(at)
+            })
+        }
+        Key::Text(t) if t == "z" => {
+            review.filled = !review.filled;
+            return true;
+        }
+        Key::Escape if open.select_from.is_some() => {
+            open.select_from = None;
+            return true;
+        }
+        Key::Escape => {
+            review.files.clear();
+            review.filled = false;
+            return true;
+        }
+        _ => return false,
+    };
+    if let Some(next) = next.filter(|_| count > 0) {
+        let selecting = ev.mods.shift && matches!(ev.key, Key::Up | Key::Down);
+        open.select_from = if selecting {
+            Some(open.select_from.unwrap_or(open.cursor))
+        } else {
+            None
+        };
+        open.cursor = next;
+        tx.scroll_into_view(file::row_key(prefix, next));
+    }
+    true
+}
+
+/// ⌃o: back to the file opened before, or out of the file view from the first.
+fn back(review: &mut Review) -> bool {
+    if review.files.pop().is_none() {
+        return false;
+    }
+    if review.files.is_empty() {
+        review.filled = false;
+    }
+    true
 }

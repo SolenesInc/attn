@@ -1,7 +1,7 @@
 use attn_protocol::{
     Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage, Profile, ReviewBundle,
-    ReviewFile, ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant,
-    ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Session,
+    ReviewFile, ReviewFileResultMessage, ReviewFlow, ReviewFlowGroup, ReviewFlowMessage,
+    ReviewFlowParticipant, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Session,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Node, Target, World};
@@ -1349,4 +1349,496 @@ fn a_selection_dragged_across_the_briefs_blocks_keeps_to_the_block_it_starts_in(
         FIRST.ends_with(exact) && exact.len() > 10,
         "the passage runs from where the drag started to its block's end: {exact:?}"
     );
+}
+
+fn calc_file() -> Vec<ReviewRow> {
+    let mut rows = vec![
+        line(" ", Some(1), Some(1), "package calc"),
+        line(" ", Some(2), Some(2), ""),
+    ];
+    rows.extend(bundle().stops[0].rows.clone());
+    rows.extend([
+        line(" ", Some(6), Some(7), ""),
+        line(" ", Some(7), Some(8), "func Sub(a, b int) int {"),
+        line("-", Some(8), None, "\treturn a - b"),
+        line("+", None, Some(9), "\treturn b - a"),
+        line(" ", Some(9), Some(10), "}"),
+    ]);
+    rows
+}
+
+/// calc.go after someone inserts two lines above Add: every line from 3 on moves down by two.
+fn calc_with_two_lines_above() -> Vec<ReviewRow> {
+    let shifted: Vec<ReviewRow> = calc_file()
+        .into_iter()
+        .map(|mut r| {
+            if r.now.is_some_and(|n| n >= 3) {
+                r.now = r.now.map(|n| n + 2);
+            }
+            r
+        })
+        .collect();
+    let mut rows = shifted[..2].to_vec();
+    rows.push(line("+", None, Some(3), "// Add sums."));
+    rows.push(line("+", None, Some(4), "// It names the sum."));
+    rows.extend(shifted[2..].to_vec());
+    rows
+}
+
+type Files = std::sync::Arc<std::sync::Mutex<Vec<ReviewRow>>>;
+
+/// Serves the review's files: calc.go as the returned handle holds it, util.go, and a line
+/// naming any other path.
+fn serve(world: &World) -> Files {
+    let calc: Files = std::sync::Arc::new(std::sync::Mutex::new(calc_file()));
+    let held = calc.clone();
+    world.daemon.on("review_file", move |r| {
+        let path = r["path"].as_str().unwrap_or_default().to_owned();
+        let (rows, hash) = match path.as_str() {
+            "calc.go" => {
+                let rows = held.lock().unwrap().clone();
+                let hash = if rows.len() == calc_file().len() {
+                    "h1".to_owned()
+                } else {
+                    format!("h1-{}", rows.len())
+                };
+                (rows, hash)
+            }
+            "util.go" => (bundle().stops[1].rows.clone(), "h2".to_owned()),
+            "go.sum" => (
+                vec![
+                    line(" ", Some(1), Some(1), "// go.sum"),
+                    line(" ", Some(2), Some(2), &"x".repeat(300)),
+                ],
+                "h4".to_owned(),
+            ),
+            other => (
+                vec![line(" ", Some(1), Some(1), &format!("// {other}"))],
+                "h3".to_owned(),
+            ),
+        };
+        serde_json::to_value(ReviewFileResultMessage {
+            success: true,
+            path: Some(path),
+            rows: Some(rows),
+            hash: Some(hash),
+            ..ReviewFileResultMessage::new()
+        })
+        .unwrap()
+    });
+    calc
+}
+
+fn open_served(content: &str, review: ReviewBundle) -> (World, Files) {
+    let mut world = start();
+    let calc = serve(&world);
+    deliver(&mut world, content, Some(review));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    (world, calc)
+}
+
+/// The file view, if one shows.
+fn file_view(world: &World) -> Option<Vec<String>> {
+    world.screen().find(Target::key("tile.m.review.view"))?;
+    Some(
+        world
+            .screen()
+            .descendants(Target::key("tile.m.review.view"))
+            .into_iter()
+            .filter_map(|n| n.name)
+            .collect(),
+    )
+}
+
+/// The row the file view's cursor stands on.
+fn file_cursor(world: &World) -> Option<String> {
+    world
+        .screen()
+        .descendants(Target::key("tile.m.review.view"))
+        .into_iter()
+        .find(|n| n.role == "row" && n.is("selected"))
+        .and_then(|n| n.name)
+}
+
+fn file_reads(world: &World) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("review_file")
+        .iter()
+        .map(|r| r["path"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+fn ctrl_o(world: &mut World) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Command('o'),
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        })
+    });
+}
+
+#[test]
+fn opens_the_whole_file_at_the_cursor_moves_between_its_changes_and_closes() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    let warmed = file_reads(&world).len();
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+
+    press(&mut world, Key::Enter);
+    let read = &world.daemon.sent_of("review_file")[warmed];
+    assert_eq!(
+        (
+            read["document"].as_str(),
+            read["path"].as_str(),
+            read.get("host")
+        ),
+        (Some(DOC), Some("calc.go"), None)
+    );
+    let view = file_view(&world).expect("the file view shows");
+    assert!(view.iter().any(|t| t == "calc.go"), "{view:?}");
+    assert!(view.iter().any(|t| t == "10 lines"), "{view:?}");
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+
+    press(&mut world, Key::Right);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("removed line 8: \treturn a - b")
+    );
+    press(&mut world, Key::Left);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("removed line 4: \treturn a + b")
+    );
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_none());
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+
+    press(&mut world, Key::Enter);
+    assert!(file_view(&world).is_some());
+    ctrl_o(&mut world);
+    assert!(file_view(&world).is_none());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn shows_the_notes_of_every_stop_in_the_file_under_it_on_the_cursors_line() {
+    let document = DOCUMENT.replace(
+        "## Not shown",
+        "### calc.go:9-10\n\n- L9: Order flipped.\n\n## Not shown",
+    );
+    let mut review = bundle();
+    let rows = calc_file();
+    review.stops.push(ReviewStop {
+        heading_line: 26,
+        path: "calc.go".into(),
+        from: 9,
+        to: 10,
+        now_from: 9,
+        now_to: 10,
+        file_hash: "h1".into(),
+        rows: rows[rows.len() - 4..].to_vec(),
+        notes: vec![note(28, 9, false, "Order flipped.")],
+        ..ReviewStop::default()
+    });
+    review.not_shown[0].line = 32;
+    let (mut world, _) = open_served(&document, review);
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Enter);
+    let strip = |world: &World| {
+        world
+            .screen()
+            .find(Target::role("region").name("Marks on this line"))
+            .map(|r| {
+                world
+                    .screen()
+                    .descendants(Target::key(r.key.unwrap_or_default()))
+                    .into_iter()
+                    .filter_map(|n| n.name)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+    for _ in 0..12 {
+        if file_cursor(&world).is_some_and(|c| c.starts_with("added line 9")) {
+            break;
+        }
+        press(&mut world, Key::Down);
+    }
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 9: \treturn b - a")
+    );
+    let notes = strip(&world);
+    assert!(
+        notes.iter().any(|t| t == "agent L9: Order flipped."),
+        "{notes:?}"
+    );
+    assert!(
+        !notes.iter().any(|t| t.contains("The sum gets a name.")),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn keeps_an_open_file_view_current_a_new_bundle_reads_the_file_again_and_the_cursor_stays_on_its_line()
+ {
+    let (mut world, calc) = open_served(DOCUMENT, bundle());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+    let before = file_reads(&world)
+        .iter()
+        .filter(|p| *p == "calc.go")
+        .count();
+
+    *calc.lock().unwrap() = calc_with_two_lines_above();
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(ReviewBundle {
+            head: "aaaaaaa".into(),
+            ..bundle()
+        }),
+    );
+    let after = file_reads(&world)
+        .iter()
+        .filter(|p| *p == "calc.go")
+        .count();
+    assert!(after > before, "{before} reads, then {after}");
+    let view = file_view(&world).unwrap();
+    assert!(
+        view.iter()
+            .any(|t| t == "added line 4: // It names the sum."),
+        "{view:?}"
+    );
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 6: \tsum := a + b")
+    );
+    press(&mut world, Key::Down);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 7: \treturn sum")
+    );
+}
+
+#[test]
+fn keeps_the_cursor_on_a_repeated_line_of_a_file_with_no_base_when_the_bundle_is_recomputed() {
+    let (mut world, calc) = open_served(DOCUMENT, bundle());
+    *calc.lock().unwrap() = ["package calc", "", "func A() {", "\tx()", "", "\ty()", "}"]
+        .iter()
+        .zip(1..)
+        .map(|(text, at)| line("+", None, Some(at), text))
+        .collect();
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    press(&mut world, Key::Down);
+    assert_eq!(file_cursor(&world).as_deref(), Some("added line 5: "));
+
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(ReviewBundle {
+            head: "aaaaaaa".into(),
+            ..bundle()
+        }),
+    );
+    assert_eq!(file_cursor(&world).as_deref(), Some("added line 5: "));
+}
+
+#[test]
+fn shows_more_lines_around_a_stop_with_e_fills_the_tile_with_z_and_opens_a_not_shown_file() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    press(&mut world, Key::Right);
+    assert_eq!(stops(&world)[0], "calc.go L3–6");
+
+    world.gesture(|app| app.type_text("e"));
+    assert_eq!(stops(&world)[0], "calc.go L1–10");
+    let rows = stop_lines(&world, &stop_key(&world, "calc.go"));
+    assert_eq!(
+        rows.first().map(String::as_str),
+        Some("unchanged line 1: package calc")
+    );
+    assert_eq!(
+        rows.last().map(String::as_str),
+        Some("unchanged line 10: }")
+    );
+
+    world.gesture(|app| app.type_text("z"));
+    let tile = world.screen().bounds(Target::key("tile.m")).unwrap();
+    let filled = world
+        .screen()
+        .bounds(Target::key("tile.m.review.view"))
+        .unwrap();
+    assert!(
+        (filled[2] - tile[2]).abs() < 2.0,
+        "filled {filled:?} in {tile:?}"
+    );
+    world.gesture(|app| app.type_text("z"));
+    let beside = world
+        .screen()
+        .bounds(Target::key("tile.m.review.view"))
+        .unwrap();
+    assert!(beside[2] < tile[2] * 0.7, "beside {beside:?} in {tile:?}");
+    press(&mut world, Key::Escape);
+    assert!(file_view(&world).is_none());
+
+    for _ in 0..30 {
+        if cursor(&world).name.as_deref() == Some("go.sum checksums only.") {
+            break;
+        }
+        press(&mut world, Key::Down);
+    }
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_reads(&world).last().map(String::as_str),
+        Some("go.sum")
+    );
+    let view = file_view(&world).unwrap();
+    assert!(
+        view.iter().any(|t| t == "unchanged line 1: // go.sum"),
+        "{view:?}"
+    );
+    let long = world
+        .screen()
+        .descendants(Target::key("tile.m.review.view"))
+        .into_iter()
+        .find(|n| {
+            n.name
+                .as_deref()
+                .is_some_and(|t| t.starts_with("unchanged line 2: xxx"))
+        })
+        .and_then(|n| n.key)
+        .unwrap();
+    let row = world.screen().bounds(Target::key(long.as_str())).unwrap();
+    assert!(
+        row[3] <= 21.0,
+        "a long line keeps one row in the file view: {row:?}"
+    );
+}
+
+fn file_answer(path: &str, rows: Vec<ReviewRow>, hash: &str) -> serde_json::Value {
+    serde_json::to_value(ReviewFileResultMessage {
+        success: true,
+        path: Some(path.into()),
+        rows: Some(rows),
+        hash: Some(hash.into()),
+        ..ReviewFileResultMessage::new()
+    })
+    .unwrap()
+}
+
+#[test]
+fn an_older_read_of_an_open_file_never_lands_over_a_newer_one() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+
+    world.daemon.on("review_file", |_| ());
+    for head in ["aaaaaaa", "bbbbbbb"] {
+        deliver(
+            &mut world,
+            DOCUMENT,
+            Some(ReviewBundle {
+                head: head.into(),
+                ..bundle()
+            }),
+        );
+    }
+    let reads: Vec<_> = world
+        .daemon
+        .sent_of("review_file")
+        .into_iter()
+        .filter(|r| r["path"] == "calc.go")
+        .collect();
+    let (older, newer) = (&reads[reads.len() - 2], &reads[reads.len() - 1]);
+    world.daemon.reply_to(
+        newer,
+        file_answer("calc.go", calc_with_two_lines_above(), "h-new"),
+    );
+    world.settle();
+    world
+        .daemon
+        .reply_to(older, file_answer("calc.go", calc_file(), "h-old"));
+    world.settle();
+    let view = file_view(&world).unwrap();
+    assert!(
+        view.iter()
+            .any(|t| t == "added line 4: // It names the sum."),
+        "{view:?}"
+    );
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 6: \tsum := a + b")
+    );
+}
+
+#[test]
+fn colors_each_stops_file_once_however_often_the_bundle_changes_while_it_reads() {
+    let mut world = start();
+    world.daemon.on("review_file", |_| ());
+    deliver(&mut world, DOCUMENT, Some(bundle()));
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(ReviewBundle {
+            head: "aaaaaaa".into(),
+            ..bundle()
+        }),
+    );
+    assert_eq!(file_reads(&world), ["calc.go"]);
+
+    let first = world.daemon.sent_of("review_file")[0].clone();
+    world
+        .daemon
+        .reply_to(&first, file_answer("calc.go", calc_file(), "h1"));
+    world.settle();
+    assert_eq!(file_reads(&world), ["calc.go", "util.go"]);
+    let second = world.daemon.sent_of("review_file")[1].clone();
+    world.daemon.reply_to(
+        &second,
+        file_answer("util.go", bundle().stops[1].rows.clone(), "h2"),
+    );
+    world.settle();
+
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(ReviewBundle {
+            head: "bbbbbbb".into(),
+            ..bundle()
+        }),
+    );
+    assert_eq!(file_reads(&world), ["calc.go", "util.go"]);
 }
