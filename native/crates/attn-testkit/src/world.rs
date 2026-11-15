@@ -362,12 +362,30 @@ impl World {
                 runtime: &mut self.runtime,
             },
         );
+        self.await_delivery();
         self.exchange(Some(&mut sampler));
         for _ in 0..(secs * hz).round() as usize {
             self.sample(&mut sampler, 1.0 / hz);
         }
         self.settle();
         sampler.rec
+    }
+
+    /// Returns once the link has taken in everything the daemon sent, so a change the daemon
+    /// sends as a recording's cause lands on the frame that records the cause.
+    fn await_delivery(&self) {
+        loop {
+            let seen = self.pulse.count();
+            let link = self.link().traffic();
+            let daemon = self.daemon.traffic();
+            if link.connection != daemon.connection as u64 || link.received >= daemon.queued {
+                return;
+            }
+            assert!(
+                self.pulse.wait_past(seen, STUCK),
+                "the link did not take in what the daemon sent after {STUCK:?}: link {link:?}, daemon {daemon:?}",
+            );
+        }
     }
 
     fn still_frame(&mut self, sampler: &mut Option<&mut rune::motion_gate::Sampler>) {
