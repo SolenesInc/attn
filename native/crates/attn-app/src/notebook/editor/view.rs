@@ -130,6 +130,13 @@ fn line_row(
             .justify_center()
             .child(el().w_full().h(1.0).fill(t.border))
             .with_press(key, i, access),
+        LineKind::Table { first, lines } if !editor.touches(lines) => {
+            if *first {
+                table_grid(editor, key, lines.start, access, t).key(row_key)
+            } else {
+                el().key(row_key).h(0.0)
+            }
+        }
         LineKind::Image { alt, src } if !editor.active(i) => {
             image_row(editor, pictures, alt, src, t)
                 .key(row_key)
@@ -381,6 +388,67 @@ impl Press for El {
             crate::notebook::edited_editor(state, &key, tx);
         })
     }
+}
+
+/// The table starting at line `start` as a grid: a press on the header puts the caret on the
+/// table's first line, a press on a row on that row's line, which shows the table's source.
+fn table_grid(editor: &Editor, key: &str, start: usize, access: Access, t: &Tokens) -> El {
+    let Some(table) = super::table::table_at(editor.doc.lines(), start) else {
+        return el();
+    };
+    let columns = table.header.len();
+    let align = |a: super::table::Align| match a {
+        super::table::Align::Right => rune::Align::End,
+        super::table::Align::Center => rune::Align::Center,
+        _ => rune::Align::Start,
+    };
+    let row_of = |cells: &[String], line: usize, header: bool| {
+        let key = key.to_owned();
+        row()
+            .key(format!("{key}.table.{line}"))
+            .w_full()
+            .equal_columns(columns)
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+            .children(cells.iter().take(columns).enumerate().map(|(c, cell)| {
+                text(cell.clone())
+                    .font(if header { type_::TITLE } else { type_::BODY })
+                    .color(t.text_primary)
+                    .align(align(
+                        table
+                            .align
+                            .get(c)
+                            .copied()
+                            .unwrap_or(super::table::Align::None),
+                    ))
+                    .wrap()
+                    .px(space::S2)
+                    .py(space::S1)
+                    .grid_cell(c)
+            }))
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                if let Some(editor) = access(state, &key) {
+                    editor.focused = true;
+                    editor.move_to(Pos::new(line, 0), false, false);
+                    tx.focus(key.clone(), false);
+                }
+                crate::notebook::edited_editor(state, &key, tx);
+            })
+    };
+    col()
+        .role("table")
+        .label("Table")
+        .w_full()
+        .my(space::S1)
+        .radius(4.0)
+        .border(1.0, t.border_subtle)
+        .child(row_of(&table.header, start, true))
+        .children(
+            table
+                .rows
+                .iter()
+                .enumerate()
+                .map(|(r, cells)| row_of(cells, start + 2 + r, false)),
+        )
 }
 
 /// An image alone on its line: the picture, fitted to the note's width, or what it is and that

@@ -22,6 +22,11 @@ pub(crate) enum LineKind {
     Code,
     /// `---`, `***` or `___` alone, not the underline of a heading.
     Rule,
+    /// A line of a GFM table; the first shows the whole table as a grid.
+    Table {
+        first: bool,
+        lines: std::ops::Range<usize>,
+    },
     /// An image alone on its line.
     Image {
         alt: String,
@@ -45,8 +50,21 @@ pub(crate) fn kinds(lines: &[String]) -> Vec<LineKind> {
         start = close + 1;
     }
     let mut fence: Option<(char, usize)> = None;
-    for i in start..lines.len() {
+    let mut i = start;
+    while i < lines.len() {
         let line = &lines[i];
+        if fence.is_none()
+            && let Some(table) = super::table::table_at(lines, i)
+        {
+            for j in table.lines.clone() {
+                kinds[j] = LineKind::Table {
+                    first: j == table.lines.start,
+                    lines: table.lines.clone(),
+                };
+            }
+            i = table.lines.end;
+            continue;
+        }
         match (fence_of(line), fence) {
             (Some((c, n)), None) => {
                 fence = Some((c, n));
@@ -67,6 +85,7 @@ pub(crate) fn kinds(lines: &[String]) -> Vec<LineKind> {
                 }
             }
         }
+        i += 1;
     }
     kinds
 }
