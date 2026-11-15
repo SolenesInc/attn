@@ -148,7 +148,9 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.layer_04 = t.border_hover;
     p.bg_accent = t.accent;
     p.bg_icon_button_contrast = t.accent;
-    p.submit_fg = t.bg_app;
+    let on_accent = c("#0d0d0f");
+    p.submit_fg = on_accent;
+    p.submit_icon = on_accent;
     p.text_base = t.text_primary;
     p.text_muted = t.text_secondary;
     p.text_faint = t.text_tertiary;
