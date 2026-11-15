@@ -607,7 +607,8 @@ pub(crate) fn body(
                         t,
                     )
                 });
-                let switch = (sides && flow.side.is_some()).then(|| side_switch(reading.side, t));
+                let switch = (sides && flow.side.is_some())
+                    .then(|| side_switch(&format!("{key}.side"), tile, reading.side, t));
                 col().w_full().gap(space::S1).children(switch).child(drawn)
             }
         })
@@ -656,7 +657,7 @@ pub(crate) fn body(
         document = document.active_descendant(key);
     }
     let frame = match reading.frame {
-        Frame::Map => map(&prefix, &reading, document, revision, t),
+        Frame::Map => map(tile, &reading, document, revision, t),
         Frame::Walkthrough => {
             let width = rune::memo::layout(&prefix).map_or(0.0, |r| r[2]);
             let script = (!review.filled).then(|| {
@@ -773,16 +774,19 @@ pub(crate) fn body(
         }))
 }
 
-/// The Before and After switch over a diagram, with `b`.
-fn side_switch(side: Side, t: &Tokens) -> El {
+/// The Before and After switch over a diagram, keyed `key`, with `b` or a press on a side.
+fn side_switch(key: &str, tile: &str, side: Side, t: &Tokens) -> El {
     let tab = |s: Side, name: &str| {
         let on = s == side;
+        let tile = tile.to_owned();
         text(name.to_owned())
+            .key(format!("{key}.{}", s.name()))
             .font(type_::LABEL)
             .color(if on { t.text_primary } else { t.text_tertiary })
             .role("tab")
             .label(name.to_owned())
-            .checked(on)
+            .focus_selected(on)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| pick_side(state, &tile, s, tx))
     };
     row()
         .role("tablist")
@@ -796,7 +800,8 @@ fn side_switch(side: Side, t: &Tokens) -> El {
 /// The Map: the diagrams with the arrow it stands on, the Not shown list under them and a line
 /// naming the arrow, beside the document narrowed to the step that explains the arrow, or above
 /// it when the tile is too narrow for both.
-fn map(prefix: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -> El {
+fn map(tile: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -> El {
+    let prefix = &prefix(tile);
     let bundle = reading.bundle;
     let list = frames::map_stops(bundle, reading.side);
     let (index, count) = reading.map.unwrap_or((0, 0));
@@ -859,7 +864,8 @@ fn map(prefix: &str, reading: &Reading, document: El, revision: u64, t: &Tokens)
     };
     let not_shown = (!bundle.not_shown.is_empty())
         .then(|| keys::not_shown(&format!("{prefix}.map.not-shown"), bundle, None, t));
-    let sides = frames::has_sides(bundle).then(|| side_switch(reading.side, t));
+    let sides = frames::has_sides(bundle)
+        .then(|| side_switch(&format!("{prefix}.map.side"), tile, reading.side, t));
     let diagrams = col()
         .key(format!("{prefix}.map"))
         .role("region")
@@ -1186,20 +1192,8 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             show_lead_in(&tile, &reading, place, tx);
         }
         Some(Move::Arrow | Move::Shown) => {
-            let after = Reading::new(&tile, &message.content, bundle, review);
-            if let Some(i) = after.cursor(review) {
-                let place = &after.places[i];
-                review.cursor = Some(place.spot.clone());
-                review.at = i;
-                if matches!(to, Some(Move::Arrow)) || after.frame == Frame::Map {
-                    show_lead_in(&tile, &after, place, tx);
-                    if let Some(key) = map_arrow_key(&tile, &after) {
-                        tx.scroll_into_view(key);
-                    }
-                } else {
-                    tx.scroll_center(place.key.clone());
-                }
-            }
+            let arrow = matches!(to, Some(Move::Arrow));
+            show_moved(review, &tile, &message.content, bundle, arrow, tx);
         }
         Some(Move::Open(target, fill)) => {
             open_file(state, &tile, source_of(&message), target, fill, tx);
@@ -1253,6 +1247,63 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     state.readings.revision += 1;
     true
+}
+
+/// Puts the cursor where `review`'s reading now places it, after the frame, the side or, when
+/// `arrow`, the Map's arrow changed.
+fn show_moved(
+    review: &mut Review,
+    tile: &str,
+    source: &str,
+    bundle: &ReviewBundle,
+    arrow: bool,
+    tx: &mut Tx,
+) {
+    let after = Reading::new(tile, source, bundle, review);
+    if let Some(i) = after.cursor(review) {
+        let place = &after.places[i];
+        review.cursor = Some(place.spot.clone());
+        review.at = i;
+        if arrow || after.frame == Frame::Map {
+            show_lead_in(tile, &after, place, tx);
+            if let Some(key) = map_arrow_key(tile, &after) {
+                tx.scroll_into_view(key);
+            }
+        } else {
+            tx.scroll_center(place.key.clone());
+        }
+    }
+}
+
+/// Shows `side` in review tile `tile` as `b` does, when it is the other side.
+fn pick_side(state: &mut State, tile: &str, side: Side, tx: &mut Tx) {
+    let Some(message) = state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .find(|(k, _)| k.tile == tile)
+        .map(|(_, c)| c.message.clone())
+    else {
+        return;
+    };
+    let Some(bundle) = message.review.as_ref() else {
+        return;
+    };
+    let review = state
+        .readings
+        .reviews
+        .tiles
+        .entry(tile.to_owned())
+        .or_default();
+    let reading = Reading::new(tile, &message.content, bundle, review);
+    if reading.side == side {
+        return;
+    }
+    let cursor = reading.cursor(review);
+    switch_side(review, &reading, cursor);
+    show_moved(review, tile, &message.content, bundle, false, tx);
+    state.readings.revision += 1;
 }
 
 enum Move {

@@ -2586,3 +2586,65 @@ fn shows_a_mark_as_moved_when_its_code_is_gone_and_sends_it_marked_as_moved() {
         Some(json!([id]))
     );
 }
+
+/// The first Before and After switch's tabs, the selected one marked.
+fn side_tabs(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::role("tab-list").name("Sides"))
+        .into_iter()
+        .filter(|n| n.role == "tab")
+        .take(2)
+        .map(|n| {
+            let name = n.name.clone().unwrap_or_default();
+            if n.is("selected") {
+                format!("{name} *")
+            } else {
+                name
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn switches_sides_when_before_or_after_is_clicked_as_b_does_in_the_map_and_the_brief() {
+    let mut world = open_map(map_bundle("map"));
+    assert_eq!(side_tabs(&world), ["Before", "After *"]);
+    press(&mut world, Key::Right);
+    assert_eq!(map_current(&world).as_deref(), Some("helper()"));
+
+    world.gesture(|app| app.click(Target::role("tab").name("Before")));
+    assert_eq!(side_tabs(&world), ["Before *", "After"]);
+    assert_eq!(map_diagrams(&world), [["Add(a, b)"]]);
+    assert_eq!(arrow_line(&world)[0], "Arrow 1 of 1 · before the change");
+    world.gesture(|app| app.click(Target::role("tab").name("Before")));
+    assert_eq!(side_tabs(&world), ["Before *", "After"]);
+    world.gesture(|app| app.click(Target::role("tab").name("After")));
+    assert_eq!(side_tabs(&world), ["Before", "After *"]);
+    assert_eq!(map_diagrams(&world), [["Add(a, b)", "helper()", "returns"]]);
+    assert_eq!(map_current(&world).as_deref(), Some("Add(a, b)"));
+    assert!(cursor_in_stop(&world, "calc.go"));
+    press(&mut world, Key::Right);
+    assert_eq!(map_current(&world).as_deref(), Some("helper()"));
+
+    type_key(&mut world, "1");
+    for _ in 0..30 {
+        if cursor_arrow(&world).is_some() {
+            break;
+        }
+        press(&mut world, Key::Down);
+    }
+    assert_eq!(cursor_arrow(&world).as_deref(), Some("Add(a, b)"));
+    world.gesture(|app| app.click(Target::role("tab").name("Before")));
+    assert_eq!(side_tabs(&world), ["Before *", "After"]);
+    assert_eq!(cursor_arrow(&world).as_deref(), Some("Add(a, b)"));
+    let key = cursor(&world).key.unwrap();
+    assert!(key.ends_with(".arrow.34"), "{key}");
+    world.gesture(|app| app.click(Target::role("tab").name("After")));
+    assert_eq!(side_tabs(&world), ["Before", "After *"]);
+    assert_eq!(cursor_arrow(&world).as_deref(), Some("Add(a, b)"));
+    type_key(&mut world, "b");
+    assert_eq!(side_tabs(&world), ["Before *", "After"]);
+    world.advance(std::time::Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
