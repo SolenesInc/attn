@@ -43,6 +43,9 @@ pub(crate) struct Editor {
     pub(crate) checked: std::collections::BTreeSet<String>,
     /// The document revision whose links were last looked at.
     pub(crate) links_revision: Option<u64>,
+    /// Rises when files on disk change, which asks about the missing notes again while their
+    /// marks stay; an answer asked before the latest change is dropped.
+    pub(crate) links_generation: u64,
     /// The find bar's query, while it is open.
     pub(crate) find: Option<find::Find>,
     kinds: (u64, Vec<LineKind>),
@@ -62,6 +65,7 @@ impl Editor {
             missing: Default::default(),
             checked: Default::default(),
             links_revision: None,
+            links_generation: 0,
             find: None,
             kinds,
         }

@@ -402,8 +402,8 @@ fn follow_disk(state: &mut State, id: &SurfaceId, tx: &mut Tx) -> bool {
             ..
         }) = surface.open_mut()
         {
+            editor.links_generation += 1;
             editor.checked.retain(|p| !editor.missing.contains(p));
-            editor.missing.clear();
             editor.links_revision = None;
         }
     }
@@ -676,6 +676,7 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
         return;
     }
     let (asked, note) = (editor.unchecked_links(links::note_dir(note)), note.clone());
+    let generation = editor.links_generation;
     if let Some(model::Open {
         draft: model::Draft::Note(editor),
         ..
@@ -699,9 +700,6 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
                     .filter(|r| r.success)
                     .and_then(|r| r.result)
                     .is_some_and(|r| !r.exists);
-                if !missing {
-                    return;
-                }
                 if let Some(model::Open {
                     draft: model::Draft::Note(editor),
                     ..
@@ -710,8 +708,13 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
                     .surface_mut(&id)
                     .and_then(Surface::open_mut)
                     .filter(|o| o.path == note)
+                    && editor.links_generation == generation
                 {
-                    editor.missing.insert(path);
+                    if missing {
+                        editor.missing.insert(path);
+                    } else {
+                        editor.missing.remove(&path);
+                    }
                 }
             },
             tx,
@@ -719,9 +722,9 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
     }
 }
 
-/// The images the open notes show, with the folder each is read from, for the window's
-/// pictures to read.
-pub(crate) fn images(state: &State) -> Vec<(Option<String>, String)> {
+/// The images the open notes show, with the folder each is read from and how many times files
+/// there changed, for the window's pictures to read and read again.
+pub(crate) fn images(state: &State) -> Vec<(Option<String>, String, u64)> {
     let notebook = &state.notebook;
     notebook
         .fullscreen
@@ -733,11 +736,14 @@ pub(crate) fn images(state: &State) -> Vec<(Option<String>, String)> {
                 model::Draft::Note(editor) => Some((
                     io::root(state, s),
                     editor.images(links::note_dir(&open.path)),
+                    s.changes,
                 )),
                 model::Draft::Field(_) => None,
             }
         })
-        .flat_map(|(root, paths)| paths.into_iter().map(move |p| (root.clone(), p)))
+        .flat_map(|(root, paths, changes)| {
+            paths.into_iter().map(move |p| (root.clone(), p, changes))
+        })
         .collect()
 }
 

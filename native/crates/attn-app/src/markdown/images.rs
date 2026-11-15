@@ -69,6 +69,9 @@ pub struct Pictures {
     /// Each shown document's content as last followed, whose images are read again when it
     /// changes.
     documents: HashMap<TileKey, u64>,
+    /// How many times files changed under each notebook folder whose images it read, so a change
+    /// there reads them again.
+    notebook_changes: HashMap<Option<String>, u64>,
     shown: Option<Shown>,
     logo: Option<Image>,
     zoom: ImageZoom,
@@ -233,12 +236,24 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
                 });
             }
         }
-        for (root, path) in notebook {
-            wanted.insert(Source {
-                reader: Reader::Notebook { root },
+        let mut seen = HashMap::new();
+        for (root, path, changes) in notebook {
+            let source = Source {
+                reader: Reader::Notebook { root: root.clone() },
                 path,
-            });
+            };
+            if state
+                .pictures
+                .notebook_changes
+                .get(&root)
+                .is_some_and(|c| *c != changes)
+            {
+                changed.insert(source.clone());
+            }
+            seen.insert(root, changes);
+            wanted.insert(source);
         }
+        state.pictures.notebook_changes = seen;
         state
             .pictures
             .loads

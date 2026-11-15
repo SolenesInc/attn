@@ -1598,3 +1598,106 @@ fn a_narrow_editor_tile_folds_its_rail_until_the_user_unfolds_it() {
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_broken_mark_stays_while_a_disk_change_asks_again_and_clears_when_the_note_appears() {
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        "[here](/journal/2026-11-14.md) [gone](gone.md)\n",
+    )]);
+    let mut world = start(&disk);
+    let exists = |path: &str, exists: bool| {
+        Answer::Reply(
+            json!({ "event": "fs_exists_result", "success": true, "result": { "path": path, "exists": exists } }),
+        )
+    };
+    world.daemon.answer_in_turn(
+        "fs_exists",
+        [
+            exists("journal/2026-11-14.md", true),
+            exists("knowledge/gone.md", false),
+            Answer::Hold,
+        ],
+    );
+    open_fullscreen(&mut world);
+    let broken = |world: &World| {
+        world
+            .screen()
+            .get(Target::key("notebook.editor.line.0"))
+            .description
+            .as_deref()
+            == Some("Link target not found in the notebook")
+    };
+    assert!(broken(&world));
+
+    world.daemon.emit(FsChangedMessage {
+        paths: vec!["knowledge/gone.md".into()],
+        origin: "agent".into(),
+        root: NOTEBOOK.into(),
+        ..FsChangedMessage::new()
+    });
+    world.settle();
+    let asked = world.daemon.sent_of("fs_exists");
+    assert_eq!(asked.len(), 3, "only the missing note is asked about again");
+    assert_eq!(asked[2]["path"], "knowledge/gone.md");
+    assert!(
+        broken(&world),
+        "the mark stays while the answer is on its way"
+    );
+
+    world.daemon.reply_to(
+        &asked[2],
+        json!({ "event": "fs_exists_result", "success": true,
+        "result": { "path": "knowledge/gone.md", "exists": true } }),
+    );
+    world.settle();
+    assert!(!broken(&world), "the note now exists");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn an_image_written_after_the_note_opened_shows_once_its_folder_changes() {
+    use base64::Engine;
+    let disk = Disk::with(&[("knowledge/index.md", "# Chart\n\n![chart](chart.png)\n")]);
+    let mut world = start(&disk);
+    let written = Arc::new(Mutex::new(false));
+    let there = written.clone();
+    let png =
+        base64::engine::general_purpose::STANDARD.encode(include_bytes!("../../src/home/logo.png"));
+    world.daemon.on("fs_read_asset", move |req| {
+        if *there.lock().unwrap() {
+            json!({ "event": "fs_read_asset_result", "success": true,
+                "result": { "path": req["path"], "mime_type": "image/png", "data_base64": png } })
+        } else {
+            json!({ "event": "fs_read_asset_result", "success": false, "error": "fsdoc: not found" })
+        }
+    });
+    open_fullscreen(&mut world);
+    world.advance(Duration::from_millis(100));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("label").name("image not found"))
+            .is_some()
+    );
+
+    *written.lock().unwrap() = true;
+    world.daemon.emit(FsChangedMessage {
+        paths: vec!["knowledge/chart.png".into()],
+        origin: "agent".into(),
+        root: NOTEBOOK.into(),
+        ..FsChangedMessage::new()
+    });
+    world.settle();
+    world.advance(Duration::from_millis(100));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("label").name("image not found"))
+            .is_none()
+    );
+    assert_eq!(world.daemon.sent_of("fs_read_asset").len(), 2);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
