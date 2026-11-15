@@ -15,6 +15,8 @@ use crate::State;
 
 /// Rows not built yet are this tall until they are: one line of body text.
 const ESTIMATED_ROW: f32 = 23.0;
+/// An image not read yet holds this much room, as the Tauri editor estimates it.
+const IMAGE_ESTIMATE: f32 = 220.0;
 
 /// How the editor finds itself in the window's state from a handler.
 pub(crate) type Access = for<'a> fn(&'a mut State, &str) -> Option<&'a mut Editor>;
@@ -48,7 +50,7 @@ pub(crate) fn view(
             },
             move |state: &State, i| match read(state, &build_key) {
                 Some(editor) if i < editor.doc.len() => {
-                    line_row(editor, &build_key, i, access, &tokens)
+                    line_row(editor, &state.pictures, &build_key, i, access, &tokens)
                 }
                 _ => el(),
             },
@@ -104,7 +106,14 @@ pub(crate) fn view(
         .child(rows)
 }
 
-fn line_row(editor: &Editor, key: &str, i: usize, access: Access, t: &Tokens) -> El {
+fn line_row(
+    editor: &Editor,
+    pictures: &crate::markdown::Pictures,
+    key: &str,
+    i: usize,
+    access: Access,
+    t: &Tokens,
+) -> El {
     let row_key = format!("{key}.line.{}", editor.doc.id(i));
     match &editor.kinds()[i] {
         LineKind::FrontMatter { card: true, first } if !editor.editing_front_matter() => {
@@ -121,32 +130,11 @@ fn line_row(editor: &Editor, key: &str, i: usize, access: Access, t: &Tokens) ->
             .justify_center()
             .child(el().w_full().h(1.0).fill(t.border))
             .with_press(key, i, access),
-        LineKind::Image { alt, src } if !editor.active(i) => row()
-            .key(row_key)
-            .w_full()
-            .py(space::S1)
-            .child(
-                col()
-                    .role("image")
-                    .label(if alt.is_empty() {
-                        src.clone()
-                    } else {
-                        alt.clone()
-                    })
-                    .padding(space::S2)
-                    .radius(4.0)
-                    .border(1.0, t.border_subtle)
-                    .child(
-                        text(if alt.is_empty() {
-                            src.clone()
-                        } else {
-                            alt.clone()
-                        })
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                    ),
-            )
-            .with_press(key, i, access),
+        LineKind::Image { alt, src } if !editor.active(i) => {
+            image_row(editor, pictures, alt, src, t)
+                .key(row_key)
+                .with_press(key, i, access)
+        }
         LineKind::Fence | LineKind::Code | LineKind::FrontMatter { .. } => {
             let line = editor.doc.line(i);
             let shown = Shown::raw(line);
@@ -393,6 +381,54 @@ impl Press for El {
             crate::notebook::edited_editor(state, &key, tx);
         })
     }
+}
+
+/// An image alone on its line: the picture, fitted to the note's width, or what it is and that
+/// it could not be found.
+fn image_row(
+    editor: &Editor,
+    pictures: &crate::markdown::Pictures,
+    alt: &str,
+    src: &str,
+    t: &Tokens,
+) -> El {
+    let name = if alt.is_empty() { src } else { alt }.to_owned();
+    let found = editor.note_of(src).and_then(|path| {
+        pictures
+            .of_notebook(editor.asset_root.as_deref())
+            .get(&path)
+            .cloned()
+    });
+    let body = match found {
+        Some(Some(image)) => {
+            let [w, h] = image.size().unwrap_or([1, 1]).map(|v| v.max(1) as f32);
+            let width = w.min(editor.width.max(1.0));
+            el().role("image")
+                .label(name)
+                .size(width, h * width / w)
+                .pixels(image.pixels())
+        }
+        Some(None) => col()
+            .role("image")
+            .label(name.clone())
+            .padding(space::S2)
+            .radius(4.0)
+            .border(1.0, t.border_subtle)
+            .child(text(name).font(type_::LABEL).color(t.text_secondary))
+            .child(
+                text("image not found")
+                    .font(type_::LABEL)
+                    .color(t.text_tertiary),
+            ),
+        None => col()
+            .role("image")
+            .label(name.clone())
+            .w_full()
+            .h(IMAGE_ESTIMATE)
+            .radius(4.0)
+            .fill(t.bg_elevated),
+    };
+    row().w_full().py(space::S1).child(body)
 }
 
 /// The front matter as a card of its properties: pressing it, or Return or Space on it, opens

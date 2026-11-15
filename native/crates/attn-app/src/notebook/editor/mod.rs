@@ -36,6 +36,8 @@ pub(crate) struct Editor {
     pub(crate) preedit: Option<String>,
     /// A press that toggled a task box: the rest of its gesture moves nothing.
     pub(crate) toggling: bool,
+    /// The folder the note's images are read from, as the note was: `None` is the notebook.
+    pub(crate) asset_root: Option<String>,
     /// The folder of the note, which its relative links start from.
     pub(crate) note_dir: String,
     /// The notes the links point at that the daemon said are missing, and every note asked
@@ -61,6 +63,7 @@ impl Editor {
             preedit: None,
             toggling: false,
             note_dir: String::new(),
+            asset_root: None,
             missing: Default::default(),
             checked: Default::default(),
             links_revision: None,
@@ -284,6 +287,17 @@ impl Editor {
             crate::notebook::links::NoteLink::Note { path, .. } => Some(path),
             _ => None,
         }
+    }
+
+    /// The image files the note shows on lines of their own, by path from its folder.
+    pub(crate) fn images(&self) -> Vec<String> {
+        self.kinds()
+            .iter()
+            .filter_map(|k| match k {
+                LineKind::Image { src, .. } => self.note_of(src),
+                _ => None,
+            })
+            .collect()
     }
 
     /// The notes the document's links point at that nobody asked about yet.
