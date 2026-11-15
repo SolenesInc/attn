@@ -42,6 +42,8 @@ pub(crate) enum SurfaceId {
 pub(crate) struct Surface {
     /// The folder it reads; `None` is the profile's notebook.
     pub(crate) root: Option<String>,
+    /// Its width in points as last laid out, which folds a narrow tile's panes.
+    pub(crate) width: f32,
     pub(crate) tree: Tree,
     pub(crate) doc: Doc,
     pub(crate) backlinks: Backlinks,
@@ -122,6 +124,7 @@ impl Surface {
     pub(crate) fn new(root: Option<String>, changes: u64) -> Surface {
         Surface {
             root,
+            width: 0.0,
             tree: Tree::default(),
             doc: Doc::Empty,
             backlinks: Backlinks::None,

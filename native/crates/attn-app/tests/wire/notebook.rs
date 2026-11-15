@@ -1553,3 +1553,36 @@ fn a_table_shows_as_a_grid_until_the_caret_enters_it_and_only_that_table_shows_i
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_narrow_editor_tile_folds_its_rail_until_the_user_unfolds_it() {
+    let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
+    let mut world = start_with(
+        &disk,
+        Some(row(vec![pane("a"), editor_tile("n", "knowledge/index.md")])),
+    );
+    let width = world
+        .screen()
+        .bounds(Target::key("notebook.tile.n.surface"))
+        .unwrap()[2];
+    assert!(
+        (620.0..900.0).contains(&width),
+        "a tile of {width} pt keeps its tree and folds its rail"
+    );
+    let screen = world.screen();
+    assert!(screen.find(Target::key("notebook.tile.n.files")).is_some());
+    assert!(
+        screen
+            .find(Target::key("notebook.tile.n.context"))
+            .is_none()
+    );
+    world.gesture(|d| d.click(Target::key("notebook.tile.n.fold.rail")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("notebook.tile.n.context"))
+            .is_some()
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}

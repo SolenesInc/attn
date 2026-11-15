@@ -80,9 +80,8 @@ pub(crate) fn view(
             }
         })
         .on_layout(move |state: &mut State, r: [f32; 4]| {
-            if let Some(editor) = access(state, &key_for_width)
-                && (editor.width - r[2]).abs() > 0.5
-            {
+            let moved = read(state, &key_for_width).is_some_and(|e| (e.width - r[2]).abs() > 0.5);
+            if moved && let Some(editor) = access(state, &key_for_width) {
                 editor.width = r[2];
             }
         })

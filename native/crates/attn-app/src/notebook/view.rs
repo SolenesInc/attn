@@ -13,6 +13,9 @@ use super::outline::outline;
 use crate::State;
 
 const TREE_WIDTH: f32 = 220.0;
+/// A tile narrower than these folds its file tree and its rail, as the Tauri tile does.
+const TREE_FOLDS_BELOW: f32 = 620.0;
+const RAIL_FOLDS_BELOW: f32 = 900.0;
 const RAIL_WIDTH: f32 = 240.0;
 const INDENT: f32 = 12.0;
 const NOTE: TextStyle = TextStyle::new(14.0, 400.0).lh(23.0);
@@ -138,11 +141,22 @@ pub(crate) fn tile_body(notebook: &super::Notebook, tile: &str, t: &Tokens) -> E
 }
 
 fn surface_view(notebook: &super::Notebook, id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
-    let tree_open = surface.folds.tree.unwrap_or(true);
+    let (tree_fits, rail_fits) = fits(id, surface.width);
+    let tree_open = surface.folds.tree.unwrap_or(tree_fits);
     let rail = rail(id, surface, t);
-    let rail_open = surface.folds.rail.unwrap_or(true);
+    let rail_open = surface.folds.rail.unwrap_or(rail_fits);
+    let sized = id.clone();
     row()
         .key(key(id, "surface"))
+        .on_layout(move |state: &mut State, r: [f32; 4]| {
+            let moved = state
+                .notebook
+                .surface(&sized)
+                .is_some_and(|s| (s.width - r[2]).abs() > 0.5);
+            if moved && let Some(surface) = state.notebook.surface_mut(&sized) {
+                surface.width = r[2];
+            }
+        })
         .w_full()
         .h_full()
         .min_h(0.0)
@@ -155,6 +169,16 @@ fn surface_view(notebook: &super::Notebook, id: &SurfaceId, surface: &Surface, t
         )
         .children(rail.filter(|_| rail_open))
         .children(super::finder::view(notebook, id, t))
+}
+
+/// Whether a tile this wide has room for its file tree and its rail; the fullscreen notebook
+/// and a tile not laid out yet always have.
+fn fits(id: &SurfaceId, width: f32) -> (bool, bool) {
+    let roomy = matches!(id, SurfaceId::Fullscreen) || width <= 0.0;
+    (
+        roomy || width >= TREE_FOLDS_BELOW,
+        roomy || width >= RAIL_FOLDS_BELOW,
+    )
 }
 
 #[derive(Clone, Copy)]
