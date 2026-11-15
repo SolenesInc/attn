@@ -392,6 +392,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-notebook-editor-undo',
+    runnerId: 'NATIVE-NOTEBOOK-EDITOR-UNDO',
+    label: 'An editor tile beside a shell opens its finder and a note that saves itself, and undo and redo reach the editor and the file, not the terminal',
+    command: ['node', 'scripts/real-app-harness/scenario-native-notebook-editor-undo.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-settings',
     runnerId: 'NATIVE-SETTINGS',
     label: 'The native Settings dialog opens three ways, searches, saves a click and a field, shows a refusal and a shell change, and closes three ways',
