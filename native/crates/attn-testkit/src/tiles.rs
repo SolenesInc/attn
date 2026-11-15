@@ -182,6 +182,11 @@ impl TileRuntime {
         }
     }
 
+    /// Moves the window's clock on by `by`, as `World::advance` moves the main window's.
+    pub(crate) fn advance(&mut self, by: std::time::Duration) {
+        self.runtime.frame(by.as_secs_f64());
+    }
+
     /// Lands the motion the last frame started.
     fn land_motion(&mut self) {
         if self.runtime.animating {

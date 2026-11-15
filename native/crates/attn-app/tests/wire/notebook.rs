@@ -1353,3 +1353,107 @@ fn opening_another_note_while_a_save_is_in_flight_waits_for_it_then_opens() {
     world.advance(Duration::from_secs(3));
     assert!(world.runtime_is_at_rest());
 }
+
+fn popped_out(mut tile: Value) -> Value {
+    tile["window"] = json!({"x": 60.0, "y": 60.0, "width": 900.0, "height": 700.0});
+    tile
+}
+
+fn tile_window_editor(world: &World, window: &str) -> String {
+    world
+        .tile_screen(window)
+        .find(Target::key("notebook.tile.n.editor"))
+        .and_then(|n| n.value.clone())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_popped_out_editor_tile_opens_its_note_saves_while_the_window_shows_another_desktop_and_comes_back_with_its_edit()
+ {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let tile = || editor_tile("n", "plan.md");
+    let mut world = start_with(&disk, Some(row(vec![pane("a"), tile()])));
+    world.gesture(|d| {
+        d.click(Target::key("notebook.tile.n.editor"));
+        d.type_text("Typed before popping out. ");
+    });
+
+    arrange(&mut world, row(vec![pane("a"), popped_out(tile())]), 2);
+    let windows = world.tile_windows();
+    assert_eq!(windows.len(), 1, "{windows:?}");
+    let window = windows[0].key.clone();
+    assert!(
+        disk.get("plan.md")
+            .unwrap()
+            .contains("Typed before popping out.")
+    );
+    assert!(
+        tile_window_editor(&world, &window).contains("Typed before popping out."),
+        "{}",
+        world.tile_screen(&window)
+    );
+
+    let mut away = desktop(row(vec![pane("a")]), 1);
+    away.id = "work/desktop_2".into();
+    away.name = "Desktop 2".into();
+    away.shortcut_slot = Some(2);
+    away.order_key = "2".into();
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            current_desktop_id: away.id.clone(),
+            ..Profile::default()
+        },
+        desktops: vec![desktop(row(vec![pane("a"), popped_out(tile())]), 3), away],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+
+    world.tile_gesture(&window, |d| {
+        d.click(Target::key("notebook.tile.n.editor"));
+        d.press("mod+down");
+        d.type_text("Typed in its own window.");
+    });
+    world.advance(Duration::from_secs(1));
+    assert!(
+        disk.get("plan.md")
+            .unwrap()
+            .contains("Typed in its own window."),
+        "{:?}",
+        disk.get("plan.md")
+    );
+    assert!(tile_window_editor(&world, &window).contains("Typed in its own window."));
+
+    world.tile_gesture(&window, |d| {
+        d.click(Target::key("notebook.tile.n.editor"));
+        d.press("mod+down");
+        d.type_text(" Typed just before coming back.");
+    });
+    arrange(&mut world, row(vec![pane("a"), tile()]), 4);
+    assert!(
+        disk.get("plan.md")
+            .unwrap()
+            .contains("Typed just before coming back."),
+        "{:?}",
+        disk.get("plan.md")
+    );
+    world.daemon.emit(FsChangedMessage {
+        paths: vec!["plan.md".into()],
+        origin: "ui".into(),
+        root: NOTEBOOK.into(),
+        ..FsChangedMessage::new()
+    });
+    world.settle();
+    let editor = world.screen().get(Target::key("notebook.tile.n.editor"));
+    assert!(
+        editor
+            .value
+            .as_deref()
+            .unwrap_or("")
+            .contains("Typed just before coming back."),
+        "{editor:?}"
+    );
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}

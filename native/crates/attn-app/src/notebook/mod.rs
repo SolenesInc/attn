@@ -203,13 +203,12 @@ fn changes_of(state: &State, root: Option<&str>) -> u64 {
 
 /// The notebook tiles this window shows, with their params.
 fn shown_tiles(state: &State) -> Vec<(String, Params)> {
-    let leaves = crate::desktop::on_screen_leaves(state);
+    let Some((desktop, leaves)) = crate::desktop::drawn_leaves(state) else {
+        return Vec::new();
+    };
     if leaves.is_empty() {
         return Vec::new();
     }
-    let Some(desktop) = state.facts.current_desktop() else {
-        return Vec::new();
-    };
     crate::sidebar::model::leaves(&desktop.tree_json)
         .into_iter()
         .filter_map(|leaf| match leaf {
@@ -251,10 +250,8 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
 }
 
 fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
-    let may_show = state
-        .facts
-        .current_desktop()
-        .is_some_and(|d| d.tree_json.contains("\"notebook\""));
+    let may_show = crate::desktop::drawn_leaves(state)
+        .is_some_and(|(d, _)| d.tree_json.contains("\"notebook\""));
     if state.notebook.tiles.is_empty() && !may_show {
         return false;
     }

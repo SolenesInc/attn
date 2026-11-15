@@ -981,3 +981,30 @@ fn a_pressed_document_tile_keeps_the_keyboard_when_its_file_changes() {
     world.settle();
     assert_eq!(holder(&mut world), "m");
 }
+
+#[test]
+fn a_document_popped_out_into_its_own_window_shows_its_local_images() {
+    let mut popped = document_tile("m", PLAN);
+    popped["window"] = json!({"x": 60.0, "y": 60.0, "width": 900.0, "height": 700.0});
+    let mut world = start_with(row(vec![pane("a"), popped]));
+    world.daemon.on("tile_asset_read", |r| {
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            data_uri: Some(format!("data:image/png;base64,{RED}")),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.daemon.emit(content("![chart](img/chart.png)"));
+    world.settle();
+
+    let windows = world.tile_windows();
+    assert_eq!(windows.len(), 1, "{windows:?}");
+    let screen = world.tile_screen(&windows[0].key);
+    assert!(
+        screen.find(Target::role("image").name("chart")).is_some(),
+        "{screen}"
+    );
+    rest(&mut world);
+}

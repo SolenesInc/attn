@@ -49,7 +49,7 @@ pub(crate) fn pops_out(state: &State, desktop: &str, leaf: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
+pub(super) fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
     state
         .facts
         .desktops
@@ -190,6 +190,20 @@ impl Pool {
     /// A tile window is on the desktop, holding a popped-out leaf.
     pub(crate) fn shows_a_window(&self) -> bool {
         self.windows.iter().any(|w| w.held.is_some() && !w.closed)
+    }
+
+    /// Hands each tile window the replies the main window heard and did not wait for, so a
+    /// tile window's requests are answered.
+    pub(crate) fn hand(&self, replies: Vec<attn_client::Reply>) {
+        if replies.is_empty() {
+            return;
+        }
+        for pooled in self.windows.iter().filter(|p| !p.closed) {
+            let replies = replies.clone();
+            pooled.window.update(Box::new(move |state, _| {
+                crate::requests::receive(state, replies);
+            }));
+        }
     }
 }
 

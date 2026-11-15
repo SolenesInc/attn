@@ -81,6 +81,10 @@ impl ReplyInbox {
         self.0.lock().unwrap().is_empty()
     }
 
+    fn put(&self, replies: Vec<Reply>) {
+        self.0.lock().unwrap().extend(replies);
+    }
+
     fn take(&self) -> Vec<Reply> {
         std::mem::take(&mut *self.0.lock().unwrap())
     }
@@ -193,11 +197,13 @@ impl Requests {
 }
 
 /// Runs the answer of each reply that came in. A `command_error` answers the oldest request
-/// waiting with its command, and shows in the window's notice when none waits. Returns whether
-/// any reply did either.
+/// waiting with its command, and shows in the window's notice when none waits. The main window
+/// hands the replies it has no use for to its tile windows, whose requests the daemon answers on
+/// the main window's link. Returns whether any reply was answered or shown.
 pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
     let replies = state.requests.inbox.take();
     let mut answered = false;
+    let mut unclaimed = Vec::new();
     for reply in replies {
         if crate::callouts::receive(state, &reply, tx) {
             answered = true;
@@ -219,7 +225,12 @@ pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
         } else if let Some(text) = unasked_refusal(&reply) {
             state.window.notify(text, tx);
             answered = true;
+        } else {
+            unclaimed.push(reply);
         }
+    }
+    if state.window.tile.is_none() {
+        state.window.desk.windows.hand(unclaimed);
     }
     answered
 }
@@ -268,4 +279,9 @@ pub(crate) fn forget(state: &mut State, tx: &mut Tx) {
     for then in unanswered {
         then(state, Answer::Dropped, tx);
     }
+}
+
+/// Replies the main window handed this tile window, answered on its next frame.
+pub(crate) fn receive(state: &mut State, replies: Vec<Reply>) {
+    state.requests.inbox.put(replies);
 }

@@ -460,6 +460,9 @@ impl World {
         self.clock.advance(by);
         self.pulse.beat();
         self.runtime.frame(by.as_secs_f64());
+        for tile in &mut self.tiles {
+            tile.advance(by);
+        }
         self.settle();
     }
 
