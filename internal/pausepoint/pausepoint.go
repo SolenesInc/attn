@@ -73,6 +73,7 @@ const (
 	SessionExitObserved            = "session-process-exit-observed"
 	AgentTerminalStarted           = "agent-terminal-started"
 	TerminalStarting               = "terminal-starting"
+	TerminalRuntimeEnding          = "terminal-runtime-ending"
 	AgentLaunchCommitReporting     = "agent-launch-commit-reporting"
 	CodexViewReleaseChecked        = "codex-view-release-checked"
 	ConversationCandidateTurn      = "conversation-candidate-turn"

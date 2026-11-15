@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
@@ -331,6 +332,42 @@ func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnswere
 		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
 	}
 	w.Launched(session)
+}
+
+func TestReloadingASharedCodexAfterADaemonRestartKeepsItsSessionInItsTerminal(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "worker")
+	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	w := newWorld(t, fakeagent.Codex)
+	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	app := w.App()
+	dir := w.Path("shop")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.SetCodexFolderTrust(dir, "trusted")
+	session := w.Spawn(app, fakeagent.Codex, dir)
+	codex := w.Launched(session)
+	codex.HoldRejoin()
+	w.restart()
+	app = w.App()
+	ending := w.PauseAt(pausepoint.TerminalRuntimeEnding)
+	mark := app.EventCount()
+	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
+	ending.Await()
+	codex.ReleaseRejoin()
+	ending.Release()
+	if reloaded := testworld.AwaitSince(app, mark, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); !reloaded.Success {
+		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
+	}
+
+	replacement := w.Launched(session)
+	app.TypeLine(session, "add a discount field")
+	if got := replacement.Prompted(); got != "add a discount field" {
+		t.Fatalf("the reloaded Codex received %q", got)
+	}
+	replacement.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	w.Terminal(session)
 }
 
 func TestAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
