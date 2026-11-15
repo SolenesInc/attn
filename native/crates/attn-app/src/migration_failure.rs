@@ -126,7 +126,7 @@ pub(crate) fn screen(state: &State, marker: &MigrationMarker, t: &Tokens) -> El 
         )
         .child(
             Button::new(if copied { "Copied" } else { "Copy details" })
-                .variant(ButtonVariant::Submit)
+                .variant(ButtonVariant::Neutral)
                 .control_size(ControlSize::Small)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     tx.copy(report.clone());
