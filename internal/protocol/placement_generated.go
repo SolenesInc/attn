@@ -206,6 +206,7 @@ var Placements = map[string][]Placement{
 	"seed_watch":                       {Placement{LocatorHome, ""}},
 	"sender_list":                      {Placement{LocatorHome, ""}},
 	"sender_pair":                      {Placement{LocatorHome, ""}},
+	"sender_refine":                    {Placement{LocatorHome, ""}},
 	"sender_sessions":                  {Placement{LocatorHome, ""}},
 	"sender_unpair":                    {Placement{LocatorHome, ""}},
 	"session_input_reopened":           {Placement{LocatorHome, ""}},
@@ -2507,6 +2508,18 @@ func (m SenderPairMessage) Placement() Placement {
 }
 
 func (m SenderPairMessage) Locate() string {
+	return ""
+}
+
+func (SenderRefineMessage) CommandName() string {
+	return "sender_refine"
+}
+
+func (m SenderRefineMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderRefineMessage) Locate() string {
 	return ""
 }
 

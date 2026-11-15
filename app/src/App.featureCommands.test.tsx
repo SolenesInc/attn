@@ -14,23 +14,23 @@ async function search(daemon: ScriptedDaemon, query: string) {
 describe('Feature commands', () => {
   it('turns an off feature on from the palette', async () => {
     const { daemon } = await renderApp();
-    const [option] = await search(daemon, '>nisse');
-    expect(option?.textContent).toContain('Turn on Nisse');
+    const [option] = await search(daemon, '>launcher 2.0');
+    expect(option?.textContent).toContain('Turn on Launcher 2.0');
     await gesture(daemon, () => fireEvent.mouseDown(option!));
-    expect(savedSettings(daemon)).toContainEqual(['nisse_enabled', 'true']);
+    expect(savedSettings(daemon)).toContainEqual(['new_session_launcher_enabled', 'true']);
   });
 
   it('turns an on feature off from the palette', async () => {
-    const { daemon } = await renderApp({ initialState: { settings: { nisse_enabled: 'true' } } });
-    const [option] = await search(daemon, '>nisse');
-    expect(option?.textContent).toContain('Turn off Nisse');
+    const { daemon } = await renderApp({ initialState: { settings: { new_session_launcher_enabled: 'true' } } });
+    const [option] = await search(daemon, '>launcher 2.0');
+    expect(option?.textContent).toContain('Turn off Launcher 2.0');
     await gesture(daemon, () => fireEvent.mouseDown(option!));
-    expect(savedSettings(daemon)).toContainEqual(['nisse_enabled', 'false']);
+    expect(savedSettings(daemon)).toContainEqual(['new_session_launcher_enabled', 'false']);
   });
 
   it('stays out of the list until a search asks for it', async () => {
     const { daemon } = await renderApp();
     const options = await search(daemon, '>');
-    expect(options.map((option) => option.textContent).join()).not.toContain('Nisse');
+    expect(options.map((option) => option.textContent).join()).not.toContain('Launcher 2.0');
   });
 });

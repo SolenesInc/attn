@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 
 const INSTANCE_PATTERN_TEXT: &str = "^[a-z0-9][a-z0-9-]{0,15}$";
 
@@ -301,7 +302,11 @@ impl<'a> Paths<'a> {
                 join(&xdg, &bundle_id)
             },
             bundle_id,
-            app_executable: bin(if macos { "app" } else { "attn-app" }),
+            app_executable: if !macos || Path::new(&bin("attn-app")).exists() {
+                bin("attn-app")
+            } else {
+                bin("app")
+            },
             app_cli: join(&dir(&app_daemon), "attn"),
             app_daemon,
             app_path: app_path.clone(),

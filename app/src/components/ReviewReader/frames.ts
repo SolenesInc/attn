@@ -1,4 +1,4 @@
-import type { ReviewBundle, ReviewFlow, ReviewFlowMessage } from '../../types/generated';
+import type { ReviewBundle, ReviewFlow, ReviewFlowMessage, ReviewStop } from '../../types/generated';
 
 export type Frame = 'brief' | 'walkthrough' | 'map';
 export type Side = 'before' | 'after';
@@ -57,6 +57,31 @@ export function mapStops(flows: readonly ReviewFlow[]): MapStop[] {
   return flows.flatMap((flow) => flow.messages.flatMap((message) => (
     message.stop_line === undefined ? [] : [{ flow, message, stopLine: message.stop_line }]
   )));
+}
+
+/** An arrow the Brief's cursor stands on: its cursor key and the stop it opens. */
+export interface ArrowTarget {
+  key: string;
+  stop: ReviewStop;
+}
+
+/** The arrows of a drawn diagram that take the Brief's cursor, by message
+ * line. A key names the arrow by its side, its diagram's place among that
+ * side's diagrams, the stop it shows, what it says, and how many arrows like
+ * it come before it, so an edit elsewhere in the document keeps it. */
+export function arrowTargets(bundle: ReviewBundle, flow: ReviewFlow): Map<number, ArrowTarget> {
+  const diagram = bundle.flows.filter((candidate) => candidate.drawn && candidate.side === flow.side).indexOf(flow);
+  const seen = new Map<string, number>();
+  const targets = new Map<number, ArrowTarget>();
+  for (const message of flow.messages) {
+    const stop = bundle.stops.find((candidate) => candidate.heading_line === message.stop_line);
+    if (!stop) continue;
+    const base = `message:${flow.side ?? ''}:${diagram}:${stop.path}:${stop.from}:${message.text}`;
+    const before = seen.get(base) ?? 0;
+    seen.set(base, before + 1);
+    targets.set(message.line, { key: `${base}:${before}`, stop });
+  }
+  return targets;
 }
 
 /** Where the Map stands, held by what the message says and the stop it

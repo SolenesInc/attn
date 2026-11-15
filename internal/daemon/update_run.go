@@ -435,7 +435,7 @@ func (d *Daemon) getUpdateBuild(ctx context.Context, run store.UpdateRun, plan s
 }
 
 func (d *Daemon) startUpdateHelper(run store.UpdateRun, plan selfupdate.Plan, env []string, log *os.File) error {
-	args := []string{"_update-apply", "--run", run.ID, "--kind", string(plan.Kind), "--dir", plan.Dir, "--root", plan.Root, "--instance", plan.Instance}
+	args := []string{"_update-apply", "--run", run.ID, "--kind", string(plan.Kind), "--dir", plan.Dir, "--root", plan.Root, "--instance", plan.Instance, "--app", plan.App}
 	helper := exec.Command(plan.StagedDaemon(), args...)
 	helper.Dir = d.dataRoot
 	helper.Env = env

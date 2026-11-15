@@ -36,11 +36,6 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		d.sendError(conn, "missing resume_session_id")
 		return
 	}
-	if observation.TranscriptPath == "" {
-		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
-		d.sendOK(conn)
-		return
-	}
 	if _, view, ours := d.linkCaller(terminal); ours {
 		if view == "" {
 			d.logf("agent conversation: no terminal shows the conversation of %s", terminal)
@@ -48,6 +43,20 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 			return
 		}
 		terminal = view
+	}
+	link, linkedServer := d.linkOf(d.sessionInTerminal(terminal)).(*serverLink)
+	if observation.TranscriptPath == "" && (!linkedServer || link.b.plugin == "") {
+		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
+		d.sendOK(conn)
+		return
+	}
+	if session := d.store.Get(d.sessionInTerminal(terminal)); session != nil {
+		if l, server := d.linkOf(session.ID).(*serverLink); server {
+			if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
+				d.sendError(conn, err.Error())
+				return
+			}
+		}
 	}
 	if held := d.store.GetSessionConversation(d.sessionInTerminal(terminal)).NativeID; held != "" && held != observation.NativeID {
 		pausepoint.At(pausepoint.ConversationObserved)
@@ -79,7 +88,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, proposed sessionmonitor.Conversation, observation agentConversationObservation) bool {
 	t := proposed.Terminal
 	cur, placed := d.terminals().Showing(t)
-	if current := d.store.Get(cur); !placed || (current != nil && !conversationIsSession(current.Agent)) {
+	if current := d.store.Get(cur); !placed || (current != nil && d.linkOf(current.ID) == nil && !conversationIsSession(current.Agent)) {
 		observation.SessionID = d.sessionInTerminal(t)
 		defer d.lockSessionLifecycles(observation.SessionID)()
 		if source != nil {
@@ -108,6 +117,12 @@ func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, propo
 	if shown, _ := d.terminals().Showing(t); shown != cur || session == nil || !d.terminalLive(t) {
 		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
 		return false
+	}
+	if l, server := d.linkOf(session.ID).(*serverLink); server {
+		if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
+			d.logf("agent conversation refused: terminal=%s: %v", t, err)
+			return false
+		}
 	}
 	if d.monitors().runReplaced(session.ID, proposed.Run) {
 		d.logf("agent conversation: dropped %s from terminal %s, reported by run %s that a reload replaced", observation.NativeID, t, proposed.Run)

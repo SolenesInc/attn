@@ -587,7 +587,10 @@ model Desktop {
 //
 model ClientHelloMessage {
   cmd: "client_hello";
-  client_kind: string;          // e.g. "tauri-app"
+  // "tauri-app" or "native-app" for attn's own app; any other kind is a plain
+  // client. The daemon trusts an app that proves browser_host_token: the Tauri
+  // app from its Tauri web origin, the native app with no web origin at all.
+  client_kind: string;
   version: string;              // free-form, used for diagnostics
   capabilities: string[];       // see capability docstrings above
   // Per-instance credential from <data-dir>/client-token, minted by the daemon.
@@ -595,7 +598,7 @@ model ClientHelloMessage {
   // local client proves before the daemon records its identity, registers it
   // for broadcasts, or sends it initial_state.
   client_token?: string;
-  browser_host_token?: string;  // secret available only to the trusted Tauri main webview
+  browser_host_token?: string;  // <data-dir>/browser-host-token, which the app mints and sends
   // Stable for as long as the client process lives, new on every restart. It is
   // what lets the daemon tell a reconnecting client why it was hung up on
   // (client_eviction_notice); a client that omits it simply gets no notice.
@@ -609,8 +612,8 @@ model ClientHelloMessage {
   // cask, dmg). Analytics batches carry them in their build block.
   app_version?: string;
   app_channel?: string;
-  // The app's own process id, which roots the daemon's memory sample of the app
-  // and its WebKit processes while this client stays connected.
+  // The app's own process id, which roots the daemon's memory sample of the app,
+  // by shell, and its WebKit processes while this client stays connected.
   app_pid?: int32;
 }
 
@@ -1335,6 +1338,28 @@ model HarnessModelsMessage {
   refresh?: boolean;
 }
 
+model HarnessTargetsMessage {
+  cmd: "harness_targets";
+  request_id: string;
+  harness: string;
+  cwd: string;
+}
+
+model ExecutionTarget {
+  id: string;
+  name: string;
+  available: boolean;
+  detail: string; // What an unavailable target needs, or the available target's state
+}
+
+model HarnessTargetsResultMessage {
+  event: "harness_targets_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  targets: ExecutionTarget[];
+}
+
 model HarnessModelsResultMessage {
   event: "harness_models_result";
   request_id: string;
@@ -1809,6 +1834,16 @@ model SnoozeTurnMessage {
   caller_session_id?: SessionID;
   session_id: SessionID;
   until: string;
+}
+
+// StandbySessionMessage asks the session's agent to go on standby until an
+// instant: the daemon types a prompt into the session, and the agent puts the
+// seed it tends on standby until then, which closes the session. `until` is
+// computed by the client for the same reason as a snooze's.
+model StandbySessionMessage {
+  cmd: "standby_session";
+  session_id: SessionID;
+  until: utcDateTime;
 }
 
 // WakeTurnMessage ends a snooze early. It clears the deadline; whether a turn
@@ -2356,6 +2391,7 @@ model SpawnSessionMessage {
   codex_executable?: string;   // Backward compatibility
   `model`?: string;            // Pin the launched agent's model; empty = agent default
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
+  execution_target?: string;   // Where a new conversation runs its tools, an id from harness_targets; empty = the harness default. The harness fixes it when it creates the conversation and never runs that conversation's tools elsewhere
 }
 
 // PTY commands and events address a terminal: their `id` is the pane's
@@ -6790,8 +6826,9 @@ model SeedReminderMessage {
 }
 
 // Put a seed on standby with a note, or clear its standby. Only the seed's
-// tender sets it. With close, the calling session then closes itself as
-// `attn agent close --self` does.
+// tender sets it. Unless stay is set, the calling session then closes itself,
+// compacting first when it can. in or at also set the seed's reminder to that
+// time with the note as its message.
 @extension("x-on", #{ home: true })
 model SeedStandbyMessage {
   "profile_id"?: string;
@@ -6799,16 +6836,17 @@ model SeedStandbyMessage {
   "cmd": "seed_standby";
   "seed_id": string;
   "note"?: string;
+  "at"?: string;
+  "in"?: string;
+  "stay"?: boolean;
   "clear"?: boolean;
-  "close"?: boolean;
-  "compact"?: boolean;
 }
 
 model SeedStandbyResult {
   "seed": Seed;
   // False when --clear found no standby.
   "changed": boolean;
-  // Present when close closed the calling session.
+  // Present when the standby closed the calling session.
   "close"?: AgentCloseResult;
 }
 
@@ -7618,6 +7656,7 @@ model Response {
   paired_sender_token?: PairedSenderToken;
   paired_senders?: PairedSender[];
   sender_sessions?: SenderSession[];
+  sender_refine_result?: SenderRefineResult;
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -9246,6 +9285,29 @@ model SenderSessionsMessage {
   sender_token: string;
 }
 
+// Refines one dictated transcript for a paired sender the way
+// dictation_refine does. The daemon answers once; closing the connection
+// first cancels the refinement.
+@extension("x-on", #{ home: true })
+model SenderRefineMessage {
+  cmd: "sender_refine";
+  sender_token: string;
+  raw_text: string;
+  recording_duration_ms: safeint;
+  format: DictationTextFormat;
+}
+
+// The fields of dictation_refine_result for a sender_refine: profile_id is the
+// sender's profile, and limit_ms is set when the refinement did not answer
+// within its limit.
+model SenderRefineResult {
+  profile_id: string;
+  success: boolean;
+  refined_text?: string;
+  error?: string;
+  limit_ms?: safeint;
+}
+
 model SenderSession {
   id: SessionID;
   label: string;
@@ -9253,6 +9315,8 @@ model SenderSession {
   state: SessionState;
   // The outpost the session runs on; absent for a session on this machine.
   host?: string;
+  // The outpost's name as attn shows it; absent with host.
+  host_label?: string;
   // When the user last focused the session's terminal in attn; absent when
   // never.
   last_focused_at?: string;
@@ -9363,6 +9427,7 @@ alias DaemonEvent =
   | DelegationPreferencesResultMessage
   | DelegationPreferencesChangedMessage
   | HarnessModelsResultMessage
+  | HarnessTargetsResultMessage
   | AgentCatalogResultMessage
   | SettingsUpdatedMessage
   | GitHubHostsUpdatedMessage
@@ -9526,6 +9591,9 @@ model SessionPlaceMessage {
   allow_user_composer?: boolean;
   compact?: boolean;
   ring?: InboxRingRecord;
+  user_words?: boolean;
+  expected_driver_run?: string;
+  expected_conversation?: string;
 }
 model SessionPlaceResult {
   stage: SessionPlaceStage;
@@ -9533,6 +9601,7 @@ model SessionPlaceResult {
   error?: string;
   error_kind?: SessionPlaceErrorKind;
   retry_after_ms?: int32;
+  uncertain?: boolean;
   held?: boolean; // The Claude mod took the input and has not placed it yet, so it can still give it back.
 }
 

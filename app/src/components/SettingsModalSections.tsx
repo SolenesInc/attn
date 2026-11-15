@@ -887,13 +887,13 @@ export function AgentSettings({
                   disabled={availability === 'unavailable'}
                   title={
                     availability === 'unavailable'
-                      ? `${agentLabel(agent)} CLI not found in PATH`
+                      ? `${(settings[`${agent}_display_name`]?.trim() || agentLabel(agent))} CLI not found in PATH`
                       : availability === 'checking'
-                        ? checkingForHarnessLabel(agentLabel(agent))
+                        ? checkingForHarnessLabel((settings[`${agent}_display_name`]?.trim() || agentLabel(agent)))
                         : undefined
                   }
                 >
-                  {agentLabel(agent)}
+                  {(settings[`${agent}_display_name`]?.trim() || agentLabel(agent))}
                   {availability === 'checking' && <HarnessCheckingMark />}
                 </button>
               );
@@ -987,13 +987,13 @@ export function AgentSettings({
           return (
             <details className="settings-agent" key={agent} open={agent === resolvedDefaultAgent ? true : undefined}>
               <summary>
-                <span>{agentLabel(agent)}</span>
+                <span>{(settings[`${agent}_display_name`]?.trim() || agentLabel(agent))}</span>
                 <span className="settings-agent-summary">
                   <HarnessRouteBadge value={routeFromStored(agent, settings[`default_model_${agent}`] || '', settings[`default_effort_${agent}`] || '')} /> · {AVAILABILITY_SUMMARY[availability]}
                 </span>
               </summary>
               <div className="settings-agent-content">
-                {overrides && <HarnessRouteChip variant="field" aria-label={`${agentLabel(agent)} default model`} data-testid={`settings-default-route-${agent}`} value={{ harness: agent, provider: '', model: defaultModelDrafts.value(agent), effort: defaultEffortDrafts.value(agent) }} rules={{ harnesses: harnesses.filter(harness => harness.id === agent), fixedHarness: true }} onChange={route => {
+                {overrides && <HarnessRouteChip variant="field" aria-label={`${(settings[`${agent}_display_name`]?.trim() || agentLabel(agent))} default model`} data-testid={`settings-default-route-${agent}`} value={{ harness: agent, provider: '', model: defaultModelDrafts.value(agent), effort: defaultEffortDrafts.value(agent) }} rules={{ harnesses: harnesses.filter(harness => harness.id === agent), fixedHarness: true }} onChange={route => {
                   if (route.model !== defaultModelDrafts.value(agent)) void defaultModelDrafts.apply(agent, route.model);
                   if (route.effort !== defaultEffortDrafts.value(agent)) void defaultEffortDrafts.apply(agent, route.effort);
                 }} />}

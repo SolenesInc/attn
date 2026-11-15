@@ -1,0 +1,66 @@
+item	statement	native_test	reason
+6	On macOS the bundle registers its instance's link scheme (attn-palmac://), not production's attn://, and a link in it reaches that bundle	live:s-fmcb34/palmac-proof.tgz	
+6	On Linux the instance's desktop entry handles its own scheme, not production's attn://	live:s-fmcb34/c36-linux.tgz	
+31	Option-modified letter shortcuts (⌥⌘N, the new session dialog's ⌥T, ⌥Q and ⌥1–⌥9) fire through AppKit despite macOS dead-key reporting		gap: s-70656g
+41	A terminal whose pane is no longer drawn detaches from its stream	attn-app/tests/wire/terminal.rs::a_terminal_no_longer_drawn_is_detached	
+41	Hidden tiles release GPU memory and return with one repaint; many tiles never fail		gap: s-gjttf8
+42	Cell metrics give the same rows and cols as the Tauri build for the same window and font size	attn-app/tests/wire/shelf_layout.rs::one_shell_tile_in_a_1200_by_800_window_gets_the_grid_the_tauri_app_gives_it	
+42	On Linux a lone shell tile gets Tauri's 34x106 at 1200x800 and 39x133 at 1440x900	live:s-rzb1xd/grid-linux-edge.tgz	
+43	An emoji ZWJ, flag, skin-tone or keycap sequence takes one cell, as grapheme clustering (DECSET 2027) stays on through a program's reset or DECRST	attn-app/tests/wire/terminal.rs::an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_turns_clustering_off	
+43	Such a sequence draws as a single glyph on macOS		gap: s-916dgb
+44	A Private Use Area icon (Nerd Font) draws from the fonts the native app bundles	live:s-916dgb/live-shot2.png	
+44	It draws on the first frame, with no fallback glyph before the fonts load		gap: s-916dgb
+45	Kitty image placements draw where the worker placed them, from pixels pulled once per image, and no client parses kitty escapes	attn-app/tests/wire/terminal_kitty.rs::a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive	
+46	Terminal input latency is measured natively		gap: s-c6b9zk
+92	On Linux the native app gives a lone shell tile the same 9x21 cell, rows and cols as on macOS for the same window	live:s-rzb1xd/grid-linux.tgz	
+92	On macOS the native app gives a lone shell tile the same Menlo 9x21 cell, rows and cols as on Linux for the same window	live:s-rzb1xd/grid-mac-measure.tgz	
+30	⌘C, from the keyboard or the native Edit menu, copies the terminal's selection	attn-app/tests/wire/terminal_view.rs::a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again	
+30	⌘C copies a selected command block's text	attn-app/tests/wire/terminal_blocks.rs::a_click_selects_the_command_block_under_it_and_the_copy_keys_copy_it_whole_or_its_command	
+30	⇧⌘C copies the terminal's selection as Markdown, keeping bold, italic, strikethrough, underline and colored inline code	attn-app/tests/wire/terminal_view.rs::the_copy_command_key_copies_a_selection_as_markdown_with_its_styles	
+30	Filter block output lists the block's output lines that hold the query, and a listed line scrolls the view to it	attn-app/tests/wire/terminal_filter.rs::the_menu_filters_a_blocks_output_and_a_listed_line_scrolls_the_view_to_it	
+47	A drag that starts outside the terminal, on its tile's header, paints no selection in it	attn-app/tests/wire/terminal_view.rs::a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal	
+54	A program's OSC 52 write reaches the clipboard without a gesture	attn-app/tests/wire/terminal_view.rs::a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing	
+54	The terminal's copy and paste reach the system clipboard from the packaged bundle		gap: s-9d54yh
+54	A spawn link reaches the packaged macOS bundle warm and cold, and starts and shows its agent	live:s-fmcb34/palmac-proof.tgz	
+54	A spawn link reaches the native app on Linux		gap: s-vmre0j
+55	On macOS a link sent while the app runs reaches the running app: a second link for the same folder starts no agent and shows the first	live:s-fmcb34/palmac-proof.tgz	
+55	On Linux a link sent while the app runs reaches the running app instead of starting a second one		gap: s-vmre0j
+49	A terminal mark paints a violet wash and underline over the text it quotes, and only while the rows still read as its quote	attn-app/tests/wire/terminal_annotations.rs::a_stored_draft_draws_on_its_message_and_a_mark_whose_text_left_the_screen_is_not_drawn	
+49	A terminal mark brightens while ⌥ is held over it	attn-app/tests/wire/terminal_annotations.rs::alt_over_a_mark_brightens_it	
+49	Terminal marks paint in the packaged app on Linux	live:s-9d54yh/annotations-native-panel.png	
+27	⌘W closes the active tile, not the window	attn-app/tests/wire/keys.rs::close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop	
+27	⌘W with home, a palette, the overview, the file opener, the New Session launcher or a dialog in front closes nothing, and the app keeps the key from Window > Close	attn-app/tests/wire/keys.rs::the_close_keys_close_nothing_behind_home_an_overlay_or_a_dialog_and_never_reach_the_menu_bar	
+27	In queue flow ⌘W closes the agent on screen and opens the next turn	attn-app/tests/wire/queue.rs::the_close_key_on_the_agent_on_screen_in_queue_flow_opens_the_next_turn	
+35	A tile window brought back hides, and the next pop-out reuses it (the Present window, re-derived to tile windows)	attn-app/tests/wire/desktops.rs::a_tile_brought_back_hides_its_window_and_the_next_pop_out_reuses_it	
+36	A secondary window gains focus after load so its content is not blank		n/a: native windows draw their content on their first frame, with no webview load that leaves one blank until it takes focus
+37	Window commands resolve the calling window: the pop-out key and close pressed in a tile window bring that tile back	attn-app/tests/wire/desktops.rs::the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back	
+47	A divider drag that ends in a terminal paints no selection in it	attn-app/tests/wire/terminal_view.rs::a_divider_drag_that_ends_in_the_terminal_selects_nothing_in_it	
+33	⌘P (Ctrl+Shift+P on Linux) opens the markdown opener on the folder of the agent behind the screen	attn-app/tests/wire/opener.rs::the_opener_lists_recent_files_at_once_relative_to_the_agents_folder_and_takes_the_keyboard	
+33	⌘P reaches the markdown opener through AppKit in the packaged bundle, with no menu item taking it		gap: s-h7a9kz
+12	The app starts its daemon before every connection, at launch and after the daemon stops, and reconnects to it	attn-app/tests/wire/connection.rs::a_stopped_daemon_is_started_again_before_the_first_retry	
+12	A daemon that cannot start leaves the app's window open, saying why, and is started again once it can	attn-app/tests/wire/connection.rs::a_daemon_that_will_not_start_at_launch_says_why_and_is_started_once_it_can	
+12	On macOS, after attn daemon stop the packaged app starts a new daemon and reconnects within seconds	live:s-nacrpp/p2-daemon-restart.txt	
+12	On macOS, a bundle with no attnd beside it opens its window and says why the daemon did not start	live:s-nacrpp/p26-no-attnd.txt	
+35	On macOS, closing the main window while a tile window shows hides it, and reopening the app shows it again, as in the Tauri app	live:s-nacrpp/p15-ab-r3.txt	
+35	Closing the main window with no tile window showing quits the app; off macOS it always quits, an improvement on the Tauri app, which hides a main window nothing there can reopen	live:s-nacrpp/p15-c-r3.txt	
+35	On macOS, a main window hidden while a tile window showed comes back when the last tile window closes, as in the Tauri app	live:s-nacrpp/p15-d-r3.txt	
+50	A markdown tile reads its local images again when its document changes, so a picture changed on disk shows as the file is now	attn-app/tests/wire/markdown.rs::an_edited_document_shows_its_image_as_the_file_is_now	
+48	A selection in a markdown document opens its toolbar, and typing over it writes into the comment field, which holds the keyboard until it saves or Escape closes it	attn-app/tests/wire/markdown_annotations.rs::typing_over_a_selection_writes_a_comment_that_saves_only_with_words_and_waits_for_its_passage	
+49	Marks paint over the words they hold in a markdown document and follow those words through edits	attn-app/tests/wire/markdown_annotations.rs::held_marks_paint_without_saving_and_follow_their_words_when_the_document_changes	
+48	A markdown passage's toolbar and comment box stay beside it while the document scrolls under them	attn-app/tests/wire/markdown_annotations.rs::the_toolbar_and_the_comment_box_move_with_their_passage_when_the_document_scrolls	
+48	A seed's body takes marks as a file does, and they go to the session tending it or as a note on the seed	attn-app/tests/wire/markdown_annotations.rs::a_seeds_marks_go_to_its_tender_or_onto_the_seed_as_a_note	
+49	A deletion mark draws a line through the words it removes	attn-app/tests/wire/markdown_annotations.rs::delete_strikes_exactly_the_selected_words_and_a_selection_loses_the_whitespace_at_its_edges	
+33	Every shortcut in the native keymap runs its own action in the window	attn-app/tests/wire/keys.rs::every_app_shortcut_runs_its_own_action	
+33	A combination recorded in the native shortcut editor runs its action once the editor closes	attn-app/tests/wire/shortcut_editor.rs::a_recorded_combination_runs_its_action_once_the_editor_closes	
+33	A chord recorded in the native shortcut editor runs its action once the daemon has it	attn-app/tests/wire/shortcut_editor.rs::a_recorded_chord_runs_its_action_once_the_daemon_has_it	
+33	On Linux, physical keys recorded in the packaged native app's shortcut editor rebind an action, and the new keys and a recorded chord then run it	live:s-qjaqty/native-shortcut-editor.tgz	
+33	On macOS, a shortcut rebound in the native editor reaches the packaged bundle through AppKit, with no menu item taking it	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
+54	Settings' Browse saves the folder the native dialog returns	attn-app/tests/wire/settings/desktop.rs::the_projects_directory_pill_says_edited_until_the_path_saves_and_browse_saves_the_chosen_folder	
+54	A cancelled folder dialog in Settings saves nothing	attn-app/tests/wire/settings/desktop.rs::a_cancelled_folder_dialog_saves_nothing	
+54	Settings' Browse opens the system folder dialog from the packaged bundle	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
+71	The settings, agent settings, self-update, shortcut, profile and session usage scenarios have native copies that pass on Linux	live:s-qjaqty/slice6-scenarios.tgz	
+71	The native copies of the settings, agent settings, profile and session usage scenarios pass on macOS	live:s-y6jmzf/s-y6jmzf-macos-evidence.tgz	
+29	Cmd+Z and Shift+Cmd+Z undo and redo in the notebook's editor, which hears them before the app's keymap	attn-app/tests/wire/notebook.rs::command_z_undoes_typing_in_the_editor_and_shift_command_z_redoes_it	
+54	The ledger's Copy the path writes the row's directory to the clipboard	attn-app/tests/wire/ledger.rs::the_keys_walk_rows_open_the_menu_copy_the_path_and_back_out_one_layer_at_a_time	
+56	The native diagnostic report names the webview's disk-diagnostic streams as not collected by the native app, as the Orchestrator approved	attn-app/tests/wire/diagnostic_report.rs::clearing_the_output_saves_only_metadata_and_names_no_webview_evidence	
+56	The native app writes its own terminal input trace to the diagnostics directory		gap: s-mny1vm

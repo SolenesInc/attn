@@ -106,8 +106,9 @@ func TestALaunchFetchLargerThanTheRequestBudgetPacesItselfToTheEnd(t *testing.T)
 	inBubble(t, func(t *testing.T, w *world) {
 		w.App()
 		w.advance(3 * time.Minute)
-		w.restart()
+		w.stop()
 		addPRsAtHead(gh, prs, "def456")
+		w.start()
 
 		before := prDetailFetches(gh)
 		app := w.ConnectApp()

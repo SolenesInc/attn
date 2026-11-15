@@ -54,9 +54,9 @@ function appLocalDataDir(bundleId) {
 // The executable inside an app tree the caller names, which `--app-path` can
 // place anywhere; deriving it from an instance would answer for another install.
 export function appExecutableInAppTree(appPath, platform = process.platform) {
-  return platform === 'darwin'
-    ? path.join(appPath, 'Contents', 'MacOS', 'app')
-    : path.join(appPath, 'bin', 'attn-app');
+  if (platform !== 'darwin') return path.join(appPath, 'bin', 'attn-app');
+  const native = path.join(appPath, 'Contents', 'MacOS', 'attn-app');
+  return fs.existsSync(native) ? native : path.join(appPath, 'Contents', 'MacOS', 'app');
 }
 
 function installedApp(appName) {

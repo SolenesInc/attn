@@ -299,7 +299,7 @@ func (d *Daemon) crewSessionGeometry(sessionID protocol.SessionID) (int, int) {
 }
 
 func (d *Daemon) closeCrewDay(sessionID protocol.SessionID, teardown *sessionTeardown) error {
-	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: who.User(), Reason: "crew member closed its session"}); err != nil {
+	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: who.Attn(), Reason: "crew member closed its session"}); err != nil {
 		return err
 	}
 	if teardown.session != nil {

@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="usage: scripts/rune-bump --pick <upstream-commit>... | --branch <fork-branch> | --rev <fork-rev>
+
+Moves native/'s Rune pin to a new revision of the fork's main and runs the
+native suite. --pick cherry-picks the named commits of upstream's dev onto main
+and records each in FORK.md; --branch merges a fork branch into main; --rev
+pins a revision already on main. FORK.md must record every commit on main that
+upstream's dev lacks: the commit changes FORK.md, or a row lists its hash. A new main must pass the tests FORK.md names before
+it is pushed and pinned. The pin move is left uncommitted."
+
+mode="" targets=()
+case "${1-}" in
+  --pick)
+    [ "$#" -ge 2 ] || { echo "$usage" >&2; exit 2; }
+    mode=pick; shift; targets=("$@") ;;
+  --branch | --rev)
+    [ "$#" -eq 2 ] && [ -n "$2" ] || { echo "$usage" >&2; exit 2; }
+    mode="${1#--}"; targets=("$2") ;;
+  -h | --help) echo "$usage"; exit 0 ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+
+upstream="${RUNE_UPSTREAM:-https://github.com/anomalyco/rune.git}"
+fork="${RUNE_FORK:-git@github.com:SolenesInc/rune.git}"
+clone="${RUNE_CLONE:-$HOME/projects/rune}"
+attn="$(git rev-parse --show-toplevel)"
+manifest="$attn/native/Cargo.toml"
+
+logs="$(mktemp -d "${TMPDIR:-/tmp}/rune-bump.XXXXXX")"
+worktree=""
+cleanup() {
+  [ -z "$worktree" ] || git -C "$clone" worktree remove --force "$worktree" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+say() { echo "rune-bump: $*"; }
+die() { echo "rune-bump: $*" >&2; exit 1; }
+
+step_name="" steps=0 log=""
+step() {
+  step_name="$1" steps=$((steps + 1)) log="$logs/step-$steps.log"
+  say "$step_name"
+}
+run() {
+  if ! "$@" >>"$log" 2>&1; then
+    echo "rune-bump: $step_name failed: $*" >&2
+    tail -n 80 "$log" >&2
+    die "$step_name failed; its whole output is in $log"
+  fi
+}
+
+git -C "$clone" rev-parse --git-dir >/dev/null 2>&1 ||
+  die "no Rune clone at $clone; clone $fork there or set RUNE_CLONE"
+git -C "$attn" diff --quiet HEAD -- native/Cargo.toml native/Cargo.lock ||
+  die "native/Cargo.toml or native/Cargo.lock has uncommitted changes; land or drop them first"
+
+old_revs="$(grep -oE 'rev = "[0-9a-f]{40}"' "$manifest" | cut -d'"' -f2 | sort -u)"
+[ "$(wc -l <<<"$old_revs")" -eq 1 ] && [ -n "$old_revs" ] ||
+  die "native/Cargo.toml must pin exactly one Rune rev; it has: ${old_revs:-none}"
+old="$old_revs"
+
+step "fetch upstream dev and the fork"
+run git -C "$clone" fetch --no-tags "$upstream" "+refs/heads/dev:refs/rune-bump/upstream/dev"
+run git -C "$clone" fetch --no-tags "$fork" "+refs/heads/*:refs/rune-bump/fork/*"
+upstream_dev=refs/rune-bump/upstream/dev
+trunk=refs/rune-bump/fork/main
+git -C "$clone" rev-parse --verify --quiet "$trunk" >/dev/null || die "the fork has no main branch"
+
+ledger_section() {
+  awk -v want="## $2" '/^## / { inside = ($0 == want); next } inside && /^\|/ && !/^\|[- |]*$/' <<<"$1" | sed 1d
+}
+hashes() { grep -oE '`[0-9a-f]{7,40}`' | tr -d '`' || true; }
+listed() {
+  local commit="$1" hash
+  while IFS= read -r hash; do
+    [ -n "$hash" ] && [ "${commit#"$hash"}" != "$commit" ] && return 0
+  done
+  return 1
+}
+
+check_ledger() {
+  local rev="$1" fork_md listed_commits commit unlisted=""
+  fork_md="$(git -C "$clone" show "$rev:FORK.md")" || die "$rev has no FORK.md"
+  listed_commits="$(ledger_section "$fork_md" "Our changes" | awk -F'|' '{ print $(NF-1) }' | hashes)"
+  for commit in $(git -C "$clone" rev-list --no-merges "$rev" "^$upstream_dev"); do
+    git -C "$clone" diff-tree --no-commit-id --name-only -r "$commit" | grep -qxF FORK.md && continue
+    listed "$commit" <<<"$listed_commits" && continue
+    unlisted+="
+  $(git -C "$clone" log -1 --format='%h %s' "$commit")"
+  done
+  [ -z "$unlisted" ] || die "FORK.md at $rev records none of these commits on main that upstream's dev lacks:$unlisted
+a commit records itself by changing FORK.md: add or extend its row under \"Our changes\", or under \"Picked from upstream\" for a pick"
+}
+
+fork_md_at() { git -C "$clone" show "$1:FORK.md" 2>/dev/null || true; }
+doubled_lines() {
+  git merge-file -p --diff3 "$2" "$1" "$3" 2>/dev/null | awk '
+    /^<<<<<<< / { part = "ours"; n = 0; next }
+    /^\|\|\|\|\|\|\| / { part = "base"; changed = 0; next }
+    /^=======$/ && part == "base" { part = "theirs"; next }
+    /^>>>>>>> / { if (changed) for (i = 1; i <= n; i++) print hunk[i]; part = ""; next }
+    part == "ours" || part == "theirs" { hunk[++n] = part "\t" $0; next }
+    part == "base" { changed = 1 }
+  '
+}
+check_union_merges() {
+  local merge dir final side line kept_ours kept_theirs doubled
+  final="$(fork_md_at "$1")" dir="$logs/union"
+  mkdir -p "$dir"
+  for merge in $(git -C "$clone" rev-list --merges "$1" "^$trunk"); do
+    fork_md_at "$(git -C "$clone" merge-base "$merge^1" "$merge^2")" >"$dir/base"
+    fork_md_at "$merge^1" >"$dir/ours"
+    fork_md_at "$merge^2" >"$dir/theirs"
+    kept_ours="" kept_theirs="" doubled=""
+    while IFS=$'\t' read -r side line; do
+      grep -qxF -- "$line" <<<"$final" || continue
+      doubled+="
+  $line"
+      if [ "$side" = ours ]; then kept_ours=1; else kept_theirs=1; fi
+    done < <(doubled_lines "$dir/base" "$dir/ours" "$dir/theirs")
+    [ -z "$kept_ours" ] || [ -z "$kept_theirs" ] ||
+      die "FORK.md keeps both sides' versions of lines that both sides of $(git -C "$clone" log -1 --format='%h %s' "$merge") changed:$doubled
+FORK.md merges by union, so a row two branches extend, or two moves of the last reviewed upstream commit, come out twice. On the branch, make each pair into one line, commit, push it and run scripts/rune-bump --branch again"
+  done
+}
+
+record_pick() {
+  local commit="$1" row last
+  row="| \`$(git -C "$clone" rev-parse --short=8 "$commit")\` | $(git -C "$clone" log -1 --format=%s "$commit" | sed 's/|/\\|/g') |"
+  last="$(awk '/^## / { inside = ($0 == "## Picked from upstream"); next } inside && /^\|/ { n = NR } END { print n }' "$worktree/FORK.md")"
+  [ -n "$last" ] || die "FORK.md has no \"Picked from upstream\" table to record $commit in"
+  ROW="$row" awk -v at="$last" '{ print } NR == at { print ENVIRON["ROW"] }' "$worktree/FORK.md" >"$logs/FORK.md"
+  cp "$logs/FORK.md" "$worktree/FORK.md"
+}
+
+if [ "$mode" = rev ]; then
+  new="$(git -C "$clone" rev-parse --verify --quiet "${targets[0]}^{commit}")" ||
+    die "${targets[0]} is not a revision in the fork"
+  git -C "$clone" merge-base --is-ancestor "$new" "$trunk" ||
+    die "$new is not on the fork's main; pin only revisions of main"
+  step "check FORK.md lists every commit on main"
+  check_ledger "$new"
+else
+  worktree="$logs/rune"
+  run git -C "$clone" worktree add --detach "$worktree" "$trunk"
+  if [ "$mode" = pick ]; then
+    step "pick from upstream"
+    picks=()
+    for target in "${targets[@]}"; do
+      commit="$(git -C "$clone" rev-parse --verify --quiet "$target^{commit}")" &&
+        git -C "$clone" merge-base --is-ancestor "$commit" "$upstream_dev" ||
+        die "$target is not a commit on upstream's dev; pick only upstream commits"
+      picks+=("$commit")
+    done
+    git -C "$clone" merge-base --is-ancestor refs/rune-bump/fork/dev "$upstream_dev" ||
+      die "the fork's dev has commits upstream's dev lacks; dev only mirrors upstream"
+    run git -C "$clone" push "$fork" "$upstream_dev:refs/heads/dev"
+    for commit in "${picks[@]}"; do
+      if ! git -C "$worktree" cherry-pick -x "$commit" >>"$logs/pick.log" 2>&1; then
+        cat "$logs/pick.log" >&2
+        conflicts="$(git -C "$worktree" diff --name-only --diff-filter=U | tr '\n' ' ')"
+        git -C "$worktree" cherry-pick --abort >/dev/null 2>&1 || true
+        [ -n "$conflicts" ] || die "picking $commit onto main failed"
+        die "picking $commit onto main conflicts in: $conflicts
+port it by hand as docs/internal/rune-fork.md says, then run scripts/rune-bump --branch <your branch>"
+      fi
+      record_pick "$commit"
+      run git -C "$worktree" commit -q --amend --no-edit -- FORK.md
+      say "  picked $(git -C "$worktree" log -1 --format='%h %s')"
+    done
+  else
+    incoming="refs/rune-bump/fork/${targets[0]}"
+    git -C "$clone" rev-parse --verify --quiet "$incoming" >/dev/null ||
+      die "the fork has no branch ${targets[0]}"
+    for base in $(git -C "$clone" merge-base --all "$incoming" "$upstream_dev"); do
+      git -C "$clone" merge-base --is-ancestor "$base" "$trunk" ||
+        die "${targets[0]} carries commits of upstream's dev that main lacks; take upstream changes with scripts/rune-bump --pick, never by merging dev"
+    done
+    step "merge ${targets[0]} into main"
+    if ! git -C "$worktree" merge --no-edit -m "Merge ${targets[0]} into main" "$incoming" >>"$logs/merge.log" 2>&1; then
+      cat "$logs/merge.log" >&2
+      conflicts="$(git -C "$worktree" diff --name-only --diff-filter=U | tr '\n' ' ')"
+      [ -n "$conflicts" ] || die "merging ${targets[0]} into main failed"
+      die "merging ${targets[0]} into main conflicts in: $conflicts
+bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --branch ${targets[0]} again"
+    fi
+  fi
+  new="$(git -C "$worktree" rev-parse HEAD)"
+  say "main is now $(git -C "$worktree" log -1 --format='%h %s')"
+
+  step "check FORK.md lists every commit on main"
+  check_ledger "$new"
+  check_union_merges "$new"
+
+  step "run the tests FORK.md lists"
+  ledger="$(ledger_section "$(cat "$worktree/FORK.md")" "Our changes" | awk -F'|' -v os="$(uname -s)" '{
+      rest = $(NF-2)
+      while (match(rest, /`[^`]+`( \(macOS\))?/)) {
+        token = substr(rest, RSTART, RLENGTH)
+        rest = substr(rest, RSTART + RLENGTH)
+        if (token ~ /\(macOS\)$/ && os != "Darwin") continue
+        sub(/ \(macOS\)$/, "", token)
+        gsub(/`/, "", token)
+        print token
+      }
+    }')"
+  [ -n "$ledger" ] || die "FORK.md lists no tests"
+  [ -x "$worktree/scripts/test.sh" ] || die "the new main has no scripts/test.sh, which runs the fork's tests"
+  test_cargo() {
+    run env CARGO_TARGET_DIR="$clone/target" scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid "$@" </dev/null
+  }
+  passed() { grep -qxF -e "test $1 ... ok" -e "test $1 - should panic ... ok" "$2"; }
+  unit_tests=() integration_tests=() missing=""
+  while IFS= read -r test; do
+    case "$test" in
+      crates/*/tests/*) integration_tests+=("$test") ;;
+      *) unit_tests+=("$test") ;;
+    esac
+  done <<<"$ledger"
+  if [ "${#unit_tests[@]}" -gt 0 ]; then
+    (cd "$worktree" && test_cargo --lib -- "${unit_tests[@]}")
+    for test in "${unit_tests[@]}"; do
+      passed "$test" "$log" && say "  ok $test" || missing+=" $test"
+    done
+  fi
+  for test in ${integration_tests[@]+"${integration_tests[@]}"}; do
+    file="${test%%::*}" name=""
+    [ "$file" = "$test" ] || name="${test#*::}"
+    if [[ ! "$file" =~ ^crates/rune(-kit|-mermaid)?/tests/([^/]+)(\.rs|/main\.rs)$ ]] || [ ! -f "$worktree/$file" ]; then
+      missing+=" $test"
+      continue
+    fi
+    target_log="$logs/$(tr '/:' '__' <<<"$test").log"
+    (cd "$worktree" && log="$target_log" test_cargo --test "${BASH_REMATCH[2]}" -- ${name:+"$name"})
+    if [ -z "$name" ] || passed "$name" "$target_log"; then say "  ok $test"; else missing+=" $test"; fi
+  done
+  [ -z "$missing" ] || die "FORK.md lists tests that did not run:$missing; name a unit test by its path in its crate, or an integration test by its file, such as crates/rune/tests/focus.rs, with ::<test> to run one of its tests"
+
+  step "push the fork's main"
+  run git -C "$worktree" push "$fork" "HEAD:refs/heads/main"
+fi
+
+step "move the pin from $old to $new"
+patch_keys() {
+  sed -n '/^\[patch.crates-io\]/,/^\[/p' | grep -oE '^[A-Za-z0-9_-]+ *=' | tr -d ' =' | sort || true
+}
+rune_manifest="$(git -C "$clone" show "$new:Cargo.toml")" || die "cannot read Rune's Cargo.toml at $new"
+if ! diff <(patch_keys <<<"$rune_manifest") <(patch_keys <"$manifest") >"$logs/patches.diff"; then
+  cat "$logs/patches.diff" >&2
+  die "Rune's [patch.crates-io] at $new differs from native/Cargo.toml's (< Rune, > native); copy Rune's entries into native/Cargo.toml, pointed at the fork, commit, then run scripts/rune-bump --rev $new"
+fi
+OLD="$old" NEW="$new" perl -pi -e 's/\Q$ENV{OLD}\E/$ENV{NEW}/g' "$manifest"
+(cd "$attn/native" && run cargo update -p rune)
+
+step "run the native suite"
+(cd "$attn" && run make test-native) || {
+  die "the native suite fails at $new; the pin move stays in native/ for you to fix or drop, and must not land red"
+}
+grep -E '^test result' "$log" | sed 's/^/rune-bump:   /'
+
+rm -rf "$logs"
+say "pinned Rune $new (was $old); native/Cargo.toml and native/Cargo.lock are ready to land"

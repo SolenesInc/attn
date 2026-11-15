@@ -120,13 +120,18 @@ func TestAnOutpostStopsTheLanguageServerOfAReviewTheHomeShowedWhenTheHomeIsGoneA
 	ask()
 	pid := goServerPID(t, outpost)
 
+	dropped := app.EventCount()
 	pair.Disconnect()
 	outpost.FirePending(bridge.LostTimer)
 	if exited, err := procwait.Exited(pid, fakeagent.HangGuard); err != nil || !exited {
 		t.Fatalf("the language server %d of a review the home showed still runs %s after the home's bridge dropped: %v", pid, fakeagent.HangGuard, err)
 	}
 
+	outpostStateSince(app, "outpost", protocol.OutpostStateLost, dropped)
+	back := app.EventCount()
 	pair.Reconnect()
+	defer home.FireTimers(bridge.RetryTimer)()
+	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, back)
 	edited := review + "\nStill adds.\n"
 	if err := os.WriteFile(document, []byte(edited), 0o644); err != nil {
 		t.Fatal(err)

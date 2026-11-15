@@ -27,6 +27,20 @@ func TestACodexApprovalPromptPutsTheSessionInApprovalUntilItIsAnswered(t *testin
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
 
+func TestACodexApprovalTheTerminalShowsAndAnswersInOneReadReturnsTheSessionToWork(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "auto_approve_enabled", "false")
+	_, run, working := codexAtWork(t, w, app)
+
+	run.HoldScreen()
+	run.AskApproval()
+	asking := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+	run.Dismiss()
+	run.ReleaseScreen()
+	testworld.AwaitStateAfter(app, asking, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+}
+
 func TestCodexsHooksNamingTheDefaultModeDoNotRetireTheReviewerItWasSpawnedWith(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

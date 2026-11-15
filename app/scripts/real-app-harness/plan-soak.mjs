@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scenarioSkipReason } from './matrixDigest.mjs';
-import { scenarioCatalog } from './scenarioCatalog.mjs';
+import { scenarioApp, scenarioCatalog } from './scenarioCatalog.mjs';
 
 export function parseScenarioList(value, catalog = scenarioCatalog, env) {
   const ids = String(value).split(',').map((id) => id.trim());
@@ -47,8 +47,12 @@ export function planSoak({ scenarios, repeat }, catalog = scenarioCatalog, env) 
   if (!Number.isInteger(parsedRepeat) || parsedRepeat <= 0) {
     throw new Error(`Repeat must be a positive integer, got: ${repeat}`);
   }
+  const byId = new Map(catalog.map((scenario) => [scenario.id, scenario]));
+  const include = parseScenarioList(scenarios, catalog, env)
+    .map((id) => ({ scenario: id, app: scenarioApp(byId.get(id)) }));
   return {
-    matrix: { scenario: parseScenarioList(scenarios, catalog, env) },
+    matrix: { include },
+    apps: [...new Set(include.map((entry) => entry.app))],
     repeat: parsedRepeat,
   };
 }
@@ -76,7 +80,7 @@ function parseArgs(argv) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const plan = planSoak(options, scenarioCatalog, options.checkRunnerEnv ? process.env : undefined);
-  process.stdout.write(`matrix=${JSON.stringify(plan.matrix)}\nrepeat=${plan.repeat}\n`);
+  process.stdout.write(`matrix=${JSON.stringify(plan.matrix)}\napps=${JSON.stringify(plan.apps)}\nrepeat=${plan.repeat}\n`);
 }
 
 const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);

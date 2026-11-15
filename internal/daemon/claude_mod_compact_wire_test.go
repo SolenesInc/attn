@@ -112,12 +112,28 @@ func TestACompactingCloseWhoseModWasLostMidTurnClosesOnceTheTurnParksOnBackgroun
 	workingOn(t, app, run, session, "deploy to staging")
 
 	closeCompactingDuringTheTurn(t, cli, run, session)
-	run.ModStopPolling()
-	w.awaitTimer(daemon.ClaudeModReachTimer)
-	w.advance(claudeModReachWindow)
+	typedClaude(w, run)
 	stillOpen(t, cli, session, "after the mod was lost during the turn that asked to close")
 
 	parkOnBackgroundWork(t, w, cli, run, session)
+
+	compactDidNotRun(t, awaitClosed(app, session), "no link that compacts")
+}
+
+func TestACompactingCloseWhoseTurnParksBeforeItsSilentModIsLostClosesOnceTheModIsLost(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	session, run := moddedClaudeWithVerdicts(t, w, app)
+	workingOn(t, app, run, session, "deploy to staging")
+
+	closeCompactingDuringTheTurn(t, cli, run, session)
+	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	run.ModStopPolling()
+	w.awaitTimer(daemon.ClaudeModReachTimer)
+	parkOnBackgroundWork(t, w, cli, run, session)
+	w.awaitTimer(daemon.ClaudeModAckTimer)
+	stillOpen(t, cli, session, "while the compact waits for the silent mod")
+	w.advance(claudeModReachWindow)
 
 	compactDidNotRun(t, awaitClosed(app, session), "no link that compacts")
 }

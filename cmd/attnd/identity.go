@@ -18,7 +18,10 @@ func ownTerminalID() protocol.TerminalID {
 var errNoCurrentSession = errors.New("not showing a session")
 
 func currentSession(c *client.Client) (protocol.SessionID, error) {
-	terminalID := ownTerminalID()
+	terminalID, err := harness.ResolveTerminalFromEnv()
+	if err != nil {
+		return "", err
+	}
 	if terminalID == "" {
 		return "", nil
 	}

@@ -56,7 +56,8 @@ Frames: `frame:` in the frontmatter picks the frame the review opens in; the
 user switches with 1, 2 and 3.
   brief         the document top to bottom
   walkthrough   the stops one at a time, your prose beside the file
-  map           a sequence diagram's messages, each beside the code of its stop
+  map           a sequence diagram's messages, each beside the ## step that
+                holds its stop
 A pick the document cannot fill opens in brief, and check says what is
 missing: walkthrough needs a stop, map a drawn diagram with a message tied to
 a stop.

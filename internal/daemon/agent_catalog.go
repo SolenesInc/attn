@@ -55,12 +55,13 @@ func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
 		}
 		health, detail, _ := plugin.healthSnapshot()
 		agents = append(agents, agentdriver.Descriptor{
-			Name:      driver.Agent,
-			Plugin:    driver.PluginName,
-			Health:    health,
-			Detail:    detail,
-			ModelPin:  driver.Capabilities["model_pin"],
-			EffortPin: driver.Capabilities["effort_pin"],
+			Name:        driver.Agent,
+			DisplayName: driver.displayName(),
+			Plugin:      driver.PluginName,
+			Health:      health,
+			Detail:      detail,
+			ModelPin:    driver.Capabilities["model_pin"],
+			EffortPin:   driver.Capabilities["effort_pin"],
 		})
 	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i].Name < agents[j].Name })

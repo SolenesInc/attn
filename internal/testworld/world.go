@@ -80,6 +80,14 @@ func worldDir(t testing.TB) string {
 	return dir
 }
 
+// RemoveTempDirsAfterTheDaemon has Go remove the test's t.TempDir folders only
+// after a daemon stopped by a cleanup registered from here on: Go removes them
+// all in one cleanup, registered at the test's first t.TempDir.
+func RemoveTempDirsAfterTheDaemon(t testing.TB) {
+	t.Helper()
+	t.TempDir()
+}
+
 func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness, withAgentKit bool) *World {
 	t.Helper()
 	production, err := config.CanonicalRuntimePath(config.DataDirForInstance(""))
@@ -296,6 +304,13 @@ func (w *World) Launched(sessionID string) *fakeagent.Run {
 	return run
 }
 
+func (w *World) LaunchFailed(sessionID string) (*fakeagent.Run, string) {
+	w.T.Helper()
+	run, failure := w.kit.LaunchFailed(w.Terminal(sessionID))
+	run.SessionID = sessionID
+	return run, failure
+}
+
 // LaunchedCarrying needs no daemon: id is the ATTN_SESSION_ID the process carries.
 func (w *World) LaunchedCarrying(id string) *fakeagent.Run {
 	w.T.Helper()
@@ -377,13 +392,13 @@ func (w *World) CodexServer() *fakeagent.CodexServer {
 	return w.kit.CodexServer()
 }
 
-func (w *World) NisseServer() *fakeagent.NisseServer {
+func (w *World) AppServer(h fakeagent.Harness) *fakeagent.AppServer {
 	w.T.Helper()
-	return w.kit.NisseServer()
+	return w.kit.AppServer(h)
 }
 
-func (w *World) NisseServers() int {
-	return w.kit.NisseServers()
+func (w *World) AppServers(h fakeagent.Harness) int {
+	return w.kit.AppServers(h)
 }
 
 func (w *World) CodexServerOf(profile string) *fakeagent.CodexServer {

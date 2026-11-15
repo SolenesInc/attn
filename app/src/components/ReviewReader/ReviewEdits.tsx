@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { keyCombo } from '../../shortcuts/formatShortcut';
 import type { ReviewRow } from '../../types/generated';
 import type { AnnotationEdit } from '../MarkdownReader/annotations/types';
 import type { EditUnitKind } from './editUnit';
@@ -155,7 +156,7 @@ export function EditBox({
       />
       {edit.problem ? <div className="review-editor-problem" role="alert">{edit.problem}</div> : null}
       <div className="review-composer-keys">
-        <kbd>{several ? '⌘↵' : '↵'}</kbd> save
+        <kbd>{several ? keyCombo('accel', '↵') : '↵'}</kbd> save
         {lineWise ? <> <kbd>⌥↑</kbd><kbd>⌥↓</kbd> take in a line</> : null}
         {' '}<kbd>esc</kbd> cancel
       </div>

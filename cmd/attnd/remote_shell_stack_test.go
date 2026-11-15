@@ -298,6 +298,7 @@ func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testi
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
 	}
 	upgrade := remote.PauseAt(pausepoint.PtyWorkerUpgrade)
+	terminalCopy := home.PauseAt(pausepoint.OutboxSessionRead)
 	remote.StartBinary(old)
 	home.StartBinary(current)
 	address := bridgeAddress(t)
@@ -309,8 +310,10 @@ func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testi
 	terminal := protocol.TerminalID(app.Terminal(id))
 	app.TypeLine(id, "echo before-upgrade-$((1+1))")
 	app.AwaitScreen(id, "before-upgrade-2")
+	terminalCopy.Await()
 	mark := len(app.Log())
 	remote.Stop()
+	terminalCopy.Release()
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark = len(app.Log())

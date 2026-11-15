@@ -8,8 +8,8 @@ import { useTileWindow } from '../../tileWindow';
 import { isDomInstance } from '../../utils/realm';
 import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexAfterRefresh, rowIndexOf, type OpenFile } from './FileView';
-import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
-import { MapFrame } from './MapFrame';
+import { FRAME_KEYS, hasSides, mapFlows, arrowTargets, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
+import { MAP_COLUMNS, MapFrame, mapFitsBeside } from './MapFrame';
 import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, OFFER_MS, offerText, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
 import { NavPanel } from './NavPanel';
 import { languageToSetUp, ReviewKeyLine, ReviewKeySheet, type ReviewSetup } from './ReviewKeys';
@@ -22,6 +22,7 @@ import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, pla
 import { findEditUnit } from './editUnit';
 import { docBlocks } from './docBlocks';
 import { showLeadIn } from './leadIn';
+import { blocksOutsideStep, isOutsideStep, OUTSIDE_STEP } from './mapStep';
 import { isDocumentPath } from './DocStop';
 import { EditBox, editStart, editText, fileLines, placeEdit, whereEditStands, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
@@ -122,6 +123,22 @@ function useFocusAround(rootRef: RefObject<HTMLElement | null>, tileWindow: Wind
   return focused;
 }
 
+/** Whether the Map's frame is wide enough for the diagram beside the step,
+ * kept current as the frame resizes; false outside the Map. */
+function useMapBeside(ref: RefObject<HTMLElement | null>, tileWindow: Window, bundle: ReviewBundle, map: boolean): boolean {
+  const [beside, setBeside] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!map || !element) return undefined;
+    const measure = () => setBeside(mapFitsBeside(bundle, element.getBoundingClientRect().width));
+    measure();
+    const observer = new tileWindow.ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [bundle, map, ref, tileWindow]);
+  return map && beside;
+}
+
 function cursorKeyOf(element: Element): string {
   const key = element.getAttribute('data-cursor-key');
   return key ?? `block:${element.getAttribute('data-block-id')}`;
@@ -168,14 +185,16 @@ function stopOfStage(bundle: ReviewBundle, key: StageKey | null): ReviewStop | u
 function documentTargets(doc: HTMLElement | null): HTMLElement[] {
   if (!doc) return [];
   return Array.from(doc.querySelectorAll<HTMLElement>('[data-review-cursor], [data-block-id]')).filter((element) => (
-    element.hasAttribute('data-review-cursor') || element.querySelector('[data-block-id]') === null
+    (element.hasAttribute('data-review-cursor') || element.querySelector('[data-block-id]') === null) && !isOutsideStep(element)
   ));
 }
 
 function findTarget(doc: HTMLElement | null, key: string | null): HTMLElement | null {
   if (!doc || !key) return null;
-  if (key.startsWith('block:')) return doc.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(key.slice(6))}"]`);
-  return doc.querySelector<HTMLElement>(`[data-cursor-key="${CSS.escape(key)}"]`);
+  const element = key.startsWith('block:')
+    ? doc.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(key.slice(6))}"]`)
+    : doc.querySelector<HTMLElement>(`[data-cursor-key="${CSS.escape(key)}"]`);
+  return element && !isOutsideStep(element) ? element : null;
 }
 
 function rowText(element: Element): string {
@@ -270,7 +289,7 @@ export function ReviewReader({
   const sendCodeNav = daemon?.sendCodeNav;
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
-  const detailRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const fileBodyRef = useRef<HTMLDivElement | null>(null);
   const offered = useMemo(() => offeredFrames(bundle), [bundle]);
   const [chosenFrame, setChosenFrame] = useState<Frame>(() => openingFrame(bundle));
@@ -293,6 +312,8 @@ export function ReviewReader({
   const [filled, setFilled] = useState(false);
   const [search, setSearch] = useState<{ query: string } | null>(null);
   const [help, setHelp] = useState(false);
+  const [filesShown, setFilesShown] = useState(false);
+  const toggleFiles = useCallback(() => setFilesShown((shown) => !shown), []);
   const [selectFrom, setSelectFrom] = useState<string | null>(null);
   const [composer, setComposer] = useState<{ kind: MarkKind; target: MarkTarget } | null>(null);
   const [sending, setSending] = useState<{ verdict: ReviewVerdict } | null>(null);
@@ -356,10 +377,7 @@ export function ReviewReader({
   const marksByLine = useMemo(() => marksAtLines(annotations, markPlaces), [annotations, markPlaces]);
   const movedMarks = useMemo(() => annotations.filter((annotation) => markPlaces.get(annotation.id) === 'moved'), [annotations, markPlaces]);
 
-  const scope = useCallback((): HTMLElement | null => {
-    if (frame === 'map') return detailRef.current;
-    return frame === 'brief' ? docRef.current : null;
-  }, [frame]);
+  const scope = useCallback((): HTMLElement | null => (frame === 'walkthrough' ? null : docRef.current), [frame]);
 
   const readFile = useCallback((path: string): Promise<ReviewFileResultMessage> => {
     if (!sendReviewFile) return Promise.reject(new Error('Not connected to the daemon'));
@@ -557,6 +575,18 @@ export function ReviewReader({
     setCursorKey(cursorKeyOf(element));
   }, []);
 
+  const mapStopLine = frame === 'map' ? messageStops[mapIndex]?.stopLine ?? null : undefined;
+  const drawnLines = useMemo(() => new Set(bundle.flows.filter((flow) => flow.drawn).map((flow) => flow.line)), [bundle]);
+  useLayoutEffect(() => {
+    const card = docRef.current?.querySelector('.md-reader-card');
+    if (mapStopLine === undefined || !card) return undefined;
+    const outside = blocksOutsideStep(card, mapStopLine, drawnLines);
+    for (const block of outside) block.setAttribute(OUTSIDE_STEP, '');
+    return () => {
+      for (const block of outside) block.removeAttribute(OUTSIDE_STEP);
+    };
+  }, [content, drawnLines, mapStopLine]);
+
   useLayoutEffect(() => {
     cursorElementRef.current?.classList.remove(CURSOR_CLASS);
     cursorElementRef.current = null;
@@ -646,6 +676,11 @@ export function ReviewReader({
     return bundle.stops.find((stop) => stop.heading_line === line);
   }, [bundle]);
 
+  const arrowStopOf = useCallback((element: Element | null) => {
+    const line = Number(element?.getAttribute('data-review-stop-line'));
+    return line > 0 ? bundle.stops.find((stop) => stop.heading_line === line) : undefined;
+  }, [bundle]);
+
   const targetAtCursor = useCallback((): FileTarget | 'search' | null => {
     const element = currentTarget();
     if (!element) return null;
@@ -654,17 +689,23 @@ export function ReviewReader({
       openSearch(searchPrefix);
       return 'search';
     }
+    const arrowStop = arrowStopOf(element);
+    if (arrowStop) return stopTarget(arrowStop);
     const path = element.getAttribute('data-path');
     if (!path) return null;
     const line = Number(element.getAttribute('data-line')) || undefined;
     const stop = stopOf(element);
     return stop ? stopTarget(stop, line) : { path, line };
-  }, [currentTarget, openSearch, stopOf]);
+  }, [arrowStopOf, currentTarget, openSearch, stopOf]);
 
   const openAtCursor = useCallback((fill: boolean) => {
+    if (currentTarget()?.getAttribute('data-review-cursor') === 'facts') {
+      toggleFiles();
+      return;
+    }
     const target = targetAtCursor();
     if (target && target !== 'search') openFile(target, { fill });
-  }, [openFile, targetAtCursor]);
+  }, [currentTarget, openFile, targetAtCursor, toggleFiles]);
 
   const expandAtCursor = useCallback(() => {
     const stop = stopOf(currentTarget());
@@ -681,7 +722,7 @@ export function ReviewReader({
     );
   }, [currentTarget, expansions, stopOf, wholeFile]);
 
-  const showCursorAt = useCallback((stop: ReviewStop, line?: number, scroll: ScrollLogicalPosition = 'start') => {
+  const showCursorAt = useCallback((stop: ReviewStop, line?: number, scroll: CursorScroll = 'start') => {
     scrolledKeyRef.current = null;
     scrollModeRef.current = scroll;
     setCursorKey(stopCursorKey(stop, line));
@@ -691,7 +732,7 @@ export function ReviewReader({
     const at = list[index];
     setMapPlace(mapPlaceOf(bundle, list, index));
     const stop = at ? bundle.stops.find((candidate) => candidate.heading_line === at.stopLine) : undefined;
-    if (stop) showCursorAt(stop, line);
+    if (stop) showCursorAt(stop, line, 'lead-in');
   }, [bundle, messageStops, showCursorAt]);
 
   const pickMessage = useCallback((message: ReviewFlowMessage) => {
@@ -701,17 +742,36 @@ export function ReviewReader({
 
   const switchSide = useCallback((next: Side) => {
     if (!sides || next === side) return;
-    const list = mapStops(mapFlows(bundle, next));
-    const current = messageStops[mapIndex];
-    const same = current ? list.findIndex((at) => at.stopLine === current.stopLine) : -1;
     setSide(next);
-    selectMessage(Math.max(0, same), list);
-  }, [bundle, mapIndex, messageStops, selectMessage, side, sides]);
+    if (frame === 'map') {
+      const list = mapStops(mapFlows(bundle, next));
+      const current = messageStops[mapIndex];
+      const same = current ? list.findIndex((at) => at.stopLine === current.stopLine) : -1;
+      selectMessage(Math.max(0, same), list);
+      return;
+    }
+    const root = scope();
+    const current = currentTarget();
+    const arrowStop = arrowStopOf(current);
+    if (!root || !current || !arrowStop) return;
+    const candidates = bundle.flows.filter((flow) => flow.drawn && flow.side === next).flatMap((flow) => [...arrowTargets(bundle, flow).values()]);
+    const arrow = candidates.find((candidate) => candidate.stop === arrowStop) ?? candidates[0];
+    const targets = documentTargets(root);
+    const diagram = current.closest('.review-brief-diagram');
+    const beforeDiagram = targets[targets.findIndex((target) => diagram?.contains(target)) - 1];
+    const key = arrow?.key ?? (beforeDiagram ? cursorKeyOf(beforeDiagram) : null);
+    if (key === null) return;
+    scrolledKeyRef.current = null;
+    scrollModeRef.current = 'nearest';
+    setCursorKey(key);
+  }, [arrowStopOf, bundle, currentTarget, frame, mapIndex, messageStops, scope, selectMessage, side, sides]);
 
   /** The stop and line the cursor stands on in the current frame. */
   const place = useCallback((): { stop?: ReviewStop; line?: number } => {
     if (frame === 'walkthrough') return { stop: stageStop, line: stageCursorLine };
     const element = currentTarget();
+    const arrowStop = arrowStopOf(element);
+    if (arrowStop) return { stop: arrowStop };
     const stop = stopOf(element);
     if (stop) return { stop, line: Number(element?.getAttribute('data-line')) || undefined };
     if (frame === 'map') {
@@ -721,7 +781,7 @@ export function ReviewReader({
     const following = Array.from(docRef.current?.querySelectorAll<HTMLElement>('[data-review-stop-head]') ?? [])
       .find((head) => element !== null && (element.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
     return { stop: stopOf(following ?? null) };
-  }, [bundle, currentTarget, frame, mapIndex, messageStops, stageCursorLine, stageStop, stopOf]);
+  }, [arrowStopOf, bundle, currentTarget, frame, mapIndex, messageStops, stageCursorLine, stageStop, stopOf]);
 
   const switchFrame = useCallback((next: Frame) => {
     if (next === frame || !offered.includes(next)) return;
@@ -1141,6 +1201,7 @@ export function ReviewReader({
   }, [rootRef, searchOpen]);
 
   const focused = useFocusAround(rootRef, tileWindow);
+  const mapBeside = useMapBeside(frameRef, tileWindow, bundle, frame === 'map');
   const selecting = selectFrom !== null || openFileView?.selectFrom !== undefined;
   const escapes = !focused ? null
     : editing ? 'editor'
@@ -1286,6 +1347,7 @@ export function ReviewReader({
             else if (fileRows) moveFileCursor((file) => [...changeStarts(fileRows)].reverse().find((start) => start < file.cursor) ?? file.cursor);
             return true;
           case 'z': setFilled((value) => !value); return true;
+          case 'b': if (!stage || !sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
         }
       } else {
         switch (event.key) {
@@ -1293,7 +1355,7 @@ export function ReviewReader({
           case 'ArrowUp': moveLine(-1, event.shiftKey); return true;
           case 'ArrowRight': if (frame === 'map') selectMessage(Math.min(messageStops.length - 1, mapIndex + 1)); else moveStop(1); return true;
           case 'ArrowLeft': if (frame === 'map') selectMessage(Math.max(0, mapIndex - 1)); else moveStop(-1); return true;
-          case 'b': if (frame !== 'map' || !sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
+          case 'b': if (!sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
           case 'Enter': openAtCursor(false); return true;
           case 'z': openAtCursor(true); return true;
           case 'e': expandAtCursor(); return true;
@@ -1326,14 +1388,18 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked }),
-    [asked, asking, bundle, expansions, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor],
+    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked, filesShown, toggleFiles, side, sides, switchSide }),
+    [asked, asking, bundle, expansions, filesShown, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor, toggleFiles, side, sides, switchSide],
   );
 
   return (
     <ReviewReaderContext.Provider value={context}>
-      <div className={`review-frame review-frame--${frame}${frame === 'walkthrough' && filled ? ' review-frame--script-hidden' : ''}`}>
-        <div className="review-doc" ref={docRef} onClick={onScopeClick} hidden={frame === 'map'}>
+      <div
+        ref={frameRef}
+        className={`review-frame review-frame--${frame}${frame === 'walkthrough' && filled ? ' review-frame--script-hidden' : ''}${frame === 'map' && !mapBeside ? ' review-frame--map-stacked' : ''}`}
+        style={mapBeside ? { gridTemplateColumns: MAP_COLUMNS } : undefined}
+      >
+        <div className="review-doc" ref={docRef} onClick={onScopeClick}>
           {children}
           {movedMarks.length > 0 ? (
             <section className="review-marks-moved" aria-label="Moved notes">
@@ -1368,10 +1434,8 @@ export function ReviewReader({
             at={mapIndex}
             side={side}
             sides={sides}
-            detailRef={detailRef}
             onPick={pickMessage}
             onSide={switchSide}
-            onDetailClick={onScopeClick}
           />
         ) : null}
         {frame !== 'walkthrough' && openFileView ? (
@@ -1391,7 +1455,7 @@ export function ReviewReader({
           <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
         ) : null}
       </div>
-      {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
+      {search ? <SearchPanel initialQuery={search.query} files={bundle.files} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet readOnly={openFileView?.target.outside === true} /> : null}
       {editing ? <EditBox key={`${editing.path}:${editing.hash}`} edit={editing} onSave={saveEdit} onTakeLine={takeLine} /> : null}
       {navPanel ? <NavPanel answer={navPanel} onPick={(index) => { const location = navPanel.locations[index]; if (location) follow(location); }} /> : null}

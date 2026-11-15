@@ -423,7 +423,7 @@ func jsonList(values []string) string {
 	return string(encoded)
 }
 
-func (s *Store) SessionCopy(session protocol.SessionID) ([]protocol.CopyRow, error) {
+func (s *Store) LaunchCopy(session protocol.SessionID, terminal protocol.TerminalID) ([]protocol.CopyRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	seq, err := copySeq(s.db)
@@ -435,7 +435,8 @@ func (s *Store) SessionCopy(session protocol.SessionID) ([]protocol.CopyRow, err
 		return nil, err
 	}
 	row.Seq = seq
-	return []protocol.CopyRow{row}, nil
+	binding := protocol.CopyRow{Table: protocol.CopyTableTerminalBindings, Key: string(terminal), Columns: map[string]any{"terminal_id": string(terminal), "session_id": string(session)}}
+	return []protocol.CopyRow{row, binding}, nil
 }
 
 func (s *Store) RequeueOutpostCopy(host string) error {

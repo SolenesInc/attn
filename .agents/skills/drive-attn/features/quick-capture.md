@@ -20,6 +20,7 @@ macOS only. A paired program sends with `attn send` without the panel.
 - `capture-delivery`: the message lands as user input in the mailbox's session, starting a session for a member between sessions.
 - `capture-guidance`: what attn tells agents about messages from quick capture.
 - `capture-send`: a paired program sends files and a message to any running session, local or on an outpost, with `attn send`. It lands like a panel capture, as user input.
+- `capture-refine`: a paired program refines dictated text with `attn refine`, the refinement the app's dictation uses.
 - `capture-senders`: pairing a program, the approval dialog that allows or denies it, and listing and removing paired senders.
 
 ## How to get to it
@@ -38,6 +39,7 @@ macOS only. A paired program sends with `attn send` without the panel.
 - `attn send pair --name <name> [--json]` asks the user to pair the program and waits for the approval dialog. It prints the code, then a token once (`cmd/attnd/send.go`, `internal/daemon/senders.go`).
 - `attn send <session> --token-stdin [--file <path>]... [-m <text>] [--json]` uploads the files and sends the capture to that session. Without a paired sender's token, the daemon refuses.
 - `attn send sessions --token-stdin [--json]` lists the live agent sessions of the sender's profile, never a shell, with `last_focused_at`, which `terminal_focus` records (`internal/daemon/senders.go`).
+- `attn refine --token-stdin [--duration-ms <n>] [--format plain|markdown] [--json]` refines the transcript after the token line and prints the refined text; past the limit, `--json` carries `limit_ms`. Stopping it cancels the harness (`cli/attn/src/commands/refine.rs`, `handleSenderRefine` in `internal/daemon/senders.go`). Tests: `internal/daemon/sender_refine_wire_test.go`, `cmd/attnd/refine_stack_test.go`.
 - `attn send senders [--profile <name|id>] [--json]` and `attn send unpair <name|id> [--profile <name|id>]` list and remove one profile's paired senders.
 
 ### Agents

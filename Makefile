@@ -222,7 +222,7 @@ lint: lint-go lint-frontend
 
 GO_PACKAGES ?= ./...
 
-.PHONY: compile-go check-go check-frontend check-browser-runtime check-mobile
+.PHONY: compile-go check-go check-frontend check-browser-runtime check-mobile check-native test-native
 compile-go: $(NATIVE_VT_DEP)
 	go list -test -deps -export $(GO_PACKAGES) >/dev/null
 
@@ -255,6 +255,21 @@ check-frontend: lint-frontend check-browser-runtime
 
 check-mobile: $(MOBILE_NODE_MODULES)
 	cd mobile && pnpm run check
+
+NATIVE_CLIPPY ?= --workspace
+check-native: $(NATIVE_VT_DEP)
+	scripts/native-parity
+	@labels=$$(git grep -nE '(Ctrl|Alt|Shift|Super|Cmd)\+|⌘|⇧|⌥|⌃' -- 'native/crates/*/tests/*' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//'); \
+	if [ -n "$$labels" ]; then \
+		printf '%s\n' "$$labels" >&2; \
+		echo "native tests above write a platform's key label, which holds on one platform only: press keys by spec (mod+shift+o) and read labels from the keymap (key_label(Action::…))" >&2; exit 1; \
+	fi
+	cd native && cargo fmt --all --check
+	cd native && cargo check --locked --workspace --all-targets
+	$(if $(strip $(NATIVE_CLIPPY)),cd native && cargo clippy --locked --all-targets $(NATIVE_CLIPPY) -- -D warnings)
+
+test-native: $(NATIVE_VT_DEP)
+	cd native && cargo test --workspace --locked
 
 check-browser-runtime: $(APP_NODE_MODULES)
 	cd app && pnpm run build:browser-runtime
@@ -292,8 +307,12 @@ endif
 endif
 endif
 
-# LaunchServices only forwards shell overrides named with `open --env`.
-MACOS_OPEN := open$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
+# The app an instance installs: tauri, or native (native/crates/attn-app).
+APP ?= tauri
+
+# LaunchServices only forwards shell overrides named with `open --env`. The
+# native app opens in the background and keeps itself from activating.
+MACOS_OPEN := open$(if $(filter native,$(APP)), -g --env MAC_APP_QUIET=1,)$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
 
 # Build + install + open the INSTANCE's app (bare `make` = prod). Every path is
 # derived from the single authority so a named instance opens its own bundle.
@@ -311,7 +330,7 @@ run: install
 	fi; \
 	echo "Launched $$app_path"
 
-INSTALL_APP_TREE = INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
+INSTALL_APP_TREE = INSTANCE="$(INSTANCE)" APP="$(APP)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
 	INSTANCE_DAEMON_UNSET="$(INSTANCE_DAEMON_UNSET)" INSTANCE_ROUTING_VARS="$(INSTANCE_ROUTING_VARS)" \
 	bash ./scripts/install-app-tree.sh
 
@@ -471,7 +490,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 		--src internal/protocol/schema/tsp-output-home-gateway/json-schema/*.json \
 		--src-lang schema --lang typescript \
 		--no-prefer-unions --no-prefer-unknown \
-		-o app/src/types/homeGatewayGenerated.ts
+		-o mobile/src/homeGateway/generated.ts
 	node scripts/generate-home-gateway.mjs
 
 # CI check: verify generated files are up-to-date.
@@ -481,7 +500,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway app/src/types/homeGatewayGenerated.ts app/src/types/homeGatewayVersion.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata
 
 # Refuses a Home Gateway API change that is not an addition to the schema on origin/main.
 check-home-gateway-compat:
@@ -518,7 +537,7 @@ check-schema:
 # enables automation for any named instance (dev, ticketqa, agent7, …); prod (the
 # empty-instance bundle) stays off unless ATTN_AUTOMATION=1.
 build-app: ensure-codesign-identity build build-pty-host
-	@INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
+	@INSTANCE="$(INSTANCE)" APP="$(APP)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
 	ATTND_BIN="$(abspath $(DAEMON_OUTPUT))" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \

@@ -66,6 +66,7 @@ pub enum SessionLookup {
 
 pub fn current_session(run: &Run<'_>) -> Result<SessionLookup, SendError> {
     if run.terminal.is_empty() {
+        crate::hooks::server_caller_from_env().map_err(SendError::plain)?;
         return Ok(SessionLookup::Found(String::new()));
     }
     let mut message = CallerSessionMessage::new();

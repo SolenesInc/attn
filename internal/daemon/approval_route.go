@@ -94,6 +94,7 @@ func launchIntentFromSpawnOptions(opts ptybackend.SpawnOptions) store.LaunchInte
 		Executable:       opts.Executable,
 		Model:            opts.Model,
 		Effort:           opts.Effort,
+		ExecutionTarget:  opts.ExecutionTarget,
 		UnattendedLaunch: opts.UnattendedLaunch,
 	}
 }

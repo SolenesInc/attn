@@ -156,6 +156,10 @@ export class MacOSDriver extends TargetedWindowDriver {
     return null;
   }
 
+  async shownWindowIds() {
+    return (await this.windowList()).map((window) => window.id);
+  }
+
   async windowList() {
     try {
       const value = await this.runInputDriverCapture(['windowlist']);

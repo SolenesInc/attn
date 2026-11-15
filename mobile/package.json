@@ -3,14 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify:ghostty-vt": "bash ../app/scripts/ensure-ghostty-vt-wasm.sh",
+    "verify:ghostty-vt": "bash ../scripts/ensure-ghostty-vt-wasm.sh vendor/ghostty-vt/ghostty-vt.wasm",
     "dev": "pnpm run verify:ghostty-vt && vite",
     "build": "pnpm run verify:ghostty-vt && vite build",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
-    "lint": "oxlint --deny-warnings src",
+    "lint": "oxlint --deny-warnings --ignore-pattern src/homeGateway/generated.ts src",
     "typecheck": "effect-tsgo tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "test": "pnpm run verify:ghostty-vt && vitest run",
     "check": "pnpm run fmt:check && pnpm run lint && pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
@@ -41,6 +41,7 @@
     "@noble/ciphers": "2.4.0",
     "@types/mdast": "4.0.4",
     "@types/node": "^26.6.6",
+    "happy-dom": "21.0.4",
     "oxlint": "1.90.0",
     "prettier": "3.9.10",
     "typescript": "7.0.2",

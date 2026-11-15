@@ -148,7 +148,6 @@ describe('App shortcut editor', () => {
 
     expect(within(row('Focus active pane')).getByText('Needs terminal')).toBeInTheDocument();
     expect(within(row('New session on this desktop')).queryByText('Needs terminal')).toBeNull();
-    expect(within(row('Collapse utility terminal')).queryByText('Needs terminal')).toBeNull();
     expect(within(row('Find in terminal')).getByText('Customized')).toBeInTheDocument();
     expect(within(row('Find in terminal')).getByText('Needs terminal')).toBeInTheDocument();
   });

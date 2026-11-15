@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { emitVerdict, harnessArtifactsRoot, timestampSlug } from './common.mjs';
 import { instanceCliEnv } from './harnessInstance.mjs';
 import { formatShardDigest, selectFailedScenarios } from './matrixDigest.mjs';
-import { resolveScenarios, scenarioCatalog } from './scenarioCatalog.mjs';
+import { matrixScenario, resolveScenarios } from './scenarioCatalog.mjs';
 import { acquireScenarioLock, instanceScenarioLockPath } from './scenarioRunner.mjs';
-import { aggregateShards } from './shardPlan.mjs';
+import { aggregateShards, matrixApp } from './shardPlan.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(HARNESS_DIR, '../..');
@@ -82,7 +82,7 @@ function parseArgs(argv) {
 
 function selectScenarioIds({ selected, failedOnly }, artifactsRoot) {
   if (!failedOnly) {
-    return resolveScenarios(selected, scenarioCatalog).map((scenario) => scenario.id);
+    return selected.length > 0 ? selected.map((id) => matrixScenario(id).id) : null;
   }
   const lastMatrixPath = path.join(artifactsRoot, 'last-matrix.json');
   if (!fs.existsSync(lastMatrixPath)) {
@@ -120,7 +120,7 @@ function startDisplay(logPath) {
 function runWorker({ index, count, instance, display, dir, scenarioIds, passThrough }) {
   const lockPath = instanceScenarioLockPath(instance);
   const args = [SERIAL_MATRIX, '--shard', `${index}/${count}`, ...passThrough];
-  for (const id of scenarioIds) {
+  for (const id of scenarioIds ?? []) {
     args.push('--scenario', id);
   }
   const env = instanceCliEnv(instance, {
@@ -184,7 +184,7 @@ async function main() {
   }
   const artifactsRoot = harnessArtifactsRoot();
   const scenarioIds = selectScenarioIds(options, artifactsRoot);
-  const count = Math.min(options.workers, scenarioIds.length);
+  const count = scenarioIds ? Math.min(options.workers, scenarioIds.length) : options.workers;
   if (count < options.workers) {
     console.log(`${scenarioIds.length} scenarios selected, so ${count} workers instead of ${options.workers}.`);
   }
@@ -228,7 +228,8 @@ async function main() {
   }
 
   const shardResults = workers.map(({ dir }) => readShardResult(artifactsRoot, dir)).filter(Boolean);
-  const aggregate = aggregateShards({ shardResults, expectedIds: scenarioIds, shardCount: count });
+  const expectedIds = scenarioIds ?? resolveScenarios([], matrixApp(shardResults)).map((scenario) => scenario.id);
+  const aggregate = aggregateShards({ shardResults, expectedIds, shardCount: count });
   const { shardLines, digest } = formatShardDigest(shardResults, aggregate);
   console.log(`\n${shardLines.join('\n')}\n\n${digest}`);
   fs.writeFileSync(path.join(artifactsRoot, 'matrix-digest.txt'), digest, 'utf8');

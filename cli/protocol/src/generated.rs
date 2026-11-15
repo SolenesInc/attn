@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cb8187842130";
+pub const PROTOCOL_VERSION: &str = "75180705e1e9";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4642,6 +4642,13 @@ pub struct EvidenceExcerpt {
     pub turn_id: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExecutionTarget {
+    pub available: bool,
+    pub detail: String,
+    pub id: String,
+    pub name: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FetchPRDetailsMessage {
     pub cmd: String,
     pub id: String,
@@ -5731,6 +5738,43 @@ impl HarnessModelsResultMessage {
     pub fn new() -> Self {
         Self {
             event: "harness_models_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessTargetsMessage {
+    pub cmd: String,
+    pub cwd: String,
+    pub harness: String,
+    pub request_id: String,
+}
+
+impl HarnessTargetsMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "harness_targets".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessTargetsResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    pub success: bool,
+    #[serde(deserialize_with = "null_as_default")]
+    pub targets: Vec<ExecutionTarget>,
+}
+
+impl HarnessTargetsResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "harness_targets_result".to_string(),
             ..Self::default()
         }
     }
@@ -9233,6 +9277,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_pairing: Option<SenderPairingRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender_refine_result: Option<SenderRefineResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_sessions: Option<Vec<SenderSession>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_instructions_result: Option<SessionInstructionsResult>,
@@ -11064,12 +11110,12 @@ pub struct SeedSinceExpired {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedStandbyMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clear: Option<bool>,
+    pub at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub close: Option<bool>,
+    pub clear: Option<bool>,
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact: Option<bool>,
+    pub r#in: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -11077,6 +11123,8 @@ pub struct SeedStandbyMessage {
     pub seed_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_session_id: Option<SessionID>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stay: Option<bool>,
 }
 
 impl SeedStandbyMessage {
@@ -11302,10 +11350,41 @@ pub struct SenderPairingRequest {
     pub requested_at: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SenderRefineMessage {
+    pub cmd: String,
+    pub format: DictationTextFormat,
+    pub raw_text: String,
+    pub recording_duration_ms: i64,
+    pub sender_token: String,
+}
+
+impl SenderRefineMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "sender_refine".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SenderRefineResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_ms: Option<i64>,
+    pub profile_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refined_text: Option<String>,
+    pub success: bool,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SenderSession {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_label: Option<String>,
     pub id: SessionID,
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -11980,6 +12059,10 @@ pub struct SessionPlaceMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact: Option<bool>,
     pub delivery_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_conversation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_driver_run: Option<String>,
     pub origin: SessionPlaceOrigin,
     pub phase: SessionPlacePhase,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -11988,6 +12071,8 @@ pub struct SessionPlaceMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_words: Option<bool>,
 }
 
 impl SessionPlaceMessage {
@@ -12014,6 +12099,8 @@ pub struct SessionPlaceResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<i64>,
     pub stage: SessionPlaceStage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uncertain: Option<bool>,
 }
 pub type SessionPlaceStage = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -12728,6 +12815,8 @@ pub struct SpawnSessionMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executable: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     pub id: SessionID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12757,6 +12846,22 @@ impl SpawnSessionMessage {
     pub fn new() -> Self {
         Self {
             cmd: "spawn_session".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StandbySessionMessage {
+    pub cmd: String,
+    pub session_id: SessionID,
+    pub until: String,
+}
+
+impl StandbySessionMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "standby_session".to_string(),
             ..Self::default()
         }
     }
@@ -14785,6 +14890,9 @@ impl ResponseField for SeedTransitionResult {
 }
 impl ResponseField for SeedWatchResult {
     const FIELD: &'static str = "seed_watch_result";
+}
+impl ResponseField for SenderRefineResult {
+    const FIELD: &'static str = "sender_refine_result";
 }
 impl ResponseField for SessionInstructionsResult {
     const FIELD: &'static str = "session_instructions_result";

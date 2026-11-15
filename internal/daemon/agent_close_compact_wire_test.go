@@ -67,7 +67,7 @@ func TestASharedCodexSessionThatClosesCompactingCompactsOnceItsTurnEndsAndThenCl
 	}
 }
 
-func TestSeedStandbyCloseCompactCompactsTheSharedCodexTenderBeforeItCloses(t *testing.T) {
+func TestSeedStandbyCompactsTheSharedCodexTenderBeforeItCloses(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path("api"), 0o755); err != nil {
@@ -81,12 +81,12 @@ func TestSeedStandbyCloseCompactCompactsTheSharedCodexTenderBeforeItCloses(t *te
 	conversation := tender.ConversationID
 
 	set, err := cli.WithGardenProfile(protocol.Deref(delegated.ProfileID), delegated.SessionID).
-		SeedStandby(delegated.SeedID, client.SeedStandbyOptions{Note: standbyNote, Close: true, Compact: true})
+		SeedStandby(delegated.SeedID, client.SeedStandbyOptions{Note: standbyNote})
 	if err != nil {
-		t.Fatalf("seed standby --close --compact: %v", err)
+		t.Fatalf("seed standby: %v", err)
 	}
 	if set.Seed.Standby == nil || set.Close == nil || !protocol.Deref(set.Close.PendingCompact) {
-		t.Fatalf("seed standby --close --compact = %+v, want the seed on standby and the close pending its compact", set)
+		t.Fatalf("seed standby = %+v, want the seed on standby and the close pending its compact", set)
 	}
 	if got := w.CodexServer().Compactions(conversation); got != 0 {
 		t.Fatalf("the conversation compacted %d times during the turn that set the standby", got)

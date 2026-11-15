@@ -72,6 +72,7 @@ batch names.
 | `workload.panes_drawn` | Terminals a connected app is attached to, which are the terminals it draws while the shared PTY host is on. With the host off, the app also stays attached to some terminals it hides |
 | `workload.desktops`, `workload.seeds` | Desktops, and seeds in any state, in every profile |
 | `processes[].role` | `daemon`, `pty_worker`, `pty_host`, `app`, `webkit_content`, `webkit_gpu` or `webkit_networking`. A role with no running process has no entry, so an outpost, which has no app, lists only the first three |
+| `processes[].shell` | For `app`, which app the instance runs: `tauri` or `native` |
 | `processes[].count` | How many processes hold the role |
 | `processes[].resident_bytes` | Their total resident memory |
 | `processes[].footprint_bytes` | Their total physical footprint, as Activity Monitor's Memory column shows it. macOS only |

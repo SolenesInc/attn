@@ -15,7 +15,7 @@ mkdir -p "$work/bin" "$work/repo"
 cat >"$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[ "${2:-}" != compile-go ] || exit 0
+[ "${2:-}" != compile-go ] || exit "${LAND_COMPILE_EXIT:-0}"
 printf '%s\n' "$*" >>"$LAND_CHECK_LOG"
 echo "make ran: $*"
 if [ -e "$LAND_MOVE_MAIN" ]; then
@@ -40,6 +40,14 @@ case "$3" in
     printf 'sync\n' >>"$LAND_CHECK_LOG"
     exit "${LAND_SYNC_EXIT:-0}"
     ;;
+  capture)
+    printf 'capture in %s: %s\n' "$(basename "$PWD")" "${*:4}" >>"$LAND_CHECK_LOG"
+    while [ "$#" -gt 0 ]; do
+      [ "$1" != --receipt-out ] || : >"$2"
+      shift
+    done
+    ;;
+  summary) echo 'PASS cargo example --lib (0.0s)' ;;
   land)
     printf '%s\n' "land ${*:6}" >>"$LAND_CHECK_LOG"
     [ "${LAND_SELECT_EXIT:-0}" -eq 0 ] || exit "$LAND_SELECT_EXIT"
@@ -64,7 +72,14 @@ case "$1 $2" in
 esac
 EOF
 chmod +x "$work/bin/gh"
+cat >"$work/bin/attn" <<'EOF'
+#!/usr/bin/env bash
+[ "$*" = "seed show s-fix123" ]
+EOF
+chmod +x "$work/bin/attn"
+unset ATTN_FREEZE_EXCEPTION
 export PATH="$work/bin:$PATH"
+export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
 export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs"
 export selected=$'go ./internal/example TestExample\nvitest src/example.test.ts'
@@ -93,6 +108,12 @@ printf '%s\n' "landing-tests $*" >>"$LAND_CHECK_LOG"
 exit "${LAND_TESTS_EXIT:-0}"
 EOF
 chmod +x scripts/landing-tests.sh
+cat >scripts/native-build-clean <<'EOF'
+#!/usr/bin/env bash
+echo cleaned >>"$LAND_CLEAN_LOG"
+echo "native-build-clean: removed an old build"
+EOF
+chmod +x scripts/native-build-clean
 cp "$root/scripts/land-scenarios.sh" scripts/land-scenarios.sh
 mkdir -p app/scripts/real-app-harness
 cp "$root"/app/scripts/real-app-harness/{landing-scenarios,scenarioCatalog,matrixDigest}.mjs app/scripts/real-app-harness/
@@ -129,7 +150,10 @@ expect_checks() {
 }
 
 printf 'kept\n' >kept.txt
+: >"$LAND_CLEAN_LOG"
 land 'Add the kept file'
+[ "$(cat "$LAND_CLEAN_LOG")" = cleaned ] || { echo 'a landing did not clean old native build output after its push' >&2; exit 1; }
+expect_output 'native-build-clean: removed an old build'
 if grep -qF 'WARNING' "$work/output"; then
   echo 'a landing that undoes nothing warned' >&2
   cat "$work/output" >&2
@@ -170,12 +194,40 @@ expect_checks 'check-types' 'check-go GO_PACKAGES=./...' "${go_choice[@]}" sync
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
+git add -A
+git commit -qm 'Change the frozen app'
+if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'a change to the frozen app landed without an exception' >&2; exit 1; fi
+expect_output 'the Tauri app is frozen'
+expect_output 'app/src/example.ts'
+expect_output 'ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh'
+if ATTN_FREEZE_EXCEPTION=s-nope00 bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'an exception naming no seed let the frozen app change land' >&2; exit 1; fi
+expect_output 'ATTN_FREEZE_EXCEPTION=s-nope00 names no seed'
+git reset -q --soft HEAD^
+export ATTN_FREEZE_EXCEPTION=s-fix123
 land 'App change'
-expect_checks 'check-frontend check-mobile' 'land --group app' "landing-tests $selected_units" sync
+expect_checks check-frontend 'land --group app' "landing-tests $selected_units" sync
+expect_output 'changing the frozen Tauri app under the exception for seed s-fix123'
+unset ATTN_FREEZE_EXCEPTION
+
+mkdir -p app/src/types
+printf 'export {};\n' >app/src/types/generated.ts
+land 'Regenerated protocol types reach the frozen app'
+
+mkdir -p native/crates/demo/src
+printf '[workspace]\n' >native/Cargo.toml
+printf '[package]\n' >native/crates/demo/Cargo.toml
+printf '\n' >native/crates/demo/src/lib.rs
+land 'Native workspace arrives'
+expect_checks 'check-native NATIVE_CLIPPY=--workspace' 'land --group native' "landing-tests $selected_units" sync
+
+printf '\n' >>native/crates/demo/src/lib.rs
+land 'Native crate change'
+expect_checks 'check-native NATIVE_CLIPPY=-p demo' 'land --group native' "landing-tests $selected_units" sync
+export ATTN_FREEZE_EXCEPTION=s-fix123
 
 printf '\n' >>app/src/example.ts
 land 'App change while a Vitest file is red on main' "LAND_SELECTED=$(printf 'vitest .\nred vitest src/red.test.ts')"
-expect_checks 'check-frontend check-mobile' 'land --group app' 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
+expect_checks check-frontend 'land --group app' 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
@@ -187,7 +239,7 @@ printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
-expect_checks 'check-types check-prompts' 'land --group prompts' "landing-tests $selected_units" sync
+expect_checks 'check-types check-prompts check-native NATIVE_CLIPPY=' 'land --group prompts --group native' "landing-tests $selected_units" sync
 expect_output 'the checkout has no script tests'
 
 mkdir -p internal/setting
@@ -197,7 +249,7 @@ expect_checks 'check-types' sync
 
 printf 'Home Gateway\n' >internal/protocol/schema/home_gateway.tsp
 land 'HomeGateway API change'
-expect_checks 'check-types check-home-gateway-compat' 'land --group old-phones' "landing-tests $selected_units" sync
+expect_checks 'check-types check-home-gateway-compat check-native NATIVE_CLIPPY=' 'land --group old-phones --group native' "landing-tests $selected_units" sync
 
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh
@@ -344,6 +396,7 @@ grep -qF 'make ran: check-go' "$work/failure" || { echo 'the Go checks left no o
 refuses 'a changed scenario that fails on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
 grep -qF 'gh run view 7 --log-failed' "$work/failure" || { echo 'the failed scenario did not say how to read it' >&2; cat "$work/failure" >&2; exit 1; }
 no_land_scenario_refs
+refuses 'a failed Go compile' LAND_COMPILE_EXIT=1 internal/example/example.go
 
 hold="$work/hold" second="$work/second"
 mkdir "$hold"
@@ -428,5 +481,15 @@ fi
 : >"$LAND_CHECK_LOG"
 scripts/landing-tests.sh --no-go-vet --unit 'go ./internal/example TestExample' >/dev/null
 grep -qF -- '-vet=off' "$LAND_CHECK_LOG" || { echo '--no-go-vet kept the vet of go test' >&2; exit 1; }
+
+mkdir -p native
+: >"$LAND_CHECK_LOG"
+scripts/landing-tests.sh --unit 'cargo example --lib' --unit 'cargo .' --unit 'cargo example --test wire' >"$work/output"
+[ "$(grep -c . "$LAND_CHECK_LOG")" = 1 ] && grep -qE '^capture in native: cargo --receipt-out [^ ]+ -- --no-fail-fast --workspace$' "$LAND_CHECK_LOG" || { echo 'cargo . did not run the whole workspace once, from native/, in place of the narrower cargo units' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+: >"$LAND_CHECK_LOG"
+scripts/landing-tests.sh --unit 'cargo example --test wire' >"$work/output"
+grep -qF -- "--unit cargo example --test wire --receipt-out" "$LAND_CHECK_LOG" && grep -qF -- '-- --no-fail-fast -p example --test wire' "$LAND_CHECK_LOG" || { echo 'a cargo unit did not run its own target' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+if scripts/landing-tests.sh --unit 'cargo example' >"$work/output" 2>&1; then echo 'a cargo unit without a target ran' >&2; exit 1; fi
+expect_output "'cargo .', 'cargo <package> --lib', 'cargo <package> --doc' or 'cargo <package> --test|--bin <name>'"
 
 echo 'landing fast gate: OK'

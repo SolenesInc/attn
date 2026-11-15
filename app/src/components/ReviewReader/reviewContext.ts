@@ -1,14 +1,13 @@
 import { createContext, useContext } from 'react';
-import type { ReviewBundle, ReviewNote, ReviewRow, ReviewStop } from '../../types/generated';
+import type { ReviewBundle, ReviewRow, ReviewStop } from '../../types/generated';
 import type { Annotation } from '../MarkdownReader/annotations/types';
-import type { Frame } from './frames';
+import type { Frame, Side } from './frames';
 import type { LabeledName, NavLine } from './navigation';
 
 export interface FileTarget {
   path: string;
   line?: number;
   range?: [number, number];
-  notes?: readonly ReviewNote[];
   /** A file outside the review's repository that a navigation answer named; it opens read-only. */
   outside?: boolean;
 }
@@ -55,6 +54,14 @@ export interface ReviewReaderContextValue {
   labels: RowLabels | null;
   /** The line a question waits on, until its answer, its error or Escape. */
   asked: NavLine['at'] | null;
+  /** Whether the Brief lists the changed files under the change's facts. */
+  filesShown: boolean;
+  toggleFiles(): void;
+  /** The side the drawn diagrams show, one for the Brief and the Map. */
+  side: Side;
+  /** Whether the document has a before and an after diagram, so b switches. */
+  sides: boolean;
+  switchSide(side: Side): void;
 }
 
 export const ReviewReaderContext = createContext<ReviewReaderContextValue | null>(null);

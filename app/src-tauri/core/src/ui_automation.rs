@@ -179,7 +179,10 @@ fn write_manifest<R: Runtime>(app: &AppHandle<R>, manifest: &AutomationManifest)
 
     match serde_json::to_string_pretty(manifest) {
         Ok(contents) => {
-            if let Err(error) = fs::write(&path, format!("{contents}\n")) {
+            let temporary = path.with_extension("json.tmp");
+            if let Err(error) = fs::write(&temporary, format!("{contents}\n"))
+                .and_then(|()| fs::rename(&temporary, &path))
+            {
                 eprintln!(
                     "[UIAutomation] Failed to write manifest {}: {error}",
                     path.display()

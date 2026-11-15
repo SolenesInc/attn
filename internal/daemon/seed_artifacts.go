@@ -378,10 +378,10 @@ func (d *Daemon) seedArtifactReferences(seedID string) []protocol.SeedArtifactRe
 	return out
 }
 
-func (d *Daemon) handleSeedArtifactTransfer(ctx context.Context, conn net.Conn, msg *protocol.SeedArtifactTransferMessage) {
+func (d *Daemon) handleSeedArtifactTransfer(ctx context.Context, conn net.Conn, msg *protocol.SeedArtifactTransferMessage, by who.Actor) {
 	ctx, cancel := d.connectionContext(ctx, conn)
 	defer cancel()
-	result, err := d.submitSeedArtifactTransfer(ctx, msg)
+	result, err := d.submitSeedArtifactTransfer(ctx, msg, by)
 	if err != nil {
 		d.sendGardenError(conn, "artifact", err)
 		return
@@ -391,7 +391,7 @@ func (d *Daemon) handleSeedArtifactTransfer(ctx context.Context, conn net.Conn, 
 
 func (d *Daemon) handleSeedArtifactTransferWS(client *wsClient, msg *protocol.SeedArtifactTransferMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	result, err := d.submitSeedArtifactTransfer(d.life.Context(), msg)
+	result, err := d.submitSeedArtifactTransfer(d.life.Context(), msg, client.caller)
 	reply := protocol.SeedArtifactTransferResultMessage{
 		Event: protocol.EventSeedArtifactTransferResult, RequestID: requestID,
 		Success: err == nil, Result: result,
@@ -402,7 +402,7 @@ func (d *Daemon) handleSeedArtifactTransferWS(client *wsClient, msg *protocol.Se
 	d.sendToClient(client, reply)
 }
 
-func (d *Daemon) submitSeedArtifactTransfer(ctx context.Context, msg *protocol.SeedArtifactTransferMessage) (*protocol.SeedArtifactTransferResult, error) {
+func (d *Daemon) submitSeedArtifactTransfer(ctx context.Context, msg *protocol.SeedArtifactTransferMessage, by who.Actor) (*protocol.SeedArtifactTransferResult, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return nil, err
@@ -428,7 +428,7 @@ func (d *Daemon) submitSeedArtifactTransfer(ctx context.Context, msg *protocol.S
 			return nil, err
 		}
 	}
-	return d.observeSeedArtifactTransfer(msg, transferred)
+	return d.observeSeedArtifactTransfer(msg, transferred, by)
 }
 
 func (d *Daemon) transferSeedArtifactHere(_ context.Context, msg protocol.SeedArtifactTransferHereMessage) (*seedArtifactMachineTransfer, error) {
@@ -562,19 +562,19 @@ func (d *Daemon) transferSeedArtifact(msg *protocol.SeedArtifactTransferMessage,
 	return &seedArtifactMachineTransfer{Result: result, Receipt: receipt}, nil
 }
 
-func (d *Daemon) observeSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMessage, transferred *seedArtifactMachineTransfer) (*protocol.SeedArtifactTransferResult, error) {
+func (d *Daemon) observeSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMessage, transferred *seedArtifactMachineTransfer, by who.Actor) (*protocol.SeedArtifactTransferResult, error) {
 	receipt, result := transferred.Receipt, transferred.Result
 	seedID := receipt.SeedID
 	d.seedArtifactMu.Lock()
 	defer d.seedArtifactMu.Unlock()
 	if receipt.Legacy != nil {
-		if err := d.detachLegacyArtifactReference(seedID, protocol.Deref(msg.SourceSessionID), *receipt.Legacy); err != nil {
+		if err := d.detachLegacyArtifactReference(seedID, protocol.Deref(msg.SourceSessionID), by, *receipt.Legacy); err != nil {
 			return nil, fmt.Errorf("artifact transferred but linked file is still associated: %w; run the same command again", err)
 		}
 	}
 	changedEvent, err := seedEvents.Occur(
 		gardenSeedEventModel(), gardenSeedEventVocabulary().ArtifactChanged, seedID,
-		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID), CausedBy: d.actorOfSession(protocol.Deref(msg.SourceSessionID)).String()},
+		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID), CausedBy: by.String()},
 	)
 	if err != nil {
 		return nil, err
@@ -1028,11 +1028,11 @@ func (d *Daemon) gitTrackedSource(source string) (bool, string, error) {
 	return tracked, display, err
 }
 
-func (d *Daemon) detachLegacyArtifactReference(seedID string, authorSession protocol.SessionID, legacy garden.ArtifactReference) error {
+func (d *Daemon) detachLegacyArtifactReference(seedID string, authorSession protocol.SessionID, by who.Actor, legacy garden.ArtifactReference) error {
 	for _, current := range d.seedArtifactReferences(seedID) {
 		candidate := artifactFromProtocol(&current)
 		if candidate != nil && candidate.Identity() == legacy.Identity() {
-			_, err := d.appendSeedNote(seedID, "", d.actorOfSession(authorSession), garden.NoteKindDetach, &legacy, false, authorSession)
+			_, err := d.appendSeedNote(seedID, "", by, garden.NoteKindDetach, &legacy, false, authorSession)
 			return err
 		}
 	}

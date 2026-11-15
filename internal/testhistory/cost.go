@@ -34,6 +34,9 @@ func BuildCosts(receipts []Receipt, key CostKey) Costs {
 }
 
 func wholeUnits(runner Runner, argv []string) bool {
+	if runner == RunnerCargo {
+		return !cargoFiltered(argv)
+	}
 	for i, arg := range argv {
 		if !strings.HasPrefix(arg, "-") {
 			continue
@@ -53,6 +56,31 @@ func wholeUnits(runner Runner, argv []string) bool {
 		}
 	}
 	return true
+}
+
+var cargoValueFlags = map[string]bool{
+	"-p": true, "--package": true, "--test": true, "--bin": true, "--example": true, "--bench": true,
+	"-F": true, "--features": true, "--target": true, "--target-dir": true, "--manifest-path": true,
+	"-j": true, "--jobs": true, "--exclude": true, "--profile": true, "--color": true, "--config": true,
+	"-Z": true, "--test-threads": true, "--format": true,
+}
+
+func cargoFiltered(argv []string) bool {
+	afterTest := false
+	for i := 0; i < len(argv); i++ {
+		arg := argv[i]
+		switch {
+		case !afterTest:
+			afterTest = arg == "test"
+		case arg == "--skip" || arg == "--exact" || arg == "--ignored":
+			return true
+		case cargoValueFlags[arg]:
+			i++
+		case !strings.HasPrefix(arg, "-"):
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Costs) addGo(receipt Receipt) {

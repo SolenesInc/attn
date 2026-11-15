@@ -3,7 +3,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-fingerprint-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/scripts" "$work/internal/prompts/content" "$work/cmd/prompt-editor/web" "$work/docs/internal" "$work/docs/guide/reference" "$work/docs/guide/images" "$work/internal/prompts/scenarios" "$work/.prompt-editor/drafts"
+mkdir -p "$work/scripts" "$work/internal/prompts/content" "$work/cmd/prompt-editor/web" "$work/docs/internal" "$work/docs/guide/reference" "$work/docs/guide/images" "$work/internal/prompts/scenarios" "$work/.prompt-editor/drafts" "$work/native/crates/attn-app/src"
 cp "$root/scripts/source-fingerprint.sh" "$work/scripts/"
 git -C "$work" init -q
 printf 'prompt\n' > "$work/internal/prompts/content/example.md"
@@ -22,7 +22,8 @@ printf 'documentation\n' > "$work/docs/internal/example.md"
 printf 'image\n' > "$work/docs/guide/images/example.png"
 printf 'scenario\n' > "$work/internal/prompts/scenarios/chief.json"
 printf 'draft\n' > "$work/.prompt-editor/drafts/d-example.json"
-[[ "$after" == "$(bash "$work/scripts/source-fingerprint.sh")" ]] || { echo 'Editor and documentation edits must not invalidate the product build'; exit 1; }
+printf 'fn main() {}\n' > "$work/native/crates/attn-app/src/main.rs"
+[[ "$after" == "$(bash "$work/scripts/source-fingerprint.sh")" ]] || { echo 'Editor, documentation and native app edits must not invalidate the product build'; exit 1; }
 [[ "$manifest" == "$(bash "$work/scripts/source-fingerprint.sh" --field dirty_paths_base64)" ]] || { echo 'Excluded paths must not enter the build manifest'; exit 1; }
 printf 'changed guide\n' > "$work/docs/guide/reference/example.md"
 guide="$(bash "$work/scripts/source-fingerprint.sh")"

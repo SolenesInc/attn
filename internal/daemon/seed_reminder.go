@@ -35,8 +35,8 @@ func (d *Daemon) registerSeedReminderCron(runner *jobs.Runner) {
 	}
 }
 
-func (d *Daemon) handleSeedReminder(conn net.Conn, msg *protocol.SeedReminderMessage) {
-	result, err := d.seedReminderRequest(msg)
+func (d *Daemon) handleSeedReminder(conn net.Conn, msg *protocol.SeedReminderMessage, setter who.Actor) {
+	result, err := d.seedReminderRequest(msg, setter)
 	if err != nil {
 		d.sendGardenError(conn, "remind", err)
 		return
@@ -44,9 +44,8 @@ func (d *Daemon) handleSeedReminder(conn net.Conn, msg *protocol.SeedReminderMes
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedReminderResult: result})
 }
 
-func (d *Daemon) seedReminderRequest(msg *protocol.SeedReminderMessage) (*protocol.SeedReminderResult, error) {
+func (d *Daemon) seedReminderRequest(msg *protocol.SeedReminderMessage, setter who.Actor) (*protocol.SeedReminderResult, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
-	setter := d.actorOfSession(protocol.TrimID(protocol.Deref(msg.SourceSessionID)))
 	if protocol.Deref(msg.Clear) {
 		if msg.At != nil || msg.In != nil || msg.Message != nil {
 			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no time or message: attn seed remind %s --clear", seedID)

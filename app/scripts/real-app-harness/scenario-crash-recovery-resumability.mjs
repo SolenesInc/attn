@@ -66,10 +66,10 @@ async function waitFor(description, predicate, timeoutMs) {
   throw new Error(`Timed out waiting for ${description}`);
 }
 
-// SIGKILL only PIDs this instance's registry recorded: never match by name or
-// path, or the kill lands on another session.
-function killInstanceRuntimeLikeACrash(dataDir, log) {
-  const killed = { workers: [], daemon: null };
+// Signal only PIDs this instance's registry recorded: never match by name or
+// path, or the signal lands on another session.
+function instancePtyOwners(dataDir) {
+  const owners = [];
   const seen = new Set();
   for (const owner of ['pty-hosts', 'workers']) {
     const ownerRoot = path.join(dataDir, owner);
@@ -79,33 +79,47 @@ function killInstanceRuntimeLikeACrash(dataDir, log) {
       for (const entry of fs.readdirSync(registryDir)) {
         const registryFile = path.join(registryDir, entry);
         if (!fs.existsSync(registryFile)) continue;
-        const raw = fs.readFileSync(registryFile, 'utf8');
-        const record = JSON.parse(raw);
+        const record = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
         const pid = Number(record.pid ?? record.Pid ?? record.worker_pid);
         if (!Number.isInteger(pid) || pid <= 1 || seen.has(pid)) continue;
         seen.add(pid);
-        try {
-          process.kill(pid, 'SIGKILL');
-          killed.workers.push({ session: entry, pid });
-        } catch (error) {
-          log(`PTY owner ${entry} pid ${pid} already gone: ${error.message}`);
-        }
+        owners.push({ session: entry, pid });
       }
     }
   }
+  return owners;
+}
+
+function instanceDaemonPid(dataDir) {
   const pidFile = path.join(dataDir, 'attn.pid');
-  if (fs.existsSync(pidFile)) {
-    const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
-    if (Number.isInteger(pid) && pid > 1) {
-      try {
-        process.kill(pid, 'SIGKILL');
-        killed.daemon = pid;
-      } catch (error) {
-        log(`daemon pid ${pid} already gone: ${error.message}`);
-      }
+  if (!fs.existsSync(pidFile)) return null;
+  const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+  return Number.isInteger(pid) && pid > 1 ? pid : null;
+}
+
+function crashAtOneInstant(targets, log) {
+  const frozen = targets.filter(({ name, pid }) => {
+    try {
+      process.kill(pid, 'SIGSTOP');
+      return true;
+    } catch (error) {
+      log(`${name} pid ${pid} already gone: ${error.message}`);
+      return false;
     }
-  }
-  return killed;
+  });
+  for (const { pid } of frozen) process.kill(pid, 'SIGKILL');
+  return frozen;
+}
+
+function killInstanceRuntimeLikeACrash(dataDir, log) {
+  const owners = instancePtyOwners(dataDir).map((owner) => ({ ...owner, name: `PTY owner ${owner.session}` }));
+  const daemonPid = instanceDaemonPid(dataDir);
+  const daemon = daemonPid ? [{ name: 'daemon', pid: daemonPid }] : [];
+  const killed = crashAtOneInstant([...daemon, ...owners], log);
+  return {
+    workers: killed.filter((target) => target.session).map(({ session, pid }) => ({ session, pid })),
+    daemon: killed.find((target) => target.name === 'daemon')?.pid ?? null,
+  };
 }
 
 function daemonLogTail(dataDir, lines = 200) {

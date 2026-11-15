@@ -176,6 +176,15 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	}
 	monitor.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
 	d.reportTerminalTitle(sessionID)
+	driver := monitor.Driver()
+	if driver.Run != "" && driver.Route == "" {
+		if session := d.store.Get(sessionID); session != nil {
+			reg, conn := d.ensurePluginRegistry().driverConnection(session.Agent, driver.Plugin)
+			if conn != nil {
+				monitor.ResolveDriverRoute(driver.Plugin, driver.Run, pluginDriverRoute(reg))
+			}
+		}
+	}
 	monitor.Arm()
 	d.syncMonitorConversation(sessionID)
 	if candidate == nil && previous != nil && previous != monitor {
@@ -225,6 +234,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		LastSeen:             protocol.Timestamp(session.LastSeen).Time(),
 		PendingConversations: decodePendingConversations(records.PendingConversations),
 		PullRequests:         decodePullRequests(records.PullRequests),
+		ServerCompletion:     records.ServerCompletion,
 	}
 	files := decodeFileReports(records.FileReports)
 	launch.SentFiles, launch.EditedFiles = files.Sent, files.Edited
@@ -247,7 +257,7 @@ func branchFromSession(session *protocol.Session) attngit.BranchInfo {
 
 func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonitor.DriverMetadata {
 	cursor := d.store.GetAgentDriverRun(session)
-	return sessionmonitor.DriverMetadata{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq,
+	return sessionmonitor.DriverMetadata{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq, Route: cursor.Route,
 		Metadata: d.store.GetAgentMetadata(session), TranscriptPath: d.store.GetAgentDriverTranscriptPath(session)}
 }
 
@@ -348,12 +358,17 @@ func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) 
 	if target.Kind == codexLinkKind {
 		return codexMonitorLink{shared: h.daemon.codexShared(), monitor: monitor, target: target}
 	}
-	if target.Kind == nisseLinkKind {
-		return nisseSessionLink{link: h.daemon.nisse(), session: target.Session}
+	if l, ok := h.daemon.linkNamed(target.Kind).(*serverLink); ok {
+		return serverSessionLink{link: l, session: target.Session}
 	}
-	targetSession, _ := monitor.TitleTarget()
-	if driver, ok := h.daemon.ensurePluginRegistry().driver(targetSession.Agent); ok && driver.Capabilities["message_delivery"] && target.Driver.Plugin == driver.PluginName && target.Driver.Run != "" {
-		return pluginLink{daemon: h.daemon, terminal: target.Terminal, plugin: target.Driver.Plugin, run: target.Driver.Run}
+	if target.Driver.Run != "" && target.Driver.Route != "terminal" {
+		targetSession, _ := monitor.TitleTarget()
+		reg, conn := h.daemon.ensurePluginRegistry().driverConnection(targetSession.Agent, target.Driver.Plugin)
+		link := pluginLink{daemon: h.daemon, terminal: target.Terminal, session: target.Session, plugin: target.Driver.Plugin, run: target.Driver.Run, conversation: target.Conversation, registration: reg, connection: conn, route: target.Driver.Route}
+		if conn != nil && reg.Capabilities["safe_during_question"] {
+			return questionSafePluginLink{link}
+		}
+		return link
 	}
 	if h.daemon.claudeMod().reachable(target.Terminal) {
 		return claudeModLink{mod: h.daemon.claudeMod(), terminal: target.Terminal, session: target.Session}

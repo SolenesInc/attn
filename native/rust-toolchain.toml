@@ -1,0 +1,5 @@
+# Rune needs 1.99.1. The rest of the repository stays on its own pin in the
+# root rust-toolchain.toml.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

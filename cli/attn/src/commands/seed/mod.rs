@@ -199,6 +199,7 @@ impl<'r, 'a> Session<'r, 'a> {
         }
         let terminal = self.run.terminal.clone();
         if terminal.is_empty() {
+            crate::hooks::server_caller_from_env().map_err(|message| self.fail(&message))?;
             return Ok((profile, String::new()));
         }
         let mut message = CallerSessionMessage::new();

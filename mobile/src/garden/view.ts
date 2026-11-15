@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
-import { verbsFor } from '@attn/components/gardenBoardModel'
+import { verbsFor } from './verbs'
 import { renderMarkdown, type MarkdownContext } from '../asks/markdown'
 import type { Pairing } from '../pairing'
 import type { LinkStatus } from '../queue'

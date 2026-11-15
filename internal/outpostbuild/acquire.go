@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -53,7 +54,20 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 		return Binaries{}, err
 	}
 	cached := BinariesIn(dir)
-	if nonEmptyFile(cached.Attn) && nonEmptyFile(cached.Attnd) && nonEmptyFile(cached.Host) {
+	if complete(cached) {
+		return cached, req.prune(key, arch)
+	}
+	if req.Channel == "release" {
+		phase("downloading")
+	} else {
+		phase("building")
+	}
+	release, err := acquireDir(ctx, dir)
+	if err != nil {
+		return Binaries{}, err
+	}
+	defer release()
+	if complete(cached) {
 		return cached, req.prune(key, arch)
 	}
 	staging, err := os.MkdirTemp(dir, ".build-*")
@@ -62,12 +76,9 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 	}
 	defer os.RemoveAll(staging)
 	staged := BinariesIn(staging)
-	switch req.Channel {
-	case "release":
-		phase("downloading")
+	if req.Channel == "release" {
 		err = DownloadRelease(ctx, req.ReleaseSource, req.Build.Version, arch, staged)
-	case "source":
-		phase("building")
+	} else {
 		err = req.build(ctx, arch, staging, staged)
 	}
 	if err != nil {
@@ -83,6 +94,22 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 		return Binaries{}, err
 	}
 	return cached, req.prune(key, arch)
+}
+
+var building sync.Map
+
+func acquireDir(ctx context.Context, dir string) (release func(), err error) {
+	turn, _ := building.LoadOrStore(dir, make(chan struct{}, 1))
+	select {
+	case turn.(chan struct{}) <- struct{}{}:
+		return func() { <-turn.(chan struct{}) }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func complete(b Binaries) bool {
+	return nonEmptyFile(b.Attn) && nonEmptyFile(b.Attnd) && nonEmptyFile(b.Host)
 }
 
 func BinariesIn(dir string) Binaries {

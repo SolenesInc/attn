@@ -1,2 +1,4 @@
 ios/
 pnpm-lock.yaml
+src/homeGateway/generated.ts
+src/homeGateway/version.ts

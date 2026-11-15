@@ -52,9 +52,10 @@ send <session>
 sessions --token-stdin
   list every live agent session of the sender's profile, the sessions it can
   send to, in one unpaged list. --json prints an array of objects with id,
-  label, agent, state, host (only for a session on an outpost) and
-  last_focused_at (only once the user has focused the session's terminal in
-  attn). The most recent last_focused_at is the session the user last focused.
+  label, agent, state, host and host_label (the outpost's id and name, only
+  for a session on an outpost) and last_focused_at (only once the user has
+  focused the session's terminal in attn). The most recent last_focused_at is
+  the session the user last focused.
 
 pair --name <name>
   ask the user to pair this program. The attn app asks the user to allow or
@@ -74,14 +75,17 @@ unpair <name|id>
 
   --profile <name|id> chooses the profile for senders and unpair. It defaults
   to the calling session's profile inside attn, or the only profile.
+
+A paired sender can also clean up dictated text with attn refine; see
+attn refine --help.
 ";
 
-fn usage(line: &str) -> Stop {
+pub(super) fn usage(line: &str) -> Stop {
     eprintln!("{line}");
     Stop(2)
 }
 
-fn failed(run: &mut Run<'_>, label: &str, error: &SendError) -> Stop {
+pub(super) fn failed(run: &mut Run<'_>, label: &str, error: &SendError) -> Stop {
     run.refusal.clone_from(&error.refusal);
     eprintln!("{label}: {}", daemon_message(error));
     Stop(1)
@@ -114,7 +118,7 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
 }
 
-fn read_sender_token(command: &str) -> Result<String, Stop> {
+pub(super) fn read_sender_token(command: &str) -> Result<String, Stop> {
     let mut line = Vec::new();
     let read = io::stdin().lock().read_until(b'\n', &mut line);
     let token = String::from_utf8_lossy(&line).trim().to_string();
@@ -545,7 +549,13 @@ fn sessions(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             session.id,
             session.agent,
             session.state,
-            or_dash(session.host.as_deref().unwrap_or("")),
+            or_dash(
+                session
+                    .host_label
+                    .as_deref()
+                    .or(session.host.as_deref())
+                    .unwrap_or("")
+            ),
             or_dash(session.last_focused_at.as_deref().unwrap_or("")),
             session.label
         );

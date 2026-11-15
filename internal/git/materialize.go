@@ -23,32 +23,42 @@ func RepositoryCacheKey(identity string) string {
 }
 
 func (c *Client) ValidateLocalClone(ctx context.Context, path, expectedIdentity string) (string, error) {
+	mainRepo, _, err := c.validateLocalClone(ctx, path, expectedIdentity)
+	return mainRepo, err
+}
+
+func (c *Client) LocalCloneOrigin(ctx context.Context, path, expectedIdentity string) (string, error) {
+	_, origin, err := c.validateLocalClone(ctx, path, expectedIdentity)
+	return origin, err
+}
+
+func (c *Client) validateLocalClone(ctx context.Context, path, expectedIdentity string) (string, string, error) {
 	path = CanonicalizePath(path)
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("local clone: %w", err)
+		return "", "", fmt.Errorf("local clone: %w", err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("local clone is not a directory: %s", path)
+		return "", "", fmt.Errorf("local clone is not a directory: %s", path)
 	}
 	root, err := c.GetRepoRoot(ctx, path)
 	if err != nil || !sameDirectory(root, path) {
-		return "", fmt.Errorf("local clone is not a repository root: %s", path)
+		return "", "", fmt.Errorf("local clone is not a repository root: %s", path)
 	}
 	mainRepo := c.ResolveMainRepoPath(ctx, root)
 	host, ownerRepo, _ := c.OriginHostOwnerRepo(ctx, mainRepo)
 	identity := strings.ToLower(host + "/" + ownerRepo)
 	if identity != strings.ToLower(expectedIdentity) {
-		return "", fmt.Errorf("local clone origin mismatch: got %s want %s", identity, strings.ToLower(expectedIdentity))
+		return "", "", fmt.Errorf("local clone origin mismatch: got %s want %s", identity, strings.ToLower(expectedIdentity))
 	}
 	remoteURL, err := c.configuredOriginURL(ctx, mainRepo)
 	if err != nil {
-		return "", fmt.Errorf("read local clone origin: %w", err)
+		return "", "", fmt.Errorf("read local clone origin: %w", err)
 	}
 	if _, err := authorizationForGitURL(remoteURL, "validation"); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return mainRepo, nil
+	return mainRepo, remoteURL, nil
 }
 
 func authorizationForGitURL(rawURL, authorization string) (string, error) {
@@ -95,8 +105,21 @@ func (c *Client) EnsureManagedClone(ctx context.Context, cloneURL, target, expec
 	if err := c.cloneWithHTTPAuthorization(ctx, cloneURL, staging, authorization); err != nil {
 		return "", false, err
 	}
+	if err := c.writePackBitmaps(ctx, staging); err != nil {
+		return "", false, err
+	}
 	mainRepo, err := c.publishManagedClone(ctx, staging, target, expectedIdentity)
 	return mainRepo, err == nil, err
+}
+
+func (c *Client) writePackBitmaps(ctx context.Context, repo string) error {
+	if out, err := c.Combined(ctx, OpMetadata, repo, "config", "repack.writeBitmaps", "true"); err != nil {
+		return fmt.Errorf("enable pack bitmaps: %s", out)
+	}
+	if out, err := c.Combined(ctx, OpClone, repo, "repack", "-a", "-d", "-b"); err != nil {
+		return fmt.Errorf("repack with bitmaps: %s", out)
+	}
+	return nil
 }
 
 func (c *Client) publishManagedClone(ctx context.Context, staging, target, expectedIdentity string) (string, error) {

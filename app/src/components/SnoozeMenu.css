@@ -61,3 +61,8 @@
   margin-top: 5px;
   padding: 6px 9px;
 }
+
+.snooze-menu-separator {
+  border-top: 1px solid var(--color-border);
+  margin: 5px 0;
+}

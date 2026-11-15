@@ -4,9 +4,8 @@ pub mod input;
 use crate::client::{Client, SendError, read_json_value};
 use crate::instance::Paths;
 use attn_protocol::go_values::{
-    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, NISSE_CONVERSATION_PREFIX, STATE_IDLE,
-    STATE_LAUNCHING, STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT,
-    STATE_WORKING,
+    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, STATE_IDLE, STATE_LAUNCHING,
+    STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
 };
 use attn_protocol::{
     FilesEditedMessage, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage,
@@ -40,16 +39,34 @@ pub fn terminal_from_env(getenv: &dyn Fn(&str) -> String) -> String {
     if !profile.is_empty() {
         return codex_thread_terminal(&profile, &getenv("CODEX_THREAD_ID"));
     }
-    let conversation = getenv("NISSE_ROOT_CONVERSATION");
-    if !conversation.is_empty() {
-        let trimmed = conversation.trim();
-        return if trimmed.is_empty() {
-            String::new()
-        } else {
-            format!("{NISSE_CONVERSATION_PREFIX}{trimmed}")
-        };
+    let legacy = getenv("ATTN_SESSION_ID");
+    if !legacy.is_empty() {
+        return legacy;
     }
-    getenv("ATTN_SESSION_ID")
+    server_caller_from_env().unwrap_or_default()
+}
+
+pub fn server_caller_from_env() -> Result<String, String> {
+    let mut names = Vec::new();
+    let mut caller = String::new();
+    for (name, value) in std::env::vars_os() {
+        let name = name.to_string_lossy();
+        if name.len() > "_ROOT_CONVERSATION".len()
+            && name.ends_with("_ROOT_CONVERSATION")
+            && !value.is_empty()
+        {
+            names.push(name.to_string());
+            caller = format!("server-env:{name}:{}", value.to_string_lossy());
+        }
+    }
+    if names.len() > 1 {
+        names.sort();
+        return Err(format!(
+            "conflicting caller variables: {}; keep only the current server's root conversation",
+            names.join(", ")
+        ));
+    }
+    Ok(caller)
 }
 
 fn codex_thread_terminal(profile: &str, thread: &str) -> String {

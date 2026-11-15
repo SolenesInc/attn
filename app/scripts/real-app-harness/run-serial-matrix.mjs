@@ -15,7 +15,8 @@ import {
 } from './harnessInstance.mjs';
 import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './matrixDigest.mjs';
 import { ensureMockGitHubServer, stopMockGitHubServer } from './mockGitHub.mjs';
-import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
+import { resolveScenarios, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
+import { appShellInTree } from './platform.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 import { parseShardSelector, readRecordedDurations, selectShard } from './shardPlan.mjs';
 
@@ -110,12 +111,8 @@ Before the first scenario, the matrix quits the app, stops the daemon, and
   run (skipped for production targets, or entirely via --no-fresh-world).
 
 Available scenarios:
-${resolveScenariosFromCatalog([], scenarioCatalog).map((scenario) => `  - ${scenario.id}: ${scenario.label}`).join('\n')}
+${scenarioCatalog.filter((scenario) => !scenario.soakOnly).map((scenario) => `  - ${scenario.id}: ${scenario.label}`).join('\n')}
 `);
-}
-
-function resolveScenarios(selected) {
-  return resolveScenariosFromCatalog(selected, scenarioCatalog);
 }
 
 const signalExitCode = {
@@ -154,6 +151,7 @@ function writeMatrixResults({ complete }) {
     finishedAt: complete ? new Date().toISOString() : null,
     complete,
     shard: matrixRun.shard ? { index: matrixRun.shard.index, count: matrixRun.shard.count } : null,
+    app: matrixRun.app,
     results: matrixRun.results.map(matrixEntry),
   }, null, 2)}\n`;
   const targets = [path.join(harnessArtifactsRoot(), 'last-matrix.json')];
@@ -327,7 +325,10 @@ async function main() {
     scenarioIds = failedIds;
   }
 
-  let scenarios = resolveScenarios(scenarioIds);
+  const instance = currentHarnessInstance();
+  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForInstance(instance);
+  const app = appShellInTree(appPath);
+  let scenarios = resolveScenarios(scenarioIds, app);
   let shardPlan = null;
   if (shard) {
     shardPlan = selectShard(scenarios, readRecordedDurations(), shard);
@@ -335,8 +336,6 @@ async function main() {
     console.log(`Shard ${shard.index}/${shard.count}: ${scenarios.length} scenarios, `
       + `${shardPlan.seconds.toFixed(1)}s of recorded work — ${shardPlan.ids.join(', ')}`);
   }
-  const instance = currentHarnessInstance();
-  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForInstance(instance);
   const wsUrl = process.env.ATTN_REAL_APP_WS_URL || defaultWSURLForInstance();
   assertProductionRunAllowed(
     { appPath, wsUrl },
@@ -377,7 +376,7 @@ async function main() {
       launchEnv: preflightLaunchEnv,
     });
   }
-  matrixRun = { shard, results: [], active: null };
+  matrixRun = { shard, app, results: [], active: null };
   const { results } = matrixRun;
   writeMatrixResults({ complete: false });
 

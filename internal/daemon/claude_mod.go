@@ -416,6 +416,7 @@ func (m *claudeMod) reachLost(t *claudeModTerminal, timer *stepclock.Timer) {
 	if session, ok := m.d.shownIn(t.id); ok {
 		m.reportReachChanged(session)
 		m.placeReturned(session)
+		m.d.kickCompactingClose(session)
 	}
 }
 

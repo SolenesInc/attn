@@ -1,7 +1,8 @@
 import { act, fireEvent, within } from '@testing-library/react';
 import { codeToTokens } from 'shiki';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openMarkdownTiles } from './test/appFixtures';
+import { stubNavigatorPlatform } from './test/platformStub';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import type { ReviewBundle, ReviewRow, ReviewStop } from './types/generated';
 
@@ -240,6 +241,17 @@ describe('App review edits', () => {
     await press('Shift');
     expect(editBox()).toHaveTextContent('calc.go: lines 7–10');
     expect(within(editBox()).getByRole('textbox')).toHaveValue('\nconst query = `\nSELECT 1\n`');
+  });
+
+  it('names the save key of several lines as Linux binds it, and saves on it', async () => {
+    onTestFinished(stubNavigatorPlatform('Linux x86_64'));
+    const { editBox, press, type, toRow, daemon } = await openReview();
+    await toRow(9);
+    await press('i');
+    expect(editBox().querySelector('.review-composer-keys')).toHaveTextContent('Ctrl+↵ save');
+    expect(editBox()).not.toHaveTextContent('⌘');
+    await type('const query = `\nSELECT 2\n`', { ctrlKey: true });
+    expect(daemon.sentOf('review_edit')).toHaveLength(1);
   });
 
   it('refuses an edit of a file that changed underneath, shows why, and records nothing', async () => {

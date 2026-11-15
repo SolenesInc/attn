@@ -13,6 +13,9 @@ scripts/vm: run this checkout's attn in a shared macOS VM.
   scripts/vm adopt                  take an instance with no owner, started by an earlier
                                     scripts/vm, when it is yours
 
+APP=native runs the native app (native/crates/attn-app) instead of the Tauri app;
+drive then takes the native app's automation actions.
+
 Each agent gets its own instance by default, vm-<worktree name>-<hash>. --instance
 NAME, before or right after the command, selects another; a name another agent is
 using in the VM is refused, and so is one that has no owner. macvm ls shows every VM.
@@ -62,7 +65,12 @@ attn instance resolve --instance "$instance" --field wsPort >/dev/null ||
     die "instance name '$instance' was refused by attn; pass another with --instance"
 
 app="attn-$instance"
-bundle="app/src-tauri/target/staged/$app.app"
+shell="${APP:-tauri}"
+case "$shell" in
+tauri) bundle="app/src-tauri/target/staged/$app.app" ;;
+native) bundle="native/target/staged/$app.app" ;;
+*) die "APP must be tauri or native, got: $shell" ;;
+esac
 guest_app="Applications/$app.app"
 guest_bin="/Users/admin/$guest_app/Contents/MacOS/attn"
 harness="h/$instance"
@@ -130,7 +138,11 @@ wait_ready() {
 cmd_up() {
     [ -e app/node_modules/ws ] || pnpm --dir app install --frozen-lockfile
     if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --field fingerprint)" ]; then
-        make build-app INSTANCE="$instance" DEMO=1
+        if [ "$shell" = native ]; then
+            make build-app INSTANCE="$instance" APP=native
+        else
+            make build-app INSTANCE="$instance" DEMO=1
+        fi
     fi
     local vm
     vm="$(macvm up)"
@@ -142,9 +154,14 @@ cmd_up() {
     macvm exec /bin/rm -rf "$harness"
     macvm push "$harness/app/scripts" app/scripts/real-app-harness
     macvm push "$harness/app/node_modules" "$(readlink -f app/node_modules/ws)"
-    macvm exec open -g "$guest_app"
-    wait_ready
-    bridge dismiss_whats_new '{}' >/dev/null
+    if [ "$shell" = native ]; then
+        macvm exec open -g --env MAC_APP_QUIET=1 "$guest_app"
+        wait_ready
+    else
+        macvm exec open -g "$guest_app"
+        wait_ready
+        bridge dismiss_whats_new '{}' >/dev/null
+    fi
     echo "scripts/vm: $app is ready in $vm. When done: scripts/vm down${instance:+ --instance $instance}"
 }
 
@@ -165,7 +182,11 @@ cmd_shot() {
     [ $# -eq 1 ] || usage
     local out="$1" guest="shots/$instance-$$.png" pulled
     macvm exec mkdir -p shots
-    bridge capture_native_window_screenshot "{\"path\":\"/Users/admin/$guest\"}" >/dev/null
+    if [ "$shell" = native ]; then
+        bridge shot "{\"path\":\"/Users/admin/$guest\"}" >/dev/null
+    else
+        bridge capture_native_window_screenshot "{\"path\":\"/Users/admin/$guest\"}" >/dev/null
+    fi
     pulled="$(mktemp -d)"
     macvm pull "$guest" "$pulled"
     mkdir -p "$(dirname "$out")"

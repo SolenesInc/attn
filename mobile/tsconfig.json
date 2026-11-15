@@ -8,7 +8,6 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "paths": { "@attn/*": ["../app/src/*"], "mermaid": ["./node_modules/mermaid"] },
     "plugins": [
       {
         "name": "@effect/language-service",

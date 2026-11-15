@@ -407,3 +407,93 @@ func TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes(t *testing.T) {
 		t.Fatalf("ClickHouse holds %q events and streams, want 5000 in 5000", stored)
 	}
 }
+
+func TestEachRecordKindReadsBackAsTypedColumnsThroughItsView(t *testing.T) {
+	clickHouse := testworld.NewClickHouse(t)
+	service := clickHouse.User(t, "SELECT, INSERT, CREATE TABLE, ALTER DELETE, ALTER UPDATE, CREATE VIEW, DROP VIEW ON *")
+	testworld.StartIngest(t, service)
+	ingest := testworld.StartIngest(t, service)
+	views := []string{"runs", "quiet_stops", "cli_commands", "process_samples", "daemon_starts", "app_actions"}
+	grants := make([]string, len(views))
+	for i, view := range views {
+		grants[i] = "SELECT ON " + view
+	}
+	reader := clickHouse.User(t, grants...)
+	if !reader.Refuses(t, "SELECT count() FROM events") {
+		t.Fatal("a user granted only the views reads events")
+	}
+	install := client{t: t, url: ingest.URL}.register()
+	build := analytics.CurrentBuild()
+
+	at := func(clock string) time.Time {
+		parsed, err := time.Parse(time.DateTime, clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parsed
+	}
+	record := func(stream analytics.Stream, seq int64, name, subject, clock, props string) analytics.Record {
+		return analytics.Record{Stream: stream, Seq: seq, Name: name, Subject: subject, At: at(clock), Props: json.RawMessage(props)}
+	}
+	outpostSample := analytics.StreamSample.OnMachine("h:0123456789ab")
+	records := []analytics.Record{
+		record(analytics.StreamRun, 1, "run", "h:aaaaaaaaaaaa", "2026-11-10 10:00:00",
+			`{"started_by":"ring","duration_ms":61000,"ended":"waiting_input","opened_turn":false,"quiet_stop":true,"turn_requested":false,"turn_after_stop":"none","approvals":0,"usage":"known","tokens":{"input":10,"output":200,"cache_read":3000,"cache_write":40},"usd":0.25,"session":{"harness":"claude","model":"claude-opus-5-5","model_requested":"opus","launch":"delegation"}}`),
+		record(analytics.StreamRun, 2, "quiet_stop", "h:aaaaaaaaaaaa", "2026-11-10 10:00:00", `{"verdict":"read"}`),
+		record(analytics.StreamRun, 3, "run", "h:bbbbbbbbbbbb", "2026-11-10 11:00:00",
+			`{"started_by":"user","duration_ms":5000,"ended":"waiting_input","opened_turn":true,"quiet_stop":false,"turn_requested":false,"turn_after_stop":"owed","user_input_ms":1200,"approvals":2,"usage":"unavailable","session":{"harness":"codex","launch":"user"}}`),
+		record(analytics.StreamCLI, 1, "seed show", "", "2026-11-01 23:59:59", `{"ok":true,"exit_code":0,"caller":"human"}`),
+		record(analytics.StreamCLI, 2, "seed harvest", "h:aaaaaaaaaaaa", "2026-11-10 10:01:00",
+			`{"ok":false,"exit_code":1,"error_kind":"refused","refusal":"not_tender","caller":"agent","harness":"claude"}`),
+		record(analytics.StreamCLI, 3, "_hook-state", "h:aaaaaaaaaaaa", "2026-11-10 10:02:00", `{"ok":true,"exit_code":0,"caller":"agent","harness":"claude"}`),
+		record(analytics.StreamSample, 1, "daemon_start", "h:cccccccccccc", "2026-11-10 08:00:00", `{"previous_end":"stopped","stop_reason":"source_fingerprint_mismatch","previous_run":"h:dddddddddddd"}`),
+		record(analytics.StreamSample, 2, "process", "h:cccccccccccc", "2026-11-10 09:00:00",
+			`{"goroutines":80,"workload":{"sessions":9,"agents":7,"terminals":9,"panes_drawn":4,"desktops":3,"seeds":812},"processes":[{"role":"daemon","count":1,"resident_bytes":90000000,"footprint_bytes":70000000},{"role":"webkit_content","count":2,"resident_bytes":614000000,"footprint_bytes":1137000000,"split":{"webkit_malloc_bytes":602000000,"owned_graphics_bytes":398000000,"gigacage_bytes":41000000}},{"role":"app","shell":"native","count":1,"resident_bytes":50000000,"footprint_bytes":40000000}]}`),
+		record(outpostSample, 1, "process", "h:eeeeeeeeeeee", "2026-11-10 09:30:00",
+			`{"workload":{"sessions":1,"agents":1,"terminals":1,"panes_drawn":0,"desktops":0,"seeds":0},"processes":[{"role":"pty_host","count":1,"resident_bytes":20000000}]}`),
+		record(analytics.StreamApp, 1, "shortcut", "", "2026-11-10 12:00:00", `{"id":"queue.next"}`),
+		record(analytics.StreamApp, 2, "queue_advance", "", "2026-11-10 12:01:00", `{"reason":"prompt_sent","to":"session","wait_ms":90000}`),
+		record(analytics.StreamApp, 3, "settings_section", "", "2026-11-10 12:02:00", `{"section":"analytics"}`),
+	}
+	if status, body := install.send(analytics.Batch{Build: build, Records: records}); status != http.StatusOK {
+		t.Fatalf("send: %d %s", status, body)
+	}
+
+	for _, view := range []struct{ query, want string }{
+		{
+			"SELECT session, started_by, duration_ms, ended, opened_turn, quiet_stop, turn_requested, turn_after_stop, user_input_ms, approvals, usage, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write, usd, harness, model, model_requested, launch, build_commit FROM runs ORDER BY at",
+			"h:aaaaaaaaaaaa\tring\t61000\twaiting_input\tfalse\ttrue\tfalse\tnone\t\\N\t0\tknown\t10\t200\t3000\t40\t0.25\tclaude\tclaude-opus-5-5\topus\tdelegation\t" + build.Commit + "\n" +
+				"h:bbbbbbbbbbbb\tuser\t5000\twaiting_input\ttrue\tfalse\tfalse\towed\t1200\t2\tunavailable\t\\N\t\\N\t\\N\t\\N\t\\N\tcodex\t\t\tuser\t" + build.Commit,
+		},
+		{
+			"SELECT session, verdict, failure, turn_after_stop, turn_requested, started_by, harness, launch FROM quiet_stops",
+			"h:aaaaaaaaaaaa\tread\t\tnone\tfalse\tring\tclaude\tdelegation",
+		},
+		{
+			"SELECT session, command, error_kind, refusal, caller, harness, ok, exit_code FROM cli_commands ORDER BY at",
+			"h:aaaaaaaaaaaa\tseed harvest\trefused\tnot_tender\tagent\tclaude\tfalse\t1\n" +
+				"h:aaaaaaaaaaaa\t_hook-state\t\t\tagent\tclaude\ttrue\t0",
+		},
+		{
+			"SELECT daemon_run, outpost, daemon_uptime_s, role, shell, count, resident_bytes, footprint_bytes, webkit_malloc_bytes, owned_graphics_bytes, gigacage_bytes, sessions, agents, terminals, panes_drawn, desktops, seeds FROM process_samples ORDER BY at, role",
+			"h:cccccccccccc\t\t3600\tapp\tnative\t1\t50000000\t40000000\t\\N\t\\N\t\\N\t9\t7\t9\t4\t3\t812\n" +
+				"h:cccccccccccc\t\t3600\tdaemon\t\t1\t90000000\t70000000\t\\N\t\\N\t\\N\t9\t7\t9\t4\t3\t812\n" +
+				"h:cccccccccccc\t\t3600\twebkit_content\t\t2\t614000000\t1137000000\t602000000\t398000000\t41000000\t9\t7\t9\t4\t3\t812\n" +
+				"h:eeeeeeeeeeee\th:0123456789ab\t\\N\tpty_host\t\t1\t20000000\t\\N\t\\N\t\\N\t\\N\t1\t1\t1\t0\t0\t0",
+		},
+		{
+			"SELECT daemon_run, previous_end, stop_reason, previous_run, build_os FROM daemon_starts",
+			"h:cccccccccccc\tstopped\tsource_fingerprint_mismatch\th:dddddddddddd\t" + build.Os,
+		},
+		{
+			"SELECT action, id, section, reason, to, wait_ms FROM app_actions ORDER BY at",
+			"shortcut\tqueue.next\t\t\t\t\\N\n" +
+				"queue_advance\t\t\tprompt_sent\tsession\t90000\n" +
+				"settings_section\t\tanalytics\t\t\t\\N",
+		},
+	} {
+		if got := reader.Query(t, view.query); got != view.want {
+			t.Errorf("%s\ngot:\n%s\nwant:\n%s", view.query, got, view.want)
+		}
+	}
+}

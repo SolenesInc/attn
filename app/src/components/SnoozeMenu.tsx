@@ -12,6 +12,7 @@ interface SnoozeMenuProps {
   sessionLabel: string;
   placement: SnoozePlacement;
   onSnooze: (until: Date) => void;
+  onStandby: (until: Date) => void;
   onClose: () => void;
   onRestoreFocus: (reason: 'cancel' | 'choose' | 'removed') => void;
 }
@@ -19,10 +20,12 @@ interface SnoozeMenuProps {
 const VIEWPORT_MARGIN = 8;
 
 // Freeze the clock on opening so the displayed unsnooze time is the instant sent.
-export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onRestoreFocus }: SnoozeMenuProps) {
+export function SnoozeMenu({ sessionLabel, placement, onSnooze, onStandby, onClose, onRestoreFocus }: SnoozeMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [mode, setMode] = useState<'snooze' | 'standby'>('snooze');
+  const itemCount = SNOOZE_CHOICES.length + (mode === 'snooze' ? 1 : 0);
   const [openedAt] = useState(() => new Date());
   const closeReason = useRef<'cancel' | 'choose' | 'outside' | null>(null);
   const restoreFocusRef = useRef(onRestoreFocus);
@@ -72,11 +75,18 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
   const choose = (id: SnoozeChoiceId) => {
     if (closeReason.current) return;
     close('choose');
-    onSnooze(snoozeInstant(id, openedAt));
+    (mode === 'snooze' ? onSnooze : onStandby)(snoozeInstant(id, openedAt));
+  };
+  const chooseStandby = () => {
+    setMode('standby');
+    setSelectedIndex(0);
   };
   const focusChoice = (index: number) => {
     menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[index]?.focus();
   };
+  useLayoutEffect(() => {
+    if (mode === 'standby') menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [mode]);
 
   return (
     <FocusTrap focusTrapOptions={{
@@ -95,26 +105,26 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
         className="snooze-menu"
         style={{ top: position.top, left: position.left }}
         role="menu"
-        aria-label={`Snooze ${sessionLabel}`}
+        aria-label={mode === 'snooze' ? `Snooze ${sessionLabel}` : `Standby ${sessionLabel} until`}
         data-testid="snooze-menu"
         onKeyDown={(event) => {
           if (event.metaKey || event.ctrlKey || event.altKey) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
-            focusChoice((selectedIndex + 1) % SNOOZE_CHOICES.length);
+            focusChoice((selectedIndex + 1) % itemCount);
           } else if (event.key === 'ArrowUp') {
             event.preventDefault();
-            focusChoice((selectedIndex + SNOOZE_CHOICES.length - 1) % SNOOZE_CHOICES.length);
+            focusChoice((selectedIndex + itemCount - 1) % itemCount);
           } else if (event.key === 'Home' || event.key === 'End') {
             event.preventDefault();
-            focusChoice(event.key === 'Home' ? 0 : SNOOZE_CHOICES.length - 1);
+            focusChoice(event.key === 'Home' ? 0 : itemCount - 1);
           } else if (event.key === 'Tab') {
             event.preventDefault();
             focusChoice(selectedIndex);
           }
         }}
       >
-        <div className="snooze-menu-header">Snooze {sessionLabel}</div>
+        <div className="snooze-menu-header">{mode === 'snooze' ? `Snooze ${sessionLabel}` : `Standby ${sessionLabel} until`}</div>
         {SNOOZE_CHOICES.map((choice, index) => (
           <button
             key={choice.id}
@@ -122,7 +132,7 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
             role="menuitem"
             className={index === selectedIndex ? 'is-selected' : undefined}
             tabIndex={index === selectedIndex ? 0 : -1}
-            data-testid={`snooze-choice-${choice.id}`}
+            data-testid={`${mode}-choice-${choice.id}`}
             onFocus={() => setSelectedIndex(index)}
             onPointerMove={(event) => event.currentTarget.focus()}
             onClick={() => choose(choice.id)}
@@ -131,7 +141,22 @@ export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onResto
             <span className="snooze-menu-detail">{choice.detail(openedAt)}</span>
           </button>
         ))}
-        <div className="snooze-menu-footer" aria-hidden="true">↑ ↓ choose · ↵ snooze · esc cancel</div>
+        {mode === 'snooze' && (<>
+          <div className="snooze-menu-separator" role="separator" />
+          <button
+            type="button"
+            role="menuitem"
+            className={selectedIndex === SNOOZE_CHOICES.length ? 'is-selected' : undefined}
+            tabIndex={selectedIndex === SNOOZE_CHOICES.length ? 0 : -1}
+            data-testid="snooze-standby"
+            onFocus={() => setSelectedIndex(SNOOZE_CHOICES.length)}
+            onPointerMove={(event) => event.currentTarget.focus()}
+            onClick={chooseStandby}
+          >
+            <span className="snooze-menu-label">Standby until…</span>
+          </button>
+        </>)}
+        <div className="snooze-menu-footer" aria-hidden="true">↑ ↓ choose · ↵ {mode} · esc cancel</div>
       </div>
     </FocusTrap>
   );

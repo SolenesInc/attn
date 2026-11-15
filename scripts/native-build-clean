@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="usage: scripts/native-build-clean"
+[ "$#" -eq 0 ] || { echo "$usage" >&2; exit 2; }
+
+# native/.cargo/config.toml puts each checkout's intermediate build output here,
+# under the checkout's own path.
+root="${ATTN_NATIVE_BUILD_ROOT:-${CARGO_HOME:-$HOME/.cargo}/attn-native-build}"
+# A checkout's build output grows with its incremental builds: the largest
+# measured 22.3 GiB on oma and 14.2 GiB on ai-sandbox (2026-11-15).
+budget_mib="${ATTN_NATIVE_BUILD_BUDGET_MIB:-65536}"
+# A cold debug, test, fast and release build of native/ writes 7.6 GiB on oma
+# (2026-11-15). The floor leaves room for the largest checkout measured to grow
+# back while another checkout builds cold, on a disk other work shares.
+floor_mib="${ATTN_NATIVE_BUILD_FREE_FLOOR_MIB:-32768}"
+# A build left alone this long costs a cold rebuild, 85 to 174 s for a debug
+# build on a loaded ai-sandbox or Mac (2026-11-12), when its checkout builds again.
+stale_days=3
+
+[ -d "$root" ] || exit 0
+
+tolerating_vanished_paths() {
+  local errors status=0
+  errors="$(mktemp "${TMPDIR:-/tmp}/native-build-clean.XXXXXX")"
+  "$@" 2>"$errors" || status=$?
+  if [ "$status" -ne 0 ] && grep -qv 'No such file or directory' "$errors"; then
+    cat "$errors" >&2
+    rm -f "$errors"
+    return "$status"
+  fi
+  rm -f "$errors"
+}
+
+remove_unless_building() {
+  tolerating_vanished_paths find "$1" -maxdepth 3 \( -name .cargo-build-lock -o -name .cargo-lock \) -print0 | perl -MFcntl=:flock -0 -e '
+    my $build = shift;
+    my @held;
+    while (my $path = <STDIN>) {
+      chomp $path;
+      open(my $lock, "<", $path) or next;
+      flock($lock, LOCK_EX | LOCK_NB) or exit 3;
+      push @held, $lock;
+    }
+    exit(system("rm", "-rf", "--", $build) == 0 ? 0 : 1);
+  ' "$1"
+}
+
+newest_change() {
+  tolerating_vanished_paths find "$1" -print0 | perl -0 -ne 'chomp; my $m = (lstat)[9]; $n = $m if $m > $n; END { print $n + 0 }'
+}
+
+kib() { tolerating_vanished_paths du -sk "$1" | cut -f1; }
+free_kib() { df -Pk "$root" | awk 'NR == 2 { print $4 }'; }
+gib() { awk -v kib="$1" 'BEGIN { printf "%.1f GiB", kib / 1048576 }'; }
+
+builds="$(tolerating_vanished_paths find "$root" -name CACHEDIR.TAG | sed 's#/CACHEDIR.TAG$##' | sort)"
+[ -n "$builds" ] || exit 0
+now="$(date +%s)"
+before="$(kib "$root")"
+removed=""
+in_use=""
+
+remove_empty_parents() {
+  local dir="$1"
+  while [ "$dir" != "$root" ] && rmdir "$dir" 2>/dev/null; do dir="$(dirname "$dir")"; done
+}
+
+remove() {
+  local build="$1" reason="$2" size status=0
+  size="$(kib "$build")"
+  remove_unless_building "$build" || status=$?
+  case "$status" in
+    0)
+      removed+="  removed $build ($(gib "$size")): $reason"$'\n'
+      remove_empty_parents "$(dirname "$build")"
+      ;;
+    3) in_use+="  kept $build ($(gib "$size")): a cargo build holds its lock"$'\n' ;;
+    *) echo "native-build-clean: could not remove $build" >&2; return 1 ;;
+  esac
+}
+
+kept=""
+while IFS= read -r build; do
+  workspace="${build#"$root"}"
+  if [ ! -f "$workspace/Cargo.toml" ]; then
+    remove "$build" "its checkout $workspace no longer exists"
+    continue
+  fi
+  changed="$(newest_change "$build")"
+  if [ $((now - changed)) -gt $((stale_days * 86400)) ]; then
+    remove "$build" "not built for $(((now - changed) / 86400)) days, past $stale_days"
+    continue
+  fi
+  kept+="$changed $build"$'\n'
+done <<<"$builds"
+
+budget_kib=$((budget_mib * 1024))
+floor_kib=$((floor_mib * 1024))
+total="$(kib "$root")"
+free="$(free_kib)"
+short=""
+[ "$total" -le "$budget_kib" ] || short+="native-build-clean: build output $(gib "$total") is over its budget of $(gib "$budget_kib")"$'\n'
+[ "$free" -ge "$floor_kib" ] || short+="native-build-clean: the disk has $(gib "$free") free, under its floor of $(gib "$floor_kib")"$'\n'
+if [ -n "$short" ]; then
+  while read -r _ build; do
+    [ -n "$build" ] || continue
+    if [ "$(kib "$root")" -gt "$budget_kib" ]; then
+      remove "$build" "least recently built while over budget"
+    elif [ "$(free_kib)" -lt "$floor_kib" ]; then
+      remove "$build" "least recently built while the disk has $(gib "$(free_kib)") free, under its floor"
+    else
+      break
+    fi
+  done < <(sort -n <<<"$kept")
+  total="$(kib "$root")"
+  free="$(free_kib)"
+fi
+
+[ -n "$removed$short" ] || exit 0
+echo "native-build-clean: $(gib "$before") of native build output in $root, budget $(gib "$budget_kib"), free-space floor $(gib "$floor_kib")"
+printf '%s' "$short$removed$in_use"
+echo "native-build-clean: $(gib "$total") left, $(gib "$free") free on the disk"
+if [ "$total" -gt "$budget_kib" ]; then
+  echo "native-build-clean: still over the budget of $(gib "$budget_kib"): every build left is in use or recent; raise ATTN_NATIVE_BUILD_BUDGET_MIB or free a checkout" >&2
+fi
+if [ "$free" -lt "$floor_kib" ]; then
+  echo "native-build-clean: the disk is still under its free-space floor of $(gib "$floor_kib"): no native build left can go; free space elsewhere or lower ATTN_NATIVE_BUILD_FREE_FLOOR_MIB" >&2
+fi

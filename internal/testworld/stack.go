@@ -58,6 +58,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	if testing.Short() {
 		t.Skip("a stack test runs the built attn binary, which -short does not build")
 	}
+	RemoveTempDirsAfterTheDaemon(t)
 	setup := stackSetup{backend: SharedHostPTY}
 	for _, opt := range opts {
 		opt(&setup)

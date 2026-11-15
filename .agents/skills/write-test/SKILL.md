@@ -33,6 +33,7 @@ Read `docs/internal/testing.md`, then the page for your kind:
 |---|---|
 | Daemon wire | `docs/internal/daemon-wire-tests.md` |
 | App wire | `docs/internal/app-wire-tests.md` |
+| Native app wire | `docs/internal/native-wire-tests.md` |
 | CLI stack | `docs/internal/cli-stack-tests.md` |
 | Browser end-to-end | the specs in `app/e2e` near yours |
 | Scenario | `app/scripts/real-app-harness/AGENTS.md` |

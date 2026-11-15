@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ReviewSearchResultMessage } from '../../types/generated';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReviewFile, ReviewSearchResultMessage } from '../../types/generated';
 import type { FileTarget } from './reviewContext';
 import { PathLabel } from './StopBlock';
 
@@ -7,6 +7,11 @@ interface SearchResult {
   key: string;
   target: FileTarget;
   text?: string;
+  change?: ReviewFile;
+}
+
+function changedFiles(files: readonly ReviewFile[]): SearchResult[] {
+  return files.map((file) => ({ key: `file:${file.path}`, target: { path: file.path }, change: file }));
 }
 
 function resultsOf(answer: ReviewSearchResultMessage): SearchResult[] {
@@ -18,10 +23,13 @@ function resultsOf(answer: ReviewSearchResultMessage): SearchResult[] {
 
 export function SearchPanel({
   initialQuery,
+  files,
   search,
   onPick,
 }: {
   initialQuery: string;
+  /** The change's files, listed while the box is empty. */
+  files: readonly ReviewFile[];
   search: (query: string) => Promise<ReviewSearchResultMessage>;
   onPick: (target: FileTarget) => void;
 }) {
@@ -43,12 +51,14 @@ export function SearchPanel({
     );
   }, [query, search]);
 
-  useEffect(() => { setSelected(0); }, [answer]);
+  const empty = query.trim() === '';
+  const results = useMemo(() => (empty ? changedFiles(files) : answer?.results ?? []), [answer, empty, files]);
+
+  useEffect(() => { setSelected(0); }, [results]);
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [selected]);
 
-  const results = answer?.results ?? [];
   const move = (delta: number) => setSelected((at) => Math.max(0, Math.min(results.length - 1, at + delta)));
 
   return (
@@ -77,7 +87,14 @@ export function SearchPanel({
             aria-selected={index === selected}
             onMouseDown={(event) => { event.preventDefault(); onPick(result.target); }}
           >
-            {result.text !== undefined ? (
+            {result.change ? (
+              <>
+                <PathLabel path={result.target.path} />
+                <span className="review-search-where">
+                  {result.change.binary ? 'binary' : <><span className="review-plus">+{result.change.added}</span> <span className="review-minus">−{result.change.removed}</span></>}
+                </span>
+              </>
+            ) : result.text !== undefined ? (
               <>
                 <span className="review-search-text">{result.text.trim()}</span>
                 <span className="review-search-where">{result.target.path}:{result.target.line}</span>
@@ -90,7 +107,7 @@ export function SearchPanel({
             )}
           </li>
         ))}
-        {answer && results.length === 0 && !answer.error ? <li className="review-search-empty">Nothing matches {answer.query}</li> : null}
+        {!empty && answer && results.length === 0 && !answer.error ? <li className="review-search-empty">Nothing matches {answer.query}</li> : null}
       </ul>
     </div>
   );

@@ -45,6 +45,7 @@ func writeConstants(out *strings.Builder) {
 		{"CHECK_VERB_ADD", string(garden.CheckVerbAdd)},
 		{"CHECK_VERB_EDIT", string(garden.CheckVerbEdit)},
 		{"CHECK_VERB_REPORT", string(garden.CheckVerbReport)},
+		{"CLIENT_KIND_NATIVE_APP", protocol.ClientKindNativeApp},
 		{"ERROR_CODE_CONFLICT", protocol.ErrorCodeConflict},
 		{"ERROR_CODE_SUBSCRIPTION_LIMIT", protocol.ErrorCodeSubscriptionLimit},
 		{"ERROR_CODE_UNAUTHORIZED_CLIENT", protocol.ErrorCodeUnauthorizedClient},
@@ -68,7 +69,6 @@ func writeConstants(out *strings.Builder) {
 		{"SHARED_CODEX_RESTART_FAILED", string(protocol.SharedCodexRestartFailed)},
 		{"CODEX_SHARED_PROFILE_ENV", harness.CodexSharedProfileEnv},
 		{"CODEX_THREAD_PREFIX", harness.CodexThreadPrefix},
-		{"NISSE_CONVERSATION_PREFIX", harness.NisseConversationPrefix},
 		{"ID_ALPHABET", shortid.Alphabet},
 		{"CREW_KEY_REF_PREFIX", crew.KeyRefPrefix},
 		{"AGENT_MSG_STATUS_QUEUED", string(protocol.AgentMsgStatusQueued)},
@@ -129,16 +129,17 @@ func writeConstants(out *strings.Builder) {
 }
 
 func writeSettings(out *strings.Builder) {
-	out.WriteString("pub struct Setting {\n    pub key: &'static str,\n    pub machine: bool,\n}\n\n")
-	out.WriteString("pub struct Feature {\n    pub key: &'static str,\n    pub name: &'static str,\n    pub stage: &'static str,\n    pub applies: &'static str,\n}\n\n")
+	out.WriteString("pub struct Setting {\n    pub key: &'static str,\n    pub machine: bool,\n    pub default_on: bool,\n}\n\n")
+	out.WriteString("pub struct Feature {\n    pub key: &'static str,\n    pub name: &'static str,\n    pub summary: &'static str,\n    pub note: &'static str,\n    pub group: &'static str,\n    pub timing: &'static str,\n    pub stage: &'static str,\n    pub applies: &'static str,\n    pub search: &'static str,\n}\n\n")
 	out.WriteString("pub const SETTINGS: &[Setting] = &[\n")
 	for _, s := range setting.All() {
-		fmt.Fprintf(out, "    Setting { key: %s, machine: %t },\n", rustString(s.Key), s.Class == setting.Machine)
+		fmt.Fprintf(out, "    Setting { key: %s, machine: %t, default_on: %t },\n",
+			rustString(s.Key), s.Class == setting.Machine, s.Kind == setting.Bool && !s.IsFamily() && s.Default == setting.On)
 	}
 	out.WriteString("];\n\npub const FEATURES: &[Feature] = &[\n")
 	for _, s := range setting.Features() {
-		fmt.Fprintf(out, "    Feature { key: %s, name: %s, stage: %s, applies: %s },\n",
-			rustString(s.Key), rustString(s.Name), rustString(s.Stage.String()), rustString(string(s.Applies)))
+		fmt.Fprintf(out, "    Feature { key: %s, name: %s, summary: %s, note: %s, group: %s, timing: %s, stage: %s, applies: %s, search: %s },\n",
+			rustString(s.Key), rustString(s.Name), rustString(s.Summary), rustString(s.Note), rustString(string(s.Group)), rustString(s.Applies.Timing()), rustString(s.Stage.String()), rustString(string(s.Applies)), rustString(s.Search))
 	}
 	out.WriteString("];\n\n")
 }

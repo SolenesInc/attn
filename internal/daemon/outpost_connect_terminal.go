@@ -162,7 +162,7 @@ func (d *Daemon) closeOutpostCommand(id string) {
 		return
 	}
 	for _, session := range commands {
-		closing, err := d.beginSessionClose(session, store.SessionClose{By: who.User(), Reason: "outpost connection cancelled"}, nil)
+		closing, err := d.beginSessionClose(session, store.SessionClose{By: who.Attn(), Reason: "outpost connection cancelled"}, nil)
 		if err != nil {
 			d.logf("close outpost connection terminal: %v", err)
 			continue

@@ -388,6 +388,9 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 	if intent.Effort != "" {
 		spawnMsg.Effort = protocol.Ptr(intent.Effort)
 	}
+	if intent.ExecutionTarget != "" {
+		spawnMsg.ExecutionTarget = protocol.Ptr(intent.ExecutionTarget)
+	}
 	launch := intent.UnattendedLaunch
 	if !launch.IsZero() {
 		launch = launch.WithLegacyDefaults()
@@ -430,7 +433,10 @@ func (d *Daemon) reviveSession(sessionID protocol.SessionID, cols, rows int) err
 	if session != nil && session.State != protocol.SessionStateRecoverable && d.sessionLive(context.Background(), sessionID) {
 		return nil
 	}
-	if session == nil || session.State != protocol.SessionStateRecoverable {
+	if session == nil {
+		return errors.New("session not recoverable")
+	}
+	if _, serverView := d.linkOf(sessionID).(*serverLink); !serverView && session.State != protocol.SessionStateRecoverable {
 		return errors.New("session not recoverable")
 	}
 	intent, ok := d.store.LaunchIntent(sessionID)
@@ -443,7 +449,12 @@ func (d *Daemon) reviveSession(sessionID protocol.SessionID, cols, rows int) err
 
 func (d *Daemon) reviveRecoverableAgents(host string) {
 	pausepoint.At(pausepoint.RecoverableAgentsReviving)
-	for _, session := range d.store.List(string(protocol.SessionStateRecoverable)) {
+	for _, session := range d.store.List("") {
+		if session.State != protocol.SessionStateRecoverable {
+			if _, serverView := d.linkOf(session.ID).(*serverLink); !serverView || d.hidden(session.ID) || d.store.GetSessionExit(session.ID) != nil || d.sessionHasLiveWorker(session.ID) {
+				continue
+			}
+		}
 		if d.stopping() {
 			return
 		}

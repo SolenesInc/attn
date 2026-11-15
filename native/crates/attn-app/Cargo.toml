@@ -1,0 +1,36 @@
+[package]
+name = "attn-app"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+attn-automation = { path = "../attn-automation" }
+attn-client = { path = "../attn-client" }
+attn-protocol = { path = "../../../cli/protocol" }
+attn-term = { path = "../attn-term" }
+attn-ui = { path = "../attn-ui" }
+base64 = "0.22"
+libc = "0.2"
+percent-encoding = "2.3"
+qrcodegen = "1.8"
+pulldown-cmark = { version = "0.13", default-features = false }
+rune = { workspace = true, features = ["native-file-dialog"] }
+rune-kit = { workspace = true, features = ["markdown", "mermaid"] }
+rune-mac.workspace = true
+serde = "1.0.229"
+serde_json = "1.0.154"
+uuid = { version = "1.29", features = ["v4"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+rusqlite = "0.42"
+tempfile = "3"
+
+[dev-dependencies]
+attn-testkit = { path = "../attn-testkit" }
+sha2 = "0.10"
+skrifa = "0.44"
+tempfile = "3"
+
+[lints]
+workspace = true

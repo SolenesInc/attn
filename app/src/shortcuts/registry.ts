@@ -34,7 +34,6 @@ export const MAC_SHORTCUTS = {
   'app.quit': { key: 'q', meta: true },
 
   'terminal.open': { key: '`', meta: true },
-  'terminal.collapse': { key: '~', shift: true },  // Shift+` produces ~ on US keyboards
   'terminal.splitVertical': { key: 'd', meta: true },
   'terminal.splitHorizontal': { key: 'd', meta: true, shift: true },
   'terminal.toggleZoom': { key: 'z', meta: true, shift: true, editableTarget: 'native' },
@@ -153,7 +152,6 @@ export const LINUX_SHORTCUTS = {
   'app.quit': { key: 'q', meta: true, shift: true },
 
   'terminal.open': { key: '`', code: 'Backquote', meta: true, shift: true },
-  'terminal.collapse': { key: '`', code: 'Backquote', meta: true, alt: true },
   'terminal.splitVertical': { key: 'd', meta: true, shift: true },
   'terminal.splitHorizontal': { key: 'd', meta: true, alt: true },
   'terminal.toggleZoom': { key: 'z', meta: true, alt: true, editableTarget: 'native' },

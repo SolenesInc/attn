@@ -219,6 +219,11 @@ export class DaemonObserver {
     return this.profileCommand('desktop_set_current', { profile_id: this.profileId, desktop_id: desktopId });
   }
 
+  /** Makes `desktopId` current again when it is still there: the daemon removes an empty, unnamed desktop left off screen. */
+  returnToDesktop(desktopId) {
+    return this.desktop(desktopId) ? this.setCurrentDesktop(desktopId) : null;
+  }
+
   describeArrangement() {
     return JSON.stringify(
       {

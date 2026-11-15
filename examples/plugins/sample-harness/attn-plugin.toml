@@ -1,0 +1,7 @@
+name = "sample-harness"
+version = "0.1.0"
+attn_api_version = 7
+description = "Example harness plugin: a local echo agent that takes direct input"
+
+[plugin]
+entrypoint = "src/index.ts"

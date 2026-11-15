@@ -53,6 +53,8 @@ const (
 	methodHalt                 = "halt"
 	methodExit                 = "exit"
 	methodStopRead             = "stop_reading_terminal"
+	methodHoldScreen           = "hold_screen"
+	methodReleaseScreen        = "release_screen"
 	methodStatus               = "program_status"
 	methodSuggestion           = "claude_suggestion"
 	methodModNext              = "mod_next"
@@ -114,13 +116,14 @@ type exitParams struct {
 }
 
 var programs = map[string]func(config) int{
-	string(Claude): runClaude,
-	string(Codex):  runCodex,
-	string(Plug):   runPlugTerminal,
-	string(Nisse):  runNisse,
-	plugPluginName: runPlugDriver,
-	wrapperName:    runWrapperTripwire,
-	miseName:       runMise,
+	string(Claude):       runClaude,
+	string(Codex):        runCodex,
+	string(Plug):         runPlugTerminal,
+	string(Sigma):        appServerProgram(Sigma),
+	string(SampleServer): appServerProgram(SampleServer),
+	plugPluginName:       runPlugDriver,
+	wrapperName:          runWrapperTripwire,
+	miseName:             runMise,
 }
 
 func Main() {
@@ -250,6 +253,9 @@ func serve(cfg config, style composer, conv conversation) int {
 		return 1
 	}
 	a := &agent{term: term, conv: conv, prompts: make(chan promptSubmission, 16)}
+	if plug, ok := conv.(*plugTerminal); ok {
+		plug.agent = a
+	}
 	if a.control, err = dialControl(cfg, a.handle); err != nil {
 		fmt.Fprintf(os.Stderr, "fake agent: %v\n", err)
 		return 1
@@ -386,7 +392,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		defer a.turn.Unlock()
 		return struct{}{}, halting.halt()
 	case methodModNext, methodModTool, methodModEsc, methodModReload, methodModStop, methodModPause, methodModResume, methodModGiveBack, methodModReaddressHeld,
-		methodModCompactOutcome, methodModCompactHold, methodModCompactArrived, methodModCompactRelease, methodModCompactions, methodModCompactReport:
+		methodModCompactOutcome, methodModCompactHold, methodModCompactArrived, methodModCompactRelease, methodModCompactReport:
 		modded, ok := a.conv.(*claude)
 		if !ok || modded.mod == nil {
 			return nil, fmt.Errorf("%T has no mod to script %s", a.conv, method)
@@ -396,6 +402,10 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		return a.handleModal(method)
 	case methodStopRead:
 		return struct{}{}, a.term.stopReading()
+	case methodHoldScreen:
+		return struct{}{}, a.term.holdScreen()
+	case methodReleaseScreen:
+		return struct{}{}, a.term.releaseScreen()
 	case methodStatus:
 		var p textParams
 		if err := json.Unmarshal(params, &p); err != nil {

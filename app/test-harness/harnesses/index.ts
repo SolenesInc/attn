@@ -26,6 +26,7 @@ import { AgentHeaderHarness } from './AgentHeaderHarness';
 import { SidebarRailHarness } from './SidebarRailHarness';
 import { ReviewReaderHarness } from './ReviewReaderHarness';
 import { ReviewSteppingHarness } from './ReviewSteppingHarness';
+import { ReviewMapHarness } from './ReviewMapHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   QuickCaptureHistory: QuickCaptureHistoryHarness,
@@ -54,5 +55,6 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   SidebarRail: SidebarRailHarness,
   ReviewReader: ReviewReaderHarness,
   ReviewStepping: ReviewSteppingHarness,
+  ReviewMap: ReviewMapHarness,
   SidebarTree: SidebarTreeHarness,
 };

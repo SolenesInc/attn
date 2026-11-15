@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -29,7 +30,7 @@ type linkRuntime interface {
 
 	renamed(sessionID protocol.SessionID, label string)
 	profileReleased(profile string)
-	sessionClosed(sessionID protocol.SessionID, profile, conversation string)
+	sessionClosed(sessionID protocol.SessionID, profile, released string)
 	restore(profile, conversation string) error
 	transcriptPath(path string) string
 
@@ -40,7 +41,11 @@ type linkRuntime interface {
 }
 
 func (d *Daemon) links() []linkRuntime {
-	return []linkRuntime{d.codexShared(), d.nisse()}
+	links := []linkRuntime{d.codexShared()}
+	for _, l := range d.appServerLinks() {
+		links = append(links, l)
+	}
+	return links
 }
 
 func (d *Daemon) linkNamed(kind string) linkRuntime {
@@ -95,7 +100,8 @@ func (d *Daemon) linkProcess(t harness.TerminalID) bool {
 			return true
 		}
 	}
-	return false
+	_, server := d.appServerProcess(d.life.Context(), t)
+	return server
 }
 
 func (d *Daemon) linkConversation(sessionID protocol.SessionID) string {
@@ -124,6 +130,19 @@ func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
 }
 
 func (d *Daemon) linkCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool) {
+	if raw, neutral := strings.CutPrefix(string(t), "server-env:"); neutral {
+		variable, conversation, _ := strings.Cut(raw, ":")
+		var owner protocol.SessionID
+		for _, id := range d.store.OpenSessionsHolding(conversation) {
+			if l, ok := d.linkOf(id).(*serverLink); ok && l.callerConversationEnv() == variable {
+				if owner != "" {
+					return "", "", true
+				}
+				owner = id
+			}
+		}
+		return owner, d.primaryTerminal(owner), true
+	}
 	for _, l := range d.links() {
 		if session, view, ours = l.resolveCaller(t); ours {
 			return session, view, true
@@ -151,6 +170,12 @@ func (d *Daemon) linkTerminalDropped(t harness.TerminalID) {
 }
 
 func (d *Daemon) linkTerminalExited(t harness.TerminalID) {
+	if _, server := d.appServerProcess(d.life.Context(), t); server {
+		if err := d.removePTYSession(t); err != nil {
+			d.logf("remove app-server terminal %s: %v", t, err)
+		}
+		return
+	}
 	for _, l := range d.links() {
 		l.terminalExited(t)
 	}

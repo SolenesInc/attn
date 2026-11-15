@@ -21,7 +21,7 @@ func TestTheGuideListsItsPagesAndPrintsEachForTheTerminal(t *testing.T) {
 	requireStdout(t, index, "attn guide <topic>", "Tutorials", "Reference",
 		"getting-started", "building-with-roles",
 		"queue", "sessions", "desktops", "delegation", "crew", "automations", "annotations",
-		"telemetry", "using-outposts", "using-shared-codex", "using-nisse",
+		"telemetry", "using-outposts", "using-shared-codex", "using-sigma",
 		"Before you install", "Why did my desktop disappear?")
 
 	requireStdout(t, s.Attn("guide", "getting-started"), "# Getting started", "The home screen, with the Chief at the top of the sidebar")
@@ -36,7 +36,7 @@ func TestTheGuideListsItsPagesAndPrintsEachForTheTerminal(t *testing.T) {
 	if missing.Code != 1 || missing.Stdout != "" {
 		t.Fatalf("unknown topic: %+v", missing)
 	}
-	requireLines(t, "unknown topic", missing.Stderr, `no topic "nope"`, "getting-started", "using-nisse", "attn <command> --help")
+	requireLines(t, "unknown topic", missing.Stderr, `no topic "nope"`, "getting-started", "using-sigma", "attn <command> --help")
 
 	for _, command := range []string{"help", "-h", "--help"} {
 		help := s.Attn(command)

@@ -12,8 +12,8 @@ import {
   type Question,
 } from './ask'
 import { mentionText, renderMarkdown, type MarkdownContext } from './markdown'
-import { createSeedMentionIndex } from '@attn/utils/seedMentions'
-import type { AskSeedMention } from '@attn/types/generated'
+import { createSeedMentionIndex } from './seedMentions'
+import type { HomeGatewaySeedMention } from '../homeGateway/generated'
 
 export type AskRow = {
   readonly key: string
@@ -40,7 +40,7 @@ export type OpenAsk = {
   readonly draft: Draft
   readonly sending: boolean
   readonly error: string
-  readonly mentions: ReadonlyArray<AskSeedMention>
+  readonly mentions: ReadonlyArray<HomeGatewaySeedMention>
 }
 
 const where = (pairing: Pairing) => `${pairing.homeName} · ${pairing.profileName}`

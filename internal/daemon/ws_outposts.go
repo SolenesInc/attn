@@ -62,7 +62,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 			if protocol.Deref(session.Host) != id {
 				continue
 			}
-			closed := store.SessionClose{By: who.User(), Reason: "outpost removed"}
+			closed := store.SessionClose{By: who.Attn(), Reason: "outpost removed"}
 			if reachable == nil {
 				closing, err := d.beginSessionClose(session.ID, closed, nil)
 				if err != nil {
@@ -72,7 +72,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 					<-d.terminateSessionAsync(session.ID, syscall.SIGTERM, closing.teardown)
 				}
 			} else {
-				if err := d.closeSessionRecord(session.ID, closed); err != nil {
+				if _, err := d.closeSessionRecord(session.ID, closed); err != nil {
 					return err
 				}
 			}

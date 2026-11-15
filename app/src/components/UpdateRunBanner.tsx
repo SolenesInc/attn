@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useUpdateActions } from '../hooks/useUpdateActions';
 import type { UpdateOutpostProgress, UpdateRun } from '../types/generated';
-import { DoneCountdown } from './OutpostUpdateBanner';
+import { DoneCountdown, OutpostNotes } from './OutpostUpdateBanner';
 
 const CLOSED_RUN_KEY = 'attn-closed-update-run';
 
@@ -83,7 +83,7 @@ export function UpdateRunBanner() {
     >
       <span>
         {text}
-        {updateRunIsOpen(run) && (run.outposts ?? []).map(outpost => <span key={outpost.id} className="banner-note"> {outpost.name}: {updateOutpostText(outpost)}</span>)}
+        {updateRunIsOpen(run) && <OutpostNotes rows={run.outposts ?? []} text={updateOutpostText} />}
       </span>
       {run.phase === 'failed' && (
         <button

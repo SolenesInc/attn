@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -135,8 +136,7 @@ type Daemon struct {
 	automationMu            sync.Mutex
 	automationLaunchResults sync.Map
 	automationLaunchWaits   sync.Map
-	automationRepoMu        sync.Mutex
-	automationRepos         map[string]*sync.Mutex
+	repositoryStores        repositoryStores
 	wsWriteTimeout          time.Duration
 	wsPingInterval          time.Duration
 	wsPingTimeout           time.Duration
@@ -214,8 +214,9 @@ type Daemon struct {
 	claudeModState           *claudeMod
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
-	nisseOnce                sync.Once
-	nisseState               *nisseLink
+	serverLinksMu            sync.Mutex
+	serverLinks              map[string]*serverLink
+	serverConnections        map[string]*serverConnection
 	quickCaptureAssetMu      sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState
@@ -665,6 +666,9 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
+	if err := d.restorePluginServerOwners(); err != nil {
+		return fmt.Errorf("restore server ownership: %w", err)
+	}
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
@@ -931,6 +935,9 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			continue
 		}
+		if _, serverView := d.linkOf(session.ID).(*serverLink); serverView {
+			continue
+		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
 			continue
@@ -970,6 +977,9 @@ func (d *Daemon) canReviveSession(session *protocol.Session) bool {
 }
 
 func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent store.LaunchIntent) bool {
+	if _, serverOwned := d.linkOf(session.ID).(*serverLink); serverOwned && d.linkConversation(session.ID) != "" {
+		return true
+	}
 	if session.Agent == protocol.AgentShellValue {
 		return true
 	}
@@ -1395,6 +1405,9 @@ func (d *Daemon) recoverMissingSession(sessionID protocol.SessionID, machine mac
 	if session == nil {
 		return
 	}
+	if _, serverView := d.linkOf(sessionID).(*serverLink); serverView {
+		return
+	}
 	if sessionUpdatedAfter(session, rules.startedAt) {
 		report.SkippedRecent++
 		return
@@ -1817,7 +1830,9 @@ func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptyback
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on lost runtime failed for %s: %v", info.ID, err)
 	}
-	d.applyState(sessionID, sessionmonitor.Change{State: string(protocol.SessionStateRecoverable), Cause: sessionmonitor.RuntimeLost{}})
+	if _, serverView := d.linkOf(sessionID).(*serverLink); !serverView {
+		d.applyState(sessionID, sessionmonitor.Change{State: string(protocol.SessionStateRecoverable), Cause: sessionmonitor.RuntimeLost{}})
+	}
 	d.logf("terminal %s lost its runtime; bringing session %s back", info.ID, sessionID)
 	cols, rows := 80, 24
 	if size, sized := d.ptySizes.owned(protocol.TerminalID(info.ID)); sized {
@@ -2052,7 +2067,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 			return nil, err
 		}
 	}
-	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence}, time.Now())
+	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence, Route: retired.Route}, time.Now())
 	if err != nil {
 		_, _ = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: prepared.Driver})
 		lifecycleLock.Unlock()
@@ -2071,8 +2086,8 @@ func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *s
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
 		d.sessionMonitor(sessionID).ClearForcedStop()
 	} else {
-		run := d.store.SessionTeardownDriverRun(sessionID)
-		raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+		run := teardown.driverRun
+		raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq, Route: run.Route})
 		if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: protocol.Ptr(string(raw))}); err != nil {
 			d.logf("cancel machine teardown: %v", err)
 		}
@@ -2101,7 +2116,7 @@ func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTea
 	}
 	session := d.store.Get(sessionID)
 	terminals := d.terminalsOf(sessionID)
-	if err := d.closeSession(sessionID, store.SessionClose{By: who.User()}); err != nil {
+	if err := d.closeSession(sessionID, store.SessionClose{By: who.Attn()}); err != nil {
 		lifecycleLock.Unlock()
 		d.logf("session teardown recovery close failed for %s: %v", sessionID, err)
 		return nil
@@ -2122,7 +2137,7 @@ func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID protocol.Sess
 	}
 	if claimed {
 		if run.TerminalID != "" {
-			raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+			raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq, Route: run.Route})
 			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "notify", TerminalID: protocol.Ptr(run.TerminalID), Driver: protocol.Ptr(string(raw)), Signal: protocol.Ptr(signalName(sig))}); err != nil {
 				d.logf("notify machine teardown: %v", err)
 				return false
@@ -2206,35 +2221,42 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) error {
 	if d.unreachableSessionHost(sessionID) != "" {
-		return d.closeSessionRecord(sessionID, closed)
+		_, err := d.closeSessionRecord(sessionID, closed)
+		return err
 	}
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
-		return d.closeSessionRecord(sessionID, closed)
+		_, err := d.closeSessionRecord(sessionID, closed)
+		return err
 	}
 	if err := d.drainAgentBeforeClose(sessionID); err != nil {
 		return err
 	}
 	session := d.store.Get(sessionID)
 	link := d.linkOf(sessionID)
-	if err := d.closeSessionRecord(sessionID, closed); err != nil {
+	closure, err := d.closeSessionRecord(sessionID, closed)
+	if err != nil {
 		return err
 	}
 	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
 		d.logf("machine close: %v", err)
 	}
 	if link != nil && session != nil {
-		profile, conversation := session.ProfileID, d.store.GetSessionConversation(sessionID).NativeID
+		profile, released := session.ProfileID, closure.ReleasedConversation
 		d.life.Go("linkAfterSessionClose", func() {
 			lifecycle := d.sessionLifecycleLockFor(sessionID)
 			lifecycle.Lock()
 			defer lifecycle.Unlock()
-			link.sessionClosed(sessionID, profile, conversation)
+			pausepoint.At(pausepoint.SessionCloseReleasing)
+			if d.store.OtherOpenSessionHolding(released, sessionID) != "" {
+				released = ""
+			}
+			link.sessionClosed(sessionID, profile, released)
 		})
 	}
 	return nil
 }
 
-func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.SessionClose) error {
+func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.SessionClose) (store.SessionClosure, error) {
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
 		d.decorateSessionWithTitle(session)
 		closed.FallbackLabel = protocol.Deref(session.Title)
@@ -2245,7 +2267,7 @@ func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.S
 	return d.recordSessionClose(sessionID, d.store.Get(sessionID), func() (store.SessionClosure, error) { return d.store.CloseSession(sessionID, closed, time.Now()) })
 }
 
-func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *protocol.Session, commit func() (store.SessionClosure, error)) error {
+func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *protocol.Session, commit func() (store.SessionClosure, error)) (store.SessionClosure, error) {
 	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
@@ -2258,7 +2280,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *proto
 	closure, err := commit()
 	if err != nil {
 		d.logf("close session %s: %v", sessionID, err)
-		return err
+		return store.SessionClosure{}, err
 	}
 	unregistered := d.sessionForBroadcast(closing)
 	if _, pending := d.sessionMonitor(sessionID).PendingConversation(); !pending {
@@ -2281,7 +2303,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *proto
 	}
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
-	return nil
+	return closure, nil
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
@@ -2859,6 +2881,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	}
 	defer release()
 	cmd, msg, err := protocol.ParseMessage(data)
+	identity := parseSocketFrameIdentity(data)
+	caller := d.callerSession(ctx, identity.terminal)
 	if origin, remote := OriginOf(ctx); remote && !d.isOutpostConn(origin.Host, origin.bridge) {
 		d.sendError(conn, "outpost bridge was replaced")
 		return
@@ -2889,12 +2913,12 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && d.answerUpdateStatusFromNotice(conn) {
 					return
 				}
-				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, d.callerSession(ctx, data))
+				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, caller)
 				return
 			}
 		}
 	}
-	caller := d.callerSession(ctx, data)
+	by := socketCaller{daemon: d, session: cmp.Or(identity.source, caller)}
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -2927,7 +2951,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
 		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:
-		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage))
+		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage), by.Actor())
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
 		d.handleAutomationCommand(conn, cmd, msg)
 	case protocol.CmdDelegationRoles:
@@ -2981,7 +3005,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdJournalAppend:
 		d.handleJournalAppend(conn, msg.(*protocol.JournalAppendMessage))
 	case protocol.CmdUnregister:
-		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage))
+		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage), by.Actor())
 	case protocol.CmdState:
 		d.handleState(conn, msg.(*protocol.StateMessage))
 	case protocol.CmdHookNotification:
@@ -3068,6 +3092,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSenderUnpair(conn, msg.(*protocol.SenderUnpairMessage), caller)
 	case protocol.CmdSenderSessions:
 		d.handleSenderSessions(conn, msg.(*protocol.SenderSessionsMessage))
+	case protocol.CmdSenderRefine:
+		d.handleSenderRefine(conn, msg.(*protocol.SenderRefineMessage))
 	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:
@@ -3075,9 +3101,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdAgentMsgStatus:
 		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
 	case protocol.CmdSeedPlant:
-		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage))
+		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage), by.Actor())
 	case protocol.CmdSeedPlot:
-		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage))
+		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage), by.Actor())
 	case protocol.CmdSeedList:
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
 	case protocol.CmdSeedSearch:
@@ -3085,35 +3111,35 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdSeedShow:
 		d.handleSeedShow(ctx, conn, msg.(*protocol.SeedShowMessage))
 	case protocol.CmdSeedArtifactTransfer:
-		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage))
+		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage), by.Actor())
 	case protocol.CmdSeedEdit:
-		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
+		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage), by.Actor())
 	case protocol.CmdSeedRollback:
-		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage))
+		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage), by.Actor())
 	case protocol.CmdSeedAuthorization:
-		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage))
+		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage), by.Actor())
 	case protocol.CmdSeedReminder:
-		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage))
+		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage), by.Actor())
 	case protocol.CmdSeedStandby:
-		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage))
+		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage), by.Actor())
 	case protocol.CmdSeedTransition:
-		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
+		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage), by.Actor())
 	case protocol.CmdSeedNote:
-		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage))
+		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage), by.Actor())
 	case protocol.CmdSeedCheck:
-		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage))
+		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage), by.Actor())
 	case protocol.CmdSeedNotes:
 		d.handleSeedNotes(conn, msg.(*protocol.SeedNotesMessage))
 	case protocol.CmdSeedWatch:
 		d.handleSeedWatch(conn, msg.(*protocol.SeedWatchMessage))
 	case protocol.CmdSeedLink:
-		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage))
+		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage), by.Actor())
 	case protocol.CmdSeedReady:
 		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
 	case protocol.CmdSeedReviewStart:
 		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
 	case protocol.CmdSeedSendToChief:
-		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage))
+		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage), by.Actor())
 	case protocol.CmdSeedReviewShow:
 		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
 	case protocol.CmdSeedReviewCancel:
@@ -3276,13 +3302,13 @@ func (d *Daemon) projectSessionUnregistered(ev bus.Event) {
 	})
 }
 
-func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
+func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage, by who.Actor) {
 	teardown, err := d.prepareSessionTeardown(msg.ID)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return
 	}
-	if err := d.commitSessionUnregister(msg.ID, store.SessionClose{By: who.User()}); err != nil {
+	if err := d.commitSessionUnregister(msg.ID, store.SessionClose{By: by}); err != nil {
 		d.cancelSessionTeardown(msg.ID, teardown)
 		d.sendError(conn, fmt.Sprintf("close session: %v", err))
 		return

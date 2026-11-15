@@ -19,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/shortid"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -327,7 +328,7 @@ func (d *Daemon) setVentDismissed(msg *protocol.SetVentDismissedMessage, profile
 
 func (d *Daemon) handlePlantVentSeed(client *wsClient, msg *protocol.PlantVentSeedMessage) {
 	result := protocol.PlantVentSeedResultMessage{Event: protocol.EventPlantVentSeedResult, RequestID: msg.RequestID, VentID: msg.VentID}
-	if seed, err := d.plantVentSeed(strings.TrimSpace(msg.VentID), client.selectedProfile()); err != nil {
+	if seed, err := d.plantVentSeed(strings.TrimSpace(msg.VentID), client.selectedProfile(), client.caller); err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {
 		result.Seed = &seed
@@ -336,7 +337,7 @@ func (d *Daemon) handlePlantVentSeed(client *wsClient, msg *protocol.PlantVentSe
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) plantVentSeed(id, profileID string) (protocol.Seed, error) {
+func (d *Daemon) plantVentSeed(id, profileID string, by who.Actor) (protocol.Seed, error) {
 	vent, err := d.profileVent(id, profileID)
 	switch {
 	case err != nil:
@@ -347,7 +348,7 @@ func (d *Daemon) plantVentSeed(id, profileID string) (protocol.Seed, error) {
 		return protocol.Seed{}, fmt.Errorf("vent %s already planted seed %s", id, vent.PlantedSeedID)
 	}
 	stored := storedVent{vent}
-	seed, _, err := d.plantSeedRequest(&protocol.SeedPlantMessage{ProfileID: &vent.ProfileID, Title: stored.seedTitle(), Body: protocol.Ptr(stored.seedBody())})
+	seed, _, err := d.plantSeedRequest(&protocol.SeedPlantMessage{ProfileID: &vent.ProfileID, Title: stored.seedTitle(), Body: protocol.Ptr(stored.seedBody())}, by)
 	if err != nil {
 		return protocol.Seed{}, fmt.Errorf("seed plant: %w", err)
 	}

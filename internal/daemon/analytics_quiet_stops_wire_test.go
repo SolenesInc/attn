@@ -210,9 +210,9 @@ func TestACodexQuietStopIsJudgedByCodexAtTheClassifiersEffort(t *testing.T) {
 	}
 }
 
-func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
+func TestAnAppServerQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	judged := make(chan string, 2)
-	w := newTitlingWorld(t, fakeagent.Nisse, fakeagent.Claude)
+	w := newTitlingWorld(t, fakeagent.SampleServer, fakeagent.Claude)
 	w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
 		switch {
 		case strings.Contains(task.Prompt, quietStopQuestion):
@@ -228,9 +228,9 @@ func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	setSetting(t, app, "queue_mode_enabled", "true")
 	setAnalyticsEnabled(app, "true")
 	registerSessions(t, w, w.Client(), "reviewer")
-	session, nisse, server := nisseSession(t, w, app, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
-	conversation := nisse.ConversationID
-	nisse.Prompted()
+	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
+	conversation := view.ConversationID
+	view.Prompted()
 	server.Prompted(conversation)
 	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	server.Reply(conversation, "Planned the refund flow. <!-- attn:state=idle -->")
@@ -249,14 +249,27 @@ func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	}
 	ringAndAnswer("the review is in", "The refund bug is fixed and landed. <!-- attn:state=idle -->")
 	ringAndAnswer("the deploy is in", "The deploy finished with no errors. <!-- attn:state=idle -->")
-	if got := verdictsOnceTheDaemonHasStopped(t, w, session); !slices.Equal(got, []string{`{"verdict":"read"}`, `{"verdict":"read"}`}) {
-		t.Errorf("quiet stop records %q", got)
+	verdicts := verdictsOnceTheDaemonHasStopped(t, w, session)
+	registerSampleServerDriver(t, w, w.App())
+	if revived := w.Launched(session); revived.ConversationID != conversation {
+		t.Errorf("the restart revived AppServer on conversation %q, want %q", revived.ConversationID, conversation)
 	}
+	if !slices.Equal(verdicts, []string{`{"verdict":"read"}`, `{"verdict":"read"}`}) {
+		t.Errorf("quiet stop records %q", verdicts)
+	}
+	answers := []string{"The deploy finished with no errors.", "The refund bug is fixed and landed."}
 	prompts := judgedSoFar(judged)
-	for i, want := range []string{"The refund bug is fixed and landed.", "The deploy finished with no errors."} {
-		if i >= len(prompts) || !strings.Contains(prompts[i], want) || strings.Contains(prompts[i], "attn:state") {
-			t.Errorf("the verdicts judged %q, want each run's own answer, %q as number %d", prompts, want, i+1)
+	var judgedAnswers []string
+	for _, prompt := range prompts {
+		for _, answer := range answers {
+			if strings.Contains(prompt, answer) && !strings.Contains(prompt, "attn:state") {
+				judgedAnswers = append(judgedAnswers, answer)
+			}
 		}
+	}
+	slices.Sort(judgedAnswers)
+	if !slices.Equal(judgedAnswers, answers) {
+		t.Errorf("the verdicts judged %q, want each run's own answer once, without its state marker: %q", prompts, answers)
 	}
 	for _, record := range streamOutbox(t, w.App(), analytics.StreamRun) {
 		if strings.Contains(string(record.Props), "refund") || strings.Contains(string(record.Props), "deploy") {

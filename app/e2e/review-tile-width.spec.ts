@@ -63,9 +63,9 @@ async function expectEveryKeyShown(tile: Locator, expected: readonly string[], s
   else expect(state?.clipped).toBe(false);
 }
 
-const BRIEF_KEYS = ['1Brief2Walkthrough3Map', '↑↓ line', '←→ stop', 'c note', 'a ask', 'i edit', '⌘↵ send', '↵ open the file', 'e more lines', 'z fill the tile', '/ search'];
+const BRIEF_KEYS = ['1Brief2Walkthrough3Map', '↑↓ line', '←→ stop', 'c note', 'a ask', 'i edit', '⌘⏎ send', '↵ open the file', 'e more lines', 'z fill the tile', '/ search'];
 const WALKTHROUGH_KEYS = ['↑↓ line', '←→ stop', '⇧←⇧→ sideways', 'z hide the script', '/ search'];
-const MAP_KEYS = ['↑↓ line', '←→ message', '↵ open the file', 'e more lines', '/ search'];
+const MAP_KEYS = ['↑↓ line', '←→ arrow', '↵ open the file', 'e more lines', '/ search'];
 const FILE_KEYS = ['↑↓ line', '←→ change', '⇧←⇧→ sideways', 'z fill the tile', '/ search', '⌃o back', 'esc close'];
 
 async function cursorToLongLine(page: Page, tile: Locator) {
@@ -121,7 +121,7 @@ for (const server of ['ready', 'failed'] as const) {
     await expectEveryKeyShown(tile, WALKTHROUGH_KEYS, server);
 
     await page.keyboard.press('3');
-    await expect(tile.locator('.review-map')).toBeVisible();
+    await expect(tile.locator('.review-map-diagrams')).toBeVisible();
     await expectEveryKeyShown(tile, MAP_KEYS, server);
   });
 }
@@ -159,7 +159,7 @@ test('a long line wraps in a stop, with its note, mark and name labels on its ro
   await page.keyboard.press('Escape');
 
   await page.keyboard.press('3');
-  const mapRow = tile.locator('.review-map-detail .review-row[data-line="3"][data-kind="+"]');
+  const mapRow = tile.locator('.review-frame--map > .review-doc .review-row[data-line="3"][data-kind="+"]');
   await expectWrapped(mapRow);
 });
 

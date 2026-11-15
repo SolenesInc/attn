@@ -16,6 +16,7 @@ attn runs you beside the user's other agents. Check this list before you work ar
 | See what other agents are doing, or message one. `chief` names the Chief | `attn agent list`, `attn agent peek`, `attn agent msg`, `attn agent inbox` | `converse-and-observe` |
 | Close or reload an agent, wrap up, or close yourself | `attn agent close`, `attn agent reload` | `wrap-up` |
 | Read past sessions, or rename or snooze a session | `attn session` | `converse-and-observe` |
+| Wait for a time, a pull request, another seed or the user, with your session closed | `attn seed standby` | `garden` |
 | Open a shell, read a terminal, move between desktops | `attn terminal` | `terminal` |
 | Show the user a markdown document | `attn open` | `markdown` |
 | Write anything longer than a few sentences for a reader | | `showing` |

@@ -11,9 +11,11 @@ picker. Pick a harness or a plain shell, then a directory. In a git repository,
 Tab moves on to where the agent works: a new worktree (type to name its
 branch), the main checkout, or a worktree that already exists. Enter starts it.
 
-Attn runs Claude Code and Codex, and other harnesses through plugins. You get
+Attn runs Claude Code and Codex, and other harnesses through plugins; to add one,
+see [Writing a harness plugin](writing-harness-plugins.md). You get
 each harness as its makers built it, and you can still use its bare CLI whenever you want.
-Nisse is experimental and off by default. See [Using Nisse](using-nisse.md).
+Install the Sigma plugin to add its harness.
+See [Using Sigma](using-sigma.md).
 
 ### The launcher
 
@@ -139,9 +141,9 @@ attn send <id> --token-stdin --file data.csv -m "Totals look off in March" < tok
 
 `attn send sessions --token-stdin --json` lists the sessions the program can
 send to: each live agent session of its profile, never a shell, with its id,
-label, agent, state, host when it runs on an outpost, and when you last
-focused it in Attn. Repeat `--file` to send more files. Attn types the message into the agent's
-conversation as yours. For each file, the message has an
+label, agent, state, the outpost's id (`host`) and name (`host_label`) when it
+runs on an outpost, and when you last focused it in Attn. Repeat `--file` to
+send more files. Attn types the message into the agent's conversation as yours. For each file, the message has an
 `attn agent attachment … --out <path>` command that saves the file where the
 agent runs, including on an outpost.
 
@@ -149,6 +151,26 @@ To see a profile's paired programs, open the **Paired senders** list in
 Settings or run `attn send senders`. To stop a program sending, click
 **Remove** there or run `attn send unpair <name>`. Run `attn send --help` for
 the details.
+
+## Refine dictated text from outside Attn
+
+A program you paired, as in [Send files to an agent from outside
+Attn](#send-files-to-an-agent-from-outside-attn), can clean up dictated text
+with the refinement Attn's own dictation uses. Give the token on the first
+line of stdin and the raw transcript after it:
+
+```sh
+printf '%s\n%s' "$TOKEN" "$TRANSCRIPT" | attn refine --token-stdin --duration-ms 7616 --json
+```
+
+The command prints the refined text and exits 0. If the refinement fails or
+takes longer than 15 seconds plus a quarter of the recording, the command
+prints the error and exits 1, and your program keeps its raw text. With
+`--json`, the error for a refinement that ran past that limit also has
+`limit_ms`. Add `--format markdown` to get paragraphs and lists for an editor
+that takes Markdown. Stopping the command cancels the refinement. The
+`dictation.refinement_agent` setting chooses the harness, and headless tasks
+must be on. Run `attn refine --help` for the details.
 
 ## Details
 

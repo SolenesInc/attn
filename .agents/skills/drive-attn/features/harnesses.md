@@ -12,8 +12,11 @@ harness's logo.
 - `harness-choice`: pick the harness when starting an agent. The default comes from Settings.
 - `harness-settings`: each harness's executable, default model and effort, and auto-approve, plus what it supports, in Settings.
 - `harness-models`: the models each harness offers, and the light, standard and deep tiers mapped to them.
+- `execution-targets`: where a plugin server's conversation runs its tools, from the targets the server lists for the folder, chosen at launch and kept through resume. An unavailable target ends the view with its reason and never falls back to local.
 - `plugins`: install a plugin from a folder or a Git repository, link a folder while developing one, set a plugin's priority, uninstall.
-- `plugin-driver`: a plugin's driver starts its harness's agents and reports what they do.
+- `plugin-driver`: a plugin's driver starts its harness's agents and reports what they do. A driver may declare a display name while keeping its stored harness ID. A run keeps its terminal or direct input route across disconnects and restarts. Capable drivers receive attributed input, accept text during approval without answering it, and compact before closing.
+- `plugin-server`: an installed plugin declares a shared app-server, prepares native views and exposes models and optional targets. Open conversations retain direct input and ownership without a view.
+- `plugin-authoring`: an author outside the checkout installs `@victorarias/attn-plugin`, copies `examples/plugins/sample-harness`, changes its harness ID and installs it with `attn plugin install --path`. The ID appears in the picker and launches the harness. A capability the author leaves out is unavailable.
 - `harness-logos`: the Claude or Codex mark beside each agent in the sidebar, or a state dot without it.
 - `shared-conversation-warning`: two tiles on one Claude Code conversation both warn until one closes.
 
@@ -39,6 +42,7 @@ harness's logo.
 
 - The plugin supervisor starts each installed plugin, restarts it when it fails, and stops it on uninstall (`internal/daemon/plugin_supervisor.go`). The plugin's driver launches and reports its harness's agents (`internal/daemon/plugin_driver.go`).
 - attn asks each harness which models it offers (`internal/daemon/harness_models.go`).
+- A protocol client lists a folder's targets with `harness_targets {harness, cwd}` and launches on one with `spawn_session`'s `execution_target` (`internal/daemon/harness_targets.go`). No app picker offers it yet.
 
 ## Driving it
 
@@ -55,11 +59,34 @@ Preconditions:
 - **Harness logos.** Run `wsctl add-session --cwd $P/codex --agent codex --label harness-codex --id harness-codex --place`. `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-harness-codex\"] [role=\"img\"][aria-label^=\"Codex · \"]","timeoutMs":5000}'` matches. Open the palette (⌘⇧K, wait for `[role="combobox"][aria-label="Commands"]` to take focus), type `Hide harness logos` and press Enter. `./attn settings get sidebar_harness_logos_enabled` prints `false`, and `bridge dom_wait '{"selector":".sidebar.sidebar--hide-harness-logos","timeoutMs":5000}'` matches: the row shows its state dot where the logo was. Choose "Show harness logos in the sidebar" in the palette: the logos return and the selector goes absent.
 - **A plugin from a folder.** Make a folder `$P/audit-probe` holding `attn-plugin.toml` (`name = "audit-probe"`, `version = "0.0.1"`, `attn_api_version = 7`, and `[plugin]` with `kind = "executable"` and `path = "probe.sh"`), a `package.json` of `{"name":"audit-probe","version":"0.0.1","private":true}` (install runs `bun install`, which needs one) and an executable `probe.sh` that runs `exec sleep 300`. `./attn plugin install --path $P/audit-probe` prints `"ok": true`, and `./attn plugin list` lists it. Run `./attn plugin uninstall audit-probe`. Then run `./attn plugin link --path $P/audit-probe` and `./attn plugin remove audit-probe` to do the same for a linked copy. The supervisor starts the probe and stops it on removal. Once the probe fails, the plugin shows `degraded` with the probe's last exit.
 - **Plugins from Settings.** Open Settings and click `[data-testid="settings-nav-plugins"]` natively. Click `[aria-label="Plugin source"]`, type `$P/audit-probe` written out, and click `.plugin-form button.settings-action:last-child` ("Install Plugin") natively: a card for `audit-probe` appears and `./attn plugin list` agrees. Type `5` in `[aria-label="audit-probe priority"]` and press Enter: `priority` is 5. Click the card's "Remove" natively: the card goes and `./attn plugin list` no longer holds `audit-probe`. Browse opens the system file dialog, which you cannot drive on a shared Mac.
+- **Plugin input.** Run `scripts/verify-plugin-run-input.sh` for daemon wire and CLI stack proof on isolated data. The checks cover arbitrary harness IDs, both voices, permission-safe delivery, compaction outcomes, old API 7 payloads, terminal-only input, disconnects, daemon restarts, both PTY runtimes, retired reports, and a database from before input routes were recorded. Human keystrokes still reach the terminal. A direct run whose driver is unavailable defers automated input.
+- **A plugin author's harness.** Run `scripts/verify-plugin-author-sdk.sh`. It packs the SDK into a tarball, copies `examples/plugins/sample-harness` to a clean folder with a new harness ID, installs it with `attn plugin install --path`, starts it in the picker's place, sends annotation and `attn agent msg` input, restarts the daemon, reloads the session and checks that models, which the sample leaves out, are unavailable. The guide page is `docs/guide/reference/writing-harness-plugins.md`.
+- **A shared-server plugin.** Run `scripts/verify-plugin-server.sh`. It packs SDK 0.3.0, installs `examples/plugins/sample-server` with an arbitrary ID in an isolated stack, reuses an external server, discovers models and targets, checks both voices and duplicate IDs, resolves shell tools through the Go and Rust CLIs, and restarts the plugin and daemon with live and zero-view sessions. Missing registrations defer direct input. Active owners refuse uninstall. Aliases share one startup, control connection and status watch. Uninstalling the initiating alias and restarting the daemon keeps the surviving alias and physical server PID. Plain-shell calls make no catalog request, and conflicting root variables refuse caller-dependent commands.
+- **Sigma.** Build the plugin from SolenesInc/attn-sigma and install it with `attn plugin install --path <checkout>`, with a `sigma` built from SolenesInc/sigma on PATH or in `ATTN_SIGMA_EXECUTABLE`. The picker offers `sigma` after registration. Start a session, send a prompt and see it run and settle; `using-sigma` in the guide covers install and uninstall. The generic shared-server checks cover `last-run` recovery and `interrupt` on close, and numbered completion recovery, leave-running close and execution targets through the sample server.
+
 - **Proof.** In `$P`, keep each `./attn` command with its output and exit code, `bridge dom_text` of the "Session agent" group before and after the key, `./attn settings get new_session_agent` after it, `./attn plugin list` before and after each install, and `bridge capture_screenshot '{"path":"<P>/harness-logos.png"}'` with the logos on and `<P>/harness-plugins.png` with the Plugins section open. Name each file for its way in, such as `harnesses-settings-plugins.png`.
+
+### In the native app
+
+The native app (`native/`) has Settings → Agents and models: the default agent, the agent switches, each harness's executable and default context cap, and model price overrides. This recipe covers Agents and models; the picker, logo and plugin steps above drive the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Open Settings as [settings.md](settings.md) says for the native app and press `settings.nav.agents`.
+
+Steps:
+
+- **The default agent.** Press `settings.default-agent.codex`: `./attn settings get new_session_agent` prints `codex`. Press `settings.default-agent.claude` to put it back.
+- **The switches.** Press `settings.toggle.auto_approve_enabled`, then `settings.toggle.direct_agent_launch_enabled`: `./attn settings get` follows each, and a second press saves the old value back.
+- **A harness executable.** Press `settings.agent.codex.toggle`, then `settings.agent.codex.advanced`, so the Codex card and its advanced fields are open. Make an executable file, press `settings.input.codex_executable.field`, type its path, written out, and press `Enter`: `settings.saved.codex_executable` answers and `./attn settings get codex_executable` prints the path. The daemon refuses a path with no executable file. Clear the field and press `Enter`: the setting is empty again and attn uses the `codex` on PATH.
+- **A refused cap.** In `settings.input.default_context_window_cap_codex.field`, type `1` and press `Enter`: `settings.refusal.default_context_window_cap_codex` reads `context window cap must be between` and the range. Press `settings.nav.general`: `state` of `settings` still shows `activeSection: "agents"`, because a refused field keeps its page. Type `192000` and press `Enter`: the refusal goes and the setting reads `192000`.
+- **A price override.** Press `settings.pricing` to open the model price overrides, then `bridge scroll '{"target":{"key":"settings.body"},"dy":3000}'`. Type a model in `settings.price-new.model` and a rate in each of `settings.price-new.<rate>`, the five rates of `session_cost.price.<model>`, and press `Enter`: `settings.price.<model>` answers and `./attn settings get session_cost.price.<model>` prints the five rates. Press `settings.price.<model>.remove`: the row goes and the setting is empty.
+- **Proof.** Keep each `./attn settings get` answer and `bridge shot '{"path":"<P>/native-agents.png"}'` with Agents and models open, `<P>` written out. The `native-agent-settings` scenario runs these steps and the headless cap in [usage.md](usage.md).
 
 ## Contexts
 
-- **Durability across restarts**: installed plugins start again with the daemon, and the daemon hands a reconnecting driver its own runs. Harness settings are kept.
+- **Durability across restarts**: installed plugins start again with the daemon, and the daemon hands a reconnecting driver its own runs. A run keeps its input route even when its plugin is absent. Older runs wait for their owning driver to register before choosing a route. Harness settings are kept.
 - **Linux**: plugins run where the daemon runs.
 - **Outposts**: a harness's executable is a machine setting, so each outpost decides its own. The rest of the harness settings come from the home.
 - **Profiles**: harness settings and plugins apply across all profiles on the daemon.
@@ -70,10 +97,10 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`.
-- Stack: `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_runtime_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`.
-- Scenario: `agent-settings`, `claude-shared-conversation`.
-- Kernel: `internal/plugins/*_test.go`, `internal/pty/harness_signals_test.go`, `internal/daemon/plugin_runtime_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/settings/agents.rs`, `native/crates/attn-app/tests/wire/settings/models.rs` and `native/crates/attn-app/tests/wire/settings/plugins.rs` (the native Settings sections), `internal/daemon/plugin_server_wire_test.go`, `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_run_input_wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`, `internal/daemon/app_server_wire_test.go`, `internal/daemon/plugin_server_recovery_wire_test.go`.
+- Stack: `cmd/attnd/plugin_server_stack_test.go`, `scripts/verify-plugin-server.sh`, `cmd/attnd/plugin_author_stack_test.go`, `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_runtime_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`, `internal/daemon/plugin_run_input_stack_test.go`, `scripts/verify-plugin-run-input.sh`.
+- Scenario: `agent-settings`, `claude-shared-conversation`, `native-agent-settings`.
+- Kernel: `sdk/plugin/test/*.test.ts` (run by `TestThePluginSDKPassesItsOwnTests`), `internal/plugins/*_test.go`, `internal/pty/harness_signals_test.go`, `internal/daemon/plugin_runtime_test.go`.
 - App: `app/src/components/Sidebar.harnessIcons.test.tsx`, `app/src/App.modelTierSettings.test.tsx`.
 
 ## Gotchas
@@ -84,6 +111,7 @@ Preconditions:
 - The baseline's `ATTN_CLAUDE_EXECUTABLE` and `ATTN_CODEX_EXECUTABLE` win over the executables set in Settings, so changing one there changes nothing on the baseline.
 - The mock stands in for `claude` and `codex` only. The shared-conversation warning needs two harness processes on one conversation, which the scenarios set up.
 - `attn plugin` has no help. With no subcommand it prints its usage and exits 1, and `attn plugin --help` exits 1 with `unknown plugin command: --help`. Every subcommand prints JSON, and `uninstall` and `remove` do the same thing, `remove` adding `plugin_dir` to its reply.
+- A shared-server plugin refuses uninstall while it owns any open server session, including a session with no view. Its declaration stays usable through a plugin disconnect; after a daemon restart, the session waits for the same owner to register again.
 - A plugin that owns running delegated agents refuses to uninstall: `plugin "<name>" owns N active delegated run(s)`.
 - `bridge location_picker_get_state` lists the YOLO and chief switches in `agents` beside the harnesses, since they share a style. Read the harness from the "Session agent" group.
 - Working but wrong: `attn plugin` has no help and always answers in JSON, and its `uninstall` and `remove` are two names for one action.

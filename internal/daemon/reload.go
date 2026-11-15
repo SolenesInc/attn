@@ -467,6 +467,9 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		return ptybackend.SpawnOptions{}, fmt.Errorf("agent %q is not available", session.Agent)
 	}
 	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
+	if isPlugin && pluginDriver.Capabilities["server_binding"] {
+		resumeSessionID = d.store.GetSessionConversation(sessionID).NativeID
+	}
 	if resumeSessionID != "" {
 		readiness, err := d.placedConversationReadiness(sessionID, d.sessionHost(sessionID), agent, session.ProfileID, resumeSessionID, true)
 		if err != nil {
@@ -481,9 +484,11 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		}
 	}
 
+	executionTarget := ""
 	if intent, ok := d.store.LaunchIntent(sessionID); ok {
 		params.Executable = intent.Executable
 		params.ClaudeExecutable, params.CodexExecutable = "", ""
+		executionTarget = intent.ExecutionTarget
 	}
 	opts := ptybackend.SpawnOptions{
 		ID:               terminal,
@@ -501,6 +506,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		CodexExecutable:  params.CodexExecutable,
 		Model:            params.Model,
 		Effort:           params.Effort,
+		ExecutionTarget:  executionTarget,
 		AutoApprove:      false,
 		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent),
 	}
@@ -542,6 +548,7 @@ type preparedPluginReload struct {
 	sessionID  protocol.SessionID
 	pluginName string
 	runID      string
+	route      string
 	completed  bool
 	launch     *AgentLaunch
 }
@@ -559,7 +566,7 @@ func (p *preparedPluginReload) commit() error {
 		return nil
 	}
 	oldRun := p.d.store.GetAgentDriverRun(p.sessionID)
-	if !p.d.beginAgentDriverRun(p.sessionID, p.pluginName, p.runID) {
+	if !p.d.beginAgentDriverRun(p.sessionID, p.pluginName, p.runID, p.route) {
 		return fmt.Errorf("initialize plugin driver run cursor")
 	}
 	p.completed = true
@@ -592,14 +599,18 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	}
 	runID := uuid.NewString()
 	params := pluginDriverSpawnParams{
-		Agent:      reg.Agent,
-		TerminalID: opts.ID,
-		RunID:      runID,
-		CWD:        session.Directory,
-		Label:      session.Label,
-		Yolo:       opts.YoloMode,
-		Model:      opts.Model,
-		Effort:     opts.Effort,
+		Executable:      opts.Executable,
+		Agent:           reg.Agent,
+		TerminalID:      opts.ID,
+		RunID:           runID,
+		CWD:             session.Directory,
+		Label:           session.Label,
+		Yolo:            opts.YoloMode,
+		Model:           opts.Model,
+		Effort:          opts.Effort,
+		ConversationID:  d.linkConversation(session.ID),
+		ResumeSessionID: opts.ResumeSessionID,
+		ExecutionTarget: opts.ExecutionTarget,
 
 		InitialPrompt: launch.InitialPrompt,
 	}

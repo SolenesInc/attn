@@ -51,9 +51,10 @@ type Kit struct {
 
 type fake struct {
 	launch
-	peer     *rpcPeer
-	mu       sync.Mutex
-	exitCode *int
+	peer        *rpcPeer
+	mu          sync.Mutex
+	exitCode    *int
+	compactions map[string]int
 }
 
 func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper string) *Kit {
@@ -81,7 +82,7 @@ func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper stri
 	if wrapper != "" {
 		links[wrapperName] = wrapper
 	}
-	for _, h := range []Harness{Claude, Codex, Plug, Nisse} {
+	for _, h := range []Harness{Claude, Codex, Plug, Sigma, SampleServer} {
 		links[string(h)] = binary
 	}
 	mustInstall(t, cfg.Bin, links, map[string]string{configName: string(encoded)})
@@ -111,8 +112,10 @@ func (k *Kit) Env() []string {
 		"PATH=" + k.cfg.Bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"ATTN_CLAUDE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Claude)),
 		"ATTN_CODEX_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Codex)),
-		"ATTN_NISSE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Nisse)),
-		"NISSE_HOME=" + nisseHome(filepath.Dir(k.cfg.Control)),
+		"ATTN_SIGMA_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Sigma)),
+		"SIGMA_HOME=" + appServerHome(filepath.Dir(k.cfg.Control), Sigma),
+		"ATTN_SAMPLE_SERVER_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(SampleServer)),
+		"SAMPLE_SERVER_HOME=" + appServerHome(filepath.Dir(k.cfg.Control), SampleServer),
 		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, wrapperName),
 	}
 }
@@ -145,6 +148,23 @@ func (k *Kit) Launched(sessionID string) *Run {
 	case <-time.After(HangGuard):
 		k.t.Fatalf("no fake agent launched for session %s within %s%s", sessionID, HangGuard, k.failureSummary())
 		return nil
+	}
+}
+
+func (k *Kit) LaunchFailed(sessionID string) (*Run, string) {
+	k.t.Helper()
+	select {
+	case run := <-k.launchesFor(sessionID):
+		if run.fake.Error == "" {
+			k.t.Fatalf("fake %s for session %s launched, want its launch to fail", run.Harness, sessionID)
+		}
+		k.mu.Lock()
+		k.failures = slices.DeleteFunc(k.failures, func(failure string) bool { return failure == launchFailure(run.fake) })
+		k.mu.Unlock()
+		return run, run.fake.Error
+	case <-time.After(HangGuard):
+		k.t.Fatalf("no fake agent launched for session %s within %s%s", sessionID, HangGuard, k.failureSummary())
+		return nil, ""
 	}
 }
 
@@ -298,7 +318,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		k.fakes = append(k.fakes, f)
 		k.mu.Unlock()
 		if f.Error != "" {
-			k.fail(fmt.Sprintf("fake %s for session %q failed to launch: %s (argv %q)", f.Harness, f.AttnSessionID, f.Error, f.Argv))
+			k.fail(launchFailure(f))
 		}
 		if f.Role == roleCodexServer {
 			k.mu.Lock()
@@ -350,6 +370,17 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		f.mu.Lock()
 		f.exitCode = &exit.Code
 		f.mu.Unlock()
+	case methodCompacted:
+		var compacted compactedParams
+		if err := json.Unmarshal(params, &compacted); err != nil {
+			return err
+		}
+		f.mu.Lock()
+		if f.compactions == nil {
+			f.compactions = map[string]int{}
+		}
+		f.compactions[compacted.Conversation]++
+		f.mu.Unlock()
 	default:
 		return fmt.Errorf("unknown method %q", method)
 	}
@@ -370,6 +401,10 @@ func (f *fake) exited() int {
 		return -1
 	}
 	return *f.exitCode
+}
+
+func launchFailure(f *fake) string {
+	return fmt.Sprintf("fake %s for session %q failed to launch: %s (argv %q)", f.Harness, f.AttnSessionID, f.Error, f.Argv)
 }
 
 func (k *Kit) fail(failure string) {

@@ -29,8 +29,8 @@ missing.
 The workflow builds:
 
 - on every push to `main` that changes the phone: `mobile/**`,
-  `internal/protocol/schema/home_gateway.tsp`, `ghostty-vt.pin`, or a file in `app/src`
-  that the phone's bundle includes
+  `internal/protocol/schema/home_gateway.tsp`, `ghostty-vt.pin`,
+  `ghostty-vt-wasm.lock`, or `scripts/ensure-ghostty-vt-wasm.sh`
 - when you start it: **Actions → TestFlight → Run workflow**, or
   `gh workflow run testflight.yml`
 - on its weekly schedule, only when the newest upload is over 60 days old, so a
@@ -41,19 +41,6 @@ the build that waits. Each build checks out the newest `main` when it starts, so
 merges that land together become one follow-up build holding all of them, in
 whichever order GitHub queued them. Changes to the daemon's Home Gateway code build
 nothing, because they do not change the app.
-
-The workflow lists the `app/src` files by name, taken from the bundle's module
-graph, because the rest of `app/src` changes far more often and would spend
-builds on code the phone does not run. To refresh the list, for example after
-the phone starts importing something new, run this and replace the `app/src`
-lines under `paths` in the workflow with its output:
-
-```sh
-pnpm --dir mobile install --frozen-lockfile
-node mobile/scripts/testflight-paths.mjs
-```
-
-A stale list only delays a change until the next build, so nothing checks it.
 
 A build takes about 4 minutes on the runner: 3m19s to 4m11s for the job, on the
 first three builds. The workflow selects Xcode 26.3 with `DEVELOPER_DIR`, because
@@ -85,8 +72,8 @@ mobile/scripts/testflight.sh
 The script:
 
 1. Reads the App Store Connect API key as [Secrets](#secrets) says.
-2. Fetches the pinned `ghostty-vt.wasm` the terminal view needs, builds the
-   web app, and copies it into the iOS project with `cap sync ios`.
+2. Fetches the pinned `ghostty-vt.wasm` the terminal view needs into
+   `mobile/vendor/ghostty-vt/`, builds the web app, and copies it into the iOS project with `cap sync ios`.
 3. Archives the Release build with the build number set to the UTC time, as
    `YYYYMMDD.HHMMSS`, so every upload has a higher number than the last.
    `MARKETING_VERSION` in the Xcode project stays the version people see.

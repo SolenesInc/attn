@@ -5,6 +5,10 @@ inputs:
   instance:
     description: Non-production instance to package
     required: true
+  app:
+    description: The app shell to build, tauri or native (native/crates/attn-app)
+    required: false
+    default: tauri
 
 outputs:
   archive:
@@ -57,6 +61,12 @@ runs:
       with:
         toolchain: '1.95.0'
 
+    - name: Install the native workspace's Rust
+      if: inputs.app == 'native'
+      shell: bash
+      working-directory: native
+      run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
     - name: Install pnpm
       uses: pnpm/action-setup@v4
       with:
@@ -90,7 +100,7 @@ runs:
       env:
         CI: 'true'
         MACOS_CODESIGN_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
-      run: make build-app INSTANCE="${{ inputs.instance }}"
+      run: make build-app INSTANCE="${{ inputs.instance }}" APP="${{ inputs.app }}"
 
     - name: Save Go build cache
       if: steps.go-cache.outputs.cache-hit != 'true'
@@ -107,9 +117,13 @@ runs:
       shell: bash
       run: |
         app_name="$(./attn instance resolve --instance "${{ inputs.instance }}" --field appName)"
+        case "${{ inputs.app }}" in
+          native) staged=native/target/staged ;;
+          *) staged=app/src-tauri/target/staged ;;
+        esac
         case "$RUNNER_OS" in
-          Linux) app_tree="app/src-tauri/target/staged/linux-tree/$app_name" ;;
-          macOS) app_tree="app/src-tauri/target/staged/$app_name.app" ;;
+          Linux) app_tree="$staged/linux-tree/$app_name" ;;
+          macOS) app_tree="$staged/$app_name.app" ;;
           *) echo "Unsupported acceptance runner: $RUNNER_OS" >&2; exit 1 ;;
         esac
         archive="$RUNNER_TEMP/app-tree.tar.gz"

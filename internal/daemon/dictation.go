@@ -62,26 +62,32 @@ type dictationRefineRequest struct {
 }
 
 func parseDictationRefineRequest(msg *protocol.DictationRefineMessage, selectedProfile string) (dictationRefineRequest, error) {
-	request := dictationRefineRequest{
-		id: strings.TrimSpace(msg.RequestID), profileID: strings.TrimSpace(msg.ProfileID),
-		rawText: msg.RawText, recording: time.Duration(msg.RecordingDurationMs) * time.Millisecond, format: msg.Format,
-	}
+	id, profileID := strings.TrimSpace(msg.RequestID), strings.TrimSpace(msg.ProfileID)
 	switch {
-	case request.id == "":
-		return request, errors.New("dictation refinement needs a request_id")
-	case request.profileID == "":
-		return request, errors.New("dictation refinement needs a profile_id")
-	case selectedProfile != "" && request.profileID != selectedProfile:
-		return request, fmt.Errorf("dictation refinement for profile %s came from an app showing profile %s", request.profileID, selectedProfile)
-	case strings.TrimSpace(request.rawText) == "":
-		return request, errors.New("dictation refinement needs raw_text")
-	case msg.RecordingDurationMs < 0:
-		return request, fmt.Errorf("recording_duration_ms must not be negative, got %d", msg.RecordingDurationMs)
+	case id == "":
+		return dictationRefineRequest{}, errors.New("dictation refinement needs a request_id")
+	case profileID == "":
+		return dictationRefineRequest{}, errors.New("dictation refinement needs a profile_id")
+	case selectedProfile != "" && profileID != selectedProfile:
+		return dictationRefineRequest{}, fmt.Errorf("dictation refinement for profile %s came from an app showing profile %s", profileID, selectedProfile)
 	}
-	switch request.format {
+	request, err := newDictationRefineRequest(profileID, msg.RawText, msg.RecordingDurationMs, msg.Format)
+	request.id = id
+	return request, err
+}
+
+func newDictationRefineRequest(profileID, rawText string, recordingMs int, format protocol.DictationTextFormat) (dictationRefineRequest, error) {
+	request := dictationRefineRequest{profileID: profileID, rawText: rawText, recording: time.Duration(recordingMs) * time.Millisecond, format: format}
+	switch {
+	case strings.TrimSpace(rawText) == "":
+		return request, errors.New("dictation refinement needs raw_text")
+	case recordingMs < 0:
+		return request, fmt.Errorf("recording_duration_ms must not be negative, got %d", recordingMs)
+	}
+	switch format {
 	case protocol.DictationTextFormatPlain, protocol.DictationTextFormatMarkdown:
 	default:
-		return request, fmt.Errorf("dictation refinement format must be plain or markdown, not %q", request.format)
+		return request, fmt.Errorf("dictation refinement format must be plain or markdown, not %q", format)
 	}
 	return request, nil
 }
@@ -150,7 +156,6 @@ func (d *Daemon) handleDictationRefine(client *wsClient, msg *protocol.Dictation
 		fail(err)
 		return
 	}
-	limit := dictationRefineLimit(request.recording)
 	ctx, cancel := context.WithCancel(d.life.Context())
 	key := dictationRefineKey{client: client, requestID: request.id}
 	if !d.dictationRefinements.admit(key, cancel) {
@@ -158,38 +163,19 @@ func (d *Daemon) handleDictationRefine(client *wsClient, msg *protocol.Dictation
 		fail(fmt.Errorf("dictation refinement %s is already running; retry with a new request_id", request.id))
 		return
 	}
-	deadline := d.clock.NewTimer(DictationRefineDeadlineTimer, limit)
-	answered := make(chan dictationRefineAnswer, 1)
-	if !d.life.Go("dictationRefine", func() { answered <- d.runDictationRefine(ctx, request) }) {
-		deadline.Stop()
-		d.dictationRefinements.settle(key)
-		return
-	}
 	answering := d.life.Go("dictationRefineAnswer", func() {
-		defer deadline.Stop()
-		select {
-		case answer := <-answered:
-			if !d.dictationRefinements.settle(key) {
-				return
-			}
-			if answer.err != nil {
-				fail(fmt.Errorf("refinement failed: %w. Original kept", answer.err))
-				return
-			}
-			result.Success = true
-			result.RefinedText = protocol.Ptr(answer.text)
-			d.sendToClient(client, result)
-		case <-deadline.C():
-			if !d.dictationRefinements.settle(key) {
-				return
-			}
-			result.LimitMs = protocol.Ptr(int(limit.Milliseconds()))
-			fail(fmt.Errorf("refinement did not answer within %s for this %s recording. Original kept", spokenSeconds(limit), spokenSeconds(request.recording)))
-		case <-ctx.Done():
+		answer := d.refineWithinLimit(ctx, request)
+		stopped := ctx.Err() != nil
+		if !d.dictationRefinements.settle(key) || stopped {
+			return
 		}
+		result.Success = answer.err == nil
+		result.RefinedText = answer.refinedText()
+		result.Error = answer.errorText()
+		result.LimitMs = answer.limitMs
+		d.sendToClient(client, result)
 	})
 	if !answering {
-		deadline.Stop()
 		d.dictationRefinements.settle(key)
 	}
 }
@@ -204,8 +190,49 @@ func spokenSeconds(duration time.Duration) string {
 }
 
 type dictationRefineAnswer struct {
-	text string
-	err  error
+	text    string
+	err     error
+	limitMs *int
+}
+
+func (a dictationRefineAnswer) refinedText() *string {
+	if a.err != nil {
+		return nil
+	}
+	return protocol.Ptr(a.text)
+}
+
+func (a dictationRefineAnswer) errorText() *string {
+	if a.err == nil {
+		return nil
+	}
+	return protocol.Ptr(a.err.Error())
+}
+
+func (d *Daemon) refineWithinLimit(ctx context.Context, request dictationRefineRequest) dictationRefineAnswer {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	limit := dictationRefineLimit(request.recording)
+	deadline := d.clock.NewTimer(DictationRefineDeadlineTimer, limit)
+	defer deadline.Stop()
+	answered := make(chan dictationRefineAnswer, 1)
+	if !d.life.Go("dictationRefine", func() { answered <- d.runDictationRefine(ctx, request) }) {
+		return dictationRefineAnswer{err: errDaemonStopping}
+	}
+	select {
+	case answer := <-answered:
+		if answer.err != nil {
+			answer.err = fmt.Errorf("refinement failed: %w. Original kept", answer.err)
+		}
+		return answer
+	case <-deadline.C():
+		return dictationRefineAnswer{
+			err:     fmt.Errorf("refinement did not answer within %s for this %s recording. Original kept", spokenSeconds(limit), spokenSeconds(request.recording)),
+			limitMs: protocol.Ptr(int(limit.Milliseconds())),
+		}
+	case <-ctx.Done():
+		return dictationRefineAnswer{err: ctx.Err()}
+	}
 }
 
 func (d *Daemon) runDictationRefine(ctx context.Context, request dictationRefineRequest) dictationRefineAnswer {

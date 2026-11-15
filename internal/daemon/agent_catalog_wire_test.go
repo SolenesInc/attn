@@ -13,6 +13,7 @@ import (
 )
 
 func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *testing.T) {
+	t.Setenv("ATTN_FAKE_PLUG_DISPLAY_NAME", "Example Agent")
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
 	t.Setenv("ATTN_CODEX_EXECUTABLE", "")
@@ -33,6 +34,9 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 		return false
 	})
 
+	if got := pluginDriverSettings(app, "plug")["plug_display_name"]; got != "Example Agent" {
+		t.Fatalf("settings display name = %q", got)
+	}
 	catalog := agentCatalog(t, w)
 	codex := catalog["codex"]
 	if codex.Executable != nightly || codex.Health != agentdriver.HealthHealthy || codex.Plugin != "" || !codex.ModelPin || !codex.EffortPin {
@@ -48,8 +52,19 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 			plugHealth = protocol.Deref(plugin.HealthMessage)
 		}
 	}
-	if !ok || plug.Plugin != "attn-plug" || plug.Health != agentdriver.HealthHealthy || plug.Detail != plugHealth || plug.ModelPin || plug.EffortPin {
+	if !ok || plug.DisplayName != "Example Agent" || plug.Plugin != "attn-plug" || plug.Health != agentdriver.HealthHealthy || plug.Detail != plugHealth || plug.ModelPin || plug.EffortPin {
 		t.Errorf("plug = %+v, want offered by attn-plug, healthy with %q, without the pins the plugin did not declare", plug, plugHealth)
+	}
+
+	prefs := testworld.Request(app, protocol.DelegationPreferencesGetMessage{Cmd: protocol.CmdDelegationPreferencesGet, RequestID: "display-name"}, protocol.EventDelegationPreferencesResult, func(m protocol.DelegationPreferencesResultMessage) bool { return m.RequestID == "display-name" })
+	found := false
+	for _, harness := range prefs.Harnesses {
+		if harness.ID == "plug" && harness.Name == "Example Agent" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("picker catalog lost display name: %+v", prefs.Harnesses)
 	}
 
 	uninstalled := testworld.Request(app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-plug"},

@@ -66,6 +66,7 @@ type AutoSettleView struct {
 }
 
 type DriverMetadata struct {
+	Route          string
 	Plugin         string
 	Run            string
 	Sequence       uint64
@@ -143,6 +144,7 @@ type View struct {
 	Exit                Value[*Exit]                               `fact:"session.pty.exited"`
 	Live                Value[bool]                                `fact:"session.live.changed"`
 	AssistantWindow     Value[uint64]                              `fact:"session.assistant_window.changed"`
+	ServerCompletion    Value[int64]                               `fact:"-"`
 }
 
 func (m *Monitor) viewLocked() View {
@@ -194,6 +196,7 @@ func (m *Monitor) snapshotLocked() View {
 		Exit:                Value[*Exit]{m.exit},
 		Live:                Value[bool]{live},
 		AssistantWindow:     Value[uint64]{m.windowRevision},
+		ServerCompletion:    Value[int64]{m.completions.applied},
 	}
 }
 

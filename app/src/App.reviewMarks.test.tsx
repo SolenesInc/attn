@@ -1,6 +1,7 @@
 import { act, fireEvent, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openMarkdownTiles } from './test/appFixtures';
+import { stubNavigatorPlatform } from './test/platformStub';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import type { ReviewBundle, ReviewRow } from './types/generated';
@@ -398,6 +399,21 @@ describe('App review marks', () => {
     const { tile, press, daemon } = await openReview();
     await press('Enter', { metaKey: true });
     expect(within(tile).getByRole('dialog', { name: 'Send the review' })).toHaveTextContent('No notes: the verdict goes alone.');
+    await press('Enter');
+    expect(daemon.sentOf('markdown_annotations_submit')).toEqual([expect.objectContaining({ verdict: 'approve' })]);
+  });
+
+  it('names the send key as Linux binds it, in the key line and the key sheet, and sends on it', async () => {
+    onTestFinished(stubNavigatorPlatform('Linux x86_64'));
+    const { tile, press, daemon } = await openReview();
+    const keyLine = within(tile).getByLabelText('Review keys');
+    expect(keyLine).toHaveTextContent('Ctrl+Shift+⏎ send');
+    expect(keyLine).not.toHaveTextContent('⌘');
+    await press('?');
+    expect(within(tile).getByRole('dialog', { name: 'Review keys' })).toHaveTextContent('Ctrl+Shift+⏎Send the review');
+    await press('?');
+    await press('Enter', { ctrlKey: true, shiftKey: true });
+    expect(within(tile).getByRole('dialog', { name: 'Send the review' })).toBeInTheDocument();
     await press('Enter');
     expect(daemon.sentOf('markdown_annotations_submit')).toEqual([expect.objectContaining({ verdict: 'approve' })]);
   });

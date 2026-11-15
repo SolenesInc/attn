@@ -102,6 +102,7 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 	}
 	startedAt := time.Now()
 	session := msg.Session
+	_, boundBefore := d.shownIn(msg.TerminalID)
 	if len(msg.Copy) > 0 {
 		home := d.homeBridge()
 		if home == nil {
@@ -127,6 +128,11 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 			return
 		}
 		d.terminals().unexpect(msg.TerminalID)
+		if len(msg.Copy) > 0 && !boundBefore {
+			if _, _, err := d.store.RemoveTerminalTile(protocol.TerminalID(msg.TerminalID)); err != nil {
+				d.logf("unbind terminal %s after its launch failed: %v", msg.TerminalID, err)
+			}
+		}
 		d.kickMonitorTerminals()
 	}()
 	opts.ID = msg.TerminalID
@@ -141,7 +147,7 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 	if err != nil {
 		return struct{}{}, err
 	}
-	if plugin != nil && !d.beginAgentDriverRun(session.ID, plugin.pluginName, plugin.runID) {
+	if plugin != nil && !d.beginAgentDriverRun(session.ID, plugin.pluginName, plugin.runID, plugin.route) {
 		plugin.abort()
 		return struct{}{}, fmt.Errorf("initialize plugin driver run cursor")
 	}
@@ -207,19 +213,21 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 		return struct{}{}, err
 	}
 	opts.LoginShellEnv = loginEnv
-	d.monitors().registry.DropPendingConversations(msg.TerminalID)
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
-	d.syncMonitorConversation(sessionID)
 	d.sessionMonitor(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)
 	opts = withLifecycleID(opts)
+	pausepoint.At(pausepoint.TerminalRuntimeEnding)
 	if killErr := d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
 	}
 	if removeErr := d.ptyBackend.Remove(ctx, terminal); removeErr != nil {
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
+	d.codexShared().retireConnections(terminal)
+	d.monitors().registry.DropPendingConversations(terminal)
+	d.syncMonitorConversation(sessionID)
 	opts.DaemonEnv = d.runEnv(opts.LifecycleID)
 	d.sessionMonitor(sessionID).HarnessStarting(opts.Agent)
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {

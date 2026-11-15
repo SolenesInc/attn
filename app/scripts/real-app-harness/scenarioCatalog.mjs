@@ -203,6 +203,261 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-close-desktop'],
   },
   {
+    id: 'native-sidebar-session',
+    runnerId: 'NATIVE-SIDEBAR-SESSION',
+    label: 'The native app launches parked, lists a shell session in its sidebar, takes a press on its row and paints the session menu row that keys reach',
+    command: ['node', 'scripts/real-app-harness/scenario-native-sidebar-session.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-terminal-core',
+    runnerId: 'NATIVE-TERMINAL-CORE',
+    label: 'A shell in the native app draws what is typed, and a program that tracks the mouse hears presses, releases and the wheel',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-core.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-desktop-tiles',
+    runnerId: 'NATIVE-DESKTOP-TILES',
+    label: 'Two shells side by side in the native app: a divider drag saves their widths, zoom, focus alone and back, and tile history',
+    command: ['node', 'scripts/real-app-harness/scenario-native-desktop-tiles.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-move-with-delegates',
+    runnerId: 'NATIVE-MOVE-WITH-DELEGATES',
+    label: 'The native palette moves a dispatcher, two delegates and a nested delegate to another desktop together',
+    command: ['node', 'scripts/real-app-harness/scenario-native-move-with-delegates.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-clear-opens-session',
+    runnerId: 'NATIVE-CLEAR-OPENS-SESSION',
+    label: 'In the native app /clear opens a new session in the same tile and sidebar row, typing goes on, and the ledger lists the cleared one closed',
+    command: ['node', 'scripts/real-app-harness/scenario-native-clear-opens-session.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-conversations-surface',
+    runnerId: 'NATIVE-CONVERSATIONS-SURFACE',
+    label: 'The native Conversations list shows why each copy is kept, keeps and unkeeps from the row, and forgets after a confirmation that names crew letters',
+    command: ['node', 'scripts/real-app-harness/scenario-native-conversations-surface.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-session-close-ledger',
+    runnerId: 'NATIVE-SESSION-CLOSE-LEDGER',
+    label: 'Closing a worktree session in the native app keeps the worktree, asks nothing, and the ledger reads it closed across a daemon restart',
+    command: ['node', 'scripts/real-app-harness/scenario-native-session-close-ledger.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-session-reopen',
+    runnerId: 'NATIVE-SESSION-REOPEN',
+    label: 'The native ledger reopens a closed worktree session under its own id, and recreates a deleted worktree only when its offered action is pressed',
+    command: ['node', 'scripts/real-app-harness/scenario-native-session-reopen.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-sessions-surface',
+    runnerId: 'NATIVE-SESSIONS-SURFACE',
+    label: 'The native Sessions list filters by repository, profile, scope and dates, updates a row in place on close, reopens on the filters it was left with, and keeps a refused reopen in the ledger',
+    command: ['node', 'scripts/real-app-harness/scenario-native-sessions-surface.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-callouts',
+    runnerId: 'NATIVE-CALLOUTS',
+    label: 'Native callouts step through the queue sidebar, reveal and go to an agent, fall back off screen, point in desktop flow, return after the palette, and leave typing with the terminal',
+    command: ['node', 'scripts/real-app-harness/scenario-native-callouts.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-desktop-order',
+    runnerId: 'NATIVE-DESKTOP-ORDER',
+    label: 'Sort desktops from the native palette orders numbered desktops then names, and its Undo puts back the order before',
+    command: ['node', 'scripts/real-app-harness/scenario-native-desktop-order.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-tile-windows',
+    runnerId: 'NATIVE-TILE-WINDOWS',
+    label: 'A document tile in the native app pops out into its own window, which hides when the tile comes back and shows again for the next pop-out',
+    command: ['node', 'scripts/real-app-harness/scenario-native-tile-windows.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-desktop-switching',
+    runnerId: 'NATIVE-DESKTOP-SWITCHING',
+    label: 'Desktop keys in the native app switch, move a tile following or staying, make a desktop on an empty digit and bounce; the overview switches, the app follows another client, and a document tile takes the keyboard',
+    command: ['node', 'scripts/real-app-harness/scenario-native-desktop-switching.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-close-desktop',
+    runnerId: 'NATIVE-CLOSE-DESKTOP',
+    label: 'The native close key closes an empty desktop with its launcher focused and shows the desktop above, and a desktop holding a shell closes from its sidebar row only through a confirmation',
+    command: ['node', 'scripts/real-app-harness/scenario-native-close-desktop.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-shelf-peek',
+    runnerId: 'NATIVE-SHELF-PEEK',
+    label: 'Native app shelf peek: a chip shows a live terminal, a reply reaches it at its size, Enter opens the tile, a chip reflowing under a still pointer opens nothing, a stack peeks from its marks, and a stopped terminal keeps the reply',
+    command: ['node', 'scripts/real-app-harness/scenario-native-shelf-peek.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-title-bar',
+    runnerId: 'NATIVE-TITLE-BAR',
+    label: 'Native app title bar: clicks reach every control, a chip opens its peek, a tile drops beside a chip, and tiles start below the band',
+    command: ['node', 'scripts/real-app-harness/scenario-native-title-bar.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-desktop-splits',
+    runnerId: 'NATIVE-DESKTOP-SPLITS',
+    label: 'Split shells on two native desktops keep to their desktop across switches, a closed split leaves the others and their scrollback, and focus shows one alone and back',
+    command: ['node', 'scripts/real-app-harness/scenario-native-desktop-splits.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-close-pane',
+    runnerId: 'NATIVE-CLOSE-PANE',
+    label: 'Closing a native split keeps the remaining shell, the most recently used tile takes over, a desktop emptied by a close bounces back, and an agent ignoring SIGTERM leaves at once despite slow Git',
+    command: ['node', 'scripts/real-app-harness/scenario-native-close-pane.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-shelf-drags',
+    runnerId: 'NATIVE-SHELF-DRAGS',
+    label: 'Native app shelf drags: chips onto tiles, between chips and onto a sidebar desktop, a tile beside a chip, column dividers past the narrowest and after a window resize, and stack chips onto a tile edge',
+    command: ['node', 'scripts/real-app-harness/scenario-native-shelf-drags.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-shelf-layout',
+    runnerId: 'NATIVE-SHELF-LAYOUT',
+    label: 'Native app: a row of shells past the screen comes back after a window sweep, the row keys slide to each end with the sidebar open and hidden, the width keys and control step the tile count, and the right key past the row end goes to the next desktop',
+    command: ['node', 'scripts/real-app-harness/scenario-native-shelf-layout.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-shelf-moves',
+    runnerId: 'NATIVE-SHELF-MOVES',
+    label: 'Native app: a split at capacity keeps its anchor, close keeps focus in the slot, carry and send to the shelf, documents agents open wait on the shelf for the jump key, and chips and the sidebar go to a tile without reordering the row',
+    command: ['node', 'scripts/real-app-harness/scenario-native-shelf-moves.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-shelf-drop-beside',
+    runnerId: 'NATIVE-SHELF-DROP-BESIDE',
+    label: 'Native app: a tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two and when a saved width keeps the pair apart',
+    command: ['node', 'scripts/real-app-harness/scenario-native-shelf-drop-beside.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-terminal-features',
+    runnerId: 'NATIVE-TERMINAL-FEATURES',
+    label: 'A shell in the native app scrolls, selects and copies, selects a command block, finds through its history and draws a kitty image',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-features.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-terminal-annotations',
+    runnerId: 'NATIVE-TERMINAL-ANNOTATIONS',
+    label: 'An Alt-drag in the native app marks an agent message; a label, a comment and a note go to the agent with the send key',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-annotations.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-markdown-annotations',
+    runnerId: 'NATIVE-MARKDOWN-ANNOTATIONS',
+    label: 'A selection in a native markdown tile takes a quick label and a comment, and Send delivers both to the bound agent',
+    command: ['node', 'scripts/real-app-harness/scenario-native-markdown-annotations.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-terminal-md-link',
+    runnerId: 'NATIVE-TERMINAL-MD-LINK',
+    label: 'A markdown path Cmd-clicked in a native terminal docks a tile bound to its agent, and again reuses it',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-md-link.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-markdown-opener',
+    runnerId: 'NATIVE-MARKDOWN-OPENER',
+    label: 'The native markdown opener docks tracked and untracked files by a fuzzy query, and a recent reuses its tile',
+    command: ['node', 'scripts/real-app-harness/scenario-native-markdown-opener.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-settings',
+    runnerId: 'NATIVE-SETTINGS',
+    label: 'The native Settings dialog opens three ways, searches, saves a click and a field, shows a refusal and a shell change, and closes three ways',
+    command: ['node', 'scripts/real-app-harness/scenario-native-settings.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-agent-settings',
+    runnerId: 'NATIVE-AGENT-SETTINGS',
+    label: 'Native agent settings: switches, the default agent, a harness executable, a refused then saved context cap, a price override and the background cap',
+    command: ['node', 'scripts/real-app-harness/scenario-native-agent-settings.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-self-update',
+    runnerId: 'NATIVE-SELF-UPDATE',
+    label: 'Native self-update: Settings and the palette each update a named instance, and its band follows the run to the relaunched app',
+    command: ['node', 'scripts/real-app-harness/scenario-native-self-update.mjs'],
+    app: 'native',
+    freshWorldAfter: true,
+    skipOn: { darwin: 'Patches the daemon binary in place, which breaks its code signature on macOS' },
+  },
+  {
+    id: 'native-shortcut-editor',
+    runnerId: 'NATIVE-SHORTCUT-EDITOR',
+    label: 'Native shortcut editor: physical keys open the cheat sheet, record a rebind and a chord that then run, ask before taking keys, and reset and restore',
+    command: ['node', 'scripts/real-app-harness/scenario-native-shortcut-editor.mjs'],
+    app: 'native',
+    skipOn: { darwin: 'The recorder hears physical keys, which only xdotool sends; the automation server sends logical keys' },
+  },
+  {
+    id: 'native-profile-lifecycle',
+    runnerId: 'NATIVE-PROFILE-LIFECYCLE',
+    label: 'Native profiles are created, renamed and deleted from the switcher, an agent keeps its profile, and the last profile stays',
+    command: ['node', 'scripts/real-app-harness/scenario-native-profile-lifecycle.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-session-usage',
+    runnerId: 'NATIVE-SESSION-USAGE',
+    label: 'A native tile header shows usage with native subagents and partial pricing, previews it on hover and pins it from the palette',
+    command: ['node', 'scripts/real-app-harness/scenario-native-session-usage.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-agent-queue',
+    runnerId: 'NATIVE-AGENT-QUEUE',
+    label: 'The native queue lists turns oldest first, opens a row, hands over on settle and snooze, lands on home and takes a woken agent back',
+    command: ['node', 'scripts/real-app-harness/scenario-native-agent-queue.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-palette-order',
+    runnerId: 'NATIVE-PALETTE-ORDER',
+    label: 'The native palette finds and shows an agent, raises a picked command under the pinned ones, switches on >, and runs priority and rename',
+    command: ['node', 'scripts/real-app-harness/scenario-native-palette-order.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-session-creation',
+    runnerId: 'NATIVE-SESSION-CREATION',
+    label: 'The native launcher on an empty desktop and the picker on both new-session keys start terminals in typed folders',
+    command: ['node', 'scripts/real-app-harness/scenario-native-session-creation.mjs'],
+    app: 'native',
+  },
+  {
     id: 'empty-desktop-keys',
     runnerId: 'EMPTY-DESKTOP-KEYS',
     label: 'Row keys walk onto and off an empty desktop',
@@ -540,19 +795,26 @@ export const scenarioCatalog = [
   },
 ];
 
-export function resolveScenarios(selected, catalog = scenarioCatalog) {
-  const matrixCatalog = catalog.filter((scenario) => !scenario.soakOnly);
-  if (!selected.length) {
-    return matrixCatalog;
+export function matrixScenario(id, catalog = scenarioCatalog) {
+  const scenario = catalog.find((entry) => entry.id === id && !entry.soakOnly);
+  if (!scenario) {
+    throw new Error(`Unknown scenario id: ${id}`);
   }
-  const byId = new Map(matrixCatalog.map((scenario) => [scenario.id, scenario]));
-  return selected.map((id) => {
-    const scenario = byId.get(id);
-    if (!scenario) {
-      throw new Error(`Unknown scenario id: ${id}`);
-    }
-    return scenario;
-  });
+  return scenario;
+}
+
+export function resolveScenarios(selected, app, catalog = scenarioCatalog) {
+  if (!selected.length) {
+    return catalog.filter((scenario) => !scenario.soakOnly && scenarioApp(scenario) === app);
+  }
+  const scenarios = selected.map((id) => matrixScenario(id, catalog));
+  const others = scenarios.filter((scenario) => scenarioApp(scenario) !== app);
+  if (others.length > 0) {
+    const needs = [...new Set(others.map(scenarioApp))].join(' and ');
+    throw new Error(`${others.map((scenario) => scenario.id).join(', ')} need the ${needs} app, and the instance has the ${app} app; `
+      + `install the one they need with make install INSTANCE=<name> APP=${needs}`);
+  }
+  return scenarios;
 }
 
 export function scenariosAllowingRealAgents(catalog = scenarioCatalog) {
@@ -575,6 +837,10 @@ export function allowRealAgentsForRunner(runnerId, catalog = scenarioCatalog) {
   }
   const named = entries.flatMap((scenario) => (Array.isArray(scenario.allowRealAgents) ? scenario.allowRealAgents : []));
   return named.length > 0 ? [...new Set(named)] : undefined;
+}
+
+export function scenarioApp(scenario) {
+  return scenario.app ?? 'tauri';
 }
 
 export function resolveScenario(id, catalog = scenarioCatalog) {

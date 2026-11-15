@@ -182,20 +182,21 @@ func TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer(t *testing.T
 	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, settled)
 }
 
-func TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
+func TestAnAppServerSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
-	w := &world{World: prepareWorld(t, fakeagent.Nisse)}
+	w := &world{World: prepareWorld(t, fakeagent.SampleServer)}
 	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
 	shell := installBlockedLoginShell(t, w)
 	w.start()
 	app := w.App()
-	session, nisse, server := nisseSession(t, w, app)
-	conversation := nisse.ConversationID
-	promptNisseUntilWorking(app, session, nisse, server, "migrate the orders table")
+	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
+	conversation := view.ConversationID
+	promptUntilWorking(app, session, view, server, "migrate the orders table")
 
 	shell.block()
 	w.restart()
+	registerSampleServerDriver(t, w, w.App())
 	app = w.App()
 	if got := app.Initial.Settings["claude_available"]; got != "checking" {
 		t.Fatalf("initial_state carries claude_available=%v during the capture, want checking", got)

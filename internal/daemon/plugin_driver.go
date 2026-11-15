@@ -26,12 +26,15 @@ const pluginResumeAvailabilityTimeout = 10 * time.Second
 type pluginDriverRegistration struct {
 	PluginName   string
 	Agent        string
+	DisplayName  string
 	Capabilities map[string]bool
 }
 
 type pluginDriverRegisterParams struct {
-	Agent        string          `json:"agent"`
-	Capabilities map[string]bool `json:"capabilities,omitempty"`
+	Agent        string                   `json:"agent"`
+	DisplayName  string                   `json:"display_name,omitempty"`
+	Capabilities map[string]bool          `json:"capabilities,omitempty"`
+	Server       *pluginServerDeclaration `json:"server,omitempty"`
 }
 
 type pluginDriverRegisterResult struct {
@@ -46,7 +49,21 @@ type activePluginRun struct {
 	Seq        uint64              `json:"seq"`
 }
 
+func (d *Daemon) activePluginRuns(pluginName string) []activePluginRun {
+	active := d.store.ListAgentDriverRuns(pluginName)
+	runs := make([]activePluginRun, 0, len(active))
+	for _, run := range active {
+		item := activePluginRun{TerminalID: d.primaryTerminal(run.SessionID), RunID: run.RunID, Seq: run.Seq}
+		if json.Valid([]byte(run.Metadata)) {
+			item.Metadata = json.RawMessage(run.Metadata)
+		}
+		runs = append(runs, item)
+	}
+	return runs
+}
+
 type pluginDriverSpawnParams struct {
+	Executable      string                    `json:"executable,omitempty"`
 	Agent           string                    `json:"agent"`
 	TerminalID      protocol.TerminalID       `json:"session_id"`
 	RunID           string                    `json:"run_id"`
@@ -55,6 +72,8 @@ type pluginDriverSpawnParams struct {
 	Yolo            bool                      `json:"yolo,omitempty"`
 	Model           string                    `json:"model,omitempty"`
 	Effort          string                    `json:"effort,omitempty"`
+	ExecutionTarget string                    `json:"execution_target,omitempty"`
+	ConversationID  string                    `json:"conversation_id,omitempty"`
 	InitialPrompt   string                    `json:"initial_prompt,omitempty"`
 	Metadata        json.RawMessage           `json:"metadata,omitempty"`
 	ResumeSessionID string                    `json:"resume_session_id,omitempty"`
@@ -130,14 +149,18 @@ type pluginDriverSessionClosedResult struct {
 }
 
 type pluginDeliverMessageParams struct {
-	TerminalID protocol.TerminalID `json:"session_id"`
-	RunID      string              `json:"run_id"`
-	InputID    string              `json:"input_id"`
-	Text       string              `json:"text"`
+	TerminalID     protocol.TerminalID `json:"session_id"`
+	RunID          string              `json:"run_id"`
+	InputID        string              `json:"input_id"`
+	Text           string              `json:"text"`
+	Voice          string              `json:"voice,omitempty"`
+	ConversationID string              `json:"conversation_id,omitempty"`
 }
 
 type pluginDeliverMessageResult struct {
-	OK bool `json:"ok"`
+	OK     bool   `json:"ok"`
+	Status string `json:"status,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type pluginReportPullRequestParams struct {
@@ -163,6 +186,15 @@ type pluginClassifyStopParams struct {
 
 type pluginClassifyStopResult struct {
 	Verdict string `json:"verdict"`
+}
+
+type pluginReportCompactionParams struct {
+	TerminalID     protocol.TerminalID `json:"session_id"`
+	RunID          string              `json:"run_id"`
+	InputID        string              `json:"input_id"`
+	ConversationID string              `json:"conversation_id"`
+	Outcome        string              `json:"outcome"`
+	Reason         string              `json:"reason,omitempty"`
 }
 
 type pendingPluginReport struct {
@@ -197,10 +229,50 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 		PluginName:   plugin.name,
 		Agent:        agent,
 		Capabilities: capabilities,
+		DisplayName:  strings.TrimSpace(params.DisplayName),
 	}
 	close(r.driverRegistered)
 	r.driverRegistered = make(chan struct{})
 	return nil
+}
+
+func (r pluginDriverRegistration) displayName() string {
+	if r.DisplayName != "" {
+		return r.DisplayName
+	}
+	return r.Agent
+}
+
+func pluginDriverRoute(reg pluginDriverRegistration) string {
+	if reg.Capabilities["message_delivery"] || reg.Capabilities["server_binding"] {
+		return "direct"
+	}
+	return "terminal"
+}
+
+func (r *pluginRegistry) driverConnection(agent, owner string) (pluginDriverRegistration, *pluginConnection) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	reg, ok := r.drivers[agent]
+	if !ok || reg.PluginName != owner {
+		return pluginDriverRegistration{}, nil
+	}
+	return reg, r.plugins[owner]
+}
+
+func (d *Daemon) resolvePluginDriverRoutes(plugin, agent string) {
+	reg, conn := d.ensurePluginRegistry().driverConnection(agent, plugin)
+	if conn == nil {
+		return
+	}
+	for _, run := range d.store.ListAgentDriverRuns(plugin) {
+		session := d.store.Get(run.SessionID)
+		if session != nil && session.Agent == agent {
+			d.sessionMonitor(run.SessionID).ResolveDriverRoute(plugin, run.RunID, pluginDriverRoute(reg))
+			d.kickSessionInboxAddresses(run.SessionID)
+			d.kickCompactingClose(run.SessionID)
+		}
+	}
 }
 
 func (r *pluginRegistry) driverOrRegistration(agent string) (registered bool, nextRegistration <-chan struct{}) {
@@ -244,6 +316,7 @@ func normalizePluginAgent(value string) string {
 
 func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, error) {
 	allowed := map[string]struct{}{
+		"server_binding":         {},
 		"resume":                 {},
 		"resume_availability":    {},
 		"yolo":                   {},
@@ -252,6 +325,9 @@ func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, 
 		"state_reporting":        {},
 		"pending_approval":       {},
 		"message_delivery":       {},
+		"attributed_input":       {},
+		"safe_during_question":   {},
+		"compaction":             {},
 		"model_pin":              {},
 		"model_discovery":        {},
 		"effort_pin":             {},
@@ -266,6 +342,11 @@ func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, 
 		}
 		out[name] = enabled
 	}
+	for _, name := range []string{"attributed_input", "safe_during_question", "compaction"} {
+		if out[name] && !out["message_delivery"] {
+			return nil, fmt.Errorf("driver capability %q requires message_delivery", name)
+		}
+	}
 	return out, nil
 }
 
@@ -276,10 +357,15 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode driver.register params: %w", err)
 		}
-		if err := d.ensurePluginRegistry().registerDriver(plugin, params); err != nil {
+		if err := d.registerPluginDriver(plugin, params); err != nil {
 			return nil, true, err
 		}
 		d.logf("plugin driver registered plugin=%s agent=%s", plugin.name, normalizePluginAgent(params.Agent))
+		d.resolvePluginDriverRoutes(plugin.name, normalizePluginAgent(params.Agent))
+		if l := d.serverLinkFor(normalizePluginAgent(params.Agent)); l != nil && l.b.plugin == plugin.name {
+			l.recoverProcesses(d.life.Context())
+			l.recoverViews(d.life.Context())
+		}
 		d.pushMonitorPolicies()
 		d.publishFact(FactPluginDriverRegistered, plugin.name, nil)
 		d.life.Go("reviveAgentsOfRegisteredDriver", func() {
@@ -287,17 +373,36 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 				d.reviveRecoverableAgents("")
 			}
 		})
-		active := d.store.ListAgentDriverRuns(plugin.name)
-		runs := make([]activePluginRun, 0, len(active))
-		for _, run := range active {
-			item := activePluginRun{TerminalID: d.primaryTerminal(run.SessionID), RunID: run.RunID, Seq: run.Seq}
-			if json.Valid([]byte(run.Metadata)) {
-				item.Metadata = json.RawMessage(run.Metadata)
-			}
-			runs = append(runs, item)
-		}
-		result := pluginDriverRegisterResult{OK: true, ActiveRuns: runs}
+		result := pluginDriverRegisterResult{OK: true, ActiveRuns: d.activePluginRuns(plugin.name)}
 		return result, true, nil
+	case "session.report_compaction":
+		var params pluginReportCompactionParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, err
+		}
+		session := d.sessionInTerminal(params.TerminalID)
+		if err := d.authorizePluginSessionReport(plugin, session, params.RunID); err != nil {
+			return nil, true, err
+		}
+		target := pluginCompactTarget{Plugin: plugin.name, Run: params.RunID, Conversation: params.ConversationID}
+		if d.store.GetSessionConversation(session).NativeID != params.ConversationID || !d.compactions.pluginMatches(session, params.InputID, target) {
+			return nil, true, errors.New("compaction report does not match the pending run, input and conversation")
+		}
+		switch params.Outcome {
+		case "busy":
+			d.compactions.retryAfterBusy(d, session, params.InputID, params.Reason)
+		case "completed":
+			d.compactions.report(d, session, params.InputID, compactOutcome{})
+		case "failed":
+			reason := params.Reason
+			if reason == "" {
+				reason = "plugin compaction failed"
+			}
+			d.compactions.report(d, session, params.InputID, compactOutcome{failed: reason})
+		default:
+			return nil, true, fmt.Errorf("unsupported compaction outcome %q", params.Outcome)
+		}
+		return struct{}{}, true, nil
 	case "session.report_state":
 		var params pluginReportStateParams
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -396,6 +501,9 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 }
 
 func (d *Daemon) authorizePluginSessionReport(plugin *pluginConnection, sessionID protocol.SessionID, runID string) error {
+	if d.ensurePluginRegistry().get(plugin.name) != plugin {
+		return errors.New("plugin connection is no longer active")
+	}
 	sessionID = protocol.TrimID(sessionID)
 	session := d.store.Get(sessionID)
 	if session == nil {

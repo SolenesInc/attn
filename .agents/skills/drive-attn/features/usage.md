@@ -59,6 +59,25 @@ Preconditions:
 - **Background caps.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'` and click `[data-testid="settings-nav-backgroundAgents"]` natively. Run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"settings-headless-context-cap\"]"}'` for setup, then click `[data-testid="settings-headless-context-cap"]` natively, press ⌘A with `bridge native_key '{"key":"a","modifiers":["command"]}'`, type `500000` with `bridge native_text` and press Enter. `[data-testid="settings-headless-context-cap-saved"]` appears and `./attn settings get headless_context_window_cap` prints `500000`. Run `./attn settings set headless_context_window_cap ""` to put it back.
 - **Proof.** In `$P`, keep `./attn session show usage-agent` after the turn, after pricing and after clearing the price. Also keep `bridge dom_text` of the badge and of the receipt, the `./attn settings set` output, `./attn agent peek usage-agent` after the session cap, `./attn settings get headless_context_window_cap` after the background cap, and `bridge capture_native_window_screenshot '{"path":"<P>/usage-receipt.png"}'` with the receipt open. Name each file for its way in, such as `usage-palette-receipt.txt`.
 
+### In the native app
+
+The native app (`native/`) shows the usage badge in an agent's tile header, previews the breakdown while the pointer rests on it, pins it from a press or the palette, and has the price overrides and the headless cap in Settings. It has no command to cap one session's context window; set the default caps in Settings instead ([harnesses.md](harnesses.md)). `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+alt+k` for the palette where macOS has `mod+shift+k`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Make `P` and `U` and start `usage-agent` as above, then `bridge press '{"target":{"key":"sidebar.session.usage-agent"}}'`.
+- `<pane>` is the `pane_id` of the agent's pane in `bridge state '{"of":"desktops","includes":"usage-agent"}'`, and `<terminal>` its `runtime_id`.
+
+Steps:
+
+- **Measure one turn.** Press `terminal.<terminal>`, `bridge type '{"text":"Measure this session"}'` and press `Enter`. Once `./attn session show usage-agent` prints the measured `usage` line, `bridge wait '{"target":{"role":"button","name":"Session usage 2.1k tokens, some usage has no price"}}'` answers with the key `tile.<pane>.usage`.
+- **The breakdown on hover.** `bridge hover '{"target":{"key":"tile.<pane>.usage"}}'`: `tile.<pane>.usage.popover` answers, and its rows in `bridge tree` hold `2,095 tokens` and `mock-agent-1`, with no `esc close`. Hover `terminal.<terminal>`: the popover goes.
+- **The breakdown from the palette.** Press `mod+alt+k`, type `usage-agent usage`, wait for `palette.row.command:show-session-usage` and press `Enter`: the popover opens pinned, and its rows hold `esc close`. Press `Escape`: it goes.
+- **Price the model from the shell.** Set the price as above: the badge's name turns into a dollar amount with no `*`. Clear the price and the badge shows tokens again.
+- **Background caps.** Open Settings, press `settings.nav.backgroundAgents`, then `settings.input.headless_context_window_cap.field`. Press `mod+a`, type `500000` and press `Enter`: `./attn settings get headless_context_window_cap` prints `500000`. Run `./attn settings set headless_context_window_cap ""` to put it back.
+- **Proof.** Keep `./attn session show usage-agent` after the turn and after pricing, the badge's `bridge find` after each change, the popover's rows from `bridge tree`, and `bridge shot '{"path":"<P>/native-usage-pinned.png"}'` with the breakdown pinned, `<P>` written out. The `native-session-usage` scenario runs the badge, a native subagent and a partly priced model, the hover and the palette.
+
 ## Contexts
 
 - **Durability across restarts**: usage is kept per session and survives every restart, and an upgrade carries over what an earlier version measured. A resumed conversation counts only the usage after the resume, so nothing is counted twice.
@@ -70,8 +89,8 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_cost_wire_test.go`, `internal/daemon/session_cost_forks_wire_test.go`, `internal/daemon/session_cost_upgrade_wire_test.go`, `internal/daemon/session_usage_wire_test.go`, `internal/daemon/context_window_cap_wire_test.go`, `internal/daemon/codex_usage_wire_test.go`, `internal/daemon/codex_close_usage_wire_test.go`.
-- Scenario: `session-usage`.
+- Wire: `native/crates/attn-app/tests/wire/tile_header.rs` (the native badge and breakdown), `internal/daemon/session_cost_wire_test.go`, `internal/daemon/session_cost_forks_wire_test.go`, `internal/daemon/session_cost_upgrade_wire_test.go`, `internal/daemon/session_usage_wire_test.go`, `internal/daemon/context_window_cap_wire_test.go`, `internal/daemon/codex_usage_wire_test.go`, `internal/daemon/codex_close_usage_wire_test.go`.
+- Scenario: `session-usage`, `native-session-usage`.
 - Kernel: `internal/sessioncost/*_test.go`, `internal/transcript/usage_test.go`, `internal/transcript/usage_sources_test.go`.
 - App: `app/src/App.sessionCostPrices.test.tsx`, `app/src/components/ledger/SessionsTab.usage.test.tsx`.
 

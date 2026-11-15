@@ -48,6 +48,7 @@ type resolvedDelegationLaunch struct {
 	SeedTitle             string
 	ParentSeedID          string
 	PreviousTenderSession protocol.SessionID
+	By                    who.Actor
 }
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
@@ -125,11 +126,13 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	handoverTender who.Party,
 	operationID string,
 	parentSeedID string,
+	by who.Actor,
 ) (*resolvedDelegationLaunch, error) {
 	if err := validateDelegateRequestShape(msg); err != nil {
 		return nil, err
 	}
 	runtime := resolveLaunchInput(msg)
+	runtime.By = by
 	runtime.Brief = nil
 	runtime.Plot = nil
 	runtime.Handover = nil

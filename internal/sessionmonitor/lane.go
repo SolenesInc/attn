@@ -74,14 +74,17 @@ func (id AttemptID) String() string {
 }
 
 type Delivery struct {
-	ID                AttemptID
-	Text              string
-	origin            inputOrigin
-	Placement         Placement
-	AllowUserComposer bool
-	BypassInitialGate bool
-	Compact           bool
-	Ring              *protocol.InboxRingRecord
+	UserWords            bool
+	ExpectedDriverRun    string
+	ExpectedConversation string
+	ID                   AttemptID
+	Text                 string
+	origin               inputOrigin
+	Placement            Placement
+	AllowUserComposer    bool
+	BypassInitialGate    bool
+	Compact              bool
+	Ring                 *protocol.InboxRingRecord
 }
 
 func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
@@ -133,11 +136,12 @@ func (r runRef) valid() bool { return r.epoch > 0 }
 
 // Custody is a delivery's only result: never confirm afterwards that the harness used it.
 type Attempt struct {
-	Stage   Stage
-	At      time.Time
-	Err     error
-	Held    bool
-	steered bool
+	Uncertain bool
+	Stage     Stage
+	At        time.Time
+	Err       error
+	Held      bool
+	steered   bool
 }
 
 type runState struct {
@@ -306,6 +310,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return Attempt{Stage: Failed, Err: fmt.Errorf("session %s: max_placed_deliveries=%d, asked for %d; reload the agent to reset its input lane", m.session, MaxPlacedDeliveries, len(l.placed)+1)}, runRef{}
 	}
 
+	if !m.deliveryTargetMatchesLocked(delivery) {
+		return Attempt{Stage: Failed, Err: errors.New("the input's driver run or native conversation has ended")}, runRef{}
+	}
 	steering := l.run != nil || l.questionInTurn
 	epochAtPlacing := l.epoch
 	var attempt Attempt
@@ -315,6 +322,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return Attempt{Stage: Failed, Err: errors.New("the session has no link that compacts its conversation")}, runRef{}
 	}
 	if !handled {
+		if !m.deliveryTargetMatchesLocked(delivery) {
+			return Attempt{Stage: Failed, Err: errors.New("the input target changed before terminal delivery")}, runRef{}
+		}
 		if duringQuestion {
 			return deferred(ErrBlockedByApproval)
 		}
@@ -349,6 +359,14 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	return attempt, credited
 }
 
+func (m *Monitor) deliveryTargetMatchesLocked(delivery Delivery) bool {
+	native := m.conversation
+	if native == "" {
+		native = m.conversationInput.NativeID
+	}
+	return delivery.ExpectedDriverRun == "" || (m.driver.Run == delivery.ExpectedDriverRun && (delivery.ExpectedConversation == "" || native == delivery.ExpectedConversation))
+}
+
 func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64) {
 	switch {
 	case l.epoch == epochAtPlacing:
@@ -369,15 +387,17 @@ func (l *lane) unlockedWhilePlacing(work func()) {
 
 func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
 	voice := delivery.origin.voice()
+	if delivery.UserWords {
+		voice = harness.VoiceUser
+	}
 	var link harness.Link
 	var custody harness.Custody
 	l.unlockedWhilePlacing(func() {
-		// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
 		link = l.monitor.registry.host.Link(l.monitor, voice)
 		if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
 			link = nil
 		}
-		in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring}
+		in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring, ExpectedDriverRun: delivery.ExpectedDriverRun, ExpectedConversation: delivery.ExpectedConversation}
 		if compactor, ok := link.(harness.Compactor); delivery.Compact && ok {
 			custody = compactor.Compact(ctx, in)
 		} else if delivery.Compact {
@@ -390,13 +410,16 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 		return Attempt{}, false
 	}
 	if custody.Stopped {
-		if voice == harness.VoiceUser {
+		if delivery.origin.kind == originUserConversation {
 			return Attempt{}, false
 		}
 		return Attempt{Stage: Deferred, Err: ErrSessionStopped}, true
 	}
+	if custody.Rejected {
+		return Attempt{Stage: Failed, Err: errors.New(custody.Reason)}, true
+	}
 	if !custody.Taken {
-		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason)}, true
+		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason), Uncertain: custody.Uncertain}, true
 	}
 	return Attempt{Stage: Placed, At: custody.At, Held: custody.Held, steered: custody.Held}, true
 }

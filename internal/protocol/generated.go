@@ -4972,6 +4972,20 @@ type EvidenceExcerpt struct {
 	TurnID string `json:"turn_id"`
 }
 
+type ExecutionTarget struct {
+	// Available corresponds to the JSON schema field "available".
+	Available bool `json:"available"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
 type FetchPRDetailsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6025,6 +6039,37 @@ type HarnessModelsResultMessage struct {
 
 	// TierDefaults corresponds to the JSON schema field "tier_defaults".
 	TierDefaults TierDefaults `json:"tier_defaults"`
+}
+
+type HarnessTargetsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd string `json:"cwd"`
+
+	// Harness corresponds to the JSON schema field "harness".
+	Harness string `json:"harness"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type HarnessTargetsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Targets corresponds to the JSON schema field "targets".
+	Targets []ExecutionTarget `json:"targets"`
 }
 
 type HeatState string
@@ -9775,6 +9820,9 @@ type Response struct {
 	// SenderPairing corresponds to the JSON schema field "sender_pairing".
 	SenderPairing *SenderPairingRequest `json:"sender_pairing,omitempty,omitzero"`
 
+	// SenderRefineResult corresponds to the JSON schema field "sender_refine_result".
+	SenderRefineResult *SenderRefineResult `json:"sender_refine_result,omitempty,omitzero"`
+
 	// SenderSessions corresponds to the JSON schema field "sender_sessions".
 	SenderSessions []SenderSession `json:"sender_sessions,omitempty,omitzero"`
 
@@ -12034,17 +12082,17 @@ type SeedSinceExpired struct {
 }
 
 type SeedStandbyMessage struct {
+	// At corresponds to the JSON schema field "at".
+	At *string `json:"at,omitempty,omitzero"`
+
 	// Clear corresponds to the JSON schema field "clear".
 	Clear *bool `json:"clear,omitempty,omitzero"`
-
-	// Close corresponds to the JSON schema field "close".
-	Close *bool `json:"close,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// Compact corresponds to the JSON schema field "compact".
-	Compact *bool `json:"compact,omitempty,omitzero"`
+	// In corresponds to the JSON schema field "in".
+	In *string `json:"in,omitempty,omitzero"`
 
 	// Note corresponds to the JSON schema field "note".
 	Note *string `json:"note,omitempty,omitzero"`
@@ -12057,6 +12105,9 @@ type SeedStandbyMessage struct {
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+
+	// Stay corresponds to the JSON schema field "stay".
+	Stay *bool `json:"stay,omitempty,omitzero"`
 }
 
 type SeedStandbyResult struct {
@@ -12294,12 +12345,50 @@ type SenderPairingRequest struct {
 	RequestedAt string `json:"requested_at"`
 }
 
+type SenderRefineMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Format corresponds to the JSON schema field "format".
+	Format DictationTextFormat `json:"format"`
+
+	// RawText corresponds to the JSON schema field "raw_text".
+	RawText string `json:"raw_text"`
+
+	// RecordingDurationMs corresponds to the JSON schema field
+	// "recording_duration_ms".
+	RecordingDurationMs int `json:"recording_duration_ms"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken string `json:"sender_token"`
+}
+
+type SenderRefineResult struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// LimitMs corresponds to the JSON schema field "limit_ms".
+	LimitMs *int `json:"limit_ms,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RefinedText corresponds to the JSON schema field "refined_text".
+	RefinedText *string `json:"refined_text,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type SenderSession struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
 
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
+
+	// HostLabel corresponds to the JSON schema field "host_label".
+	HostLabel *string `json:"host_label,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
@@ -13065,6 +13154,13 @@ type SessionPlaceMessage struct {
 	// DeliveryID corresponds to the JSON schema field "delivery_id".
 	DeliveryID string `json:"delivery_id"`
 
+	// ExpectedConversation corresponds to the JSON schema field
+	// "expected_conversation".
+	ExpectedConversation *string `json:"expected_conversation,omitempty,omitzero"`
+
+	// ExpectedDriverRun corresponds to the JSON schema field "expected_driver_run".
+	ExpectedDriverRun *string `json:"expected_driver_run,omitempty,omitzero"`
+
 	// Origin corresponds to the JSON schema field "origin".
 	Origin SessionPlaceOrigin `json:"origin"`
 
@@ -13082,6 +13178,9 @@ type SessionPlaceMessage struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+
+	// UserWords corresponds to the JSON schema field "user_words".
+	UserWords *bool `json:"user_words,omitempty,omitzero"`
 }
 
 type SessionPlaceOrigin string
@@ -13113,6 +13212,9 @@ type SessionPlaceResult struct {
 
 	// Stage corresponds to the JSON schema field "stage".
 	Stage SessionPlaceStage `json:"stage"`
+
+	// Uncertain corresponds to the JSON schema field "uncertain".
+	Uncertain *bool `json:"uncertain,omitempty,omitzero"`
 }
 
 type SessionPlaceStage string
@@ -13879,6 +13981,9 @@ type SpawnSessionMessage struct {
 	// Executable corresponds to the JSON schema field "executable".
 	Executable *string `json:"executable,omitempty,omitzero"`
 
+	// ExecutionTarget corresponds to the JSON schema field "execution_target".
+	ExecutionTarget *string `json:"execution_target,omitempty,omitzero"`
+
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
 
@@ -13917,6 +14022,17 @@ type SpawnSessionMessage struct {
 
 	// YoloMode corresponds to the JSON schema field "yolo_mode".
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
+}
+
+type StandbySessionMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Until corresponds to the JSON schema field "until".
+	Until time.Time `json:"until"`
 }
 
 type StartUpdateMessage struct {

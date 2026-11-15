@@ -145,4 +145,26 @@ describe('pipeline parity (headless extraction vs live DOM)', () => {
     expect(blocks.map((b) => b.text)).not.toContain('calc.go:1-2');
     expect(container.querySelector('.review-stop')).toHaveTextContent('package calc');
   });
+
+  it('keeps parity and the prose offsets around a drawn diagram, which renders as chrome', () => {
+    const review = '---\nattn: review\nrepository: /repo\nhead: abc\n---\n\n# Title\n\nBefore the diagram.\n\n```mermaid\nsequenceDiagram\n  a->>b: call\n```\n\nAfter the diagram.\n';
+    const bundle: ReviewBundle = {
+      frame: 'brief', repository: '/repo', head: 'abc', files: [], stops: [], not_shown: [], navigation: [], problems: [],
+      flows: [{ line: 11, drawn: true, participants: [{ id: 'a', label: 'a', actor: false }, { id: 'b', label: 'b', actor: false }],
+        messages: [{ line: 13, from: 'a', to: 'b', arrow: '->>', text: 'call' }], groups: [] }],
+    };
+    const { container } = renderReader(review, bundle);
+    const blocks = extractBlockTexts(review, reviewChromeOf(bundle));
+    const plain = extractBlockTexts(review);
+
+    const domBlocks = [...container.querySelectorAll('[data-block-id]')];
+    expect(domBlocks.map((el) => el.getAttribute('data-block-id'))).toEqual(blocks.map((b) => b.blockId));
+    for (const block of blocks) {
+      expect(blockDomText(container.querySelector(`[data-block-id="${block.blockId}"]`)!), block.blockId).toBe(block.text);
+    }
+    const after = (list: typeof blocks) => list.find((b) => b.text === 'After the diagram.');
+    expect(after(blocks)?.blockId).toBe(after(plain)?.blockId);
+    expect(container.querySelector('[data-review-flow="11"] [data-review-message="13"]')).toHaveTextContent('call');
+    expect(container.querySelector('.markdown-mermaid-frame')).toBeNull();
+  });
 });

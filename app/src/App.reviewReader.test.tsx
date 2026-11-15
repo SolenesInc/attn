@@ -166,17 +166,42 @@ describe('App review reader', () => {
 
     expect(reader.getByText('A paragraph between the stops.')).toBeInTheDocument();
     expect(reader.getByRole('heading', { name: 'Add keeps its result' })).toBeInTheDocument();
-    const summary = reader.getByRole('region', { name: 'The change' });
-    expect(within(summary).getAllByText(/calc\.go|util\.go|go\.sum/).map((element) => element.closest('.review-file-row')?.getAttribute('data-path'))).toEqual(['calc.go', 'util.go', 'go.sum']);
     expect(tileElement.querySelector('.review-not-shown')).toHaveTextContent('go.sumchecksums only.');
+  });
+
+  it('opens with the title and the change\'s facts under it, with the changed files one Enter away', async () => {
+    const { tileElement, reader, press, daemon } = await openReview();
+
+    const article = tileElement.querySelector('.md-reader-card')!;
+    const summary = reader.getByRole('region', { name: 'The change' });
+    expect(article.firstElementChild).toHaveTextContent('Name the sum');
+    expect(article.firstElementChild?.nextElementSibling).toBe(summary);
+    expect(summary).toHaveTextContent('3 files+5 −32 stops show 4 of 8 changed lines');
+    expect(summary.querySelector('.review-file-row')).toBeNull();
+
+    await press('ArrowDown');
+    expect(cursor(tileElement)).toHaveTextContent('Name the sum');
+    await press('ArrowDown');
+    expect(cursor(tileElement)).toHaveAttribute('data-review-cursor', 'facts');
+    await press('Enter');
+    expect(Array.from(summary.querySelectorAll('.review-file-row')).map((row) => row.getAttribute('data-path'))).toEqual(['calc.go', 'util.go', 'go.sum']);
+
+    await press('ArrowDown');
+    await press('ArrowDown');
+    expect(cursor(tileElement)).toHaveAttribute('data-path', 'util.go');
+    await press('Enter');
+    expect(daemon.sentOf('review_file').slice(-1)[0]?.path).toBe('util.go');
+    expect(fileView(tileElement)).toHaveTextContent('func helper() {}');
+    await press('Escape');
+
+    await press('ArrowUp');
+    await press('ArrowUp');
+    await press('Enter');
+    expect(summary.querySelector('.review-file-row')).toBeNull();
   });
 
   it('moves the cursor by block and line with up and down, and by stop with left and right', async () => {
     const { tileElement, press } = await openReview();
-
-    await press('ArrowDown');
-    expect(cursor(tileElement)).toHaveAttribute('data-path', 'calc.go');
-    expect(cursor(tileElement)?.closest('.review-summary')).not.toBeNull();
 
     await press('ArrowRight');
     expect(cursor(tileElement)?.closest('.review-stop')).toHaveAttribute('data-path', 'calc.go');
@@ -250,6 +275,67 @@ describe('App review reader', () => {
     await press('Escape');
     expect(fileView(tileElement)).toBeNull();
     expect(cursor(tileElement)).toHaveAttribute('data-line', '4');
+  });
+
+  describe('a file opened from anywhere', () => {
+    const TWO_STOPS_DOCUMENT = DOCUMENT.replace('## Not shown', '### calc.go:9-10\n\n- L9: Order flipped.\n\n## Not shown');
+    const TWO_STOPS: ReviewBundle = {
+      ...BUNDLE,
+      stops: [
+        ...BUNDLE.stops,
+        {
+          heading_line: 26, path: 'calc.go', from: 9, to: 10, now_from: 9, now_to: 10, changed_since_presented: false, file_hash: 'h1',
+          rows: CALC_FILE.slice(-4),
+          notes: [{ line: 28, from: 9, to: 9, now_from: 9, now_to: 9, look: false, text: 'Order flipped.' }],
+        },
+      ],
+      navigation: [{ language: 'go', state: 'ready', file: 'calc.go' }],
+    };
+
+    const litRows = (scope: HTMLElement) => Array.from(fileView(scope)!.querySelectorAll('.review-file-view-row--look, .review-file-view-row--noted')).map((element) => element.textContent);
+    const strip = (scope: HTMLElement) => fileView(scope)!.querySelector('.review-file-view-marks')?.textContent ?? '';
+
+    const entries: Array<[string, (view: Awaited<ReturnType<typeof openReview>>) => Promise<void>]> = [
+      ['a stop', async ({ press }) => {
+        await press('ArrowRight');
+        await press('Enter');
+      }],
+      ['the file list', async ({ press }) => {
+        await press('ArrowDown');
+        await press('ArrowDown');
+        await press('Enter');
+        await press('ArrowDown');
+        await press('Enter');
+      }],
+      ['search', async ({ tileElement, daemon, reader }) => {
+        fireEvent.keyDown(tileElement.querySelector('.desktop-dock-tile-body')!, { key: '/' });
+        const input = reader.getByRole('textbox', { name: 'Search' });
+        fireEvent.change(input, { target: { value: 'calc' } });
+        await act(() => vi.advanceTimersByTimeAsync(0));
+        await daemon.idle();
+        fireEvent.keyDown(input, { key: 'Enter' });
+        await daemon.idle();
+      }],
+      ['a navigation answer', async ({ daemon, press }) => {
+        daemon.on('code_nav', () => ({ event: 'code_nav_result', success: true, language: 'go', locations: [{ path: 'calc.go', line: 1, character: 0, end_line: 1, end_character: 7, text: 'package calc', outside: false }] }));
+        await press('ArrowRight');
+        await press('f');
+        await press('s');
+      }],
+    ];
+
+    it.each(entries)('shows the notes of every stop in the file, opened from %s', async (_name, enter) => {
+      const view = await openReview({ review: TWO_STOPS, content: TWO_STOPS_DOCUMENT });
+      await enter(view);
+      const { tileElement, press } = view;
+      expect(fileView(tileElement)).toHaveTextContent('calc.go');
+      expect(litRows(tileElement)).toEqual(['4+\tsum := a + b', '5+\treturn sum', '9+\treturn b - a']);
+
+      for (let step = 0; step < 12 && !fileCursorText(tileElement)?.startsWith('9+'); step += 1) await press('ArrowDown');
+      expect(fileCursorText(tileElement)).toBe('9+\treturn b - a');
+      expect(strip(tileElement)).toContain('Order flipped.');
+      expect(strip(tileElement)).not.toContain('The sum gets a name.');
+    });
   });
 
   it('keeps an open file view current: a new bundle reads the file again and the cursor stays on its line', async () => {
@@ -329,10 +415,14 @@ describe('App review reader', () => {
     expect(fileView(tileElement)).toBeNull();
   });
 
-  it('searches the repository by name and text, and opens what it finds', async () => {
+  it('lists the changed files in an empty search, searches the repository by name and text, and opens what it finds', async () => {
     const { tileElement, daemon, press, reader } = await openReview();
 
     await press('/');
+    const changed = ['calc.go+3 −2', 'util.go+1 −0', 'go.sum+1 −1'];
+    expect(reader.getAllByRole('option').map((option) => option.textContent)).toEqual(changed);
+    expect(daemon.sentOf('review_search')).toEqual([]);
+
     const input = reader.getByRole('textbox', { name: 'Search' });
     fireEvent.change(input, { target: { value: 'calc' } });
     await act(() => vi.advanceTimersByTimeAsync(0));
@@ -340,6 +430,13 @@ describe('App review reader', () => {
     expect(daemon.sentOf('review_search').map(({ document, query }) => [document, query])).toEqual([[DOC, 'calc']]);
     const options = reader.getAllByRole('option').map((option) => option.textContent);
     expect(options).toEqual(['calc.gofile', '\treturn b - acalc.go:9'.trim()]);
+
+    fireEvent.change(input, { target: { value: '' } });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(reader.getAllByRole('option').map((option) => option.textContent)).toEqual(changed);
+    fireEvent.change(input, { target: { value: 'calc' } });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await daemon.idle();
 
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -351,11 +448,13 @@ describe('App review reader', () => {
   it('shows more lines around a stop with e, fills the tile with z, and opens a Not shown file', async () => {
     const { tileElement, daemon, press } = await openReview();
     await press('ArrowRight');
+    const calc = tileElement.querySelector('.review-stop[data-path="calc.go"]')!;
+    expect(calc.querySelector('.review-stop-range')).toHaveTextContent('L3–6');
 
     await press('e');
-    const calc = tileElement.querySelector('.review-stop[data-path="calc.go"]')!;
     expect(stopRows(calc)[0]).toBe('11package calc');
     expect(stopRows(calc).slice(-1)[0]).toBe('910}');
+    expect(calc.querySelector('.review-stop-range')).toHaveTextContent('L1–10');
 
     await press('z');
     expect(fileView(tileElement)).toHaveClass('review-file-view--filled');
@@ -454,14 +553,14 @@ const MAP_BUNDLE: ReviewBundle = {
   ...BUNDLE,
   frame: 'map',
   flows: [
-    { line: 31, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(35, 'poll', 'calc', 'Add(a, b)', 15)], groups: [] },
+    { line: 30, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(34, 'poll', 'calc', 'Add(a, b)', 15)], groups: [] },
     {
-      line: 39, side: 'after', drawn: true,
+      line: 38, side: 'after', drawn: true,
       participants: [participant('poll', 'Poll'), participant('calc', 'Calc'), participant('util', 'Util')],
-      messages: [message(44, 'poll', 'calc', 'Add(a, b)', 15), message(46, 'calc', 'util', 'helper()', 22), message(48, 'util', 'calc', 'returns')],
+      messages: [message(43, 'poll', 'calc', 'Add(a, b)', 15), message(45, 'calc', 'util', 'helper()', 22), message(47, 'util', 'calc', 'returns')],
       groups: [],
     },
-    { line: 51, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(54, 'poll', 'calc', 'Add(a, b)')], groups: [] },
+    { line: 50, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(53, 'poll', 'calc', 'Add(a, b)')], groups: [] },
   ],
 };
 
@@ -470,8 +569,10 @@ const script = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review
 const stageStop = (scope: HTMLElement) => script(scope)?.querySelector('.review-stop--current')?.getAttribute('data-path');
 const diagrams = (scope: HTMLElement) => Array.from(scope.querySelectorAll('.review-map [data-review-flow]')).map((svg) => svg.getAttribute('data-review-flow'));
 const currentMessage = (scope: HTMLElement) => scope.querySelector('.review-map [aria-current="true"][data-review-message]')?.getAttribute('data-review-message');
-const mapDetail = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-map-detail');
+const arrowLine = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-map-message');
+const mapDetail = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-frame--map > .review-doc');
 const mapCursor = (scope: HTMLElement) => mapDetail(scope)?.querySelector<HTMLElement>('.review-cursor');
+const cursorStop = (scope: HTMLElement) => mapCursor(scope)?.closest('.review-stop')?.getAttribute('data-path');
 
 describe('App review reader frames', () => {
   it('opens in the Walkthrough the document picks: the stops as a script beside the file of the current stop', async () => {
@@ -485,10 +586,17 @@ describe('App review reader frames', () => {
     expect(fileCursorText(tileElement)).toBe('4+\tsum := a + b');
     expect(fileView(tileElement)?.querySelector('.review-file-view-row--look')?.textContent).toBe('4+\tsum := a + b');
     expect(script(tileElement)?.querySelector('.review-note-at')).toHaveTextContent('The sum gets a name.');
+    const dimmed = Array.from(fileView(tileElement)!.querySelectorAll('.review-file-view-row--outside .review-row'))
+      .map((element) => `${element.getAttribute('data-old') ?? ''}:${element.getAttribute('data-line') ?? ''}`);
+    expect(dimmed).toEqual(['1:1', '2:2', '6:7', '7:8', '8:', ':9', '9:10']);
+    const strip = () => fileView(tileElement)?.querySelector('[aria-label="Marks on this line"]');
+    expect(strip()).toHaveTextContent('look hereL4The sum gets a name.');
 
     await press('ArrowDown');
     expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
     expect(script(tileElement)?.querySelector('.review-note-at')).toHaveTextContent('Then it is returned.');
+    expect(strip()).toHaveTextContent('agentL5Then it is returned.');
+    expect(strip()).not.toHaveTextContent('The sum gets a name.');
     fireEvent.click(script(tileElement)!.querySelector('.review-stop--current .review-note')!);
     expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
 
@@ -531,14 +639,14 @@ describe('App review reader frames', () => {
     expect(fileCursorText(tileElement)).toBe('2+func helper() {}');
   });
 
-  it('opens in the Map the document picks and walks the messages tied to stops, with the code of each beside the diagram', async () => {
+  it('opens in the Map the document picks and walks the messages tied to stops, with the step of each beside the diagram', async () => {
     const { tileElement, press } = await openReview({ review: MAP_BUNDLE, content: MAP_DOCUMENT });
 
     expect(frameTabs(tileElement)).toEqual(['1Brief', '2Walkthrough', '3Map *']);
-    expect(diagrams(tileElement)).toEqual(['39']);
-    expect(currentMessage(tileElement)).toBe('44');
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 2 · after the change');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'calc.go');
+    expect(diagrams(tileElement)).toEqual(['38']);
+    expect(currentMessage(tileElement)).toBe('43');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 2 · after the change');
+    expect(cursorStop(tileElement)).toBe('calc.go');
     expect(mapCursor(tileElement)).toHaveAttribute('data-line', '3');
 
     await press('ArrowDown');
@@ -546,62 +654,62 @@ describe('App review reader frames', () => {
     expect(mapCursor(tileElement)).toHaveAttribute('data-line', '4');
 
     await press('ArrowRight');
-    expect(currentMessage(tileElement)).toBe('46');
-    expect(mapDetail(tileElement)).toHaveTextContent('helper()Calc → Util');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    expect(currentMessage(tileElement)).toBe('45');
+    expect(arrowLine(tileElement)).toHaveTextContent('helper()Calc → Util');
+    expect(cursorStop(tileElement)).toBe('util.go');
     await press('ArrowRight');
-    expect(currentMessage(tileElement)).toBe('46');
+    expect(currentMessage(tileElement)).toBe('45');
 
     await press('Enter');
     expect(fileView(tileElement)).toHaveTextContent('util.go');
     await press('Escape');
 
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['31']);
-    expect(currentMessage(tileElement)).toBe('35');
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 1 · before the change');
+    expect(diagrams(tileElement)).toEqual(['30']);
+    expect(currentMessage(tileElement)).toBe('34');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 1 · before the change');
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['39']);
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(diagrams(tileElement)).toEqual(['38']);
+    expect(currentMessage(tileElement)).toBe('43');
   });
 
   it('keeps the Map on its message when the agent adds or removes a message before it', async () => {
     const { tileElement, daemon, press } = await openReview({ review: MAP_BUNDLE, content: MAP_DOCUMENT });
     await press('ArrowRight');
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 2 of 2');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 2 of 2');
+    expect(cursorStop(tileElement)).toBe('util.go');
 
     const [before, after, undrawn] = MAP_BUNDLE.flows;
     const show = (messages: typeof after.messages) => act(() => daemon.emit({
       event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC,
       content: MAP_DOCUMENT, review: { ...MAP_BUNDLE, flows: [before, { ...after, messages }, undrawn] },
     }));
-    show([message(42, 'poll', 'calc', 'Sum(a, b)', 15), ...after.messages.map((entry) => ({ ...entry, line: entry.line + 2 }))]);
+    show([message(41, 'poll', 'calc', 'Sum(a, b)', 15), ...after.messages.map((entry) => ({ ...entry, line: entry.line + 2 }))]);
     await daemon.idle();
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 3 of 3');
-    expect(mapDetail(tileElement)).toHaveTextContent('helper()');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 3 of 3');
+    expect(arrowLine(tileElement)).toHaveTextContent('helper()');
+    expect(cursorStop(tileElement)).toBe('util.go');
 
     show(after.messages.slice(1));
     await daemon.idle();
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 1');
-    expect(mapDetail(tileElement)).toHaveTextContent('helper()');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 1');
+    expect(arrowLine(tileElement)).toHaveTextContent('helper()');
   });
 
   it('switches with b to a before diagram that ties no message to a stop, and back', async () => {
     const [before, after, undrawn] = MAP_BUNDLE.flows;
     const review: ReviewBundle = { ...MAP_BUNDLE, flows: [{ ...before, messages: before.messages.map(({ stop_line: _stop, ...rest }) => rest) }, after, undrawn] };
     const { tileElement, press } = await openReview({ review, content: MAP_DOCUMENT });
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(currentMessage(tileElement)).toBe('43');
 
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['31']);
-    expect(mapDetail(tileElement)).toHaveTextContent('No message in this diagram is tied to a stop.');
+    expect(diagrams(tileElement)).toEqual(['30']);
+    expect(arrowLine(tileElement)).toHaveTextContent('No arrow in this diagram is tied to a stop.');
     await press('ArrowRight');
-    expect(diagrams(tileElement)).toEqual(['31']);
+    expect(diagrams(tileElement)).toEqual(['30']);
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['39']);
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(diagrams(tileElement)).toEqual(['38']);
+    expect(currentMessage(tileElement)).toBe('43');
   });
 
   it('switches frames with 1, 2 and 3 and keeps the stop and line the cursor is on', async () => {
@@ -620,7 +728,7 @@ describe('App review reader frames', () => {
     await press('ArrowDown');
     expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
     await press('3');
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(currentMessage(tileElement)).toBe('43');
     expect(mapCursor(tileElement)).toHaveAttribute('data-line', '5');
 
     await press('ArrowRight');
@@ -628,6 +736,70 @@ describe('App review reader frames', () => {
     expect(tileElement.querySelector('.review-map')).toBeNull();
     expect(cursor(tileElement)?.closest('.review-stop')).toHaveAttribute('data-path', 'util.go');
     expect(cursor(tileElement)).toHaveAttribute('data-line', '1');
+  });
+
+  it('walks the Brief’s drawn diagram by its arrows, opens an arrow’s stop, and shares the side with the Map', async () => {
+    const { tileElement, press } = await openReview({ review: { ...MAP_BUNDLE, frame: 'brief' }, content: MAP_DOCUMENT });
+    const briefDiagrams = () => Array.from(tileElement.querySelectorAll('.review-doc [data-review-flow]')).map((figure) => figure.getAttribute('data-review-flow'));
+    const cursorArrow = () => cursor(tileElement)?.getAttribute('data-review-message') ?? null;
+    expect(briefDiagrams()).toEqual(['38']);
+    await act(() => vi.dynamicImportSettled());
+    expect(tileElement.querySelectorAll('.review-doc .markdown-mermaid-frame')).toHaveLength(1);
+
+    for (let presses = 0; cursorArrow() === null && presses < 30; presses += 1) await press('ArrowDown');
+    expect(cursorArrow()).toBe('43');
+    await press('ArrowUp');
+    expect(cursor(tileElement)?.closest('.review-not-shown')).not.toBeNull();
+    await press('ArrowDown');
+    await press('ArrowDown');
+    expect(cursorArrow()).toBe('45');
+    await press('ArrowDown');
+    expect(cursorArrow()).toBeNull();
+    await press('ArrowUp');
+    await press('ArrowUp');
+    expect(cursorArrow()).toBe('43');
+
+    await press('Enter');
+    expect(fileView(tileElement)).toHaveTextContent('calc.go');
+    expect(fileCursorText(tileElement)).toBe('33func Add(a, b int) int {');
+    await press('Escape');
+    expect(fileView(tileElement)).toBeNull();
+
+    await press('b');
+    expect(briefDiagrams()).toEqual(['30']);
+    expect(cursorArrow()).toBe('34');
+    await press('3');
+    expect(diagrams(tileElement)).toEqual(['30']);
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 1 · before the change');
+    expect(mapDetail(tileElement)?.querySelector('.review-brief-diagram')).toHaveAttribute('data-review-outside');
+    await press('b');
+    await press('1');
+    expect(briefDiagrams()).toEqual(['38']);
+
+    await press('2');
+    expect(script(tileElement)?.querySelector('[data-review-flow="38"]')).not.toBeNull();
+    expect(script(tileElement)?.querySelector('[data-review-cursor="message"]')).toBeNull();
+    await press('b');
+    expect(script(tileElement)?.querySelector('[data-review-flow="30"]')).not.toBeNull();
+    expect(script(tileElement)?.querySelector('[data-review-flow="38"]')).toBeNull();
+  });
+
+  it('walks two arrows that say the same of the same stop one by one, and keeps the cursor by the diagram when b shows a side with no arrow to stand on', async () => {
+    const [before, after, undrawn] = MAP_BUNDLE.flows;
+    const review: ReviewBundle = {
+      ...MAP_BUNDLE, frame: 'brief',
+      flows: [{ ...before, messages: before.messages.map(({ stop_line: _stop, ...rest }) => rest) }, { ...after, messages: [after.messages[0], { ...after.messages[0], line: 45 }, after.messages[2]] }, undrawn],
+    };
+    const { tileElement, press } = await openReview({ review, content: MAP_DOCUMENT });
+    const cursorArrow = () => cursor(tileElement)?.getAttribute('data-review-message') ?? null;
+    for (let presses = 0; cursorArrow() === null && presses < 30; presses += 1) await press('ArrowDown');
+    expect(cursorArrow()).toBe('43');
+    await press('ArrowDown');
+    expect(cursorArrow()).toBe('45');
+
+    await press('b');
+    expect(tileElement.querySelector('.review-doc [data-review-flow="30"]')).not.toBeNull();
+    expect(cursor(tileElement)?.closest('.review-not-shown')).not.toBeNull();
   });
 
   it('leaves out a frame the document cannot fill, and shows a diagram outside the drawn subset as a mermaid figure', async () => {

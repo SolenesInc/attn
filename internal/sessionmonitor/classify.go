@@ -179,6 +179,7 @@ func (m *Monitor) applyClassification(classificationStartTime time.Time, decisio
 	m.logf("classifySessionState: session=%s state=%s reason=%s", label, decision.state, decision.reason)
 	m.Trace(statetrace.Observation{Source: StateSourceClassifier, Detail: decision.reason, ObservedAt: classificationStartTime, Claim: decision.state, Outcome: statetrace.OutcomeObserved})
 	m.concludeClassification(classifierVerdictMutation(decision.state, classificationStartTime))
+	pausepoint.At(pausepoint.ClassifierVerdictApplied)
 }
 
 func (m *Monitor) runClassifier(request ClassifyRequest, headlessTasks bool) (string, error) {

@@ -12,6 +12,9 @@
 #   vitest <file>             a Vitest file, relative to app/
 #   vitest .                  the whole Vitest suite, in one run
 #   playwright <file>         a Playwright spec, relative to app/
+#   cargo .                   the whole native/ workspace, in one run
+#   cargo <package> --lib     a native/ crate's unit tests; also --doc
+#   cargo <package> --test <name>   a native/ test target; also --bin <name>
 #
 # The list grows from red main. When the sheriff's repair for a red cause lands,
 # the test that caught it joins the group whose paths can break it, if it runs
@@ -43,6 +46,7 @@ go ./internal/daemon TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget
 go ./internal/daemon TestACompactingCloseFinishesWhenTheUserPressesEnterDuringTheCompact
 go ./internal/daemon TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactCompactsAndCloses
 go ./internal/daemon TestAMessageSentWhileARingIsBeingPlacedIsAnsweredOnceTheRingIsPlaced
+go ./internal/daemon TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnsweredAtLaunch
 go ./cmd/attnd TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attnd TestATerminalOpenedWhileAnotherBuildIsOnDiskKeepsItsWorkerUntilTheDaemonRestarts
 go ./cmd/attnd TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
@@ -92,12 +96,15 @@ go ./cmd/attnd TestARingCaughtWhileTheModDropsAfterARestartIsTypedInto
 go ./cmd/attnd TestAnOutpostLostDuringTheResumesDirectoryCheckResumesTheTenderWhenItReturns
 go ./internal/daemon TestTheDaemonAnswersWhileTheLoginShellRuns
 go ./internal/daemon TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer
-go ./internal/daemon TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture
+go ./internal/daemon TestAnAppServerSessionDoesNotHoldTheFirstScreenForTheCapture
 go ./internal/daemon TestAReloadWaitingForItsPluginHarnessLeavesTheSessionFreeToClose
 go ./internal/daemon TestCodexsHooksNamingTheDefaultModeDoNotRetireTheReviewerItWasSpawnedWith
 go ./internal/daemon TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactCompactsAndCloses
 go ./internal/daemon TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten
 go ./internal/daemon TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing
+go ./internal/daemon TestADelegateStartsOnASeedPointerBesideItsCaller
+go ./internal/daemon TestAResumedSharedCodexSessionNamesItsConversationAgainAfterAnotherProfileRenamedIt
+go ./cmd/attnd TestAnInstallPastItsLimitFailsAndNamesTheLimit
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal
@@ -119,7 +126,7 @@ group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
 
-group clickhouse ^internal/daemon/analytics|^internal/analytics/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
+group clickhouse ^internal/daemon/analytics|^internal/analytics/|^internal/ingest/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
 go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
 go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing
@@ -132,6 +139,7 @@ go ./cmd/attn-ingest TestOversizedRequestsAreRefusedNamingTheLimit
 go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
 go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
+go ./cmd/attn-ingest TestEachRecordKindReadsBackAsTypedColumnsThroughItsView
 
 group app ^app/
 vitest .
@@ -153,3 +161,6 @@ go ./cmd/attnd TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly
 
 group old-phones ^internal/daemon/home_gateway|^internal/daemon/testdata/old_phones/|^internal/protocol/(schema/home_gateway\.tsp|homegateway/)
 go ./internal/daemon TestAPhoneOfEveryHomeGatewayAPIKeepsWorkingAgainstThisHome
+
+group native ^native/|^internal/protocol/schema/|^cli/protocol/
+cargo .

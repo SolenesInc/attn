@@ -1,13 +1,13 @@
 import { concatBytes } from '@noble/hashes/utils.js'
-import { decodeHomeGatewayEvent, type HomeGatewayEvent } from '@attn/homeGateway/decode'
+import { decodeHomeGatewayEvent, type HomeGatewayEvent } from './homeGateway/decode'
 import type {
   HomeGatewayAsk,
   HomeGatewaySeed,
   HomeGatewayCrewMemberBetweenSessions,
   HomeGatewaySession,
   TerminalScreen,
-} from '@attn/types/homeGatewayGenerated'
-import { HOME_GATEWAY_API_VERSION } from '@attn/types/homeGatewayVersion'
+} from './homeGateway/generated'
+import { HOME_GATEWAY_API_VERSION } from './homeGateway/version'
 import { fromBase64, fromBase64Url, toBase64Url } from './bytes'
 import { relayToken, signChallenge, type PhoneKeys } from './phoneKeys'
 import { HandshakeKind, startHandshake, type Transport } from './noise'

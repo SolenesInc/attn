@@ -291,6 +291,38 @@ connected:
   way, and it takes the next prompt. A held ring then starts a new turn, and later
   rings go out as usual. A question outside a turn still holds every ring back.
 
+### With a plugin driver
+
+A plugin driver chooses terminal or direct input for each run at launch or
+resume. A direct run never receives a ring through its terminal, including
+while the plugin is disconnected or after a daemon restart. Human keystrokes
+still reach the terminal. A terminal-only run keeps terminal delivery even if
+its plugin later offers direct input. A run from an older daemon waits for its
+owning driver to register before choosing its route.
+
+Before dispatching a direct ring, attn saves its input ID, exact text, driver
+run, and native conversation on the inbox delivery record. A lost reply keeps
+that attempt pending. When the owner returns, attn retries the same input ID
+and payload through the existing inbox scheduling. Later user input waits for
+that receipt, then arrives separately. The driver must return the original
+receipt for an accepted input ID without submitting it again to the live
+conversation, including after a plugin or daemon restart.
+
+An explicit rejection, an ended target, a retired run, or a changed native
+conversation releases the pending attempt. Its items stay unread, and the
+existing delivery policy can place them again with a fresh input ID. A retry charges no additional attempt before custody is confirmed. Starts
+retain their existing attempt counts. A successful ring records its receipt
+and clears the pending attempt in one transaction, with the same counting
+rules as other rings.
+
+A driver that accepts attributed input receives annotations and rings containing
+only typed user input as `voice: "user"`. Rings with notices use `voice: "attn"`,
+even when they also carry user input. Each attributed input names the expected
+native conversation. Input waits until that conversation is known. A driver that
+promises permission-safe delivery can accept annotations during a running
+turn's approval without answering it. The existing inbox policy still decides
+when to ring.
+
 ## Notification runs
 
 A notification run is a run that attn's own input started: a ring, or a crew
@@ -418,12 +450,15 @@ restarts, and, unless the resume is blocked, when the bridge to the tender's
 outpost connects. So a seed on standby with unread mail resumes its tender right
 after any of them.
 
-`attn seed standby --close` and `attn agent close --self` refuse while a seed
-the session tends is on standby and has unread seed mail. The refusal names
+`attn seed standby` without `--stay` and `attn agent close --self` refuse while
+a seed the session tends is on standby and has unread seed mail. The refusal names
 `attn agent inbox`.
 
-With `--compact`, the close places the compact in the session's input lane,
-through the Claude mod or the shared Codex app server, as soon as it is asked.
+A compacting close, which `attn agent close --self --compact` asks for and
+`attn seed standby` makes when the session can compact, places the compact in
+the session's input lane, through the Claude mod, the shared Codex app server, or a plugin driver with
+native compaction,
+as soon as it is asked.
 The harness alone decides whether the conversation is between turns: Claude
 refuses the compact while a turn runs and the mod answers `busy`, and shared
 Codex reports its thread active. A refused compact opens the lane again and is
@@ -534,7 +569,9 @@ notified, or read.
 
 attn keeps the first delivery receipt of each successful delivery until the
 input lane resets on an agent reload or daemon restart. A retry with the same ID
-returns that delivery receipt. At the delivery-ID limit, new deliveries fail
+returns that delivery receipt. A direct plugin ring also keeps its pending ID
+and payload in the database until custody is settled, as [With a plugin
+driver](#with-a-plugin-driver) describes. At the delivery-ID limit, new deliveries fail
 before attn types them, and the error names the session, the limit and the
 requested count. Existing IDs still return their delivery receipts.
 
@@ -576,9 +613,9 @@ no update for the earlier event. A message sent to the seed's id goes to the
 new tender.
 
 **A reminder on standby.** An agent runs
-`attn seed remind s-x --in 20m -m "Check the rollout"`, then
-`attn seed standby s-x -m "Read the rollout dashboard and report" --close`. The
-session closes. When the reminder comes due, the seed is on standby and
+`attn seed standby s-x --in 20m -m "Read the rollout dashboard and report"`,
+which also sets the seed's reminder to that time with the note as its message.
+The session closes. When the reminder comes due, the seed is on standby and
 `garden.tender_resume` is `any`, so attn resumes the closed session. For a Claude
 session, attn waits for the mod's first poll. The session gets the note and
 reads the reminder with `attn agent inbox`, and standby ends. The agent

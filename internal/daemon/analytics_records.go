@@ -93,11 +93,16 @@ func (d *Daemon) withAnalyticsCaller(props map[string]any, sessionID protocol.Se
 	return props, sessionID
 }
 
-func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
+type socketFrameIdentity struct {
+	terminal protocol.TerminalID
+	source   protocol.SessionID
+}
+
+func parseSocketFrameIdentity(frame []byte) socketFrameIdentity {
 	var fields struct {
-		Cmd string `json:"cmd"`
 		protocol.SocketCaller
+		Source protocol.SessionID `json:"source_session_id"`
 	}
 	_ = json.Unmarshal(frame, &fields)
-	return fields.Cmd, protocol.Deref(fields.CallerID)
+	return socketFrameIdentity{terminal: protocol.Deref(fields.CallerID), source: protocol.TrimID(fields.Source)}
 }

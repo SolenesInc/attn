@@ -14,9 +14,10 @@ const (
 	RunnerVitest     Runner = "vitest"
 	RunnerPlaywright Runner = "playwright"
 	RunnerNative     Runner = "native"
+	RunnerCargo      Runner = "cargo"
 )
 
-var runners = []Runner{RunnerGo, RunnerVitest, RunnerPlaywright, RunnerNative}
+var runners = []Runner{RunnerGo, RunnerVitest, RunnerPlaywright, RunnerNative, RunnerCargo}
 
 func ParseRunner(name string) (Runner, error) {
 	for _, runner := range runners {
@@ -24,7 +25,7 @@ func ParseRunner(name string) (Runner, error) {
 			return runner, nil
 		}
 	}
-	return "", fmt.Errorf("unknown runner %q; runners: go, vitest, playwright, native", name)
+	return "", fmt.Errorf("unknown runner %q; runners: go, vitest, playwright, native, cargo", name)
 }
 
 type Outcome string

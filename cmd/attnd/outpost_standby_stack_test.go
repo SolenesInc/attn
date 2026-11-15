@@ -32,7 +32,7 @@ func (m *outpostMod) onStandbyAndClosed(t *testing.T) string {
 	m.workingOn(t, m.app, "write the essay")
 	m.run.Reply("Done. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(m.app, m.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-	seed := m.onStandby(t, "--close")
+	seed := m.onStandby(t)
 	m.awaitClosed()
 	return seed
 }
@@ -113,7 +113,7 @@ func TestAnOutpostDirectoryThatIsGoneOrUnusableBlocksTheResume(t *testing.T) {
 
 func (m *outpostMod) answerReturnedBeforeItsPlacementAnswers(t *testing.T, answering *testworld.Pause) string {
 	t.Helper()
-	seed := m.onStandby(t)
+	seed := m.onStandby(t, "--stay")
 	m.workingOn(t, m.app, "write the essay")
 	asked, err := m.home.Client().AskOpen(protocol.SessionID(m.session), seed, "Deploys empty the cache.\n\n:::question\nWhich store should keep the cache?\n- [ ] Postgres\n- [ ] Redis\n:::\n", "", m.home.Path())
 	if err != nil {

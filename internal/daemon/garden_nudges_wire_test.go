@@ -20,14 +20,14 @@ func TestTheAppsSeedEditsNeverRingTheirSource(t *testing.T) {
 
 		moved := testworld.Request(app, protocol.SeedTransitionMessage{
 			Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move"),
-			SourceSessionID: protocol.Ptr(protocol.SessionID("source")), SeedID: seed, Verb: "tend",
+			SourceSessionID: protocol.Ptr(protocol.SessionID("source")), SeedID: seed, Verb: "wither", Reason: protocol.Ptr("not needed"),
 		}, protocol.EventSeedTransitionResult, func(m protocol.SeedTransitionResultMessage) bool { return m.RequestID == "move" })
 		if !moved.Success {
-			t.Fatalf("the app's tend: %s", protocol.Deref(moved.Error))
+			t.Fatalf("the app's wither: %s", protocol.Deref(moved.Error))
 		}
 		w.advance(0)
-		gardenNudgeInboxIsEmpty(t, cli, "source", "after the app tended for it")
-		gardenNudgeOneBell(t, cli, "watcher", seed, "tended")
+		gardenNudgeInboxIsEmpty(t, cli, "source", "after the app withered it from its page")
+		gardenNudgeOneBell(t, cli, "watcher", seed, "withered")
 
 		noted := testworld.Request(app, protocol.SeedNoteMessage{
 			Cmd: protocol.CmdSeedNote, RequestID: protocol.Ptr("note"),
@@ -40,7 +40,7 @@ func TestTheAppsSeedEditsNeverRingTheirSource(t *testing.T) {
 		gardenNudgeInboxIsEmpty(t, cli, "source", "after the app noted for it")
 		gardenNudgeOneBell(t, cli, "watcher", seed, "note.added")
 
-		gardenNudgeMove(t, cli, "source", seed, "park")
+		gardenNudgeMove(t, cli, "source", seed, "replant")
 		gardenNudgeNote(t, cli, "source", seed, "my own words", true)
 		w.advance(0)
 		gardenNudgeInboxIsEmpty(t, cli, "source", "after its own move and note")

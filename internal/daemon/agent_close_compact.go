@@ -32,22 +32,35 @@ type compactionLedger struct {
 	pending map[protocol.SessionID]*pendingCompactClose
 }
 
+type pluginCompactTarget struct {
+	Plugin, Run, Conversation string
+}
+
 type pendingCompactClose struct {
-	session   protocol.SessionID
-	monitor   *sessionmonitor.Monitor
-	reason    string
-	onStandby []string
-	key       string
-	retries   int
-	placing   bool
-	again     bool
-	placed    bool
-	busy      bool
-	outcome   *compactOutcome
-	tripwire  stepclock.Timer
+	pluginTarget pluginCompactTarget
+	session      protocol.SessionID
+	monitor      *sessionmonitor.Monitor
+	reason       string
+	onStandby    []string
+	key          string
+	retries      int
+	placing      bool
+	again        bool
+	placed       bool
+	busy         bool
+	outcome      *compactOutcome
+	tripwire     stepclock.Timer
 }
 
 func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal {
+	run := d.store.GetAgentDriverRun(target.ID)
+	if run.Route == "direct" {
+		reg, conn := d.ensurePluginRegistry().driverConnection(target.Agent, run.PluginName)
+		if conn != nil && reg.Capabilities["compaction"] {
+			return nil
+		}
+	}
+
 	if d.codexShared().launchedShared(target.ID) {
 		return nil
 	}
@@ -199,11 +212,30 @@ func turnHasEnded(monitor *sessionmonitor.Monitor) bool {
 
 func (p *pendingCompactClose) waitForTurnEndLocked() {
 	p.outcome, p.placed, p.placing, p.again, p.busy = nil, false, false, false, false
+	p.pluginTarget = pluginCompactTarget{}
 	p.retries++
 	if p.tripwire != nil {
 		p.tripwire.Stop()
 		p.tripwire = nil
 	}
+}
+
+func (l *compactionLedger) bindPlugin(session protocol.SessionID, input string, target pluginCompactTarget) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	p := l.pending[session]
+	if p == nil || p.compact().ID.String() != input {
+		return false
+	}
+	p.pluginTarget = target
+	return true
+}
+
+func (l *compactionLedger) pluginMatches(session protocol.SessionID, input string, target pluginCompactTarget) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	p := l.pending[session]
+	return p != nil && p.compact().ID.String() == input && p.pluginTarget == target && target.Run != ""
 }
 
 func (l *compactionLedger) report(d *Daemon, session protocol.SessionID, delivery string, outcome compactOutcome) {

@@ -11,15 +11,6 @@ var (
 		Since:   "2026-10-18",
 		Search:  "questions answer decisions drawer",
 	})
-	NisseEnabled = feature("nisse_enabled", "Offer Nisse as a harness: true or false.", Info{
-		Name:    "Nisse",
-		Summary: "Offer Nisse as a harness.",
-		Group:   Agents,
-		Applies: NewAgents,
-		Stage:   Experimental,
-		Since:   "2026-10-29",
-		Search:  "harness server",
-	})
 	NewSessionLauncherEnabled = feature("new_session_launcher_enabled", "Show the new session launcher: true or false.", Info{
 		Name:    "Launcher 2.0",
 		Summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.",

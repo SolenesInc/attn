@@ -37,6 +37,7 @@ type Change struct {
 	Cause            Cause
 	RequestStartedAt time.Time
 	Origin           Origin
+	ServerCompletion int64
 }
 
 type Origin struct {
@@ -125,6 +126,7 @@ func (m *Monitor) ApplyState(change Change) bool {
 		}
 		m.syncAutoSettleLocked()
 		ended = m.observeRunLocked(previous, change.Cause, stop, time.Now())
+		m.completions.applyLocked(change.ServerCompletion)
 		view = m.viewLocked()
 	}
 	m.mu.Unlock()

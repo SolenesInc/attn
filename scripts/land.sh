@@ -28,8 +28,8 @@ protocol_outputs=(
   internal/protocol/homegateway/generated.go
   internal/protocol/homegateway/schema.json
   internal/protocol/homegateway/version.go
-  app/src/types/homeGatewayGenerated.ts
-  app/src/types/homeGatewayVersion.ts
+  mobile/src/homeGateway/generated.ts
+  mobile/src/homeGateway/version.ts
   cli/protocol/src/generated.rs
   cli/protocol/src/go_values.rs
   cli/testdata/duration_string.jsonl
@@ -45,6 +45,8 @@ prompt_outputs=(
   internal/prompts/catalog.generated.json
   app/src/prompts/catalog.generated.json
 )
+frozen_paths='^app/src/|^app/src-tauri/'
+native_paths='^native/|^internal/protocol/schema/|^cli/protocol/|^scripts/native-parity$'
 
 fail() {
   echo "land: $*" >&2
@@ -206,7 +208,8 @@ run_checks() {
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
-  touches '^mobile/|^app/src/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
+  touches "$native_paths" && targets+=(check-native "NATIVE_CLIPPY=$(native_clippy_scope "$changed")")
+  touches '^mobile/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
   script_tests="$(script_tests_for "$changed")"
   if [ -n "$script_tests" ]; then
     targets+=(test-scripts "SCRIPT_TESTS=$script_tests")
@@ -220,6 +223,18 @@ run_checks() {
     make "${targets[@]}"
   fi
   run_go_checks_beside_landing_tests
+}
+
+native_clippy_scope() {
+  local crates
+  if grep -qE '^native/[^/]+$' <<<"$1"; then
+    echo --workspace
+    return
+  fi
+  crates="$(grep -oE '^native/crates/[^/]+/' <<<"$1" | sort -u | while IFS= read -r dir; do
+    [ -f "$dir/Cargo.toml" ] && printf -- '-p %s ' "$(basename "$dir")"
+  done)"
+  echo "${crates% }"
 }
 
 run_go_checks_beside_landing_tests() {
@@ -308,21 +323,36 @@ sync_history() {
   go tool test-history sync || echo "land: $1" >&2
 }
 
-lock_land_queue() {
-  perl -MFcntl=:flock -e 'open(my $queue, ">&=9") or die "land: $!\n"; flock($queue, LOCK_EX | ($ARGV[0] ? LOCK_NB : 0)) or exit 1' "$1"
-}
-
 take_land_queue() {
-  local queue holder
+  local queue status holder
   queue="$(git rev-parse --git-common-dir)/attn-land-queue"
-  exec 9>>"$queue"
-  if ! lock_land_queue nonblocking; then
+  exec 9< <(perl -MFcntl=:flock -e '
+    my ($queue, $land) = @ARGV;
+    $| = 1;
+    open(my $lock, ">>", $queue) or die "land: $queue: $!\n";
+    unless (flock($lock, LOCK_EX | LOCK_NB)) {
+      print "busy\n";
+      flock($lock, LOCK_EX) or die "land: $!\n";
+    }
+    print "took\n";
+    close(STDOUT);
+    select(undef, undef, undef, 0.05) while kill(0, $land);
+  ' "$queue" "$$" &)
+  read -r status <&9 || true
+  if [ "$status" = busy ]; then
     holder="$(cat "$queue")"
     echo "land: waiting for the land queue: held by ${holder:-a land that is starting}" >&2
-    lock_land_queue ""
-    echo "land: took the land queue" >&2
+    read -r status <&9 || true
+    [ "$status" != took ] || echo "land: took the land queue" >&2
   fi
+  exec 9<&-
+  [ "$status" = took ] || fail "could not take the land queue at $queue"
   echo "pid $$ ($(basename "$PWD")) since $(date +%H:%M:%S)" >"$queue"
+}
+
+clean_native_builds() {
+  [ -x scripts/native-build-clean ] || return 0
+  scripts/native-build-clean || echo "land: scripts/native-build-clean failed; old native build output stays until the next land" >&2
 }
 
 patch_applies_on() {
@@ -364,6 +394,7 @@ land() {
     if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
       echo "land: main is at $(git rev-parse --short HEAD)"
       sync_history "this landing's test receipts upload at the next sync"
+      clean_native_builds
       warn_about_undone_commits "$undone"
       exit 0
     fi
@@ -374,12 +405,30 @@ land() {
   fail "main moved $max_attempts times while landing; run scripts/land.sh again"
 }
 
+refuse_frozen_changes() {
+  local frozen generated
+  generated="$(printf '%s\n' "${protocol_outputs[@]}" "${prompt_outputs[@]}")"
+  frozen="$(git diff --name-only origin/main...HEAD | grep -E "$frozen_paths" | grep -vxF -- "$generated" | grep -v '^app/src-tauri/generated/' || true)"
+  [ -n "$frozen" ] || return 0
+  if [ -n "${ATTN_FREEZE_EXCEPTION:-}" ]; then
+    if command -v attn >/dev/null && ! attn seed show "$ATTN_FREEZE_EXCEPTION" >/dev/null 2>&1; then
+      fail "ATTN_FREEZE_EXCEPTION=$ATTN_FREEZE_EXCEPTION names no seed; set it to the seed of the fix"
+    fi
+    echo "land: changing the frozen Tauri app under the exception for seed $ATTN_FREEZE_EXCEPTION" >&2
+    return 0
+  fi
+  fail "the Tauri app is frozen: app/src and app/src-tauri take only P0 and P1 fixes to the shipped app until the native app replaces it. A fix in an area the native app already covers lands in both apps.
+This landing changes:
+$frozen
+To land a fix, name its seed: ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh"
+}
+
 refuse_commits_by_another_author() {
-  local identity others
-  identity="$(git config --global --includes --get user.email || true)"
-  [ -n "$identity" ] || return 0
-  others="$(git log --format='  %h %ae %s' origin/main..HEAD | awk -v identity="$identity" '$2 != identity')"
-  [ -z "$others" ] || fail "these commits are not authored by your global git identity, $identity:
+  local author others
+  author="$(git config --global --includes --get user.email || true)"
+  [ -n "$author" ] || return 0
+  others="$(git log --format='  %h %ae %s' origin/main..HEAD | awk -v author="$author" '$2 != author')"
+  [ -z "$others" ] || fail "these commits are not authored by your global git identity, $author:
 $others
 See which config set the identity with git config --show-origin user.email. If it is not yours, remove it. Then fix these commits with git rebase origin/main --exec 'git commit --amend --no-edit --reset-author' and run scripts/land.sh again."
 }
@@ -394,6 +443,7 @@ run_landing_scenarios() {
 export GOGC="${GOGC:-400}"
 git fetch --quiet origin main
 refuse_commits_by_another_author
+refuse_frozen_changes
 run_landing_scenarios
 take_land_queue
-land 9>&-
+land

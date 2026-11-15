@@ -514,3 +514,52 @@ func TestNoEvidenceButAFreshPassClearsAFailure(t *testing.T) {
 		}
 	})
 }
+
+func TestCargoTargetsFollowCargosTargetDiscovery(t *testing.T) {
+	cases := map[string][]string{
+		"native/crates/app/src/lib.rs":           {"cargo app --lib", "cargo app --doc"},
+		"native/crates/app/src/main.rs":          {"cargo app --bin app"},
+		"native/crates/app/src/bin/tool.rs":      {"cargo app --bin tool"},
+		"native/crates/app/src/bin/tool/main.rs": {"cargo app --bin tool"},
+		"native/crates/app/src/bin/tool/util.rs": nil,
+		"native/crates/app/src/view.rs":          nil,
+		"native/crates/app/tests/wire.rs":        {"cargo app --test wire"},
+		"native/crates/app/tests/wire/main.rs":   {"cargo app --test wire"},
+		"native/crates/app/tests/wire/window.rs": nil,
+		"native/crates/app/tests/a/b/c.rs":       nil,
+		"native/crates/app/Cargo.toml":           nil,
+		"native/Cargo.toml":                      nil,
+		"app/src/lib.rs":                         nil,
+	}
+	for path, want := range cases {
+		if got := th.CargoTestUnits(path); !reflect.DeepEqual(got, want) {
+			t.Errorf("CargoTestUnits(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+func TestACargoRunPricesItsTargetUnlessItFiltersTests(t *testing.T) {
+	unit := "cargo good --lib"
+	key := th.CostKey{Lane: mac, Machine: machine}
+	cases := []struct {
+		args  []string
+		whole bool
+	}{
+		{[]string{"--no-fail-fast", "-p", "good", "--lib"}, true},
+		{[]string{"--package", "good", "--lib", "--locked", "-j", "4"}, true},
+		{[]string{"-p", "good", "--lib", "--", "--test-threads", "1", "--nocapture"}, true},
+		{[]string{"-p", "good", "--lib", "holds"}, false},
+		{[]string{"-p", "good", "--lib", "--", "holds"}, false},
+		{[]string{"-p", "good", "--lib", "--", "--skip", "slow"}, false},
+		{[]string{"-p", "good", "--lib", "--", "--exact", "tests::holds"}, false},
+		{[]string{"-p", "good", "--lib", "--", "--ignored"}, false},
+	}
+	for _, tc := range cases {
+		run := wall(receipt(on("c00", mac), result(unit, th.Pass)), 3000)
+		run.Runner = th.RunnerCargo
+		run.Command.Argv = append([]string{"cargo", "test", "--message-format=json"}, tc.args...)
+		if got := th.BuildCosts([]th.Receipt{run}, key).Priced(unit); got != tc.whole {
+			t.Errorf("cargo test %v priced its target: %v, want %v", tc.args, got, tc.whole)
+		}
+	}
+}

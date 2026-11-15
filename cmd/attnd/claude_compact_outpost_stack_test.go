@@ -161,7 +161,7 @@ func TestARealClaudeOnAnOutpostOnStandbyCompactsClosesAndResumesOnSeedMailWithIt
 	}
 	const note = "On approval: merge the pull request."
 	c.model.RunBashAfter(outpostCompactRing, outpostCompactRing)
-	c.model.RunBashAfter(outpostCompactAsked, `attn seed standby `+seed.ID+` -m "`+note+`" --close --compact`)
+	c.model.RunBashAfter(outpostCompactAsked, `attn seed standby `+seed.ID+` -m "`+note+`"`)
 
 	c.mail(t, c.session, outpostCompactAsked)
 	c.closesWith(t, app, "On standby for "+seed.ID+": "+note)
@@ -286,7 +286,7 @@ func TestAnOutpostSessionWhoseSeedLeftStandbyStaysOpenInsteadOfCompacting(t *tes
 	m.outpost.Run(testworld.Invocation{Args: []string{"seed", "plant", "Merge the discount field", "--json"}, Terminal: string(m.terminal)}).JSON(t, &seed)
 	for _, args := range [][]string{
 		{"seed", "tend", seed.ID},
-		{"seed", "standby", seed.ID, "-m", "On approval: merge.", "--close", "--compact"},
+		{"seed", "standby", seed.ID, "-m", "On approval: merge."},
 		{"seed", "standby", seed.ID, "--clear"},
 	} {
 		if done := m.outpost.Run(testworld.Invocation{Args: args, Terminal: string(m.terminal)}); done.Code != 0 {

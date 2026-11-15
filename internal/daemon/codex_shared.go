@@ -1080,7 +1080,6 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
 		opts.LaunchExecutable = installed
 		return nil
 	}
-	r.retireConnections(v)
 	opts.CodexRemote = "unix://" + v.socket
 	r.answerTrustIfKnown(opts, v.profile)
 	if _, err := r.ensureServer(r.d.life.Context(), v.profile, ""); err != nil {
@@ -1090,7 +1089,13 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
 	return nil
 }
 
-func (r *codexShared) retireConnections(v *codexView) {
+func (r *codexShared) retireConnections(t harness.TerminalID) {
+	r.mu.Lock()
+	v := r.views[t]
+	r.mu.Unlock()
+	if v == nil {
+		return
+	}
 	v.replies.Lock()
 	defer v.replies.Unlock()
 	r.mu.Lock()

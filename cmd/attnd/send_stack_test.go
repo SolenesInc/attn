@@ -196,16 +196,27 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 	var sessions []jsonKeys
 	listed.JSON(t, &sessions)
 	keysByID := map[string][]string{}
+	hostLabels := map[string]string{}
 	for _, row := range sessions {
 		var id string
 		if err := json.Unmarshal(row["id"], &id); err != nil {
 			t.Fatalf("send sessions row %v: %v", row, err)
 		}
 		keysByID[id] = row.sorted()
+		if label, ok := row["host_label"]; ok {
+			var name string
+			if err := json.Unmarshal(label, &name); err != nil {
+				t.Fatalf("send sessions row %v: %v", row, err)
+			}
+			hostLabels[id] = name
+		}
+	}
+	if want := map[string]string{remote: "outpost"}; !reflect.DeepEqual(hostLabels, want) {
+		t.Fatalf("send sessions --json host_label = %v; the app shows the outpost's name %v, not its id %s", hostLabels, want, pair.Host)
 	}
 	if want := map[string][]string{
 		local:  {"agent", "id", "label", "last_focused_at", "state"},
-		remote: {"agent", "host", "id", "label", "state"},
+		remote: {"agent", "host", "host_label", "id", "label", "state"},
 	}; !reflect.DeepEqual(keysByID, want) {
 		t.Fatalf("send sessions --json = %s; the app reads %v and never another profile's session %s or the shell %s", listed.Stdout, want, side, shell)
 	}

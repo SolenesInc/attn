@@ -5,7 +5,8 @@ body { margin: 0; padding: 0 var(--gutter); background: var(--ground); color: va
 a { color: inherit; text-decoration: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .bar { width: 100%; max-width: var(--col); height: 56px; margin: 0 auto; display: flex; align-items: center; gap: 26px; font-size: 15px; font-weight: 500; }
-.mark { margin-right: auto; font: 700 20px/1 var(--mono); letter-spacing: -.02em; color: var(--accent); }
+.mark { margin-right: auto; }
+.mark img { display: block; height: 32px; width: auto; }
 .bar a:not(.mark) { padding: 8px 0; color: var(--mid); transition: color .15s; }
 .bar a:not(.mark):hover { color: var(--ink); }
 main { max-width: 640px; margin: 0 auto; padding: clamp(56px, 12vh, 120px) 0 clamp(72px, 14vh, 140px); }

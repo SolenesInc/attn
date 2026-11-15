@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -632,14 +633,15 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 	w.CodexServerOf(app.SelectedProfile()).AwaitName(conversation, "Release train")
 
 	if way == "ledger" {
-		for _, c := range []struct {
-			app     *testworld.Peer
-			session string
-		}{{app, resumed}, {sideApp, elsewhere}} {
-			if closed := closeFromApp(c.app, c.session); !closed.Accepted {
-				t.Fatalf("close %s: %s", c.session, protocol.Deref(closed.Error))
-			}
+		releasing := w.PauseAt(pausepoint.SessionCloseReleasing)
+		if closed := closeFromApp(sideApp, elsewhere); !closed.Accepted {
+			t.Fatalf("close %s: %s", elsewhere, protocol.Deref(closed.Error))
 		}
+		releasing.Await()
+		if closed := closeFromApp(app, resumed); !closed.Accepted {
+			t.Fatalf("close %s: %s", resumed, protocol.Deref(closed.Error))
+		}
+		releasing.Release()
 		if reopened := reopenOverTheWebSocket(sideApp, elsewhere); !reopened.Success {
 			t.Fatalf("resume %s from the ledger: %s", elsewhere, protocol.Deref(reopened.Error))
 		}

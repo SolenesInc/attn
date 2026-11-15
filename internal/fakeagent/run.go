@@ -177,9 +177,12 @@ func (r *Run) ModHoldNextCompact() (arrived, release func()) {
 }
 
 func (r *Run) ModCompactions() int {
-	r.t.Helper()
+	r.fake.mu.Lock()
+	defer r.fake.mu.Unlock()
 	var ran int
-	r.call(methodModCompactions, struct{}{}, &ran)
+	for _, compacted := range r.fake.compactions {
+		ran += compacted
+	}
 	return ran
 }
 
@@ -232,6 +235,16 @@ func (r *Run) ReleaseRejoin() {
 func (r *Run) StopReadingTerminal() {
 	r.t.Helper()
 	r.call(methodStopRead, struct{}{}, nil)
+}
+
+func (r *Run) HoldScreen() {
+	r.t.Helper()
+	r.call(methodHoldScreen, struct{}{}, nil)
+}
+
+func (r *Run) ReleaseScreen() {
+	r.t.Helper()
+	r.call(methodReleaseScreen, struct{}{}, nil)
 }
 
 func (r *Run) ProgramStatus(fields string) {

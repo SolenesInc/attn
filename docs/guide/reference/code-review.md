@@ -38,6 +38,10 @@ removed lines, and the agent's notes under the lines they explain. A note marked
 as the place to look is the line the agent most wants you to check. A stop on a
 markdown file shows the text rendered, with the changed words marked.
 
+The review opens with its title and one line of facts under it: the files, the
+lines added and removed, and how many of the changed lines the stops show.
+Enter on that line lists the changed files, and Enter on a file opens it.
+
 The review always shows the files as they are now. If you or the agent edit a
 file while you read, the stop follows its lines.
 
@@ -48,33 +52,42 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 |---|---|
 | ↑ ↓ | Move by line in code and by block in prose |
 | ← → | The previous or next stop, with the text that leads into it at the top |
-| Enter | Open the whole file at the cursor, with the stop's lines marked |
-| `e` | Show 10 more lines around the stop |
+| Enter | Open the whole file at the cursor, with the stop's lines marked. On an arrow of a diagram, open its stop's file |
+| `e` | Show 10 more lines around the stop. The stop's label names the lines it shows |
 | `z` | Fill the tile with the file |
-| `/` | Search the repository: files by name, lines by text |
+| `/` | Search the repository: files by name, lines by text. The empty box lists the changed files |
 | ⌃O | Go back to the file you came from |
 | Escape | Close the file view, the search or the key sheet |
 
 A long line wraps in a stop. The file view, which the Walkthrough also shows
 beside its explanation, keeps each line on one row: ⇧← and ⇧→ scroll it
 sideways by half its width. In the file view, ← and → move to the previous or
-next change. In a stop on a markdown file on this computer, `o` opens the file
-in an editor tile.
+next change. However you opened the file, the lines the agent's notes explain
+are marked, and the note on the cursor's line shows under the file, with your
+own notes on it. In a stop on a markdown file on this computer, `o`
+opens the file in an editor tile.
 
 ## Switch the frame
 
 One review has three frames. The agent picks the one that suits the change, and
 `1`, `2` and `3` switch:
 
-- **Brief** (`1`) reads the document top to bottom.
+- **Brief** (`1`) reads the document top to bottom. A sequence diagram the
+  reader can draw is drawn in place, and ↑ and ↓ stop on each of its arrows
+  that has a stop: Enter opens that stop's file. When the review has a diagram
+  before and after the change, the Brief shows one and `b` switches.
 - **Walkthrough** (`2`) fills the tile with the file and steps through the
-  stops, with the agent's explanation beside it. `z` hides the explanation, and
-  ⇧← and ⇧→ scroll the file sideways.
+  stops, with the agent's explanation beside it. Lines outside the stop are
+  dimmed. `z` hides the explanation, and ⇧← and ⇧→ scroll the file sideways.
+  The explanation's diagrams switch with `b`, as in the Brief.
 - **Map** (`3`) draws the change as a sequence diagram: the parts of the
   system, the calls between them with the agent's caption under each, and boxes
-  around a transaction, a loop or a branch. ← and → step through its messages,
-  each beside the code that sends it. When the review has a
-  diagram before and after the change, `b` switches between them.
+  around a transaction, a loop or a branch. ← and → step through its arrows.
+  Beside the diagram is the step that explains the current arrow, with its
+  stops, and under the diagram the files the review leaves out. In a narrow
+  tile the diagram sits above the step. When the review has a diagram before
+  and after the change, `b` switches between them, and the Brief shows the
+  same side.
 
 A frame the review cannot fill, such as Map for a review with no diagram, is
 left out.
@@ -88,7 +101,9 @@ Put the cursor on a line, or select several lines with ⇧↑ and ⇧↓. Then:
   shows under the line when the agent replies. The question stays in the review.
 - `i` edits the line and saves the file. In a string or comment that spans
   several lines, `i` takes all of it. In a markdown stop, it takes the
-  paragraph. ⌥↑ and ⌥↓ take in one more line. `u` on the line undoes the edit.
+  paragraph. ⌥↑ and ⌥↓ take in one more line. Enter saves a single line; for
+  several lines press ⌘Enter, or Ctrl+Enter on Linux, and Shift+Enter adds a
+  line. `u` on the line undoes the edit.
 
 If the file changed underneath you since you opened the edit, attn writes
 nothing and says so.
@@ -101,8 +116,9 @@ Selecting text with the mouse and typing still writes a comment, as in any
 
 ## Send the review
 
-Press ⌘Enter. The send sheet lists your notes and edits. Pick a verdict with
-`a` (approve), `r` (request changes) or `c` (comment), then press Enter.
+Press ⌘Enter, or Ctrl+Shift+Enter on Linux. The send sheet lists your notes
+and edits. Pick a verdict with `a` (approve), `r` (request changes) or `c`
+(comment), then press Enter.
 
 The agent receives one message: your notes in reading order with the lines they
 are on, your edits with the text before and after, and the verdict.

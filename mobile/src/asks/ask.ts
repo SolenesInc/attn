@@ -1,4 +1,4 @@
-import type { HomeGatewayAsk, HomeGatewayAskAnswer } from '@attn/types/homeGatewayGenerated'
+import type { HomeGatewayAsk, HomeGatewayAskAnswer } from '../homeGateway/generated'
 import { Schema } from 'effect'
 
 export const QuestionKind = Schema.Literals(['one', 'any', 'text', 'unknown'])

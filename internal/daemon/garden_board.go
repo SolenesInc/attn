@@ -19,7 +19,7 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		fail(err)
 		return
 	}
-	ask, sessionID, err := d.seedTransitionAsk(msg, verb)
+	ask, sessionID, err := d.seedTransitionAsk(msg, verb, client.caller)
 	if err != nil {
 		fail(err)
 		return
@@ -74,7 +74,7 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 	note, err := d.appendSeedNote(
 		msg.SeedID,
 		msg.Body,
-		d.actorOfSession(authorSession),
+		client.caller,
 		protocol.Deref(msg.Kind),
 		artifactFromProtocol(msg.Artifact),
 		protocol.Deref(msg.Ring), authorSession,

@@ -20,6 +20,11 @@ const AgentMessageMaxChars = 32 * 1024
 // A 1 MiB garden body needs at most 6 MiB after JSON escaping; 8 MiB leaves room for the envelope.
 const MaxSocketFrameBytes = 8 << 20
 
+const (
+	ClientKindTauriApp  = "tauri-app"
+	ClientKindNativeApp = "native-app"
+)
+
 const CapabilityBrowserHost = "browser_host"
 
 const CapabilityBinaryPtyOutput = "binary_pty_output"
@@ -46,6 +51,7 @@ const (
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
 	CmdDelegationPreferencesSave     = "delegation_preferences_save"
 	CmdHarnessModels                 = "harness_models"
+	CmdHarnessTargets                = "harness_targets"
 	CmdDelegationRoles               = "delegation_roles"
 	CmdDelegationPreferencesShow     = "delegation_preferences_show"
 	CmdDelegationPreferencesCommit   = "delegation_preferences_commit"
@@ -81,6 +87,7 @@ const (
 	CmdSenderList                    = "sender_list"
 	CmdSenderUnpair                  = "sender_unpair"
 	CmdSenderSessions                = "sender_sessions"
+	CmdSenderRefine                  = "sender_refine"
 	CmdSendersGet                    = "senders_get"
 	CmdSenderPairDecide              = "sender_pair_decide"
 	CmdPlantVentSeed                 = "plant_vent_seed"
@@ -212,6 +219,7 @@ const (
 	CmdAgentTurn                     = "agent_turn"
 	CmdSnoozeTurn                    = "snooze_turn"
 	CmdWakeTurn                      = "wake_turn"
+	CmdStandbySession                = "standby_session"
 	CmdCancelCountdown               = "cancel_countdown"
 	CmdQueryPRs                      = "query_prs"
 	CmdMutePR                        = "mute_pr"
@@ -612,6 +620,7 @@ const (
 	EventDelegationPreferencesResult  = "delegation_preferences_result"
 	EventDelegationPreferencesChanged = "delegation_preferences_changed"
 	EventHarnessModelsResult          = "harness_models_result"
+	EventHarnessTargetsResult         = "harness_targets_result"
 	EventAgentCatalogResult           = "agent_catalog_result"
 )
 

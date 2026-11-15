@@ -1,7 +1,4 @@
-import type {
-  HomeGatewayCrewMemberBetweenSessions,
-  HomeGatewaySession,
-} from '@attn/types/homeGatewayGenerated'
+import type { HomeGatewayCrewMemberBetweenSessions, HomeGatewaySession } from './homeGateway/generated'
 import { Schema } from 'effect'
 import { PhoneAsk } from './asks/ask'
 import { GardenSeed } from './garden/seed'

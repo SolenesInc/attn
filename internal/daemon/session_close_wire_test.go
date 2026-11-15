@@ -44,6 +44,40 @@ func TestAClosedSessionLeavesEveryLiveViewAndKeepsItsFirstClose(t *testing.T) {
 	}
 }
 
+func TestAClosedSessionNamesWhoClosedIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	fromApp := w.Spawn(app, fakeagent.Claude, w.Path("app"))
+	fromTerminal := w.Spawn(app, fakeagent.Claude, w.Path("terminal"))
+	fromAgent := w.Spawn(app, fakeagent.Claude, w.Path("agent"))
+	closer := w.Spawn(app, fakeagent.Claude, w.Path("closer"))
+	cleared := w.Spawn(app, fakeagent.Claude, w.Path("cleared"))
+	for _, id := range []string{fromApp, fromTerminal, fromAgent, closer} {
+		w.Launched(id)
+	}
+	claude := w.Launched(cleared)
+
+	if closed := closeFromApp(app, fromApp); !closed.Accepted {
+		t.Fatalf("the app closes %s: %s", fromApp, protocol.Deref(closed.Error))
+	}
+	if err := cli.Unregister(protocol.SessionID(fromTerminal)); err != nil {
+		t.Fatalf("a plain terminal closes %s: %v", fromTerminal, err)
+	}
+	if err := cli.WithCaller(protocol.TerminalID(app.Terminal(closer))).Unregister(protocol.SessionID(fromAgent)); err != nil {
+		t.Fatalf("%s closes %s from its terminal: %v", closer, fromAgent, err)
+	}
+	clearClaude(app, claude, cleared)
+
+	for id, want := range map[string]string{fromApp: "user", fromTerminal: "user", fromAgent: closer, cleared: "attn"} {
+		if by := protocol.Deref(awaitClosed(app, id).ClosedBy); by != want {
+			t.Errorf("%s was closed by %q, want %q", id, by, want)
+		}
+		if by := protocol.Deref(showSession(t, cli, id).ClosedBy); by != want {
+			t.Errorf("session show %s says closed by %q, want %q", id, by, want)
+		}
+	}
+}
+
 func TestALateReportCannotRewriteAClosedSession(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()

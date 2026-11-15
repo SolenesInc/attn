@@ -3,8 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { formatShardDigest } from './matrixDigest.mjs';
-import { resolveScenarios, scenarioCatalog } from './scenarioCatalog.mjs';
-import { aggregateShards } from './shardPlan.mjs';
+import { resolveScenarios } from './scenarioCatalog.mjs';
+import { aggregateShards, matrixApp } from './shardPlan.mjs';
 
 function parseArgs(argv) {
   let resultsDir = null;
@@ -48,7 +48,7 @@ function main() {
     ...JSON.parse(fs.readFileSync(file, 'utf8')),
     source: path.relative(resultsDir, file),
   }));
-  const expectedIds = resolveScenarios([], scenarioCatalog).map((scenario) => scenario.id);
+  const expectedIds = resolveScenarios([], matrixApp(shardResults)).map((scenario) => scenario.id);
   const aggregate = aggregateShards({ shardResults, expectedIds, shardCount });
 
   const { shardLines, digest } = formatShardDigest(shardResults, aggregate);

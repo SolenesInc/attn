@@ -25,8 +25,8 @@ type authorizationChange struct {
 	withdrawn   *store.InboxKey
 }
 
-func (d *Daemon) handleSeedAuthorization(conn net.Conn, msg *protocol.SeedAuthorizationMessage) {
-	result, err := d.seedAuthorizationRequest(msg)
+func (d *Daemon) handleSeedAuthorization(conn net.Conn, msg *protocol.SeedAuthorizationMessage, by who.Actor) {
+	result, err := d.seedAuthorizationRequest(msg, by)
 	if err != nil {
 		d.sendGardenError(conn, "authorization", err)
 		return
@@ -39,7 +39,7 @@ func (d *Daemon) handleSeedAuthorizationWS(client *wsClient, msg *protocol.SeedA
 		Event:     protocol.EventSeedAuthorizationResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	result, err := d.seedAuthorizationRequest(msg)
+	result, err := d.seedAuthorizationRequest(msg, client.caller)
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	} else {
@@ -48,7 +48,7 @@ func (d *Daemon) handleSeedAuthorizationWS(client *wsClient, msg *protocol.SeedA
 	d.sendToClient(client, reply)
 }
 
-func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage) (*protocol.SeedAuthorizationResult, error) {
+func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage, by who.Actor) (*protocol.SeedAuthorizationResult, error) {
 	text := strings.TrimSpace(protocol.Deref(msg.Text))
 	clear := protocol.Deref(msg.Clear)
 	if text != "" && clear {
@@ -68,7 +68,7 @@ func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage
 	}
 	source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	savedAt := time.Now()
-	change, err := d.writeSeedAuthorization(msg.SeedID, text, d.actorOfSession(source), source, true)
+	change, err := d.writeSeedAuthorization(msg.SeedID, text, by, source, true)
 	if err != nil {
 		return nil, err
 	}
