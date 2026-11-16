@@ -5,6 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+attn-ui = { path = "../attn-ui" }
 parley = { version = "0.12", default-features = false, features = ["std", "system"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 rune.workspace = true

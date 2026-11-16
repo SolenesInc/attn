@@ -7,7 +7,7 @@ use crate::grid::{
 };
 use crate::markdown::Look;
 use crate::mouse;
-use crate::theme::Theme;
+use attn_ui::colors::TerminalColors;
 
 #[repr(C)]
 struct AttnTerm {
@@ -319,7 +319,7 @@ impl Vt {
     }
 
     /// The colors the terminal draws with until its program sets its own.
-    pub fn set_theme(&mut self, theme: &Theme) {
+    pub fn set_theme(&mut self, theme: &TerminalColors) {
         let ansi = theme.ansi.as_flattened();
         let rc = unsafe {
             attn_term_set_theme(

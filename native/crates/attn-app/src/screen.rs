@@ -1,5 +1,5 @@
-use attn_term::{Cells, Theme};
-use attn_ui::Appearance;
+use attn_term::Cells;
+use attn_ui::colors::TerminalColors;
 use rune::{Compositor, Frame, Runtime, RuntimeCore};
 
 use crate::State;
@@ -11,9 +11,8 @@ pub struct Screens {
 }
 
 /// Gives the terminals the window's theme and returns it.
-fn theme_terminals(rt: &mut Runtime<State>) -> Theme {
-    let setting = rt.state().facts.settings.get("theme").map(String::as_str);
-    let theme = Theme::of(Appearance::from_setting(setting).is_dark(rt.env.system_dark));
+fn theme_terminals(rt: &mut Runtime<State>) -> TerminalColors {
+    let theme = crate::colors(&rt.state().facts.settings, rt.env.system_dark).terminal;
     let state = rt.state_mut();
     state.terminals.set_theme(theme, &state.daemon);
     theme

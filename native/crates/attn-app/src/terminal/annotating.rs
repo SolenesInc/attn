@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use attn_protocol::{SessionAnnotation, SessionAnnotationsSaveMessage, SessionMessage};
 use attn_term::align::{Alignment, RowRange, quotes_anchor};
 use attn_term::selection::Selection;
-use attn_term::{Overlay, OverlayKind, Rgb, Vt};
+use attn_term::{Overlay, OverlayKind, Vt};
+use attn_ui::colors::TerminalColors;
 use rune::TextEdit;
 
 use super::{Term, Terminals};
 
 /// The violet the Tauri terminal marks annotated text in.
-const MARKED: Rgb = [0xa7, 0x8b, 0xfa];
 /// A mark's wash, 0.24 of the violet, and 0.42 while ⌥ holds the pointer over it.
 const WASH: u8 = 61;
 const WASH_HOVERED: u8 = 107;
@@ -575,7 +575,7 @@ fn utf16_slice(text: &str, start: usize, end: usize) -> Option<&str> {
 impl Terminals {
     /// What lies over terminal `term`'s view for its marks: a wash and an underline on each
     /// cell a mark covers, brighter on the mark ⌥ points at.
-    pub(super) fn annotation_overlays(term: &mut Term) -> Vec<Overlay> {
+    pub(super) fn annotation_overlays(term: &mut Term, theme: &TerminalColors) -> Vec<Overlay> {
         let Some(marking) = term.marking.as_mut() else {
             return Vec::new();
         };
@@ -592,14 +592,14 @@ impl Terminals {
                 overlays.push(Overlay {
                     row,
                     cols: range.cols,
-                    color: MARKED,
+                    color: theme.annotation,
                     alpha: if hovered { WASH_HOVERED } else { WASH },
                     kind: OverlayKind::Wash,
                 });
                 overlays.push(Overlay {
                     row,
                     cols: range.cols,
-                    color: MARKED,
+                    color: theme.annotation,
                     alpha: if hovered { LINE_HOVERED } else { LINE },
                     kind: OverlayKind::Underline,
                 });

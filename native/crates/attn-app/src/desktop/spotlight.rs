@@ -79,12 +79,12 @@ impl Look {
                 .box_shadow(Shadow {
                     y: 10.0,
                     blur: 26.0,
-                    color: Color::BLACK.alpha(0.42),
+                    color: t.shadow.alpha(0.42),
                     ..Shadow::default()
                 })
                 .box_shadow(Shadow {
                     spread: 1.0,
-                    color: Color::WHITE.alpha(0.09),
+                    color: t.highlight.alpha(0.09),
                     inset: true,
                     ..Shadow::default()
                 })
@@ -172,7 +172,7 @@ impl Look {
     /// The header's background, lighter on the spotlit tile.
     pub(super) fn header_fill(&self, t: &Tokens) -> Option<Color> {
         self.spotlit()
-            .then(|| srgb_mix(t.bg_elevated, t.text_primary, HEADER_LIFT))
+            .then(|| attn_ui::colors::mix_srgb(t.bg_elevated, t.text_primary, HEADER_LIFT))
     }
 }
 
@@ -180,19 +180,5 @@ fn fade() -> Curve {
     Curve::Tween {
         duration: FADE_SECONDS,
         easing: Easing::EASE,
-    }
-}
-
-/// `t` of the way from `a` to `b` in encoded sRGB, as CSS `color-mix(in srgb, ..)`.
-fn srgb_mix(a: Color, b: Color, t: f32) -> Color {
-    let m = |x: f32, y: f32| {
-        let (x, y) = (rune::color::srgb_encode(x), rune::color::srgb_encode(y));
-        rune::color::srgb_decode(x + (y - x) * t)
-    };
-    Color {
-        r: m(a.r, b.r),
-        g: m(a.g, b.g),
-        b: m(a.b, b.b),
-        a: a.a + (b.a - a.a) * t,
     }
 }

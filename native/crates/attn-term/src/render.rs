@@ -17,7 +17,7 @@ use crate::grid::{
 };
 use crate::kitty::{Picture, Viewport, quad, source_rect};
 use crate::sprites;
-use crate::theme::Theme;
+use attn_ui::colors::TerminalColors;
 
 const ATLAS: u32 = 1024;
 const EMOJI_FAMILY: &str =
@@ -460,7 +460,7 @@ pub struct Cells {
     /// A texture per kitty picture on a screen, by picture id; None for one past the device's
     /// largest texture.
     pictures: HashMap<u64, Option<wgpu::BindGroup>>,
-    theme: Theme,
+    theme: TerminalColors,
 }
 
 const SHADER: &str = r#"
@@ -817,7 +817,7 @@ impl Cells {
         key: DeviceKey,
         scale: f32,
         metrics: Metrics,
-        theme: Theme,
+        theme: TerminalColors,
         grids: impl IntoIterator<Item = (u32, &'g mut Grid)>,
     ) {
         self.gpu(device, key);
@@ -1248,7 +1248,7 @@ fn image_insts(grid: &Grid, cell: (f32, f32)) -> (Vec<ImageInst>, Vec<(u64, Laye
 
 /// A grid's overlays as instances: the washes, with the cursor drawn again over them as the
 /// Tauri renderer draws it, and the lines.
-fn overlay_insts(grid: &Grid, theme: Theme) -> (Vec<Inst>, Vec<Inst>) {
+fn overlay_insts(grid: &Grid, theme: TerminalColors) -> (Vec<Inst>, Vec<Inst>) {
     let (mut washes, mut lines) = (Vec::new(), Vec::new());
     for o in grid.overlays() {
         let (start, end) = (o.cols.0.min(grid.cols), o.cols.1.min(grid.cols));

@@ -10,7 +10,8 @@ use attn_protocol::{
 };
 use attn_term::attach::{self, Attached, Chunk, Output, Policy, Snapshot, Stream};
 use attn_term::mouse::{self, Action, WheelRows};
-use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
+use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Vt, responses};
+use attn_ui::colors::{TerminalColors, to_hex};
 use rune::{Live, Tx};
 
 mod annotating;
@@ -95,7 +96,7 @@ pub struct Terminals {
     focused: Option<String>,
     fonts: Option<Fonts>,
     metrics: Option<Metrics>,
-    theme: Theme,
+    theme: TerminalColors,
     /// A screen changed since the renderer last took the grids.
     undrawn: bool,
     /// What an input method is composing, and for which terminal, until it commits.
@@ -210,7 +211,7 @@ struct Attaching {
 }
 
 impl Term {
-    fn new(agent: bool, theme: &Theme) -> Term {
+    fn new(agent: bool, theme: &TerminalColors) -> Term {
         Term {
             vt: themed(Vt::new(FIRST_SIZE.0, FIRST_SIZE.1), theme),
             grid: Grid::default(),
@@ -995,7 +996,7 @@ impl Terminals {
 
     /// The colors every terminal draws with until its program sets its own, which the daemon
     /// also answers color queries with.
-    pub(crate) fn set_theme(&mut self, theme: Theme, daemon: &Commands) {
+    pub(crate) fn set_theme(&mut self, theme: TerminalColors, daemon: &Commands) {
         if theme == self.theme {
             return;
         }
@@ -1029,7 +1030,7 @@ impl Terminals {
         images: &mut kitty::Images,
         finds: &HashMap<String, find::Finding>,
         (seeds, card): (&std::collections::HashSet<String>, Option<&seeds::SeedCard>),
-        theme: &Theme,
+        theme: &TerminalColors,
         id: &str,
         term: &mut Term,
     ) {
@@ -1041,7 +1042,7 @@ impl Terminals {
         term.grid.set_images(placed, top);
         let mut overlays = Terminals::overlays(term, theme, finds.get(id));
         let previewing = card.filter(|c| c.runtime == id).map(|c| c.seed.as_str());
-        overlays.extend(Terminals::seed_overlays(term, seeds, previewing));
+        overlays.extend(Terminals::seed_overlays(term, seeds, previewing, theme));
         term.grid.set_overlays(overlays);
         term.scrolled_back = term.vt.scrolled_back();
     }
@@ -1242,17 +1243,17 @@ fn base64_decode(text: &str) -> Option<Vec<u8>> {
     base64::engine::general_purpose::STANDARD.decode(text).ok()
 }
 
-fn themed(mut vt: Vt, theme: &Theme) -> Vt {
+fn themed(mut vt: Vt, theme: &TerminalColors) -> Vt {
     vt.set_theme(theme);
     vt
 }
 
-fn send_theme(theme: &Theme, daemon: &Commands) {
+fn send_theme(theme: &TerminalColors, daemon: &Commands) {
     let _ = daemon.send(&SetTerminalThemeMessage {
-        foreground: Theme::hex(theme.fg),
-        background: Theme::hex(theme.bg),
-        cursor: Theme::hex(theme.cursor),
-        ansi_palette: theme.ansi.iter().map(|&c| Theme::hex(c)).collect(),
+        foreground: to_hex(theme.fg),
+        background: to_hex(theme.bg),
+        cursor: to_hex(theme.cursor),
+        ansi_palette: theme.ansi.iter().map(|&c| to_hex(c)).collect(),
         ..SetTerminalThemeMessage::new()
     });
 }

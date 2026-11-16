@@ -418,6 +418,7 @@ dependencies = [
 name = "attn-term"
 version = "0.0.0"
 dependencies = [
+ "attn-ui",
  "bytemuck",
  "cc",
  "parley",

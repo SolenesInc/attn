@@ -1,18 +1,10 @@
 use attn_ui::Tokens;
 use rune::tok::type_;
-use rune::{Color, El, Key, KeyEvent, Span, Tx, col, el, row, text};
+use rune::{El, Key, KeyEvent, Span, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, TextInput};
 
 use crate::State;
 use crate::terminal::{Filtered, Filtering, filter_field_key};
-
-/// The wash over a filtered line's matches, as the Tauri panel marks them: the find yellow at
-/// 0.45.
-fn match_wash() -> Color {
-    rune::color::hex("#f5c542")
-        .expect("the find yellow is a color")
-        .alpha(0.45)
-}
 
 /// Terminal `id`'s block filter over its top right corner, as the Tauri terminal floats it: the
 /// field, Match case, the count and Close, and below them the output lines that hold the query,
@@ -98,7 +90,7 @@ fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
     }
     list.children(lines.iter().map(|line| {
         let (id, offset) = (id.to_owned(), line.offset);
-        let wash = match_wash();
+        let wash = t.find.alpha(0.45);
         let spans: Vec<Span> = line
             .matches
             .iter()

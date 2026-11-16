@@ -1,5 +1,6 @@
 use attn_term::links::{self, Line, Open, Target};
-use attn_term::{Metrics, Overlay, OverlayKind, Theme};
+use attn_term::{Metrics, Overlay, OverlayKind};
+use attn_ui::colors::TerminalColors;
 use rune::{Mods, Tx};
 
 use super::{Term, Terminals};
@@ -163,7 +164,7 @@ impl Terminals {
     }
 
     /// The underline under the hovered link of a terminal, in its view's rows.
-    pub(super) fn link_overlays(term: &mut Term, theme: &Theme) -> Vec<Overlay> {
+    pub(super) fn link_overlays(term: &mut Term, theme: &TerminalColors) -> Vec<Overlay> {
         let Some(found) = term.view.hover.as_ref().and_then(|h| h.link.as_ref()) else {
             return Vec::new();
         };

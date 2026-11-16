@@ -753,14 +753,13 @@ pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
 }
 
 pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
-    let hex = |s| rune::color::hex(s).expect("a state color is #rrggbb");
     match state {
-        AgentState::Idle | AgentState::Recoverable => hex("#6b7280"),
-        AgentState::Working => hex("#22c55e"),
-        AgentState::WaitingInput => hex("#f59e0b"),
-        AgentState::PendingApproval => hex("#eab308"),
-        AgentState::Scheduled => hex("#0ea5e9"),
-        AgentState::Unknown => hex("#a855f7"),
+        AgentState::Idle | AgentState::Recoverable => t.state_idle,
+        AgentState::Working => t.state_working,
+        AgentState::WaitingInput => t.state_waiting,
+        AgentState::PendingApproval => t.state_approval,
+        AgentState::Scheduled => t.state_scheduled,
+        AgentState::Unknown => t.state_unknown,
         AgentState::Launching => t.text_tertiary,
     }
 }

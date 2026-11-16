@@ -4,7 +4,8 @@ use rune_kit::{
     Toast, ToastRegion, Tooltip,
 };
 
-use crate::{kit, tokens};
+use crate::colors::scheme_for;
+use crate::kit;
 
 /// What a component story shows: one component, open where it opens, in the stage's
 /// appearance, which the playground's own switch sets.
@@ -38,8 +39,8 @@ pub fn playground<S: 'static>() -> Playground<S> {
 }
 
 fn stage(cx: &Cx<Showcase>, body: impl FnOnce(&Kit, &mut Vec<El>) -> El) -> El {
-    let t = tokens(cx.system_dark());
-    let k = kit(&t);
+    let t = &scheme_for(None).colors(cx.system_dark()).ui;
+    let k = kit(t);
     let mut layer = Vec::new();
     let content = body(k, &mut layer);
     el().w_full()

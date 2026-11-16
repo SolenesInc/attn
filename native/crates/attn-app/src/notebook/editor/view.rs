@@ -335,14 +335,11 @@ fn text_row(
 }
 
 fn selection_color(t: &Tokens) -> Color {
-    Color { a: 0.3, ..t.accent }
+    t.accent.alpha(0.3)
 }
 
 fn find_color(t: &Tokens) -> Color {
-    Color {
-        a: 0.25,
-        ..t.warning
-    }
+    t.warning.alpha(0.25)
 }
 
 trait Press {

@@ -1,10 +1,10 @@
-use attn_term::{Found, Mark, Overlay, OverlayKind, Rgb, Vt};
+use attn_term::{Found, Mark, Overlay, OverlayKind, Vt};
+use attn_ui::colors::TerminalColors;
 use rune::{TextEdit, Tx};
 
 use super::{Term, Terminals};
 
 /// The yellow the Tauri terminal washes find matches in.
-const MATCH: Rgb = [0xf5, 0xc5, 0x42];
 /// A match's wash, 0.28 of the yellow.
 const MATCH_WASH: u8 = 71;
 /// The focused match's wash, 0.6 of the yellow.
@@ -201,7 +201,11 @@ impl Terminals {
     }
 
     /// The washes over the matches the view shows, the focused one stronger.
-    pub(super) fn find_overlays(term: &mut Term, finding: Option<&Finding>) -> Vec<Overlay> {
+    pub(super) fn find_overlays(
+        term: &mut Term,
+        finding: Option<&Finding>,
+        theme: &TerminalColors,
+    ) -> Vec<Overlay> {
         let Some(finding) = finding.filter(|f| f.open) else {
             return Vec::new();
         };
@@ -223,7 +227,7 @@ impl Terminals {
                     overlays.push(Overlay {
                         row: (row - top) as u16,
                         cols: span,
-                        color: MATCH,
+                        color: theme.find,
                         alpha,
                         kind: OverlayKind::Wash,
                     });

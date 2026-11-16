@@ -292,7 +292,7 @@ fn status_dot(row_key: &str, status: Status, t: &Tokens) -> El {
         Status::Working | Status::Chief => dot.fill(t.success),
         Status::Snoozed => dot.border(1.0, t.text_tertiary),
         Status::Unreachable => dot.border(1.0, t.error),
-        Status::Idle => dot.fill(rune::color::hex("#555555").expect("a dot color is #rrggbb")),
+        Status::Idle => dot.fill(t.inactive),
     }
 }
 

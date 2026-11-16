@@ -1,13 +1,10 @@
 use attn_term::markdown::{Line, styled_markdown};
 use attn_term::selection::{Anchor, Point, Selection, clean_lines, word_at};
-use attn_term::{Mark, Overlay, OverlayKind, Rgb, Theme, Vt};
+use attn_term::{Mark, Overlay, OverlayKind, Vt};
+use attn_ui::colors::TerminalColors;
 
 use super::annotating::Miss;
 use super::{Term, Terminals};
-
-/// The light blue the Tauri terminal washes a selection in, by theme.
-const SELECTION_DARK: Rgb = [0x26, 0x4f, 0x78];
-const SELECTION_LIGHT: Rgb = [0xad, 0xd6, 0xff];
 
 /// What the user selected in one terminal and what the pointer hovers.
 #[derive(Default)]
@@ -230,7 +227,7 @@ impl Terminals {
                     "row": o.row,
                     "cols": [o.cols.0, o.cols.1],
                     "kind": format!("{:?}", o.kind),
-                    "color": attn_term::Theme::hex(o.color),
+                    "color": attn_ui::colors::to_hex(o.color),
                     "alpha": o.alpha,
                 })
             })
@@ -374,28 +371,24 @@ impl Terminals {
     /// What lies over terminal `id`'s view: its selection, and the hovered link's underline.
     pub(super) fn overlays(
         term: &mut Term,
-        theme: &Theme,
+        theme: &TerminalColors,
         finding: Option<&super::find::Finding>,
     ) -> Vec<Overlay> {
-        let mut overlays = Terminals::block_overlays(term);
-        overlays.extend(Terminals::find_overlays(term, finding));
+        let mut overlays = Terminals::block_overlays(term, theme);
+        overlays.extend(Terminals::find_overlays(term, finding, theme));
         overlays.extend(Terminals::selection_overlays(term, theme));
         overlays.extend(Terminals::link_overlays(term, theme));
-        overlays.extend(Terminals::annotation_overlays(term));
+        overlays.extend(Terminals::annotation_overlays(term, theme));
         overlays
     }
 
-    fn selection_overlays(term: &mut Term, theme: &Theme) -> Vec<Overlay> {
+    fn selection_overlays(term: &mut Term, theme: &TerminalColors) -> Vec<Overlay> {
         let Some(selection) = term.view.selection() else {
             return Vec::new();
         };
         let (cols, rows) = term.vt.size();
         let top = term.vt.view_top();
-        let color = if *theme == Theme::of(true) {
-            SELECTION_DARK
-        } else {
-            SELECTION_LIGHT
-        };
+        let color = theme.selection;
         selection
             .rows(cols)
             .filter(|(row, _)| (top..top + u32::from(rows)).contains(row))

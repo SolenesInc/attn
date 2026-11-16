@@ -1,5 +1,6 @@
 use attn_protocol::{Desktop, DesktopPane, Session};
 use attn_term::mouse;
+use attn_ui::colors::TerminalColors;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo, row, text};
@@ -419,6 +420,9 @@ pub(super) fn lone(
         },
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
+        terminal_colors: &crate::color_scheme(&state.facts.settings)
+            .colors(t.dark)
+            .terminal,
         contents: &state.facts.tile_contents,
         outposts: &state.facts.outposts,
         pictures: &state.pictures,
@@ -506,6 +510,7 @@ fn screen(
                     },
                     holder,
                     terminals,
+                    terminal_colors: &crate::color_scheme(&facts.settings).colors(t.dark).terminal,
                     contents: &facts.tile_contents,
                     outposts: &facts.outposts,
                     pictures,
@@ -587,6 +592,7 @@ struct TileCx<'a> {
     screen: super::spotlight::Screen,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
+    terminal_colors: &'a TerminalColors,
     contents: &'a attn_client::TileContents,
     outposts: &'a [attn_protocol::OutpostInfo],
     pictures: &'a crate::markdown::Pictures,
@@ -745,7 +751,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let body = match (&leaf.kind, pane_of(desktop, &leaf.id)) {
         (LeafKind::Pane, Some(pane)) if !pane.runtime_id.is_empty() => {
             let caret = held
-                .then(|| ime_caret(cx.terminals, &pane.runtime_id, t.dark))
+                .then(|| ime_caret(cx.terminals, &pane.runtime_id, cx.terminal_colors))
                 .flatten();
             let pointing_link = cx.terminals.pointing_link() == Some(pane.runtime_id.as_str())
                 || cx.terminals.pointing_mark(&pane.runtime_id);
@@ -754,7 +760,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 holder.clone(),
                 caret,
                 pointing_link,
-                (t.dark, cx.scale),
+                (cx.terminal_colors, cx.scale),
             );
             let slot = match cx.terminals.finding(&pane.runtime_id) {
                 Some(finding) => slot.child(super::find_bar::bar(&pane.runtime_id, finding, t)),
@@ -1172,9 +1178,13 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .children((is_tile || focused).then_some(tile_actions));
     let height = header_height(pane.is_some());
     let track = match (settle, pane) {
-        (Some(settle), Some(pane)) => {
-            settling_track(&leaf.id, settle, cx.drains.get(&pane.session_id), height)
-        }
+        (Some(settle), Some(pane)) => settling_track(
+            &leaf.id,
+            settle,
+            cx.drains.get(&pane.session_id),
+            height,
+            cx.t,
+        ),
         _ => None,
     };
     col()
@@ -1400,13 +1410,6 @@ fn pop_out_button(desktop: &str, leaf: &str, popped: bool, cx: &TileCx) -> El {
     )
 }
 
-/// The settling violet, which the Tauri app keeps out of its theme so packaged apps match.
-fn settling(alpha: f32) -> rune::Color {
-    rune::color::hex("#a78bfa")
-        .expect("the settling accent is #rrggbb")
-        .alpha(alpha)
-}
-
 /// The header's mark of a turn that settles on its own, or that the person kept; pressing it
 /// keeps the turn, or undoes keeping it.
 /// The widths of the settling chip in full and as its mark alone.
@@ -1438,14 +1441,21 @@ fn settling_chip(
     t: &Tokens,
 ) -> El {
     let (label, words, verb, fill, edge, ink) = match settle {
-        Settle::Counting(_) => ("Keep this turn", "SETTLING…", "keep", 0.16, 0.55, "#e2d9fd"),
+        Settle::Counting(_) => (
+            "Keep this turn",
+            "SETTLING…",
+            "keep",
+            0.16,
+            0.55,
+            t.settle_ink,
+        ),
         Settle::Held => (
             "Keep this turn",
             "SETTLING PAUSED",
             "keep",
             0.10,
             0.35,
-            "#c8bcf0",
+            t.settle_ink_quiet,
         ),
         Settle::Kept => (
             "Turn kept; undo to let it auto-settle again",
@@ -1453,11 +1463,10 @@ fn settling_chip(
             "undo",
             0.09,
             0.40,
-            "#c8bcf0",
+            t.settle_ink_quiet,
         ),
     };
-    let ink = rune::color::hex(ink).expect("a settling ink is #rrggbb");
-    let mark = el().w(6.0).h(6.0).fill(settling(1.0));
+    let mark = el().w(6.0).h(6.0).fill(t.settle);
     let mark = match settle {
         Settle::Counting(_) => mark.radius(3.0),
         Settle::Held => mark.radius(3.0).opacity(0.55),
@@ -1512,9 +1521,9 @@ fn settling_chip(
         .h(face_h + 4.0)
         .px(9.0)
         .radius(5.0)
-        .fill(settling(fill))
-        .border(1.0, settling(edge))
-        .hover(settling(0.12))
+        .fill(t.settle.alpha(fill))
+        .border(1.0, t.settle.alpha(edge))
+        .hover(t.settle.alpha(0.12))
 }
 
 /// The hairline along the header's foot that drains to the countdown's deadline, or stands
@@ -1524,6 +1533,7 @@ fn settling_track(
     settle: &Settle,
     drain: Option<&crate::sidebar::Countdown>,
     header: f32,
+    t: &Tokens,
 ) -> Option<El> {
     if *settle == Settle::Kept {
         return None;
@@ -1533,7 +1543,7 @@ fn settling_track(
         [1.0, 0.5],
         1.0,
         rune::LineCap::Butt,
-        settling(1.0),
+        t.settle,
     );
     let fill = rune::canvas(line)
         .key(format!("tile.{leaf}.settling.track"))
@@ -1547,14 +1557,14 @@ fn settling_track(
         el().absolute(0.0, header - SETTLING_TRACK_PX)
             .w_full()
             .h(SETTLING_TRACK_PX)
-            .fill(settling(0.16))
+            .fill(t.settle.alpha(0.16))
             .child(fill),
     )
 }
 
 /// The input method's caret in the terminal holding the keyboard: the cell text goes to
 /// next, where the candidate window opens, showing what the input method composes so far.
-fn ime_caret(terminals: &Terminals, runtime_id: &str, dark: bool) -> Option<El> {
+fn ime_caret(terminals: &Terminals, runtime_id: &str, theme: &TerminalColors) -> Option<El> {
     let caret = el()
         .key(format!("terminal.{runtime_id}.caret"))
         .absolute(0.0, 0.0)
@@ -1566,9 +1576,7 @@ fn ime_caret(terminals: &Terminals, runtime_id: &str, dark: bool) -> Option<El> 
     ) else {
         return Some(caret);
     };
-    let theme = attn_term::Theme::of(dark);
-    let color =
-        |rgb| rune::color::hex(&attn_term::Theme::hex(rgb)).expect("a theme color is #rrggbb");
+    let color = attn_ui::colors::rgb;
     let font = rune::TextStyle {
         size,
         line_height: h,
@@ -1602,18 +1610,17 @@ fn terminal_slot(
     tile: Holder,
     caret: Option<El>,
     pointing_link: bool,
-    (dark, scale): (bool, f32),
+    (theme, scale): (&TerminalColors, f32),
 ) -> El {
     let id = runtime_id.to_owned();
     let (pointing, pressing, wheeling, leaving) = (id.clone(), id.clone(), id.clone(), id.clone());
     let (moved_over, left) = (session.to_owned(), session.to_owned());
-    let bg = attn_term::Theme::hex(attn_term::Theme::of(dark).bg);
     let slot = el()
         .key(format!("terminal.{runtime_id}"))
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .fill(rune::color::hex(&bg).expect("a theme color is #rrggbb"))
+        .fill(attn_ui::colors::rgb(theme.bg))
         .effect(crate::terminal::mark(runtime_id))
         .on_layout_tx(move |state: &mut State, [_, _, w, h], tx: &mut Tx| {
             state

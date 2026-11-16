@@ -40,7 +40,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
                     .w_full()
                     .h_full()
                     .backdrop_blur(2.0)
-                    .fill(rune::Color::BLACK.alpha(0.5))
+                    .fill(t.shadow.alpha(0.5))
                     .a11y_hidden()
                     .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx)),
             )
