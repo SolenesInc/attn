@@ -1469,3 +1469,194 @@ fn tab_reaches_every_button_of_the_garden_and_a_plots_page() {
     );
     assert!(world.runtime_is_at_rest());
 }
+
+fn related(world: &World, label: &str, id: &str) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key(format!("garden.related.{label}.{id}")))
+        .and_then(|n| n.name)
+}
+
+#[test]
+fn counts_a_blocker_from_outside_the_plot_it_is_standing_in() {
+    let away = with(seed("s-ddd111", "blocker elsewhere"), |s| {
+        s.edges.push(edge("blocks", "s-bbb111"))
+    });
+    let mut world = open_garden(vec![
+        part_of("s-crown1", "s-bbb111", "the blocked one"),
+        away,
+        plot("s-crown1", "the crown", ""),
+    ]);
+
+    open_row(&mut world, "the crown");
+
+    assert!(!has_row(&world, "blocker elsewhere"));
+    assert!(row_says(&world, "s-bbb111", "blocked by 1"));
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn shows_a_discovered_from_edge_from_the_work_and_from_its_origin() {
+    let found = with(seed("s-found11", "the discovered work"), |s| {
+        s.edges.push(edge("discovered-from", "s-origin1"))
+    });
+    let mut world = open_garden(vec![found, seed("s-origin1", "the origin")]);
+
+    open_row(&mut world, "the discovered work");
+    assert_eq!(
+        related(&world, "discovered from", "s-origin1").as_deref(),
+        Some("the origin")
+    );
+
+    world.gesture(|app| app.click(Target::key("garden.related.discovered from.s-origin1")));
+    assert_eq!(heading(&world).as_deref(), Some("the origin"));
+    assert_eq!(
+        related(&world, "discovered", "s-found11").as_deref(),
+        Some("the discovered work")
+    );
+    assert!(rests(&mut world));
+}
+
+fn claimed_by(seed: Seed, name: &str, r#ref: &str, session_id: Option<&str>) -> Seed {
+    with(seed, |s| {
+        s.status = "growing".into();
+        s.claimed = true;
+        s.tender = Some(PartyView {
+            name: name.into(),
+            r#ref: r#ref.into(),
+            session_id: session_id.map(str::to_owned),
+        });
+    })
+}
+
+#[test]
+fn shows_a_seeds_state_and_who_tends_it_in_the_row() {
+    let unknown = "4915e44d-fadd-4dc8-82cf-671cbbf872c0";
+    let world = open_garden_with(daemon(
+        vec![
+            claimed_by(
+                seed("s-grow11", "tended by crew"),
+                "Trellis",
+                "member:trellis",
+                Some("sess-a"),
+            ),
+            claimed_by(
+                seed("s-grow22", "claimed by a session"),
+                "Garden polish",
+                "session:sess-b",
+                Some("sess-b"),
+            ),
+            claimed_by(
+                seed("s-grow33", "claimed by an unknown session"),
+                "4915e44d",
+                &format!("session:{unknown}"),
+                Some(unknown),
+            ),
+            seed("s-idle11", "unclaimed"),
+        ],
+        vec![session("sess-b", "Garden polish")],
+    ));
+
+    assert!(row_says(&world, "s-grow11", "growing"));
+    assert!(row_says(&world, "s-grow11", "tended by Trellis"));
+    assert!(row_says(&world, "s-grow22", "tended by Garden polish"));
+    assert!(row_says(&world, "s-grow33", "tended by 4915e44d"));
+    assert!(
+        row_words(&world, "s-idle11")
+            .iter()
+            .all(|w| !w.contains("tended by"))
+    );
+}
+
+#[test]
+fn names_a_session_tender_by_its_current_label_as_soon_as_the_session_is_renamed() {
+    let mut world = open_garden_with(daemon(
+        vec![claimed_by(
+            seed("s-grow22", "claimed by a session"),
+            "Garden polish",
+            "session:sess-b",
+            Some("sess-b"),
+        )],
+        vec![session("sess-b", "Garden polish")],
+    ));
+    assert!(row_says(&world, "s-grow22", "tended by Garden polish"));
+
+    world.daemon.emit(SessionStateChangedMessage {
+        session: session("sess-b", "Search rework"),
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+
+    assert!(row_says(&world, "s-grow22", "tended by Search rework"));
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn says_what_is_hidden_when_everything_in_view_is_closed() {
+    let mut world = open_garden(vec![
+        closed(seed("s-done22", "all wrapped"), "harvested"),
+        closed(seed("s-dead11", "went nowhere"), "withered"),
+    ]);
+    assert!(shows(&world, "Nothing open here. 2 closed seeds are"));
+
+    click(&mut world, "2 closed");
+
+    assert!(has_row(&world, "all wrapped"));
+    assert!(has_row(&world, "went nowhere"));
+    assert!(!shows(&world, "Nothing open here"));
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn reads_the_seeds_document_and_opens_a_linked_markdown_file_from_it() {
+    let plan = with(seed("s-plan11", "Open this plan"), |s| {
+        s.body = "# First body\n\nThe plan.".into()
+    });
+    let held = plan.clone();
+    let world_daemon = daemon(vec![plan], Vec::new());
+    world_daemon.on("seed_document_get", move |r: &Request| {
+        let mut answer = logged(r, held.clone(), "n-live");
+        answer["document"]["references"] =
+            serde_json::json!([{"kind": "markdown_file", "path": "/repo/evidence.md"}]);
+        answer
+    });
+    world_daemon.on("fs_exists", |r: &Request| {
+        serde_json::json!({
+            "event": "fs_exists_result",
+            "request_id": r["request_id"],
+            "success": true,
+            "result": {"path": format!("{}/{}", r["root"].as_str().unwrap_or(""), r["path"].as_str().unwrap_or("")), "exists": true},
+        })
+    });
+    let mut world = open_garden_with(world_daemon);
+
+    open_row(&mut world, "Open this plan");
+
+    let reads = world.daemon.sent_of("seed_document_get");
+    assert_eq!(reads.len(), 1);
+    assert_eq!(reads[0]["seed_id"], "s-plan11");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("heading").name("First body"))
+            .is_some()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.log.n-live"))
+            .is_some()
+    );
+    let file = world
+        .screen()
+        .find(Target::key("garden.reference.0.row"))
+        .and_then(|n| n.name)
+        .unwrap_or_default();
+    assert!(file.starts_with("linked file evidence.md"), "{file}");
+    world.gesture(|app| app.click(Target::key("garden.reference.0.open")));
+    assert_eq!(
+        world.daemon.sent_of("open_markdown")[0]["path"],
+        "/repo/evidence.md"
+    );
+    assert!(rests(&mut world));
+}
