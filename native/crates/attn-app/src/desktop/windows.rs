@@ -366,7 +366,8 @@ fn run_from(state: &mut State, desktop: &str, leaf: &str, action: Action, tx: &m
         | TerminalFocusLeft
         | TerminalFocusRight
         | TerminalFocusUp
-        | TerminalFocusDown => {}
+        | TerminalFocusDown
+        | TerminalOpen => {}
         action => {
             if crate::dispatch::run(state, action, tx) == crate::dispatch::Outcome::Ran {
                 crate::frame::raise_main();
