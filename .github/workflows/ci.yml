@@ -1224,28 +1224,18 @@ jobs:
           exit 1
 
   app-acceptance-macos:
-    name: App acceptance macOS (${{ matrix.group }})
+    name: App acceptance macOS
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - group: clipboard and keyboard
-            key: clipboard-keyboard
-            scenarios: terminal-block-copy terminal-input
-          - group: quick capture
-            key: quick-capture
-            scenarios: quick-capture
     runs-on: macos-15
     timeout-minutes: 40
     env:
       ATTN_INSTANCE: app-acceptance
       ATTN_HARNESS_INSTANCE: app-acceptance
       ATTN_HARNESS_PARK_VISIBLE_PX: '0'
-      SCENARIOS: ${{ matrix.scenarios }}
+      SCENARIOS: terminal-block-copy terminal-input quick-capture
     steps:
       - name: Configure artifact directory
         run: echo "ATTN_REAL_APP_ARTIFACTS_DIR=$RUNNER_TEMP/attn-real-app-harness" >> "$GITHUB_ENV"
@@ -1269,7 +1259,7 @@ jobs:
           instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ steps.build-app.outputs.archive }}
 
-      - name: Run native ${{ matrix.group }} scenarios
+      - name: Run native clipboard, keyboard and Quick Capture scenarios
         run: |
           scenario_args=(); for scenario in $SCENARIOS; do scenario_args+=(--scenario "$scenario"); done
           pnpm --dir app run real-app:serial-matrix -- "${scenario_args[@]}"
@@ -1278,7 +1268,7 @@ jobs:
         if: always()
         uses: ./.github/actions/upload-test-receipts
         with:
-          name: app-acceptance-macos-${{ matrix.key }}
+          name: app-acceptance-macos
 
       - name: Require executed macOS coverage
         run: |
@@ -1314,7 +1304,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-macos-${{ matrix.key }}-evidence-${{ github.run_attempt }}
+          name: app-acceptance-macos-evidence-${{ github.run_attempt }}
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
