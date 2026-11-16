@@ -27,6 +27,7 @@ mod wire {
     mod picker;
     mod profile;
     mod queue;
+    mod quick_capture;
     mod reach;
     mod review;
     mod settings;

@@ -559,7 +559,7 @@ pub(crate) fn row_detail(chooser: &Chooser, row: &Destination, now: f64) -> Stri
 
 /// How long ago an RFC 3339 time was, as the chooser says it: minutes, hours, then days.
 fn ago(time: &str, now: f64) -> String {
-    let Some(then) = parse_rfc3339(time) else {
+    let Some(then) = crate::calendar::seconds_of_rfc3339(time) else {
         return String::new();
     };
     let minutes = ((now - then) / 60.0).floor() as i64;
@@ -571,37 +571,6 @@ fn ago(time: &str, now: f64) -> String {
         return format!("{hours}h ago");
     }
     format!("{}d ago", hours / 24)
-}
-
-/// Seconds since the Unix epoch of `YYYY-MM-DDTHH:MM:SS` with an optional fraction and a `Z`
-/// or `±HH:MM` offset.
-fn parse_rfc3339(time: &str) -> Option<f64> {
-    let (date, rest) = time.split_once('T')?;
-    let mut date = date.split('-').map(|p| p.parse::<i64>().ok());
-    let (y, m, d) = (date.next()??, date.next()??, date.next()??);
-    let (clock, offset) = match rest.find(['Z', '+', '-']) {
-        Some(at) => rest.split_at(at),
-        None => (rest, ""),
-    };
-    let mut clock = clock.split(':');
-    let h: i64 = clock.next()?.parse().ok()?;
-    let min: i64 = clock.next()?.parse().ok()?;
-    let sec: f64 = clock.next().unwrap_or("0").parse().ok()?;
-    let offset_seconds = match offset.chars().next() {
-        Some(sign @ ('+' | '-')) => {
-            let (oh, om) = offset[1..].split_once(':')?;
-            let seconds = oh.parse::<i64>().ok()? * 3600 + om.parse::<i64>().ok()? * 60;
-            if sign == '+' { seconds } else { -seconds }
-        }
-        _ => 0,
-    };
-    let (y, m) = if m <= 2 { (y - 1, m + 9) } else { (y, m - 3) };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let doy = (153 * m + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146_097 + doe - 719_468;
-    Some((days * 86_400 + h * 3600 + min * 60 - offset_seconds) as f64 + sec)
 }
 
 /// How far an agent started in a new worktree has got, shown in a corner without taking the

@@ -31,6 +31,7 @@ mod palette;
 mod picker;
 mod profile_switcher;
 pub mod prompts;
+pub mod quick_capture;
 mod requests;
 mod review;
 pub mod screen;
@@ -77,6 +78,8 @@ pub struct State {
     pub opener: opener::Opener,
     pub notebook: notebook::Notebook,
     pub(crate) browser: browser::Browsers,
+    /// The Quick Capture panel's window, on a platform that has one.
+    capture: Option<Arc<dyn quick_capture::Window>>,
     daemon: Commands,
     requests: requests::Requests,
     /// Wall-clock milliseconds when the runtime's clock read zero.
@@ -433,9 +436,10 @@ pub fn menu_items(keymap: &Keymap) -> Vec<MenuItem<State>> {
         })
         .id(Action::TilePopOut.id())
         .menu("File"),
-        MenuItem::new("Quick Capture", |_, _| {})
-            .id("quick-capture")
-            .menu("File")
-            .enabled(false),
+        MenuItem::new("Quick Capture", |state, tx| {
+            dispatch(state, Action::OpenQuickCapture, tx);
+        })
+        .id(Action::OpenQuickCapture.id())
+        .menu("File"),
     ]
 }

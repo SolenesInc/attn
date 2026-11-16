@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::State;
 
-type Then = Box<dyn FnOnce(&mut State, Answer, &mut Tx)>;
+pub(crate) type Then<S = State> = Box<dyn FnOnce(&mut S, Answer, &mut Tx)>;
 
 /// The daemon's reply to a request, or why there is none.
 pub(crate) enum Answer {
@@ -81,29 +81,71 @@ impl ReplyInbox {
         self.0.lock().unwrap().is_empty()
     }
 
-    fn put(&self, replies: Vec<Reply>) {
+    pub(crate) fn put(&self, replies: Vec<Reply>) {
         self.0.lock().unwrap().extend(replies);
     }
 
-    fn take(&self) -> Vec<Reply> {
+    pub(crate) fn take(&self) -> Vec<Reply> {
         std::mem::take(&mut *self.0.lock().unwrap())
     }
 }
 
-/// The window's requests that wait for the daemon's answer, by request id.
-#[derive(Default)]
-pub struct Requests {
+/// A window's requests that wait for the daemon's answer, by request id: the main and tile
+/// windows', or Quick Capture's, whose state is `S`.
+pub struct Requests<S = State> {
     pub(crate) inbox: ReplyInbox,
-    waiting: HashMap<String, Waiting>,
+    waiting: HashMap<String, Waiting<S>>,
     sent: u64,
+}
+
+impl<S> Default for Requests<S> {
+    fn default() -> Self {
+        Requests {
+            inbox: ReplyInbox::default(),
+            waiting: HashMap::new(),
+            sent: 0,
+        }
+    }
 }
 
 /// A request waiting for its answer, with the command it sent, so a `command_error` that names
 /// only the command answers the oldest one.
-struct Waiting {
+struct Waiting<S> {
     command: serde_json::Value,
     sent: u64,
-    then: Then,
+    then: Then<S>,
+}
+
+impl<S> Requests<S> {
+    /// Waits for the answer to `command`, sent under `id`.
+    pub(crate) fn wait(&mut self, id: String, command: &impl Serialize, then: Then<S>) {
+        self.sent += 1;
+        let waiting = Waiting {
+            command: serde_json::to_value(command).unwrap_or_default(),
+            sent: self.sent,
+            then,
+        };
+        self.waiting.insert(id, waiting);
+    }
+
+    /// What waits for `reply`: the request it names, or for a `command_error`, the oldest
+    /// request with its command.
+    pub(crate) fn answered_by(&mut self, reply: &Reply) -> Option<Then<S>> {
+        let id = if reply.event == "command_error" {
+            oldest_waiting(self, reply.body["cmd"].as_str().unwrap_or_default())
+        } else {
+            Some(reply.request_id.clone())
+        };
+        id.and_then(|id| self.waiting.remove(&id)).map(|w| w.then)
+    }
+
+    /// Every request still waiting, which a connection that ended will never answer.
+    pub(crate) fn unanswerable(&mut self) -> Vec<Then<S>> {
+        self.waiting
+            .drain()
+            .map(|(_, waiting)| waiting.then)
+            .collect()
+    }
 }
 
 impl State {
@@ -136,15 +178,7 @@ impl State {
         tx: &mut Tx,
     ) {
         match self.daemon.send(command) {
-            Ok(()) => {
-                self.requests.sent += 1;
-                let waiting = Waiting {
-                    command: serde_json::to_value(command).unwrap_or_default(),
-                    sent: self.requests.sent,
-                    then: Box::new(then),
-                };
-                self.requests.waiting.insert(id, waiting);
-            }
+            Ok(()) => self.requests.wait(id, command, Box::new(then)),
             Err(_) => then(self, Answer::NotSent, tx),
         }
     }
@@ -189,7 +223,7 @@ impl State {
     }
 }
 
-impl Requests {
+impl<S> Requests<S> {
     /// Whether a request whose command `asks` is true of still waits for its answer.
     pub(crate) fn waits_for(&self, asks: impl Fn(&serde_json::Value) -> bool) -> bool {
         self.waiting.values().any(|w| asks(&w.command))
@@ -210,16 +244,8 @@ pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
             answered = true;
             continue;
         }
-        let waiting = if reply.event == "command_error" {
-            oldest_waiting(
-                &state.requests,
-                reply.body["cmd"].as_str().unwrap_or_default(),
-            )
-        } else {
-            Some(reply.request_id.clone())
-        };
-        if let Some(waiting) = waiting.and_then(|id| state.requests.waiting.remove(&id)) {
-            (waiting.then)(state, Answer::Reply(reply), tx);
+        if let Some(then) = state.requests.answered_by(&reply) {
+            then(state, Answer::Reply(reply), tx);
             answered = true;
         } else if crate::settings::outposts::refused(state, &reply)
             || crate::desktop::refusal::receive(state, &reply, tx)
@@ -233,12 +259,13 @@ pub(crate) fn drain(state: &mut State, tx: &mut Tx) -> bool {
         }
     }
     if state.window.tile.is_none() {
+        crate::quick_capture::hand(state, &unclaimed);
         state.window.desk.windows.hand(unclaimed);
     }
     answered
 }
 
-fn oldest_waiting(requests: &Requests, cmd: &str) -> Option<String> {
+fn oldest_waiting<S>(requests: &Requests<S>, cmd: &str) -> Option<String> {
     requests
         .waiting
         .iter()
@@ -273,13 +300,7 @@ fn unasked_refusal(reply: &Reply) -> Option<String> {
 /// A connection that ends takes its requests' replies with it: each request is answered with
 /// nothing.
 pub(crate) fn forget(state: &mut State, tx: &mut Tx) {
-    let unanswered: Vec<Then> = state
-        .requests
-        .waiting
-        .drain()
-        .map(|(_, waiting)| waiting.then)
-        .collect();
-    for then in unanswered {
+    for then in state.requests.unanswerable() {
         then(state, Answer::Dropped, tx);
     }
 }

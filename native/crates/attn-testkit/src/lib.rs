@@ -1,3 +1,4 @@
+mod capture;
 mod daemon;
 mod screen;
 mod tiles;

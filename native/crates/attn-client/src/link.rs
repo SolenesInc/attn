@@ -4,16 +4,18 @@ use std::time::Duration;
 
 use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage, ClientHelloMessage,
-    CommandErrorMessage, FsChangedMessage, GardenReviewUpdatedMessage, GardenSeedsChangedMessage,
-    GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage, GitOperationStartedMessage,
-    InitialStateMessage, KittyImageResultMessage, KittyPlacementsMessage, MigrationChangedMessage,
-    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
-    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
-    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, ReposUpdatedMessage,
-    RuntimeRespawnedMessage, SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
-    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
-    SessionsUpdatedMessage, SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage,
-    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
+    CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage, GardenReviewUpdatedMessage,
+    GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
+    GitOperationStartedMessage, InitialStateMessage, KittyImageResultMessage,
+    KittyPlacementsMessage, MigrationChangedMessage, NotificationListResultMessage,
+    NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
+    PluginsUpdatedMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
+    PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage, QuickCaptureUnreadMessage,
+    ReposUpdatedMessage, RuntimeRespawnedMessage, SendersUpdatedMessage, SessionClosedMessage,
+    SessionExitedMessage, SessionMessagesChangedMessage, SessionRegisteredMessage,
+    SessionUnregisteredMessage, SessionsUpdatedMessage, SettingsUpdatedMessage,
+    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
+    go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -617,6 +619,22 @@ impl Task {
             }
             "phones_updated" => {
                 self.store.set_phones(parse(&header.event, text)?);
+                None
+            }
+            "crew_updated" => {
+                let message: CrewUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_crew(message.members);
+                None
+            }
+            "quick_capture_read" => {
+                let message: QuickCaptureReadMessage = parse(&header.event, text)?;
+                self.store
+                    .set_capture_read(message.capture_id, Some(message.read_at));
+                None
+            }
+            "quick_capture_unread" => {
+                let message: QuickCaptureUnreadMessage = parse(&header.event, text)?;
+                self.store.set_capture_read(message.capture_id, None);
                 None
             }
             "senders_updated" => {

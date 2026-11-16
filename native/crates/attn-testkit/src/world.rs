@@ -49,6 +49,7 @@ pub struct World {
     store: Store,
     orders: crate::tiles::Orders,
     tiles: Vec<crate::tiles::TileRuntime>,
+    capture: crate::capture::CaptureRuntime,
 }
 
 type OnKey = fn(&mut State, &KeyEvent, &mut Tx) -> bool;
@@ -69,21 +70,24 @@ fn heard(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     took
 }
 
-/// What a gesture can do to the app.
-pub struct Driver<'a> {
-    pub runtime: &'a mut Runtime<State>,
+/// What a gesture can do to a window of the app: the main window's or a tile window's, or the
+/// Quick Capture panel's, whose state is `S`.
+pub struct Driver<'a, S: 'static = State> {
+    pub runtime: &'a mut Runtime<S>,
 }
 
-impl Driver<'_> {
-    /// Changes the window's state as a handler would.
-    pub fn update(&mut self, f: impl FnOnce(&mut State, &mut Tx)) {
-        self.runtime.update(f);
-    }
-
+impl Driver<'_, State> {
     /// Opens a link with the app, as the system hands one to `App::on_open_url`.
     pub fn open_link(&mut self, url: &str) {
         self.runtime
             .update(|state, tx| attn_app::open_link(state, url, tx));
+    }
+}
+
+impl<S: 'static> Driver<'_, S> {
+    /// Changes the window's state as a handler would.
+    pub fn update(&mut self, f: impl FnOnce(&mut S, &mut Tx)) {
+        self.runtime.update(f);
     }
 
     /// Presses a key, as the window hears it from the keyboard.
@@ -288,6 +292,13 @@ impl World {
             });
             runtime.update(move |state, _| state.open_tile_windows(opener, main));
         }
+        let data_dir = files.path().join("data");
+        let capture =
+            crate::capture::CaptureRuntime::start(&store, link.commands(), &pulse, &data_dir);
+        {
+            let window: Arc<dyn attn_app::quick_capture::Window> = capture.window.clone();
+            runtime.update(move |state, _| state.use_quick_capture(window));
+        }
         let mut world = World {
             files,
             daemon,
@@ -307,6 +318,7 @@ impl World {
             store,
             orders,
             tiles: Vec::new(),
+            capture,
         };
         world.settle();
         world
@@ -437,7 +449,9 @@ impl World {
             for tile in &mut self.tiles {
                 tile.settle();
             }
+            self.capture.settle();
             if self.quiet()
+                && self.capture.idle()
                 && self.orders.list.lock().unwrap().is_empty()
                 && self.tiles.iter().all(|t| t.idle())
                 && self.inbox.lock().unwrap().is_empty()
@@ -465,6 +479,7 @@ impl World {
         for tile in &mut self.tiles {
             tile.advance(by);
         }
+        self.capture.advance(by);
         self.settle();
     }
 
@@ -654,7 +669,50 @@ impl World {
 
     /// No frame requested and no wake deadline: an idle window that draws nothing.
     pub fn runtime_is_at_rest(&self) -> bool {
-        !self.runtime.animating && self.runtime.wake_deadline().is_none()
+        !self.runtime.animating && self.runtime.wake_deadline().is_none() && self.capture.at_rest()
+    }
+
+    /// Runs a user action in the Quick Capture panel, then settles.
+    pub fn capture_gesture(&mut self, f: impl FnOnce(&mut Driver<attn_app::quick_capture::Panel>)) {
+        f(&mut Driver {
+            runtime: &mut self.capture.runtime,
+        });
+        self.settle();
+    }
+
+    /// What the Quick Capture panel shows, whether or not its window does.
+    pub fn capture_screen(&self) -> Screen {
+        self.capture.screen()
+    }
+
+    /// Whether the platform would show the Quick Capture panel's window.
+    pub fn capture_shown(&self) -> bool {
+        self.capture.shown()
+    }
+
+    /// The clipboard the Quick Capture panel pastes from.
+    pub fn capture_clipboard(&self) -> &rune::clipboard::MemoryClipboard {
+        &self.capture.clipboard
+    }
+
+    /// The instance data folder, where Quick Capture keeps each profile's draft.
+    pub fn data_dir(&self) -> &std::path::Path {
+        &self.capture.data_dir
+    }
+
+    /// Quits and relaunches the Quick Capture panel, as an app restart does: it keeps only what
+    /// it wrote to disk.
+    pub fn restart_capture(&mut self) {
+        self.capture = crate::capture::CaptureRuntime::start(
+            &self.store,
+            self.link().commands(),
+            &self.pulse,
+            &self.capture.data_dir.clone(),
+        );
+        let window: Arc<dyn attn_app::quick_capture::Window> = self.capture.window.clone();
+        self.runtime
+            .update(move |state, _| state.use_quick_capture(window));
+        self.settle();
     }
 
     /// Covers the window or uncovers it: a covered window, such as a parked or occluded one,

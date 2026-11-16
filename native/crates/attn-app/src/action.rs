@@ -69,6 +69,8 @@ macro_rules! actions {
             ToggleNotifications,
             /// Open the editor that rebinds shortcuts.
             OpenShortcutEditor,
+            /// Open Quick Capture over the app in front.
+            OpenQuickCapture,
             /// Ask the daemon to update attn.
             StartUpdate,
             /// Open the attention drawer and take the keyboard into it.
@@ -109,6 +111,7 @@ macro_rules! actions {
                     Action::OpenWorktrees => "ledger.worktrees",
                     Action::ToggleNotifications => "notifications.toggle",
                     Action::OpenShortcutEditor => "shortcuts.edit",
+                    Action::OpenQuickCapture => "quickCapture.open",
                     Action::StartUpdate => "update.start",
                     Action::OpenAttention => "attention.open",
                     Action::CreateDesktop => "desktop.create",
@@ -141,6 +144,7 @@ macro_rules! actions {
                     Action::OpenWorktrees => "Open worktrees",
                     Action::ToggleNotifications => "Show or hide notifications",
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
+                    Action::OpenQuickCapture => "Quick Capture",
                     Action::StartUpdate => "Update attn",
                     Action::OpenAttention => "Open attention drawer",
                     Action::CreateDesktop => "New desktop",

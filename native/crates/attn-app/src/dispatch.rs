@@ -89,6 +89,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::StartUpdate => crate::update_run::start(state, None, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::OpenShortcutEditor => crate::shortcut_editor::open(state, tx),
+        Action::OpenQuickCapture => crate::quick_capture::open(state),
         Action::ProfileSwitch => crate::profile_switcher::toggle(state, tx),
         Action::SwitchToProfile { profile } => crate::profile_switcher::select(state, &profile, tx),
         Action::AppQuit => tx.quit(),

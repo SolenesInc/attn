@@ -78,3 +78,5 @@ item	statement	native_test	reason
 67	An action on a desktop the window has not loaded says to open that desktop	attn-app/tests/wire/browser.rs::an_action_on_a_desktop_the_window_has_not_loaded_says_to_open_that_desktop	
 67	An answer past 24 MiB fails and says why, under the daemon's 32 MiB read limit	attn-app/tests/wire/browser.rs::an_answer_too_large_for_the_daemon_to_read_fails_and_says_why	
 68	A page that browses elsewhere stores its address once and loads nothing when the daemon stores it	attn-app/tests/wire/browser.rs::a_page_that_browses_elsewhere_stores_its_address_and_loads_nothing_when_the_daemon_stores_it	
+35	The Quick Capture panel hides instead of closing, and the next show finds its draft and the message field holding the keys	attn-app/tests/wire/quick_capture.rs::opens_over_the_app_with_the_message_field_and_escape_hides_it_keeping_the_draft	
+32	Quick Capture opens through one action, Action::OpenQuickCapture, which the File menu item dispatches (the menu and the global shortcut are driven live)	attn-app/tests/wire/quick_capture.rs::opens_over_the_app_with_the_message_field_and_escape_hides_it_keeping_the_draft	

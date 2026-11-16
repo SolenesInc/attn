@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
-    Ask, AuthorState, Desktop, DesktopTileContentMessage, GardenReview, GitOperation,
+    Ask, AuthorState, CrewMember, Desktop, DesktopTileContentMessage, GardenReview, GitOperation,
     InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage, PluginInfo,
     PluginIssue, Profile, RepoState, Seed, Session, SessionLedgerEntry, UpdateRun, Vent, Worktree,
     WorktreeSweepEntry,
@@ -30,6 +30,11 @@ pub struct Facts {
     /// The programs paired to send as the selected profile; `None` until the daemon first
     /// lists them.
     pub senders: Arc<Option<Vec<PairedSender>>>,
+    /// Every crew member of every profile, in session or not.
+    pub crew: Arc<Vec<CrewMember>>,
+    /// When the daemon last said an agent retrieved a quick capture from its inbox, by capture
+    /// id; `None` once it said the capture is unread again.
+    pub capture_reads: Arc<BTreeMap<String, Option<String>>>,
     /// What each document tile holds, as the daemon last sent it.
     pub tile_contents: Arc<TileContents>,
     pub garden: Arc<Garden>,
@@ -360,7 +365,13 @@ impl Slices {
     pub const MIGRATION: Slices = Slices(1 << 23);
     pub const FILES: Slices = Slices(1 << 24);
     pub const GARDEN_REVIEW: Slices = Slices(1 << 25);
-    pub const ALL: Slices = Slices((1 << 26) - 1);
+    pub const CREW: Slices = Slices(1 << 26);
+    pub const CAPTURE_READS: Slices = Slices(1 << 27);
+    pub const ALL: Slices = Slices((1 << 28) - 1);
+
+    pub const fn union(self, other: Slices) -> Slices {
+        Slices(self.0 | other.0)
+    }
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -476,6 +487,7 @@ impl Store {
             facts.settings = Arc::new(state.settings.unwrap_or_default());
             facts.outposts = Arc::new(state.outposts.unwrap_or_default());
             facts.home_build = state.home_build.unwrap_or_default();
+            facts.crew = Arc::new(state.crew.unwrap_or_default());
             let seeds: Vec<Arc<Seed>> = state
                 .seeds
                 .unwrap_or_default()
@@ -692,6 +704,20 @@ impl Store {
         self.change(|facts| {
             facts.senders = Arc::new(Some(senders));
             Slices::SENDERS
+        });
+    }
+
+    pub(crate) fn set_crew(&self, crew: Vec<CrewMember>) {
+        self.change(|facts| {
+            facts.crew = Arc::new(crew);
+            Slices::CREW
+        });
+    }
+
+    pub(crate) fn set_capture_read(&self, capture: String, read_at: Option<String>) {
+        self.change(|facts| {
+            Arc::make_mut(&mut facts.capture_reads).insert(capture, read_at);
+            Slices::CAPTURE_READS
         });
     }
 

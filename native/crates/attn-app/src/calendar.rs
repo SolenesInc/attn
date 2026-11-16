@@ -115,6 +115,42 @@ pub(crate) fn file_stamp(ms: i64) -> String {
     )
 }
 
+/// Seconds since the Unix epoch of `YYYY-MM-DDTHH:MM:SS` with an optional fraction and a `Z`
+/// or `±HH:MM` offset.
+pub(crate) fn seconds_of_rfc3339(time: &str) -> Option<f64> {
+    let (date, rest) = time.split_once('T')?;
+    let mut date = date.split('-').map(|p| p.parse::<i64>().ok());
+    let (y, m, d) = (date.next()??, date.next()??, date.next()??);
+    let (clock, offset) = match rest.find(['Z', '+', '-']) {
+        Some(at) => rest.split_at(at),
+        None => (rest, ""),
+    };
+    let mut clock = clock.split(':');
+    let h: i64 = clock.next()?.parse().ok()?;
+    let min: i64 = clock.next()?.parse().ok()?;
+    let sec: f64 = clock.next().unwrap_or("0").parse().ok()?;
+    let offset_seconds = match offset.chars().next() {
+        Some(sign @ ('+' | '-')) => {
+            let (oh, om) = offset[1..].split_once(':')?;
+            let seconds = oh.parse::<i64>().ok()? * 3600 + om.parse::<i64>().ok()? * 60;
+            if sign == '+' { seconds } else { -seconds }
+        }
+        _ => 0,
+    };
+    let (y, m) = if m <= 2 { (y - 1, m + 9) } else { (y, m - 3) };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * m + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some((days * 86_400 + h * 3600 + min * 60 - offset_seconds) as f64 + sec)
+}
+
+/// Milliseconds since the Unix epoch of an RFC 3339 time.
+pub(crate) fn ms_of_rfc3339(time: &str) -> Option<i64> {
+    seconds_of_rfc3339(time).map(|s| (s * 1000.0).round() as i64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
