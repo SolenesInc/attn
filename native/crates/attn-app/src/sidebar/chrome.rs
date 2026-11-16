@@ -244,7 +244,12 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
 }
 
 fn turns_on<'a>(bands: &Bands<'a>) -> Vec<&'a str> {
-    bands.turns.iter().filter_map(|r| r.desktop).collect()
+    bands
+        .turns
+        .iter()
+        .filter(|r| !r.offline)
+        .filter_map(|r| r.desktop)
+        .collect()
 }
 
 /// The desktops of the agents that want the user, one entry per agent.
@@ -413,19 +418,15 @@ fn tool(
 /// Queue flow with the sidebar collapsed: the waiting pill, then the desktops' chips, in
 /// the title bar.
 pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
-    let waiting = bands.turns.len();
+    let owed = bands.owed();
     let crumbs: Vec<String> = bands
         .turns
         .iter()
         .take(3)
         .map(|r| super::model::display_name(r.session))
         .collect();
-    let more = waiting.saturating_sub(crumbs.len());
-    let mut pill = if waiting == 0 {
-        "Nothing owed".to_owned()
-    } else {
-        format!("{waiting} waiting")
-    };
+    let more = bands.turns.len().saturating_sub(crumbs.len());
+    let mut pill = super::queue_view::owed_label(owed).unwrap_or_else(|| "Nothing owed".into());
     if !crumbs.is_empty() {
         pill.push_str(" · ");
         pill.push_str(&crumbs.join(" › "));
@@ -433,7 +434,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
     if more > 0 {
         pill.push_str(&format!(" +{more}"));
     }
-    let pill_ink = if waiting == 0 {
+    let pill_ink = if owed.0 == 0 {
         t.text_tertiary
     } else {
         t.text_primary
@@ -463,7 +464,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                 })
                 .build(attn_ui::kit(t))
                 .key("queue-bar.pill")
-                .a11y_value(waiting.to_string())
+                .a11y_value(owed.0.to_string())
                 .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
                     super::bar_peek::pill_hovered(state, inside)
                 })

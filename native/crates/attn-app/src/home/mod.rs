@@ -187,7 +187,13 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
                 .label("Asks")
                 .w_full()
                 .gap(2.0)
-                .child(group_label("Asks", Some(asks.len()), t))
+                .child(group_label(
+                    "home.group.asks",
+                    "Asks",
+                    Some(asks.len()),
+                    None,
+                    t,
+                ))
                 .children(asks.iter().map(|item| ask_row(item, t))),
         );
     }
@@ -200,10 +206,12 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
         );
     } else {
         if !home.turns.is_empty() {
+            let unreachable = home.turns.iter().filter(|a| a.agent.offline).count();
             body = body.child(group(
                 "home.group.turns",
                 "Your turn",
-                Some(home.turns.len()),
+                Some(home.turns.len() - unreachable),
+                (unreachable > 0).then(|| format!("{unreachable} unreachable")),
                 &home.turns,
                 t,
             ));
@@ -218,7 +226,7 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
             );
         }
         body = body.children(home.groups.iter().map(|Group { key, label, rows }| {
-            group(&format!("home.group.{key}"), label, None, rows, t)
+            group(&format!("home.group.{key}"), label, None, None, rows, t)
         }));
         if !home.snoozed.is_empty() {
             body = body.child(snoozed(&home.snoozed, snoozed_open, t));
@@ -260,18 +268,39 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
         .child(body)
 }
 
-fn group(key: &str, label: &str, count: Option<usize>, rows: &[HomeAgent], t: &Tokens) -> El {
+/// A group of agents under its label, its count and what that count leaves out.
+fn group(
+    key: &str,
+    label: &str,
+    count: Option<usize>,
+    apart: Option<String>,
+    rows: &[HomeAgent],
+    t: &Tokens,
+) -> El {
     col()
         .key(key.to_owned())
         .role("list")
         .label(label.to_owned())
         .w_full()
         .gap(2.0)
-        .child(group_label(label, count, t))
+        .child(group_label(key, label, count, apart, t))
         .children(rows.iter().map(|agent| session_row(agent, t)))
 }
 
-fn group_label(label: &str, count: Option<usize>, t: &Tokens) -> El {
+fn group_label(
+    key: &str,
+    label: &str,
+    count: Option<usize>,
+    apart: Option<String>,
+    t: &Tokens,
+) -> El {
+    let caption = |key: String, said: String| {
+        text(said.clone())
+            .key(key)
+            .label(said)
+            .font(type_::MONO_CAPTION)
+            .color(t.text_tertiary)
+    };
     row()
         .gap(space::S2)
         .items_center()
@@ -280,11 +309,8 @@ fn group_label(label: &str, count: Option<usize>, t: &Tokens) -> El {
                 .font(type_::SECTION)
                 .color(t.text_tertiary),
         )
-        .children(count.map(|n| {
-            text(n.to_string())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-        }))
+        .children(count.map(|n| caption(format!("{key}.count"), n.to_string())))
+        .children(apart.map(|said| caption(format!("{key}.apart"), said)))
 }
 
 fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
@@ -314,7 +340,13 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
                             .font(type_::LABEL)
                             .color(tokens.text_tertiary),
                         )
-                        .child(group_label("Snoozed", Some(count), &tokens))
+                        .child(group_label(
+                            "home.group.snoozed",
+                            "Snoozed",
+                            Some(count),
+                            None,
+                            &tokens,
+                        ))
                 })
                 .build(attn_ui::kit(t))
                 .expanded(open)
@@ -376,7 +408,7 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
     memo(key.clone(), (a, *t), || {
         let id = a.agent.id.clone();
         let name = a.agent.shown_name();
-        let unsnooze = (!a.snoozed_until.is_empty()).then(|| {
+        let unsnooze = (!a.snoozed_until.is_empty() && !a.agent.offline).then(|| {
             let id = id.clone();
             button(
                 &format!("{key}.unsnooze"),

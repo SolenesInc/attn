@@ -146,13 +146,15 @@ pub(crate) fn open(
     });
 }
 
-/// Closes the menu once its agent is gone.
+/// Closes the menu once its agent is gone, or its machine is unreachable.
 pub(crate) fn follow(state: &mut State) {
-    let gone = state
-        .window
-        .snooze
-        .as_ref()
-        .is_some_and(|menu| !state.facts.sessions.iter().any(|s| s.id == menu.session));
+    let gone = state.window.snooze.as_ref().is_some_and(|menu| {
+        !state
+            .facts
+            .sessions
+            .iter()
+            .any(|s| s.id == menu.session && !crate::outpost::offline(s, &state.facts.outposts))
+    });
     if gone {
         state.window.snooze = None;
     }

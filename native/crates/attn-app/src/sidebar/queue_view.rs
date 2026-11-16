@@ -54,7 +54,7 @@ pub struct QueueAgent {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum QLine {
     Rule { key: &'static str, text: String },
-    WaitingHead { waiting: usize },
+    WaitingHead { waiting: usize, unreachable: usize },
     AgentsToggle { open: bool, more: usize },
     Counts(String),
     Filter,
@@ -161,7 +161,7 @@ fn agent(
         },
         settle: band == Band::Turn && actions.settle,
         snooze: matches!(band, Band::Turn | Band::Working) && actions.snooze,
-        unsnooze: band == Band::Snoozed,
+        unsnooze: band == Band::Snoozed && !row.offline,
     })
 }
 
@@ -205,8 +205,10 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
     }
     let pinned: std::collections::HashSet<&str> =
         bands.crew.iter().map(|r| r.session.id.as_str()).collect();
+    let (waiting, unreachable) = bands.owed();
     lines.push(QLine::WaitingHead {
-        waiting: bands.turns.len(),
+        waiting,
+        unreachable,
     });
     for row in &bands.turns {
         lines.push(QLine::Agent(agent(
@@ -399,7 +401,10 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             match line {
                 QLine::Rule { text: label, .. } => rule(key, label, t),
-                QLine::WaitingHead { waiting } => waiting_head(key, *waiting, keys, t),
+                QLine::WaitingHead {
+                    waiting,
+                    unreachable,
+                } => waiting_head(key, (*waiting, *unreachable), keys, t),
                 QLine::AgentsToggle { open, more } => agents_toggle(key, *open, *more, keys, t),
                 QLine::Counts(counts) => text(counts.clone())
                     .key(key)
@@ -465,12 +470,23 @@ fn rule_tail(keys: Option<String>, t: &Tokens) -> [El; 2] {
 
 const KEYS_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
 
-fn waiting_head(key: String, waiting: usize, keys: Option<String>, t: &Tokens) -> El {
-    let label = if waiting == 0 {
-        "Nothing owed".to_owned()
-    } else {
-        format!("{waiting} waiting")
-    };
+/// What the queue owes, as the head and the collapsed bar say it: "2 waiting · 1 unreachable".
+pub(crate) fn owed_label((waiting, unreachable): (usize, usize)) -> Option<String> {
+    let parts: Vec<String> = [(waiting, "waiting"), (unreachable, "unreachable")]
+        .into_iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, said)| format!("{n} {said}"))
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+fn waiting_head(
+    key: String,
+    (waiting, unreachable): (usize, usize),
+    keys: Option<String>,
+    t: &Tokens,
+) -> El {
+    let label = owed_label((waiting, unreachable)).unwrap_or_else(|| "Nothing owed".into());
     let ink = if waiting == 0 {
         t.text_muted
     } else {

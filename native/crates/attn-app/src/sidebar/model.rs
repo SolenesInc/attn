@@ -142,7 +142,10 @@ impl AgentRow {
 
     /// The row of an agent whose tile is not on screen, which shows its countdown.
     pub fn off_screen(mut self, session: &Session) -> AgentRow {
-        self.settling = Settling::of(session);
+        self.settling = match Settling::of(session) {
+            Settling::Counting(_) if self.offline => Settling::Held,
+            settling => settling,
+        };
         self
     }
 

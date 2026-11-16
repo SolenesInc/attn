@@ -17,6 +17,8 @@ pub struct QueueRow<'a> {
     pub session: &'a Session,
     pub desktop: Option<&'a str>,
     pub desktop_title: String,
+    /// Its machine is unreachable: the row stays, but no count, step or action takes it.
+    pub offline: bool,
 }
 
 /// The queue sidebar's standing order. Every queue participant lands in one band;
@@ -170,7 +172,9 @@ pub struct QueueActions {
 }
 
 pub fn actions(facts: &Facts, session: &Session, now_ms: i64) -> QueueActions {
-    if is_snoozed(session.turn_snoozed_until.as_deref(), now_ms) {
+    if crate::outpost::offline(session, &facts.outposts)
+        || is_snoozed(session.turn_snoozed_until.as_deref(), now_ms)
+    {
         return QueueActions::default();
     }
     let settings = &facts.settings;
@@ -255,6 +259,7 @@ pub fn bands(facts: &Facts, now_ms: i64) -> Bands<'_> {
                 session,
                 desktop: *desktop,
                 desktop_title: title.clone(),
+                offline: crate::outpost::offline(session, &facts.outposts),
             };
             if session.chief_of_staff == Some(true) && bands.chief.is_none() {
                 bands.chief = Some(row.clone());
@@ -282,9 +287,11 @@ pub fn bands(facts: &Facts, now_ms: i64) -> Bands<'_> {
             }
         }
     }
-    bands
-        .turns
-        .sort_by(|a, b| compare_turn_order(a.session, b.session));
+    bands.turns.sort_by(|a, b| {
+        a.offline
+            .cmp(&b.offline)
+            .then_with(|| compare_turn_order(a.session, b.session))
+    });
     bands
         .snoozed
         .sort_by(|a, b| compare_wake_order(a.session, b.session));
@@ -298,9 +305,18 @@ pub fn bands(facts: &Facts, now_ms: i64) -> Bands<'_> {
 }
 
 impl Bands<'_> {
-    /// The turn at the head of the queue.
+    /// The turn at the head of the queue, on a machine the home reaches.
     pub fn head(&self) -> Option<&Session> {
-        self.turns.first().map(|row| row.session)
+        self.turns
+            .iter()
+            .find(|row| !row.offline)
+            .map(|row| row.session)
+    }
+
+    /// The owed turns the user can take, and those on unreachable machines.
+    pub fn owed(&self) -> (usize, usize) {
+        let unreachable = self.turns.iter().filter(|row| row.offline).count();
+        (self.turns.len() - unreachable, unreachable)
     }
 
     /// The agent `step` rows from `from` in the order the sidebar lists the queue:
@@ -311,6 +327,7 @@ impl Bands<'_> {
             .iter()
             .chain(&self.settled)
             .chain(&self.snoozed)
+            .filter(|row| !row.offline)
             .map(|row| row.session)
             .collect();
         if order.is_empty() {
@@ -341,13 +358,18 @@ impl Bands<'_> {
             .iter()
             .chain(&self.snoozed)
             .find(|row| row.session.id == id)?;
-        if closed.session.turn_by_agent == Some(true) {
+        if closed.offline || closed.session.turn_by_agent == Some(true) {
             return None;
         }
         if let Some(head) = self.head().filter(|h| h.priority == Some(true)) {
             return Some(Some(head.id.clone()));
         }
-        let still: HashSet<&str> = self.turns.iter().map(|r| r.session.id.as_str()).collect();
+        let still: HashSet<&str> = self
+            .turns
+            .iter()
+            .filter(|r| !r.offline)
+            .map(|r| r.session.id.as_str())
+            .collect();
         let at = previous_turns
             .iter()
             .position(|t| t == id)

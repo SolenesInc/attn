@@ -551,7 +551,11 @@ pub(crate) fn send(state: &mut State, id: &str, tx: &mut Tx) {
         .terminals
         .marking(id)
         .is_none_or(|m| m.marks.is_empty() || m.outcome == Some(Outcome::Sending));
-    if sending_now {
+    let unreachable = state
+        .terminals
+        .marking(id)
+        .is_some_and(|m| crate::outpost::unreachable(state, &m.session).is_some());
+    if sending_now || unreachable {
         return;
     }
     let marking = state.terminals.marking_mut(id).expect("checked above");

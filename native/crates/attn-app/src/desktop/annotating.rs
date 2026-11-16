@@ -23,16 +23,18 @@ const NUDGE_FAR: f32 = 40.0;
 
 /// What terminal `id`'s marks put over its slot: the panel listing them, the notice of a drag
 /// that marked nothing, and the popup over a mark. `slot` is the slot's size in points;
-/// `send_key` names the send key while this terminal holds the keyboard.
+/// `send_key` names the send key while this terminal holds the keyboard; `unreachable` names
+/// the session's machine while the marks cannot reach it.
 pub(super) fn layers(
     id: &str,
     marking: &Marking,
     slot: (f32, f32),
-    send_key: Option<&str>,
+    (send_key, unreachable): (Option<&str>, Option<&str>),
     t: &Tokens,
 ) -> Vec<El> {
     let shows_sent = matches!(marking.outcome, Some(Outcome::Sent { .. }));
-    let panel = (!marking.marks.is_empty() || shows_sent).then(|| panel(id, marking, send_key, t));
+    let panel = (!marking.marks.is_empty() || shows_sent)
+        .then(|| panel(id, marking, send_key, unreachable, t));
     let notice = marking.notice.as_ref().map(|n| notice(id, n, slot, t));
     let popup = marking
         .popup
@@ -540,8 +542,14 @@ fn on_comment_key(state: &mut State, id: &str, ev: &KeyEvent, tx: &mut Tx) -> bo
 }
 
 /// The panel over the terminal's bottom right corner: each mark as a card that opens it, the
-/// note sent with them, and Send all.
-fn panel(id: &str, marking: &Marking, send_key: Option<&str>, t: &Tokens) -> El {
+/// note sent with them, and Send all while the session's machine can take them.
+fn panel(
+    id: &str,
+    marking: &Marking,
+    send_key: Option<&str>,
+    unreachable: Option<&str>,
+    t: &Tokens,
+) -> El {
     let count = marking.marks.len();
     let (dragged, measured) = (id.to_owned(), id.to_owned());
     let head = row()
@@ -664,7 +672,7 @@ fn panel(id: &str, marking: &Marking, send_key: Option<&str>, t: &Tokens) -> El 
                         .color(t.text_secondary)
                         .grow(1.0),
                 )
-                .child(button)
+                .children(unreachable.is_none().then_some(button))
         }
     };
     let placed = col()
@@ -682,6 +690,17 @@ fn panel(id: &str, marking: &Marking, send_key: Option<&str>, t: &Tokens) -> El 
             }
         })
         .child(head)
+        .children(unreachable.map(|host| {
+            let said = format!("{host} is unreachable");
+            text(said.clone())
+                .key(format!("terminal.{id}.annotation.unreachable"))
+                .role("status")
+                .label(said)
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .wrap()
+                .px(10.0)
+        }))
         .child(cards)
         .child(note)
         .children(said)

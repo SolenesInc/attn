@@ -1143,3 +1143,69 @@ fn a_mark_whose_message_was_not_yet_drawn_draws_once_the_agent_prints_it_under_l
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn an_offline_sessions_marks_stay_and_say_its_machine_is_unreachable_with_no_send_until_it_is_back()
+{
+    let studio = |reach: &str| attn_protocol::OutpostInfo {
+        id: "studio-id".into(),
+        name: "studio".into(),
+        state: if reach == "reachable" {
+            "connected"
+        } else {
+            "lost"
+        }
+        .into(),
+        reach: reach.into(),
+        ..attn_protocol::OutpostInfo::default()
+    };
+    let mut state = showing(vec![agent_pane()], "daemon-1");
+    state.sessions = Some(vec![attn_protocol::Session {
+        id: "s1".into(),
+        agent: "claude".into(),
+        host: Some("studio-id".into()),
+        ..attn_protocol::Session::default()
+    }]);
+    state.outposts = Some(vec![studio("reachable")]);
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("session_messages_get", |_| {
+            message(messages_result(&[("m1", MESSAGE)], "ready"))
+        })
+        .on("session_annotations_get", |_| {
+            draft_result(vec![stored_mark("cut-this")], 1)
+        });
+    let mut world = started(daemon);
+    let shows = |world: &World, key: &str| world.screen().find(Target::key(key)).is_some();
+    let lose = |world: &mut World, reach: &str| {
+        world.daemon.emit(attn_protocol::OutpostsUpdatedMessage {
+            outposts: vec![studio(reach)],
+            ..attn_protocol::OutpostsUpdatedMessage::new()
+        });
+        world.settle();
+    };
+    assert!(shows(&world, "terminal.r1.annotation.send"));
+
+    lose(&mut world, "unreachable");
+    assert_eq!(annotations(&mut world)["marks"][0]["label"], "cut-this");
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("terminal.r1.annotation.unreachable"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("studio is unreachable")
+    );
+    assert!(!shows(&world, "terminal.r1.annotation.send"));
+    world.gesture(|app| app.press(SEND));
+    assert!(
+        world
+            .daemon
+            .sent_of("session_annotations_submit")
+            .is_empty()
+    );
+
+    lose(&mut world, "reachable");
+    assert!(shows(&world, "terminal.r1.annotation.send"));
+    assert!(!shows(&world, "terminal.r1.annotation.unreachable"));
+}

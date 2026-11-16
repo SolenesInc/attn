@@ -260,8 +260,12 @@ pub(crate) fn cancel_countdown(state: &State) {
         View::Desktop => crate::desktop::on_screen_sessions(state),
         _ => Vec::new(),
     };
+    let reachable = |id: &String| {
+        session(state, id).is_some_and(|s| !crate::outpost::offline(s, &state.facts.outposts))
+    };
     let counting: Vec<&String> = on_screen
         .iter()
+        .filter(|id| reachable(id))
         .filter(|id| {
             session(state, id)
                 .is_some_and(|s| super::model::Settling::of(s) != super::model::Settling::Off)
@@ -270,7 +274,7 @@ pub(crate) fn cancel_countdown(state: &State) {
     let shown = state
         .window
         .on_screen(&state.facts)
-        .filter(|id| on_screen.contains(id));
+        .filter(|id| on_screen.contains(id) && reachable(id));
     let targets: Vec<String> = if counting.is_empty() {
         shown.into_iter().collect()
     } else {

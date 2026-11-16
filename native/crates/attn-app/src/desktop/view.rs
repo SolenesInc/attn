@@ -35,10 +35,24 @@ enum Settle {
     Held,
     /// The person kept the next turn: it will not settle on its own.
     Kept,
+    /// Its machine is unreachable: the countdown stands still and cannot be kept until the
+    /// machine is back.
+    Frozen,
 }
 
 impl Settle {
-    fn of(session: &attn_protocol::Session) -> Option<Settle> {
+    fn of(
+        session: &attn_protocol::Session,
+        outposts: &[attn_protocol::OutpostInfo],
+    ) -> Option<Settle> {
+        let counts = session
+            .auto_settle_fires_at
+            .as_deref()
+            .is_some_and(|at| !at.is_empty())
+            || session.auto_settle_held == Some(true);
+        if crate::outpost::offline(session, outposts) {
+            return counts.then_some(Settle::Frozen);
+        }
         match &session.auto_settle_fires_at {
             Some(at) if !at.is_empty() => Some(Settle::Counting(at.clone())),
             _ if session.auto_settle_held == Some(true) => Some(Settle::Held),
@@ -89,7 +103,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         *t,
         scale.to_bits(),
     );
-    let settles = desktop.map_or_else(Vec::new, |d| settles(d, &facts.sessions));
+    let settles = desktop.map_or_else(Vec::new, |d| settles(d, facts));
     let keys = header_keys(state);
     let names: Vec<crate::sidebar::AgentRow> = desktop
         .map(|d| {
@@ -236,7 +250,7 @@ fn sublines(
     facts: &attn_client::Facts,
     desk: &super::Desk,
 ) -> Vec<(String, Subline)> {
-    let settles = settles(desktop, &facts.sessions);
+    let settles = settles(desktop, facts);
     let seeds = facts.garden.of(&facts.profiles.selected);
     desktop
         .panes
@@ -347,13 +361,13 @@ fn id_width(session: &str) -> Widths {
     }
 }
 
-fn settles(desktop: &Desktop, sessions: &[Session]) -> Vec<(String, Settle)> {
+fn settles(desktop: &Desktop, facts: &attn_client::Facts) -> Vec<(String, Settle)> {
     desktop
         .panes
         .iter()
         .filter_map(|p| {
-            let session = sessions.iter().find(|s| s.id == p.session_id)?;
-            Some((p.pane_id.clone(), Settle::of(session)?))
+            let session = facts.sessions.iter().find(|s| s.id == p.session_id)?;
+            Some((p.pane_id.clone(), Settle::of(session, &facts.outposts)?))
         })
         .collect()
 }
@@ -398,7 +412,7 @@ pub(super) fn lone(
     scale: f32,
     chrome_leading: f32,
 ) -> El {
-    let settles = settles(desktop, &state.facts.sessions);
+    let settles = settles(desktop, &state.facts);
     let keys = header_keys(state);
     let unsent = state.window.desk.peeks.unsent();
     let sublines = sublines(desktop, &state.facts, &state.window.desk);
@@ -805,8 +819,11 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     &pane.runtime_id,
                     marking,
                     cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default(),
-                    held.then_some(cx.keys.send_annotations.as_deref())
-                        .flatten(),
+                    (
+                        held.then_some(cx.keys.send_annotations.as_deref())
+                            .flatten(),
+                        unreachable_host(cx, pane).as_deref(),
+                    ),
                     t,
                 )),
                 None => slot,
@@ -1030,6 +1047,14 @@ fn tile_transition(kind: &LeafKind) -> rune::Transition {
         enter: row_spring(),
         exit: Spring::new(0.11, 0.0),
     })
+}
+
+/// The machine of the pane's session while the home cannot reach it.
+fn unreachable_host(cx: &TileCx, pane: &DesktopPane) -> Option<String> {
+    let session = cx.sessions.iter().find(|s| s.id == pane.session_id)?;
+    crate::outpost::offline(session, cx.outposts)
+        .then(|| super::host::name(session, cx.outposts))
+        .flatten()
 }
 
 /// What a remote terminal's strip says of its machine, and the machine whose screen the tile
@@ -1461,7 +1486,7 @@ fn pop_out_button(desktop: &str, leaf: &str, popped: bool, cx: &TileCx) -> El {
 fn settling_widths(settle: &Settle) -> Widths {
     let words = match settle {
         Settle::Counting(_) => "SETTLING…",
-        Settle::Held => "SETTLING PAUSED",
+        Settle::Held | Settle::Frozen => "SETTLING PAUSED",
         Settle::Kept => "TURN KEPT",
     };
     let font = rune::TextStyle {
@@ -1510,11 +1535,19 @@ fn settling_chip(
             0.40,
             t.settle_ink_quiet,
         ),
+        Settle::Frozen => (
+            "Settling paused while the host is unreachable",
+            "SETTLING PAUSED",
+            "",
+            0.10,
+            0.35,
+            t.settle_ink_quiet,
+        ),
     };
     let mark = el().w(6.0).h(6.0).fill(t.settle);
     let mark = match settle {
         Settle::Counting(_) => mark.radius(3.0),
-        Settle::Held => mark.radius(3.0).opacity(0.55),
+        Settle::Held | Settle::Frozen => mark.radius(3.0).opacity(0.55),
         Settle::Kept => mark.radius(1.0).opacity(0.7),
     };
     let font = rune::TextStyle {
@@ -1523,7 +1556,8 @@ fn settling_chip(
         ..type_::LABEL
     };
     let session = session.to_owned();
-    let keep_key = keep_key.filter(|_| !icon).map(str::to_owned);
+    let frozen = *settle == Settle::Frozen;
+    let keep_key = keep_key.filter(|_| !icon && !frozen).map(str::to_owned);
     let face_h = match (icon, &keep_key) {
         (true, _) => 6.0,
         (false, None) => font.line_px(),
@@ -1531,6 +1565,7 @@ fn settling_chip(
     };
     Button::new(label)
         .variant(ButtonVariant::Ghost)
+        .disabled(frozen)
         .on_press(move |state: &mut State| {
             let _ = state.daemon.send(&attn_protocol::CancelCountdownMessage {
                 session_id: session.clone(),
