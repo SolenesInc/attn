@@ -290,6 +290,52 @@ fn opens_a_seed_as_a_tile_beside_the_session_the_user_is_in_and_shows_it() {
 }
 
 #[test]
+fn opening_a_seed_as_a_tile_from_home_shows_the_desktop_it_lands_on() {
+    let world_daemon = Daemon::scripted().state(InitialStateMessage {
+        profiles: Some(vec![profile()]),
+        desktops: Some(vec![desktop(Vec::new(), "a")]),
+        ..initial(vec![continued(resumable())], vec![session("s1", "Agent a")])
+    });
+    let known = continued(resumable());
+    world_daemon.on("seed_document_get", move |r: &Request| {
+        document_reply(r, Some(known.clone()))
+    });
+    let docked = desktop(vec![seed_tile("s1")], "a");
+    world_daemon.on("open_seed", move |r: &Request| {
+        vec![
+            message(OpenSeedResultMessage {
+                request_id: r["request_id"].as_str().map(str::to_owned),
+                success: true,
+                seed_id: "s-cont11".into(),
+                desktop_id: Some(DESKTOP.into()),
+                tile_id: Some("tile-seed".into()),
+                ..OpenSeedResultMessage::new()
+            }),
+            message(ProfileArrangementChangedMessage {
+                profile: profile(),
+                desktops: vec![Desktop {
+                    revision: 2,
+                    ..docked.clone()
+                }],
+                ..ProfileArrangementChangedMessage::new()
+            }),
+        ]
+    });
+    let mut world = World::start_sized(world_daemon, (1248.0, 800.0));
+    world.gesture(|app| app.key(board()));
+    open_row(&mut world, "Cache store migration");
+
+    click(&mut world, "Open as tile");
+
+    let window = world.automate("state", json!({"of": "window"})).unwrap();
+    assert_eq!(window["view"], "Desktop");
+    assert_eq!(window["keyboard"]["pane"], "tile-seed");
+    let leaves = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(leaves.last().unwrap()["leaf_id"], "tile-seed");
+    assert!(rests(&mut world));
+}
+
+#[test]
 fn opens_a_seed_from_a_session_bound_seed_tile_beside_the_session_that_tile_is_bound_to() {
     let mut world = on_desktop(
         vec![seed_tile("tender")],

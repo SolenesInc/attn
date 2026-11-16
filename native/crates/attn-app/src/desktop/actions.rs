@@ -396,6 +396,7 @@ pub(crate) fn reveal_leaf(
     keyboard: bool,
     tx: &mut Tx,
 ) {
+    state.window.show_desktop(tx);
     if keyboard {
         give_keyboard(state, desktop, leaf, tx);
     }
