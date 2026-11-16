@@ -76,7 +76,7 @@ fn press(world: &mut World, key: Key) {
 }
 
 /// Puts the pointer over the row keyed `key`, which shows its buttons.
-fn hover(world: &mut World, key: &str) {
+pub(super) fn hover(world: &mut World, key: &str) {
     let [x, y, w, h] = world
         .screen()
         .bounds(Target::key(key))

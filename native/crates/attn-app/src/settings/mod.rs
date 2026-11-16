@@ -32,7 +32,9 @@ use crate::State;
 use crate::action::Action;
 use crate::shell::Layer;
 pub(crate) use appearance::{garden_scale, text_scale};
-pub(crate) use route::{Route, RouteHarness, Rules, Target as RouteTarget};
+pub(crate) use route::{
+    EffortMode, Route, RouteHarness, Rules, Target as RouteTarget, view as route_view,
+};
 pub(crate) use sections::Section;
 pub(crate) use updates::updatable;
 pub(crate) use view::dialog;
@@ -95,6 +97,43 @@ pub(crate) fn crew_poll(state: &mut State, tx: &mut Tx) -> bool {
             Some((h.id.clone(), h.discovery))
         });
     read | route::discover_wanted(state, wanted.into_iter().collect(), tx)
+}
+
+/// The harnesses the daemon offers as the Chief's setup reads them: whether a read is on its
+/// way, whether one has answered, and why the last one failed.
+pub(crate) struct HarnessRead {
+    pub(crate) listed: Vec<attn_protocol::Harness>,
+    pub(crate) loading: bool,
+    pub(crate) answered: bool,
+    pub(crate) error: Option<String>,
+}
+
+pub(crate) fn harness_read(state: &State) -> HarnessRead {
+    let harnesses = &state.window.settings.harnesses;
+    HarnessRead {
+        listed: harnesses::listed(state),
+        loading: harnesses.loading,
+        answered: harnesses.read.is_some(),
+        error: harnesses.error.clone(),
+    }
+}
+
+/// While the Chief's setup shows: reads the harnesses and discovers the models of `wanted`.
+pub(crate) fn chief_poll(state: &mut State, wanted: Option<(String, bool)>, tx: &mut Tx) -> bool {
+    harnesses::ensure(state, tx) | route::discover_wanted(state, wanted.into_iter().collect(), tx)
+}
+
+/// Reads the harnesses again, and asks `harness` for its models again.
+pub(crate) fn recheck_harnesses(state: &mut State, harness: Option<&str>, tx: &mut Tx) {
+    harnesses::read(state, tx);
+    if let Some(harness) = harness {
+        catalogs::discover(state, harness, true, tx);
+    }
+}
+
+/// Asks `harness` for its models again.
+pub(crate) fn rediscover_models(state: &mut State, harness: &str, tx: &mut Tx) {
+    catalogs::discover(state, harness, true, tx);
 }
 
 /// The text fields the dialog shows, each the daemon setting it edits, and whether its value

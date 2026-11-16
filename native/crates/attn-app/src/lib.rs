@@ -7,6 +7,7 @@ pub mod browser;
 mod calendar;
 mod callouts;
 mod cheat_sheet;
+mod chief;
 mod closing;
 mod connection;
 mod crew;
@@ -333,7 +334,8 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     }
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
-    let settings = settings::poll(state, now, tx) | crew::poll(state, now, tx);
+    let settings =
+        settings::poll(state, now, tx) | crew::poll(state, now, tx) | chief::poll(state, tx);
     let updating = update_run::poll(state, now, tx)
         | outpost_updates::poll(state, now, tx)
         | attention::poll(state, now);

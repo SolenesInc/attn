@@ -265,6 +265,39 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
                 .child(caption(age.clone(), "age"))
                 .children(tag.clone().map(|tag| caption(tag, "tag")))
         }
+        Look::Member {
+            chief,
+            unconfigured,
+        } => {
+            let (pill, hint) = if *unconfigured {
+                ("not set up", "set up")
+            } else {
+                ("between sessions", "start")
+            };
+            let name = row()
+                .gap(space::S1)
+                .grow(1.0)
+                .child(title)
+                .child(muted(if *chief { "· chief" } else { "· crew" }.into()));
+            option
+                .a11y_value(pill)
+                .child(
+                    el().key(format!("{key}.state"))
+                        .w(7.0)
+                        .h(7.0)
+                        .radius(3.5)
+                        .border(1.0, t.text_tertiary),
+                )
+                .child(name)
+                .child(caption(String::new(), "slot"))
+                .child(
+                    text(pill)
+                        .key(format!("{key}.status"))
+                        .font(PILL_TYPE)
+                        .color(t.text_tertiary),
+                )
+                .child(caption(hint.into(), "age"))
+        }
         Look::Tile { word, slot } => option
             .child(caption(word.to_string(), "kind"))
             .child(row().grow(1.0).child(title))

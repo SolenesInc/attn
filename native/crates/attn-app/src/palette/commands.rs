@@ -89,7 +89,8 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .on_screen(facts)
         .and_then(|id| facts.sessions.iter().find(|s| s.id == id));
     let turn_actions = on_screen.map(|s| queue::actions(facts, s, state.window.now_ms));
-    let mut commands = vec![
+    let mut commands = chief_commands(state);
+    commands.extend([
         Command::new(
             "new-agent",
             "New agent",
@@ -104,7 +105,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             Action::SessionJumpToWaiting,
         )
         .describe("Open the agent that has waited longest for you"),
-    ];
+    ]);
     if turn_actions.as_ref().is_some_and(|a| a.settle) {
         commands.push(
             Command::new(
@@ -690,6 +691,46 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             .describe("Take it off your plate until a time you choose")
             .pin(),
         );
+    }
+    commands
+}
+
+/// What the Chief's phase lets the user do with it.
+fn chief_commands(state: &State) -> Vec<Command> {
+    use crate::chief::Phase;
+    let Some(chief) = crate::chief::view(state) else {
+        return Vec::new();
+    };
+    let name = &chief.name;
+    let mut commands = Vec::new();
+    match chief.phase {
+        Phase::Unconfigured => commands.push(Command::new(
+            "chief-setup",
+            &format!("Set up {name}"),
+            &["chief", "harness", "model"],
+            Action::OpenChiefSetup,
+        )),
+        Phase::BetweenSessions => commands.push(Command::new(
+            "chief-start",
+            &format!("Start {name}"),
+            &["chief", "start"],
+            Action::StartChief,
+        )),
+        Phase::InSession => commands.push(Command::new(
+            "chief-close",
+            &format!("Ask {name} to close"),
+            &["chief", "close"],
+            Action::AskChiefToClose,
+        )),
+        Phase::Configuring | Phase::Starting | Phase::Closing => {}
+    }
+    if chief.agent.is_some() {
+        commands.push(Command::new(
+            "chief-route",
+            &format!("Change {name}'s harness and model"),
+            &["chief", "harness", "model", "effort"],
+            Action::OpenChiefSetup,
+        ));
     }
     commands
 }

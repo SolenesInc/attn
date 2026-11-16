@@ -28,6 +28,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if modal(state) {
         return bound(state, ev, tx);
     }
+    if ev.key == Key::Escape && crate::chief::setup_shows(state) {
+        crate::chief::dismiss(state, true, tx);
+        return true;
+    }
     if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
         if let Some(action) = second {
             run_shortcut(state, action, tx);

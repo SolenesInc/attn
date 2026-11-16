@@ -166,6 +166,11 @@ pub(crate) enum Look {
         word: &'static str,
         slot: String,
     },
+    /// A crew member between sessions, or the Chief before its setup.
+    Member {
+        chief: bool,
+        unconfigured: bool,
+    },
     Choice {
         detail: String,
     },

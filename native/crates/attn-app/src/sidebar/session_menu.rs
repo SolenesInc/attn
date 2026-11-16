@@ -17,7 +17,14 @@ pub struct Menu {
 }
 
 pub(crate) fn open(state: &mut State, session: &str, name: String, under: String, tx: &mut Tx) {
-    tx.focus(format!("{MENU}.priority"), true);
+    let first = if chief_session(state, session).is_some() {
+        "route"
+    } else if member_of(state, session).is_some() {
+        "member-details"
+    } else {
+        "priority"
+    };
+    tx.focus(format!("{MENU}.{first}"), true);
     state.window.session_menu = Some(Menu {
         session: session.to_owned(),
         name,
@@ -35,6 +42,24 @@ pub(crate) fn follow(state: &mut State) {
     if gone {
         state.window.session_menu = None;
     }
+}
+
+/// The Chief whose slot shows `session`.
+fn chief_session(state: &State, session: &str) -> Option<crate::chief::View> {
+    crate::chief::view(state).filter(|c| {
+        c.session.as_deref() == Some(session) || member_of(state, session) == Some(c.key.clone())
+    })
+}
+
+fn member_of(state: &State, session: &str) -> Option<String> {
+    state
+        .facts
+        .sessions
+        .iter()
+        .find(|s| s.id == session)?
+        .crew_member
+        .clone()
+        .filter(|m| !m.is_empty())
 }
 
 fn target(state: &mut State) -> Option<Session> {
@@ -152,6 +177,11 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
     } else {
         "Mark priority"
     };
+    let chief_slot = chief_session(state, &menu.session);
+    let member = chief_slot
+        .as_ref()
+        .map(|c| c.key.clone())
+        .or_else(|| member_of(state, &menu.session));
     let mut kit_menu = rune_kit::Menu::new(MENU)
         .standard()
         .anchor(menu.under.clone())
@@ -160,7 +190,40 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         .min_width(200.0)
         .label(format!("Actions for {}", menu.name))
         .open(true)
-        .on_close(|state: &mut State| state.window.session_menu = None)
+        .on_close(|state: &mut State| state.window.session_menu = None);
+    if chief_slot.is_some() {
+        kit_menu = kit_menu.item(
+            MenuItem::new("Harness and model…")
+                .key(format!("{MENU}.route"))
+                .on_select_tx(|state: &mut State, tx: &mut Tx| {
+                    state.window.session_menu = None;
+                    crate::chief::edit(state, tx);
+                }),
+        );
+    }
+    if let Some(member) = member.clone() {
+        let is_chief = chief_slot.is_some();
+        let label = if is_chief {
+            "Edit charter"
+        } else {
+            "Member details"
+        };
+        kit_menu = kit_menu
+            .item(
+                item("member-details", attn_ui::icon::BOLT, label).on_select_tx(
+                    move |state: &mut State, tx: &mut Tx| {
+                        state.window.session_menu = None;
+                        if is_chief {
+                            super::crew::charter(state, &member, tx);
+                        } else {
+                            super::crew::details(state, &member, tx);
+                        }
+                    },
+                ),
+            )
+            .separator();
+    }
+    kit_menu = kit_menu
         .item(
             item("priority", attn_ui::icon::FLAG, priority_label).on_select(
                 move |state: &mut State| {
@@ -172,20 +235,19 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         .item(item("rename", attn_ui::icon::PENCIL, "Rename session").on_select_tx(rename))
         .separator()
         .item(item("reload", "↻", "Reload session").on_select_tx(reload));
-    if let Some(member) = session
-        .and_then(|s| s.crew_member.clone())
-        .filter(|m| !m.is_empty())
-    {
+    if let Some(slot) = &chief_slot {
         kit_menu = kit_menu.item(
-            item("member-details", attn_ui::icon::BOLT, "Member details").on_select_tx(
-                move |state: &mut State, tx: &mut Tx| {
-                    state.window.session_menu = None;
-                    super::crew::details(state, &member, tx);
-                },
-            ),
+            item(
+                "ask-close",
+                attn_ui::icon::MOON,
+                &format!("Ask {} to close", slot.name),
+            )
+            .on_select_tx(|state: &mut State, tx: &mut Tx| {
+                state.window.session_menu = None;
+                crate::chief::close(state, tx);
+            }),
         );
-    }
-    if !chief {
+    } else if !chief {
         kit_menu = kit_menu.item(item("close", "×", "Close session").on_select_tx(close));
     }
     let mut layer = Vec::new();

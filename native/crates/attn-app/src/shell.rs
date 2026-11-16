@@ -78,6 +78,7 @@ pub struct Window {
     pub(crate) settings: crate::settings::Dialog,
     pub(crate) crew: crate::crew::Panel,
     pub(crate) crew_rows: crate::sidebar::crew::Rows,
+    pub(crate) chief: crate::chief::Chief,
     pub(crate) launch_desktop: crate::launch_desktop::Picker,
     pub(crate) shortcut_editor: crate::shortcut_editor::Editor,
     pub(crate) profile_switcher: crate::profile_switcher::Switcher,
@@ -619,6 +620,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::sidebar::session_menu::view(state, t));
     layers.extend(crate::sidebar::crew::menu_view(state, t));
+    crate::chief::setup::overlay(state, t, &mut layers);
     layers.extend(crate::sidebar::rename::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));
     layers.extend(crate::desktop::drag_overlay(state, t));

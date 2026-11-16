@@ -32,9 +32,7 @@ pub(crate) fn rows(state: &State, query: &str) -> Vec<Row> {
         rows: Vec::new(),
     };
 
-    for session in anchored(&bands) {
-        list.agent(session);
-    }
+    anchored(state, &bands, &mut list);
     let anchored_rows = list.rows.len();
 
     let settled: HashSet<&str> = bands
@@ -87,20 +85,49 @@ pub(crate) fn rows(state: &State, query: &str) -> Vec<Row> {
     rows
 }
 
-/// The chief's session, then each crew member's, by member.
-fn anchored<'a>(bands: &Bands<'a>) -> Vec<&'a Session> {
-    let chief = bands.chief.as_ref().map(|c| c.session);
-    let chief_member = chief.and_then(|c| c.crew_member.as_deref());
-    chief
-        .into_iter()
+/// The chief's session, or the Chief between sessions, then each crew member by key: its
+/// sessions, or the member between sessions.
+fn anchored(state: &State, bands: &Bands<'_>, list: &mut List<'_>) {
+    let chief = crate::chief::view(state);
+    if let Some(row) = &bands.chief {
+        list.agent(row.session);
+    } else if let Some(chief) = &chief {
+        list.member(&chief.key, &chief.name, Some(chief.agent.is_none()));
+    }
+    let roster = crate::crew::members(state);
+    let mut members: Vec<String> = roster
+        .iter()
+        .map(|m| m.id.clone())
         .chain(
             bands
                 .crew
                 .iter()
-                .map(|r| r.session)
-                .filter(|s| chief_member.is_none() || s.crew_member.as_deref() != chief_member),
+                .map(|r| r.session.crew_member.clone().unwrap_or_default()),
         )
-        .collect()
+        .collect();
+    members.sort();
+    members.dedup();
+    for member in members {
+        if chief.as_ref().is_some_and(|c| c.key == member) {
+            continue;
+        }
+        let live: Vec<&Session> = bands
+            .crew
+            .iter()
+            .filter(|r| r.session.crew_member.as_deref().unwrap_or_default() == member)
+            .map(|r| r.session)
+            .collect();
+        if live.is_empty() {
+            let name = roster
+                .iter()
+                .find(|m| m.id == member)
+                .map_or_else(|| member.clone(), |m| m.name.clone());
+            list.member(&member, &name, None);
+        }
+        for session in live {
+            list.agent(session);
+        }
+    }
 }
 
 struct List<'a> {
@@ -165,6 +192,32 @@ impl List<'_> {
             pick: Some(Pick::Open(Action::OpenAgent {
                 session: session.id.clone(),
             })),
+        });
+    }
+
+    /// A member between sessions, which a pick starts; `chief` says whether the Chief still
+    /// needs its setup.
+    fn member(&mut self, member: &str, name: &str, chief: Option<bool>) {
+        let words = if chief.is_some() { "chief" } else { "" };
+        if !self.matches(&[member, name, words]) {
+            return;
+        }
+        let unconfigured = chief == Some(true);
+        let action = match chief {
+            Some(true) => Action::OpenChiefSetup,
+            Some(false) => Action::StartChief,
+            None => Action::StartCrewMember {
+                member: member.to_owned(),
+            },
+        };
+        self.rows.push(Row {
+            key: format!("member:{member}"),
+            label: name.to_owned(),
+            look: Look::Member {
+                chief: chief.is_some(),
+                unconfigured,
+            },
+            pick: Some(Pick::Open(action)),
         });
     }
 

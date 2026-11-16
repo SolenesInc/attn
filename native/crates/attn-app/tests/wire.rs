@@ -4,6 +4,7 @@ mod wire {
     mod automation;
     mod browser;
     mod callouts;
+    mod chief;
     mod connection;
     mod covered;
     mod crew;

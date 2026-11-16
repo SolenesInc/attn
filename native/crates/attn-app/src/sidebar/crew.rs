@@ -56,6 +56,8 @@ pub(crate) struct Resting {
     pub(crate) member: String,
     pub(crate) name: String,
     pub(crate) phase: Option<Phase>,
+    /// The Chief, whose start takes one click.
+    pub(crate) chief: bool,
 }
 
 pub(crate) fn resting(state: &State, member: &str) -> Resting {
@@ -76,6 +78,7 @@ pub(crate) fn resting(state: &State, member: &str) -> Resting {
         member: member.to_owned(),
         name,
         phase,
+        chief: crate::chief::member(state).is_some_and(|c| c.id == member),
     }
 }
 
@@ -93,8 +96,10 @@ pub(crate) fn between_sessions(state: &State) -> Vec<&CrewMember> {
 /// during the flare does nothing.
 pub(crate) fn trigger(state: &mut State, row_key: &str, member: &str, tx: &mut Tx) {
     let now = tx.clock();
+    let one_click = crate::chief::member(state).is_some_and(|c| c.id == member);
     let armed = match &state.window.crew_rows.arm {
         Some(arm) if arm.member == member => arm.phase,
+        _ if one_click => Phase::Armed,
         _ => {
             state.window.crew_rows.arm = Some(Arm {
                 member: member.to_owned(),
@@ -119,7 +124,11 @@ pub(crate) fn trigger(state: &mut State, row_key: &str, member: &str, tx: &mut T
         focus: None,
     });
     tx.wake_at(now + BREAK_SECONDS);
-    crate::crew::start(state, member, tx);
+    if one_click {
+        crate::chief::start(state, tx);
+    } else {
+        crate::crew::start(state, member, tx);
+    }
 }
 
 /// Stands an armed start down.
@@ -230,6 +239,19 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
                 .truncate()
                 .grow(1.0),
         )
+        .children(m.chief.then(|| {
+            text(attn_ui::icon::BOLT)
+                .key(format!("{key}.chief"))
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .help(m.name.clone())
+        }))
+        .children(m.chief.then(|| {
+            text("between sessions")
+                .key(format!("{key}.age"))
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary)
+        }))
         .children(armed.then(|| {
             text("confirm")
                 .key(format!("{key}.confirm"))
@@ -260,17 +282,94 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
     row
 }
 
+/// The Chief's slot before it has a session: Set up opens its setup, and the slot says when
+/// the Chief is starting.
+pub(crate) fn chief_setup_row(key: String, chief: &crate::chief::View, t: &Tokens) -> El {
+    use crate::chief::Phase;
+    let pill = if chief.phase == Phase::Unconfigured {
+        "Set up ⏎"
+    } else {
+        "starting…"
+    };
+    let phase = match chief.phase {
+        Phase::Unconfigured => "unconfigured",
+        Phase::Configuring => "configuring",
+        _ => "starting",
+    };
+    let mut row = row()
+        .key(key.clone())
+        .role("button")
+        .label(format!("Set up {}", chief.name))
+        .a11y_value(phase)
+        .w_full()
+        .h(super::ROW_HEIGHT)
+        .items_center()
+        .gap(space::S2)
+        .px(space::S1)
+        .radius(4.0)
+        .child(
+            text(attn_ui::icon::CIRCLE_OPEN)
+                .font(type_::LABEL)
+                .color(t.text_muted)
+                .w(14.0),
+        )
+        .child(
+            text(chief.name.clone())
+                .font(type_::BODY)
+                .color(t.text_secondary)
+                .single_line()
+                .truncate()
+                .grow(1.0),
+        )
+        .child(
+            text(pill)
+                .key(format!("{key}.pill"))
+                .font(type_::LABEL)
+                .color(t.text_tertiary),
+        );
+    if chief.busy {
+        row = row.disabled(true);
+    } else {
+        row = row
+            .focusable(true)
+            .hover(t.bg_elevated)
+            .on_press_tx(crate::chief::edit)
+            .on_key(|state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+                if ev.key == rune::Key::Enter {
+                    crate::chief::edit(state, tx);
+                    return true;
+                }
+                false
+            });
+    }
+    row
+}
+
 fn open_menu(state: &mut State, member: &str, under: &str, tx: &mut Tx) {
     state.window.crew_rows.menu = Some(Menu {
         member: member.to_owned(),
         under: under.to_owned(),
     });
-    tx.focus(format!("{MENU}.details"), true);
+    let chief = crate::chief::member(state).is_some_and(|c| c.id == member);
+    tx.focus(
+        format!("{MENU}.{}", if chief { "route" } else { "details" }),
+        true,
+    );
 }
 
 /// Opens Manage crew on `member`.
 pub(crate) fn details(state: &mut State, member: &str, tx: &mut Tx) {
     crate::crew::open(state, Some(member.to_owned()), tx);
+}
+
+/// Opens Manage crew on `member`'s charter.
+pub(crate) fn charter(state: &mut State, member: &str, tx: &mut Tx) {
+    crate::crew::open_on(
+        state,
+        Some(member.to_owned()),
+        crate::crew::Tab::Charter,
+        tx,
+    );
 }
 
 /// The member menu, over the window.
@@ -286,6 +385,7 @@ pub(crate) fn menu_view(state: &State, t: &Tokens) -> Vec<El> {
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| crate::asks::crew_display_name(&menu.member));
     let desktop = member.and_then(|m| m.launch_desktop.as_ref()?.label.clone());
+    let chief = crate::chief::view(state).filter(|c| c.key == menu.member);
     let id = menu.member.clone();
     let mut kit_menu = rune_kit::Menu::new(MENU)
         .standard()
@@ -299,20 +399,49 @@ pub(crate) fn menu_view(state: &State, t: &Tokens) -> Vec<El> {
     if let Some(desktop) = desktop {
         kit_menu = kit_menu.group_label(desktop);
     }
+    let is_chief = chief.is_some();
+    if is_chief {
+        kit_menu = kit_menu.item(
+            MenuItem::new("Harness and model…")
+                .key(format!("{MENU}.route"))
+                .on_select_tx(|state: &mut State, tx: &mut Tx| {
+                    state.window.crew_rows.menu = None;
+                    crate::chief::edit(state, tx);
+                }),
+        );
+    }
     kit_menu = kit_menu.item(
-        MenuItem::new("Member details")
-            .key(format!("{MENU}.details"))
-            .lead(
-                text(attn_ui::icon::BOLT)
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary)
-                    .w(14.0),
-            )
-            .on_select_tx(move |state: &mut State, tx: &mut Tx| {
-                state.window.crew_rows.menu = None;
+        MenuItem::new(if is_chief {
+            "Edit charter"
+        } else {
+            "Member details"
+        })
+        .key(format!("{MENU}.details"))
+        .lead(
+            text(attn_ui::icon::BOLT)
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .w(14.0),
+        )
+        .on_select_tx(move |state: &mut State, tx: &mut Tx| {
+            state.window.crew_rows.menu = None;
+            if is_chief {
+                charter(state, &id, tx);
+            } else {
                 details(state, &id, tx);
-            }),
+            }
+        }),
     );
+    if let Some(chief) = chief.filter(|c| c.agent.is_some()) {
+        kit_menu = kit_menu.item(
+            MenuItem::new(format!("Start {}", chief.name))
+                .key(format!("{MENU}.start"))
+                .on_select_tx(|state: &mut State, tx: &mut Tx| {
+                    state.window.crew_rows.menu = None;
+                    crate::chief::start(state, tx);
+                }),
+        );
+    }
     let mut layer = Vec::new();
     kit_menu.build(attn_ui::kit(t), &mut layer);
     layer

@@ -51,6 +51,10 @@ pub struct QueueAgent {
     pub unsnooze: bool,
     /// The member a crew row's session belongs to, with its name, for Ask to close.
     pub member: Option<(String, String)>,
+    /// The row is the Chief's slot: Ask to close goes through the Chief's own request.
+    pub chief: bool,
+    /// The Chief was asked to close and has not answered yet.
+    pub closing: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -64,6 +68,7 @@ pub enum QLine {
     Agent(Box<QueueAgent>),
     CrewRule,
     Member(super::crew::Resting),
+    ChiefSetup(crate::chief::View),
 }
 
 impl QLine {
@@ -77,7 +82,9 @@ impl QLine {
             QLine::Empty(key) => format!("queue.empty.{key}"),
             QLine::Agent(a) => format!("{}.{}", a.band.prefix(), a.agent.id),
             QLine::CrewRule => "queue.rule.crew".into(),
+            QLine::Member(m) if m.chief => crate::chief::SLOT.into(),
             QLine::Member(m) => format!("{}.{}", super::crew::QUEUE_ROW, m.member),
+            QLine::ChiefSetup(_) => crate::chief::SLOT.into(),
         }
     }
 }
@@ -175,7 +182,58 @@ fn agent(
                 let name = super::crew::resting(state, &m).name;
                 (m, name)
             }),
+        chief: false,
+        closing: false,
     })
+}
+
+/// The Chief's slot as the desktop sidebar draws it, above the crew between sessions.
+pub(super) fn chief_slot(state: &State, t: &Tokens) -> Option<El> {
+    let chief = crate::chief::view(state)?;
+    let bands = queue::bands(&state.facts, state.window.now_ms);
+    let on_screen = crate::desktop::on_screen_sessions(state);
+    let line = chief_line(state, &on_screen, &bands, chief);
+    let key = line.key();
+    Some(match &line {
+        QLine::Agent(agent) => queue_row(key, agent, false, super::logos(state), t),
+        QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, t),
+        QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
+        _ => return None,
+    })
+}
+
+/// The Chief's slot: setup while it has none, its session's row while it has one, and a start
+/// between sessions.
+pub(super) fn chief_line(
+    state: &State,
+    on_screen: &[String],
+    bands: &Bands<'_>,
+    chief: crate::chief::View,
+) -> QLine {
+    use crate::chief::Phase;
+    let rows = bands
+        .chief
+        .iter()
+        .chain(&bands.crew)
+        .chain(&bands.turns)
+        .chain(&bands.settled)
+        .chain(&bands.snoozed);
+    let row = chief
+        .session
+        .as_deref()
+        .and_then(|id| rows.into_iter().find(|r| r.session.id == id));
+    match (chief.phase, row) {
+        (Phase::Unconfigured | Phase::Configuring | Phase::Starting, _) => QLine::ChiefSetup(chief),
+        (Phase::InSession | Phase::Closing, Some(row)) => {
+            let mut line = agent(state, on_screen, Band::Chief, row, state.window.now_ms);
+            line.agent.name.clone_from(&chief.name);
+            line.member = (!chief.busy).then(|| (chief.key.clone(), chief.name.clone()));
+            line.chief = true;
+            line.closing = chief.phase == Phase::Closing;
+            QLine::Agent(line)
+        }
+        _ => QLine::Member(super::crew::resting(state, &chief.key)),
+    }
 }
 
 /// The queue sidebar's body, top to bottom: the crew, the waiting card and its turns, the
@@ -185,8 +243,12 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
     let window = &state.window;
     let on_screen = crate::desktop::on_screen_sessions(state);
     let mut lines = Vec::new();
-    let chief = bands.chief.as_ref();
-    let chief_member = chief.and_then(|c| c.session.crew_member.clone());
+    let chief_slot = crate::chief::view(state);
+    let chief = bands.chief.as_ref().filter(|_| chief_slot.is_none());
+    let chief_member = match &chief_slot {
+        Some(slot) => Some(slot.key.clone()),
+        None => chief.and_then(|c| c.session.crew_member.clone()),
+    };
     let mut members: Vec<(String, Option<&QueueRow<'_>>)> = Vec::new();
     for row in &bands.crew {
         let member = row.session.crew_member.clone().unwrap_or_default();
@@ -201,9 +263,11 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
     }
     members.retain(|(m, _)| Some(m) != chief_member.as_ref());
     members.sort_by(|a, b| a.0.cmp(&b.0));
-    if chief.is_some() || !members.is_empty() {
+    if chief_slot.is_some() || chief.is_some() || !members.is_empty() {
         lines.push(QLine::CrewRule);
-        if let Some(chief) = chief {
+        if let Some(slot) = chief_slot {
+            lines.push(chief_line(state, &on_screen, bands, slot));
+        } else if let Some(chief) = chief {
             lines.push(QLine::Agent(agent(
                 state,
                 &on_screen,
@@ -316,6 +380,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
             std::sync::Arc::as_ptr(&facts.crew) as usize,
             window.crew_rows.armed(),
+            crate::chief::view(state),
         ),
         window.view,
         window.agent_list_open,
@@ -438,6 +503,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 }
                 QLine::CrewRule => crew_rule(key, t),
                 QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
+                QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, t),
                 QLine::Filter => unreachable!("the filter is built above"),
             }
         },
@@ -630,7 +696,9 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
 fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens) -> El {
     let id = a.agent.id.clone();
     let name = a.agent.shown_name();
-    let trailing = if !a.age.is_empty() {
+    let trailing = if a.closing {
+        "closing".to_owned()
+    } else if !a.age.is_empty() {
         a.age.clone()
     } else {
         a.snoozed_until.clone()
@@ -719,6 +787,7 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             move |state, tx| super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx),
         )
     });
+    let chief = a.chief;
     let ask_close = a.member.as_ref().map(|(member, name)| {
         let member = member.clone();
         control(
@@ -727,7 +796,13 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             format!("Ask {name} to close"),
             attn_ui::icon::MOON,
             t,
-            move |state, tx| crate::crew::ask_to_close(state, &member, tx),
+            move |state, tx| {
+                if chief {
+                    crate::chief::close(state, tx);
+                } else {
+                    crate::crew::ask_to_close(state, &member, tx);
+                }
+            },
         )
     });
     Some(

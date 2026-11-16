@@ -1,4 +1,4 @@
-mod actions;
+pub(crate) mod actions;
 pub(crate) mod bar_peek;
 mod chrome;
 pub(crate) mod crew;
@@ -190,8 +190,10 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let home_keys = crate::palette::label_of(state, &Action::SessionGoToDashboard);
     let overview_keys = crate::palette::label_of(state, &Action::DesktopOverview);
     let has_crew = !crate::crew::members(state).is_empty();
+    let chief = crate::chief::view(state);
     let resting: Vec<crew::Resting> = crew::between_sessions(state)
         .into_iter()
+        .filter(|m| chief.as_ref().is_none_or(|c| c.key != m.id))
         .map(|m| crew::resting(state, &m.id))
         .collect();
     let reads = (
@@ -209,7 +211,12 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             state.window.reorder.clone(),
             new_desktop,
             (dock.clone(), home_keys.clone(), overview_keys.clone()),
-            (resting.clone(), has_crew),
+            (
+                resting.clone(),
+                has_crew,
+                chief.clone(),
+                state.window.crew_rows.armed(),
+            ),
         ),
         (
             *t,
@@ -253,6 +260,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                             .label("Crew between sessions")
                             .w_full()
                             .child(queue_view::crew_rule("sidebar.rule.crew".into(), &t))
+                            .children(queue_view::chief_slot(state, &t))
                             .children(resting.iter().map(|m| {
                                 crew::row_view(
                                     format!("{}.{}", crew::CLASSIC_ROW, m.member),

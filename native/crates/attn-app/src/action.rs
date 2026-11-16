@@ -69,6 +69,12 @@ macro_rules! actions {
             OpenWorktrees,
             /// Open Manage crew.
             OpenCrew,
+            /// Open the Chief's setup: its harness, model and effort.
+            OpenChiefSetup,
+            /// Start the Chief's session.
+            StartChief,
+            /// Ask the Chief's session to close.
+            AskChiefToClose,
             /// Open the notifications panel, or close it.
             ToggleNotifications,
             /// Open the editor that rebinds shortcuts.
@@ -115,6 +121,9 @@ macro_rules! actions {
                     Action::ShowAsks { .. } => "asks.show",
                     Action::OpenWorktrees => "ledger.worktrees",
                     Action::OpenCrew => "crew.manage",
+                    Action::OpenChiefSetup => "chief.setup",
+                    Action::StartChief => "chief.start",
+                    Action::AskChiefToClose => "chief.close",
                     Action::ToggleNotifications => "notifications.toggle",
                     Action::OpenShortcutEditor => "shortcuts.edit",
                     Action::OpenQuickCapture => "quickCapture.open",
@@ -150,6 +159,9 @@ macro_rules! actions {
                     Action::ShowAsks { .. } => "Open asks",
                     Action::OpenWorktrees => "Open worktrees",
                     Action::OpenCrew => "Manage crew",
+                    Action::OpenChiefSetup => "Set up the Chief",
+                    Action::StartChief => "Start the Chief",
+                    Action::AskChiefToClose => "Ask the Chief to close",
                     Action::ToggleNotifications => "Show or hide notifications",
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
                     Action::OpenQuickCapture => "Quick Capture",

@@ -141,8 +141,14 @@ pub(crate) fn selected(state: &State) -> Option<&CrewMember> {
 
 /// Opens the panel afresh, on the launch settings of `member` or the first member.
 pub(crate) fn open(state: &mut State, member: Option<String>, tx: &mut Tx) {
+    open_on(state, member, Tab::Launch, tx);
+}
+
+/// Opens the panel afresh on `tab` of `member`.
+pub(crate) fn open_on(state: &mut State, member: Option<String>, tab: Tab, tx: &mut Tx) {
     state.window.crew.place = Place {
         member,
+        tab,
         ..Place::default()
     };
     show(state, tx);

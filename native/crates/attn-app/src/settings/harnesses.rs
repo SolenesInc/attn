@@ -79,7 +79,7 @@ fn registry(state: &State) -> Vec<String> {
 /// change discovers every catalog again.
 pub(super) fn ensure(state: &mut State, tx: &mut Tx) -> bool {
     let harnesses = &state.window.settings.harnesses;
-    if !(super::is_open(state) || crate::crew::is_open(state))
+    if !(super::is_open(state) || crate::crew::is_open(state) || crate::chief::setup_shows(state))
         || harnesses.loading
         || state.facts.connection != attn_client::Connection::Connected
         || super::delegation::busy(state)
