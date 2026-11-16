@@ -82,7 +82,7 @@ func (d *Daemon) registerSessionPullRequestRefreshCron(runner *jobs.Runner) {
 }
 
 func (d *Daemon) sessionPullRequestRefreshHandler(ctx context.Context, _ *jobs.Job) (any, error) {
-	fetched, changed := d.refreshSessionPullRequestsContext(ctx, time.Now(), "")
+	fetched, changed := d.refreshSessionPullRequestsContext(ctx, d.clock.Now(), "")
 	return map[string]any{"fetched": fetched, "changed": changed}, context.Cause(ctx)
 }
 
@@ -95,7 +95,7 @@ func (d *Daemon) sessionPullRequestSettleHandler(ctx context.Context, job *jobs.
 	if err := job.DecodePayload(&payload); err != nil {
 		return nil, err
 	}
-	fetched, changed := d.refreshSessionPullRequestsContext(ctx, time.Now(), payload.PRID)
+	fetched, changed := d.refreshSessionPullRequestsContext(ctx, d.clock.Now(), payload.PRID)
 	return map[string]any{"fetched": fetched, "changed": changed}, context.Cause(ctx)
 }
 
@@ -761,7 +761,7 @@ func (d *Daemon) reheatSessionPullRequest(event bus.Event) {
 	if d.store == nil {
 		return
 	}
-	if err := d.store.TouchSessionPullRequestActivity(event.Subject, time.Now()); err != nil {
+	if err := d.store.TouchSessionPullRequestActivity(event.Subject, d.clock.Now()); err != nil {
 		d.logf("session pull requests: reheat %s: %v", event.Subject, err)
 	}
 }

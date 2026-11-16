@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/garden"
@@ -128,7 +127,7 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, see
 	if err != nil {
 		return err
 	}
-	recorded, changed, err := d.store.WatchPullRequest(rec, address, mode, reviewer, time.Now())
+	recorded, changed, err := d.store.WatchPullRequest(rec, address, mode, reviewer, d.clock.Now())
 	if err != nil {
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}
