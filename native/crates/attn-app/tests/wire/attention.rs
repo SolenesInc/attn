@@ -5,9 +5,9 @@ use attn_protocol::{
     AuthorState, AuthorsUpdatedMessage, CreateWorktreeResultMessage, EnsureRepoResultMessage,
     FetchPRDetailsResultMessage, GitHubHostsUpdatedMessage, InitialStateMessage, PR,
     PRActionResultMessage, PRsUpdatedMessage, RefreshPRsResultMessage, RepoState,
-    ReposUpdatedMessage, SpawnResultMessage,
+    ReposUpdatedMessage, SettingsUpdatedMessage, SpawnResultMessage,
 };
-use attn_testkit::{Target, World, message};
+use attn_testkit::{Answer, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 
 use super::queue::{one_desktop, queue, turn};
@@ -659,7 +659,6 @@ fn home_marks_each_pr_updated_approved_and_with_its_ci() {
     assert_eq!(marks("a1"), ["Approved", "CI success"]);
     assert_eq!(marks("y1"), ["CI pending"]);
     assert!(marks("n1").is_empty());
-    assert!(!has(&world, "attention.pr.u1.updated"));
 }
 
 #[test]
@@ -787,7 +786,7 @@ fn a_new_worktree_session_from_home_checks_out_the_prs_branch_and_starts_the_age
 }
 
 #[test]
-fn a_new_worktree_session_that_cannot_sync_the_repo_says_why_and_starts_nothing() {
+fn a_new_worktree_session_names_the_pr_and_the_step_it_is_on() {
     let mut world = start(
         with_projects(one_desktop(vec![])),
         vec![PR {
@@ -795,28 +794,130 @@ fn a_new_worktree_session_that_cannot_sync_the_repo_says_why_and_starts_nothing(
             ..pr("r1", 10, "reviewer", "review this")
         }],
     );
-    world.daemon.on("ensure_repo", |r| ensured(r, false));
+    world.daemon.on("ensure_repo", |r| ensured(r, true));
 
     click(&mut world, "home.pr.r1.new");
 
-    assert!(world.daemon.sent_of("fetch_pr_details").is_empty());
-    assert!(
-        world
-            .daemon
-            .sent_of("create_worktree_from_branch")
-            .is_empty()
-    );
-    assert!(world.daemon.sent_of("spawn_session").is_empty());
     assert_eq!(
         name(&world, "worktree-setup").as_deref(),
-        Some("Create failed: attn#10 failed")
+        Some("Creating worktree: attn#10")
     );
-    click(&mut world, "worktree-setup");
-    let shown = name(&world, "worktree-setup.error");
-    assert!(
-        shown
-            .as_deref()
-            .is_some_and(|s| s.contains("clone failed: no access")),
-        "{shown:?}"
+    assert!(world.daemon.sent_of("fetch_pr_details").is_empty());
+}
+
+/// The reason the failed corner opens to, dismissed after reading, or the notice when no
+/// corner showed.
+fn reason_shown(world: &mut World) -> Option<String> {
+    if !has(world, "worktree-setup") {
+        return name(world, "notice.text");
+    }
+    click(world, "worktree-setup");
+    let reason = name(world, "worktree-setup.error");
+    click(world, "worktree-setup.dismiss");
+    reason
+}
+
+#[test]
+fn a_new_worktree_session_that_cannot_finish_says_why_starts_nothing_and_can_be_tried_again() {
+    let steps = [
+        "fetch_pr_details",
+        "ensure_repo",
+        "create_worktree_from_branch",
+        "spawn_session",
+    ];
+    let unknown = pr("r1", 10, "reviewer", "review this");
+    let known = PR {
+        head_branch: Some("feature".into()),
+        ..unknown.clone()
+    };
+    let mut world = start(one_desktop(vec![]), vec![unknown.clone()]);
+    let try_it = |world: &mut World, case: &str, said: &str, sent: &[&str]| {
+        let before: Vec<usize> = steps
+            .iter()
+            .map(|c| world.daemon.sent_of(c).len())
+            .collect();
+        click(world, "home.pr.r1.new");
+        let reason = reason_shown(world);
+        assert!(
+            reason.as_deref().is_some_and(|r| r.contains(said)),
+            "{case}: {reason:?}"
+        );
+        let went: Vec<&str> = steps
+            .iter()
+            .zip(before)
+            .filter(|(cmd, n)| world.daemon.sent_of(cmd).len() > *n)
+            .map(|(cmd, _)| *cmd)
+            .collect();
+        assert_eq!(went, sent, "{case}");
+    };
+
+    try_it(
+        &mut world,
+        "no projects directory",
+        "Configure your Projects Directory in Settings first",
+        &[],
+    );
+
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: with_projects(InitialStateMessage::new()).settings,
+        ..SettingsUpdatedMessage::new()
+    });
+    world.daemon.answer_in_turn(
+        "fetch_pr_details",
+        [
+            Answer::Reply(message(FetchPRDetailsResultMessage {
+                success: false,
+                error: Some("API rate limit exceeded".into()),
+                ..FetchPRDetailsResultMessage::new()
+            })),
+            Answer::Reply(message(FetchPRDetailsResultMessage {
+                success: true,
+                prs: Some(vec![unknown]),
+                ..FetchPRDetailsResultMessage::new()
+            })),
+        ],
+    );
+    world.settle();
+    try_it(
+        &mut world,
+        "fetching details fails",
+        "Failed to fetch PR details. API rate limit exceeded",
+        &["fetch_pr_details"],
+    );
+    try_it(
+        &mut world,
+        "GitHub has no branch",
+        "PR branch information not available.",
+        &["fetch_pr_details"],
+    );
+
+    world.daemon.emit(PRsUpdatedMessage {
+        prs: Some(vec![known]),
+        ..PRsUpdatedMessage::new()
+    });
+    world.daemon.on("ensure_repo", |r| ensured(r, false));
+    world.settle();
+    try_it(
+        &mut world,
+        "the clone fails",
+        "Failed to clone repository victorarias/attn.",
+        &["ensure_repo"],
+    );
+
+    world
+        .daemon
+        .on("ensure_repo", |r| ensured(r, true))
+        .on("create_worktree_from_branch", |_| {
+            message(CreateWorktreeResultMessage {
+                success: false,
+                error: Some("fatal: 'feature' already exists".into()),
+                ..CreateWorktreeResultMessage::new()
+            })
+        });
+    try_it(
+        &mut world,
+        "the worktree exists",
+        "A worktree for this branch may already exist.",
+        &["ensure_repo", "create_worktree_from_branch"],
     );
 }

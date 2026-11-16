@@ -26,7 +26,14 @@ struct Checkout {
 /// the repository, makes the worktree, then the agent starts in it on the current desktop. The
 /// corner prompt says how far it got.
 pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, tx: &mut Tx) {
-    if state.window.launching.worktree.is_some() {
+    let failed = |setup: &Setup| setup.failed.is_some();
+    if state
+        .window
+        .launching
+        .worktree
+        .as_ref()
+        .is_some_and(|s| !failed(s))
+    {
         state
             .window
             .notify("A worktree session is already being created.".into(), tx);
@@ -51,7 +58,7 @@ pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, tx: &mut Tx) {
         .filter(|dir| !dir.is_empty())
     else {
         state.window.notify(
-            "Set your Projects Directory in Settings first: it is where attn finds your repositories."
+            "Configure your Projects Directory in Settings first: it tells attn where to find your repositories."
                 .into(),
             tx,
         );
@@ -85,7 +92,7 @@ fn fetch_branch(state: &mut State, checkout: Checkout, tx: &mut Tx) {
         move |state, answer, tx| {
             let fetched = match answer.outcome() {
                 Ok(reply) => reply.parse::<FetchPRDetailsResultMessage>(),
-                Err(reason) => return fail(state, format!("Failed to fetch PR details: {reason}")),
+                Err(reason) => return fail(state, format!("Failed to fetch PR details. {reason}")),
             };
             let branch = fetched
                 .and_then(|r| r.prs)
@@ -98,7 +105,8 @@ fn fetch_branch(state: &mut State, checkout: Checkout, tx: &mut Tx) {
                 Some(branch) => sync(state, checkout, branch, tx),
                 None => fail(
                     state,
-                    "PR branch information is not available. Refresh PRs and try again.".into(),
+                    "PR branch information not available. Refresh PRs to fetch branch details."
+                        .into(),
                 ),
             }
         },
@@ -121,7 +129,7 @@ fn sync(state: &mut State, checkout: Checkout, branch: String, tx: &mut Tx) {
         &message,
         move |state, answer, tx| match answer.outcome() {
             Ok(_) => add_worktree(state, checkout, branch, tx),
-            Err(reason) => fail(state, reason),
+            Err(reason) => fail(state, explain(&checkout.repo, reason)),
         },
         tx,
     );
@@ -131,7 +139,7 @@ fn add_worktree(state: &mut State, checkout: Checkout, branch: String, tx: &mut 
     if let Some(setup) = &mut state.window.launching.worktree {
         setup.step = Step::CreatingWorktree(checkout.local.clone());
     }
-    let main_repo = checkout.local.clone();
+    let (main_repo, repo) = (checkout.local.clone(), checkout.repo.clone());
     state.ask(
         |id| CreateWorktreeFromBranchMessage {
             main_repo,
@@ -147,13 +155,11 @@ fn add_worktree(state: &mut State, checkout: Checkout, branch: String, tx: &mut 
                     ..
                 }) => path,
                 other => {
-                    return fail(
-                        state,
-                        other
-                            .and_then(|r| r.error)
-                            .filter(|e| !e.is_empty())
-                            .unwrap_or_else(|| "Failed to create worktree".into()),
-                    );
+                    let error = other
+                        .and_then(|r| r.error)
+                        .filter(|e| !e.is_empty())
+                        .unwrap_or_else(|| "Failed to create worktree".into());
+                    return fail(state, explain(&repo, error));
                 }
             };
             state.window.launching.worktree = None;
@@ -173,6 +179,19 @@ fn add_worktree(state: &mut State, checkout: Checkout, branch: String, tx: &mut 
         },
         tx,
     );
+}
+
+/// What the user can do about a git step that failed, as the Tauri app words it.
+fn explain(repo: &str, error: String) -> String {
+    if error.contains("clone failed") {
+        format!(
+            "Failed to clone repository {repo}. Check your network connection and GitHub access. {error}"
+        )
+    } else if error.contains("already exists") {
+        format!("A worktree for this branch may already exist. {error}")
+    } else {
+        format!("Failed to open PR: {error}")
+    }
 }
 
 fn fail(state: &mut State, error: String) {
