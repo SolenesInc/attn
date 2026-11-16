@@ -763,6 +763,22 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'native-automation-form',
+    runnerId: 'NATIVE-AUTOMATION-FORM',
+    label: 'The native automation form validates before saving, gives new definitions an ID, recovers a stale revision, leaves the switch its own column, deletes on a second press, and shows a guarded schedule\'s checks in the drawer',
+    command: ['node', 'scripts/real-app-harness/scenario-native-automation-form.mjs'],
+    app: 'native',
+    timeoutMs: 600_000,
+  },
+  {
+    id: 'native-automation-surface',
+    runnerId: 'NATIVE-AUTOMATION-SURFACE',
+    label: 'The native automations drawer runs a definition at once, shows the run on its desktop, in the palette, the queue sidebar and the queue bar, says why a disabled run is refused, and keeps runs across a restart',
+    command: ['node', 'scripts/real-app-harness/scenario-native-automation-surface.mjs'],
+    app: 'native',
+    timeoutMs: 240_000,
+  },
+  {
     id: 'worktree-surface',
     runnerId: 'WORKTREE-SURFACE',
     label: 'Worktrees panel: one refresh completes every verdict, the keep pin goes both ways, and a removal lands on its seed',

@@ -1159,7 +1159,7 @@ fn one_agent(settings: &[(&str, &str)]) -> InitialStateMessage {
     state
 }
 
-fn run_command(world: &mut World, query: &str) {
+pub(super) fn run_command(world: &mut World, query: &str) {
     press_action(world, Action::UiCommandPalette);
     world.gesture(|app| app.type_text(query));
     press(world, Key::Enter);

@@ -92,6 +92,7 @@ pub(crate) enum Icon {
     Notifications,
     Garden,
     Delegation,
+    Automations,
 }
 
 impl Icon {
@@ -105,6 +106,7 @@ impl Icon {
             Icon::Notifications => "Notifications",
             Icon::Garden => "Garden",
             Icon::Delegation => "Delegation",
+            Icon::Automations => "Automations",
         }
     }
 
@@ -118,6 +120,7 @@ impl Icon {
             Icon::Notebook => icon::BOOK,
             Icon::Garden => icon::SEEDLING,
             Icon::Delegation => icon::SITEMAP,
+            Icon::Automations => icon::STAR_OPEN,
         }
     }
 }
@@ -604,11 +607,14 @@ pub(crate) fn peek_rows(state: &State) -> (Vec<Row>, usize) {
     (shown, total - entries)
 }
 
+pub(crate) use agents::run_rows;
+
 /// Opens what the peek's row `key` names.
 pub(crate) fn open_peeked(state: &mut State, key: &str, tx: &mut Tx) {
     let picked = peek_rows(state)
         .0
         .into_iter()
+        .chain(run_rows(state))
         .find(|r| r.key == key)
         .and_then(|r| r.pick);
     if let Some(Pick::Open(action)) = picked {

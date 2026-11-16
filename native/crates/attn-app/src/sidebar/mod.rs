@@ -926,6 +926,15 @@ pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut T
 /// Shows the agent where it is and gives its terminal the keyboard, as a click on its row in
 /// the Tauri app does.
 pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
+    if let Some(run) = state
+        .facts
+        .sessions
+        .iter()
+        .find(|s| s.id == session)
+        .and_then(|s| s.automation.as_ref())
+    {
+        state.window.run_groups_open.insert(run.definition_id);
+    }
     if let Some((desktop, leaf)) = pane_of(state, session) {
         crate::desktop::give_keyboard(state, &desktop, &leaf, tx);
     }

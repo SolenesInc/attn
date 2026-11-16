@@ -60,13 +60,14 @@ impl Hooks<State> for AppHooks {
                 "notice": window.notice.as_ref().map(|n| n.text.clone()),
             }),
             "settings" => crate::settings::automation_state(state),
+            "automations" => crate::automations::automation_state(state),
             "capture-shortcut" => json!({
                 "binding": state.capture_shortcut.active.clone().unwrap_or_default(),
                 "error": state.capture_shortcut.error,
             }),
             "build" => build_identity()?,
             _ => {
-                return Err("slices: connection, sessions, desktops, outposts, profiles, window, settings, capture-shortcut, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
+                return Err("slices: connection, sessions, desktops, outposts, profiles, window, settings, automations, capture-shortcut, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
             }
         }))
     }

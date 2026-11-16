@@ -93,6 +93,8 @@ macro_rules! actions {
             ConfirmReloadCodexTiles,
             /// Open the attention drawer and take the keyboard into it.
             OpenAttention,
+            /// Open the automations drawer, or close it.
+            ToggleAutomations,
             /// Make a desktop and switch to it.
             CreateDesktop,
             /// Replay the tour of what this release brings.
@@ -141,6 +143,7 @@ macro_rules! actions {
                     Action::ConfirmSharedCodexRestart => "codex.restartNow",
                     Action::ConfirmReloadCodexTiles => "codex.reloadOldTiles",
                     Action::OpenAttention => "attention.open",
+                    Action::ToggleAutomations => "automations.toggle",
                     Action::CreateDesktop => "desktop.create",
                     Action::OpenWhatsNew => "whatsNew.open",
                     Action::CreateDiagnosticReport => "diagnosticReport.create",
@@ -183,6 +186,7 @@ macro_rules! actions {
                     Action::ConfirmSharedCodexRestart => "Restart shared Codex now",
                     Action::ConfirmReloadCodexTiles => "Reload old Codex tiles",
                     Action::OpenAttention => "Open attention drawer",
+                    Action::ToggleAutomations => "Show or hide automations",
                     Action::CreateDesktop => "New desktop",
                     Action::OpenWhatsNew => "What's new",
                     Action::CreateDiagnosticReport => "Create diagnostic report",

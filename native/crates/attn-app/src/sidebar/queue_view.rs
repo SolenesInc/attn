@@ -13,6 +13,7 @@ use crate::action::Action;
 
 pub(crate) const FILTER_FIELD: &str = "queue.filter.field";
 pub(crate) const LIST: &str = "sidebar.queue";
+const RUNS: &str = "queue.runs";
 
 /// Where an agent's row sits in the queue sidebar, which sets the buttons it carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -22,6 +23,7 @@ pub enum Band {
     Turn,
     Working,
     Snoozed,
+    Run,
 }
 
 impl Band {
@@ -32,6 +34,7 @@ impl Band {
             Band::Turn => "queue-turn",
             Band::Working => "queue-settled",
             Band::Snoozed => "queue-snoozed",
+            Band::Run => "queue-run",
         }
     }
 }
@@ -59,9 +62,18 @@ pub struct QueueAgent {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum QLine {
-    Rule { key: &'static str, text: String },
-    WaitingHead { waiting: usize, unreachable: usize },
-    AgentsToggle { open: bool, more: usize },
+    Rule {
+        key: &'static str,
+        text: String,
+    },
+    WaitingHead {
+        waiting: usize,
+        unreachable: usize,
+    },
+    AgentsToggle {
+        open: bool,
+        more: usize,
+    },
     Counts(String),
     Filter,
     Empty(&'static str),
@@ -69,6 +81,22 @@ pub enum QLine {
     CrewRule,
     Member(super::crew::Resting),
     ChiefSetup(crate::chief::View),
+    /// The automation runs' heading: how many current runs there are and how many need the user.
+    RunsHead {
+        runs: usize,
+        needing: usize,
+    },
+    RunGroup(RunGroup),
+}
+
+/// An automation's group of runs in the queue sidebar.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RunGroup {
+    pub id: i64,
+    pub name: String,
+    pub runs: usize,
+    pub asking: usize,
+    pub open: bool,
 }
 
 impl QLine {
@@ -85,6 +113,8 @@ impl QLine {
             QLine::Member(m) if m.chief => crate::chief::SLOT.into(),
             QLine::Member(m) => format!("{}.{}", super::crew::QUEUE_ROW, m.member),
             QLine::ChiefSetup(_) => crate::chief::SLOT.into(),
+            QLine::RunsHead { .. } => RUNS.into(),
+            QLine::RunGroup(group) => format!("{RUNS}.group.{}", group.id),
         }
     }
 }
@@ -173,7 +203,7 @@ fn agent(
         } else {
             String::new()
         },
-        settle: band == Band::Turn && actions.settle,
+        settle: matches!(band, Band::Turn | Band::Run) && actions.settle,
         snooze: matches!(band, Band::Turn | Band::Working) && actions.snooze,
         unsnooze: band == Band::Snoozed && !row.offline,
         member: (band == Band::Crew)
@@ -324,47 +354,92 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
         if !parts.is_empty() {
             lines.push(QLine::Counts(parts.join("  ")));
         }
-        return lines;
-    }
-    lines.push(QLine::Filter);
-    let filter = window.agent_filter.text.to_lowercase();
-    let matches = |r: &&QueueRow<'_>| {
-        filter.is_empty() || display_name(r.session).to_lowercase().contains(&filter)
-    };
-    let working: Vec<_> = working.into_iter().filter(matches).collect();
-    let snoozed: Vec<_> = snoozed.into_iter().filter(matches).collect();
-    lines.push(QLine::Rule {
-        key: "working",
-        text: format!("Working {}", working.len()),
-    });
-    if working.is_empty() {
-        lines.push(QLine::Empty("working"));
-    }
-    for row in working {
-        lines.push(QLine::Agent(agent(
-            state,
-            &on_screen,
-            Band::Working,
-            row,
-            now_ms,
-        )));
-    }
-    if !snoozed.is_empty() {
+    } else {
+        lines.push(QLine::Filter);
+        let filter = window.agent_filter.text.to_lowercase();
+        let matches = |r: &&QueueRow<'_>| {
+            filter.is_empty() || display_name(r.session).to_lowercase().contains(&filter)
+        };
+        let working: Vec<_> = working.into_iter().filter(matches).collect();
+        let snoozed: Vec<_> = snoozed.into_iter().filter(matches).collect();
         lines.push(QLine::Rule {
-            key: "snoozed",
-            text: format!("Snoozed {}", snoozed.len()),
+            key: "working",
+            text: format!("Working {}", working.len()),
         });
-        for row in snoozed {
+        if working.is_empty() {
+            lines.push(QLine::Empty("working"));
+        }
+        for row in working {
             lines.push(QLine::Agent(agent(
                 state,
                 &on_screen,
-                Band::Snoozed,
+                Band::Working,
                 row,
                 now_ms,
             )));
         }
+        if !snoozed.is_empty() {
+            lines.push(QLine::Rule {
+                key: "snoozed",
+                text: format!("Snoozed {}", snoozed.len()),
+            });
+            for row in snoozed {
+                lines.push(QLine::Agent(agent(
+                    state,
+                    &on_screen,
+                    Band::Snoozed,
+                    row,
+                    now_ms,
+                )));
+            }
+        }
     }
+    runs(state, &on_screen, &mut lines);
     lines
+}
+
+/// The automation runs on the desktops, which never join the queue: a heading, then each
+/// automation's group, its current runs listed while the group is open.
+fn runs(state: &State, on_screen: &[String], lines: &mut Vec<QLine>) {
+    let now_ms = state.window.now_ms;
+    let groups = crate::automations::runs::on_desktops(&state.facts, now_ms);
+    if groups.is_empty() {
+        return;
+    }
+    let places = queue::Places::of(&state.facts);
+    lines.push(QLine::RunsHead {
+        runs: groups.iter().map(|g| g.runs.len()).sum(),
+        needing: groups.iter().map(|g| g.needing_you.len()).sum(),
+    });
+    for group in &groups {
+        let open = state.window.run_groups_open.contains(&group.id);
+        lines.push(QLine::RunGroup(RunGroup {
+            id: group.id,
+            name: group.name.clone(),
+            runs: group.runs.len(),
+            asking: group.needing_you.len(),
+            open,
+        }));
+        if !open {
+            continue;
+        }
+        for run in &group.runs {
+            let desktop = places.desktop_of.get(run.id.as_str()).copied();
+            let row = QueueRow {
+                session: run,
+                desktop,
+                desktop_title: String::new(),
+                offline: crate::outpost::offline(run, &state.facts.outposts),
+            };
+            lines.push(QLine::Agent(agent(
+                state,
+                on_screen,
+                Band::Run,
+                &row,
+                now_ms,
+            )));
+        }
+    }
 }
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
@@ -388,6 +463,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         (
             window.agent_filter.text.to_owned(),
             window.queue_cursor.clone(),
+            window.run_groups_open.clone(),
         ),
         window.now_ms,
         crate::desktop::on_screen_sessions(state),
@@ -475,6 +551,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
     let keys = match line {
         QLine::WaitingHead { .. } => keys_of(state, &Action::SessionJumpToWaiting),
         QLine::AgentsToggle { .. } => keys_of(state, &Action::SidebarAgentList),
+        QLine::RunsHead { .. } => keys_of(state, &Action::SessionNextRun),
         _ => None,
     };
     let logos = super::logos(state);
@@ -505,6 +582,8 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 QLine::CrewRule => crew_rule(key, t),
                 QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
                 QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, t),
+                QLine::RunsHead { runs, needing } => runs_head(key, *runs, *needing, keys, t),
+                QLine::RunGroup(group) => run_group(key, group, t),
                 QLine::Filter => unreachable!("the filter is built above"),
             }
         },
@@ -658,6 +737,137 @@ fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: 
         .expanded(open)
         .key(key)
         .description(description)
+        .w_full()
+        .h(ROW_HEIGHT)
+        .px(0.0)
+        .justify_start()
+        .radius(4.0)
+        .hover(t.bg_elevated)
+}
+
+fn plural(n: usize, noun: &str) -> String {
+    if n == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
+}
+
+/// The automations' heading, and while runs stopped with a question, the button that walks them.
+fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: &Tokens) -> El {
+    let walk = (needing > 0).then(|| {
+        let label = format!(
+            "{} {} you",
+            plural(needing, "run"),
+            if needing == 1 { "needs" } else { "need" }
+        );
+        let tokens = *t;
+        let shown = label.clone();
+        Button::new(label)
+            .variant(ButtonVariant::Ghost)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                crate::automations::runs::next_run(state, tx)
+            })
+            .label_with(move |_, _| {
+                row()
+                    .items_center()
+                    .gap(space::S1)
+                    .child(text(shown).font(type_::LABEL).color(tokens.warning))
+                    .children(keys.map(|k| {
+                        text(k)
+                            .font(KEYS_TYPE)
+                            .color(tokens.text_tertiary)
+                            .single_line()
+                    }))
+            })
+            .build(attn_ui::kit(t))
+            .key(format!("{key}.needing"))
+            .description("Open the next run needing you; press again for the one after")
+            .h(ROW_HEIGHT - 4.0)
+            .px(space::S1)
+            .radius(4.0)
+            .hover(t.bg_elevated)
+    });
+    row()
+        .key(key)
+        .role("heading")
+        .label("Automations")
+        .a11y_value(plural(runs, "run"))
+        .help("Automation runs never join the queue")
+        .w_full()
+        .h(ROW_HEIGHT)
+        .items_center()
+        .gap(space::S1)
+        .child(
+            text("Automations")
+                .font(type_::SECTION)
+                .color(t.text_tertiary),
+        )
+        .child(
+            text(plural(runs, "run"))
+                .font(type_::LABEL)
+                .color(t.text_muted)
+                .grow(1.0),
+        )
+        .children(walk)
+}
+
+/// An automation's group header, which lists or hides its runs.
+fn run_group(key: String, group: &RunGroup, t: &Tokens) -> El {
+    let id = group.id;
+    let (name, runs, asking, open) = (group.name.clone(), group.runs, group.asking, group.open);
+    let mut says = vec![group.name.clone(), plural(runs, "run")];
+    if asking > 0 {
+        says.push(format!("{asking} stopped with a question"));
+    }
+    says.push("runs stay out of the queue".into());
+    let tokens = *t;
+    Button::new(name.clone())
+        .variant(ButtonVariant::Ghost)
+        .on_press(move |state: &mut State| {
+            let open = &mut state.window.run_groups_open;
+            if !open.remove(&id) {
+                open.insert(id);
+            }
+        })
+        .label_with(move |_, _| {
+            row()
+                .w_full()
+                .items_center()
+                .gap(space::S1)
+                .child(
+                    text(if open {
+                        attn_ui::icon::CARET_DOWN
+                    } else {
+                        attn_ui::icon::CARET_RIGHT
+                    })
+                    .font(type_::LABEL)
+                    .color(tokens.text_tertiary),
+                )
+                .child(
+                    text(name)
+                        .font(type_::BODY)
+                        .color(tokens.text_primary)
+                        .single_line()
+                        .truncate()
+                        .grow(1.0),
+                )
+                .children((asking > 0).then(|| {
+                    text(asking.to_string())
+                        .font(type_::MONO_CAPTION)
+                        .color(tokens.warning)
+                }))
+                .child(
+                    text(runs.to_string())
+                        .font(type_::MONO_CAPTION)
+                        .color(tokens.text_tertiary),
+                )
+        })
+        .build(attn_ui::kit(t))
+        .expanded(open)
+        .key(key)
+        .a11y_value(runs.to_string())
+        .description(says.join(" · "))
         .w_full()
         .h(ROW_HEIGHT)
         .px(0.0)

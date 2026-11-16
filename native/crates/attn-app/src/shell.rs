@@ -37,6 +37,8 @@ pub struct Window {
     pub(crate) desk: crate::desktop::Desk,
     pub(crate) search: crate::palette::Search,
     pub agent_list_open: bool,
+    /// The automations whose runs the queue sidebar lists under their group, by definition id.
+    pub(crate) run_groups_open: std::collections::BTreeSet<i64>,
     pub(crate) agent_filter: rune::TextEdit,
     /// The queue row the arrows reached, by key: the settle, priority and snooze keys act on
     /// it while the queue list holds the keyboard.
@@ -71,6 +73,7 @@ pub struct Window {
     pub(crate) garden: crate::garden::Garden,
     pub(crate) asks: crate::asks::Asks,
     pub(crate) attention: crate::attention::Attention,
+    pub(crate) automations: crate::automations::Automations,
     pub(crate) ledger: crate::ledger::Ledger,
     pub(crate) notifications: crate::notifications::Panel,
     pub(crate) update_run: crate::update_run::Banner,
@@ -98,6 +101,7 @@ pub enum View {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Drawer {
     Attention,
+    Automations,
     Asks,
     Garden,
 }
@@ -185,6 +189,7 @@ pub(crate) fn escape_drawers(state: &mut State, tx: &mut Tx) -> bool {
         Some(Drawer::Garden) => crate::garden::close(state),
         Some(Drawer::Asks) => crate::asks::close(state, tx),
         Some(Drawer::Attention) => crate::attention::close(state, tx),
+        Some(Drawer::Automations) => crate::automations::close(state, tx),
         None => return false,
     }
     true
@@ -551,6 +556,7 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
             Drawer::Garden => Some(crate::garden::panel(state, t)),
             Drawer::Asks => Some(crate::asks::drawer(state, t)),
             Drawer::Attention => Some(crate::attention::drawer(state, t)),
+            Drawer::Automations => Some(crate::automations::drawer(state, t)),
         }))
 }
 
@@ -622,6 +628,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::attention::merge_confirmation(state, t));
     layers.extend(crate::garden::frame_layer(state, t));
     crate::notebook::root_picker_overlay(state, t, &mut layers);
+    crate::automations::form::overlay(state, t, &mut layers);
     layers.extend(crate::desktop::cap_menu(state, t));
     layers.extend(crate::desktop::peek(state, t));
     layers.extend(crate::desktop::header_popover(state, t));

@@ -48,3 +48,4 @@ pub const DESKTOP: &str = "\u{f108}";
 pub const REPO: &str = "\u{f401}";
 pub const COMMIT: &str = "\u{f417}";
 pub const BRANCH: &str = "\u{f418}";
+pub const STAR_OPEN: &str = "\u{f006}";

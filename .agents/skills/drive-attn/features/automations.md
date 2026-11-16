@@ -205,6 +205,28 @@ EOF
 - **Start a scheduled or review automation by hand.** Run `./attn automation run <schedule-id>` on a guarded singleton: the run is `delivered` with a `manual:` `occurrence_key` and its own session, the guard's command has not run, and `./attn automation show <schedule-id>` says nothing about a superseded session. Run `./attn automation run <review-id>`: it exits 1 naming `--pr-url`. With `--pr-url https://mock.github.local/owner/repo/pull/42` the run is `delivered`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn automation runs <id>` after each run, `./attn agent peek <session>`, `bridge automations_get_state` after each drawer action, `bridge get_state` after each ⌘⇧J, and `bridge capture_screenshot '{"path":"<P>/automations-drawer.png"}'` with the drawer open, where `<P>` is the folder's path written out. Name each file for its way in, such as `automations-drawer-run-now-state.json`.
 
+### In the native app
+
+The native app (`native/crates/attn-app/src/automations/`) has the same drawer, form, run history, next-run walk and queue-flow groups. The CLI, agents, prompts and triggers are the daemon's and do not change. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), which name elements by key, and `bridge state '{"of":"automations"}'` reads the drawer and the form.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and use the Linux chords: `mod+alt+k` for the command palette and `mod+alt+j` for the next run.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
+- Make `P`, `R`, `A` and `manual.yaml` as above, and apply it from the shell.
+
+Steps:
+
+- **The CLI and agents.** As above: they do not touch the app.
+- **Open and close the drawer.** Press `titlebar.automations`, named "Show Automations": `bridge wait '{"target":{"key":"automations"}}'` answers, and `bridge state '{"of":"automations"}'` shows `present: true` and a definition named `Drive automation`. `automations.close` and Escape close it. The palette's "Show automations" opens it again.
+- **Run from the drawer.** Press `automations.select.<id>`, then `automations.run-now.<id>`: `automations.runs` lists the new run as `automations.run.<run>`, and `./attn automation runs <id>` agrees. Pressing `automations.run-open.<run>` opens the run's session. A worktree automation first shows `automations.pr.<id>` for a pull request URL; `automations.pr-run` with the field empty shows `automations.pr-error.<id>`.
+- **Turn it off and on.** Press the switch `automations.toggle.<id>`: the state shows `enabled: false`, and so does `./attn automation list`. Press it again for `enabled: true`. A refusal shows `automations.toggle-error.<id>`.
+- **Next run needing you.** Press `mod+shift+j` (`mod+alt+j` on Linux) with `bridge key`: `bridge state '{"of":"desktops"}'` shows the run's session on screen. Press it again: the next run that is owed a turn. The palette's "Next run needing you" does the same. In queue flow, the queue sidebar lists `queue.runs` with the run count, `queue.runs.needing` while runs need the user, and `queue.runs.group.<id>` per automation; opening a run expands its group, which lists `queue-run.<session>` rows that settle with `.settle`. Collapse the sidebar: `queue-bar.runs` counts the runs and those needing the user, hovering it shows `queue-bar.runs-peek`, and pressing it walks the runs.
+- **Edit in the form.** Press `automations.edit.<id>`: `automations.form` replaces the list and the state's `form.status` is `ready`. Press `automations.form.name`, select all with `mod+a`, type `Drive automation edited` and press `automations.form.save`: `./attn automation show <id>` prints the new name with the same `launch`.
+- **Create a schedule with a guard.** Press `automations.new`, then `automations.form.trigger-scheduled`. The schedule composer's tabs are a segmented control under `automations.form.schedule-tabs`; the cron field is `automations.form.cron`, the time zone `automations.form.time-zone`, and `automations.form.next-runs` lists the daemon's preview. Type `* * * * *` into the cron field and `sh guard.sh` into `automations.form.guard`: the next runs read as next checks. Fill name, folder and prompt and save. Reopen it: the guard is there. Clear it and save to remove it. A field's rule shows under it as `<field>.error` once the keyboard leaves it.
+- **Delete.** In the form, press `automations.form.delete`: it reads "Confirm delete". Press it again: `./attn automation list` no longer lists `<id>`. Pressing anything else first disarms it.
+- **Proof.** In `$P`, keep each `./attn` command's output and exit code, `bridge state '{"of":"automations"}'` after each drawer and form action, and `bridge tree` with the drawer and the form open. Capture `bridge shot '{"path":"<P>/native-automations-drawer.png"}'` and `<P>/native-automations-form.png`, `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: definitions, occurrences and runs are the daemon's records, and runs' sessions come back like any session. After downtime, a schedule with `catch_up: latest` starts the latest missed occurrence and one with `skip` waits for the next.
@@ -221,8 +243,9 @@ EOF
 
 - Wire: `internal/daemon/automation_*_wire_test.go`, `internal/daemon/automation_wire_test.go`, `internal/daemon/automations_test.go`, `internal/daemon/garden_profile_automations_wire_test.go`.
 - Stack: `cmd/attnd/automation_profile_stack_test.go`, `internal/daemon/automation_codex_launch_stack_test.go`.
-- Scenario: `automation-form`, `automation-surface`.
+- Scenario: `native-automation-form` and `native-automation-surface` in the native app, `automation-form` and `automation-surface` in the Tauri app.
 - Kernel: `internal/automation/automation_test.go`, `internal/automation/schedule_test.go`, `internal/store/automations_test.go`.
+- Native wire: `native/crates/attn-app/tests/wire/automations.rs`, `native/crates/attn-app/tests/wire/automations/form.rs`, `native/crates/attn-app/tests/wire/automations/runs.rs`.
 - App: `app/src/App.automations.test.tsx`, `app/src/App.automationActions.test.tsx`, `app/src/App.automationForm.test.tsx`, `app/src/App.automationSelection.test.tsx`, `app/src/components/automations/automationFormModel.test.ts`, `app/src/utils/automationRuns.ordering.test.ts`.
 
 ## Gotchas

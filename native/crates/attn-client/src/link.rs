@@ -715,6 +715,10 @@ impl Task {
                 self.store.delegation_changed();
                 None
             }
+            "automations_changed" => {
+                self.store.automations_changed();
+                None
+            }
             "kept_conversations_changed" => {
                 self.store.kept_conversations_changed();
                 None

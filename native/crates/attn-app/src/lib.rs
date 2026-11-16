@@ -3,6 +3,7 @@ pub mod annotations;
 mod asks;
 mod attention;
 pub mod automation;
+mod automations;
 pub mod browser;
 mod calendar;
 mod callouts;
@@ -252,6 +253,7 @@ pub fn bind(
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             crew::follow(state);
+            automations::follow(state, tx);
             follow_terminals(state, tx);
             if state.window.tile.is_none() {
                 annotations::draft::follow(state, tx);
@@ -342,12 +344,14 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | outpost_updates::poll(state, now, tx)
         | shared_codex::poll(state, tx)
         | attention::poll(state, now);
+    let automated = automations::poll(state, now, tx);
     let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);
     let greeted = whats_new::greet(state, tx);
     let reported = diagnostic_report::poll(state, now, tx);
     let expired = shell::expire(state, now, tx) || expired;
     let browsed_pages = browser::follow(state, tx);
     expired
+        || automated
         || settings
         || updating
         || pointed

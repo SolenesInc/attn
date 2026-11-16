@@ -21,7 +21,7 @@ pub(crate) fn harness(id: &str, name: &str) -> Harness {
     }
 }
 
-pub(super) fn harnesses() -> Vec<Harness> {
+pub(crate) fn harnesses() -> Vec<Harness> {
     vec![
         harness("claude", "Claude"),
         harness("codex", "Codex"),
@@ -164,7 +164,7 @@ pub(crate) fn preferences_result(harnesses: Vec<Harness>) -> DelegationPreferenc
 }
 
 /// Answers the harness list with `harnesses` and each catalog read from [`catalog`].
-pub(super) fn serve(daemon: &Daemon, settings: &Settings, harnesses: Vec<Harness>) {
+pub(crate) fn serve(daemon: &Daemon, settings: &Settings, harnesses: Vec<Harness>) {
     daemon.on("delegation_preferences_get", move |_| {
         message(preferences_result(harnesses.clone()))
     });
@@ -175,7 +175,7 @@ pub(super) fn serve(daemon: &Daemon, settings: &Settings, harnesses: Vec<Harness
     });
 }
 
-pub(super) const PICKER: &str = "settings.route-picker";
+pub(crate) const PICKER: &str = "settings.route-picker";
 
 /// Opens the picker from the route button named `label`.
 pub(crate) fn open_route(world: &mut World, label: &str) {
@@ -255,7 +255,7 @@ pub(crate) fn pick_effort(world: &mut World, name: &str) {
 }
 
 /// Types `id` into the filter and uses it as the model, with `provider` when one is given.
-pub(super) fn enter_model(world: &mut World, id: &str, provider: Option<&str>) {
+pub(crate) fn enter_model(world: &mut World, id: &str, provider: Option<&str>) {
     click(world, "settings.route-picker.filter");
     world.gesture(|app| app.type_text(id));
     if let Some(provider) = provider {
@@ -266,7 +266,7 @@ pub(super) fn enter_model(world: &mut World, id: &str, provider: Option<&str>) {
 }
 
 /// What the route button named by `key` shows: harness, model and effort.
-pub(super) fn route_value(world: &World, key: &str) -> String {
+pub(crate) fn route_value(world: &World, key: &str) -> String {
     world
         .screen()
         .get(Target::key(key))

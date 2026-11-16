@@ -224,7 +224,7 @@ pub(super) fn age(at: &str, now_ms: i64) -> String {
 }
 
 /// `age` in words: "just now", "12 min ago", "3 h ago", "2 days ago".
-pub(super) fn long_ago(at: &str, now_ms: i64) -> String {
+pub(crate) fn long_ago(at: &str, now_ms: i64) -> String {
     let short = age(at, now_ms);
     if short == "now" || short.is_empty() {
         return "just now".into();

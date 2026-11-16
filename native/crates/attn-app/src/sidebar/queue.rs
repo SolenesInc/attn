@@ -192,7 +192,7 @@ pub fn actions(facts: &Facts, session: &Session, now_ms: i64) -> QueueActions {
 /// when the queue shows hidden sessions, the hidden ones on no desktop.
 pub struct Places<'a> {
     pub places: Vec<(Option<&'a str>, String, Vec<&'a Session>)>,
-    desktop_of: HashMap<&'a str, &'a str>,
+    pub desktop_of: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> Places<'a> {

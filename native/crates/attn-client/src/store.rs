@@ -65,6 +65,8 @@ pub struct Facts {
     pub tasks_changed: u64,
     /// Rises each time the daemon says the delegation preferences changed.
     pub delegation_changed: u64,
+    /// Rises each time the daemon says automation definitions or their runs changed.
+    pub automations_changed: u64,
     pub github: Arc<GitHub>,
     pub worktrees: Arc<WorktreePushes>,
     /// The paths git operations run on now, by operation id.
@@ -378,7 +380,8 @@ impl Slices {
     pub const CREW: Slices = Slices(1 << 26);
     pub const CAPTURE_READS: Slices = Slices(1 << 27);
     pub const SHARED_CODEX: Slices = Slices(1 << 28);
-    pub const ALL: Slices = Slices((1 << 29) - 1);
+    pub const AUTOMATIONS: Slices = Slices(1 << 29);
+    pub const ALL: Slices = Slices((1 << 30) - 1);
 
     pub const fn union(self, other: Slices) -> Slices {
         Slices(self.0 | other.0)
@@ -761,6 +764,13 @@ impl Store {
         self.change(|facts| {
             facts.delegation_changed += 1;
             Slices::DELEGATION
+        });
+    }
+
+    pub(crate) fn automations_changed(&self) {
+        self.change(|facts| {
+            facts.automations_changed += 1;
+            Slices::AUTOMATIONS
         });
     }
 

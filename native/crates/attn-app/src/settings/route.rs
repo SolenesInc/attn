@@ -510,7 +510,7 @@ fn picker(state: &State) -> Option<&Picker> {
 
 /// A route chip: the harness, model and effort it runs, opening the picker. A field also
 /// labels each part and discovers its harness's models as it shows.
-pub(super) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field: bool) -> El {
+pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field: bool) -> El {
     let Some((value, rules)) = (target.read)(state, &target.id) else {
         return row();
     };
@@ -581,7 +581,7 @@ pub(super) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
 }
 
 /// The harnesses whose models the page's chips and the open picker want discovered.
-pub(super) fn discover_wanted(state: &mut State, wanted: Vec<(String, bool)>, tx: &mut Tx) -> bool {
+pub(crate) fn discover_wanted(state: &mut State, wanted: Vec<(String, bool)>, tx: &mut Tx) -> bool {
     let mut asked = false;
     let mut harnesses = wanted;
     if let Some(p) = picker(state)
@@ -601,7 +601,7 @@ pub(super) fn discover_wanted(state: &mut State, wanted: Vec<(String, bool)>, tx
 }
 
 /// The harnesses a field chip of `target` discovers.
-pub(super) fn wanted(state: &State, target: &Target) -> Option<(String, bool)> {
+pub(crate) fn wanted(state: &State, target: &Target) -> Option<(String, bool)> {
     let (value, rules) = (target.read)(state, &target.id)?;
     let h = rules.harnesses.iter().find(|h| h.id == value.harness)?;
     Some((h.id.clone(), h.discovery))
@@ -651,7 +651,7 @@ fn toggle(state: &mut State, target: Target, tx: &mut Tx) {
 }
 
 /// Closes the picker, keeping an effort typed into its field.
-pub(super) fn close(state: &mut State, tx: &mut Tx) {
+pub(crate) fn close(state: &mut State, tx: &mut Tx) {
     commit_effort(state, tx);
     state.window.settings.route_picker = None;
 }
@@ -836,7 +836,7 @@ fn submit_filter(state: &mut State, tx: &mut Tx) {
 }
 
 /// The picker over the page, when one is open.
-pub(super) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
+pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(p) = picker(state) else { return };
     let Some((value, rules)) = (p.target.read)(state, &p.target.id) else {
         return;

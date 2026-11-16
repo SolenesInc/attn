@@ -354,6 +354,17 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
         ),
         ledger_button(state, t),
         tool(
+            "titlebar.automations",
+            if crate::automations::is_open(state) {
+                "Hide Automations"
+            } else {
+                "Show Automations"
+            },
+            attn_ui::icon::STAR_OPEN,
+            t,
+            crate::automations::toggle,
+        ),
+        tool(
             "titlebar.commands",
             "Commands",
             attn_ui::icon::BOLT,
@@ -466,7 +477,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                 .key("queue-bar.pill")
                 .a11y_value(owed.0.to_string())
                 .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
-                    super::bar_peek::pill_hovered(state, inside)
+                    super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
                 })
                 .shrink()
                 .min_w(124.0)
@@ -477,6 +488,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                 .fill(t.bg_button)
                 .hover(t.bg_elevated),
         )
+        .children(runs_chip(state, t))
         .child(
             row()
                 .key("queue-bar.desktops")
@@ -496,6 +508,67 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                     t,
                 )),
         )
+}
+
+/// The queue bar's count of automation runs and of those that need the user; pressing it walks
+/// them as ⌘⇧J does.
+fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
+    let groups = crate::automations::runs::on_desktops(&state.facts, state.window.now_ms);
+    let runs: usize = groups.iter().map(|g| g.runs.len()).sum();
+    let needing: usize = groups.iter().map(|g| g.needing_you.len()).sum();
+    if runs == 0 && needing == 0 {
+        return None;
+    }
+    let plural = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
+    let mut says = vec![plural(groups.len(), "automation"), plural(runs, "run")];
+    if needing > 0 {
+        says.push(format!("{needing} still need you"));
+    }
+    says.push("runs stay out of the queue".into());
+    let keys = state
+        .keymap
+        .binding(&crate::Action::SessionNextRun)
+        .map(|b| state.keymap.label(b));
+    says.push(match keys {
+        Some(keys) => format!("click or {keys} to walk them"),
+        None => "click to walk them".into(),
+    });
+    let tokens = *t;
+    Some(
+        Button::new(format!("{runs} runs"))
+            .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                super::bar_peek::dismiss(state);
+                crate::automations::runs::next_run(state, tx)
+            })
+            .label_with(move |_, _| {
+                row()
+                    .items_center()
+                    .gap(space::S1)
+                    .child(
+                        text(format!("{} {runs}", attn_ui::icon::STAR_OPEN))
+                            .font(type_::LABEL)
+                            .color(tokens.text_secondary)
+                            .single_line(),
+                    )
+                    .children((needing > 0).then(|| {
+                        text(needing.to_string())
+                            .font(COUNT_TYPE)
+                            .color(tokens.warning)
+                    }))
+            })
+            .build(attn_ui::kit(t))
+            .key(super::bar_peek::RUNS)
+            .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
+                super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Runs, inside)
+            })
+            .a11y_value(format!("{runs} runs, {needing} need you"))
+            .description(says.join(" · "))
+            .h(22.0)
+            .px(space::S2)
+            .radius(11.0)
+            .fill(t.bg_button)
+            .hover(t.bg_elevated),
+    )
 }
 
 const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(9.5, 600.0).mono();

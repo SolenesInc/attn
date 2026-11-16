@@ -67,6 +67,8 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
         Action::DockAttention => crate::attention::toggle(state, tx),
         Action::OpenAttention => crate::attention::open(state, tx),
+        Action::ToggleAutomations => crate::automations::toggle(state, tx),
+        Action::SessionNextRun => crate::automations::runs::next_run(state, tx),
         Action::CreateDesktop => crate::desktop::create_desktop(state, tx),
         Action::OpenWhatsNew => crate::whats_new::open(state, tx),
         Action::NotebookOpenTile => crate::notebook::open_tile(state, tx),

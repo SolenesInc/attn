@@ -2,6 +2,7 @@ mod wire {
     mod asks;
     mod attention;
     mod automation;
+    mod automations;
     mod browser;
     mod callouts;
     mod chief;

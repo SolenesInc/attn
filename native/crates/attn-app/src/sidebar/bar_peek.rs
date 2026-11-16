@@ -1,82 +1,125 @@
-//! The queue bar's peek: hovering the waiting pill lists the agents under it, as the Tauri app's
-//! `WaitingPeek`, and a row opens its agent or tile.
+//! The queue bar's peeks, as the Tauri app's `WaitingPeek` and `RunsPeek`: hovering the waiting
+//! pill lists the agents under it, hovering the runs chip lists the automation runs, and a row
+//! opens its agent or tile.
 
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{Align, El, Shadow, Side, Tx, col, text};
 
 use crate::State;
+use crate::palette::Row;
 
-const PILL: &str = "queue-bar.pill";
-const PEEK: &str = "queue-bar.peek";
+pub(crate) const PILL: &str = "queue-bar.pill";
+pub(crate) const RUNS: &str = "queue-bar.runs";
 const WIDTH: f32 = 600.0;
-/// The room between the pill and the peek, inside the peek's hover region so the pointer
+/// The room between the anchor and the peek, inside the peek's hover region so the pointer
 /// crosses it without closing the peek.
 const GAP: f32 = 6.0;
 
-/// Whether the pointer is over the pill or over the peek; the peek shows while it is over
-/// either.
+/// What a peek lists, by the queue bar's control it hangs from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Anchor {
+    Waiting,
+    Runs,
+}
+
+impl Anchor {
+    fn key(self) -> &'static str {
+        match self {
+            Anchor::Waiting => PILL,
+            Anchor::Runs => RUNS,
+        }
+    }
+
+    fn peek(self) -> &'static str {
+        match self {
+            Anchor::Waiting => "queue-bar.peek",
+            Anchor::Runs => "queue-bar.runs-peek",
+        }
+    }
+}
+
+/// The anchor the pointer last came to, and whether it is over that anchor or over the peek;
+/// the peek shows while it is over either.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Hover {
-    pill: bool,
+    at: Option<Anchor>,
+    anchor: bool,
     peek: bool,
 }
 
-pub(crate) fn pill_hovered(state: &mut State, inside: bool) {
-    state.window.bar_peek.pill = inside;
+pub(crate) fn anchor_hovered(state: &mut State, anchor: Anchor, inside: bool) {
+    let hover = &mut state.window.bar_peek;
+    if inside {
+        *hover = Hover {
+            at: Some(anchor),
+            anchor: true,
+            peek: false,
+        };
+    } else if hover.at == Some(anchor) {
+        hover.anchor = false;
+    }
 }
 
-/// The pill was pressed: the peek closes until the pointer comes back to the pill.
+/// The anchor was pressed, or left the bar: the peek closes until the pointer comes back.
 pub(crate) fn dismiss(state: &mut State) {
     state.window.bar_peek = Hover::default();
 }
 
-fn shows(state: &State) -> bool {
+fn shown(state: &State) -> Option<Anchor> {
     let hover = state.window.bar_peek;
-    (hover.pill || hover.peek)
+    let open = (hover.anchor || hover.peek)
         && state.window.layer.is_none()
         && state.window.sidebar_hidden
-        && super::actions::queue_flow(state)
+        && super::actions::queue_flow(state);
+    hover.at.filter(|_| open)
 }
 
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    if !shows(state) {
-        return None;
-    }
-    let (rows, more) = crate::palette::peek_rows(state);
-    let rows = rows.iter().map(|r| {
-        let key = format!("{PEEK}.{}", r.key);
-        let face = crate::palette::row_face(r, key, t);
-        match r.selectable() {
-            false => face,
-            true => {
-                let picked = r.key.clone();
-                face.role("button")
-                    .px(10.0)
-                    .radius(8.0)
-                    .hover(t.bg_selected)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        dismiss(state);
-                        crate::palette::open_peeked(state, &picked, tx);
-                    })
-            }
+    let anchor = shown(state)?;
+    let (rows, foot) = match anchor {
+        Anchor::Waiting => {
+            let (rows, more) = crate::palette::peek_rows(state);
+            let search = crate::palette::label_of(state, &crate::Action::UiActionMenu);
+            let foot = (more > 0).then(|| match search {
+                Some(keys) => format!("{more} more · {keys} to search"),
+                None => format!("{more} more"),
+            });
+            (rows, foot)
         }
-    });
-    let search = crate::palette::label_of(state, &crate::Action::UiActionMenu);
-    let more = (more > 0).then(|| {
-        let said = match search {
-            Some(keys) => format!("{more} more · {keys} to search"),
-            None => format!("{more} more"),
-        };
+        Anchor::Runs => {
+            let rows = crate::palette::run_rows(state);
+            let walks = rows.iter().any(|r| match &r.look {
+                crate::palette::Look::Agent { tag, .. } => tag.is_some(),
+                _ => false,
+            });
+            let next = crate::palette::label_of(state, &crate::Action::SessionNextRun);
+            let foot = match (walks, next) {
+                (true, Some(keys)) => {
+                    format!(
+                        "Automation runs never join the queue · {keys} opens the next one needing you"
+                    )
+                }
+                (true, None) => "Automation runs never join the queue".to_owned(),
+                (false, _) => {
+                    "Automation runs never join the queue · nothing here needs you".to_owned()
+                }
+            };
+            (rows, Some(foot))
+        }
+    };
+    let peek = anchor.peek();
+    let rows = rows.iter().map(|r| peek_row(peek, r, t));
+    let foot = foot.map(|said| {
         text(said)
-            .key(format!("{PEEK}.more"))
+            .key(format!("{peek}.more"))
             .font(type_::LABEL)
             .color(t.text_tertiary)
             .px(10.0)
             .py(space::S1)
     });
     let panel = col()
-        .key(format!("{PEEK}.panel"))
+        .key(format!("{peek}.panel"))
         .w(WIDTH)
         .shrink()
         .min_h(0.0)
@@ -93,7 +136,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         })
         .child(
             col()
-                .key(format!("{PEEK}.rows"))
+                .key(format!("{peek}.rows"))
                 .w_full()
                 .shrink()
                 .min_h(0.0)
@@ -102,12 +145,16 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 })
                 .children(rows),
         )
-        .children(more);
+        .children(foot);
+    let (align, label) = match anchor {
+        Anchor::Waiting => (Align::Start, "Agents"),
+        Anchor::Runs => (Align::End, "Automation runs"),
+    };
     Some(
         col()
-            .key(PEEK)
+            .key(peek)
             .role("group")
-            .label("Agents")
+            .label(label)
             .shrink()
             .min_h(0.0)
             .pt(GAP)
@@ -115,6 +162,23 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
                 state.window.bar_peek.peek = inside;
             })
-            .anchored_fit(PILL, Side::Bottom, Align::Start, 0.0),
+            .anchored_fit(anchor.key(), Side::Bottom, align, 0.0),
     )
+}
+
+fn peek_row(peek: &str, r: &Row, t: &Tokens) -> El {
+    let key = format!("{peek}.{}", r.key);
+    let face = crate::palette::row_face(r, key, t);
+    if !r.selectable() {
+        return face;
+    }
+    let picked = r.key.clone();
+    face.role("button")
+        .px(10.0)
+        .radius(8.0)
+        .hover(t.bg_selected)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            dismiss(state);
+            crate::palette::open_peeked(state, &picked, tx);
+        })
 }

@@ -106,6 +106,13 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             Action::SessionJumpToWaiting,
         )
         .describe("Open the agent that has waited longest for you"),
+        Command::new(
+            "next-run-needing-you",
+            "Next run needing you",
+            &["automation", "run", "batch", "waiting", "next"],
+            Action::SessionNextRun,
+        )
+        .describe("Open the next automation run that stopped with a question"),
     ]);
     if turn_actions.as_ref().is_some_and(|a| a.settle) {
         commands.push(
@@ -375,6 +382,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         },
         &["notifications", "alerts", "bell"],
         Action::ToggleNotifications,
+    ));
+    commands.push(Command::new(
+        "automations",
+        if crate::automations::is_open(state) {
+            "Hide automations"
+        } else {
+            "Show automations"
+        },
+        &["automations", "schedule", "runs", "panel"],
+        Action::ToggleAutomations,
     ));
     commands.push(Command::new(
         "toggle-sidebar",
@@ -828,6 +845,7 @@ fn icon_of(id: &str) -> Option<Icon> {
         | "create-diagnostic-report" => Icon::Keys,
         "notebook" => Icon::Notebook,
         "notifications" => Icon::Notifications,
+        "automations" => Icon::Automations,
         "show-tended-seeds" => Icon::Garden,
         "show-delegation-chain" => Icon::Delegation,
         _ => Icon::Context,

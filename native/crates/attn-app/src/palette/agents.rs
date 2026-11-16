@@ -130,6 +130,50 @@ fn anchored(state: &State, bands: &Bands<'_>, list: &mut List<'_>) {
     }
 }
 
+/// The automation runs as the queue bar's runs peek lists them, as the Tauri app's `RunsPeek`:
+/// each automation's name and counts, then its current runs, the one ⌘⇧J opens next tagged with
+/// its keys.
+pub(crate) fn run_rows(state: &State) -> Vec<Row> {
+    let groups = crate::automations::runs::on_desktops(&state.facts, state.window.now_ms);
+    let on_screen = state.window.on_screen(&state.facts);
+    let next = crate::automations::runs::next_needing_you(&groups, on_screen.as_deref())
+        .map(|(run, ..)| run.id.clone());
+    let mut list = List {
+        state,
+        terms: &[],
+        head: None,
+        seen: HashSet::new(),
+        rows: Vec::new(),
+    };
+    let plural = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
+    for group in &groups {
+        let asking = group.needing_you.len();
+        let mut detail = String::new();
+        if asking > 0 {
+            detail.push_str(&format!("{asking} need you · "));
+        }
+        detail.push_str(&plural(group.runs.len(), "run"));
+        list.rows.push(Row {
+            key: format!("group:{}", group.id),
+            label: group.name.clone(),
+            look: Look::Choice { detail },
+            pick: None,
+        });
+        for run in &group.runs {
+            list.agent(run);
+            if next.as_deref() == Some(run.id.as_str())
+                && let Some(Row {
+                    look: Look::Agent { tag, .. },
+                    ..
+                }) = list.rows.last_mut()
+            {
+                *tag = super::label_of(state, &Action::SessionNextRun);
+            }
+        }
+    }
+    list.rows
+}
+
 struct List<'a> {
     state: &'a State,
     terms: &'a [String],

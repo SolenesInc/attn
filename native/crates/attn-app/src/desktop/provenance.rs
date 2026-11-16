@@ -299,6 +299,21 @@ enum Does<'a> {
     ShowDetails,
 }
 
+/// An automation run's provenance as words, as the drawer's run history says it:
+/// "⚡ Automation · nightly docs · Superseded session · attn #20".
+pub(crate) fn automation_words(provenance: &AutomationProvenance) -> String {
+    let line = Line {
+        automation: Some(automation(provenance)),
+        pull_request: None,
+    };
+    parts(&line)
+        .into_iter()
+        .filter(|p| !matches!(p.does, Does::Title))
+        .map(|p| p.text.trim_end_matches(" ↗").to_owned())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
 fn parts(line: &Line) -> Vec<Part<'_>> {
     let part = |text: String, icon, does| Part { text, icon, does };
     let mut parts = Vec::new();

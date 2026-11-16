@@ -31,6 +31,7 @@ use rune::{TextEdit, Tx};
 use crate::State;
 use crate::action::Action;
 use crate::shell::Layer;
+pub(crate) use analytics::long_ago;
 pub(crate) use appearance::{garden_scale, text_scale};
 pub(crate) use route::{
     EffortMode, Route, RouteHarness, Rules, Target as RouteTarget, view as route_view,
@@ -233,6 +234,26 @@ fn refresh(state: &mut State, tx: &mut Tx) -> bool {
     shown |= background::follow(state);
     shown |= agents::follow(state);
     shown | harnesses::ensure(state, tx) | discover(state, tx)
+}
+
+/// Discovers the models of the harnesses chips outside the dialog show.
+pub(crate) fn discover_routes(state: &mut State, targets: &[RouteTarget], tx: &mut Tx) -> bool {
+    let wanted = targets
+        .iter()
+        .filter_map(|target| route::wanted(state, target))
+        .collect();
+    route::discover_wanted(state, wanted, tx)
+}
+
+/// Reads the harnesses a route offers when nothing has read them yet.
+pub(crate) fn want_harnesses(state: &mut State, tx: &mut Tx) {
+    let h = &state.window.settings.harnesses;
+    if h.read.is_none()
+        && !h.loading
+        && state.facts.connection == attn_client::Connection::Connected
+    {
+        harnesses::read(state, tx);
+    }
 }
 
 /// Has the page brought up to date before the next frame.
