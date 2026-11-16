@@ -455,6 +455,21 @@ fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
             .as_deref(),
         Some("")
     );
+    world.gesture(|app| app.click(Target::key("rail.home")));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("rail.home"))
+            .value
+            .as_deref(),
+        Some("current")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("main").name("Home"))
+            .is_some()
+    );
 
     world.gesture(|app| app.click(Target::role("button").name("Expand sidebar")));
     assert!(world.screen().find(Target::key("rail")).is_none());

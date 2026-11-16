@@ -613,6 +613,30 @@ fn a_non_production_instance_names_itself_in_the_title_bar_before_the_profile_pi
 }
 
 #[test]
+fn a_default_build_names_no_instance_with_the_sidebar_shown_or_collapsed() {
+    let mut world = World::start_as_instance(
+        keeping(vec![work(), home(), side()], "work", &[]),
+        "default",
+    );
+    let names_an_instance = |world: &World| {
+        let screen = world.screen();
+        screen.find(Target::key("titlebar.instance")).is_some()
+            || screen.to_string().contains("Instance:")
+    };
+    assert!(
+        world
+            .screen()
+            .find(Target::key("titlebar.profile"))
+            .is_some()
+    );
+    assert!(!names_an_instance(&world));
+
+    press_action(&mut world, &Action::SessionToggleSidebar);
+    assert!(world.screen().find(Target::key("rail")).is_some());
+    assert!(!names_an_instance(&world));
+}
+
+#[test]
 fn the_palette_opens_the_switcher_and_records_a_switch_in_the_profile_it_was_picked_in() {
     let mut world = three("work");
 

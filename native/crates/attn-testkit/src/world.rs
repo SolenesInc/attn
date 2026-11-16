@@ -200,16 +200,31 @@ impl World {
 
     /// [`World::start`] with a window `size` points wide and tall.
     pub fn start_sized(daemon: Daemon, size: (f32, f32)) -> World {
-        World::start_with(daemon, size, attn_app::whats_new::seen_prefs())
+        World::start_with(daemon, size, attn_app::whats_new::seen_prefs(), INSTANCE)
+    }
+
+    /// [`World::start`] for an app of `instance`, against a daemon of the same instance.
+    pub fn start_as_instance(daemon: Daemon, instance: &str) -> World {
+        World::start_with(
+            daemon.instance(instance),
+            VIEWPORT,
+            attn_app::whats_new::seen_prefs(),
+            instance,
+        )
     }
 
     /// [`World::start`] for someone whose app settings are `prefs`, such as a first launch's
     /// empty store or a file an earlier world saved to.
     pub fn start_with_prefs(daemon: Daemon, prefs: rune::prefs::Prefs) -> World {
-        World::start_with(daemon, VIEWPORT, prefs)
+        World::start_with(daemon, VIEWPORT, prefs, INSTANCE)
     }
 
-    fn start_with(daemon: Daemon, size: (f32, f32), prefs: rune::prefs::Prefs) -> World {
+    fn start_with(
+        daemon: Daemon,
+        size: (f32, f32),
+        prefs: rune::prefs::Prefs,
+        instance: &str,
+    ) -> World {
         attn_app::use_prefs(prefs);
         attn_app::use_hour_cycle(attn_app::HourCycle::TwentyFour);
         let files = tempfile::tempdir().expect("a temporary folder for the user's files");
@@ -239,7 +254,7 @@ impl World {
                 daemon: daemon.address().to_string(),
                 client_token: CLIENT_TOKEN.into(),
                 host_token: None,
-                instance: INSTANCE.into(),
+                instance: instance.into(),
                 browser_host: false,
                 profile_id: None,
                 client_id: "wire-client".into(),
@@ -266,7 +281,7 @@ impl World {
                 terminals.clone(),
                 replies.clone(),
                 WALL_START_MS,
-                INSTANCE.into(),
+                instance.into(),
                 move |update| {
                     inbox.lock().unwrap().push(update);
                     pulse.beat();

@@ -795,6 +795,19 @@ fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
                 .color(t.text_tertiary),
         )
         .children((tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile, t)))
+        .child(close_tile_button(&key, tile, t))
+}
+
+fn close_tile_button(row_key: &str, tile: &TileRow, t: &Tokens) -> El {
+    let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
+    queue_view::control(
+        row_key,
+        "close",
+        format!("Close {}", tile.title),
+        "×",
+        t,
+        move |state, tx| crate::desktop::remove_tile(state, desktop.clone(), leaf.clone(), tx),
+    )
 }
 
 /// The browser row's button that loads its page again, as the tile header's does.

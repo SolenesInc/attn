@@ -726,7 +726,7 @@ fn close(state: &mut State, tx: &mut Tx) {
 const CLOSE_REFUSED: &str = "Could not close that tile";
 
 /// The document or browser tile `leaf` leaves `desktop`.
-pub(super) fn remove_tile(state: &mut State, desktop_id: String, leaf_id: String, tx: &mut Tx) {
+pub(crate) fn remove_tile(state: &mut State, desktop_id: String, leaf_id: String, tx: &mut Tx) {
     state.act(
         |request_id| DesktopRemoveLeafMessage {
             request_id,

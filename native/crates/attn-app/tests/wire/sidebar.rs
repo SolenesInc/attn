@@ -379,11 +379,18 @@ fn desktops_list_in_order_with_their_agents_and_tiles_in_layout_order() {
             .as_deref(),
         Some("Empty desktop")
     );
+    for desktop in ["sidebar.desktop.a", "sidebar.desktop.tile-only"] {
+        assert_eq!(
+            world.screen().get(Target::key(desktop)).value.as_deref(),
+            Some(""),
+            "{desktop} has something on it"
+        );
+    }
     assert!(world.runtime_is_at_rest());
 }
 
 #[test]
-fn clicking_a_tile_row_asks_the_daemon_to_show_that_tile() {
+fn a_tile_row_shows_its_tile_and_its_close_button_takes_the_tile_off_its_desktop() {
     let tree = r#"{"type":"split","split_id":"s","direction":"vertical","children":[
         {"type":"pane","pane_id":"p1"},
         {"type":"tile","tile_id":"tile-docs","tile_kind":"browser","tile_params":"https://docs.test/a"}]}"#;
@@ -398,6 +405,12 @@ fn clicking_a_tile_row_asks_the_daemon_to_show_that_tile() {
     assert_eq!(shown.len(), 1);
     assert_eq!(shown[0]["desktop_id"], "d1");
     assert_eq!(shown[0]["leaf_id"], "tile-docs");
+
+    world.gesture(|app| app.click(Target::role("button").name("Close docs.test")));
+    let removed = world.daemon.sent_of("desktop_remove_leaf");
+    assert_eq!(removed.len(), 1, "{removed:?}");
+    assert_eq!(removed[0]["desktop_id"], "d1");
+    assert_eq!(removed[0]["leaf_id"], "tile-docs");
 }
 
 fn three_desktops() -> InitialStateMessage {
@@ -650,6 +663,32 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
             .screen()
             .find(Target::key("overview.dialog"))
             .is_some()
+    );
+}
+
+#[test]
+fn home_hints_the_keys_the_user_bound_it_to() {
+    let mut world = World::start(Daemon::scripted().state(state(
+        vec![session("s1", "idle")],
+        vec![desktop("d1", "a", "One", vec![pane("d1", "p1", "s1")])],
+    )));
+    let rebound =
+        r#"{"version":1,"overrides":{"session.goToDashboard":{"key":"y","meta":true,"alt":true}}}"#;
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(BTreeMap::from([(
+            "keybindings_config".to_owned(),
+            rebound.to_owned(),
+        )])),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+
+    let keymap = Keymap::from_setting(Some(rebound), KeyPlatform::current());
+    let bound = keymap.label(keymap.binding(&Action::SessionGoToDashboard).unwrap());
+    assert_ne!(bound, keys_of(Action::SessionGoToDashboard));
+    assert_eq!(
+        world.screen().get(Target::key("sidebar.home")).description,
+        Some(bound)
     );
 }
 
