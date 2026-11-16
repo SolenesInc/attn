@@ -172,6 +172,19 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         .item(item("rename", attn_ui::icon::PENCIL, "Rename session").on_select_tx(rename))
         .separator()
         .item(item("reload", "↻", "Reload session").on_select_tx(reload));
+    if let Some(member) = session
+        .and_then(|s| s.crew_member.clone())
+        .filter(|m| !m.is_empty())
+    {
+        kit_menu = kit_menu.item(
+            item("member-details", attn_ui::icon::BOLT, "Member details").on_select_tx(
+                move |state: &mut State, tx: &mut Tx| {
+                    state.window.session_menu = None;
+                    super::crew::details(state, &member, tx);
+                },
+            ),
+        );
+    }
     if !chief {
         kit_menu = kit_menu.item(item("close", "×", "Close session").on_select_tx(close));
     }

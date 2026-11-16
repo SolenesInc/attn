@@ -73,6 +73,9 @@ pub(crate) fn filter_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) ->
 /// filter, and Escape steps back one layer, the last of which hands the keyboard back to the
 /// agent on screen.
 pub(crate) fn list_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
+    if ev.key == rune::Key::Escape {
+        super::crew::disarm(state);
+    }
     if !plain(ev) {
         return false;
     }

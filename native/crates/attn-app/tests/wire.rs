@@ -7,6 +7,7 @@ mod wire {
     mod connection;
     mod covered;
     mod crew;
+    mod crew_start;
     mod deep_link;
     mod desktop_close;
     mod desktop_order;

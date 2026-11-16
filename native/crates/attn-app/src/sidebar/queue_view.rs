@@ -49,6 +49,8 @@ pub struct QueueAgent {
     pub settle: bool,
     pub snooze: bool,
     pub unsnooze: bool,
+    /// The member a crew row's session belongs to, with its name, for Ask to close.
+    pub member: Option<(String, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -60,6 +62,8 @@ pub enum QLine {
     Filter,
     Empty(&'static str),
     Agent(Box<QueueAgent>),
+    CrewRule,
+    Member(super::crew::Resting),
 }
 
 impl QLine {
@@ -72,6 +76,8 @@ impl QLine {
             QLine::Filter => "queue.filter".into(),
             QLine::Empty(key) => format!("queue.empty.{key}"),
             QLine::Agent(a) => format!("{}.{}", a.band.prefix(), a.agent.id),
+            QLine::CrewRule => "queue.rule.crew".into(),
+            QLine::Member(m) => format!("{}.{}", super::crew::QUEUE_ROW, m.member),
         }
     }
 }
@@ -162,6 +168,13 @@ fn agent(
         settle: band == Band::Turn && actions.settle,
         snooze: matches!(band, Band::Turn | Band::Working) && actions.snooze,
         unsnooze: band == Band::Snoozed && !row.offline,
+        member: (band == Band::Crew)
+            .then(|| session.crew_member.clone().filter(|m| !m.is_empty()))
+            .flatten()
+            .map(|m| {
+                let name = super::crew::resting(state, &m).name;
+                (m, name)
+            }),
     })
 }
 
@@ -173,11 +186,23 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
     let on_screen = crate::desktop::on_screen_sessions(state);
     let mut lines = Vec::new();
     let chief = bands.chief.as_ref();
-    if chief.is_some() || !bands.crew.is_empty() {
-        lines.push(QLine::Rule {
-            key: "crew",
-            text: "Crew".into(),
-        });
+    let chief_member = chief.and_then(|c| c.session.crew_member.clone());
+    let mut members: Vec<(String, Option<&QueueRow<'_>>)> = Vec::new();
+    for row in &bands.crew {
+        let member = row.session.crew_member.clone().unwrap_or_default();
+        if !members.iter().any(|(m, _)| *m == member) {
+            members.push((member, Some(row)));
+        }
+    }
+    for resting in crate::crew::members(state) {
+        if !members.iter().any(|(m, _)| *m == resting.id) {
+            members.push((resting.id.clone(), None));
+        }
+    }
+    members.retain(|(m, _)| Some(m) != chief_member.as_ref());
+    members.sort_by(|a, b| a.0.cmp(&b.0));
+    if chief.is_some() || !members.is_empty() {
+        lines.push(QLine::CrewRule);
         if let Some(chief) = chief {
             lines.push(QLine::Agent(agent(
                 state,
@@ -187,20 +212,11 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
                 now_ms,
             )));
         }
-        let chief_member = chief.and_then(|c| c.session.crew_member.clone());
-        let mut seen = std::collections::HashSet::new();
-        for row in &bands.crew {
-            let member = row.session.crew_member.clone().unwrap_or_default();
-            if Some(&member) == chief_member.as_ref() || !seen.insert(member) {
-                continue;
-            }
-            lines.push(QLine::Agent(agent(
-                state,
-                &on_screen,
-                Band::Crew,
-                row,
-                now_ms,
-            )));
+        for (member, row) in members {
+            lines.push(match row {
+                Some(row) => QLine::Agent(agent(state, &on_screen, Band::Crew, row, now_ms)),
+                None => QLine::Member(super::crew::resting(state, &member)),
+            });
         }
     }
     let pinned: std::collections::HashSet<&str> =
@@ -298,6 +314,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             std::sync::Arc::as_ptr(&facts.asks) as usize,
             std::sync::Arc::as_ptr(&facts.garden) as usize,
             std::sync::Arc::as_ptr(&facts.outposts) as usize,
+            std::sync::Arc::as_ptr(&facts.crew) as usize,
+            window.crew_rows.armed(),
         ),
         window.view,
         window.agent_list_open,
@@ -418,10 +436,34 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                     let bar = super::settling_bar(state, &key, &agent.agent, t);
                     queue_row(key, agent, cursor, logos, t).children(bar)
                 }
+                QLine::CrewRule => crew_rule(key, t),
+                QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
                 QLine::Filter => unreachable!("the filter is built above"),
             }
         },
     )
+}
+
+pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
+    row()
+        .key(key.clone())
+        .role("heading")
+        .label("Crew")
+        .w_full()
+        .h(ROW_HEIGHT)
+        .items_center()
+        .gap(space::S1)
+        .child(text("Crew").font(type_::SECTION).color(t.text_tertiary))
+        .child(rune::el().grow(1.0).h(1.0).fill(t.border_subtle))
+        .child(
+            Button::new("manage")
+                .variant(ButtonVariant::GhostMuted)
+                .control_size(rune_kit::ControlSize::Small)
+                .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::open(state, None, tx))
+                .build(attn_ui::kit(t))
+                .key(format!("{key}.manage"))
+                .label("Manage crew"),
+        )
 }
 
 fn rule(key: String, label: &str, t: &Tokens) -> El {
@@ -677,11 +719,23 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             move |state, tx| super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx),
         )
     });
+    let ask_close = a.member.as_ref().map(|(member, name)| {
+        let member = member.clone();
+        control(
+            key,
+            "ask-close",
+            format!("Ask {name} to close"),
+            attn_ui::icon::MOON,
+            t,
+            move |state, tx| crate::crew::ask_to_close(state, &member, tx),
+        )
+    });
     Some(
         row()
             .key(format!("{key}.controls"))
             .gap(2.0)
             .group_opacity(0.0, 1.0)
+            .children(ask_close)
             .children(unsnooze)
             .children(snooze)
             .child(super::actions_button(key, &a.agent, t))

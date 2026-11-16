@@ -22,6 +22,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
     }
+    if ev.key == Key::Escape {
+        crate::sidebar::crew::disarm(state);
+    }
     if modal(state) {
         return bound(state, ev, tx);
     }

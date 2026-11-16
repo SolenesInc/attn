@@ -508,5 +508,6 @@ pub(crate) fn reconnected(state: &mut State, tx: &mut Tx) {
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let left = view::leave_charter(state, tx);
     let listed = is_open(state) && crate::settings::crew_poll(state, tx);
-    charter::poll(state, now, tx) | left | listed
+    let rows = crate::sidebar::crew::poll(state, now, &crate::sidebar::crew::row_prefixes(), tx);
+    charter::poll(state, now, tx) | left | listed | rows
 }

@@ -10,6 +10,7 @@ pub const CLOSE: &str = "\u{f00d}";
 pub const CARET_RIGHT: &str = "\u{f0da}";
 pub const SEARCH: &str = "\u{f002}";
 pub const MOON: &str = "\u{f186}";
+pub const SUN: &str = "\u{f185}";
 pub const SETTINGS: &str = "\u{f013}";
 pub const CHECKED: &str = "\u{f046}";
 pub const CHECK: &str = "\u{f00c}";

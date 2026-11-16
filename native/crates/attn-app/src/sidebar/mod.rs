@@ -1,6 +1,7 @@
 mod actions;
 pub(crate) mod bar_peek;
 mod chrome;
+pub(crate) mod crew;
 mod dock;
 mod harness_icon;
 pub(crate) mod model;
@@ -188,6 +189,11 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let dock = dock::of(state);
     let home_keys = crate::palette::label_of(state, &Action::SessionGoToDashboard);
     let overview_keys = crate::palette::label_of(state, &Action::DesktopOverview);
+    let has_crew = !crate::crew::members(state).is_empty();
+    let resting: Vec<crew::Resting> = crew::between_sessions(state)
+        .into_iter()
+        .map(|m| crew::resting(state, &m.id))
+        .collect();
     let reads = (
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
@@ -203,6 +209,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             state.window.reorder.clone(),
             new_desktop,
             (dock.clone(), home_keys.clone(), overview_keys.clone()),
+            (resting.clone(), has_crew),
         ),
         (
             *t,
@@ -239,6 +246,22 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                         stick_bottom: false,
                     })
                     .child(overview_row(overview_keys.clone(), &t))
+                    .children(has_crew.then(|| {
+                        col()
+                            .key(crew::CLASSIC_ROW)
+                            .role("list")
+                            .label("Crew between sessions")
+                            .w_full()
+                            .child(queue_view::crew_rule("sidebar.rule.crew".into(), &t))
+                            .children(resting.iter().map(|m| {
+                                crew::row_view(
+                                    format!("{}.{}", crew::CLASSIC_ROW, m.member),
+                                    m,
+                                    ROW_HEIGHT,
+                                    &t,
+                                )
+                            }))
+                    }))
                     .child(
                         col()
                             .key(DESKTOP_LIST)
