@@ -292,6 +292,14 @@ try {
     await key('escape'); await hidden();
     await client.request('capture_binding', { binding: testBinding });
   });
+  await runner.step('shortcut_with_pointer_on_top_edge_opens_panel', async () => {
+    const edge = JSON.parse(await driver.runInputDriverCapture(['pointer_top_edge']));
+    runner.writeJson('pointer-top-edge.json', edge);
+    const primary = edge.screens[0];
+    assert.equal(edge.pointer.y, primary.y + primary.height, 'macOS reports a pointer pinned to the top row at the screen\'s top edge');
+    await openCapture();
+    await key('escape'); await hidden();
+  });
   await runner.step('hidden_origin_escape_keeps_app_hidden', async () => {
     await driver.activateApp();
     await driver.runInputDriver(['wait_frontmost']);

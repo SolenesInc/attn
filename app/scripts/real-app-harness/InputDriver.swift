@@ -54,7 +54,7 @@ func parseOptions() throws -> Options {
     while index < args.count {
         let arg = args[index]
         switch arg {
-        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
+        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
             options.command = arg
         case "--window-title":
             index += 1
@@ -807,6 +807,20 @@ func clickWindow(bundleId: String, relativeX: Double, relativeY: Double, right: 
     up.post(tap: .cghidEventTap)
 }
 
+func pinPointerToTopEdgeOfMainDisplay() throws -> String {
+    let display = CGDisplayBounds(CGMainDisplayID())
+    let top = CGPoint(x: display.midX, y: display.minY)
+    let warped = CGWarpMouseCursorPosition(top)
+    guard warped == .success else {
+        throw DriverError.eventCreationFailed("Failed to move the pointer to the top edge: CGError \(warped.rawValue).")
+    }
+    let pointer = NSEvent.mouseLocation
+    let screens = NSScreen.screens.map { screen in
+        "{\"x\":\(screen.frame.minX),\"y\":\(screen.frame.minY),\"width\":\(screen.frame.width),\"height\":\(screen.frame.height)}"
+    }
+    return "{\"pointer\":{\"x\":\(pointer.x),\"y\":\(pointer.y)},\"screens\":[\(screens.joined(separator: ","))]}"
+}
+
 func movePointerInWindow(bundleId: String, relativeX: Double, relativeY: Double, titleSubstring: String? = nil) throws {
     let bounds = try mainWindowBounds(bundleId: bundleId, titleSubstring: titleSubstring)
     let target = CGPoint(
@@ -891,7 +905,7 @@ do {
     // and observation-only commands work fine against a sleeping display and
     // are deliberately left alone.
     switch options.command {
-    case "activate", "text", "key", "keycode", "global_key", "global_text", "global_capture", "drag_between", "move", "click", "right_click", "drag":
+    case "activate", "text", "key", "keycode", "global_key", "global_text", "global_capture", "pointer_top_edge", "drag_between", "move", "click", "right_click", "drag":
         try requireLiveDisplay()
     default:
         break
@@ -951,6 +965,9 @@ do {
         let postedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
         try postKeyCode(try virtualKeyCode(for: options.key ?? "space"), modifiers: options.modifiers.isEmpty ? ["control", "option"] : options.modifiers)
         print("{\"postedAtMs\":\(postedAtMs)}")
+    case "pointer_top_edge":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        print(try pinPointerToTopEdgeOfMainDisplay())
     case "drag_between":
         try ensureAccessibility(prompt: options.promptAccessibility)
         try dragWindow(bundleId: options.bundleId, relativeX: options.relativeX ?? 0.5, relativeY: options.relativeY ?? 0.5, toRelativeX: 0.5, toRelativeY: 0.5, steps: 30, targetBundleId: options.text)
