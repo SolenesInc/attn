@@ -97,6 +97,9 @@ pub(crate) struct Garden {
     edits: HashMap<spot::Spot, spot::Edit>,
     /// The folds open on seed pages, by the key of the control that opens each.
     folds: HashSet<String>,
+    /// The seed whose check takes the keyboard once its page lays it out, and that check's
+    /// box, as a shared check's row goes to an inheriting seed.
+    check_focus: Option<(String, String)>,
     pub(crate) board_walk: board::Board,
     pub(crate) review: review::Review,
 }

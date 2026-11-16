@@ -455,3 +455,279 @@ fn reads_a_seed_tile_from_its_status_through_its_plot_to_its_plan_and_a_log_of_w
     );
     assert!(world.runtime_is_at_rest());
 }
+
+fn plan() -> Seed {
+    with(seed("s-plan11", "Plan the reader"), |s| {
+        s.body = "# Rendered plan\n\nThe steps.".into()
+    })
+}
+
+#[test]
+fn lists_a_seed_tiles_checks_under_its_plan_with_the_header_tally_and_moves_one_from_the_tile() {
+    let checked = with(plan(), |s| {
+        s.checks = Some(vec![
+            attn_protocol::SeedCheck {
+                report: Some(attn_protocol::SeedCheckReport {
+                    summary: "Reader wire tests pass".into(),
+                    by: ActorView {
+                        name: "Trellis".into(),
+                        r#ref: "member:trellis".into(),
+                    },
+                    at: "2026-08-15T09:00:00Z".into(),
+                    ..attn_protocol::SeedCheckReport::default()
+                }),
+                id: "C1".into(),
+                text: "Wire tests cover the reader.".into(),
+                state: "reported".into(),
+                ..attn_protocol::SeedCheck::default()
+            },
+            attn_protocol::SeedCheck {
+                id: "C2".into(),
+                text: "The reader is recorded.".into(),
+                state: "open".into(),
+                ..attn_protocol::SeedCheck::default()
+            },
+        ])
+    });
+    let read = checked.clone();
+    let mut world = start("s-plan11", vec![checked], move |r| {
+        document(r, read.clone(), Vec::new(), &[])
+    });
+    world.daemon.on("seed_check", |_: &Request| ());
+
+    let tally = world
+        .screen()
+        .descendants(Target::key("tile.t"))
+        .into_iter()
+        .find(|n| n.name.as_deref() == Some("Checks: 0 of 2 confirmed · 1 to judge"));
+    assert!(tally.is_some(), "{:?}", shown(&world));
+    let seen = shown(&world);
+    let at = |words: &str| seen.iter().position(|w| w.contains(words));
+    assert!(
+        at("Rendered plan") < at("Wire tests cover the reader."),
+        "{seen:?}"
+    );
+    assert!(at("Reader wire tests pass").is_some(), "{seen:?}");
+
+    world.gesture(|app| app.click(Target::role("button").name("Confirm C1")));
+    let sent = world.daemon.sent_of("seed_check");
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        (&sent[0]["seed_id"], &sent[0]["check_id"], &sent[0]["verb"]),
+        (&json!("s-plan11"), &json!("C1"), &json!("confirm"))
+    );
+}
+
+#[test]
+fn opens_an_inheriting_seeds_check_from_a_plot_tiles_shared_check_row() {
+    let leaf = with(part_of("s-plot11", "s-leaf11", "The view"), |s| {
+        s.checks = Some(vec![attn_protocol::SeedCheck {
+            id: "C4".into(),
+            text: "CI is green on the head.".into(),
+            state: "open".into(),
+            from: Some("s-plot11".into()),
+            ..attn_protocol::SeedCheck::default()
+        }])
+    });
+    let crown = with(plot("s-plot11", "The monitor plot", ""), |s| {
+        s.body = "# A long plan".into();
+        s.shared_checks = Some(vec![attn_protocol::SeedSharedCheck {
+            id: "C4".into(),
+            text: "CI is green on the head.".into(),
+            seeds: vec![attn_protocol::SeedCheckRollupEntry {
+                seed_id: "s-leaf11".into(),
+                state: "open".into(),
+                has_report: false,
+            }],
+            ..attn_protocol::SeedSharedCheck::default()
+        }]);
+    });
+    let (read_crown, read_leaf) = (crown.clone(), leaf.clone());
+    let mut world = start("s-plot11", vec![crown.clone()], move |r| {
+        if r["seed_id"] == "s-leaf11" {
+            document(r, read_leaf.clone(), Vec::new(), &[])
+        } else {
+            document(r, read_crown.clone(), vec![read_leaf.clone()], &[])
+        }
+    });
+    world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+        profile_id: PROFILE.into(),
+        order: vec!["s-plot11".into(), "s-leaf11".into()],
+        seeds: vec![leaf],
+        total: 2,
+        ..attn_protocol::GardenSeedsChangedMessage::new()
+    });
+    world.settle();
+    world.daemon.on("desktop_update_tile", |_: &Request| ());
+
+    world.gesture(|app| {
+        app.click(Target::role("button").name("C4 CI is green on the head. · 0 of 1 confirmed"))
+    });
+    world.gesture(|app| app.click(Target::role("button").name("The view · planted · open")));
+
+    let updated = world.daemon.sent_of("desktop_update_tile");
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0]["tile_params"], "s-leaf11");
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile(),
+        desktops: vec![desktop(row(vec![pane("a"), seed_tile("s-leaf11")]), 2)],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.name).as_deref(),
+        Some("Confirm C4")
+    );
+}
+
+#[test]
+fn refreshes_a_seed_tile_on_garden_changes_that_carry_no_seed_on_reconnect_and_ignores_obsolete_responses()
+ {
+    let notes = std::sync::Arc::new(std::sync::Mutex::new(Some(vec!["before the keep pass"])));
+    let said = notes.clone();
+    let mut world = start("s-plan11", vec![plan()], move |r| {
+        match said.lock().unwrap().as_ref() {
+            Some(notes) => document(r, plan(), Vec::new(), notes),
+            None => Value::Null,
+        }
+    });
+    let changed = |world: &mut World| {
+        world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
+            profile_id: PROFILE.into(),
+            order: vec!["s-plan11".into()],
+            seeds: Vec::new(),
+            total: 1,
+            ..attn_protocol::GardenSeedsChangedMessage::new()
+        });
+        world.settle();
+    };
+    let kept_changed = |world: &mut World| {
+        world
+            .daemon
+            .emit(json!({"event": "kept_conversations_changed"}));
+        world.settle();
+    };
+    let reads = |world: &World| world.daemon.sent_of("seed_document_get");
+
+    world.daemon.on("seed_document_get", |_: &Request| ());
+    kept_changed(&mut world);
+    assert_eq!(reads(&world).len(), 1);
+    changed(&mut world);
+    let older = reads(&world)[1].clone();
+
+    *notes.lock().unwrap() = Some(vec!["after the keep pass"]);
+    let said = notes.clone();
+    world.daemon.on("seed_document_get", move |r: &Request| {
+        document(
+            r,
+            plan(),
+            Vec::new(),
+            said.lock().unwrap().as_ref().unwrap(),
+        )
+    });
+    kept_changed(&mut world);
+    assert_eq!(reads(&world).len(), 2);
+    changed(&mut world);
+    world.daemon.reply_to(
+        &older,
+        document(&older, plan(), Vec::new(), &["superseded detail"]),
+    );
+    world.settle();
+    let seen = shown(&world);
+    assert!(
+        seen.contains(&"after the keep pass body".to_owned()),
+        "{seen:?}"
+    );
+    assert!(
+        !seen.contains(&"superseded detail body".to_owned()),
+        "{seen:?}"
+    );
+    assert_eq!(reads(&world).len(), 3);
+    assert!(reads(&world).iter().all(|r| r["seed_id"] == "s-plan11"));
+
+    *notes.lock().unwrap() = Some(vec!["after reconnect"]);
+    world.reconnect();
+    let seen = shown(&world);
+    assert!(
+        seen.contains(&"after reconnect body".to_owned()),
+        "{seen:?}"
+    );
+    assert_eq!(reads(&world).len(), 4);
+}
+
+#[test]
+fn shows_no_artifacts_and_no_harvest_condition_for_a_seed_that_has_neither() {
+    let world = start("s-plan11", vec![plan()], |r| {
+        document(r, plan(), Vec::new(), &["no attachment here"])
+    });
+    let seen = shown(&world);
+    assert!(
+        seen.contains(&"no attachment here body".to_owned()),
+        "{seen:?}"
+    );
+    assert!(!seen.contains(&"Artifacts".to_owned()), "{seen:?}");
+    assert!(
+        !seen.iter().any(|w| w.contains("harvests when")),
+        "{seen:?}"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn says_the_harvest_condition_beside_the_state_and_opens_the_pull_request() {
+    let url = "https://github.com/victorarias/attn/pull/42";
+    let armed = with(plan(), |s| {
+        s.status = "parked".into();
+        s.harvest_when = Some(SeedHarvestCondition {
+            pull_request: "github.com:victorarias/attn#42".into(),
+            url: url.into(),
+            ..SeedHarvestCondition::default()
+        });
+    });
+    let read = armed.clone();
+    let mut world = start("s-plan11", vec![armed], move |r| {
+        document(r, read.clone(), Vec::new(), &[])
+    });
+
+    let link = Target::role("link").name("harvests when victorarias/attn#42 merges");
+    let meta: Vec<_> = world
+        .screen()
+        .descendants(Target::key("seed-tile.t.head.meta"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(meta.first().map(String::as_str), Some("parked"), "{meta:?}");
+    assert!(
+        meta.contains(&"harvests when victorarias/attn#42 merges".to_owned()),
+        "{meta:?}"
+    );
+    world.gesture(|app| app.click(link));
+    assert_eq!(world.opened_links(), [url]);
+}
+
+#[test]
+fn keeps_the_lines_a_log_entry_was_written_in_and_leaves_its_code_alone() {
+    let world = start("s-plan11", vec![plan()], |r| {
+        let mut answer = document(r, plan(), Vec::new(), &[]);
+        answer["document"]["notes"] = json!([{
+            "id": "n-lines", "seed_id": "s-plan11", "kind": "note",
+            "body": "Checked A\nChecked B\n\n```\nx\ny\n```",
+            "author": {"name": "the user", "ref": "user"},
+            "created_at": "2026-11-13T09:00:00Z",
+        }]);
+        answer["document"]["notes_total"] = json!(1);
+        answer
+    });
+    let read: Vec<_> = world
+        .screen()
+        .descendants(Target::key("seed-tile.t.log.n-lines"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        read.contains(&"Checked A\nChecked B".to_owned()),
+        "{read:?}"
+    );
+    assert!(read.contains(&"x\ny".to_owned()), "{read:?}");
+    assert!(world.runtime_is_at_rest());
+}

@@ -186,7 +186,7 @@ impl Sheet<'_> {
         let view = format!("{}/log.{id}", self.view);
         let kept = self.readings.kept(&view);
         let t = *self.t;
-        let body = body.to_owned();
+        let body = line_breaks(body);
         memo(
             self.key(&format!("log.{id}.body")),
             (body.clone(), view.clone(), kept.clone(), t),
@@ -371,6 +371,31 @@ pub(super) fn note(key: &str, words: impl Into<String>, t: &Tokens) -> El {
         .font(type_::BODY)
         .color(t.text_secondary)
         .padding(space::S2)
+}
+
+/// `body` with each single newline outside a code fence made a hard break, so the lines a log
+/// entry was written in stay lines, as the Tauri log reads it with `breaks`.
+fn line_breaks(body: &str) -> String {
+    let mut fence: Option<&str> = None;
+    let lines: Vec<&str> = body.lines().collect();
+    let mut out = String::with_capacity(body.len() + lines.len() * 2);
+    for (i, line) in lines.iter().enumerate() {
+        let marker = ["```", "~~~"]
+            .into_iter()
+            .find(|m| line.trim_start().starts_with(m));
+        match (fence, marker) {
+            (None, Some(m)) => fence = Some(m),
+            (Some(open), Some(m)) if open == m => fence = None,
+            _ => {}
+        }
+        out.push_str(line);
+        let next_written = lines.get(i + 1).is_some_and(|n| !n.trim().is_empty());
+        if fence.is_none() && marker.is_none() && !line.trim().is_empty() && next_written {
+            out.push_str("  ");
+        }
+        out.push('\n');
+    }
+    out
 }
 
 pub(super) fn section(key: &str, title: &str, t: &Tokens) -> El {
