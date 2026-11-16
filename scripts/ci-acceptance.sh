@@ -16,7 +16,7 @@ if [ "$unmet" = '[]' ]; then
   exit 0
 fi
 echo "ci acceptance: not green: $unmet" >&2
-if jq -e 'any(.[]; .result | IN("failure", "cancelled") | not)' <<<"$unmet" >/dev/null; then
+if jq -e 'any(.[]; .result == "skipped")' <<<"$unmet" >/dev/null; then
   exit 1
 fi
 

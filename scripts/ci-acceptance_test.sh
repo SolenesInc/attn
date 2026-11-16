@@ -34,6 +34,7 @@ ok='{"result":"success"}'
 skipped='{"result":"skipped"}'
 failed='{"result":"failure"}'
 cancelled='{"result":"cancelled"}'
+abandoned='{"result":"abandoned"}'
 acceptance='{"name":"Acceptance","status":"in_progress","conclusion":null,"runner_name":"GitHub Actions 3","labels":["ubuntu-24.04"]}'
 linux_green='{"name":"PTY upgrade (ubuntu-24.04)","status":"completed","conclusion":"success","runner_name":"GitHub Actions 1","labels":["ubuntu-24.04"]}'
 macos_never_started='{"name":"PTY upgrade (macos-15)","status":"completed","conclusion":"cancelled","runner_name":null,"labels":["macos-15"]}'
@@ -69,6 +70,12 @@ expect macos-never-started 0 "{\"backend\":$ok,\"pty-compatibility\":$cancelled,
   "{\"jobs\":[$acceptance,$linux_green,$macos_never_started,$macos_aa_never_started]}"
 grep -Fq '::warning title=macOS coverage missing::No runner picked up PTY upgrade (macos-15), App acceptance macOS, so 1111111111111111111111111111111111111111 has no macOS coverage' "$work/macos-never-started.out"
 grep -Fq 'macOS coverage missing' "$work/macos-never-started.summary"
+
+expect macos-never-started-reported-abandoned 0 "{\"backend\":$ok,\"attn-cli\":$abandoned,\"full-macos\":$skipped}" \
+  "{\"jobs\":[$acceptance,$linux_green,{\"name\":\"CLI (macos-15)\",\"status\":\"completed\",\"conclusion\":\"cancelled\",\"runner_name\":\"\",\"labels\":[\"macos-15\"]}]}"
+
+expect macos-failed-reported-abandoned 1 "{\"backend\":$ok,\"pty-compatibility\":$abandoned,\"full-macos\":$skipped}" \
+  "{\"jobs\":[$acceptance,$linux_green,$macos_failed]}"
 
 expect macos-failed 1 "{\"backend\":$ok,\"pty-compatibility\":$failed,\"full-macos\":$skipped}" \
   "{\"jobs\":[$acceptance,$linux_green,$macos_failed]}"
