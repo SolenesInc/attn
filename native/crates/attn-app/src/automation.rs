@@ -7,6 +7,10 @@ use serde_json::{Value, json};
 
 use crate::{Action, State, dispatch};
 
+/// The `run` name that binds Quick Capture's system-wide shortcut to what follows it, as
+/// `capture.shortcut=Control+Alt+KeyB`, or turns it off when nothing does.
+const CAPTURE_SHORTCUT: &str = "capture.shortcut=";
+
 /// What attn adds to the automation protocol: ready once connected, its actions by shortcut
 /// id, and the slices of the store and the window a test reads.
 pub struct AppHooks;
@@ -17,6 +21,10 @@ impl Hooks<State> for AppHooks {
     }
 
     fn run(&self, state: &mut State, name: &str, tx: &mut Tx) -> Result<(), String> {
+        if let Some(binding) = name.strip_prefix(CAPTURE_SHORTCUT) {
+            let binding = (!binding.is_empty()).then(|| binding.to_owned());
+            return crate::quick_capture::shortcut::choose(state, binding);
+        }
         let action = Action::from_id(name).ok_or_else(|| {
             format!(
                 "no action has this id; ids are the keymap's, such as {:?}",
@@ -51,9 +59,13 @@ impl Hooks<State> for AppHooks {
                 "notice": window.notice.as_ref().map(|n| n.text.clone()),
             }),
             "settings" => crate::settings::automation_state(state),
+            "capture-shortcut" => json!({
+                "binding": state.capture_shortcut.active.clone().unwrap_or_default(),
+                "error": state.capture_shortcut.error,
+            }),
             "build" => build_identity()?,
             _ => {
-                return Err("slices: connection, sessions, desktops, profiles, window, settings, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
+                return Err("slices: connection, sessions, desktops, profiles, window, settings, capture-shortcut, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
             }
         }))
     }
@@ -81,6 +93,11 @@ pub fn enabled(instance: &str) -> bool {
         Ok("0") => false,
         _ => !instance.is_empty(),
     }
+}
+
+/// Where the Quick Capture panel's automation server writes its manifest, beside the app's.
+pub fn capture_manifest_path(bundle_id: &str) -> Option<PathBuf> {
+    manifest_path(bundle_id).map(|main| main.with_file_name("ui-automation-capture.json"))
 }
 
 /// Where the Tauri app writes its manifest for this bundle id, so the runner finds either

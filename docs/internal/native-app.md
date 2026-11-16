@@ -85,12 +85,12 @@ are on their way to the daemon.
 | `key` | `chord`, such as `mod+shift+k` | the key the keyboard sends for it on this platform |
 | `hold` | `mods`, such as `mod` or `mod+shift`, or empty | holds those modifiers down, as a keyboard does, until the next `hold`; empty lets them all go |
 | `type` | `text`, `target` | focuses the target first, then types |
-| `run` | `name`, an action id such as `session.toggleSidebar` | dispatches the action |
-| `state` | `of`, `includes` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build`, `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`, or `terminal-view:<runtime id>`, its cursor, what lies over it such as the selection, its images, how far it is scrolled back, what the copy key copies, the selected command block and its annotations, as the terminal holds them when read, whether or not a frame drew them. With `includes`, waits until one string in the slice, such as one terminal row, contains the text, and waits for a terminal not drawn yet |
+| `run` | `name`, an action id such as `session.toggleSidebar`, or `capture.shortcut=<binding>` | dispatches the action. `capture.shortcut=Control+Alt+KeyB` binds Quick Capture's system-wide shortcut as the shortcut editor does, and fails with the editor's reason when the system or the binding refuses it; nothing after `=` turns it off |
+| `state` | `of`, `includes`, `expect` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build`, `capture-shortcut`, the system-wide shortcut held and why the last binding failed, `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`, or `terminal-view:<runtime id>`, its cursor, what lies over it such as the selection, its images, how far it is scrolled back, what the copy key copies, the selected command block and its annotations, as the terminal holds them when read, whether or not a frame drew them. With `includes`, waits until one string in the slice, such as one terminal row, contains the text, and waits for a terminal not drawn yet. With `expect`, an object, waits until each field it names has its value in the slice, nested objects field by field |
 | `native_windows`, `shot` | `path` for `shot` | the main window's platform id, labelled `main`, then each tile window's, labelled by its key; whether a tile window shows is the platform's to say. `shot` captures the main window |
 | `set_window_bounds` | `logicalBounds`: `{x, y, width, height}` in points | moves the main window's top-left corner toward `x, y`, as far as the system allows, and sizes its content to `width` by `height`, then replies `{scaleFactor, minimized, logicalBounds}` with where the window is once the view lays out at that size, as the Tauri app's request does. When the window never reaches the size, such as below its minimum size, it fails naming the bounds asked for and the ones it has. Hosts without a window refuse it |
 
-A request that waits, `state` with `includes` among them, gives up after 30 s,
+A request that waits, `state` with `includes` or `expect` among them, gives up after 30 s,
 or its payload's `timeout_ms`, and says what it waited for.
 
 Hosts run the protocol on the app's `Runtime`:
@@ -107,6 +107,11 @@ Hosts run the protocol on the app's `Runtime`:
 - The installed app serves it on a named instance, or with `ATTN_AUTOMATION=1`
   (`0` turns it off), and writes its manifest where the Tauri app does:
   `debug/ui-automation.json` in the bundle id's application data directory.
+  On macOS the Quick Capture panel serves its own, with the manifest
+  `debug/ui-automation-capture.json` beside the app's. Its `run` takes
+  `dismiss`, which hides the panel, and its `state` one slice, `capture`: the
+  draft's text, mailbox and files, whether the panel shows, holds the
+  keyboard and has the message field focused, its view and its recent rows.
   Requests run on the window's runtime between frames, so they work while the
   window is parked or in the background. A covered window holds its motion
   until it shows, so a request waiting for an element to stop moving waits

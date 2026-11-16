@@ -43,6 +43,7 @@ pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
             },
         )
         .on_drop_hover(|panel: &mut Panel, over: bool, _: &mut Tx| panel.dropping = over)
+        .on_window_focus(|panel: &mut Panel, focused: bool, _: &mut Tx| panel.key_window = focused)
         .child(body)
         .children(alert(panel, &t))
         .children((panel.face == Face::Compose).then(|| footer(panel, &t)))

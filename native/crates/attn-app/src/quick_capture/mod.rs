@@ -4,6 +4,7 @@
 //! the main window opens it and hands it the daemon's answers to its requests.
 
 mod attach;
+pub mod automation;
 mod draft;
 mod history;
 #[cfg(target_os = "macos")]
@@ -157,6 +158,8 @@ pub struct Panel {
     after_staging: Option<fn(&mut Panel, &mut Tx)>,
     /// A file is dragged over the panel.
     pub(crate) dropping: bool,
+    /// The panel's window holds the keyboard.
+    pub(crate) key_window: bool,
 }
 
 const READS: Slices = Slices::CONNECTION

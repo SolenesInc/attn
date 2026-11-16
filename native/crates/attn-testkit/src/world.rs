@@ -723,6 +723,29 @@ impl World {
         self.capture.screen()
     }
 
+    /// Runs one automation request on the Quick Capture panel, as its server does.
+    pub fn capture_automate(&mut self, action: &str, payload: Value) -> Result<Value, String> {
+        let hooks = attn_app::quick_capture::automation::CaptureHooks;
+        let mut last = None;
+        loop {
+            let attempt = attn_automation::act(&mut self.capture.runtime, &hooks, action, &payload);
+            self.settle();
+            match attempt {
+                Attempt::Done(value) => return Ok(value),
+                Attempt::Fail(why) => return Err(why),
+                Attempt::Wait(what) => {
+                    let screen = self.capture.runtime.accessibility_json();
+                    if last.as_ref() == Some(&screen) {
+                        return Err(format!(
+                            "{action}: the panel is quiet and still waits for {what}"
+                        ));
+                    }
+                    last = Some(screen);
+                }
+            }
+        }
+    }
+
     /// How much the Quick Capture panel zooms what it draws.
     pub fn capture_zoom(&self) -> f32 {
         self.capture.runtime.zoom()

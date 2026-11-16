@@ -67,8 +67,8 @@ export class NativeAppDriver {
     return this.client.request('wait', { target, gone, ...(timeoutMs ? { timeout_ms: timeoutMs } : {}) });
   }
 
-  state(of, { includes, timeoutMs } = {}) {
-    return this.client.request('state', { of, ...(includes ? { includes } : {}), ...(timeoutMs ? { timeout_ms: timeoutMs } : {}) });
+  state(of, { includes, expect, timeoutMs } = {}) {
+    return this.client.request('state', { of, ...(includes ? { includes } : {}), ...(expect ? { expect } : {}), ...(timeoutMs ? { timeout_ms: timeoutMs } : {}) });
   }
 
   tree() {

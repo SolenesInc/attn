@@ -92,6 +92,9 @@ fn main() -> ExitCode {
         store.clone(),
         link.commands(),
         launch.instance.data_dir.clone(),
+        automation
+            .then(|| attn_app::automation::capture_manifest_path(&launch.instance.bundle_id))
+            .flatten(),
     );
     let menus = main.clone();
     main.update(Box::new(
@@ -99,8 +102,9 @@ fn main() -> ExitCode {
             state.open_tile_windows(opener, deliver);
             #[cfg(target_os = "macos")]
             {
-                let (store, daemon, data_dir) = capture;
-                let window = attn_app::quick_capture::mac::open(&store, daemon, data_dir.clone());
+                let (store, daemon, data_dir, manifest) = capture;
+                let window =
+                    attn_app::quick_capture::mac::open(&store, daemon, data_dir.clone(), manifest);
                 state.use_quick_capture(window, &data_dir);
             }
             if cfg!(target_os = "macos") {

@@ -5,7 +5,8 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use attn_client::{Commands, Store, Subscription};
+use attn_automation::{Host, Inspection, Server};
+use attn_client::{Commands, Pulse, Store, Subscription};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject};
@@ -25,6 +26,23 @@ struct MacPanel {
     front: Mutex<Option<Front>>,
     shortcut: Mutex<Option<ShortcutId>>,
     bound: Mutex<Option<Subscription>>,
+    automation: Mutex<Option<Server>>,
+}
+
+/// The panel's runtime as its automation server reaches it.
+struct PanelHost {
+    handle: AppHandle<Panel>,
+    frames: Pulse,
+}
+
+impl Host<Panel> for PanelHost {
+    fn inspect(&self, f: Inspection<Panel>) {
+        self.handle.inspect(f);
+    }
+
+    fn frames(&self) -> &Pulse {
+        &self.frames
+    }
 }
 
 /// Where the keyboard goes back to when the panel hides.
@@ -33,10 +51,20 @@ struct Front {
     app_hidden: bool,
 }
 
-/// Opens the panel's window, hidden until `Window::show`, bound to `store`. Call it on the UI
-/// thread, as `rune::open_window` needs.
-pub fn open(store: &Store, daemon: Commands, data_dir: PathBuf) -> Arc<dyn Window> {
-    let app = super::app();
+/// Opens the panel's window, hidden until `Window::show`, bound to `store`, with an
+/// automation server that writes `automation` as its manifest when given one. Call it on the
+/// UI thread, as `rune::open_window` needs.
+pub fn open(
+    store: &Store,
+    daemon: Commands,
+    data_dir: PathBuf,
+    automation: Option<PathBuf>,
+) -> Arc<dyn Window> {
+    let frames = Pulse::default();
+    let app = super::app().on_frame_encoded({
+        let frames = frames.clone();
+        move |_| frames.beat()
+    });
     let handle = app.handle();
     let options = WindowOptions::launcher_panel().macos(|native| {
         native
@@ -53,12 +81,21 @@ pub fn open(store: &Store, daemon: Commands, data_dir: PathBuf) -> Arc<dyn Windo
         front: Mutex::default(),
         shortcut: Mutex::default(),
         bound: Mutex::default(),
+        automation: Mutex::default(),
     });
     let window: Arc<dyn Window> = panel.clone();
-    let bound = super::bind(store, daemon, window.clone(), data_dir, move |update| {
-        handle.update(update)
+    let bound = super::bind(store, daemon, window.clone(), data_dir, {
+        let handle = handle.clone();
+        move |update| handle.update(update)
     });
     *panel.bound.lock().unwrap() = Some(bound);
+    if let Some(manifest) = automation {
+        let host = Arc::new(PanelHost { handle, frames });
+        match Server::start(host, Arc::new(super::automation::CaptureHooks), &manifest) {
+            Ok(server) => *panel.automation.lock().unwrap() = Some(server),
+            Err(why) => eprintln!("attn-app: Quick Capture automation is off: {why}"),
+        }
+    }
     window
 }
 

@@ -95,6 +95,10 @@ struct Of {
     /// Waits until a string in the slice contains this text.
     #[serde(default)]
     includes: Option<String>,
+    /// Waits until each of these fields of the slice has its value here, nested objects
+    /// field by field.
+    #[serde(default)]
+    expect: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -251,20 +255,38 @@ pub fn act<S: 'static>(
             }
         }
         "state" => {
-            let Of { of, includes } = args!(action, payload);
-            match (hooks.state(rt.state_mut(), &of), includes) {
-                (Err(why), _) => Attempt::Fail(format!("state {of:?}: {why}")),
-                (Ok(None), Some(_)) => Attempt::Wait(format!("state {of:?} to be there")),
-                (Ok(None), None) => Attempt::Fail(format!("state {of:?} is not there yet")),
-                (Ok(Some(value)), Some(text)) if !holds(&value, &text) => {
-                    Attempt::Wait(format!("state {of:?} to include {text:?}"))
+            let Of {
+                of,
+                includes,
+                expect,
+            } = args!(action, payload);
+            let waits = includes.is_some() || expect.is_some();
+            match hooks.state(rt.state_mut(), &of) {
+                Err(why) => Attempt::Fail(format!("state {of:?}: {why}")),
+                Ok(None) if waits => Attempt::Wait(format!("state {of:?} to be there")),
+                Ok(None) => Attempt::Fail(format!("state {of:?} is not there yet")),
+                Ok(Some(value)) if includes.as_ref().is_some_and(|text| !holds(&value, text)) => {
+                    Attempt::Wait(format!("state {of:?} to include {includes:?}"))
                 }
-                (Ok(Some(value)), _) => Attempt::Done(value),
+                Ok(Some(value)) if expect.as_ref().is_some_and(|e| !agrees(&value, e)) => {
+                    Attempt::Wait(format!("state {of:?} to agree with {}", expect.unwrap()))
+                }
+                Ok(Some(value)) => Attempt::Done(value),
             }
         }
         other => Attempt::Fail(format!(
             "unknown action {other:?}; actions: ping, tree, find, wait, press, hover, drag, scroll, key, hold, type, run, state, native_windows, shot, set_window_bounds"
         )),
+    }
+}
+
+/// Whether each field `expect` names has its value in `value`, objects field by field.
+fn agrees(value: &Value, expect: &Value) -> bool {
+    match (value, expect) {
+        (Value::Object(have), Value::Object(want)) => want
+            .iter()
+            .all(|(k, w)| have.get(k).is_some_and(|h| agrees(h, w))),
+        _ => value == expect,
     }
 }
 

@@ -1683,3 +1683,74 @@ fn the_panel_sizes_its_text_with_the_app() {
     assert_eq!(message_text(&world), "Keep me");
     rest(&mut world);
 }
+
+fn capture_state(world: &mut World, expect: Value) -> Result<Value, String> {
+    world.capture_automate("state", json!({"of": "capture", "expect": expect}))
+}
+
+#[test]
+fn the_panels_automation_reads_the_draft_waits_for_what_it_expects_and_dismisses_it() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    type_text(&mut world, "Check the drive notes.");
+    let image = ClipboardImage::from_png(png()).unwrap();
+    world.capture_gesture(|d| {
+        d.runtime
+            .paste_content(ClipboardContent::new("").with_image(image));
+    });
+
+    let state = capture_state(
+        &mut world,
+        json!({"visible": true, "attachmentCount": 1, "settled": true, "mailbox": "ada"}),
+    )
+    .unwrap();
+    assert_eq!(state["text"], "Check the drive notes.");
+    assert_eq!(state["imageCount"], 1);
+    assert_eq!(state["view"], "compose");
+    assert_eq!(state["files"][0]["name"], "Pasted screenshot");
+
+    let refused = capture_state(&mut world, json!({"mailbox": "fern"})).unwrap_err();
+    assert!(refused.contains("still waits"), "{refused}");
+
+    world
+        .capture_automate("run", json!({"name": "dismiss"}))
+        .unwrap();
+    assert!(!world.capture_shown());
+    capture_state(&mut world, json!({"visible": false})).unwrap();
+    rest(&mut world);
+}
+
+#[test]
+fn automation_binds_the_system_wide_shortcut_and_says_why_it_refuses_one() {
+    let (daemon, _) = home();
+    keeping_settings(&daemon, &[]);
+    let mut world = World::start(daemon);
+
+    world
+        .automate("run", json!({"name": "capture.shortcut=Control+Alt+KeyB"}))
+        .unwrap();
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+    let slice = world
+        .automate("state", json!({"of": "capture-shortcut"}))
+        .unwrap();
+    assert_eq!(slice["binding"], "Control+Alt+KeyB");
+
+    let refused = world
+        .automate("run", json!({"name": "capture.shortcut=Shift+KeyA"}))
+        .unwrap_err();
+    assert!(
+        refused.contains(
+            "Use Command, Control or Option with another key for a system-wide shortcut."
+        ),
+        "{refused}"
+    );
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+
+    world
+        .automate("run", json!({"name": "capture.shortcut="}))
+        .unwrap();
+    assert_eq!(world.capture_shortcut(), None);
+    assert_eq!(shortcut_writes(&world).last().map(String::as_str), Some(""));
+    rest(&mut world);
+}
