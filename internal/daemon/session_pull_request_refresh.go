@@ -187,22 +187,32 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 				changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
 				continue
 			}
-			d.logf("session pull requests: refresh %s: %v", group.prID, err)
-			changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
-			d.markSessionPullRequestChecked(group.prID, now)
-			continue
-		}
-
-		fetched++
-		if observation != nil {
-			changedSessions = append(changedSessions, d.processPullRequestWatches(group, *observation, feedbackErr, status, now)...)
-			if err := d.store.UpdateUnwatchedSessionPullRequestStatus(group.prID, status, now); err != nil {
-				d.logf("session pull requests: store unwatched status for %s: %v", group.prID, err)
+			if !errors.Is(err, github.ErrNotFound) {
+				d.logf("session pull requests: refresh %s: %v", group.prID, err)
+				changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
+				d.markSessionPullRequestChecked(group.prID, now)
 				continue
 			}
-		} else if err := d.store.UpdateSessionPullRequestStatus(group.prID, status, now); err != nil {
-			d.logf("session pull requests: store status for %s: %v", group.prID, err)
-			continue
+			d.logf("session pull requests: GitHub cannot find %s, so its watches end and it is recorded closed: %v", group.prID, err)
+			status = group.previous
+			status.State = sessionPullRequestClosed
+			changedSessions = append(changedSessions, d.endPullRequestWatches(group, status, err, now)...)
+			if err := d.store.UpdateSessionPullRequestStatus(group.prID, status, now); err != nil {
+				d.logf("session pull requests: store status for %s: %v", group.prID, err)
+				continue
+			}
+		} else {
+			fetched++
+			if observation != nil {
+				changedSessions = append(changedSessions, d.processPullRequestWatches(group, *observation, feedbackErr, status, now)...)
+				if err := d.store.UpdateUnwatchedSessionPullRequestStatus(group.prID, status, now); err != nil {
+					d.logf("session pull requests: store unwatched status for %s: %v", group.prID, err)
+					continue
+				}
+			} else if err := d.store.UpdateSessionPullRequestStatus(group.prID, status, now); err != nil {
+				d.logf("session pull requests: store status for %s: %v", group.prID, err)
+				continue
+			}
 		}
 		if status == group.previous {
 			continue
@@ -520,6 +530,40 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 		if !projectionChanged {
 			continue
 		}
+		changed = append(changed, string(watch.SessionID))
+		if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
+			changed = append(changed, string(holder.ID))
+		}
+	}
+	return changed
+}
+
+func (d *Daemon) endPullRequestWatches(
+	group *sessionPullRequestGroup, status store.SessionPullRequestStatus, notFound error, now time.Time,
+) []string {
+	changed := make([]string, 0, len(group.watches))
+	for _, watch := range group.watches {
+		final := pullRequestWatchMailboxItem(
+			watch, "not-found", store.PullRequestWatchCoalesceKey(watch.PRID), "watch ended",
+			[]string{"GitHub cannot find this pull request, so attn stopped watching it: " + notFound.Error()},
+		)
+		deliveries, _, err := d.store.ReconcilePullRequestWatch(store.PullRequestWatchReconcile{
+			To: watch.To, SessionID: watch.SessionID, PRID: watch.PRID, CreatedAt: watch.CreatedAt,
+			Mode: watch.Mode, Reviewer: watch.Reviewer, Cursor: watch.Cursor, Status: status,
+			Evaluation: prreadiness.Evaluation{State: prreadiness.StateClosed, Reason: prreadiness.ReasonClosed},
+			Terminal:   true, MailboxItems: []inbox.Item{final}, At: now,
+		})
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			d.logf("pull request watch: end %s/%s: %v", watch.SessionID, watch.PRID, err)
+			continue
+		}
+		for _, delivery := range deliveries {
+			d.deliverPullRequestMailbox(delivery)
+		}
+		d.publishStandbyViewChanged(watch.To)
 		changed = append(changed, string(watch.SessionID))
 		if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
 			changed = append(changed, string(holder.ID))

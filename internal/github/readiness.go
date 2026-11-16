@@ -248,20 +248,30 @@ func fetchReadinessPage(ctx context.Context, transport QueryTransport, query str
 				PullRequest *readinessPullRequest `json:"pullRequest"`
 			} `json:"repository"`
 		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		Errors []graphQLError `json:"errors"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Errorf("parse pull request readiness: %w", err)
 	}
 	if len(payload.Errors) > 0 {
-		return nil, errors.New(payload.Errors[0].Message)
+		return nil, payload.Errors[0].err()
 	}
 	if payload.Data.Repository.PullRequest == nil {
 		return nil, errors.New("GitHub returned no pull request")
 	}
 	return payload.Data.Repository.PullRequest, nil
+}
+
+type graphQLError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+func (e graphQLError) err() error {
+	if e.Type == "NOT_FOUND" {
+		return fmt.Errorf("%w: %s", ErrNotFound, e.Message)
+	}
+	return errors.New(e.Message)
 }
 
 func appendReadinessPages(ctx context.Context, transport QueryTransport, base map[string]any, pr *readinessPullRequest) error {

@@ -30,6 +30,9 @@ type refreshedPullRequest struct {
 	reviews                    []string
 	reviewsFail, snapshotFails bool
 	readinessFails             bool
+	readinessDrops             bool
+	graphQLMissing             bool
+	gone                       bool
 	readinessGate              <-chan struct{}
 	keepAlive                  bool
 	codexThumbsUp, checkFails  bool
@@ -75,8 +78,13 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 			gh.limitedUntil = time.Time{}
 			return
 		}
-		if gh.snapshotFails {
+		if gh.gone {
 			rw.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(rw, `{"message":"Not Found","status":"404"}`)
+			return
+		}
+		if gh.snapshotFails {
+			rw.WriteHeader(http.StatusBadGateway)
 			return
 		}
 		state := "open"
@@ -102,6 +110,31 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 		gh.readinessReads++
 		if gh.readinessGate != nil {
 			<-gh.readinessGate
+		}
+		if !gh.limitedUntil.IsZero() {
+			rw.Header().Set("X-RateLimit-Resource", "graphql")
+			rw.Header().Set("X-RateLimit-Remaining", "0")
+			rw.Header().Set("X-RateLimit-Reset", strconv.FormatInt(gh.limitedUntil.Unix(), 10))
+			rw.WriteHeader(http.StatusForbidden)
+			gh.limitedUntil = time.Time{}
+			return
+		}
+		if gh.graphQLMissing {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if gh.readinessDrops {
+			if conn, _, err := http.NewResponseController(rw).Hijack(); err == nil {
+				_ = conn.Close()
+			}
+			return
+		}
+		if gh.gone {
+			answer = map[string]any{"data": map[string]any{"repository": nil}, "errors": []any{map[string]any{
+				"type": "NOT_FOUND", "path": []any{"repository"},
+				"message": "Could not resolve to a Repository with the name 'acme/shop'.",
+			}}}
+			break
 		}
 		if gh.readinessFails {
 			rw.WriteHeader(http.StatusBadGateway)
@@ -317,7 +350,7 @@ func TestAFailingPullRequestClaimsNoStatusAndIsRetriedAtItsOwnPace(t *testing.T)
 		w.advance(protocol.HeatWarmDuration + protocol.HeatHotInterval)
 
 		if pr := onlyPullRequest(t, cli, "s1"); pr.State != "open" || pr.CIStatus != nil || pr.StatusFetchedAt != nil {
-			t.Errorf("a pull request GitHub cannot find = %+v, want it as recorded", pr)
+			t.Errorf("a pull request GitHub fails to answer for = %+v, want it as recorded", pr)
 		}
 		if cold, _ := gh.fetchesDuring(w, 3*protocol.HeatColdInterval); cold != 3 {
 			t.Errorf("a failing cold pull request was retried %d times over %s, want every %s", cold, 3*protocol.HeatColdInterval, protocol.HeatColdInterval)
@@ -470,6 +503,84 @@ func TestAWatchOutageTellsTheAgentOnceAndRecoveryTellsItTheNews(t *testing.T) {
 		w.advance(protocol.HeatHotInterval)
 		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "monitoring is delayed") {
 			t.Errorf("after a second outage the agent's inbox = %q, want a new note that monitoring is delayed", inbox)
+		}
+	})
+}
+
+func TestAWatchEndsWhenGitHubCannotFindThePullRequestAndOutlivesEveryOtherFailure(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "s1")
+		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
+		w.advance(protocol.HeatHotInterval)
+
+		failures := []struct {
+			name  string
+			fail  func(gh *refreshedPullRequest)
+			error string
+		}{
+			{"a 5xx", func(gh *refreshedPullRequest) { gh.readinessFails = true }, "502"},
+			{"a rate limit", func(gh *refreshedPullRequest) { gh.limitedUntil = time.Now().Add(time.Second) }, "rate limit"},
+			{"a network failure", func(gh *refreshedPullRequest) { gh.readinessDrops = true }, "request failed"},
+			{"a missing GraphQL endpoint", func(gh *refreshedPullRequest) { gh.graphQLMissing = true }, "404"},
+		}
+		for _, failure := range failures {
+			gh.set(failure.fail)
+			w.advance(protocol.HeatHotInterval)
+			pr := onlyPullRequest(t, cli, "s1")
+			if pr.WatchMode == nil || protocol.Deref(pr.WatchHealth) != "delayed" || !strings.Contains(protocol.Deref(pr.WatchError), failure.error) {
+				t.Errorf("after %s the watch = mode %v health %q error %q, want it kept and delayed by %q",
+					failure.name, pr.WatchMode, protocol.Deref(pr.WatchHealth), protocol.Deref(pr.WatchError), failure.error)
+			}
+			if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "monitoring is delayed") {
+				t.Errorf("after %s the agent's inbox = %q, want a note that monitoring is delayed", failure.name, inbox)
+			}
+			gh.set(func(gh *refreshedPullRequest) {
+				gh.readinessFails, gh.readinessDrops, gh.graphQLMissing = false, false, false
+			})
+			w.advance(protocol.HeatHotInterval)
+			if pr := onlyPullRequest(t, cli, "s1"); protocol.Deref(pr.WatchHealth) != "current" {
+				t.Fatalf("once GitHub answered after %s the watch = %+v, want it current", failure.name, pr)
+			}
+		}
+
+		gh.set(func(gh *refreshedPullRequest) { gh.checkFails = true })
+		w.advance(protocol.HeatHotInterval)
+		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "checks failed") || strings.Contains(inbox, "monitoring is delayed") {
+			t.Errorf("after GitHub answered again the agent's inbox = %q, want the failed checks and no delay", inbox)
+		}
+
+		gh.set(func(gh *refreshedPullRequest) { gh.gone = true })
+		w.advance(protocol.HeatHotInterval)
+		items := readInbox(t, cli, "s1", 0).Items
+		if len(items) != 1 || !strings.Contains(items[0].Content, "watch ended") || !strings.Contains(items[0].Content, "GitHub cannot find this pull request") {
+			t.Errorf("after GitHub lost the pull request the agent's inbox = %q, want one final update that the watch ended because GitHub cannot find it", inboxContents(items))
+		}
+		if pr := onlyPullRequest(t, cli, "s1"); pr.WatchMode != nil || pr.State != "closed" {
+			t.Errorf("the pull request GitHub cannot find = %+v, want no watch and state closed", pr)
+		}
+		if snapshots, readinessReads := gh.fetchesDuring(w, 3*protocol.HeatColdInterval); snapshots+readinessReads != 0 {
+			t.Errorf("GitHub was asked %d times about a pull request it cannot find, want none", snapshots+readinessReads)
+		}
+	})
+}
+
+func TestAnUnwatchedPullRequestGitHubCannotFindIsNoLongerAskedAbout(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	gh.set(func(gh *refreshedPullRequest) { gh.gone = true })
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "s1")
+		recordPullRequest(t, cli, "s1", shopPull(71))
+		if first, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); first != 1 {
+			t.Fatalf("GitHub was asked %d times about a new pull request, want once", first)
+		}
+		if pr := onlyPullRequest(t, cli, "s1"); pr.State != "closed" {
+			t.Errorf("a pull request GitHub cannot find = %+v, want it closed", pr)
+		}
+		if later, _ := gh.fetchesDuring(w, 3*protocol.HeatColdInterval); later != 0 {
+			t.Errorf("GitHub was asked %d more times about a pull request it cannot find, want none", later)
 		}
 	})
 }

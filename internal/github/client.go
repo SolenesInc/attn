@@ -37,6 +37,17 @@ var ErrRateLimited = errors.New("GitHub rate limit exceeded")
 
 var ErrNoToken = errors.New("no GitHub token available")
 
+var ErrNotFound = errors.New("GitHub cannot find it")
+
+type APIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("GitHub API error %d: %s", e.StatusCode, e.Body)
+}
+
 var ErrStopping = errors.New("attn is stopping, so this GitHub request was not sent")
 
 type RateLimitInfo struct {
@@ -150,7 +161,7 @@ func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Clien
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("GitHub API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(respBody)}
 	}
 
 	return respBody, nil
@@ -482,6 +493,9 @@ type PullRequestSnapshot struct {
 
 func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequestSnapshot, error) {
 	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
+	if apiErr := (*APIError)(nil); errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("fetch pull request snapshot: %w: %w", ErrNotFound, err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("fetch pull request snapshot: %w", err)
 	}

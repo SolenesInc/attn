@@ -146,7 +146,11 @@ item.
 
 A PR watch update tells the watching agent what happened on a pull request:
 ready, checks failed, changes requested, merged, closed, new review feedback, a
-reopened thread, or that monitoring is delayed. Feedback that attn's GitHub
+reopened thread, or that monitoring is delayed. When GitHub answers that it
+cannot find the pull request, the watcher gets a last update saying the watch
+ended and why, attn removes the watch and records the pull request closed. A
+network failure, a server error or a rate limit is a delay, not an end.
+Feedback that attn's GitHub
 account for the host wrote, and reopened threads that account started on its own
 pull request, make no update unless the profile sets
 `pull_requests.own_comments` to `ring`. attn withdraws the pull request's unread
@@ -180,8 +184,8 @@ reads the update. The seed's log still has every event.
 attn replaces other keyed items. The new item takes the place of the old item
 and gets fresh attempts.
 
-- A PR watch status update (ready, checks failed, changes requested, merged or
-  closed) replaces the older unread status update for the same pull request. A
+- A PR watch status update (ready, checks failed, changes requested, merged,
+  closed or watch ended) replaces the older unread status update for the same pull request. A
   delay update replaces the older unread delay update. New review feedback and
   reopened threads are separate items.
 - A change to a seed's authorization replaces the older unread change for the
