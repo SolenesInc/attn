@@ -54,8 +54,9 @@ moves it.
 runner. A landing that changes `native/`, the protocol schema or `cli/protocol`
 runs `make check-native` and every test of the workspace, as
 [Trunk-based development](trunk-based-development.md#what-landsh-does) says.
-CI's `Native (macos-15)` and `Native (ubuntu-24.04)` jobs run the same checks
-when those paths change, and on every push to `main`.
+CI's `Native (ubuntu-24.04)` job runs the same checks when those paths change,
+and on every push to `main`. `Native (macos-15)` runs them when those paths
+change, nightly, and on a release commit.
 
 ## Colors
 

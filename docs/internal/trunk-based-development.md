@@ -133,9 +133,12 @@ new commits do not reach.
 
 Checks before landing are fast and local: targeted tests, the change on the
 surface it touches, and a review scaled to the change's risk. The full Go
-suite, the Playwright specs and the scenario matrix, macOS included, run in CI
-on `main` after landing, and so do the combinations of changes that landed
-together.
+suite, the Playwright specs and the Linux scenario matrix run in CI on every
+push to `main` after landing, and so do the combinations of changes that
+landed together. Each macOS job runs on a push only when the push changes
+paths that can break it. Every macOS job runs nightly and on a release
+commit. When no runner picks up a macOS job, Acceptance passes with a warning
+that names the job, and the nightly run covers the gap.
 
 Reviewers catch a defect before landing, while the author still remembers the
 work and before other slices build on the defect. The review automation on `main` still reads every commit afterwards, with the

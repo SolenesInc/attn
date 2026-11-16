@@ -34,7 +34,12 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       force_all: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
-      full_macos: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.filter.outputs.release_commit == 'true') }}
+      full_macos: ${{ steps.full.outputs.macos }}
+      macos_cli: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.cli == 'true' }}
+      macos_pty_upgrade: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.pty_upgrade == 'true' }}
+      macos_tauri: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.tauri == 'true' }}
+      macos_native: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native == 'true' }}
+      macos_app_acceptance: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.app_acceptance == 'true' }}
       daemon: ${{ steps.filter.outputs.daemon }}
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -65,6 +70,25 @@ jobs:
           filters: |
             release_commit:
               - '.github/release-candidate.yml'
+            cli:
+              - 'cli/**'
+              - 'rust-toolchain.toml'
+              - '.github/actions/cache-attn-cli/**'
+              - '.github/workflows/ci.yml'
+            pty_upgrade:
+              - 'pty-host/**'
+              - 'internal/pty*/**'
+              - 'scripts/test-pty-upgrade.sh'
+              - 'ghostty-vt.pin'
+              - 'ghostty-vt-native.lock'
+              - 'go.mod'
+              - 'go.sum'
+              - 'go-cgo-cflags'
+              - 'Makefile'
+              - 'rust-toolchain.toml'
+              - '.tool-versions'
+              - '.github/actions/**'
+              - '.github/workflows/ci.yml'
             daemon:
               - '**/*.go'
               - 'docs/guide/tutorials/**'
@@ -169,6 +193,8 @@ jobs:
               - '.github/workflows/ci.yml'
             app_acceptance:
               - 'app/**'
+              - 'cli/**'
+              - 'rust-toolchain.toml'
               - 'cmd/**'
               - 'internal/**'
               - 'pty-host/**'
@@ -207,6 +233,11 @@ jobs:
               - 'scripts/check-binary-glibc.sh'
               - '.tool-versions'
               - '.github/actions/setup-toolchains/**'
+
+      - name: Decide whether every macOS job runs
+        id: full
+        run: echo "macos=${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.filter.outputs.release_commit == 'true') }}" >> "$GITHUB_OUTPUT"
+
   release-candidate:
     name: Release candidate
     # Waits on app-acceptance because candidate-gate.sh reads that job's result.
@@ -450,15 +481,11 @@ jobs:
     name: PTY upgrade (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    runs-on: ${{ matrix.runs_on }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            runs_on: macos-15
-          - os: ubuntu-24.04
-            runs_on: ubuntu-24.04
+        os: ${{ fromJSON(needs.changes.outputs.macos_pty_upgrade == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -713,15 +740,11 @@ jobs:
     name: Tauri (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
-    runs-on: ${{ matrix.runs_on }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            runs_on: macos-15
-          - os: ubuntu-24.04
-            runs_on: ubuntu-24.04
+        os: ${{ fromJSON(needs.changes.outputs.macos_tauri == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
     defaults:
       run:
         working-directory: app/src-tauri
@@ -818,15 +841,11 @@ jobs:
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.native == 'true'
     permissions:
       contents: read
-    runs-on: ${{ matrix.runs_on }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            runs_on: macos-15
-          - os: ubuntu-24.04
-            runs_on: ubuntu-24.04
+        os: ${{ fromJSON(needs.changes.outputs.macos_native == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
     env:
       CARGO_BUILD_BUILD_DIR: ${{ github.workspace }}/native/target
       RUSTUP_TOOLCHAIN: 1.99.1
@@ -926,17 +945,14 @@ jobs:
 
   attn-cli:
     name: CLI (${{ matrix.os }})
+    needs: changes
     permissions:
       contents: read
-    runs-on: ${{ matrix.runs_on }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            runs_on: macos-15
-          - os: ubuntu-24.04
-            runs_on: ubuntu-24.04
+        os: ${{ fromJSON(needs.changes.outputs.macos_cli == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -1147,7 +1163,7 @@ jobs:
 
   app-acceptance:
     name: App acceptance
-    needs: [changes, app-acceptance-build, app-acceptance-shard, app-acceptance-macos]
+    needs: [changes, app-acceptance-build, app-acceptance-shard]
     # !cancelled() so a red shard still reaches the aggregate instead of skipping.
     if: >-
       !cancelled() &&
@@ -1201,14 +1217,9 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
           SHARD_RESULT: ${{ needs.app-acceptance-shard.result }}
-          MACOS_RESULT: ${{ needs.app-acceptance-macos.result }}
         run: |
-          if [ "$MACOS_RESULT" != success ]; then
-            echo "app acceptance: macOS native clipboard and keyboard verification is $MACOS_RESULT for $HEAD_SHA" >&2
-            exit 1
-          fi
           if [ "$MATRIX_OUTCOME" = success ] && [ "$SHARD_RESULT" = success ]; then
-            echo "app acceptance: Linux serial matrix and macOS native clipboard and keyboard are green for $HEAD_SHA"
+            echo "app acceptance: Linux serial matrix is green for $HEAD_SHA"
             exit 0
           fi
           if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/release/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
@@ -1235,7 +1246,7 @@ jobs:
   app-acceptance-macos:
     name: App acceptance macOS
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
+    if: needs.changes.outputs.macos_app_acceptance == 'true'
     permissions:
       contents: read
     runs-on: macos-15
@@ -1417,7 +1428,7 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: >-
           jq -e 'all(to_entries[]; .value.result == "success" or
-          (.key == "full-macos" and .value.result == "skipped"))' <<< "$NEEDS_JSON"
+          (.key | IN("full-macos", "app-acceptance-macos")) and .value.result == "skipped")' <<< "$NEEDS_JSON"
 
   branch-health:
     name: Report branch health
