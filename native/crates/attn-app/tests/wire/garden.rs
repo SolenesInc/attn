@@ -119,7 +119,7 @@ fn daemon(seeds: Vec<Seed>, sessions: Vec<Session>) -> Daemon {
     daemon
 }
 
-fn document_reply(request: &Request, seed: Option<Seed>) -> Value {
+pub(super) fn document_reply(request: &Request, seed: Option<Seed>) -> Value {
     message(SeedDocumentGetResultMessage {
         request_id: request["request_id"].as_str().unwrap().into(),
         success: seed.is_some(),

@@ -511,6 +511,13 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         )
         .describe("Whether a crew member or the Chief owing a turn also waits in the queue"),
         Command::new(
+            "manage-crew",
+            "Manage crew",
+            &["crew", "member", "charter", "start", "close"],
+            Action::OpenCrew,
+        )
+        .describe("Start, charter and hand off to crew members"),
+        Command::new(
             "toggle-auto-settle",
             if auto_settle_on {
                 "Turn off auto-settle"

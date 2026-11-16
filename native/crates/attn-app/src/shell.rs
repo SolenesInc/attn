@@ -76,6 +76,7 @@ pub struct Window {
     pub(crate) update_run: crate::update_run::Banner,
     pub(crate) outpost_updates: crate::outpost_updates::Banner,
     pub(crate) settings: crate::settings::Dialog,
+    pub(crate) crew: crate::crew::Panel,
     pub(crate) shortcut_editor: crate::shortcut_editor::Editor,
     pub(crate) profile_switcher: crate::profile_switcher::Switcher,
     /// The migration failure screen's details went to the clipboard.
@@ -123,6 +124,8 @@ pub enum Layer {
     DiagnosticReport,
     /// The notebook over the whole window; `Notebook::fullscreen` holds it.
     Notebook,
+    /// Manage crew; `Window::crew` holds it.
+    Crew,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -601,6 +604,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::WhatsNew) => crate::whats_new::dialog(state, t, &mut layers),
         Some(Layer::DiagnosticReport) => crate::diagnostic_report::dialog(state, t, &mut layers),
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
+        Some(Layer::Crew) => crate::crew::panel(state, t, &mut layers),
         None => {}
     }
     layers.extend(crate::attention::merge_confirmation(state, t));

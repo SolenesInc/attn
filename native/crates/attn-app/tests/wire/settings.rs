@@ -17,7 +17,7 @@ mod background;
 mod bus;
 mod delegation;
 mod desktop;
-mod harness_catalogs;
+pub(crate) mod harness_catalogs;
 mod harnesses;
 mod hygiene;
 mod models;
@@ -28,7 +28,7 @@ mod senders;
 mod tasks;
 mod updates;
 
-type Settings = Arc<Mutex<BTreeMap<String, String>>>;
+pub(crate) type Settings = Arc<Mutex<BTreeMap<String, String>>>;
 
 /// A daemon that keeps settings as the real one does: a write it accepts is answered, then
 /// broadcast to every client, and one `refuse` turns down is answered with its reason.

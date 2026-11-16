@@ -949,6 +949,7 @@ fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
             &state.facts.profiles.selected,
         ),
         zoom: crate::garden::zoom(state),
+        crew_back: crate::crew::back_tile(state),
     }
 }
 

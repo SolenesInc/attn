@@ -65,6 +65,8 @@ macro_rules! actions {
             ShowAsks { ask: Option<String> },
             /// Open the ledger on its Worktrees list.
             OpenWorktrees,
+            /// Open Manage crew.
+            OpenCrew,
             /// Open the notifications panel, or close it.
             ToggleNotifications,
             /// Open the editor that rebinds shortcuts.
@@ -109,6 +111,7 @@ macro_rules! actions {
                     Action::CloseDesktop { .. } => "desktop.close",
                     Action::ShowAsks { .. } => "asks.show",
                     Action::OpenWorktrees => "ledger.worktrees",
+                    Action::OpenCrew => "crew.manage",
                     Action::ToggleNotifications => "notifications.toggle",
                     Action::OpenShortcutEditor => "shortcuts.edit",
                     Action::OpenQuickCapture => "quickCapture.open",
@@ -142,6 +145,7 @@ macro_rules! actions {
                     Action::CloseDesktop { .. } => "Close desktop",
                     Action::ShowAsks { .. } => "Open asks",
                     Action::OpenWorktrees => "Open worktrees",
+                    Action::OpenCrew => "Manage crew",
                     Action::ToggleNotifications => "Show or hide notifications",
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
                     Action::OpenQuickCapture => "Quick Capture",

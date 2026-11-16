@@ -9,6 +9,7 @@ mod callouts;
 mod cheat_sheet;
 mod closing;
 mod connection;
+mod crew;
 pub mod daemon;
 mod deep_link;
 pub mod desktop;
@@ -208,6 +209,7 @@ pub fn bind(
             }
             if !was && is {
                 picker::reconnected(state, tx);
+                crew::reconnected(state, tx);
             }
             if let Some(keymap) = keymap {
                 if let Some(menus) = &state.menus {
@@ -242,6 +244,7 @@ pub fn bind(
             quick_capture::shortcut::follow(state);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
+            crew::follow(state);
             if state.window.tile.is_none() {
                 let keyboard = state.window.keyboard_terminal(&state.facts);
                 state
@@ -320,7 +323,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     }
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
-    let settings = settings::poll(state, now, tx);
+    let settings = settings::poll(state, now, tx) | crew::poll(state, now, tx);
     let updating = update_run::poll(state, now, tx)
         | outpost_updates::poll(state, now, tx)
         | attention::poll(state, now);

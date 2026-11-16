@@ -30,9 +30,70 @@ use crate::State;
 use crate::action::Action;
 use crate::shell::Layer;
 pub(crate) use appearance::{garden_scale, text_scale};
+pub(crate) use route::{Route, RouteHarness, Rules, Target as RouteTarget};
 pub(crate) use sections::Section;
 pub(crate) use updates::updatable;
 pub(crate) use view::dialog;
+
+/// A route chip outside the dialog, such as a crew member's launch settings, with its parts
+/// labelled.
+pub(crate) fn route_chip(
+    state: &State,
+    t: &attn_ui::Tokens,
+    target: RouteTarget,
+    label: &str,
+) -> rune::El {
+    route::chip(state, t, target, label, true)
+}
+
+/// The model picker a route chip outside the dialog opened.
+pub(crate) fn route_overlay(state: &State, t: &attn_ui::Tokens, layers: &mut Vec<rune::El>) {
+    route::overlay(state, t, layers);
+}
+
+pub(crate) fn close_route_picker(state: &mut State, tx: &mut Tx) {
+    if state.window.settings.route_picker.is_some() {
+        route::close(state, tx);
+    }
+}
+
+/// The harnesses the daemon offers, as last read.
+pub(crate) fn listed_harnesses(state: &State) -> Vec<attn_protocol::Harness> {
+    harnesses::listed(state)
+}
+
+/// Why the harnesses could not be read, when they could not.
+pub(crate) fn harnesses_error(state: &State) -> Option<String> {
+    state.window.settings.harnesses.error.clone()
+}
+
+pub(crate) fn read_harnesses(state: &mut State, tx: &mut Tx) {
+    harnesses::read(state, tx);
+}
+
+/// The crew panel opened: it reads the harnesses as the dialog does.
+pub(crate) fn crew_opened(state: &mut State) {
+    harnesses::opened(state);
+}
+
+/// While the crew panel shows: the harnesses read when the daemon says they changed, and the
+/// models of its route chip and open picker discovered; whether a read went out.
+pub(crate) fn crew_poll(state: &mut State, tx: &mut Tx) -> bool {
+    let read = harnesses::ensure(state, tx);
+    let wanted = crate::crew::selected(state)
+        .map(|m| m.id.clone())
+        .and_then(|member| {
+            let (value, rules) = crate::crew::launch::route(state, &member)?;
+            let harness = if value.harness.is_empty() {
+                rules.follows.clone()?
+            } else {
+                value.harness
+            };
+            let h = rules.harnesses.iter().find(|h| h.id == harness)?;
+            Some((h.id.clone(), h.discovery))
+        });
+    read | route::discover_wanted(state, wanted.into_iter().collect(), tx)
+}
 
 /// The text fields the dialog shows, each the daemon setting it edits, and whether its value
 /// goes to the daemon trimmed.

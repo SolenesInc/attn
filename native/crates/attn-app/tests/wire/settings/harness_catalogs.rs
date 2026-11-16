@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use super::{Settings, click};
 
-pub(super) fn harness(id: &str, name: &str) -> Harness {
+pub(crate) fn harness(id: &str, name: &str) -> Harness {
     Harness {
         id: id.into(),
         name: name.into(),
@@ -65,7 +65,7 @@ pub(super) fn model(
     }
 }
 
-pub(super) fn catalog(harness: &str) -> Vec<HarnessModel> {
+pub(crate) fn catalog(harness: &str) -> Vec<HarnessModel> {
     match harness {
         "claude" => vec![
             model("claude", "default", "Default (recommended)", None, EFFORTS),
@@ -105,7 +105,7 @@ pub(super) fn catalog(harness: &str) -> Vec<HarnessModel> {
 
 /// The models a harness reports, with the tiers `model_tier_overrides` gives them, and the
 /// first supported model of each tier as its default.
-pub(super) fn reported(
+pub(crate) fn reported(
     harness: &str,
     settings: &Settings,
     models: Vec<HarnessModel>,
@@ -152,7 +152,7 @@ pub(super) fn reported(
     }
 }
 
-pub(super) fn preferences_result(harnesses: Vec<Harness>) -> DelegationPreferencesResultMessage {
+pub(crate) fn preferences_result(harnesses: Vec<Harness>) -> DelegationPreferencesResultMessage {
     DelegationPreferencesResultMessage {
         success: true,
         preferences: Some(DelegationPreferences::default()),
@@ -178,7 +178,7 @@ pub(super) fn serve(daemon: &Daemon, settings: &Settings, harnesses: Vec<Harness
 pub(super) const PICKER: &str = "settings.route-picker";
 
 /// Opens the picker from the route button named `label`.
-pub(super) fn open_route(world: &mut World, label: &str) {
+pub(crate) fn open_route(world: &mut World, label: &str) {
     world
         .automate(
             "press",
@@ -188,13 +188,13 @@ pub(super) fn open_route(world: &mut World, label: &str) {
     assert!(picker_open(world), "the picker opened from {label}");
 }
 
-pub(super) fn picker_open(world: &World) -> bool {
+pub(crate) fn picker_open(world: &World) -> bool {
     world.screen().find(Target::key(PICKER)).is_some()
 }
 
 /// The options of the picker's list keyed `list`, by name, with whether each is selected and
 /// enabled.
-pub(super) fn options(world: &World, list: &str) -> Vec<(String, bool, bool)> {
+pub(crate) fn options(world: &World, list: &str) -> Vec<(String, bool, bool)> {
     world
         .screen()
         .descendants(Target::key(format!("settings.route-picker.{list}")))
@@ -231,19 +231,19 @@ fn option_key(world: &World, list: &str, prefix: &str) -> String {
 }
 
 /// Browses the harness whose name starts with `name`.
-pub(super) fn preview_harness(world: &mut World, name: &str) {
+pub(crate) fn preview_harness(world: &mut World, name: &str) {
     let key = option_key(world, "harnesses", name);
     click(world, &key);
 }
 
 /// Picks the model whose name starts with `name`.
-pub(super) fn pick_model(world: &mut World, name: &str) {
+pub(crate) fn pick_model(world: &mut World, name: &str) {
     let key = option_key(world, "models", name);
     click(world, &key);
 }
 
 /// Picks the effort level named `name`.
-pub(super) fn pick_effort(world: &mut World, name: &str) {
+pub(crate) fn pick_effort(world: &mut World, name: &str) {
     let key = world
         .screen()
         .descendants(Target::key("settings.route-picker.effort"))

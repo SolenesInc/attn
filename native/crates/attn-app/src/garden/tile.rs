@@ -19,6 +19,8 @@ pub(crate) struct Reads<'a> {
     pub(crate) now_ms: i64,
     pub(crate) chief: bool,
     pub(crate) zoom: f32,
+    /// The seed tile, by desktop and tile, that offers the way back to Manage crew.
+    pub(crate) crew_back: Option<(&'a str, &'a str)>,
 }
 
 /// The seed a tile holds, as the garden's page shows it: the garden's copy when the daemon's
@@ -93,10 +95,15 @@ pub(crate) fn body(
         super::view::button(sheet.key("back"), format!("Back to {title}"), t)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| go.to(state, &parent, tx))
     });
+    let to_crew = (reads.crew_back == Some((desktop, leaf))).then(|| {
+        super::view::button(format!("tile.{leaf}.crew-back"), "Back to Crew", t)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::go_back(state, tx))
+    });
     let page = col()
         .w_full()
         .padding(space::S3)
         .gap(space::S2)
+        .children(to_crew)
         .children(back)
         .child(
             sheet.head(

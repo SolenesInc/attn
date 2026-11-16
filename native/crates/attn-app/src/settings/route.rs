@@ -83,6 +83,16 @@ pub(crate) struct Rules {
     /// The tier the work needs: the route without a model runs the harness's default for it.
     pub(crate) tier: Option<&'static str>,
     pub(crate) default_effort: Option<fn(&str) -> &'static str>,
+    /// What the route without a harness is called, when not "None".
+    pub(crate) none_label: Option<&'static str>,
+    /// The harness a route without one runs on, whose models it may still pin.
+    pub(crate) follows: Option<String>,
+}
+
+impl Rules {
+    fn none_label(&self) -> &'static str {
+        self.none_label.unwrap_or("None")
+    }
 }
 
 /// A tier the user gave a model, kept in the `model_tier_overrides` setting.
@@ -177,7 +187,10 @@ pub(crate) struct View<'a> {
 }
 
 pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> View<'a> {
-    let effective = input.harness.clone();
+    let effective = match (&rules.follows, input.harness.is_empty()) {
+        (Some(follows), true) => follows.clone(),
+        _ => input.harness.clone(),
+    };
     let harness = rules.harnesses.iter().find(|h| h.id == effective);
     let discovered = harness.map_or_else(Discovered::default, |h| {
         catalogs::of(state, &h.id, h.discovery)
@@ -231,11 +244,16 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         }
         None => None,
     };
-    let harness_name = harness
+    let effective_name = harness
         .map(|h| h.name.clone())
         .filter(|n| !n.is_empty())
         .or_else(|| (!effective.is_empty()).then(|| effective.clone()))
-        .unwrap_or_else(|| "None".into());
+        .unwrap_or_else(|| rules.none_label().into());
+    let harness_name = if input.harness.is_empty() && rules.none_label.is_some() {
+        rules.none_label().to_owned()
+    } else {
+        effective_name.clone()
+    };
     let checking = discovered.loading
         || (catalog.is_none()
             && discovered.error.is_none()
@@ -247,11 +265,11 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
             } else if let Some(m) = default_model {
                 display_name(m)
             } else {
-                format!("none found, {harness_name} decides")
+                format!("none found, {effective_name} decides")
             };
             format!("{} default → {runs}", tier_label(tier))
         }
-        None => format!("{harness_name} default"),
+        None => format!("{effective_name} default"),
     };
     let model_label = if value.model.is_empty() {
         unset_label.clone()
@@ -876,11 +894,13 @@ fn harness_list(shown: &Route, rules: &Rules, t: &Tokens) -> El {
         list = list.child(
             option(
                 "settings.route-picker.harness.none".into(),
-                "None",
+                rules.none_label(),
                 preview.is_empty(),
                 false,
                 t,
-                text("None").font(type_::BODY).color(t.text_primary),
+                text(rules.none_label())
+                    .font(type_::BODY)
+                    .color(t.text_primary),
             )
             .on_press_tx(|state: &mut State, tx: &mut Tx| {
                 change(state, Route::default(), tx);

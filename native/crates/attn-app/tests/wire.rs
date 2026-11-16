@@ -6,6 +6,7 @@ mod wire {
     mod callouts;
     mod connection;
     mod covered;
+    mod crew;
     mod deep_link;
     mod desktop_close;
     mod desktop_order;
