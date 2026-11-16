@@ -18,7 +18,7 @@ pub(crate) mod outposts;
 mod pages;
 pub(crate) mod phones;
 mod plugins;
-mod route;
+pub(crate) mod route;
 mod sections;
 mod senders;
 mod tasks;

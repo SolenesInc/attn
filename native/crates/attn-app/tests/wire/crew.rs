@@ -2065,3 +2065,329 @@ fn a_conflicting_launch_edit_takes_in_what_changed_elsewhere_keeps_what_the_user
     );
     assert_eq!(launch_status(&world).as_deref(), Some("Saved"));
 }
+
+fn route_shows(world: &World, member: &str) -> String {
+    world
+        .screen()
+        .get(Target::key(format!("settings.route.crew.{member}")))
+        .value
+        .unwrap_or_default()
+}
+
+fn serve_models(world: &World, models: Vec<attn_protocol::HarnessModel>) {
+    world.daemon.on("harness_models", move |r| {
+        let harness = r["harness"].as_str().unwrap_or_default().to_owned();
+        let listed = models
+            .iter()
+            .filter(|m| m.harness == harness)
+            .cloned()
+            .collect();
+        message(reported(&harness, &Settings::default(), listed))
+    });
+}
+
+#[test]
+fn crew_default_writes_one_cleared_selection_and_close_stays_available_while_it_saves() {
+    let d = daemon(
+        vec![in_session(
+            routed(member("alder", 7), "codex", "gpt-6-astra", "high"),
+            "session-alder",
+        )],
+        vec![session("session-alder", "codex")],
+        Vec::new(),
+    );
+    d.answer_in_turn("crew_set", [Answer::Hold]);
+    let mut world = World::start(d);
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    preview_harness(&mut world, "Crew default");
+    assert_eq!(
+        sets(&world),
+        [json!({"expected_revision": 7, "agent": "", "model": "", "effort": ""})]
+    );
+    assert!(enabled(&world, "crew.close"));
+    let write = world.daemon.sent_of("crew_set").remove(0);
+    world.daemon.reply_to(
+        &write,
+        CrewSetResultMessage {
+            success: true,
+            member: Some(in_session(member("alder", 8), "session-alder")),
+            ..CrewSetResultMessage::new()
+        },
+    );
+    world.settle();
+    if picker_open(&world) {
+        close_picker(&mut world);
+    }
+    assert!(enabled(&world, "crew.close"));
+    assert!(
+        route_shows(&world, "alder").contains("Crew default"),
+        "{}",
+        route_shows(&world, "alder")
+    );
+}
+
+#[test]
+fn a_failed_member_edit_survives_roster_navigation_and_retries() {
+    let d = daemon(
+        vec![member("alder", 2), member("keel", 3)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_set",
+        [
+            Answer::Reply(message(CrewSetResultMessage {
+                success: false,
+                error: Some("model discovery is unavailable".into()),
+                ..CrewSetResultMessage::new()
+            })),
+            saved(routed(member("alder", 3), "codex", "", "")),
+        ],
+    );
+    let mut world = World::start(d);
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    preview_harness(&mut world, "Codex");
+    pick_model(&mut world, "Codex");
+    if picker_open(&world) {
+        close_picker(&mut world);
+    }
+    assert_eq!(launch_status(&world).as_deref(), Some("Not saved"));
+    assert_eq!(
+        named(&world, "crew.launch.error").as_deref(),
+        Some("model discovery is unavailable")
+    );
+    click(&mut world, "crew.roster.keel");
+    click(&mut world, "crew.roster.alder");
+    assert!(
+        route_shows(&world, "alder").contains("Codex"),
+        "{}",
+        route_shows(&world, "alder")
+    );
+    click(&mut world, "crew.launch.retry");
+    assert_eq!(world.daemon.sent_of("crew_set").len(), 2);
+    assert_eq!(launch_status(&world).as_deref(), Some("Saved"));
+}
+
+#[test]
+fn the_roster_stays_navigable_while_the_harness_list_is_read() {
+    let d = daemon(
+        vec![member("alder", 2), member("keel", 3)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn("delegation_preferences_get", [Answer::Hold]);
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, "crew.roster.keel");
+    assert_eq!(heading(&world).as_deref(), Some("Keel"));
+    let read = world.daemon.sent_of("delegation_preferences_get").remove(0);
+    world.daemon.reply_to(
+        &read,
+        preferences_result(vec![harness("claude", "Claude Code")]),
+    );
+    world.settle();
+    assert!(enabled(&world, "settings.route.crew.keel"));
+    assert_eq!(heading(&world).as_deref(), Some("Keel"));
+    assert_eq!(world.daemon.sent_of("delegation_preferences_get").len(), 1);
+}
+
+#[test]
+fn a_model_and_an_effort_pin_while_the_harness_follows_the_crew_default() {
+    let d = daemon(
+        vec![with(member("keel", 5), |m| {
+            m.resolved_agent = "codex".into()
+        })],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_set",
+        [
+            saved(with(
+                routed(member("keel", 6), "", "gpt-6-astra", ""),
+                |m| m.agent = None,
+            )),
+            saved(routed(member("keel", 7), "", "gpt-6-astra", "high")),
+        ],
+    );
+    let mut world = World::start_sized(d, (1200.0, 1000.0));
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    pick_model(&mut world, "gpt-6-astra");
+    if picker_open(&world) {
+        close_picker(&mut world);
+    }
+    open_route(&mut world, "Crew launch model");
+    super::settings::harness_catalogs::pick_effort(&mut world, "high");
+    if picker_open(&world) {
+        close_picker(&mut world);
+    }
+    assert_eq!(
+        sets(&world),
+        [
+            json!({"expected_revision": 5, "agent": "", "model": "gpt-6-astra", "effort": ""}),
+            json!({"expected_revision": 6, "agent": "", "model": "gpt-6-astra", "effort": "high"}),
+        ]
+    );
+    assert!(route_shows(&world, "keel").contains("gpt-6-astra"));
+}
+
+#[test]
+fn a_typed_model_id_goes_on_return_as_one_write_and_the_draft_outlasts_roster_pushes() {
+    let d = daemon(
+        vec![member("keel", 6)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_set",
+        [saved(routed(member("keel", 8), "", "gpt-7", ""))],
+    );
+    let mut world = World::start(d);
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    click(&mut world, "settings.route-picker.filter");
+    world.gesture(|app| app.type_text("gpt-7"));
+    roster_push(&mut world, vec![member("keel", 7)]);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("settings.route-picker.filter"))
+            .value
+            .as_deref(),
+        Some("gpt-7")
+    );
+    assert!(sets(&world).is_empty());
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        sets(&world),
+        [json!({"expected_revision": 7, "agent": "", "model": "gpt-7", "effort": ""})]
+    );
+}
+
+#[test]
+fn the_model_list_waits_while_an_explicit_harness_pin_clears() {
+    let d = daemon(
+        vec![routed(member("keel", 5), "codex", "gpt-6-astra", "")],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn("crew_set", [Answer::Hold]);
+    let mut world = World::start(d);
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    preview_harness(&mut world, "Crew default");
+    if !picker_open(&world) {
+        open_route(&mut world, "Crew launch model");
+    }
+    let model_list = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("settings.route-picker.models"))
+            .is_some()
+    };
+    assert!(!model_list(&world));
+    let write = world.daemon.sent_of("crew_set").remove(0);
+    world.daemon.reply_to(
+        &write,
+        CrewSetResultMessage {
+            success: true,
+            member: Some(with(member("keel", 6), |m| {
+                m.resolved_agent = "claude".into()
+            })),
+            ..CrewSetResultMessage::new()
+        },
+    );
+    world.settle();
+    assert!(model_list(&world));
+}
+
+#[test]
+fn a_provider_qualified_model_is_picked_when_bare_ids_collide() {
+    let d = daemon(
+        vec![with(member("keel", 5), |m| {
+            m.agent = Some("codex".into());
+            m.resolved_agent = "codex".into();
+        })],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_set",
+        [saved(routed(
+            member("keel", 6),
+            "codex",
+            "second/shared",
+            "",
+        ))],
+    );
+    let mut world = World::start(d);
+    let shared = |provider: &str, name: &str, effort: &str| attn_protocol::HarnessModel {
+        provider: provider.into(),
+        ..super::settings::harness_catalogs::model("codex", "shared", name, None, &[effort])
+    };
+    serve_models(
+        &world,
+        vec![
+            shared("first", "Shared one", "low"),
+            shared("second", "Shared two", "high"),
+        ],
+    );
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    pick_model(&mut world, "Shared two");
+    assert_eq!(
+        sets(&world),
+        [json!({"expected_revision": 5, "agent": "codex", "model": "second/shared", "effort": ""})]
+    );
+    if picker_open(&world) {
+        close_picker(&mut world);
+    }
+    assert!(
+        route_shows(&world, "keel").contains("Shared two"),
+        "{}",
+        route_shows(&world, "keel")
+    );
+}
+
+#[test]
+fn an_unsupported_models_cleared_effort_stays_cleared_through_a_conflict() {
+    let d = daemon(
+        vec![with(member("keel", 5), |m| {
+            m.agent = Some("codex".into());
+            m.resolved_agent = "codex".into();
+        })],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_set",
+        [
+            conflicted(routed(member("keel", 6), "codex", "", "high")),
+            saved(routed(member("keel", 7), "codex", "local/fixed", "")),
+        ],
+    );
+    let mut world = World::start(d);
+    serve_models(
+        &world,
+        vec![attn_protocol::HarnessModel {
+            provider: "local".into(),
+            ..super::settings::harness_catalogs::model("codex", "fixed", "Fixed", None, &[])
+        }],
+    );
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    pick_model(&mut world, "Fixed");
+    if picker_open(&world) {
+        close_picker(&mut world);
+    }
+    assert_eq!(launch_status(&world).as_deref(), Some("Not saved"));
+    click(&mut world, "crew.launch.retry");
+    assert_eq!(
+        sets(&world)[1],
+        json!({"expected_revision": 6, "agent": "codex", "model": "local/fixed", "effort": ""})
+    );
+    assert_eq!(launch_status(&world).as_deref(), Some("Saved"));
+}

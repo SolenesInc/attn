@@ -300,9 +300,16 @@ pub(crate) fn write_route(state: &mut State, member: &str, route: Route, tx: &mu
         );
         return;
     }
+    let takes_no_effort = self::route(state, member).is_some_and(|(_, rules)| {
+        crate::settings::route::view(state, &route, &rules).effort_mode
+            == crate::settings::route::EffortMode::Unsupported
+    });
     let mut change = Pending::default();
     if model != selection.model {
         change.model = Some(model);
+        if takes_no_effort {
+            change.effort = Some(route.effort.clone());
+        }
     }
     if route.effort != selection.effort {
         change.effort = Some(route.effort);

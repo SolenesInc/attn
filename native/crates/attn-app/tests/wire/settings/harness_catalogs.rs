@@ -31,7 +31,7 @@ pub(super) fn harnesses() -> Vec<Harness> {
 
 const EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
 
-pub(super) fn model(
+pub(crate) fn model(
     harness: &str,
     id: &str,
     name: &str,
