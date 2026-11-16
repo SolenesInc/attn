@@ -384,6 +384,21 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         &["sidebar", "collapse", "expand", "rail"],
         Action::SessionToggleSidebar,
     ));
+    let behind_screen = crate::opener::behind_screen(state);
+    if let (Some(session), None) = (behind_screen, crate::editor::unavailable(behind_screen)) {
+        commands.push(
+            Command::new(
+                "open-in-editor",
+                "Open in editor",
+                &["editor", "zed", "code", "folder"],
+                Action::OpenInEditor {
+                    session: session.id.clone(),
+                },
+            )
+            .describe("The active agent’s folder in your editor")
+            .pin(),
+        );
+    }
     commands.push(Command::new(
         "keyboard-shortcuts",
         "Keyboard shortcuts",

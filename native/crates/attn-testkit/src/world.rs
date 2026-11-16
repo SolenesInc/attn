@@ -227,6 +227,7 @@ impl World {
     ) -> World {
         attn_app::use_prefs(prefs);
         attn_app::use_hour_cycle(attn_app::HourCycle::TwentyFour);
+        attn_app::record_editor_launches();
         let files = tempfile::tempdir().expect("a temporary folder for the user's files");
         std::fs::create_dir(files.path().join("Downloads")).expect("a Downloads folder");
         attn_app::use_folders(attn_app::Folders {
@@ -876,6 +877,12 @@ impl World {
     /// keeps instead of opening.
     pub fn opened_links(&mut self) -> Vec<String> {
         self.runtime.take_url_requests()
+    }
+
+    /// The editors the app started since the last call, which a test run keeps instead of
+    /// starting.
+    pub fn editor_launches(&self) -> Vec<attn_app::EditorLaunch> {
+        attn_app::take_editor_launches()
     }
 
     /// The temporary folder that holds the user's `Downloads` and `home`.

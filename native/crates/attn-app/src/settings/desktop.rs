@@ -11,7 +11,7 @@ use super::pages::{
 };
 use crate::{State, setting};
 
-pub(super) const EDITOR: &str = "editor_executable";
+pub(crate) const EDITOR: &str = "editor_executable";
 pub(super) const PROJECTS_DIRECTORY: &str = "projects_directory";
 pub(super) const NOTEBOOK_ROOT: &str = "notebook.root";
 const NOTEBOOK_ROOT_EFFECTIVE: &str = "notebook.root.effective";

@@ -9,6 +9,8 @@ mod bus;
 mod catalogs;
 mod delegation;
 mod desktop;
+
+pub(crate) use desktop::EDITOR;
 mod harnesses;
 mod hygiene;
 mod models;

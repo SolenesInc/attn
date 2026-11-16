@@ -49,6 +49,8 @@ macro_rules! actions {
             ShowSessionSeeds { session: String },
             /// Restart an agent in its pane.
             ReloadSession { session: String },
+            /// Open an agent's folder in the user's editor.
+            OpenInEditor { session: String },
             /// End an agent's snooze.
             WakeSession { session: String },
             /// Store a daemon setting.
@@ -100,6 +102,7 @@ macro_rules! actions {
                     Action::SwitchToProfile { .. } => "profile.switchTo",
                     Action::RenameSession { .. } => "session.rename",
                     Action::ReloadSession { .. } => "session.reload",
+                    Action::OpenInEditor { .. } => "session.openInEditor",
                     Action::ShowSessionUsage { .. } => "session.showUsage",
                     Action::ShowDelegationChain { .. } => "session.showDelegationChain",
                     Action::ShowSessionSeeds { .. } => "session.showSeeds",
@@ -134,6 +137,7 @@ macro_rules! actions {
                     Action::SwitchToProfile { .. } => "Switch to a profile",
                     Action::RenameSession { .. } => "Rename an agent",
                     Action::ReloadSession { .. } => "Reload an agent",
+                    Action::OpenInEditor { .. } => "Open in editor",
                     Action::ShowSessionUsage { .. } => "Show an agent's usage",
                     Action::ShowDelegationChain { .. } => "Show an agent's delegation chain",
                     Action::ShowSessionSeeds { .. } => "Show an agent's seeds",

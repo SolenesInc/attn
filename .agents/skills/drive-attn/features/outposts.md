@@ -165,7 +165,7 @@ Steps:
 
 ## Tests
 
-- Wire: `internal/bridge/*_test.go`, `internal/daemon/outposts_wire_test.go`, `internal/daemon/outpost_forward_transcript_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/settings/outposts.rs`, `outpost_updates.rs`, `remote_shell.rs`, `remote_agents.rs` and the outpost tests in `tile_header.rs`, `terminal_annotations.rs`, `keys.rs` and `ledger.rs`.
+- Wire: `internal/bridge/*_test.go`, `internal/daemon/outposts_wire_test.go`, `internal/daemon/outpost_forward_transcript_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/settings/outposts.rs`, `outpost_updates.rs`, `remote_shell.rs`, `remote_agents.rs`, `outpost_paths.rs` and the outpost tests in `tile_header.rs`, `terminal_annotations.rs`, `keys.rs` and `ledger.rs`.
 - Stack: `cmd/attnd/outposts_stack_test.go`, `cmd/attnd/outpost_connect_terminal_stack_test.go`, `cmd/attnd/outpost_*_stack_test.go`, `cmd/attnd/remote_*_stack_test.go`, `cmd/attnd/enrollment_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `cmd/attnd/delegate_outpost_stack_test.go`, `cmd/attnd/session_reopen_outpost_stack_test.go`, `cmd/attnd/garden_resume_outpost_stack_test.go`, `cmd/attnd/launcher_reads_stack_test.go`, `cmd/attnd/remote_worktree_delete_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
 - Scenario: in the native app `native-outposts-settings`, `native-outpost-update` and `native-notebook-sync`; in the Tauri app `outposts-settings`, `outpost-update`, `notebook-sync`.
 - Kernel: `internal/enrollment/*_test.go`, `internal/outpostbuild/*_test.go`.

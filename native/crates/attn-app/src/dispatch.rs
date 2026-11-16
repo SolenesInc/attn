@@ -63,6 +63,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::CreateDesktop => crate::desktop::create_desktop(state, tx),
         Action::OpenWhatsNew => crate::whats_new::open(state, tx),
         Action::NotebookOpenTile => crate::notebook::open_tile(state, tx),
+        Action::OpenInEditor { session } => crate::editor::open_session(state, &session, tx),
         Action::NotebookOpenFullscreen => crate::notebook::open_fullscreen(state, tx),
         Action::CreateDiagnosticReport => crate::diagnostic_report::open(state, tx),
         Action::SessionRefreshPrs => crate::attention::refresh(state, tx),
