@@ -16,7 +16,7 @@ mod host;
 pub mod layout;
 mod overview;
 mod peek;
-mod provenance;
+pub(crate) mod provenance;
 pub(crate) mod refusal;
 mod role_icon;
 mod seed_card;

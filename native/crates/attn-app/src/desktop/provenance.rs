@@ -1,7 +1,7 @@
 use attn_protocol::{AutomationProvenance, Session, SessionPullRequest};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, TextStyle, Tx, col, row, text};
+use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Placement};
 
 use super::fit::{Level, Widths, text_w};
@@ -128,6 +128,50 @@ pub(crate) fn pull_requests(session: &Session) -> Vec<&SessionPullRequest> {
             .then_with(|| created(b).cmp(&created(a)))
     });
     all
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Badge {
+    number: i64,
+    said: String,
+    tone: Tone,
+}
+
+pub(crate) fn badge(session: &Session) -> Option<Badge> {
+    let pr = pull_request(session)?;
+    let (label, tone) = status(pr);
+    let title = pr.title.as_deref().filter(|t| !t.is_empty());
+    let said = [
+        Some(format!("{}#{}", pr.repository, pr.number)),
+        Some(label.to_owned()),
+        title.map(str::to_owned),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" · ");
+    Some(Badge {
+        number: pr.number,
+        said,
+        tone,
+    })
+}
+
+pub(crate) fn badge_view(row_key: &str, badge: &Badge, t: &Tokens) -> El {
+    let number = format!("#{}", badge.number);
+    row()
+        .key(format!("{row_key}.pr"))
+        .role("img")
+        .label(badge.said.clone())
+        .a11y_value(number.clone())
+        .items_center()
+        .gap(4.0)
+        .child(el().w(6.0).h(6.0).radius(3.0).fill(badge.tone.color(t)))
+        .child(
+            text(number)
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary),
+        )
 }
 
 /// The pull request the header names: the best one, unless even that one is closed.

@@ -59,7 +59,7 @@ pub enum QLine {
     Counts(String),
     Filter,
     Empty(&'static str),
-    Agent(QueueAgent),
+    Agent(Box<QueueAgent>),
 }
 
 impl QLine {
@@ -129,10 +129,10 @@ fn agent(
     band: Band,
     row: &QueueRow<'_>,
     now_ms: i64,
-) -> QueueAgent {
+) -> Box<QueueAgent> {
     let session = row.session;
     let actions = queue::actions(&state.facts, session, now_ms);
-    QueueAgent {
+    Box::new(QueueAgent {
         band,
         agent: {
             let row = AgentRow::of(
@@ -161,7 +161,7 @@ fn agent(
         settle: band == Band::Turn && actions.settle,
         snooze: matches!(band, Band::Turn | Band::Working) && actions.snooze,
         unsnooze: band == Band::Snoozed,
-    }
+    })
 }
 
 /// The queue sidebar's body, top to bottom: the crew, the waiting card and its turns, the

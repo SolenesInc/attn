@@ -357,6 +357,13 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                     let more = rune::row()
                         .key(format!("{key}.controls"))
                         .group_opacity(0.0, 1.0)
+                        .gap(space::S1)
+                        .items_center()
+                        .children(
+                            row.pr
+                                .as_ref()
+                                .map(|pr| crate::desktop::provenance::badge_view(&key, pr, t)),
+                        )
                         .child(actions_button(&key, row, t));
                     agent_row(key.clone(), row, logos, t)
                         .hover_group()
@@ -520,6 +527,16 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+        .children(
+            agent
+                .chief
+                .then(|| mark(&key, "chief", attn_ui::icon::BOLT, "Chief of staff", t)),
+        )
+        .children(
+            agent
+                .delegated
+                .then(|| mark(&key, "delegated", "↳", "Delegated from chief of staff", t)),
+        )
         .children(crate::asks::marker(&key, agent.asks, t))
 }
 
@@ -533,6 +550,18 @@ fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> 
         t,
         move |state, tx| rename::desktop(state, &id, under.clone(), tx),
     )
+}
+
+fn mark(row_key: &str, name: &str, glyph: &str, label: &str, t: &Tokens) -> El {
+    text(glyph)
+        .key(format!("{row_key}.{name}"))
+        .role("img")
+        .label(label)
+        .font(type_::MONO_CAPTION)
+        .color(t.accent)
+        .px(5.0)
+        .radius(9.0)
+        .fill(t.accent.alpha(0.14))
 }
 
 /// The × button that closes a desktop, asking first when it holds tiles.

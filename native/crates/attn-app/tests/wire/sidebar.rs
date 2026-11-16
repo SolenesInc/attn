@@ -773,3 +773,99 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
     assert_eq!(renamed(&world), ["Reviews", "Reviews", ""]);
     assert!(world.screen().find(Target::key("desktop.rename")).is_none());
 }
+
+#[test]
+fn an_agent_row_names_its_pull_request_and_marks_the_chief_and_what_the_chief_delegated() {
+    use attn_protocol::SessionPullRequest;
+    let pr =
+        |number: i64, state: &str, ci: Option<&str>, review: Option<&str>| SessionPullRequest {
+            repository: "github.com/victorarias/attn".into(),
+            number,
+            state: state.into(),
+            ci_status: ci.map(Into::into),
+            review_status: review.map(Into::into),
+            created_at: "2026-08-30T12:00:00Z".into(),
+            ..SessionPullRequest::default()
+        };
+    let cases: Vec<(Vec<SessionPullRequest>, Option<&str>)> = vec![
+        (
+            vec![pr(71, "open", Some("failure"), None)],
+            Some("github.com/victorarias/attn#71 · checks failed"),
+        ),
+        (
+            vec![pr(71, "open", None, Some("changes_requested"))],
+            Some("github.com/victorarias/attn#71 · changes requested"),
+        ),
+        (
+            vec![pr(72, "open", None, None), pr(71, "merged", None, None)],
+            Some("github.com/victorarias/attn#72 · open"),
+        ),
+        (
+            vec![pr(71, "merged", None, None)],
+            Some("github.com/victorarias/attn#71 · merged"),
+        ),
+        (
+            vec![pr(71, "open", Some("pending"), None)],
+            Some("github.com/victorarias/attn#71 · checks running"),
+        ),
+        (vec![pr(71, "closed", None, None)], None),
+        (vec![], None),
+    ];
+    for (pull_requests, expected) in cases {
+        let agent = Session {
+            pull_requests: Some(pull_requests),
+            ..session("s1", "idle")
+        };
+        let world = World::start(Daemon::scripted().state(state(
+            vec![agent],
+            vec![desktop("d1", "a", "Work", vec![pane("d1", "p1", "s1")])],
+        )));
+        let badge = world.screen().find(Target::key("sidebar.session.s1.pr"));
+        assert_eq!(
+            badge.as_ref().and_then(|n| n.name.as_deref()),
+            expected,
+            "{expected:?}"
+        );
+        if expected.is_some() {
+            assert_eq!(
+                badge.unwrap().value.as_deref().map(|v| v.starts_with('#')),
+                Some(true)
+            );
+        }
+    }
+
+    let world = World::start(Daemon::scripted().state(state(
+        vec![
+            Session {
+                chief_of_staff: Some(true),
+                ..session("chief", "idle")
+            },
+            Session {
+                delegated_from_chief: Some(true),
+                ..session("s1", "idle")
+            },
+            session("s2", "idle"),
+        ],
+        vec![desktop(
+            "d1",
+            "a",
+            "Work",
+            vec![
+                pane("d1", "p1", "chief"),
+                pane("d1", "p2", "s1"),
+                pane("d1", "p3", "s2"),
+            ],
+        )],
+    )));
+    let label = |key: &str| world.screen().find(Target::key(key)).and_then(|n| n.name);
+    assert_eq!(
+        label("sidebar.session.chief.chief").as_deref(),
+        Some("Chief of staff")
+    );
+    assert_eq!(
+        label("sidebar.session.s1.delegated").as_deref(),
+        Some("Delegated from chief of staff")
+    );
+    assert_eq!(label("sidebar.session.s2.delegated"), None);
+    assert_eq!(label("sidebar.session.s2.chief"), None);
+}

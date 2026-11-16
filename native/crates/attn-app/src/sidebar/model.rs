@@ -70,6 +70,9 @@ pub struct AgentRow {
     pub settling: Settling,
     /// The agent's open asks.
     pub asks: usize,
+    pub pr: Option<crate::desktop::provenance::Badge>,
+    pub chief: bool,
+    pub delegated: bool,
 }
 
 /// The daemon's auto-settle countdown, as a row whose tile is not on screen shows it.
@@ -114,6 +117,9 @@ impl AgentRow {
             selected,
             settling: Settling::Off,
             asks: 0,
+            pr: crate::desktop::provenance::badge(session),
+            chief: session.chief_of_staff == Some(true),
+            delegated: session.delegated_from_chief == Some(true),
         }
     }
 
