@@ -73,7 +73,7 @@ item	statement	native_test	reason
 62	Close with a browser tile's address field focused closes that browser tile	attn-app/tests/wire/browser.rs::a_click_in_the_address_field_makes_close_act_on_its_browser_tile	
 63	A browsed page reaches no app channel		n/a: the native app registers no script message handler and keeps its browser-host token in its own process, so a page has nothing to call
 64	The WebDriver element and shadow reference format survives across navigation		n/a: the native app runs the same browser runtime bundle as the Tauri app (app/src-tauri/generated/browser-runtime.js), so the format is the bundle's
-65	Cookie reads and deletes are scoped to the page, writes refuse another domain, and one persistent store keeps sign-ins		gap: s-r6p0d0
+65	Cookie reads and deletes are scoped to the page, writes refuse another domain, and one persistent store keeps sign-ins	live:s-r6p0d0/cookies.txt	
 66	wait_for asks the page every 50 ms and gives up at its timeout, at most 120 s, with the Tauri app's error	attn-app/tests/wire/browser.rs::wait_for_asks_the_page_until_its_element_is_ready_or_its_time_runs_out	
 67	An action on a desktop the window has not loaded says to open that desktop	attn-app/tests/wire/browser.rs::an_action_on_a_desktop_the_window_has_not_loaded_says_to_open_that_desktop	
 67	An answer past 24 MiB fails and says why, under the daemon's 32 MiB read limit	attn-app/tests/wire/browser.rs::an_answer_too_large_for_the_daemon_to_read_fails_and_says_why	
