@@ -726,6 +726,47 @@ fn each_harness_and_yolo_shows_its_keys_as_keycaps() {
 }
 
 #[test]
+fn many_harnesses_wrap_inside_a_dialog_as_wide_as_tauris() {
+    let mut world = busy_desktop(&[]);
+    world.daemon.on("delegation_preferences_get", |_| {
+        catalog(&[
+            "claude",
+            "codex",
+            "opencode",
+            "gemini-cli",
+            "plug",
+            "snipe",
+            "pi",
+            "amp",
+        ])
+    });
+    open_dialog(&mut world);
+
+    let screen = world.screen();
+    let [dialog_x, _, dialog_w, _] = screen.bounds(Target::key("new-session")).unwrap();
+    assert_eq!(
+        dialog_w, 760.0,
+        "Tauri's dialog is 760 wide (LocationPicker.css)"
+    );
+    let options: Vec<_> = screen
+        .all(Target::role("radio-button"))
+        .into_iter()
+        .filter_map(|n| n.key.filter(|k| k.starts_with("new-session.agent.")))
+        .collect();
+    assert_eq!(options.len(), 9, "{options:?}");
+    for key in options {
+        let [x, _, w, _] = screen.bounds(Target::key(key.clone())).unwrap();
+        assert!(
+            x + w <= dialog_x + dialog_w,
+            "{key} ends at {} past the dialog's {}",
+            x + w,
+            dialog_x + dialog_w
+        );
+    }
+    rest(&mut world);
+}
+
+#[test]
 fn a_plugin_display_name_is_shown_on_its_stored_harness_control() {
     let mut world = busy_desktop_with(
         &[],

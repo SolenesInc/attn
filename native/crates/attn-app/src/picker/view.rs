@@ -26,7 +26,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
             );
         })
         .w_full()
-        .max_w(640.0)
+        .max_w(DIALOG_W)
         .padding(space::S3);
     let frame = rune_kit::popover::raised(attn_ui::kit(t), frame, 8.0);
     Some(
@@ -272,9 +272,11 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
 fn toggle(options: impl IntoIterator<Item = El>, t: &Tokens) -> El {
     row()
         .items_center()
+        .flex_wrap()
+        .shrink()
         .gap(4.0)
         .padding(3.0)
-        .radius(999.0)
+        .radius(16.0)
         .fill(t.bg_input)
         .border(1.0, t.border)
         .children(options)
@@ -881,3 +883,6 @@ fn link(
 }
 
 const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();
+
+/// Tauri's `.location-picker` width.
+const DIALOG_W: f32 = 760.0;

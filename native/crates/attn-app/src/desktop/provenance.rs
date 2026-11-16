@@ -176,8 +176,18 @@ pub(crate) fn badge_view(row_key: &str, badge: &Badge, t: &Tokens) -> El {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Run {
-    shown: String,
+    definition: String,
+    number: Option<i64>,
     said: String,
+}
+
+impl Run {
+    fn shown(&self) -> String {
+        match self.number {
+            Some(n) => format!("{} #{n}", self.definition),
+            None => self.definition.clone(),
+        }
+    }
 }
 
 pub(crate) fn run(session: &Session) -> Option<Run> {
@@ -186,14 +196,13 @@ pub(crate) fn run(session: &Session) -> Option<Run> {
     if automation.superseded == Some(true) {
         said.push("Superseded session".into());
     }
-    let mut shown = short_definition(&automation.definition_name);
     if let Some(pr) = &automation.pull_request {
         said.push(format!("{}#{}", pr.repository, pr.number));
         said.extend(pr.title.clone().filter(|t| !t.is_empty()));
-        shown = format!("{shown} #{}", pr.number);
     }
     Some(Run {
-        shown,
+        definition: short_definition(&automation.definition_name),
+        number: automation.pull_request.as_ref().map(|pr| pr.number),
         said: said.join(" · "),
     })
 }
@@ -203,24 +212,34 @@ pub(crate) fn run_view(row_key: &str, run: &Run, t: &Tokens) -> El {
         .key(format!("{row_key}.run"))
         .role("img")
         .label(run.said.clone())
-        .a11y_value(run.shown.clone())
+        .a11y_value(run.shown())
         .items_center()
         .gap(4.0)
         .shrink()
+        .max_w(RUN_MAX_W)
         .child(
             text(attn_ui::icon::BOLT)
                 .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary),
         )
         .child(
-            text(run.shown.clone())
+            text(run.definition.clone())
                 .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary)
                 .single_line()
                 .truncate()
                 .shrink(),
         )
+        .children(run.number.map(|n| {
+            text(format!("#{n}"))
+                .key(format!("{row_key}.run.number"))
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary)
+                .single_line()
+        }))
 }
+
+const RUN_MAX_W: f32 = 120.0;
 
 /// The pull request the header names: the best one, unless even that one is closed.
 pub(crate) fn pull_request(session: &Session) -> Option<&SessionPullRequest> {

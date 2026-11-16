@@ -163,8 +163,8 @@ pub(crate) enum DesktopMark {
     /// The desktop the drag started on, which takes no drop.
     Source,
     Accepts,
-    /// The drag rests on it, and the window switches to it soon.
-    Entering,
+    /// The drop lands on it: the pointer is over it.
+    Target,
 }
 
 /// A side of a tile the dragged tile docks against, taking `ratio` of the split it makes.
@@ -215,19 +215,26 @@ impl LeafDrag {
             None
         } else if desktop == self.source.desktop() {
             Some(DesktopMark::Source)
-        } else if self.entering.as_ref().is_some_and(|(on, _)| on == desktop) {
-            Some(DesktopMark::Entering)
+        } else if self.lands_on(desktop) {
+            Some(DesktopMark::Target)
         } else {
             Some(DesktopMark::Accepts)
         }
     }
 
+    fn lands_on(&self, desktop: &str) -> bool {
+        matches!(&self.target, Some(Target::Desktop(on)) if on == desktop)
+    }
+
     /// What sidebar desktops show of the drag, for a view to read: the desktop it started on
-    /// and the one it rests on, while the press has become a drag.
+    /// and the one it lands on, while the press has become a drag.
     pub(crate) fn desktop_marks(&self) -> Option<(String, Option<String>)> {
         self.active.then(|| {
-            let entering = self.entering.as_ref().map(|(on, _)| on.clone());
-            (self.source.desktop().to_owned(), entering)
+            let landing = match &self.target {
+                Some(Target::Desktop(on)) => Some(on.clone()),
+                _ => None,
+            };
+            (self.source.desktop().to_owned(), landing)
         })
     }
 

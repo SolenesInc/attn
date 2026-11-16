@@ -758,7 +758,7 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
                     "request_id": r["request_id"],
                     "action": "desktop_rename",
                     "success": false,
-                    "error": "desktop work changed since revision 1",
+                    "error": "desktop work changed since revision 1 while another window arranged it, so this name was not saved",
                 })
             } else {
                 serde_json::json!({
@@ -797,7 +797,24 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
             .get(Target::key("desktop.rename.refused"))
             .name
             .as_deref(),
-        Some("desktop work changed since revision 1")
+        Some(
+            "desktop work changed since revision 1 while another window arranged it, so this name was not saved"
+        )
+    );
+    let inside = |outer: [f32; 4], inner: [f32; 4]| {
+        inner[0] >= outer[0] && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+    };
+    let popover = world
+        .screen()
+        .bounds(Target::key("desktop.rename"))
+        .unwrap();
+    let refused = world
+        .screen()
+        .bounds(Target::key("desktop.rename.refused"))
+        .unwrap();
+    assert!(
+        inside(popover, refused) && refused[3] > 1.5 * rune::tok::type_::LABEL.line_px(),
+        "the refusal wraps onto more lines inside the popover: {refused:?} in {popover:?}"
     );
 
     refuse.store(false, Ordering::SeqCst);
@@ -947,6 +964,46 @@ fn an_agent_row_says_its_harness_on_hover_and_explains_an_unknown_state_the_daem
             Some(said.replace(" · unknown", "").as_str())
         );
     }
+}
+
+#[test]
+fn a_run_row_with_a_long_name_and_definition_keeps_room_for_the_name_and_shows_its_pull_request_number()
+ {
+    use attn_protocol::{AutomationProvenance, PullRequestProvenance};
+    let mut run = session("run-a", "idle");
+    run.label = "Review the incoming pull request for the feed service".into();
+    run.automation = Some(AutomationProvenance {
+        run_id: "run-1".into(),
+        definition_id: 1,
+        definition_name: "Review incoming pull requests across every repository - GPT Sol high"
+            .into(),
+        trigger_type: "github_review_requested".into(),
+        pull_request: Some(PullRequestProvenance {
+            repository: "ghe.example.net/audiobook/feed-nexus-web".into(),
+            number: 4182,
+            url: "https://ghe.example.net/audiobook/feed-nexus-web/pull/4182".into(),
+            ..PullRequestProvenance::default()
+        }),
+        ..AutomationProvenance::default()
+    });
+    let world = World::start(Daemon::scripted().state(state(
+        vec![run],
+        vec![desktop("d1", "a", "One", vec![pane("d1", "p1", "run-a")])],
+    )));
+    let screen = world.screen();
+    let bounds = |key: &str| screen.bounds(Target::key(key)).expect(key);
+    let [row_x, _, row_w, _] = bounds("sidebar.session.run-a");
+    let [name_x, _, name_w, _] = bounds("sidebar.session.run-a.name");
+    let [number_x, _, number_w, _] = bounds("sidebar.session.run-a.run.number");
+    assert!(
+        name_w >= 4.0 * 13.0,
+        "the name keeps room for a few letters: {name_w}"
+    );
+    assert!(number_x >= name_x + name_w, "the number follows the name");
+    assert!(
+        number_x + number_w <= row_x + row_w,
+        "#4182 shows inside the row: {number_x}+{number_w} past {row_x}+{row_w}"
+    );
 }
 
 #[test]

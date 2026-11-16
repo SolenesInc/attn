@@ -254,5 +254,7 @@ fn popover(rename: &Rename, t: &Tokens) -> El {
                 .key(format!("{key}.refused"))
                 .font(type_::LABEL)
                 .color(t.error)
+                .wrap()
+                .w_full()
         }))
 }

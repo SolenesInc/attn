@@ -163,7 +163,7 @@ pub(crate) fn chip(
         None => el,
         Some(DesktopMark::Source) => el.opacity(0.4),
         Some(DesktopMark::Accepts) => el.border(1.0, t.accent),
-        Some(DesktopMark::Entering) => el.border(1.0, t.accent).fill(t.accent.alpha(0.18)),
+        Some(DesktopMark::Target) => el.border(1.0, t.accent).fill(t.accent.alpha(0.18)),
     }
 }
 
@@ -183,10 +183,15 @@ fn waiting_mark(waiting: usize, mark: Mark, t: &Tokens) -> Option<El> {
             .radius(2.5)
             .fill(t.warning)
             .ml(2.0),
-        Mark::Count => text(waiting.to_string())
-            .font(type_::MONO_CAPTION)
-            .color(t.warning)
-            .ml(2.0),
+        Mark::Count => row()
+            .min_w(15.0)
+            .h(15.0)
+            .px(4.0)
+            .center()
+            .radius(999.0)
+            .fill(t.warning)
+            .ml(3.0)
+            .child(text(waiting.to_string()).font(COUNT_TYPE).color(t.bg_app)),
     })
 }
 
@@ -491,3 +496,5 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                 )),
         )
 }
+
+const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(9.5, 600.0).mono();

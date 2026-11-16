@@ -373,7 +373,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                 }
                 Line::Tile(tile) => tile_row(key.clone(), tile, t),
             };
-            drop_mark(row, mark, t).children(seam.map(|seam| {
+            drop_mark(row, mark, matches!(line, Line::Desktop(_)), t).children(seam.map(|seam| {
                 rune::el()
                     .key(format!("{key}.seam"))
                     .absolute(
@@ -393,17 +393,19 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
 }
 
 /// A line as its desktop shows to a dragged tile: muted on the desktop the tile comes from,
-/// and tinted on the others, more so on the one it rests on.
-fn drop_mark(line: El, mark: Option<DesktopMark>, t: &Tokens) -> El {
+/// the heading outlined on the others, and every line of the one it lands on tinted behind
+/// one accent bar.
+fn drop_mark(line: El, mark: Option<DesktopMark>, heading: bool, t: &Tokens) -> El {
     match mark {
         None => line,
         Some(DesktopMark::Source) => line.opacity(0.45),
-        Some(DesktopMark::Accepts) => line
+        Some(DesktopMark::Accepts) if heading => line
             .fill(t.accent.alpha(0.07))
             .border(1.0, t.accent.alpha(0.32)),
-        Some(DesktopMark::Entering) => line
-            .fill(t.accent.alpha(0.12))
-            .border_sides([3.0, 1.0, 1.0, 1.0], t.accent.alpha(0.6)),
+        Some(DesktopMark::Accepts) => line,
+        Some(DesktopMark::Target) => line
+            .fill(t.accent.alpha(0.14))
+            .border_sides([3.0, 0.0, 0.0, 0.0], t.accent),
     }
 }
 
@@ -496,6 +498,8 @@ fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &T
         }))
 }
 
+const NAME_MIN_W: f32 = 64.0;
+
 fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
     let id = agent.id.clone();
     let name = agent.shown_name();
@@ -526,11 +530,14 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
         .child(lead(&key, agent, logos, t))
         .child(
             text(name)
+                .key(format!("{key}.name"))
                 .font(type_::BODY)
                 .color(t.text_primary)
                 .single_line()
                 .truncate()
-                .grow(1.0),
+                .grow(1.0)
+                .shrink()
+                .min_w(NAME_MIN_W),
         )
         .children(
             agent
