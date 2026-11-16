@@ -1776,3 +1776,147 @@ fn the_seeds_tab_says_when_its_list_is_only_the_newest_part_of_the_garden() {
         Some("Planted 0+")
     );
 }
+
+fn charter_saves(world: &World) -> Vec<(String, String)> {
+    world
+        .daemon
+        .sent_of("crew_charter_set")
+        .iter()
+        .map(|r| {
+            (
+                r["content"].as_str().unwrap_or_default().to_owned(),
+                r["expected_token"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect()
+}
+
+fn saves(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+    pairs
+        .iter()
+        .map(|(c, t)| ((*c).to_owned(), (*t).to_owned()))
+        .collect()
+}
+
+#[test]
+fn a_save_whose_answer_was_lost_writes_again_even_once_the_text_is_back_to_what_was_saved() {
+    let d = daemon(
+        vec![member("fern", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_charter_get",
+        [
+            charter_read("fern", "A", "a"),
+            charter_read("fern", "A", "a"),
+        ],
+    );
+    d.answer_in_turn("crew_charter_set", [Answer::Hold, Answer::Hold]);
+    let mut world = World::start(d);
+    on_charter(&mut world);
+    click(&mut world, "crew.charter.editor");
+    world.gesture(|app| app.press("mod+down"));
+    world.gesture(|app| app.type_text("B"));
+    click(&mut world, "crew.heading");
+    super::ledger::hang_up(&mut world);
+    assert_eq!(
+        named(&world, "crew.charter.status").as_deref(),
+        Some("Not saved")
+    );
+
+    click(&mut world, "crew.charter.editor");
+    world.gesture(|app| app.press("mod+down"));
+    press(&mut world, Key::Backspace);
+    super::ledger::come_back(&mut world);
+    click(&mut world, "crew.heading");
+    assert_eq!(charter_saves(&world), saves(&[("AB", "a"), ("A", "a")]));
+}
+
+#[test]
+fn a_save_that_failed_for_want_of_a_connection_goes_once_it_reconnects_and_other_failures_wait_for_the_user()
+ {
+    let d = daemon(
+        vec![member("fern", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_charter_get",
+        [
+            charter_read("fern", "old", "old"),
+            charter_read("fern", "old", "old"),
+            charter_read("fern", "old", "old"),
+        ],
+    );
+    d.answer_in_turn(
+        "crew_charter_set",
+        [Answer::Reply(message(CrewCharterSetResultMessage {
+            success: false,
+            error: Some("disk is read-only".into()),
+            ..CrewCharterSetResultMessage::new()
+        }))],
+    );
+    let mut world = World::start(d);
+    on_charter(&mut world);
+    super::ledger::hang_up(&mut world);
+    click(&mut world, "crew.charter.editor");
+    world.gesture(|app| app.press("mod+down"));
+    world.gesture(|app| app.type_text(" offline edit"));
+    click(&mut world, "crew.heading");
+    assert!(named(&world, "crew.charter.error").is_some());
+    assert_eq!(charter_saves(&world), saves(&[]));
+
+    super::ledger::come_back(&mut world);
+    assert_eq!(charter_saves(&world), saves(&[("old offline edit", "old")]));
+    let error = named(&world, "crew.charter.error").unwrap_or_default();
+    assert!(error.contains("disk is read-only"), "{error}");
+
+    world.reconnect();
+    assert_eq!(charter_saves(&world).len(), 1);
+    assert_eq!(editor(&world), "old offline edit");
+}
+
+#[test]
+fn a_write_the_daemon_acknowledged_stays_when_an_older_reread_answers_after_it() {
+    let d = daemon(
+        vec![member("fern", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_charter_get",
+        [charter_read("fern", "A", "a"), Answer::Hold],
+    );
+    d.answer_in_turn("crew_charter_set", [charter_saved("fern", "AB", "b")]);
+    let mut world = World::start(d);
+    on_charter(&mut world);
+    click(&mut world, "crew.tab.launch");
+    click(&mut world, "crew.tab.charter");
+    let reread = world.daemon.sent_of("crew_charter_get").remove(1);
+
+    click(&mut world, "crew.charter.editor");
+    world.gesture(|app| app.press("mod+down"));
+    world.gesture(|app| app.type_text("B"));
+    click(&mut world, "crew.heading");
+    assert_eq!(
+        named(&world, "crew.charter.status").as_deref(),
+        Some("Saved")
+    );
+
+    world.daemon.reply_to(
+        &reread,
+        CrewCharterGetResultMessage {
+            success: true,
+            member: Some("fern".into()),
+            charter: Some(charter("A", "a")),
+            ..CrewCharterGetResultMessage::new()
+        },
+    );
+    world.settle();
+    assert_eq!(editor(&world), "AB");
+    assert_eq!(
+        named(&world, "crew.charter.status").as_deref(),
+        Some("Saved")
+    );
+}
