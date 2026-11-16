@@ -73,6 +73,7 @@ pub struct AgentRow {
     pub pr: Option<crate::desktop::provenance::Badge>,
     pub chief: bool,
     pub delegated: bool,
+    pub unknown_because: Option<&'static str>,
 }
 
 /// The daemon's auto-settle countdown, as a row whose tile is not on screen shows it.
@@ -120,6 +121,9 @@ impl AgentRow {
             pr: crate::desktop::provenance::badge(session),
             chief: session.chief_of_staff == Some(true),
             delegated: session.delegated_from_chief == Some(true),
+            unknown_because: (session.state == "unknown")
+                .then(|| unknown_reason(session.state_reason.as_deref()))
+                .flatten(),
         }
     }
 
@@ -137,7 +141,29 @@ impl AgentRow {
 
     /// What the state mark says to a screen reader: "Claude · working".
     pub fn lead(&self) -> String {
-        format!("{} · {}", self.harness, self.state.spoken())
+        format!(
+            "{} · {}",
+            self.harness,
+            self.unknown_because.unwrap_or(self.state.spoken())
+        )
+    }
+
+    pub fn hover(&self) -> String {
+        match (self.unknown_because, self.state) {
+            (Some(why), _) => format!("{} · {why}", self.harness),
+            (None, AgentState::Recoverable) => {
+                format!("{} · Session will be recovered when opened", self.harness)
+            }
+            (None, _) => self.harness.clone(),
+        }
+    }
+}
+
+fn unknown_reason(reason: Option<&str>) -> Option<&'static str> {
+    match reason? {
+        "stuck" => Some("Stuck — the agent has stopped reporting anything at all"),
+        "no_evidence" => Some("No signal from this agent yet"),
+        _ => None,
     }
 }
 

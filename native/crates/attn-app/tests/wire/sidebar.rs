@@ -161,6 +161,7 @@ fn clicking_an_agent_row_asks_the_daemon_to_show_that_agent() {
     let shown = world.daemon.sent_of("desktop_show_session");
     assert_eq!(shown.len(), 1);
     assert_eq!(shown[0]["session_id"], "side-c");
+    world.advance(std::time::Duration::from_millis(500));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -868,4 +869,42 @@ fn an_agent_row_names_its_pull_request_and_marks_the_chief_and_what_the_chief_de
     );
     assert_eq!(label("sidebar.session.s2.delegated"), None);
     assert_eq!(label("sidebar.session.s2.chief"), None);
+}
+
+#[test]
+fn an_agent_row_says_its_harness_on_hover_and_explains_an_unknown_state_the_daemon_gave_a_reason_for()
+ {
+    let cases = [
+        (
+            "stuck",
+            "Claude · Stuck — the agent has stopped reporting anything at all",
+        ),
+        ("no_evidence", "Claude · No signal from this agent yet"),
+        ("some_future_clause", "Claude · unknown"),
+    ];
+    for (reason, said) in cases {
+        let agent = Session {
+            state_reason: Some(reason.into()),
+            ..session("s1", "unknown")
+        };
+        let world = World::start(Daemon::scripted().state(state(
+            vec![agent],
+            vec![desktop("d1", "a", "Work", vec![pane("d1", "p1", "s1")])],
+        )));
+        let screen = world.screen();
+        assert_eq!(
+            screen
+                .get(Target::key("sidebar.session.s1.state"))
+                .name
+                .as_deref(),
+            Some(said)
+        );
+        assert_eq!(
+            screen
+                .get(Target::key("sidebar.session.s1"))
+                .description
+                .as_deref(),
+            Some(said.replace(" · unknown", "").as_str())
+        );
+    }
 }

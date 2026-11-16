@@ -1793,3 +1793,25 @@ fn a_long_waiting_pill_keeps_to_its_width_and_leaves_the_title_bar_its_profile_p
         );
     }
 }
+
+#[test]
+fn a_queue_row_says_its_harness_on_hover_with_its_logo_turned_off() {
+    let mut message = queue(one_desktop(vec![Session {
+        agent: "codex".into(),
+        ..turn("t1", 5)
+    }]));
+    message
+        .settings
+        .as_mut()
+        .unwrap()
+        .insert("sidebar_harness_logos_enabled".into(), "false".into());
+    let world = World::start(Daemon::scripted().state(message));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("queue-turn.t1"))
+            .description
+            .as_deref(),
+        Some("Codex")
+    );
+}

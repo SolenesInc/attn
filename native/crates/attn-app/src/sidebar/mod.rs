@@ -504,6 +504,7 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
         .focusable(true)
         .label(format!("Open {}", agent.name))
         .a11y_value(agent.state.wire())
+        .help(agent.hover())
         .w_full()
         .h(ROW_HEIGHT)
         .items_center()
@@ -527,6 +528,12 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+        .children((agent.state == AgentState::Recoverable).then(|| {
+            text("recoverable")
+                .key(format!("{key}.recoverable"))
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary)
+        }))
         .children(
             agent
                 .chief
