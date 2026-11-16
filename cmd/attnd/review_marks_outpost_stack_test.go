@@ -76,6 +76,11 @@ func TestAnOutpostAgentsReviewTakesItsAnswerAndRecordsItsSendOnTheOutpost(t *tes
 			func(r protocol.MarkdownAnnotationsSubmitResultMessage) bool { return r.RequestID == send.RequestID })
 	}
 
+	readInto := func(file string) {
+		app.TypeLine(shell, "printf '__reading_%s\\n' "+file+"; cat > "+file)
+		app.AwaitScreen(shell, "__reading_"+file)
+	}
+
 	question := protocol.MarkdownAnnotation{ID: "q1", Type: protocol.MarkdownAnnotationQuestion, Text: protocol.Ptr("Why keep it?"), CreatedAt: 1,
 		Anchor: &protocol.MarkdownAnnotationAnchor{BlockID: "b1", StartLine: 9, EndLine: 9, Exact: "Add keeps its sum."}}
 	saved := testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{Cmd: protocol.CmdMarkdownAnnotationsSave, DocumentUri: outpostURI, SourceKind: "file",
@@ -85,7 +90,7 @@ func TestAnOutpostAgentsReviewTakesItsAnswerAndRecordsItsSendOnTheOutpost(t *tes
 		t.Fatalf("saving the question = %+v", saved)
 	}
 
-	app.TypeLine(shell, "cat > asked.txt")
+	readInto("asked.txt")
 	if asked := submit(protocol.MarkdownAnnotationsSubmitMessage{OnlyIds: []string{"q1"}}); asked.Status != "delivered" {
 		t.Fatalf("asking on the outpost's review = %+v, want delivered", asked)
 	}
@@ -106,7 +111,7 @@ func TestAnOutpostAgentsReviewTakesItsAnswerAndRecordsItsSendOnTheOutpost(t *tes
 		t.Fatalf("the home's draft of the same path = %+v, want it untouched", marks)
 	}
 
-	app.TypeLine(shell, "cat > sent.txt")
+	readInto("sent.txt")
 	if sent := submit(protocol.MarkdownAnnotationsSubmitMessage{Verdict: protocol.Ptr(protocol.ReviewVerdictApprove)}); sent.Status != "delivered" || sent.Error != nil || len(sent.Annotations) != 0 {
 		t.Fatalf("sending the outpost's review = %+v, want it delivered, spent and recorded", sent)
 	}
