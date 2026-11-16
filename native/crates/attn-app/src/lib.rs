@@ -56,6 +56,7 @@ use attn_client::{
 use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 
 pub use action::{Action, Category};
+pub use calendar::{HourCycle, use_hour_cycle};
 pub use deep_link::open_link;
 pub use dispatch::dispatch;
 pub use frame::{Folders, use_folders, use_prefs};

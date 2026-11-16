@@ -211,6 +211,7 @@ impl World {
 
     fn start_with(daemon: Daemon, size: (f32, f32), prefs: rune::prefs::Prefs) -> World {
         attn_app::use_prefs(prefs);
+        attn_app::use_hour_cycle(attn_app::HourCycle::TwentyFour);
         let files = tempfile::tempdir().expect("a temporary folder for the user's files");
         std::fs::create_dir(files.path().join("Downloads")).expect("a Downloads folder");
         attn_app::use_folders(attn_app::Folders {
@@ -832,6 +833,12 @@ impl World {
     /// Gives the app other folders to save into, such as a machine that names no Downloads.
     pub fn use_folders(&self, folders: attn_app::Folders) {
         attn_app::use_folders(folders);
+    }
+
+    /// Has the system write the hours of the day in `cycle`, as the user's clock setting does.
+    /// A world starts on a 24-hour clock.
+    pub fn use_hour_cycle(&self, cycle: attn_app::HourCycle) {
+        attn_app::use_hour_cycle(cycle);
     }
 
     /// The paths the app asked the file manager to show since the last call, which a test run

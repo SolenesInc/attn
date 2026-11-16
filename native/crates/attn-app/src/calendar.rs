@@ -1,6 +1,90 @@
-//! Instants on the user's calendar and clock, in the user's time zone.
+//! Instants on the user's calendar and clock, in the user's time zone, with the hours the
+//! system writes them in.
+
+use std::cell::Cell;
 
 use rune::time::LocalTime;
+
+/// Whether the system writes the hours of the day from 1 to 12 with AM or PM, or from 0 to 23.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum HourCycle {
+    Twelve,
+    TwentyFour,
+}
+
+thread_local! {
+    static HOUR_CYCLE: Cell<Option<HourCycle>> = const { Cell::new(None) };
+}
+
+/// Writes clock times in `cycle` on this thread, in place of the system's choice.
+pub fn use_hour_cycle(cycle: HourCycle) {
+    HOUR_CYCLE.set(Some(cycle));
+}
+
+fn hour_cycle() -> HourCycle {
+    if let Some(cycle) = HOUR_CYCLE.get() {
+        return cycle;
+    }
+    static SYSTEM: std::sync::OnceLock<HourCycle> = std::sync::OnceLock::new();
+    *SYSTEM.get_or_init(system_hour_cycle)
+}
+
+#[cfg(target_os = "macos")]
+fn system_hour_cycle() -> HourCycle {
+    use objc2_foundation::{NSDateFormatter, NSLocale, NSString};
+    let locale = NSLocale::currentLocale();
+    let format = NSDateFormatter::dateFormatFromTemplate_options_locale(
+        &NSString::from_str("j"),
+        0,
+        Some(&*locale),
+    );
+    match format {
+        Some(format) if format.to_string().contains('a') => HourCycle::Twelve,
+        _ => HourCycle::TwentyFour,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn system_hour_cycle() -> HourCycle {
+    let locale = unsafe { libc::newlocale(libc::LC_TIME_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+    if locale.is_null() {
+        return HourCycle::TwentyFour;
+    }
+    let format = unsafe { std::ffi::CStr::from_ptr(libc::nl_langinfo_l(libc::T_FMT, locale)) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { libc::freelocale(locale) };
+    cycle_of_time_format(&format)
+}
+
+/// The hours a C library time format writes: "%r", "%I", "%l" and "%p" are the 12-hour ones.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn cycle_of_time_format(format: &str) -> HourCycle {
+    match ["%r", "%I", "%l", "%p"].iter().any(|d| format.contains(d)) {
+        true => HourCycle::Twelve,
+        false => HourCycle::TwentyFour,
+    }
+}
+
+/// `local`'s hour and minute, and its second when `seconds`, as `cycle` writes them:
+/// "6:05 PM" or "18:05".
+fn clock_in(local: &LocalTime, cycle: HourCycle, seconds: bool) -> String {
+    let second = match seconds {
+        true => format!(":{:02}", local.second),
+        false => String::new(),
+    };
+    match cycle {
+        HourCycle::TwentyFour => format!("{}:{:02}{second}", local.hour, local.minute),
+        HourCycle::Twelve => {
+            let hour = match local.hour % 12 {
+                0 => 12,
+                h => h,
+            };
+            let half = if local.hour < 12 { "AM" } else { "PM" };
+            format!("{hour}:{:02}{second} {half}", local.minute)
+        }
+    }
+}
 
 pub(crate) const DAY_S: i64 = 86_400;
 
@@ -62,24 +146,29 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+/// `ms`'s hour and minute on the user's clock: "6:05 PM" or "18:05".
 pub(crate) fn clock(ms: i64) -> String {
-    let local = LocalTime::at(ms);
-    format!("{}:{:02}", local.hour, local.minute)
+    clock_in(&LocalTime::at(ms), hour_cycle(), false)
 }
 
-/// `ms` on the user's clock as the Tauri app's `toLocaleTimeString` words it: "6:00:00 PM".
+/// [`clock`] with its hour in two digits, as the Tauri app's `hour: '2-digit'`: "06:05 PM" or
+/// "18:05".
+pub(crate) fn clock_two_digit(ms: i64) -> String {
+    let clock = clock(ms);
+    match clock.find(':') {
+        Some(1) => format!("0{clock}"),
+        _ => clock,
+    }
+}
+
+/// `ms` on the user's clock as the Tauri app's `toLocaleTimeString` words it: "6:00:00 PM" or
+/// "18:00:00".
 pub(crate) fn time_of_day(ms: i64) -> String {
-    let local = LocalTime::at(ms);
-    let hour = match local.hour % 12 {
-        0 => 12,
-        h => h,
-    };
-    let half = if local.hour < 12 { "AM" } else { "PM" };
-    format!("{hour}:{:02}:{:02} {half}", local.minute, local.second)
+    clock_in(&LocalTime::at(ms), hour_cycle(), true)
 }
 
 /// `ms` on the user's calendar and clock as the Tauri app's `toLocaleString` words it:
-/// "10/18/2026, 6:00:00 PM".
+/// "10/18/2026, 6:00:00 PM", or "10/18/2026, 18:00:00" on a 24-hour clock.
 pub(crate) fn date_time(ms: i64) -> String {
     let local = LocalTime::at(ms);
     format!(
@@ -154,6 +243,44 @@ pub(crate) fn ms_of_rfc3339(time: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_c_library_time_format_names_its_hour_cycle() {
+        for (format, cycle) in [
+            ("%r", HourCycle::Twelve),
+            ("%I:%M:%S %p", HourCycle::Twelve),
+            ("%l:%M %p", HourCycle::Twelve),
+            ("%T", HourCycle::TwentyFour),
+            ("%H:%M:%S", HourCycle::TwentyFour),
+            ("%H.%M.%S", HourCycle::TwentyFour),
+            ("", HourCycle::TwentyFour),
+        ] {
+            assert_eq!(cycle_of_time_format(format), cycle, "{format:?}");
+        }
+    }
+
+    #[test]
+    fn a_clock_time_reads_as_its_hour_cycle_writes_it() {
+        let at = |hour, minute, second| {
+            let mut local = LocalTime::at_offset(0, 0);
+            (local.hour, local.minute, local.second) = (hour, minute, second);
+            local
+        };
+        for ((hour, minute, second), seconds, twelve, twenty_four) in [
+            ((0, 5, 9), false, "12:05 AM", "0:05"),
+            ((9, 30, 0), false, "9:30 AM", "9:30"),
+            ((12, 0, 0), false, "12:00 PM", "12:00"),
+            ((18, 7, 42), true, "6:07:42 PM", "18:07:42"),
+            ((23, 59, 59), true, "11:59:59 PM", "23:59:59"),
+        ] {
+            let local = at(hour, minute, second);
+            assert_eq!(clock_in(&local, HourCycle::Twelve, seconds), twelve);
+            assert_eq!(
+                clock_in(&local, HourCycle::TwentyFour, seconds),
+                twenty_four
+            );
+        }
+    }
 
     #[test]
     fn a_date_names_its_day_and_a_day_that_does_not_exist_names_none() {

@@ -364,24 +364,32 @@ impl Bands<'_> {
 
 const WEEKDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/// When a snooze ends, as the queue row shows it: "14:30" today, "tmrw 9:00", or
-/// "Sat 9:00", in the user's time zone.
+/// When a snooze ends, as the queue row shows it on a 24-hour clock to stay narrow: "14:30"
+/// today, "tmrw 9:00", or "Sat 9:00", in the user's time zone.
 pub fn wake_time_short(until: Option<&str>, now_ms: i64) -> String {
-    wake_time(until, now_ms, "tmrw")
+    wake_time(until, now_ms, "tmrw", |at| {
+        let local = rune::time::LocalTime::at(at);
+        format!("{}:{:02}", local.hour, local.minute)
+    })
 }
 
-/// When a snooze ends, as the home screen shows it: "14:30" today, "tomorrow 9:00", or
-/// "Sat 9:00", in the user's time zone.
+/// When a snooze ends, as the home screen shows it on the user's clock: "2:30 PM" today,
+/// "tomorrow 9:00 AM", or "Sat 9:00 AM", in the user's time zone.
 pub fn wake_time_long(until: Option<&str>, now_ms: i64) -> String {
-    wake_time(until, now_ms, "tomorrow")
+    wake_time(until, now_ms, "tomorrow", crate::calendar::clock)
 }
 
-fn wake_time(until: Option<&str>, now_ms: i64, tomorrow: &str) -> String {
+fn wake_time(
+    until: Option<&str>,
+    now_ms: i64,
+    tomorrow: &str,
+    clock: impl Fn(i64) -> String,
+) -> String {
     let Some(at) = until.and_then(epoch_ms) else {
         return String::new();
     };
     let local = rune::time::LocalTime::at(at);
-    let time = format!("{}:{:02}", local.hour, local.minute);
+    let time = clock(at);
     let day = |ms: i64| {
         let l = rune::time::LocalTime::at(ms);
         (l.year, l.month, l.day)

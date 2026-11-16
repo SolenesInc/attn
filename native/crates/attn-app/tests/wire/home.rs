@@ -121,6 +121,28 @@ fn an_activity_line_shows_beside_the_name_and_turns_stale_once_it_stops_being_re
 }
 
 #[test]
+fn a_stale_activity_reads_its_time_on_the_users_12_hour_clock() {
+    let mut world = home(vec![with_activity("s1", 0)], &[]);
+    world.use_hour_cycle(attn_app::HourCycle::Twelve);
+
+    world.advance(Duration::from_secs(16 * 60));
+
+    let at = rune::time::LocalTime::at(WALL_START_MS);
+    let hour = match at.hour % 12 {
+        0 => 12,
+        h => h,
+    };
+    let half = if at.hour < 12 { "AM" } else { "PM" };
+    assert_eq!(
+        text_of(&world, "home.session.s1.activity"),
+        format!(
+            "running the frontend test suite, as of {hour}:{:02} {half}",
+            at.minute
+        )
+    );
+}
+
+#[test]
 fn the_staleness_window_follows_the_configured_cadence() {
     let mut world = home(
         vec![with_activity("s1", 0)],

@@ -332,11 +332,7 @@ fn age(created: &str, now_ms: i64) -> String {
         return String::new();
     };
     let seconds = ((now_ms - at).max(0) as f64 / 1000.0).round() as i64;
-    let local = rune::time::LocalTime::at(at);
-    let when = format!(
-        "{}-{:02}-{:02} {}:{:02}",
-        local.year, local.month, local.day, local.hour, local.minute
-    );
+    let when = crate::calendar::date_time(at);
     let ago = match seconds {
         s if s < 60 => "just now".to_owned(),
         s if s < 3600 => format!("{}m ago", (s as f64 / 60.0).round()),
