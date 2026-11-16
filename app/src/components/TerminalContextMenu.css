@@ -6,8 +6,8 @@
   min-width: 220px;
   padding: 4px;
   border-radius: 8px;
-  border: 1px solid var(--color-border, rgba(127, 127, 127, 0.35));
-  background: var(--color-bg-secondary, rgba(30, 30, 30, 0.97));
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-tile) 97%, transparent);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   font: 12px var(--font-ui, sans-serif);
 }
@@ -22,23 +22,23 @@
   border: none;
   border-radius: 5px;
   background: transparent;
-  color: var(--color-text-primary, #ddd);
+  color: var(--color-text-primary);
   text-align: left;
   cursor: pointer;
 }
 
 .ghostty-context-menu-item:hover:not(:disabled) {
-  background: rgba(127, 127, 127, 0.2);
+  background: color-mix(in srgb, var(--color-text-tertiary) 20%, transparent);
 }
 
 .ghostty-context-menu-item:disabled {
-  color: var(--color-text-secondary, #777);
+  color: var(--color-text-secondary);
   opacity: 0.55;
   cursor: default;
 }
 
 .ghostty-context-menu-shortcut {
-  color: var(--color-text-secondary, #999);
+  color: var(--color-text-secondary);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -46,5 +46,5 @@
 .ghostty-context-menu-separator {
   height: 1px;
   margin: 4px 6px;
-  background: var(--color-border, rgba(127, 127, 127, 0.3));
+  background: var(--color-border);
 }

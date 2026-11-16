@@ -133,8 +133,8 @@
 }
 
 .garden-review__rail button.is-current .garden-review__rail-number {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
 }
 
 .garden-review__rail-copy {
@@ -230,7 +230,7 @@
 .garden-review__return {
   background: none;
   border: 0;
-  color: var(--accent);
+  color: var(--color-brand);
   cursor: pointer;
   padding: 0;
 }
@@ -300,8 +300,8 @@
 }
 
 .garden-review__status.is-ready {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--color-border-subtle));
-  color: var(--accent);
+  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-border-subtle));
+  color: var(--color-brand);
 }
 
 .garden-review__seed .markdown-reader,
@@ -347,7 +347,7 @@
 }
 
 .garden-review__advice {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--color-brand);
   margin-bottom: 28px;
   padding: 2px 0 2px 14px;
 }
@@ -360,7 +360,7 @@
 }
 
 .garden-review__advice > strong {
-  color: var(--accent);
+  color: var(--color-brand);
   font-size: 18px;
   font-weight: 600;
 }
@@ -448,18 +448,18 @@
 }
 
 .garden-review__progress-track span.is-ready {
-  background: var(--accent);
+  background: var(--color-brand);
 }
 
 .garden-review__progress-track span.is-failed,
 .garden-review__progress-track span.is-invalidated,
 .garden-review__progress-track span.is-advisor-failed {
-  background: var(--color-error, #d65d5d);
+  background: var(--color-error);
 }
 
 .garden-review__progress-track span.is-running,
 .garden-review__progress-track span.is-advisor-retrying {
-  background: color-mix(in srgb, var(--accent) 55%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-brand) 55%, var(--color-border-subtle));
 }
 
 .garden-review__waiting .garden-review__progress-detail {
@@ -468,7 +468,7 @@
 }
 
 .garden-review__waiting .garden-review__progress-error {
-  color: var(--color-error, #d65d5d);
+  color: var(--color-error);
   font-size: var(--font-size-sm);
   margin-bottom: 8px;
 }
@@ -561,8 +561,8 @@
 }
 
 .garden-review__action-row button.is-recommended {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
 }
 
 .garden-review__action-row button.garden-resume-split {
@@ -608,13 +608,13 @@
 .garden-review__draft-ready button {
   background: none;
   border: 0;
-  color: var(--accent);
+  color: var(--color-brand);
   cursor: pointer;
   padding: 0;
 }
 
 .garden-review__composer textarea {
-  background: var(--color-bg-input, var(--color-bg-panel));
+  background: var(--color-bg-input);
   border: 1px solid var(--color-border-subtle);
   border-radius: 5px;
   color: var(--color-text-primary);
@@ -628,7 +628,7 @@
 }
 
 .garden-review__composer textarea:focus {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
   outline: none;
 }
 
@@ -644,7 +644,7 @@
 }
 
 .garden-review__error {
-  color: var(--color-error, #d65d5d);
+  color: var(--color-error);
 }
 
 .garden-review__composer-actions {
@@ -672,9 +672,9 @@
 
 .garden-review__complete > span {
   align-items: center;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--color-brand);
   border-radius: 50%;
-  color: var(--accent);
+  color: var(--color-brand);
   display: flex;
   font-size: 20px;
   height: 42px;

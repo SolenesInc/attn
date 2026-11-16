@@ -94,7 +94,7 @@
 .notifications-panel-state button {
   padding: 4px 8px;
   color: var(--color-text-primary);
-  background: var(--color-bg-base, var(--color-bg-elevated));
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;
@@ -209,7 +209,7 @@
 }
 
 .notification-row.is-unread .notification-dot {
-  background: var(--sev, var(--accent, #4c9aff));
+  background: var(--sev, var(--color-brand));
 }
 
 .notification-row-title {
@@ -281,7 +281,7 @@
 	overflow: auto;
 	padding: 8px;
 	color: var(--color-text-secondary);
-	background: var(--color-bg-base, var(--color-bg-elevated));
+	background: var(--color-bg-elevated);
 	border: 1px solid var(--color-border-subtle);
 	border-radius: 6px;
 	font: 10px/1.45 ui-monospace, 'SFMono-Regular', monospace;
@@ -294,9 +294,9 @@
   max-height: 140px;
   overflow: auto;
   padding: 8px;
-  color: color-mix(in srgb, #e26565 80%, var(--color-text-secondary));
-  background: color-mix(in srgb, #e26565 10%, transparent);
-  border: 1px solid color-mix(in srgb, #e26565 30%, transparent);
+  color: color-mix(in srgb, var(--color-error) 58%, var(--color-text-secondary));
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
   border-radius: 6px;
   font: 10px/1.45 ui-monospace, 'SFMono-Regular', monospace;
   white-space: pre-wrap;
@@ -312,7 +312,7 @@
   align-self: flex-start;
   padding: 4px 10px;
   color: var(--color-text-primary);
-  background: var(--color-bg-base, var(--color-bg-elevated));
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;

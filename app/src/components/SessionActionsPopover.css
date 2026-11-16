@@ -41,7 +41,7 @@
 }
 
 .session-actions-popover .chief-of-staff-action {
-  color: #79b8ff;
+  color: var(--color-accent);
 }
 
 .session-actions-divider {

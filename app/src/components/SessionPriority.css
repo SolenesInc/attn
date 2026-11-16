@@ -1,5 +1,5 @@
 .session-priority {
-  color: var(--accent);
+  color: var(--color-brand);
   flex-shrink: 0;
   margin-right: 0.3em;
 }

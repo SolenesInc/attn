@@ -10,8 +10,8 @@
 }
 
 .snooze-menu-header {
-  color: var(--color-text-tertiary, var(--color-text-secondary));
-  font-size: var(--font-size-xs, 11px);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
   letter-spacing: 0.04em;
   overflow: hidden;
   padding: 6px 9px 7px;
@@ -47,9 +47,9 @@
    line so the promise is legible, quiet enough that the durations still scan as
    a list. */
 .snooze-menu-detail {
-  color: var(--color-text-tertiary, var(--color-text-secondary));
+  color: var(--color-text-tertiary);
   flex-shrink: 0;
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
 }

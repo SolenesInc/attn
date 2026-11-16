@@ -51,7 +51,7 @@
   gap: 14px;
   width: min(560px, calc(100vw - 36px));
   background:
-    linear-gradient(135deg, rgba(255, 107, 53, 0.08), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--color-brand) 8%, transparent), transparent 42%),
     linear-gradient(180deg, var(--color-bg-elevated), var(--color-bg-panel));
   border: 1px solid var(--color-border-hover);
   border-radius: 8px;
@@ -69,13 +69,13 @@
   width: 10px;
   min-height: 72px;
   border-radius: 999px;
-  background: #ff6b35;
-  box-shadow: 0 0 28px rgba(255, 107, 53, 0.34);
+  background: var(--color-brand);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--color-brand) 34%, transparent);
 }
 
 .cleanup-status-pin.failed {
-  background: #ef4444;
-  box-shadow: 0 0 28px rgba(239, 68, 68, 0.32);
+  background: var(--color-error);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--color-error) 32%, transparent);
 }
 
 .cleanup-copy {
@@ -84,7 +84,7 @@
 
 .cleanup-title {
   margin-bottom: 7px;
-  color: #ff9a6f;
+  color: color-mix(in srgb, var(--color-brand) 70%, white);
   font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   font-weight: 700;
@@ -132,14 +132,14 @@
   gap: 8px 14px;
   margin-top: 14px;
   padding: 11px 12px;
-  border: 1px solid rgba(255, 107, 53, 0.28);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 28%, transparent);
   border-radius: 7px;
-  background: rgba(255, 107, 53, 0.07);
+  background: color-mix(in srgb, var(--color-brand) 7%, transparent);
 }
 
 .cleanup-operation.failed {
-  border-color: rgba(239, 68, 68, 0.36);
-  background: rgba(239, 68, 68, 0.09);
+  border-color: color-mix(in srgb, var(--color-error) 36%, transparent);
+  background: color-mix(in srgb, var(--color-error) 9%, transparent);
 }
 
 .cleanup-operation-label {
@@ -178,8 +178,8 @@
   height: 100%;
   background: repeating-linear-gradient(
     90deg,
-    #ff6b35 0 14px,
-    #ffb391 14px 18px
+    var(--color-brand) 0 14px,
+    color-mix(in srgb, var(--color-brand) 53%, white) 14px 18px
   );
   animation: session-progress-meter 950ms linear infinite;
 }
@@ -215,7 +215,7 @@
 
 .cleanup-btn:focus-visible,
 .session-progress-compact:focus-visible {
-  outline: 2px solid rgba(255, 107, 53, 0.72);
+  outline: 2px solid color-mix(in srgb, var(--color-brand) 72%, transparent);
   outline-offset: 2px;
 }
 
@@ -245,11 +245,11 @@
   gap: 12px;
   width: min(360px, calc(100vw - 44px));
   padding: 12px;
-  border: 1px solid rgba(255, 107, 53, 0.36);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 36%, transparent);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(255, 107, 53, 0.09), transparent 45%),
-    rgba(20, 20, 22, 0.97);
+    linear-gradient(135deg, color-mix(in srgb, var(--color-brand) 9%, transparent), transparent 45%),
+    color-mix(in srgb, var(--color-bg-panel) 97%, transparent);
   color: var(--color-text-primary);
   text-align: left;
   cursor: pointer;
@@ -259,17 +259,17 @@
 }
 
 .session-progress-compact:hover {
-  border-color: rgba(255, 107, 53, 0.58);
+  border-color: color-mix(in srgb, var(--color-brand) 58%, transparent);
   background:
-    linear-gradient(135deg, rgba(255, 107, 53, 0.13), transparent 45%),
-    rgba(28, 28, 31, 0.98);
+    linear-gradient(135deg, color-mix(in srgb, var(--color-brand) 13%, transparent), transparent 45%),
+    color-mix(in srgb, var(--color-bg-elevated) 98%, transparent);
 }
 
 .session-progress-compact.failed {
-  border-color: rgba(239, 68, 68, 0.52);
+  border-color: color-mix(in srgb, var(--color-error) 52%, transparent);
   background:
-    linear-gradient(135deg, rgba(239, 68, 68, 0.12), transparent 45%),
-    rgba(31, 20, 20, 0.97);
+    linear-gradient(135deg, color-mix(in srgb, var(--color-error) 12%, transparent), transparent 45%),
+    color-mix(in srgb, var(--color-error) 6%, var(--color-bg-panel));
 }
 
 .session-progress-compact.surface-hidden {
@@ -293,13 +293,13 @@
   width: 8px;
   min-height: 54px;
   border-radius: 999px;
-  background: #ff6b35;
-  box-shadow: 0 0 22px rgba(255, 107, 53, 0.34);
+  background: var(--color-brand);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--color-brand) 34%, transparent);
 }
 
 .session-progress-compact.failed .compact-pin {
-  background: #ef4444;
-  box-shadow: 0 0 22px rgba(239, 68, 68, 0.34);
+  background: var(--color-error);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--color-error) 34%, transparent);
 }
 
 .compact-copy {
@@ -309,7 +309,7 @@
 .compact-kicker {
   display: block;
   margin-bottom: 5px;
-  color: #ff9a6f;
+  color: color-mix(in srgb, var(--color-brand) 70%, white);
   font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   font-weight: 700;
@@ -318,7 +318,7 @@
 }
 
 .session-progress-compact.failed .compact-kicker {
-  color: #ff8f87;
+  color: color-mix(in srgb, var(--color-error) 62%, white);
 }
 
 .compact-title {
@@ -359,7 +359,7 @@
 
 .session-progress-compact.failed .compact-meter span {
   width: 100%;
-  background: #ef4444;
+  background: var(--color-error);
   animation: none;
 }
 

@@ -3,7 +3,7 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--color-bg-editor);
+  background: var(--color-bg-tile);
 }
 
 .session-terminal-desktop.zoom-mode .desktop-pane:not(.active):where(:not([data-pane-kind='agent'])) {
@@ -21,7 +21,7 @@
   min-width: 0;
   padding: 6px 12px;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-elevated, var(--color-bg-editor));
+  background: var(--color-bg-elevated);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -46,8 +46,8 @@
 }
 
 .desktop-review-tab--selected {
-  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand) 38%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
   color: var(--color-text-primary);
 }
 
@@ -100,15 +100,15 @@
 }
 
 .session-terminal-desktop.focus-mode .desktop-pane {
-  border: 1px solid rgba(255, 107, 53, 0.28);
-  box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-brand) 8%, transparent);
 }
 
 .desktop-pane {
   position: relative;
   min-width: 0;
   min-height: 0;
-  background: var(--color-bg-editor);
+  background: var(--color-bg-tile);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -150,7 +150,7 @@
   z-index: 10;
   width: 3px;
   pointer-events: none;
-  background: var(--accent);
+  background: var(--color-brand);
 }
 
 .session-terminal-desktop.desktop-selection--rail.multi-leaf .desktop-pane.active .desktop-pane-title,
@@ -176,12 +176,12 @@
 .session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active .desktop-dock-tile-header {
   background: color-mix(
     in srgb,
-    var(--color-bg-elevated, var(--color-bg-editor)) 92%,
+    var(--color-bg-elevated) 92%,
     var(--color-text-primary)
   );
   --pane-header-fade: color-mix(
     in srgb,
-    var(--color-bg-elevated, var(--color-bg-editor)) 92%,
+    var(--color-bg-elevated) 92%,
     var(--color-text-primary)
   );
 }
@@ -203,14 +203,14 @@
 
 .session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active::before {
   inset: 0 auto auto 0;
-  border-top: 2px solid var(--accent);
-  border-left: 2px solid var(--accent);
+  border-top: 2px solid var(--color-brand);
+  border-left: 2px solid var(--color-brand);
 }
 
 .session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active::after {
   inset: auto 0 0 auto;
-  border-right: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--color-brand);
+  border-bottom: 2px solid var(--color-brand);
 }
 
 .session-terminal-desktop .desktop-pane.leaf-arrival::after,
@@ -230,7 +230,7 @@
 
 @keyframes leaf-arrival-pulse {
   from {
-    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-brand) 70%, transparent);
   }
   to {
     box-shadow: inset 0 0 0 1.5px transparent;
@@ -360,7 +360,7 @@
 }
 
 .desktop-pane-header {
-  --pane-header-fade: color-mix(in srgb, var(--color-bg-editor) 93%, rgb(255, 107, 53));
+  --pane-header-fade: color-mix(in srgb, var(--color-bg-tile) 93%, var(--color-brand));
   position: relative;
   flex: none;
   display: flex;
@@ -372,7 +372,7 @@
      header is permanent now and names the session, so it reads as the pane's
      own chrome instead of a highlight laid over the terminal. */
   background:
-    linear-gradient(180deg, rgba(255, 107, 53, 0.11), rgba(255, 107, 53, 0.03)),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-brand) 11%, transparent), color-mix(in srgb, var(--color-brand) 3%, transparent)),
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
@@ -445,7 +445,7 @@
 
 .desktop-pane-subline:not(:has(.desktop-pane-piece:not(:empty))) .desktop-pane-harness {
   display: inline;
-  color: var(--color-text-muted, var(--color-text-tertiary));
+  color: var(--color-text-muted);
 }
 
 .desktop-pane-harness::before {
@@ -515,7 +515,7 @@
 
 .desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance__target-icon {
   display: inline;
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance > ::after {
@@ -788,7 +788,7 @@
   inset: 0;
   z-index: 100;
   pointer-events: none;
-  background: var(--color-bg-editor);
+  background: var(--color-bg-tile);
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -855,7 +855,7 @@
 
 .desktop-pane-status--failed .desktop-pane-status-spinner {
   animation: none;
-  border-color: var(--color-danger, #f87171);
+  border-color: color-mix(in srgb, var(--color-error) 76%, white);
 }
 
 @keyframes desktop-pane-spin {

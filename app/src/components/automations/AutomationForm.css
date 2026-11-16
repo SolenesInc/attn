@@ -58,8 +58,8 @@
 }
 
 .automation-form__enabled--on {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
 }
 
 .automation-form__body {
@@ -128,7 +128,7 @@
 .automation-form__input:focus,
 .automation-form__textarea:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .automation-form__input--invalid,
@@ -184,8 +184,8 @@
 }
 
 .automation-form__trigger-card--selected {
-  border-color: var(--accent);
-  background: var(--accent-glow);
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 15%, transparent);
   color: var(--color-text-primary);
 }
 
@@ -224,7 +224,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--color-brand);
 }
 
 .automation-form__segmented {
@@ -250,8 +250,8 @@
 }
 
 .automation-form__segment--selected {
-  background: var(--accent-glow);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--color-brand) 15%, transparent);
+  color: var(--color-brand);
 }
 
 .automation-form__chip-input {
@@ -341,9 +341,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: rgba(251, 191, 36, 0.12);
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  color: #fbbf24;
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  color: var(--color-warning);
 }
 
 .automation-form__banner--stale p {
@@ -353,7 +353,7 @@
 
 .automation-form__banner--stale button {
   background: var(--color-bg-button);
-  border: 1px solid rgba(251, 191, 36, 0.4);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
   border-radius: 6px;
   color: var(--color-text-primary);
   cursor: pointer;
@@ -422,11 +422,11 @@
 
 .automation-form__cancel:hover:not(:disabled),
 .automation-form__save:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .automation-form__save {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .automation-form__save:disabled {
@@ -473,9 +473,9 @@
 }
 
 .schedule-composer__day--on {
-  border-color: var(--accent);
-  background: var(--accent-glow);
-  color: var(--accent);
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 15%, transparent);
+  color: var(--color-brand);
 }
 
 .schedule-composer__quiet {

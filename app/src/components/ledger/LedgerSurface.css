@@ -7,10 +7,10 @@
   --ledger-fg-3: var(--color-text-muted);
   --ledger-hair: var(--color-border-subtle);
   --ledger-line: var(--color-border);
-  --ledger-ok: var(--color-success, #3fb950);
-  --ledger-warn: var(--color-warning, #f59e0b);
-  --ledger-no: var(--color-danger, #e5484d);
-  --ledger-accent: var(--accent);
+  --ledger-ok: var(--color-success);
+  --ledger-warn: var(--color-warning);
+  --ledger-no: color-mix(in srgb, var(--color-error) 90%, var(--color-text-tertiary));
+  --ledger-accent: var(--color-brand);
   position: fixed;
   inset: var(--title-bar-height, 0px) 0 0;
   z-index: 400;
@@ -507,7 +507,7 @@
 
 .ledger-copy:hover { text-decoration: underline dotted; }
 .ledger-copy em { font-style: normal; color: var(--ledger-ok); font-family: var(--ledger-font); }
-.ledger-link { color: var(--color-accent, #5b8cff); }
+.ledger-link { color: var(--color-accent); }
 .ledger-link:hover { text-decoration: underline; }
 
 .ledger-words { display: flex; flex-wrap: wrap; gap: 4px 10px; }

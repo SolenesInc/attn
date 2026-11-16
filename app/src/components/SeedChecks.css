@@ -182,7 +182,7 @@ button.seed-check__box:hover:not(:disabled) {
 }
 
 button.seed-check__evidence {
-  color: var(--color-accent, var(--accent));
+  color: var(--color-accent);
   cursor: pointer;
 }
 

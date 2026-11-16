@@ -17,7 +17,7 @@
 
 .queue-sidebar .queue-row-select:focus,
 .queue-sidebar .sidebar-row-select:focus {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-brand);
   outline-offset: -2px;
 }
 
@@ -183,7 +183,7 @@
 }
 
 .queue-agent-filter:focus-within {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .queue-sidebar .automation-runs {
@@ -246,12 +246,12 @@
 
 .queue-desktop-chip.is-drop-target {
   border-style: dashed;
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .queue-desktop-chip.is-drop-entering {
-  border-color: var(--accent);
-  background: rgba(255, 107, 53, 0.18);
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 18%, transparent);
   color: var(--color-text-primary);
 }
 

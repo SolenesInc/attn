@@ -61,7 +61,7 @@
 }
 
 .pr-action-btn:focus {
-  outline: 2px solid #ff6b35;
+  outline: 2px solid var(--color-brand);
   outline-offset: 1px;
 }
 
@@ -72,38 +72,38 @@
 
 /* Action-specific colors */
 .pr-action-btn[data-action="approve"]:hover {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
-  border-color: #22c55e;
+  background: color-mix(in srgb, var(--color-state-working) 10%, transparent);
+  color: var(--color-state-working);
+  border-color: var(--color-state-working);
 }
 
 .pr-action-btn[data-action="merge"]:hover {
-  background: rgba(167, 139, 250, 0.1);
-  color: #a78bfa;
-  border-color: #a78bfa;
+  background: color-mix(in srgb, var(--color-annotation) 10%, transparent);
+  color: var(--color-annotation);
+  border-color: var(--color-annotation);
 }
 
 .pr-action-btn[data-action="open"]:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-  border-color: #3b82f6;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 .pr-action-btn[data-action="mute"]:hover {
-  background: rgba(85, 85, 85, 0.2);
+  background: color-mix(in srgb, var(--color-text-dimmed) 20%, transparent);
 }
 
 /* Success state */
 .pr-action-btn[data-success="true"] {
-  background: #22c55e;
-  color: #000;
-  border-color: #22c55e;
+  background: var(--color-state-working);
+  color: var(--color-on-accent);
+  border-color: var(--color-state-working);
 }
 
 /* Error state */
 .pr-action-btn[data-error="true"] {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
 /* Loading spinner */
@@ -185,11 +185,11 @@
 }
 
 .modal-btn-primary {
-  background: #a78bfa;
-  color: #000;
-  border-color: #a78bfa;
+  background: var(--color-annotation);
+  color: var(--color-on-accent);
+  border-color: var(--color-annotation);
 }
 
 .modal-btn-primary:hover {
-  background: #b695f5;
+  background: color-mix(in srgb, var(--color-merged) 71%, var(--color-text-primary));
 }

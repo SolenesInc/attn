@@ -64,7 +64,7 @@
 
 .sidebar-tool-btn.has-critical .sidebar-tool-badge {
   background: var(--color-severity-critical);
-  color: #fff;
+  color: var(--color-text-primary);
   /* Two rings: the panel color first so the badge reads as lifted off the
      sidebar, then the severity tint. */
   box-shadow:

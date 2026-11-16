@@ -20,7 +20,7 @@
 }
 
 .garden-compose__verb {
-  color: var(--accent);
+  color: var(--color-brand);
   flex: none;
   font-size: var(--font-size-sm);
 }
@@ -47,7 +47,7 @@
 }
 
 .garden-compose__input:focus {
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--color-brand);
 }
 
 .garden-compose__input::placeholder {

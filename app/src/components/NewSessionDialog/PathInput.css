@@ -14,14 +14,14 @@
   font-family: inherit;
   font-size: var(--font-size);
   color: var(--color-text-primary);
-  caret-color: #ff6b35;
+  caret-color: var(--color-brand);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .path-input:focus {
-  border-color: #ff6b35;
-  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.1);
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand) 10%, transparent);
 }
 
 .path-input::placeholder {
@@ -69,5 +69,5 @@
 }
 
 .path-input-accent {
-  color: #8fb4ff;
+  color: color-mix(in srgb, var(--color-accent) 67%, white);
 }

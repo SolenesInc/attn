@@ -719,7 +719,7 @@
   border: none;
   border-radius: 6px;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-brand);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -757,7 +757,7 @@
 }
 
 .asks-accept-recommended:hover {
-  background: var(--color-bg-hover, color-mix(in srgb, var(--color-text-primary) 8%, transparent));
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
 
 .asks-accept-recommended + .asks-send {
@@ -769,7 +769,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--color-accent, #5b8cff);
+  color: var(--color-accent);
   font: inherit;
   cursor: pointer;
 }

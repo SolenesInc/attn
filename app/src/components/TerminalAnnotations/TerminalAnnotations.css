@@ -74,7 +74,7 @@
   margin: 4px 2px 0;
   font-size: 11px;
   line-height: 15px;
-  color: var(--color-text-secondary, #8a8a8a);
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -198,7 +198,7 @@
 .anno-panel-send {
   border-color: transparent;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-brand);
 }
 
 .anno-panel-send {

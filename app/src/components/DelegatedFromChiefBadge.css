@@ -3,10 +3,10 @@
    the tiny icon (vs the chief's worded "⌁ CHIEF" badge) keeps the two distinct. */
 .delegated-from-chief-badge {
   align-items: center;
-  background: rgba(88, 166, 255, 0.14);
-  border: 1px solid rgba(88, 166, 255, 0.34);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 34%, transparent);
   border-radius: 999px;
-  color: #79b8ff;
+  color: var(--color-accent);
   display: inline-flex;
   flex-shrink: 0;
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;

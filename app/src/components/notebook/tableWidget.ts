@@ -196,11 +196,11 @@ const tableTheme = EditorView.baseTheme({
     fontSize: '13px',
   },
   '.cm-md-table th, .cm-md-table td': {
-    border: '1px solid var(--color-border, rgba(127,127,127,0.35))',
+    border: '1px solid var(--color-border)',
     padding: '3px 10px',
   },
   '.cm-md-table th': {
-    backgroundColor: 'var(--color-bg-elevated, rgba(128,128,128,0.08))',
+    backgroundColor: 'var(--color-bg-elevated)',
     fontWeight: '600',
   },
   '.cm-md-table tr': {

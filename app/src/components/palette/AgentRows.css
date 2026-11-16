@@ -22,7 +22,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #555;
+  background: var(--color-text-dimmed);
 }
 
 .unified-palette-dot.is-waiting,
@@ -138,8 +138,8 @@
 }
 
 .unified-palette-pill.is-chief {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 14%, transparent);
 }
 
 .unified-palette-age {

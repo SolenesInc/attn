@@ -13,7 +13,7 @@
 
 .garden-review-prompt {
   align-items: center;
-  background: color-mix(in srgb, var(--color-bg-panel) 90%, var(--accent));
+  background: color-mix(in srgb, var(--color-bg-panel) 90%, var(--color-brand));
   border-bottom: 1px solid var(--color-border-subtle);
   display: flex;
   flex: none;
@@ -40,16 +40,16 @@
 
 .garden-review-prompt button {
   background: none;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--color-brand);
   border-radius: 4px;
-  color: var(--accent);
+  color: var(--color-brand);
   cursor: pointer;
   flex: none;
   padding: 5px 9px;
 }
 
 .garden-review-prompt__error {
-  color: var(--color-error, #d65d5d);
+  color: var(--color-error);
   flex: none;
   font-size: var(--font-size-sm);
   margin: 0;
@@ -110,7 +110,7 @@
 }
 
 .garden-trail__step:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: 2px;
 }
 
@@ -148,7 +148,7 @@
 }
 
 .garden-chrome__scope:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: 2px;
 }
 
@@ -273,7 +273,7 @@
 
 .garden-row > button:focus-visible {
   background: var(--color-bg-elevated);
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: -1px;
 }
 
@@ -289,7 +289,7 @@
 .garden-row > button > .garden-row__pip { margin-top: 6px; }
 
 .is-planted .garden-row__pip { background: var(--color-accent); }
-.is-growing .garden-row__pip { background: var(--accent); }
+.is-growing .garden-row__pip { background: var(--color-brand); }
 .is-harvested .garden-row__pip { background: var(--color-text-tertiary); }
 .is-withered .garden-row__pip { background: var(--color-error); }
 .is-parked .garden-row__pip { background: var(--color-warning); }
@@ -321,13 +321,13 @@
   font-size: var(--font-size-sm);
 }
 
-.garden-row__signal.is-active { color: var(--accent); }
+.garden-row__signal.is-active { color: var(--color-brand); }
 .garden-row__signal.is-blocked { color: var(--color-text-muted); }
 .garden-row__signal.is-parked { color: var(--color-warning); }
 .garden-row__signal.is-closed { color: var(--color-text-muted); }
 
 .garden-row__standby {
-  color: var(--accent);
+  color: var(--color-brand);
   flex: none;
   font-size: var(--font-size-sm);
   white-space: nowrap;
@@ -417,7 +417,7 @@
 }
 
 .garden-closed-toggle:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: -1px;
 }
 
@@ -468,7 +468,7 @@
 }
 
 .garden-head__actions button:hover:not(:disabled, [aria-disabled='true']) {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
   color: var(--color-text-primary);
 }
 
@@ -521,7 +521,7 @@
 }
 
 .garden-handover textarea:focus {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
   outline: none;
 }
 
@@ -597,7 +597,7 @@
    token that stays mid-weight on either ground; tertiary goes near-black on
    light, which would make the finished work the loudest thing on the page. */
 .garden-progress__seg.is-done { background: var(--color-text-muted); }
-.garden-progress__seg.is-growing { background: var(--accent); }
+.garden-progress__seg.is-growing { background: var(--color-brand); }
 .garden-progress__seg.is-parked { background: var(--color-warning); }
 .garden-progress__seg.is-withered { background: var(--color-error); }
 .garden-progress__seg.is-rest { background: var(--color-accent); opacity: 0.5; }
@@ -788,7 +788,7 @@
 /* A handoff is addressed to whoever comes next, which is a different thing from
    a note to nobody in particular. */
 .garden-log > li.is-handoff {
-  border-left-color: var(--accent);
+  border-left-color: var(--color-brand);
 }
 
 .garden-log__head {
@@ -878,7 +878,7 @@
 }
 
 .garden-search:focus-within .garden-search__glyph {
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .garden-search__input {
@@ -928,7 +928,7 @@
 }
 
 .garden-search__value:hover {
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .garden-search__value-hint {
@@ -961,12 +961,12 @@
    reads as decoration at this density. */
 .garden-hit {
   background: none;
-  color: var(--accent);
+  color: var(--color-brand);
   font-weight: 600;
 }
 
 .garden-row__id.garden-hit {
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 /* Where a result lives, for a flat list of them. */
@@ -998,7 +998,7 @@
    needs to carry the mark itself. */
 .garden-row.is-active > button {
   background: var(--color-bg-selected);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--color-brand);
 }
 
 /* No results: name the query, then offer only the moves that would find
@@ -1061,7 +1061,7 @@
 }
 
 .garden-nothing__moves button:hover {
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .garden-nothing__count {

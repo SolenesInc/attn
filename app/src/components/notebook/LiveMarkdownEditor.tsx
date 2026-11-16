@@ -48,7 +48,7 @@ const editorTheme = EditorView.theme({
   '&': {
     height: '100%',
     backgroundColor: 'transparent',
-    color: 'var(--color-text-primary, inherit)',
+    color: 'var(--color-text-primary)',
     fontSize: '14px',
   },
   '.cm-content': {
@@ -63,21 +63,21 @@ const editorTheme = EditorView.theme({
   // drawSelection draws its own `.cm-cursor`, so the caret color is that
   // element's left border, and the selector must outrank CM's base rule.
   '.cm-cursorLayer .cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--color-text-primary, #e8e8e8)',
+    borderLeftColor: 'var(--color-text-primary)',
     borderLeftWidth: '2px',
   },
   // CM's base focused-selection rule is more specific than a theme can match, so
   // !important is the clean way to assert the app accent.
   '.cm-selectionLayer .cm-selectionBackground': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #ff6b35) 30%, transparent) !important',
+    backgroundColor: 'color-mix(in srgb, var(--color-brand) 30%, transparent) !important',
   },
   // CM's base theme paints its ⌘F buttons with a gradient; clear it explicitly.
   '.cm-panels': {
-    color: 'var(--color-text-primary, inherit)',
-    backgroundColor: 'var(--color-bg-elevated, rgba(128, 128, 128, 0.08))',
+    color: 'var(--color-text-primary)',
+    backgroundColor: 'var(--color-bg-elevated)',
   },
   '.cm-panels.cm-panels-top': {
-    borderBottom: '1px solid var(--color-border, rgba(128, 128, 128, 0.3))',
+    borderBottom: '1px solid var(--color-border)',
   },
   '.cm-panel.cm-search': {
     padding: '4px 6px',
@@ -87,25 +87,25 @@ const editorTheme = EditorView.theme({
   '.cm-panel.cm-search input, .cm-panel.cm-search button, .cm-panel.cm-search label': {
     fontFamily: 'inherit',
     fontSize: 'inherit',
-    color: 'var(--color-text-primary, inherit)',
+    color: 'var(--color-text-primary)',
   },
   '.cm-panel.cm-search input': {
-    backgroundColor: 'var(--color-bg-input, transparent)',
-    border: '1px solid var(--color-border, rgba(128, 128, 128, 0.3))',
+    backgroundColor: 'var(--color-bg-input)',
+    border: '1px solid var(--color-border)',
     borderRadius: '3px',
     padding: '2px 4px',
   },
   '.cm-panel.cm-search button': {
     backgroundImage: 'none',
-    backgroundColor: 'var(--color-bg-button, transparent)',
-    border: '1px solid var(--color-border, rgba(128, 128, 128, 0.3))',
+    backgroundColor: 'var(--color-bg-button)',
+    border: '1px solid var(--color-border)',
     borderRadius: '3px',
   },
   '.cm-searchMatch': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #ff6b35) 25%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--color-brand) 25%, transparent)',
   },
   '.cm-searchMatch-selected': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #ff6b35) 50%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--color-brand) 50%, transparent)',
   },
 });
 

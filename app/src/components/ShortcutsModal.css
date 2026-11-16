@@ -27,7 +27,7 @@
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.03),
     0 24px 80px rgba(0, 0, 0, 0.8),
-    0 0 120px rgba(255, 107, 53, 0.04);
+    0 0 120px color-mix(in srgb, var(--color-brand) 4%, transparent);
   display: flex;
   flex-direction: column;
   animation: shortcuts-slideUp 180ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -74,15 +74,15 @@
   font-size: 12px;
   padding: 5px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 107, 53, 0.5);
-  background: rgba(255, 107, 53, 0.12);
-  color: #ff6b35;
+  border: 1px solid color-mix(in srgb, var(--color-brand) 50%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
+  color: var(--color-brand);
   cursor: pointer;
   transition: all 120ms ease-out;
 }
 
 .shortcuts-edit:hover {
-  background: rgba(255, 107, 53, 0.2);
+  background: color-mix(in srgb, var(--color-brand) 20%, transparent);
 }
 
 .shortcuts-close {
@@ -121,7 +121,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #ff6b35;
+  color: var(--color-brand);
   margin: 0 0 6px;
 }
 

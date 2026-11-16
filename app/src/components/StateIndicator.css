@@ -46,35 +46,35 @@
 }
 
 .state-indicator--session.state-indicator--waiting-input {
-  color: #f59e0b;
+  color: var(--color-state-waiting);
   background-color: currentColor; /* amber/orange */
 }
 
 .state-indicator--session.state-indicator--working {
-  color: #22c55e;
+  color: var(--color-state-working);
   background-color: currentColor; /* green */
 }
 
 .state-indicator--session.state-indicator--idle,
 .state-indicator--session.state-indicator--recoverable {
-  color: #6b7280;
+  color: var(--color-state-idle);
   background-color: currentColor; /* gray */
 }
 
 .state-indicator--session.state-indicator--pending-approval {
-  color: #eab308;
+  color: var(--color-state-approval);
   background-color: currentColor; /* yellow-500 */
   animation: flash-pending 1s ease-in-out infinite;
 }
 
 .state-indicator--session.state-indicator--scheduled {
-  color: #0ea5e9;
+  color: var(--color-state-scheduled);
   background-color: currentColor; /* sky blue — parked on a schedule */
   animation: pulse-scheduled 3.2s ease-in-out infinite;
 }
 
 .state-indicator--session.state-indicator--unknown {
-  color: #a855f7;
+  color: var(--color-state-unknown);
   background-color: currentColor; /* purple */
 }
 
@@ -91,7 +91,7 @@
 
 /* PR states - PRs that need attention are always "waiting" */
 .state-indicator--pr {
-  background-color: #3b82f6; /* blue */
+  background-color: var(--color-accent); /* blue */
 }
 
 .state-indicator--session.state-indicator--offline {

@@ -81,7 +81,7 @@
 }
 
 .desktop-dock-tile-seed-parent:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: 1px;
 }
 
@@ -104,7 +104,7 @@
   padding: 2px 8px;
   border: 1px solid var(--color-border);
   border-radius: 5px;
-  background: var(--color-bg-editor);
+  background: var(--color-bg-tile);
   color: var(--color-text-primary);
   font: 11px/1.2 'SF Mono', 'Monaco', 'Menlo', monospace;
   outline: none;
@@ -175,7 +175,7 @@
   padding: 2px 4px;
   border: 1px solid var(--color-border);
   border-radius: 5px;
-  background: var(--color-bg-editor);
+  background: var(--color-bg-tile);
   color: var(--color-text-secondary);
   font-size: 11px;
   outline: none;
@@ -217,16 +217,16 @@
 }
 
 .desktop-dock-tile-send-button--ok {
-  color: var(--color-status-success, #4ade80);
+  color: var(--color-success);
 }
 
 .desktop-dock-tile-send-button--skipped,
 .desktop-dock-tile-send-button--warning {
-  border-color: color-mix(in srgb, var(--color-status-warning, #facc15) 48%, var(--color-border));
+  border-color: color-mix(in srgb, var(--color-warning) 48%, var(--color-border));
 }
 
 .desktop-dock-tile-send-button--error {
-  border-color: color-mix(in srgb, var(--color-status-error, #f87171) 52%, var(--color-border));
+  border-color: color-mix(in srgb, color-mix(in srgb, var(--color-error) 76%, white) 52%, var(--color-border));
 }
 
 .desktop-dock-tile-send-alert {
@@ -236,15 +236,15 @@
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: var(--color-status-warning, #facc15);
-  color: #171717;
+  background: var(--color-warning);
+  color: color-mix(in srgb, var(--color-text-dimmed) 27%, black);
   font-size: 9px;
   font-weight: 800;
   line-height: 1;
 }
 
 .desktop-dock-tile-send-button--error .desktop-dock-tile-send-alert {
-  background: var(--color-status-error, #f87171);
+  background: color-mix(in srgb, var(--color-error) 76%, white);
 }
 
 .desktop-dock-tile-send-action {
@@ -321,7 +321,7 @@
   padding: 4px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: var(--color-bg-elevated, var(--color-bg-editor));
+  background: var(--color-bg-elevated);
   box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
 }
 
@@ -349,7 +349,7 @@
 
 .desktop-dock-tile-destination-check {
   width: 12px;
-  color: var(--accent);
+  color: var(--color-brand);
   text-align: center;
 }
 
@@ -361,7 +361,7 @@
 }
 
 .desktop-dock-tile-destination-state {
-  color: var(--color-status-warning, #facc15);
+  color: var(--color-warning);
   font-size: 10px;
 }
 
@@ -401,9 +401,9 @@
   gap: 4px;
   height: 24px;
   padding: 2px 9px;
-  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 36%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
   color: var(--color-text-secondary);
   font-size: 11px;
   font-weight: 600;
@@ -417,8 +417,8 @@
 }
 
 .desktop-dock-tile-focus-action:hover {
-  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand) 58%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 15%, transparent);
   color: var(--color-text-primary);
 }
 
@@ -608,7 +608,7 @@
 }
 
 .desktop-dock-tile-error {
-  color: var(--color-status-error, #f87171);
+  color: color-mix(in srgb, var(--color-error) 76%, white);
   font-style: normal;
   white-space: pre-wrap;
   word-break: break-word;
@@ -623,10 +623,10 @@
   position: absolute;
   z-index: 6;
   pointer-events: none;
-  background: rgba(255, 107, 53, 0.14);
-  border: 1.5px dashed var(--color-border-focus, rgba(255, 107, 53, 0.7));
+  background: color-mix(in srgb, var(--color-brand) 14%, transparent);
+  border: 1.5px dashed var(--color-border-focus);
   border-radius: 6px;
-  box-shadow: inset 0 0 0 1px rgba(255, 107, 53, 0.12);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-brand) 12%, transparent);
 }
 
 /* Ghost of the tile following the cursor during a re-dock drag. */

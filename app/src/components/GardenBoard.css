@@ -17,35 +17,13 @@
   --font-size: calc(14px * var(--garden-scale));
   --font-size-lg: calc(18px * var(--garden-scale));
   --font-size-xl: calc(24px * var(--garden-scale));
-  --garden-board-ready: #58c98b;
-  --garden-board-progress: #74a7f7;
-  --garden-board-attention: #dda75b;
-  --garden-board-parked: #8c96a3;
-  --garden-board-lane: #161619;
-  --garden-board-card: #1c1c20;
-  --garden-board-card-border: #303034;
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .garden-board {
-    --garden-board-ready: #227d4d;
-    --garden-board-progress: #356fbd;
-    --garden-board-attention: #94600d;
-    --garden-board-parked: #65717e;
-    --garden-board-lane: #f1f1f3;
-    --garden-board-card: #ffffff;
-    --garden-board-card-border: #d9d9de;
-  }
-}
-
-:root[data-theme='light'] .garden-board {
-  --garden-board-ready: #227d4d;
-  --garden-board-progress: #356fbd;
-  --garden-board-attention: #94600d;
-  --garden-board-parked: #65717e;
-  --garden-board-lane: #f1f1f3;
-  --garden-board-card: #ffffff;
-  --garden-board-card-border: #d9d9de;
+  --garden-board-ready: var(--color-success);
+  --garden-board-progress: color-mix(in srgb, var(--color-accent) 79%, var(--color-text-primary));
+  --garden-board-attention: color-mix(in srgb, var(--color-warning) 55%, var(--color-text-secondary));
+  --garden-board-parked: color-mix(in srgb, var(--color-accent) 19%, var(--color-text-tertiary));
+  --garden-board-lane: color-mix(in srgb, var(--color-bg-elevated) 57%, var(--color-bg-panel));
+  --garden-board-card: color-mix(in srgb, var(--color-bg-tile) 58%, var(--color-bg-elevated));
+  --garden-board-card-border: color-mix(in srgb, var(--color-border-hover) 40%, var(--color-border));
 }
 
 /* Header — the panel's, to the pixel, so switching views moves nothing. */
@@ -111,7 +89,7 @@
 
 .garden-view-switch button[aria-pressed='true'] {
   color: var(--color-text-primary);
-  box-shadow: inset 0 -1px 0 var(--accent);
+  box-shadow: inset 0 -1px 0 var(--color-brand);
 }
 
 /* Where you are. Same trail as the list, so drilling reads the same in both. */
@@ -395,12 +373,12 @@
 
 .garden-card.is-selected .garden-card__body {
   background: color-mix(in srgb, var(--garden-board-card) 82%, var(--color-bg-selected));
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: -1px;
 }
 
 .garden-card__body:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: -1px;
 }
 
@@ -735,8 +713,8 @@
 }
 
 .garden-board__zone.is-over {
-  background: var(--accent-glow);
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--color-brand) 15%, transparent);
+  border-color: var(--color-brand);
   border-style: solid;
   color: var(--color-text-primary);
 }

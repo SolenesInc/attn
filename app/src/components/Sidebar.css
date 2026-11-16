@@ -166,8 +166,8 @@
 }
 
 .desktop-group--drag-target {
-  outline: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-brand) 32%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 7%, transparent);
 }
 
 .desktop-group--drag-disabled {
@@ -175,8 +175,8 @@
 }
 
 .desktop-group--drag-entering {
-  outline: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-brand) 60%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
 }
 
 .desktop-group--drag-entering::before {
@@ -184,7 +184,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: var(--accent);
+  background: var(--color-brand);
   transform-origin: top;
   animation: desktop-drag-enter 320ms ease-out both;
 }
@@ -225,8 +225,8 @@
   max-width: 220px;
   padding: 5px 10px;
   border-radius: 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 16%, var(--color-bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--color-brand) 45%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 16%, var(--color-bg-elevated));
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
   color: var(--color-text-primary);
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace;
@@ -251,11 +251,11 @@
   top: 50%;
   height: 2px;
   border-radius: 2px;
-  background: var(--accent);
+  background: var(--color-brand);
   transform: translateY(-50%) scaleX(0);
   transform-origin: center;
   opacity: 0;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-brand) 60%, transparent);
   transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 120ms ease;
 }
 
@@ -280,12 +280,12 @@
   gap: 6px;
   margin: 6px 0 2px;
   padding: 12px 10px;
-  border: 1.5px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--color-brand) 50%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 4%, transparent);
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace;
   font-size: 12px;
-  color: var(--accent);
+  color: var(--color-brand);
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -297,9 +297,9 @@
 
 .new-desktop-dropzone--active {
   border-style: solid;
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-brand) 30%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -344,14 +344,14 @@
 }
 
 .desktop-number.current {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0b1220;
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: color-mix(in srgb, var(--color-accent) 13%, black);
 }
 
 .desktop-number.empty {
   border-style: dashed;
-  border-color: #3d4047;
+  border-color: color-mix(in srgb, var(--color-border-focus) 40%, var(--color-border-hover));
 }
 
 .desktop-rule-line {
@@ -509,7 +509,7 @@
 }
 
 .session-recoverable {
-  color: #d97706;
+  color: color-mix(in srgb, var(--color-warning) 85%, black);
   flex-shrink: 0;
   font-size: var(--font-size-xs);
   font-style: italic;
@@ -697,8 +697,8 @@
 
 .shortcut-hint.active {
   color: var(--color-text-primary);
-  background: rgba(255, 107, 53, 0.12);
-  border: 1px solid rgba(255, 107, 53, 0.35);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 35%, transparent);
   border-radius: 999px;
   padding: 2px 8px;
 }
@@ -824,7 +824,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--color-state-waiting);
 }
 
 .mini-ask-badge {
@@ -844,12 +844,12 @@
 }
 
 .mini-badge.pending {
-  background: #eab308;
+  background: var(--color-state-approval);
   animation: flash-pending 1s ease-in-out infinite;
 }
 
 .mini-badge.unknown {
-  background: #a855f7;
+  background: var(--color-state-unknown);
   border: none;
 }
 
@@ -932,7 +932,7 @@
   color: var(--color-text-primary);
 }
 .sidebar-nav-row:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-brand);
   outline-offset: -2px;
 }
 .sidebar-nav-row svg,
@@ -1000,7 +1000,7 @@
 
 .queue-row-select:focus-visible,
 .sidebar-row-select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-brand);
   outline-offset: -2px;
 }
 

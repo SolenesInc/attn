@@ -32,8 +32,8 @@
 }
 
 .drawer-count {
-  background: #ff6b35;
-  color: #000;
+  background: var(--color-brand);
+  color: var(--color-on-accent);
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 700;
@@ -89,8 +89,8 @@
 }
 
 .section-count {
-  background: rgba(255, 107, 53, 0.15);
-  color: #ff6b35;
+  background: color-mix(in srgb, var(--color-brand) 15%, transparent);
+  color: var(--color-brand);
   font-size: var(--font-size-xs);
   font-weight: 600;
   padding: 2px 6px;
@@ -132,29 +132,29 @@
 
 /* Default session dot (legacy support) */
 .item-dot.session {
-  background: #ff6b35;
-  box-shadow: 0 0 8px rgba(255, 107, 53, 0.4);
+  background: var(--color-brand);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-brand) 40%, transparent);
 }
 
 /* State-specific session dots */
 .item-dot.session.waiting-input {
-  background: #f59e0b;
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  background: var(--color-state-waiting);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-state-waiting) 40%, transparent);
 }
 
 .item-dot.session.working {
-  background: #22c55e;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+  background: var(--color-state-working);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-state-working) 40%, transparent);
 }
 
 .item-dot.session.idle {
-  background: #6b7280;
-  box-shadow: 0 0 8px rgba(107, 114, 128, 0.3);
+  background: var(--color-state-idle);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-state-idle) 30%, transparent);
 }
 
 .item-dot.pr {
-  background: #a78bfa;
-  box-shadow: 0 0 8px rgba(167, 139, 250, 0.3);
+  background: var(--color-annotation);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-annotation) 30%, transparent);
 }
 
 .item-name {
@@ -193,7 +193,7 @@
 }
 
 .attention-item.pr-item .pr-link:hover {
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 /* PR metadata row (repo + number) */

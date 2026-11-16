@@ -1,6 +1,6 @@
 .terminal-seed-preview {
-  --terminal-seed-phosphor: #ff8659;
-  --terminal-seed-mint: #91c8b1;
+  --terminal-seed-phosphor: color-mix(in srgb, var(--color-brand) 82%, white);
+  --terminal-seed-mint: color-mix(in srgb, var(--color-success) 35%, var(--color-text-secondary));
   position: fixed;
   z-index: 1000;
   box-sizing: border-box;
@@ -11,7 +11,7 @@
   overflow: visible;
   border: 0;
   background: transparent;
-  color: #e8e5de;
+  color: var(--color-text-primary);
   color-scheme: dark;
   font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, system-ui, sans-serif);
   opacity: 0;
@@ -22,7 +22,7 @@
   opacity: 1;
   pointer-events: auto;
   filter:
-    drop-shadow(0 0 17px rgba(255, 120, 71, 0.18))
+    drop-shadow(0 0 17px color-mix(in srgb, var(--color-brand) 18%, transparent))
     drop-shadow(0 18px 34px rgba(0, 0, 0, 0.5));
 }
 
@@ -31,11 +31,11 @@
   z-index: 0;
   inset: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 131, 86, 0.5);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 50%, transparent);
   background:
-    linear-gradient(90deg, rgba(255, 120, 71, 0.026), transparent 20%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-brand) 2.6%, transparent), transparent 20%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 31%),
-    rgba(18, 21, 25, 0.985);
+    color-mix(in srgb, var(--color-bg-panel) 98.5%, transparent);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.018), inset 0 0 0 1px rgba(0, 0, 0, 0.44);
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
   transform-origin: var(--terminal-seed-entry-x) var(--terminal-seed-entry-y);
@@ -43,23 +43,23 @@
 
 .terminal-seed-preview[data-placement='left'] .terminal-seed-preview__chrome {
   background:
-    linear-gradient(270deg, rgba(255, 120, 71, 0.026), transparent 20%),
+    linear-gradient(270deg, color-mix(in srgb, var(--color-brand) 2.6%, transparent), transparent 20%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 31%),
-    rgba(18, 21, 25, 0.985);
+    color-mix(in srgb, var(--color-bg-panel) 98.5%, transparent);
 }
 
 .terminal-seed-preview[data-placement='below'] .terminal-seed-preview__chrome {
   background:
-    linear-gradient(180deg, rgba(255, 120, 71, 0.026), transparent 20%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-brand) 2.6%, transparent), transparent 20%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 31%),
-    rgba(18, 21, 25, 0.985);
+    color-mix(in srgb, var(--color-bg-panel) 98.5%, transparent);
 }
 
 .terminal-seed-preview[data-placement='above'] .terminal-seed-preview__chrome {
   background:
-    linear-gradient(0deg, rgba(255, 120, 71, 0.026), transparent 20%),
+    linear-gradient(0deg, color-mix(in srgb, var(--color-brand) 2.6%, transparent), transparent 20%),
     linear-gradient(0deg, rgba(255, 255, 255, 0.018), transparent 31%),
-    rgba(18, 21, 25, 0.985);
+    color-mix(in srgb, var(--color-bg-panel) 98.5%, transparent);
 }
 
 .terminal-seed-preview__chrome::before {
@@ -70,7 +70,7 @@
   width: 44px;
   height: 1px;
   background: var(--terminal-seed-phosphor);
-  box-shadow: 0 0 5px #ff7847, 0 0 14px rgba(255, 120, 71, 0.66);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--color-brand) 91%, white), 0 0 14px color-mix(in srgb, var(--color-brand) 66%, transparent);
   content: '';
 }
 
@@ -140,7 +140,7 @@
   gap: 6px;
   margin-right: auto;
   padding: 0 5px;
-  color: #9cbcac;
+  color: color-mix(in srgb, var(--color-success) 20%, var(--color-text-secondary));
   font: 8px/1 var(--font-mono, ui-monospace, monospace);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -150,22 +150,22 @@
   width: 3px;
   height: 3px;
   background: var(--terminal-seed-mint);
-  box-shadow: 0 0 7px rgba(145, 200, 177, 0.38);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--color-success) 38%, transparent);
   transform: rotate(45deg);
 }
 
 .terminal-seed-preview__status[data-status='parked'] i {
-  background: #d7ad70;
+  background: color-mix(in srgb, var(--color-warning) 43%, var(--color-text-secondary));
   box-shadow: none;
 }
 
 .terminal-seed-preview__status[data-status='harvested'] i {
-  background: #858c90;
+  background: color-mix(in srgb, var(--color-bg-selected) 59%, white);
   box-shadow: none;
 }
 
 .terminal-seed-preview__status[data-status='withered'] i {
-  background: #db7f72;
+  background: color-mix(in srgb, var(--color-error) 56%, var(--color-text-secondary));
   box-shadow: none;
 }
 
@@ -177,10 +177,10 @@
   align-items: center;
   gap: 6px;
   padding: 0 9px 0 7px;
-  border: 1px solid rgba(255, 131, 86, 0.42);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 42%, transparent);
   border-radius: 5px;
   background: transparent;
-  color: #d9aa98;
+  color: color-mix(in srgb, var(--color-brand) 28%, var(--color-text-secondary));
   cursor: pointer;
   font-size: 11px;
   line-height: 1;
@@ -204,10 +204,10 @@
 
 .terminal-seed-preview__agent:hover,
 .terminal-seed-preview__agent:focus-visible {
-  border-color: rgba(255, 131, 86, 0.64);
+  border-color: color-mix(in srgb, var(--color-brand) 64%, transparent);
   outline: none;
-  background: rgba(255, 120, 71, 0.07);
-  color: #ff9c76;
+  background: color-mix(in srgb, var(--color-brand) 7%, transparent);
+  color: color-mix(in srgb, var(--color-brand) 67%, white);
 }
 
 .terminal-seed-preview__agent:active {
@@ -222,11 +222,11 @@
   flex: none;
   place-items: center;
   padding: 0;
-  border: 1px solid rgba(255, 131, 86, 0.42);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 42%, transparent);
   border-radius: 5px;
   background: transparent;
-  box-shadow: 0 0 9px rgba(255, 120, 71, 0.1);
-  color: #d9aa98;
+  box-shadow: 0 0 9px color-mix(in srgb, var(--color-brand) 10%, transparent);
+  color: color-mix(in srgb, var(--color-brand) 28%, var(--color-text-secondary));
   cursor: pointer;
   transition: color 120ms ease, border-color 120ms ease, background 120ms ease, transform 80ms ease;
 }
@@ -240,10 +240,10 @@
 
 .terminal-seed-preview__open:hover,
 .terminal-seed-preview__open:focus-visible {
-  border-color: rgba(255, 131, 86, 0.64);
+  border-color: color-mix(in srgb, var(--color-brand) 64%, transparent);
   outline: none;
-  background: rgba(255, 120, 71, 0.07);
-  color: #ff9c76;
+  background: color-mix(in srgb, var(--color-brand) 7%, transparent);
+  color: color-mix(in srgb, var(--color-brand) 67%, white);
 }
 
 .terminal-seed-preview__open:active {
@@ -256,11 +256,11 @@
   bottom: calc(100% + 8px);
   width: max-content;
   padding: 5px 8px;
-  border: 1px solid #343a40;
+  border: 1px solid var(--color-border-hover);
   border-radius: 3px;
-  background: #0c0e11;
+  background: color-mix(in srgb, var(--color-bg-panel) 17%, var(--color-bg-app));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
-  color: #b9bbb7;
+  color: var(--color-text-secondary);
   content: attr(data-tooltip);
   font: 8px/1 var(--font-mono, ui-monospace, monospace);
   letter-spacing: 0.06em;
@@ -286,7 +286,7 @@
   overflow: hidden;
   max-width: 340px;
   margin: 0;
-  color: #efede7;
+  color: color-mix(in srgb, var(--color-text-primary) 84%, white);
   font-size: 17.5px;
   font-weight: 570;
   letter-spacing: -0.025em;
@@ -299,7 +299,7 @@
   display: -webkit-box;
   overflow: hidden;
   margin: 9px 0 15px;
-  color: #92979a;
+  color: color-mix(in srgb, var(--color-text-secondary) 28%, var(--color-text-tertiary));
   font-size: 11.5px;
   line-height: 1.46;
   -webkit-box-orient: vertical;
@@ -310,7 +310,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   margin: 0;
-  border-top: 1px solid rgba(151, 158, 164, 0.14);
+  border-top: 1px solid color-mix(in srgb, var(--color-text-tertiary) 14%, transparent);
 }
 
 .terminal-seed-preview__meta:empty {
@@ -320,7 +320,7 @@
 .terminal-seed-preview__meta > div {
   min-width: 0;
   padding: 9px 9px 4px 0;
-  border-right: 1px solid rgba(151, 158, 164, 0.1);
+  border-right: 1px solid color-mix(in srgb, var(--color-text-tertiary) 10%, transparent);
 }
 
 .terminal-seed-preview__meta > div + div {
@@ -333,7 +333,7 @@
 
 .terminal-seed-preview__meta dt {
   margin-bottom: 5px;
-  color: #50575c;
+  color: var(--color-text-dimmed);
   font: 7px/1 var(--font-mono, ui-monospace, monospace);
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -342,7 +342,7 @@
 .terminal-seed-preview__meta dd {
   overflow: hidden;
   margin: 0;
-  color: #a0a4a3;
+  color: color-mix(in srgb, var(--color-text-secondary) 52%, var(--color-text-tertiary));
   font: 9px/1 var(--font-mono, ui-monospace, monospace);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -365,19 +365,19 @@
 }
 
 .terminal-seed-preview-signal__shadow {
-  stroke: rgba(255, 120, 71, 0.18);
+  stroke: color-mix(in srgb, var(--color-brand) 18%, transparent);
   stroke-width: 8px;
   filter: blur(2px);
 }
 
 .terminal-seed-preview-signal__core {
-  stroke: var(--accent, #ff6b35);
+  stroke: var(--color-brand);
   stroke-width: 1.25px;
-  filter: drop-shadow(0 0 5px rgba(255, 120, 71, 0.78));
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-brand) 78%, transparent));
 }
 
 .terminal-seed-preview-signal__echo {
-  stroke: rgba(255, 176, 142, 0.48);
+  stroke: color-mix(in srgb, var(--color-brand) 48%, transparent);
   stroke-dasharray: 0.02 0.05;
   stroke-width: 1px;
 }
@@ -399,14 +399,14 @@
 }
 
 .terminal-seed-preview-signal__origin {
-  fill: #ff8a5e;
-  filter: drop-shadow(0 0 7px rgba(255, 120, 71, 0.8));
+  fill: color-mix(in srgb, var(--color-brand) 79%, white);
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--color-brand) 80%, transparent));
   animation: terminal-seed-node-arrive 120ms ease-out both;
 }
 
 .terminal-seed-preview-signal__destination {
-  fill: #b4f2d7;
-  filter: drop-shadow(0 0 6px rgba(139, 221, 187, 0.72));
+  fill: color-mix(in srgb, var(--color-success) 30%, white);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-success) 72%, transparent));
   animation: terminal-seed-node-arrive 120ms ease-out 160ms both;
 }
 

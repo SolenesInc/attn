@@ -2,10 +2,10 @@
 .delegation-settings button { font: inherit; }
 .delegation-settings .settings-action.quiet { background: transparent; border-color: transparent; }
 .delegation-settings .settings-action.quiet:hover:not(:disabled) { background: var(--color-bg-button); border-color: var(--color-border-hover); }
-.delegation-settings .settings-action.primary { color: #1c1308; background: #f59b4a; border-color: rgba(245, 155, 74, 0.8); }
-.delegation-settings .settings-action.primary:hover:not(:disabled) { color: #1c1308; background: #ffab5e; }
+.delegation-settings .settings-action.primary { color: color-mix(in srgb, var(--color-warning) 10%, black); background: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 80%, transparent); }
+.delegation-settings .settings-action.primary:hover:not(:disabled) { color: color-mix(in srgb, var(--color-warning) 10%, black); background: color-mix(in srgb, var(--color-warning) 70%, white); }
 .delegation-settings .settings-action.danger { color: var(--color-error); border-color: transparent; }
-.delegation-settings .settings-action.danger:hover:not(:disabled) { border-color: rgba(255, 116, 108, 0.38); }
+.delegation-settings .settings-action.danger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--color-error) 38%, transparent); }
 .delegation-settings :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .delegation-lead { max-width: 68ch; margin: 0 0 16px; color: var(--color-text-secondary); font-size: var(--font-size-md); line-height: 1.45; }
 .delegation-lead.off { color: var(--color-text-tertiary); }
@@ -22,7 +22,7 @@
 .delegation-icon svg { width: 18px; height: 18px; }
 .delegation-icon.fallback { border-style: dashed; background: transparent; }
 .delegation-icon.pick { cursor: pointer; }
-.delegation-icon.pick.active { border-color: #f59b4a; color: var(--color-text-primary); }
+.delegation-icon.pick.active { border-color: var(--color-warning); color: var(--color-text-primary); }
 .delegation-icons { display: flex; flex-wrap: wrap; gap: 8px; }
 .delegation-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
 .delegation-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-text-primary); font-size: var(--font-size-md); font-weight: 600; }
@@ -35,7 +35,7 @@
 .delegation-model .h { color: var(--color-text-tertiary); }
 .delegation-model .m { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .delegation-model .h { flex: none; }
-.delegation-model .e { color: #f59b4a; }
+.delegation-model .e { color: var(--color-warning); }
 .delegation-model.unset { color: var(--color-warning); border-style: dashed; border-color: color-mix(in srgb, var(--color-warning) 45%, transparent); }
 .delegation-model.pinned { color: var(--color-text-tertiary); }
 .delegation-caret { margin-left: auto; opacity: .55; line-height: 0; transform: translateY(-3px); }
@@ -90,7 +90,7 @@
 .delegation-confirm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: var(--font-size-sm); }
 .delegation-confirm select { padding: 5px 8px; border: 1px solid var(--color-border); border-radius: 5px; background: var(--color-bg-input); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); }
 .delegation-undo { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: var(--font-size-sm); }
-.delegation-undo .settings-action { min-height: 30px; color: #f59b4a; }
+.delegation-undo .settings-action { min-height: 30px; color: var(--color-warning); }
 @media (max-width: 760px) {
   .delegation-settings { --delegation-cols: 36px minmax(0, 1fr) 40px; }
   .delegation-thead span:nth-child(3) { display: none; }

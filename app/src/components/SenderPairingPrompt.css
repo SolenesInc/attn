@@ -50,7 +50,7 @@
 }
 
 .sender-pairing-error {
-  color: #ff9f7a;
+  color: color-mix(in srgb, var(--color-brand) 66%, white);
   font-size: var(--font-size-sm);
   margin: 0 0 14px;
 }
@@ -81,12 +81,12 @@
 }
 
 .sender-pairing-actions .allow {
-  background: rgba(88, 166, 255, 0.14);
-  border-color: rgba(88, 166, 255, 0.35);
-  color: #79b8ff;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  color: var(--color-accent);
 }
 
 .sender-pairing-actions button:focus-visible {
-  outline: 2px solid rgba(88, 166, 255, 0.6);
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
   outline-offset: 2px;
 }

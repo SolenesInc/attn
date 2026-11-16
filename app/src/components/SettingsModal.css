@@ -180,9 +180,9 @@
 }
 
 .settings-nav-item.active {
-  background: rgba(245, 155, 74, 0.12);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   color: var(--color-text-primary);
-  box-shadow: inset 3px 0 0 #f59b4a;
+  box-shadow: inset 3px 0 0 var(--color-warning);
 }
 
 .settings-body {
@@ -303,7 +303,7 @@
 }
 
 .settings-warning {
-  color: #ff9f7a;
+  color: color-mix(in srgb, var(--color-brand) 66%, white);
   font-size: var(--font-size-sm);
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -311,7 +311,7 @@
 
 .settings-warning a,
 .settings-meta-row a {
-  color: #77a7ff;
+  color: color-mix(in srgb, var(--color-accent) 81%, white);
 }
 
 .settings-pill,
@@ -339,26 +339,26 @@
 .plugin-status-badge.connected,
 .plugin-health-badge.healthy,
 .agent-capability-pill.enabled {
-  color: #60c287;
-  border-color: rgba(96, 194, 135, 0.42);
-  background: rgba(96, 194, 135, 0.11);
+  color: color-mix(in srgb, var(--color-success) 73%, var(--color-text-primary));
+  border-color: color-mix(in srgb, var(--color-success) 42%, transparent);
+  background: color-mix(in srgb, var(--color-success) 11%, transparent);
 }
 
 .settings-pill.warn,
 .plugin-status-badge.starting,
 .plugin-status-badge.backoff {
-  color: #f59b4a;
-  border-color: rgba(245, 155, 74, 0.42);
-  background: rgba(245, 155, 74, 0.11);
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 42%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 11%, transparent);
 }
 
 .settings-pill.bad,
 .plugin-health-badge.unhealthy,
 .plugin-status-badge.parked,
 .agent-capability-pill.disabled {
-  color: #ff746c;
-  border-color: rgba(255, 116, 108, 0.42);
-  background: rgba(255, 116, 108, 0.11);
+  color: color-mix(in srgb, var(--color-error) 76%, white);
+  border-color: color-mix(in srgb, var(--color-error) 42%, transparent);
+  background: color-mix(in srgb, var(--color-error) 11%, transparent);
 }
 
 .settings-inline-form,
@@ -440,8 +440,8 @@
 }
 
 .settings-action.danger {
-  color: #ff746c;
-  border-color: rgba(255, 116, 108, 0.38);
+  color: color-mix(in srgb, var(--color-error) 76%, white);
+  border-color: color-mix(in srgb, var(--color-error) 38%, transparent);
 }
 
 .settings-segmented {
@@ -475,9 +475,9 @@
 }
 
 .settings-segmented-option.active {
-  color: #1c1308;
-  background: #f59b4a;
-  border-color: rgba(245, 155, 74, 0.8);
+  color: color-mix(in srgb, var(--color-warning) 10%, black);
+  background: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 80%, transparent);
 }
 
 .settings-segmented-option:disabled {
@@ -528,8 +528,8 @@
 }
 
 .settings-standby-verdict.resumes {
-  color: #f59b4a;
-  background: rgba(245, 155, 74, 0.14);
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
 }
 
 .settings-standby-verdict.waits {
@@ -635,13 +635,13 @@
 }
 
 .settings-switch[aria-checked="true"] .settings-switch-track {
-  background: #f59b4a;
-  border-color: #f59b4a;
+  background: var(--color-warning);
+  border-color: var(--color-warning);
 }
 
 .settings-switch[aria-checked="true"] .settings-switch-track::after {
   transform: translateX(16px);
-  background: #1c1308;
+  background: color-mix(in srgb, var(--color-warning) 10%, black);
 }
 
 .settings-flag-group {
@@ -679,7 +679,7 @@
 }
 
 .settings-flag-count b {
-  color: #f59b4a;
+  color: var(--color-warning);
   font-weight: 500;
 }
 
@@ -693,7 +693,7 @@
 }
 
 .settings-flag.on {
-  background: linear-gradient(90deg, rgba(245, 155, 74, 0.07), transparent 45%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-warning) 7%, transparent), transparent 45%);
 }
 
 .settings-flag .settings-switch {
@@ -969,12 +969,12 @@
 
 .settings-status.available,
 .settings-status.mode-worker {
-  color: #60c287;
+  color: color-mix(in srgb, var(--color-success) 73%, var(--color-text-primary));
 }
 
 .settings-status.missing,
 .settings-status.mode-unknown {
-  color: #f59b4a;
+  color: var(--color-warning);
 }
 
 .agent-capabilities-item {

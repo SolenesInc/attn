@@ -1,25 +1,25 @@
 .new-session-launcher {
-  --launcher-accent: #ff6b35;
-  --launcher-accent-text: #ff8a5c;
-  --launcher-on-accent: #1c0c05;
-  --launcher-bg-input: #09090a;
-  --launcher-bg-tile: #141417;
-  --launcher-border-tile: #222227;
-  --launcher-border-input: #2a2a2f;
-  --launcher-hairline: #1b1b1f;
+  --launcher-accent: var(--color-brand);
+  --launcher-accent-text: color-mix(in srgb, var(--color-brand) 80%, white);
+  --launcher-on-accent: color-mix(in srgb, var(--color-brand) 11%, black);
+  --launcher-bg-input: color-mix(in srgb, var(--color-bg-input) 70%, black);
+  --launcher-bg-tile: color-mix(in srgb, var(--color-bg-elevated) 36%, var(--color-bg-panel));
+  --launcher-border-tile: color-mix(in srgb, var(--color-border) 33%, var(--color-border-subtle));
+  --launcher-border-input: var(--color-border);
+  --launcher-hairline: color-mix(in srgb, var(--color-border-subtle) 89%, black);
   --launcher-footer-bg: rgba(0, 0, 0, 0.28);
-  --launcher-text-quiet: #8a8a94;
-  --launcher-text-path: #74747e;
-  --launcher-text-section: #66666f;
-  --launcher-text-faint: #5d5d66;
-  --launcher-worktree-color: #9be7a8;
+  --launcher-text-quiet: var(--color-text-tertiary);
+  --launcher-text-path: color-mix(in srgb, var(--color-text-tertiary) 51%, var(--color-text-muted));
+  --launcher-text-section: var(--color-text-muted);
+  --launcher-text-faint: color-mix(in srgb, var(--color-text-muted) 65%, var(--color-text-dimmed));
+  --launcher-worktree-color: color-mix(in srgb, var(--color-success) 50%, white);
   width: 760px;
-  border-color: #26262b;
+  border-color: color-mix(in srgb, var(--color-border) 70%, var(--color-border-subtle));
   border-radius: 10px;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.03),
     0 24px 60px rgba(0, 0, 0, 0.72),
-    0 0 100px rgba(255, 107, 53, 0.03);
+    0 0 100px color-mix(in srgb, var(--color-brand) 3%, transparent);
 }
 
 .new-session-launcher .picker-title {
@@ -158,7 +158,7 @@
 }
 .launcher-worktree {
   padding: 1px 6px;
-  background: rgba(63, 185, 80, 0.09);
+  background: color-mix(in srgb, var(--color-success) 9%, transparent);
 }
 .launcher-repo-chip {
   padding: 3px 8px;
@@ -209,7 +209,7 @@
   text-decoration: line-through;
 }
 .launcher-error-reason {
-  color: color-mix(in srgb, #ffb4b4 75%, transparent);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-error) 40%, white) 75%, transparent);
 }
 .launcher-progress[data-stalled] {
   color: var(--color-warning);
@@ -226,9 +226,9 @@
   margin: 10px 16px;
   padding: 8px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.1);
-  color: #ffb4b4;
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: color-mix(in srgb, var(--color-error) 40%, white);
   font-size: calc(12.5px * var(--ui-scale));
   line-height: 1.45;
 }
@@ -381,7 +381,7 @@
 }
 
 [data-theme='light'] .new-session-launcher {
-  --launcher-accent-text: #d9531f;
+  --launcher-accent-text: color-mix(in srgb, var(--color-brand) 83%, black);
   --launcher-bg-input: var(--color-bg-input);
   --launcher-bg-tile: var(--color-bg-elevated);
   --launcher-border-tile: var(--color-border-subtle);
@@ -397,7 +397,7 @@
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) .new-session-launcher {
-    --launcher-accent-text: #d9531f;
+    --launcher-accent-text: color-mix(in srgb, var(--color-brand) 83%, black);
     --launcher-bg-input: var(--color-bg-input);
     --launcher-bg-tile: var(--color-bg-elevated);
     --launcher-border-tile: var(--color-border-subtle);
@@ -420,5 +420,5 @@
   color: var(--launcher-text-quiet);
 }
 .launcher-status[data-bad] {
-  color: #ff9c9c;
+  color: color-mix(in srgb, var(--color-error) 53%, white);
 }

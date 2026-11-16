@@ -1,5 +1,5 @@
 /* Lazy filesystem tree. Tracks the app's light/dark mode through the same design
-   tokens the notebook browser uses (--accent, --color-*), so it sits seamlessly in
+   tokens the notebook browser uses (--color-brand, --color-*), so it sits seamlessly in
    the same pane. Indentation is applied inline per depth (see indent() in the TSX);
    these rules own only the row chrome. */
 
@@ -65,7 +65,7 @@
 }
 
 .file-tree-file.is-selected .file-tree-name {
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .file-tree-state {
@@ -76,7 +76,7 @@
 }
 
 .file-tree-error {
-  color: var(--color-danger, #e5484d);
+  color: color-mix(in srgb, var(--color-error) 90%, var(--color-text-tertiary));
 }
 
 .file-tree-empty {

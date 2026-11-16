@@ -143,7 +143,7 @@
   cursor: pointer;
 }
 .profile-switcher-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.profile-switcher-selected { width: 12px; flex: none; color: var(--accent); }
+.profile-switcher-selected { width: 12px; flex: none; color: var(--color-brand); }
 .profile-switcher-row-actions { display: none; gap: 2px; flex: none; }
 .profile-switcher-item.focused .profile-switcher-row-actions,
 .profile-switcher-item:hover .profile-switcher-row-actions,
@@ -179,4 +179,4 @@
 }
 .profile-switcher kbd.symbol-key { font-family: inherit; font-size: 12px; line-height: 1.2; }
 .profile-switcher-back { align-self: flex-start; margin: 4px 8px; }
-.profile-switcher button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.profile-switcher button:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 1px; }

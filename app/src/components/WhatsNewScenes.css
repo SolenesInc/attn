@@ -30,16 +30,16 @@
 }
 
 .wn-pane {
-  fill: var(--color-bg-editor);
+  fill: var(--color-bg-tile);
   stroke: var(--color-border-subtle);
 }
 
 .wn-pane.is-active {
-  stroke: var(--accent);
+  stroke: var(--color-brand);
 }
 
 .wn-tile {
-  fill: var(--color-bg-tile, var(--color-bg-editor));
+  fill: var(--color-bg-tile);
   stroke: var(--color-border-subtle);
 }
 
@@ -90,7 +90,7 @@
 }
 
 .wn-chip.is-current {
-  fill: var(--accent);
+  fill: var(--color-brand);
 }
 
 .wn-chip-text {
@@ -100,7 +100,7 @@
 }
 
 .wn-chip-text.is-current {
-  fill: #fff;
+  fill: var(--color-on-brand);
 }
 
 .wn-pill {
@@ -117,17 +117,17 @@
 }
 
 .wn-caret {
-  fill: var(--accent);
+  fill: var(--color-brand);
 }
 
 .wn-ghost {
   fill: var(--color-bg-elevated);
-  stroke: var(--accent);
+  stroke: var(--color-brand);
 }
 
 .wn-drop {
-  fill: rgba(255, 107, 53, 0.1);
-  stroke: var(--accent);
+  fill: color-mix(in srgb, var(--color-brand) 10%, transparent);
+  stroke: var(--color-brand);
   stroke-dasharray: 4 3;
 }
 

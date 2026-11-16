@@ -103,12 +103,12 @@
 }
 
 .title-bar-new {
-  border-color: rgba(255, 107, 53, 0.5);
-  background: rgba(255, 107, 53, 0.12);
+  border-color: color-mix(in srgb, var(--color-brand) 50%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
   color: var(--color-text-primary);
 }
 
-.title-bar-commands svg { color: var(--accent); }
+.title-bar-commands svg { color: var(--color-brand); }
 
 .title-bar-right .title-bar-panel-button {
   padding: 0;
@@ -118,7 +118,7 @@
 .title-bar-profile-pill:focus-visible,
 .title-bar-tool:focus-visible,
 .title-bar-panel-button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-brand);
   outline-offset: 1px;
 }
 
@@ -129,7 +129,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--color-brand);
   box-shadow: 0 0 0 2px var(--color-bg-panel);
 }
 

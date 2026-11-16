@@ -57,8 +57,8 @@
 .diagnostic-report-included {
   margin: 18px 24px 0;
   padding: 14px 16px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--color-bg-primary));
-  border-left: 3px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 7%, var(--color-bg-primary));
+  border-left: 3px solid color-mix(in srgb, var(--color-brand) 65%, transparent);
   border-radius: 3px 8px 8px 3px;
 }
 
@@ -96,7 +96,7 @@
 
 .diagnostic-report-output-heading button {
   border: 0;
-  color: var(--accent);
+  color: var(--color-brand);
   background: transparent;
   font-size: 11px;
   cursor: pointer;
@@ -155,12 +155,12 @@
 }
 
 .diagnostic-report-output input {
-  accent-color: var(--accent);
+  accent-color: var(--color-brand);
 }
 
 .diagnostic-report-error {
   margin: 4px 24px 0;
-  color: var(--color-error, #f85149);
+  color: var(--color-error);
   font-size: 12px;
 }
 
@@ -189,13 +189,13 @@
 
 .diagnostic-report-actions .primary {
   color: var(--color-bg-primary);
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--color-brand);
+  border-color: var(--color-brand);
 }
 
 .diagnostic-report-sheet button:focus-visible,
 .diagnostic-report-sheet input:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, white);
+  outline: 2px solid color-mix(in srgb, var(--color-brand) 70%, white);
   outline-offset: 2px;
 }
 

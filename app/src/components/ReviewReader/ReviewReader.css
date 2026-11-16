@@ -78,7 +78,7 @@
 }
 
 .review-file-view-row--look .review-row-sign {
-  box-shadow: inset 3px 0 0 var(--color-warning, var(--color-accent));
+  box-shadow: inset 3px 0 0 var(--color-warning);
 }
 
 .review-frame.review-frame--map {
@@ -133,7 +133,7 @@
   font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-text-primary, inherit);
+  color: var(--color-text-primary);
 }
 
 .review-map-route {
@@ -179,7 +179,7 @@
 .review-frames button[aria-selected='true'] {
   border-color: var(--color-border);
   background: var(--review-range);
-  color: var(--color-text-primary, inherit);
+  color: var(--color-text-primary);
 }
 
 .review-frame.review-frame--map-stacked {
@@ -260,7 +260,7 @@
 }
 
 .review-seq-participant text {
-  fill: var(--color-text-primary, currentColor);
+  fill: var(--color-text-primary);
   font-weight: 600;
 }
 
@@ -301,7 +301,7 @@
 }
 
 .review-seq-message--stop .review-seq-label {
-  fill: var(--color-text-primary, currentColor);
+  fill: var(--color-text-primary);
 }
 
 .review-seq-message--stop .review-seq-line,
@@ -444,7 +444,7 @@
   border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
   border-radius: 0.5rem;
   overflow: hidden;
-  background: var(--color-bg-editor, var(--color-bg-elevated));
+  background: var(--color-bg-tile);
 }
 
 .review-stop-header {
@@ -579,7 +579,7 @@
   width: min(780px, 64%);
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-editor, var(--color-bg-panel));
+  background: var(--color-bg-tile);
   border-left: 1px solid var(--color-border);
   box-shadow: -18px 0 40px rgba(0, 0, 0, 0.28);
   z-index: 5;

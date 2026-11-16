@@ -36,7 +36,7 @@
 
 .delegation-chain-trigger[data-role="orchestrator"],
 .delegation-chain-role-icon[data-role="orchestrator"] {
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .delegation-chain-trigger:hover,

@@ -1,9 +1,9 @@
 .chief-of-staff-badge {
   align-items: center;
-  background: rgba(88, 166, 255, 0.12);
-  border: 1px solid rgba(88, 166, 255, 0.36);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 36%, transparent);
   border-radius: 4px;
-  color: #79b8ff;
+  color: var(--color-accent);
   display: inline-flex;
   flex-shrink: 0;
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;

@@ -45,7 +45,7 @@
 
 @keyframes desktop-shelf-chip-arrival {
   0%, 60% {
-    border-color: var(--color-accent, #ff6b35);
+    border-color: var(--color-accent);
     color: var(--color-text-primary);
   }
 }
@@ -235,9 +235,9 @@
 }
 
 .desktop-shelf-chip.is-drop-left {
-  box-shadow: inset 2px 0 0 var(--color-accent, #ff6b35);
+  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
 .desktop-shelf-chip.is-drop-right {
-  box-shadow: inset -2px 0 0 var(--color-accent, #ff6b35);
+  box-shadow: inset -2px 0 0 var(--color-accent);
 }

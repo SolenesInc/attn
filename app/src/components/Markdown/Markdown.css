@@ -57,7 +57,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-warning, #eab308);
+  background: var(--color-warning);
 }
 
 .markdown-mermaid-focus-button,
@@ -74,8 +74,8 @@
 }
 
 .markdown-mermaid-focus-button {
-  border-color: color-mix(in srgb, var(--color-accent, #5b8cff) 55%, var(--color-border));
-  background: color-mix(in srgb, var(--color-accent, #5b8cff) 16%, var(--color-bg-button));
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-button));
   color: var(--color-text-primary);
   font-weight: 600;
 }
@@ -86,7 +86,7 @@
 .md-diagram-focus-control:focus-visible,
 .md-diagram-focus-return:hover,
 .md-diagram-focus-return:focus-visible {
-  border-color: var(--color-border-focus, var(--color-accent, #5b8cff));
+  border-color: var(--color-border-focus);
   color: var(--color-text-primary);
   outline: none;
 }
@@ -101,7 +101,7 @@
 }
 
 .markdown-mermaid--oversized:focus-visible {
-  outline: 2px solid var(--color-accent, #5b8cff);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -128,7 +128,7 @@
   min-width: 0;
   min-height: 0;
   color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-bg-app, #0d0d0f) 96%, transparent);
+  background: color-mix(in srgb, var(--color-bg-app) 96%, transparent);
   backdrop-filter: blur(4px);
 }
 
@@ -150,7 +150,7 @@
 
 .md-diagram-focus-kicker {
   display: block;
-  color: var(--color-warning, #eab308);
+  color: var(--color-warning);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -206,13 +206,13 @@
   background: radial-gradient(
     circle at center,
     color-mix(in srgb, var(--color-bg-elevated) 55%, var(--color-bg-app)) 0,
-    var(--color-bg-app, #0d0d0f) 72%
+    var(--color-bg-app) 72%
   );
   scrollbar-width: thin;
 }
 
 .md-diagram-focus-canvas:focus-visible {
-  outline: 2px solid var(--color-accent, #5b8cff);
+  outline: 2px solid var(--color-accent);
   outline-offset: -3px;
 }
 
@@ -260,13 +260,13 @@
 
 .markdown-mermaid-error-note {
   margin: 0 0 4px 0;
-  color: var(--color-error, #ef4444);
+  color: var(--color-error);
   font-size: var(--font-size-sm);
 }
 
 .markdown-mermaid-error-detail {
   margin: 0 0 8px 0;
-  color: var(--color-error, #ef4444);
+  color: var(--color-error);
   white-space: pre-wrap;
   overflow-x: auto;
 }

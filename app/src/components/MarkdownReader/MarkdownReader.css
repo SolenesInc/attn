@@ -14,34 +14,12 @@
   color: var(--color-text-primary);
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
-  /* Local success token (attn has none): copy-button checkmark tint. */
-  --md-success: #3fb950;
-  /* GitHub alert accents (dark palette default, light overridden below). */
-  --md-alert-note: #4493f8;
-  --md-alert-tip: #3fb950;
-  --md-alert-warning: #d29922;
-  --md-alert-caution: #f85149;
-  --md-alert-important: #ab7df8;
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .md-reader {
-    --md-success: #1a7f37;
-    --md-alert-note: #0969da;
-    --md-alert-tip: #1a7f37;
-    --md-alert-warning: #9a6700;
-    --md-alert-caution: #cf222e;
-    --md-alert-important: #8250df;
-  }
-}
-
-:root[data-theme='light'] .md-reader {
-  --md-success: #1a7f37;
-  --md-alert-note: #0969da;
-  --md-alert-tip: #1a7f37;
-  --md-alert-warning: #9a6700;
-  --md-alert-caution: #cf222e;
-  --md-alert-important: #8250df;
+  --md-success: var(--color-success);
+  --md-alert-note: var(--color-accent);
+  --md-alert-tip: var(--color-success);
+  --md-alert-warning: var(--color-warning);
+  --md-alert-caution: var(--color-error);
+  --md-alert-important: var(--color-merged);
 }
 
 .md-reader code,
@@ -166,7 +144,7 @@
 }
 
 .md-reader li::marker {
-  color: color-mix(in srgb, var(--color-accent, #5b8cff) 60%, transparent);
+  color: color-mix(in srgb, var(--color-accent) 60%, transparent);
 }
 
 /* ---- Task lists (read-only) ----
@@ -222,7 +200,7 @@
 }
 
 .md-reader blockquote {
-  border-left: 2px solid color-mix(in srgb, var(--color-accent, #5b8cff) 50%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
   padding-left: 1rem;
   margin: 1rem 0;
   color: var(--color-text-secondary);
@@ -306,7 +284,7 @@
 }
 
 .md-reader a {
-  color: var(--color-accent, #5b8cff);
+  color: var(--color-accent);
   text-decoration: none;
   transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -321,7 +299,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--color-accent, #5b8cff);
+  color: var(--color-accent);
   font: inherit;
   cursor: pointer;
 }
@@ -339,7 +317,7 @@
 }
 
 .md-reader ::selection {
-  background: color-mix(in srgb, var(--color-accent, #5b8cff) 30%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -476,8 +454,8 @@
 .md-frontmatter-tag {
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
-  background: color-mix(in srgb, var(--color-accent, #5b8cff) 10%, transparent);
-  color: var(--color-accent, #5b8cff);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
   font-size: 0.75rem;
 }
 
@@ -552,7 +530,7 @@
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-bg-button);
-  color: var(--color-accent, #5b8cff);
+  color: var(--color-accent);
   font: inherit;
   cursor: pointer;
 }
@@ -606,17 +584,17 @@
 /* ---- Anchor paint layer (anchoring/painter.ts) ----
    Preferred path: CSS Custom Highlight API — zero DOM mutation. */
 ::highlight(attn-md-comment) {
-  background-color: color-mix(in srgb, var(--color-warning, #eab308) 28%, transparent);
+  background-color: color-mix(in srgb, var(--color-warning) 28%, transparent);
 }
 
 ::highlight(attn-md-deletion) {
-  background-color: color-mix(in srgb, #ef4444 20%, transparent);
+  background-color: color-mix(in srgb, var(--color-error) 20%, transparent);
   text-decoration: line-through;
 }
 
 /* Transient focus glow when jumping to an annotation from the sidebar. */
 ::highlight(attn-md-focus) {
-  background-color: color-mix(in srgb, var(--color-accent-primary, #3b82f6) 32%, transparent);
+  background-color: color-mix(in srgb, var(--color-accent) 32%, transparent);
 }
 
 /* MarkPainter fallback spans (engines without CSS.highlights). The
@@ -629,16 +607,16 @@
 }
 
 .md-mark-comment {
-  background-color: color-mix(in srgb, var(--color-warning, #eab308) 28%, transparent);
+  background-color: color-mix(in srgb, var(--color-warning) 28%, transparent);
 }
 
 .md-mark-deletion {
-  background-color: color-mix(in srgb, #ef4444 20%, transparent);
+  background-color: color-mix(in srgb, var(--color-error) 20%, transparent);
   text-decoration: line-through;
 }
 
 .md-mark-focus {
-  background-color: color-mix(in srgb, var(--color-accent-primary, #3b82f6) 32%, transparent);
+  background-color: color-mix(in srgb, var(--color-accent) 32%, transparent);
 }
 
 /* MarkPainter fallback interaction affordances (donor .annotation-highlight):
@@ -674,9 +652,9 @@
   width: min(22rem, calc(100% - 20px));
   max-width: none;
   margin: 0;
-  border: 1px solid color-mix(in srgb, var(--color-border, #2a2a2d) 75%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
   border-radius: 10px;
-  background: var(--color-bg-elevated, var(--color-bg-editor));
+  background: var(--color-bg-elevated);
   color: inherit;
   box-shadow: 0 18px 44px rgb(0 0 0 / 42%);
   display: flex;
@@ -690,14 +668,14 @@
   align-items: center;
   gap: 6px;
   padding: 4px 2px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border, #2a2a2d) 50%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
   flex-wrap: wrap;
 }
 
 .md-sidebar-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-secondary, #bbb);
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -707,14 +685,14 @@
   font-weight: 600;
   padding: 1px 8px;
   border-radius: 999px;
-  background: var(--color-bg-button, #252528);
-  color: var(--color-text-secondary, #bbb);
+  background: var(--color-bg-button);
+  color: var(--color-text-secondary);
   border: none;
   cursor: pointer;
 }
 
 .md-sidebar-count:hover {
-  color: var(--color-text-primary, #e8e8e8);
+  color: var(--color-text-primary);
 }
 
 .md-sidebar-spacer {
@@ -727,20 +705,20 @@
   border-radius: 5px;
   border: none;
   background: transparent;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .md-sidebar-action:hover {
-  background: var(--color-bg-button, #252528);
-  color: var(--color-text-primary, #e8e8e8);
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
 }
 
 .md-sidebar-clear--confirming,
 .md-sidebar-clear--confirming:hover {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.12);
+  color: color-mix(in srgb, var(--color-error) 76%, white);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
 .md-sidebar-list {
@@ -756,7 +734,7 @@
 
 .md-sidebar-empty {
   text-align: center;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-top: 2rem;
   padding: 0 12px;
@@ -773,19 +751,19 @@
   position: relative;
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid var(--color-border, #2a2a2d);
-  background: var(--color-bg-panel, #111113);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
   cursor: pointer;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .md-annotation-card:hover {
-  border-color: var(--color-border-hover, #3a3a3d);
+  border-color: var(--color-border-hover);
 }
 
 .md-annotation-card--selected {
-  border-color: var(--color-accent, #5b8cff);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent, #5b8cff) 40%, transparent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
 .md-annotation-card--orphan {
@@ -810,23 +788,23 @@
 }
 
 .md-card-badge--comment {
-  background: color-mix(in srgb, var(--color-warning, #eab308) 18%, transparent);
-  color: var(--color-warning, #eab308);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
 }
 
 .md-card-badge--deletion {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: color-mix(in srgb, var(--color-error) 15%, transparent);
+  color: color-mix(in srgb, var(--color-error) 76%, white);
 }
 
 .md-card-badge--global {
-  background: color-mix(in srgb, var(--color-accent, #5b8cff) 15%, transparent);
-  color: var(--color-accent, #5b8cff);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
 }
 
 .md-card-orphan-badge {
   font-size: 10px;
-  color: var(--color-warning, #eab308);
+  color: var(--color-warning);
 }
 
 .md-card-delete {
@@ -837,7 +815,7 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s ease;
@@ -849,8 +827,8 @@
 }
 
 .md-card-delete:hover {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.12);
+  color: color-mix(in srgb, var(--color-error) 76%, white);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
 .md-card-delete svg {
@@ -861,8 +839,8 @@
 .md-card-quote {
   font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, 'DejaVu Sans Mono', monospace;
   font-size: 11px;
-  color: var(--color-text-secondary, #bbb);
-  background: var(--color-bg-app, #0d0d0f);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-app);
   border-radius: 6px;
   padding: 6px 8px;
   overflow: hidden;
@@ -873,16 +851,16 @@
 .md-card-orphan-line {
   margin-top: 4px;
   font-size: 11px;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
 .md-card-text {
   margin-top: 6px;
   font-size: 12px;
-  color: var(--color-text-primary, #e8e8e8);
+  color: var(--color-text-primary);
   padding-left: 8px;
-  border-left: 2px solid var(--color-accent, #5b8cff);
+  border-left: 2px solid var(--color-accent);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -890,9 +868,9 @@
 .md-card-answer {
   margin-top: 6px;
   font-size: 12px;
-  color: var(--color-text-secondary, #bbb);
+  color: var(--color-text-secondary);
   padding-left: 8px;
-  border-left: 2px solid var(--color-text-muted, #888);
+  border-left: 2px solid var(--color-text-muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -907,8 +885,8 @@
   gap: 2px;
   padding: 4px;
   border-radius: 8px;
-  background: var(--color-bg-elevated, #1a1a1d);
-  border: 1px solid var(--color-border, #2a2a2d);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   animation: md-toolbar-in 0.15s ease-out;
 }
@@ -938,42 +916,42 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text-secondary, #bbb);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
 .md-toolbar-btn:hover {
-  background: var(--color-bg-button, #252528);
-  color: var(--color-text-primary, #e8e8e8);
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
 }
 
 .md-toolbar-btn--delete {
-  color: #f87171;
+  color: color-mix(in srgb, var(--color-error) 76%, white);
 }
 
 .md-toolbar-btn--delete:hover {
-  background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: color-mix(in srgb, var(--color-error) 76%, white);
 }
 
 .md-toolbar-btn--comment {
-  color: var(--color-warning, #eab308);
+  color: var(--color-warning);
 }
 
 .md-toolbar-btn--comment:hover {
-  background: color-mix(in srgb, var(--color-warning, #eab308) 12%, transparent);
-  color: var(--color-warning, #eab308);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  color: var(--color-warning);
 }
 
 .md-toolbar-btn--zap {
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 
 .md-toolbar-btn--zap:hover,
 .md-toolbar-btn--active {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  color: var(--color-warning);
 }
 
 .md-toolbar-icon {
@@ -990,7 +968,7 @@
   width: 1px;
   height: 18px;
   margin: 0 2px;
-  background: var(--color-border, #2a2a2d);
+  background: var(--color-border);
 }
 
 /* ---- Comment popover (body portal) ---- */
@@ -1001,8 +979,8 @@
   display: flex;
   flex-direction: column;
   border-radius: 12px;
-  background: var(--color-bg-elevated, #1a1a1d);
-  border: 1px solid var(--color-border, #2a2a2d);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   animation: md-popover-in 0.15s ease-out;
 }
@@ -1040,12 +1018,12 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border, #2a2a2d) 50%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
 }
 
 .md-popover-quote {
   font-size: 11px;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1059,13 +1037,13 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .md-popover-close:hover {
-  background: var(--color-bg-button, #252528);
-  color: var(--color-text-primary, #e8e8e8);
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
 }
 
 .md-popover-close svg {
@@ -1081,14 +1059,14 @@
   border: none;
   outline: none;
   background: transparent;
-  color: var(--color-text-primary, #e8e8e8);
+  color: var(--color-text-primary);
   font-size: 13px;
   font-family: inherit;
   line-height: 1.5;
 }
 
 .md-popover-textarea::placeholder {
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
 }
 
 .md-popover-footer {
@@ -1097,20 +1075,20 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 8px 12px;
-  border-top: 1px solid color-mix(in srgb, var(--color-border, #2a2a2d) 50%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
 }
 
 .md-popover-hint {
   font-size: 10px;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted);
 }
 
 .md-popover-submit {
   padding: 5px 12px;
   border: none;
   border-radius: 6px;
-  background: var(--color-accent, #5b8cff);
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-on-brand);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;

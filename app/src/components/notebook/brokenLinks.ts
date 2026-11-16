@@ -136,8 +136,8 @@ export function brokenLinks(options: BrokenLinkOptions): Extension {
   const theme = EditorView.baseTheme({
     // !important outranks `.cm-md-link`: single-class marks tie on specificity.
     '.cm-md-link-broken': {
-      color: 'var(--color-danger, #e5534b) !important',
-      borderBottom: '1px dashed color-mix(in srgb, var(--color-danger, #e5534b) 50%, transparent)',
+      color: 'var(--color-error) !important',
+      borderBottom: '1px dashed color-mix(in srgb, var(--color-error) 50%, transparent)',
     },
     '.cm-md-link-broken::after': {
       content: '" ⚠"',

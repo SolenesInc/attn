@@ -191,12 +191,12 @@
 
 .queue-bar-desktop.is-drop-target {
   border-style: dashed;
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .queue-bar-desktop.is-drop-entering {
-  border-color: var(--accent);
-  background: rgba(255, 107, 53, 0.18);
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 18%, transparent);
 }
 
 .queue-bar-desktop.is-drop-disabled {
@@ -208,7 +208,7 @@
   top: -6px;
   right: -6px;
   background: var(--color-warning);
-  color: #2a1c00;
+  color: color-mix(in srgb, var(--color-warning) 17%, black);
 }
 
 .queue-bar-peek {

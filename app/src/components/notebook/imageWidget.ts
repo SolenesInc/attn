@@ -185,17 +185,17 @@ const imageTheme = EditorView.baseTheme({
     margin: '4px 0',
     padding: '10px 14px',
     borderRadius: '8px',
-    border: '1px dashed var(--color-border, rgba(127,127,127,0.35))',
-    background: 'var(--color-bg-elevated, rgba(127,127,127,0.08))',
+    border: '1px dashed var(--color-border)',
+    background: 'var(--color-bg-elevated)',
     fontFamily: 'var(--font-sans, system-ui), sans-serif',
   },
   '.cm-md-image-broken-label': {
     fontSize: '0.85em',
-    color: 'var(--color-text-secondary, #b8b8b8)',
+    color: 'var(--color-text-secondary)',
   },
   '.cm-md-image-broken-hint': {
     fontSize: '0.72em',
-    color: 'var(--color-text-dimmed, #666)',
+    color: 'var(--color-text-dimmed)',
   },
 });
 

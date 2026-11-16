@@ -27,7 +27,7 @@
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.03),
     0 24px 80px rgba(0, 0, 0, 0.8),
-    0 0 120px rgba(255, 107, 53, 0.04);
+    0 0 120px color-mix(in srgb, var(--color-brand) 4%, transparent);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -105,7 +105,7 @@
 }
 
 .shortcut-editor-search-input:focus {
-  border-color: rgba(255, 107, 53, 0.5);
+  border-color: color-mix(in srgb, var(--color-brand) 50%, transparent);
 }
 
 .shortcut-editor-no-matches {
@@ -133,7 +133,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #ff6b35;
+  color: var(--color-brand);
   margin: 0 0 4px;
 }
 
@@ -172,8 +172,8 @@
   letter-spacing: 0.05em;
   padding: 1px 5px;
   border-radius: 4px;
-  color: #ff6b35;
-  background: rgba(255, 107, 53, 0.1);
+  color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
 }
 
 .shortcut-editor-badge--locked,
@@ -206,7 +206,7 @@
 
 .shortcut-editor-row-error {
   font-size: 11px;
-  color: #ff6b35;
+  color: var(--color-brand);
   max-width: 280px;
   text-align: right;
 }
@@ -245,7 +245,7 @@
 
 .shortcut-editor-icon-btn--on,
 .shortcut-editor-icon-btn--on:hover {
-  color: #ff6b35;
+  color: var(--color-brand);
 }
 
 /* Dock section (reorderable membership list at the top of the editor) */
@@ -337,13 +337,13 @@
 }
 
 .shortcut-editor-btn--primary {
-  border-color: rgba(255, 107, 53, 0.5);
-  background: rgba(255, 107, 53, 0.12);
-  color: #ff6b35;
+  border-color: color-mix(in srgb, var(--color-brand) 50%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
+  color: var(--color-brand);
 }
 
 .shortcut-editor-btn--primary:hover {
-  background: rgba(255, 107, 53, 0.2);
+  background: color-mix(in srgb, var(--color-brand) 20%, transparent);
 }
 
 .shortcut-editor-body::-webkit-scrollbar {

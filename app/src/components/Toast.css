@@ -1,5 +1,4 @@
 .toast {
-  --color-accent: #ff6b35;
   position: fixed;
   inset: auto 18px 18px auto;
   margin: 0;
@@ -40,10 +39,10 @@
 .toast-list--single .toast-row small { display: none; }
 .toast-row--seen { color: var(--color-text-muted); }
 .toast-list--single .toast-row--action button { display: flex; }
-.toast-list--single .toast-row--action small { display: inline; color: var(--color-accent); }
+.toast-list--single .toast-row--action small { display: inline; color: var(--color-brand); }
 .toast-list--single .toast-row--seen small { display: inline; margin-left: 6px; }
-.toast-row--seen small { color: var(--color-success, #3fb950); }
+.toast-row--seen small { color: var(--color-success); }
 .toast-row--new { animation: toast-row-arrival 1.6s ease-out; }
-@keyframes toast-row-arrival { from { background: color-mix(in srgb, var(--color-accent) 16%, transparent); } }
+@keyframes toast-row-arrival { from { background: color-mix(in srgb, var(--color-brand) 16%, transparent); } }
 .toast-footer { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--color-text-muted); }
 .crew-desktop-label { color: var(--color-text-muted); padding: 6px 12px; font-size: 11px; }

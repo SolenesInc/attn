@@ -23,8 +23,8 @@
    theme-invariant, so the armed state reads the same in light and dark. */
 .crew-sun--armed,
 .crew-sun--breaking {
-  --sun-ink: var(--accent);
-  --sun-core: var(--accent);
+  --sun-ink: var(--color-brand);
+  --sun-core: var(--color-brand);
 }
 
 .crew-sun-disc {
@@ -85,7 +85,7 @@
 /* First light: blooms once, past where it lands, then holds. The hold is the
    held breath — a still frame, not a pulse. */
 .crew-sun-glow {
-  fill: var(--accent);
+  fill: var(--color-brand);
   stroke: none;
   filter: blur(2.6px);
   opacity: 0.22;
@@ -166,7 +166,7 @@
 
 .crew-sun-shock {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--color-brand);
   transform-box: fill-box;
   transform-origin: center;
   animation: crew-sun-shock 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -196,7 +196,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--accent);
+  color: var(--color-brand);
   animation: crew-start-confirm-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -219,7 +219,7 @@
 .queue-row.queue-row--crew[data-crew-start='armed'],
 .queue-row.queue-row--crew[data-crew-start='armed'] .session-actions {
   background-color: var(--color-bg-elevated);
-  background-image: linear-gradient(var(--accent-glow), var(--accent-glow));
+  background-image: linear-gradient(color-mix(in srgb, var(--color-brand) 15%, transparent), color-mix(in srgb, var(--color-brand) 15%, transparent));
 }
 
 /* Confirmed: the strip gets out of the light's way. */
@@ -241,9 +241,9 @@
   background: linear-gradient(
     100deg,
     transparent 30%,
-    var(--accent-glow) 42%,
-    rgba(255, 168, 92, 0.32) 50%,
-    var(--accent-glow) 58%,
+    color-mix(in srgb, var(--color-brand) 15%, transparent) 42%,
+    color-mix(in srgb, var(--color-brand) 32%, transparent) 50%,
+    color-mix(in srgb, var(--color-brand) 15%, transparent) 58%,
     transparent 70%
   );
   background-size: 300% 100%;

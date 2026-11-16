@@ -34,12 +34,12 @@
 }
 
 .session-lead[data-state='idle'],
-.session-lead[data-state='recoverable'] { color: #6b7280; }
-.session-lead[data-state='working'] { color: #22c55e; }
-.session-lead[data-state='waiting_input'] { color: #f59e0b; }
-.session-lead[data-state='pending_approval'] { color: #eab308; animation: flash-pending 1s ease-in-out infinite; }
-.session-lead[data-state='scheduled'] { color: #0ea5e9; animation: pulse-scheduled 3.2s ease-in-out infinite; }
-.session-lead[data-state='unknown'] { color: #a855f7; }
+.session-lead[data-state='recoverable'] { color: var(--color-state-idle); }
+.session-lead[data-state='working'] { color: var(--color-state-working); }
+.session-lead[data-state='waiting_input'] { color: var(--color-state-waiting); }
+.session-lead[data-state='pending_approval'] { color: var(--color-state-approval); animation: flash-pending 1s ease-in-out infinite; }
+.session-lead[data-state='scheduled'] { color: var(--color-state-scheduled); animation: pulse-scheduled 3.2s ease-in-out infinite; }
+.session-lead[data-state='unknown'] { color: var(--color-state-unknown); }
 
 .session-lead-emoji { font-size: 13px; line-height: 1; }
 .sidebar--hide-harness-logos .session-lead-emoji { display: none; }

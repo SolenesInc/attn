@@ -56,7 +56,7 @@
 }
 
 .automations-panel__new:hover {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .automations-panel__empty {
@@ -155,7 +155,7 @@
 }
 
 .automations-panel__run-now:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
 }
 
 .automations-panel__run-now:disabled {
@@ -175,7 +175,7 @@
 }
 
 .automations-panel__edit:hover {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
   color: var(--color-text-primary);
 }
 

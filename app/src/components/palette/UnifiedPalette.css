@@ -2,7 +2,7 @@
   position: fixed;
   z-index: 420;
   padding-top: min(12vh, 110px);
-  background: rgba(3, 3, 5, 0.6);
+  background: color-mix(in srgb, var(--color-bg-app) 60%, transparent);
 }
 
 .unified-palette-box {

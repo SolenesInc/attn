@@ -12,7 +12,7 @@
   position: relative;
   overflow: hidden;
   outline: none;
-  background: var(--color-bg-editor);
+  background: var(--color-bg-tile);
   cursor: text;
   caret-color: transparent;
 }
@@ -29,8 +29,8 @@
   gap: 4px;
   padding: 4px 6px;
   border-radius: 6px;
-  border: 1px solid var(--color-border, rgba(127, 127, 127, 0.35));
-  background: var(--color-bg-secondary, rgba(30, 30, 30, 0.95));
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-tile) 95%, transparent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   font: 12px var(--font-ui, sans-serif);
 }
@@ -40,12 +40,12 @@
   border: none;
   outline: none;
   background: transparent;
-  color: var(--color-text-primary, #ddd);
+  color: var(--color-text-primary);
   font: 12px var(--font-mono, monospace);
 }
 
 .ghostty-find-count {
-  color: var(--color-text-secondary, #999);
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   padding: 0 2px;
@@ -54,7 +54,7 @@
 .ghostty-find-button {
   border: none;
   background: transparent;
-  color: var(--color-text-secondary, #999);
+  color: var(--color-text-secondary);
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
@@ -63,13 +63,13 @@
 }
 
 .ghostty-find-button:hover {
-  color: var(--color-text-primary, #ddd);
-  background: rgba(127, 127, 127, 0.2);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-text-tertiary) 20%, transparent);
 }
 
 .ghostty-find-case-active {
-  color: var(--color-text-primary, #ddd);
-  background: rgba(127, 127, 127, 0.3);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-text-tertiary) 30%, transparent);
 }
 
 /* Block-output filter: bar + matching-lines panel, floats like the find bar.
@@ -91,8 +91,8 @@
   gap: 4px;
   padding: 4px 6px;
   border-radius: 6px;
-  border: 1px solid var(--color-border, rgba(127, 127, 127, 0.35));
-  background: var(--color-bg-secondary, rgba(30, 30, 30, 0.95));
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-tile) 95%, transparent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   font: 12px var(--font-ui, sans-serif);
 }
@@ -105,8 +105,8 @@
   max-height: 40vh;
   overflow-y: auto;
   border-radius: 6px;
-  border: 1px solid var(--color-border, rgba(127, 127, 127, 0.35));
-  background: var(--color-bg-secondary, rgba(30, 30, 30, 0.95));
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-tile) 95%, transparent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   padding: 4px;
 }
@@ -118,7 +118,7 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text-primary, #ddd);
+  color: var(--color-text-primary);
   font: 12px var(--font-mono, monospace);
   text-align: left;
   white-space: pre;
@@ -128,18 +128,18 @@
 }
 
 .ghostty-filter-line:hover {
-  background: rgba(127, 127, 127, 0.2);
+  background: color-mix(in srgb, var(--color-text-tertiary) 20%, transparent);
 }
 
 .ghostty-filter-match {
-  background: rgba(245, 197, 66, 0.45);
+  background: color-mix(in srgb, var(--color-find) 45%, transparent);
   color: inherit;
   border-radius: 2px;
 }
 
 .ghostty-filter-empty {
   padding: 6px 8px;
-  color: var(--color-text-secondary, #999);
+  color: var(--color-text-secondary);
   font: 12px var(--font-ui, sans-serif);
 }
 
@@ -164,8 +164,8 @@
   box-sizing: border-box;
   overflow: visible;
   border-radius: 2px;
-  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%);
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 72%, transparent);
+  background: linear-gradient(to top, color-mix(in srgb, var(--color-brand) 10%, transparent), transparent 62%);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--color-brand) 72%, transparent);
   transition: background 90ms ease, box-shadow 90ms ease;
 }
 
@@ -180,15 +180,15 @@
 .ghostty-terminal-seed-mark::before {
   inset: -4px -7px;
   background:
-    linear-gradient(var(--accent), var(--accent)) left top / 6px 1px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) left top / 1px 5px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) right top / 6px 1px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) right top / 1px 5px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) left bottom / 6px 1px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) left bottom / 1px 5px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) right bottom / 6px 1px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) right bottom / 1px 5px no-repeat;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 72%, transparent));
+    linear-gradient(var(--color-brand), var(--color-brand)) left top / 6px 1px no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) left top / 1px 5px no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) right top / 6px 1px no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) right top / 1px 5px no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) left bottom / 6px 1px no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) left bottom / 1px 5px no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) right bottom / 6px 1px no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) right bottom / 1px 5px no-repeat;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--color-brand) 72%, transparent));
 }
 
 .ghostty-terminal-seed-mark::after {
@@ -196,13 +196,13 @@
   bottom: 2px;
   left: 0;
   width: 38%;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 34%, white), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-brand) 34%, white), transparent);
   mix-blend-mode: screen;
 }
 
 .ghostty-terminal-seed-mark.is-previewing {
-  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--accent) 3%, transparent));
-  box-shadow: inset 0 -2px 0 var(--accent);
+  background: linear-gradient(to top, color-mix(in srgb, var(--color-brand) 18%, transparent), color-mix(in srgb, var(--color-brand) 3%, transparent));
+  box-shadow: inset 0 -2px 0 var(--color-brand);
 }
 
 .ghostty-terminal-seed-mark.is-previewing::before {
@@ -256,6 +256,6 @@
 
 .ghostty-terminal-error {
   padding: 12px;
-  color: var(--color-fg-error, #f48771);
+  color: color-mix(in srgb, var(--color-brand) 70%, var(--color-text-primary));
   font: 12px var(--font-mono, monospace);
 }

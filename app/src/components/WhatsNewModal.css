@@ -27,7 +27,7 @@
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.03),
     0 24px 80px rgba(0, 0, 0, 0.8),
-    0 0 140px rgba(255, 107, 53, 0.06);
+    0 0 140px color-mix(in srgb, var(--color-brand) 6%, transparent);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -60,7 +60,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .whats-new-count {
@@ -193,7 +193,7 @@
 
 .whats-new-dot.is-current {
   width: 18px;
-  background: var(--accent);
+  background: var(--color-brand);
   opacity: 1;
 }
 
@@ -219,16 +219,16 @@
 }
 
 .whats-new-primary {
-  background: linear-gradient(180deg, #ff7a47 0%, #ff5722 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-brand) 91%, white) 0%, var(--color-brand) 100%);
   border: none;
-  color: #fff;
+  color: var(--color-on-brand);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   padding: 8px 18px;
   border-radius: 8px;
   box-shadow:
-    0 2px 8px rgba(255, 107, 53, 0.35),
+    0 2px 8px color-mix(in srgb, var(--color-brand) 35%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transition: transform 100ms ease-out, box-shadow 120ms ease-out;
 }
@@ -236,7 +236,7 @@
 .whats-new-primary:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 4px 12px rgba(255, 107, 53, 0.45),
+    0 4px 12px color-mix(in srgb, var(--color-brand) 45%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 

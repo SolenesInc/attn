@@ -42,7 +42,7 @@
 }
 
 .seed-authorization__text {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--color-brand);
   color: var(--color-text-primary);
   font-size: var(--font-size-md);
   margin: 0 2px;

@@ -47,7 +47,7 @@
 }
 
 .mp-eyebrow {
-  color: var(--accent);
+  color: var(--color-brand);
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   letter-spacing: 1.8px;
@@ -75,9 +75,9 @@
 }
 
 .mp-button.primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #1b100a;
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: color-mix(in srgb, var(--color-brand) 12%, black);
   font-weight: 650;
 }
 
@@ -91,8 +91,8 @@
 }
 
 .mp-button.chosen {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
 }
 
 .mp-shell button:focus-visible,
@@ -100,7 +100,7 @@
 .mp-dialog button:focus-visible,
 .mp-dialog select:focus-visible,
 .mp-dialog input:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 
@@ -130,7 +130,7 @@
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  background: var(--accent);
+  background: var(--color-brand);
 }
 
 .mp-steps {
@@ -151,7 +151,7 @@
 
 .mp-steps i {
   margin-right: 5px;
-  color: var(--accent);
+  color: var(--color-brand);
   font-size: var(--font-size-sm);
   font-style: normal;
 }
@@ -203,7 +203,7 @@
 
 .mp-change-icon {
   width: 30px;
-  color: var(--accent);
+  color: var(--color-brand);
   font-size: calc(26px * var(--ui-scale));
   line-height: 1.2;
   text-align: center;
@@ -253,9 +253,9 @@
 .mp-explainer-trigger {
   padding: 0;
   border: 0;
-  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-brand) 70%, transparent);
   background: none;
-  color: var(--accent);
+  color: var(--color-brand);
   font: inherit;
   font-size: calc(18px * var(--ui-scale));
   cursor: help;
@@ -304,8 +304,8 @@
 }
 
 .mp-explainer-art .focus {
-  fill: color-mix(in srgb, var(--accent) 10%, transparent);
-  stroke: var(--accent);
+  fill: color-mix(in srgb, var(--color-brand) 10%, transparent);
+  stroke: var(--color-brand);
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
 }
@@ -344,11 +344,11 @@
 }
 
 .mp-explainer-art .marker {
-  fill: var(--accent);
+  fill: var(--color-brand);
 }
 
 .mp-explainer-art .marker-text {
-  fill: #1b100a;
+  fill: color-mix(in srgb, var(--color-brand) 12%, black);
   font-size: 12px;
   font-weight: 700;
   text-anchor: middle;
@@ -372,8 +372,8 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--accent);
-  color: #1b100a;
+  background: var(--color-brand);
+  color: color-mix(in srgb, var(--color-brand) 12%, black);
   font-size: var(--font-size-sm);
   line-height: 20px;
   text-align: center;
@@ -510,8 +510,8 @@
 }
 
 .mp-source.selected {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand) 55%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
 }
 
 .mp-source.confirmed {
@@ -530,7 +530,7 @@
 }
 
 .mp-source:hover .mp-grip {
-  color: var(--accent);
+  color: var(--color-brand);
 }
 
 .mp-source-main {
@@ -715,7 +715,7 @@
 }
 
 .mp-desktop:hover {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--color-border-hover));
+  border-color: color-mix(in srgb, var(--color-brand) 50%, var(--color-border-hover));
 }
 
 .mp-desktop.empty {
@@ -732,13 +732,13 @@
 }
 
 .mp-desktop.targeted {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 1px var(--color-brand);
 }
 
 .mp-desktop.dragover {
-  border: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 2px solid var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
 }
 
 .mp-deskhead {
@@ -756,8 +756,8 @@
 }
 
 .mp-desknumber kbd {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
+  border-color: color-mix(in srgb, var(--color-brand) 45%, transparent);
+  color: var(--color-brand);
 }
 
 .mp-extra-mark {
@@ -795,7 +795,7 @@
 
 .mp-plus {
   margin-right: 7px;
-  color: var(--accent);
+  color: var(--color-brand);
   font-size: calc(22px * var(--ui-scale));
   font-weight: 300;
 }
@@ -819,7 +819,7 @@
 
 .mp-group.selected,
 .mp-group.highlight {
-  border-color: var(--accent);
+  border-color: var(--color-brand);
   border-style: solid;
 }
 
@@ -933,7 +933,7 @@
   z-index: 32;
   max-width: 240px;
   padding: 7px 10px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--color-brand);
   border-radius: 5px;
   background: var(--color-bg-elevated);
   font-size: var(--font-size-sm);
@@ -943,9 +943,9 @@
 .mp-drop-preview {
   position: fixed;
   z-index: 30;
-  border: 2px solid var(--accent);
+  border: 2px solid var(--color-brand);
   border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 24%, transparent);
   pointer-events: none;
 }
 
@@ -955,8 +955,8 @@
   max-width: calc(100vw - 16px);
   padding: 5px 8px;
   border-radius: 4px;
-  background: var(--accent);
-  color: #1b100a;
+  background: var(--color-brand);
+  color: color-mix(in srgb, var(--color-brand) 12%, black);
   font-size: var(--font-size-sm);
   font-weight: 600;
   pointer-events: none;
@@ -1056,7 +1056,7 @@
 .mp-join-ratio input {
   flex: 1;
   min-width: 0;
-  accent-color: var(--accent);
+  accent-color: var(--color-brand);
 }
 
 .mp-join-hint {
@@ -1123,7 +1123,7 @@
 }
 
 .mp-done h1 em {
-  color: var(--accent);
+  color: var(--color-brand);
   font-style: normal;
 }
 
@@ -1145,8 +1145,8 @@
 
 .mp-shell .pulse {
   position: relative;
-  border-color: var(--accent);
-  color: color-mix(in srgb, var(--accent) 35%, white);
+  border-color: var(--color-brand);
+  color: color-mix(in srgb, var(--color-brand) 35%, white);
 }
 
 .mp-shell .pulse::after {
@@ -1154,7 +1154,7 @@
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-brand) 60%, transparent);
   pointer-events: none;
   animation: mp-pulse 1.6s ease-out infinite;
 }
@@ -1162,7 +1162,7 @@
 @media (prefers-reduced-motion: reduce) {
   .mp-shell .pulse::after {
     animation: none;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand) 60%, transparent);
   }
 }
 

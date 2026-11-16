@@ -1,16 +1,8 @@
-/* Auto-settle countdown for pane headers and sidebar rows. Literal colors keep
-   the indicator consistent in packaged apps with different theme tokens. */
+/* Auto-settle countdown for pane headers and sidebar rows. */
 
-/* The palette is declared on every root this file styles, not just the chip.
-   The header's track is a *sibling* of the chip button, not a descendant, so a
-   custom property set only on `.settling-header` would not reach it — and an
-   undefined var() is a silent no-op, which renders the bar fully transparent
-   rather than failing loudly. */
 .settling-header,
 .settling-header-track,
 .settling-sidebar-bar {
-  --settling-accent: 167, 139, 250; /* violet */
-  --settling-accent-solid: #a78bfa;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -24,9 +16,9 @@
   flex: none;
   margin: 0;
   padding: 2px 9px;
-  border: 1px solid rgba(var(--settling-accent), 0.55);
+  border: 1px solid color-mix(in srgb, var(--color-settle) 55%, transparent);
   border-radius: 5px;
-  background: rgba(var(--settling-accent), 0.16);
+  background: color-mix(in srgb, var(--color-settle) 16%, transparent);
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: 600;
@@ -34,15 +26,15 @@
   text-transform: uppercase;
   line-height: 1;
   white-space: nowrap;
-  color: #e2d9fd;
+  color: var(--color-settle-ink);
   cursor: pointer;
   pointer-events: auto;
   transition: background 120ms ease, border-color 120ms ease;
 }
 
 .settling-header:hover {
-  background: rgba(var(--settling-accent), 0.28);
-  border-color: rgba(var(--settling-accent), 0.9);
+  background: color-mix(in srgb, var(--color-settle) 28%, transparent);
+  border-color: color-mix(in srgb, var(--color-settle) 90%, transparent);
 }
 
 .settling-header:active {
@@ -58,8 +50,8 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--settling-accent-solid);
-  box-shadow: 0 0 8px 1px rgba(var(--settling-accent), 0.85);
+  background: var(--color-settle);
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--color-settle) 85%, transparent);
   animation: settling-dot-pulse 1.2s ease-in-out infinite;
 }
 
@@ -71,7 +63,7 @@
   bottom: 0;
   height: 2px;
   overflow: hidden;
-  background: rgba(var(--settling-accent), 0.16);
+  background: color-mix(in srgb, var(--color-settle) 16%, transparent);
   pointer-events: none;
 }
 
@@ -79,8 +71,8 @@
   display: block;
   height: 100%;
   width: 100%;
-  background: var(--settling-accent-solid);
-  box-shadow: 0 0 9px 1px rgba(var(--settling-accent), 0.75);
+  background: var(--color-settle);
+  box-shadow: 0 0 9px 1px color-mix(in srgb, var(--color-settle) 75%, transparent);
 }
 
 /* ---- Sidebar row: a thin bar pinned to the bottom edge of .session-item ---- */
@@ -94,15 +86,15 @@
   border-radius: 0 0 6px 6px;
   overflow: hidden;
   pointer-events: none;
-  background: rgba(var(--settling-accent), 0.18);
+  background: color-mix(in srgb, var(--color-settle) 18%, transparent);
 }
 
 .settling-sidebar-bar-fill {
   display: block;
   height: 100%;
   width: 100%;
-  background: var(--settling-accent-solid);
-  box-shadow: 0 0 9px 1px rgba(var(--settling-accent), 0.7);
+  background: var(--color-settle);
+  box-shadow: 0 0 9px 1px color-mix(in srgb, var(--color-settle) 70%, transparent);
 }
 
 /* ---- Held: the user is interacting, so the countdown is frozen ----
@@ -113,9 +105,9 @@
    only thing on the chip that says a clock is going. */
 
 .settling-header--held {
-  background: rgba(var(--settling-accent), 0.1);
-  border-color: rgba(var(--settling-accent), 0.35);
-  color: #c8bcf0;
+  background: color-mix(in srgb, var(--color-settle) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-settle) 35%, transparent);
+  color: var(--color-settle-ink-quiet);
 }
 
 .settling-header--held .settling-dot {
@@ -136,15 +128,15 @@
    than a held one: held is a clock waiting to resume, this is a decision. */
 
 .settling-header--kept {
-  background: rgba(var(--settling-accent), 0.09);
-  border-color: rgba(var(--settling-accent), 0.4);
+  background: color-mix(in srgb, var(--color-settle) 9%, transparent);
+  border-color: color-mix(in srgb, var(--color-settle) 40%, transparent);
   border-style: dashed;
-  color: #c8bcf0;
+  color: var(--color-settle-ink-quiet);
 }
 
 .settling-header--kept:hover {
-  background: rgba(var(--settling-accent), 0.2);
-  border-color: rgba(var(--settling-accent), 0.7);
+  background: color-mix(in srgb, var(--color-settle) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-settle) 70%, transparent);
 }
 
 .settling-kept-mark {
@@ -152,7 +144,7 @@
   width: 6px;
   height: 6px;
   border-radius: 1px;
-  background: var(--settling-accent-solid);
+  background: var(--color-settle);
   opacity: 0.7;
 }
 

@@ -111,7 +111,7 @@
 }
 
 .seed-document__children button:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: -1px;
 }
 
@@ -128,7 +128,7 @@
 }
 
 .seed-document__children .is-growing .seed-document__child-state {
-  background: var(--accent);
+  background: var(--color-brand);
 }
 
 .seed-document__children .is-harvested .seed-document__child-state {
@@ -199,7 +199,7 @@
   width: 6px;
 }
 
-.seed-document__state.is-growing > span { background: var(--accent); }
+.seed-document__state.is-growing > span { background: var(--color-brand); }
 .seed-document__state.is-parked > span { background: var(--color-warning); }
 .seed-document__state.is-withered > span { background: var(--color-error); }
 .seed-document__state.is-harvested > span { background: var(--color-text-tertiary); }
@@ -256,7 +256,7 @@
 }
 
 .seed-document__ledger summary:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--color-brand);
   outline-offset: -1px;
 }
 
@@ -277,7 +277,7 @@
 }
 
 .seed-document__notes > li.is-handoff {
-  border-left-color: var(--accent);
+  border-left-color: var(--color-brand);
 }
 
 .seed-document__note-head {

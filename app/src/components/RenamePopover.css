@@ -15,21 +15,21 @@
   padding: 6px 8px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: var(--color-bg-input, rgba(255, 255, 255, 0.04));
+  background: var(--color-bg-input);
   color: var(--color-text-primary);
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-sm);
   line-height: 1.4;
   outline: none;
 }
 
 .rename-popover-input:focus {
-  border-color: var(--color-accent, #5b8cff);
+  border-color: var(--color-accent);
 }
 
 .rename-popover-error {
   margin-top: 6px;
-  color: var(--color-danger, #ff6b6b);
+  color: color-mix(in srgb, var(--color-error) 79%, white);
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
 }
@@ -58,14 +58,14 @@
 }
 
 .rename-popover-btn.save {
-  border-color: var(--color-accent, #5b8cff);
-  background: var(--color-accent, #5b8cff);
-  color: #fff;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-brand);
 }
 
 .rename-popover-btn.save:hover:not(:disabled) {
   filter: brightness(1.08);
-  color: #fff;
+  color: var(--color-on-brand);
 }
 
 .rename-popover-btn:disabled {

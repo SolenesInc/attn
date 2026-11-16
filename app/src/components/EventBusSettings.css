@@ -27,11 +27,11 @@
   padding: 8px 10px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 6px;
-  background: color-mix(in srgb, #ff9f7a 8%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
 }
 
 .bus-health-entry.error {
-  background: color-mix(in srgb, #ff6b6b 10%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .bus-health-message {
@@ -122,7 +122,7 @@
 }
 
 .bus-row.surging {
-  background: color-mix(in srgb, #ff9f7a 7%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 7%, transparent);
 }
 
 .bus-row.disabled .bus-name,

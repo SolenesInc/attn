@@ -7,7 +7,7 @@
 }
 
 a.harvest-when:hover {
-  color: var(--accent);
+  color: var(--color-brand);
   text-decoration: underline;
 }
 

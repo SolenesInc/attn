@@ -19,12 +19,12 @@
   border: 1px solid var(--color-border);
   /* The seam back to the row it came from, in place of the border the other
      three sides wear. */
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--color-brand);
   border-radius: 0 8px 8px 0;
   background-color: var(--color-bg-elevated);
   background-image:
     /* Brand tint bleeding out of the rail. */
-    linear-gradient(90deg, rgba(255, 107, 53, 0.13), rgba(255, 107, 53, 0) 84px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-brand) 13%, transparent), color-mix(in srgb, var(--color-brand) 0%, transparent) 84px),
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
   box-shadow:
     0 20px 44px rgba(0, 0, 0, 0.46),
