@@ -69,6 +69,17 @@ type Client struct {
 
 	selfLimiter *rate.Limiter
 	stopPacing  context.Context
+
+	responsesMu sync.Mutex
+	responses   map[string]*cachedResponse
+}
+
+const cachedResponseUnusedFor = time.Hour
+
+type cachedResponse struct {
+	etag     string
+	body     []byte
+	lastUsed time.Time
 }
 
 func newClientWithToken(stopPacing context.Context, logf func(format string, args ...any), host, baseURL, token string) (*Client, error) {
@@ -91,6 +102,7 @@ func newClientWithToken(stopPacing context.Context, logf func(format string, arg
 		logf:        logf,
 		selfLimiter: rate.NewLimiter(rate.Limit(1), 60),
 		stopPacing:  stopPacing,
+		responses:   make(map[string]*cachedResponse),
 	}, nil
 }
 
@@ -107,8 +119,47 @@ func (c *Client) doRequestContext(ctx context.Context, method, path string, body
 }
 
 func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Client, method, path string, body interface{}) ([]byte, error) {
-	if err := c.awaitBudget(ctx); err != nil {
+	respBody, _, err := c.send(ctx, httpClient, method, path, body, nil)
+	return respBody, err
+}
+
+func (c *Client) conditionalGet(ctx context.Context, path string) ([]byte, error) {
+	c.responsesMu.Lock()
+	cached := c.responses[path]
+	c.responsesMu.Unlock()
+
+	header := http.Header{}
+	if cached != nil {
+		header.Set("If-None-Match", cached.etag)
+	}
+	body, resp, err := c.send(ctx, c.httpClient, "GET", path, nil, header)
+	if err != nil {
 		return nil, err
+	}
+
+	now := time.Now()
+	c.responsesMu.Lock()
+	defer c.responsesMu.Unlock()
+	switch etag := resp.Header.Get("ETag"); {
+	case resp.StatusCode == http.StatusNotModified:
+		body = cached.body
+		c.responses[path] = &cachedResponse{etag: cached.etag, body: cached.body, lastUsed: now}
+	case etag != "":
+		c.responses[path] = &cachedResponse{etag: etag, body: body, lastUsed: now}
+	default:
+		delete(c.responses, path)
+	}
+	for kept, entry := range c.responses {
+		if now.Sub(entry.lastUsed) > cachedResponseUnusedFor {
+			delete(c.responses, kept)
+		}
+	}
+	return body, nil
+}
+
+func (c *Client) send(ctx context.Context, httpClient *http.Client, method, path string, body interface{}, header http.Header) ([]byte, *http.Response, error) {
+	if err := c.awaitBudget(ctx); err != nil {
+		return nil, nil, err
 	}
 
 	requestURL := path
@@ -121,14 +172,14 @@ func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Clien
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("marshal body: %w", err)
+			return nil, nil, fmt.Errorf("marshal body: %w", err)
 		}
 		bodyReader = bytes.NewReader(jsonBody)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, requestURL, bodyReader)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
@@ -137,13 +188,16 @@ func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Clien
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	for name, values := range header {
+		req.Header[name] = values
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		if cause := context.Cause(ctx); cause != nil {
-			return nil, cause
+			return nil, nil, cause
 		}
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -151,20 +205,20 @@ func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Clien
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode == 403 || resp.StatusCode == 429 {
 		if remaining := resp.Header.Get("X-RateLimit-Remaining"); remaining == "0" {
-			return nil, fmt.Errorf("%w: %s", ErrRateLimited, string(respBody))
+			return nil, nil, fmt.Errorf("%w: %s", ErrRateLimited, string(respBody))
 		}
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(respBody)}
+		return nil, nil, &APIError{StatusCode: resp.StatusCode, Body: string(respBody)}
 	}
 
-	return respBody, nil
+	return respBody, resp, nil
 }
 
 func (c *Client) awaitBudget(ctx context.Context) error {
@@ -492,7 +546,7 @@ type PullRequestSnapshot struct {
 }
 
 func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequestSnapshot, error) {
-	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
+	body, err := c.conditionalGet(context.Background(), fmt.Sprintf("/repos/%s/pulls/%d", repo, number))
 	if apiErr := (*APIError)(nil); errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("fetch pull request snapshot: %w: %w", ErrNotFound, err)
 	}
@@ -539,22 +593,6 @@ func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequest
 	}, nil
 }
 
-func (c *Client) FetchPRState(ctx context.Context, repo string, number int) (state string, merged bool, title string, err error) {
-	body, err := c.doRequestContext(ctx, "GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
-	if err != nil {
-		return "", false, "", fmt.Errorf("fetch PR state: %w", err)
-	}
-	var prData struct {
-		State  string `json:"state"`
-		Merged bool   `json:"merged"`
-		Title  string `json:"title"`
-	}
-	if err := json.Unmarshal(body, &prData); err != nil {
-		return "", false, "", fmt.Errorf("parse PR state: %w", err)
-	}
-	return prData.State, prData.Merged, prData.Title, nil
-}
-
 func (c *Client) RepoVisibility(repo string) (string, error) {
 	body, err := c.doRequest("GET", "/repos/"+repo, nil)
 	if err != nil {
@@ -574,7 +612,7 @@ func (c *Client) RepoVisibility(repo string) (string, error) {
 
 func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 	prPath := fmt.Sprintf("/repos/%s/pulls/%d", repo, number)
-	prBody, err := c.doRequest("GET", prPath, nil)
+	prBody, err := c.conditionalGet(context.Background(), prPath)
 	if err != nil {
 		return nil, fmt.Errorf("fetch PR: %w", err)
 	}
@@ -621,7 +659,7 @@ func CIStatusFromMergeableState(mergeableState string) string {
 }
 
 func (c *Client) FetchPullRequestReviewStatus(repo string, number int) (string, error) {
-	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number), nil)
+	body, err := c.conditionalGet(context.Background(), fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number))
 	if err != nil {
 		return "", fmt.Errorf("fetch PR reviews: %w", err)
 	}

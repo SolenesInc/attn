@@ -1,6 +1,7 @@
 package mockserver
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,12 +17,13 @@ type RequestLog struct {
 	Method string
 	Path   string
 	Body   map[string]interface{}
+	Status int
 }
 
 type Server struct {
 	*httptest.Server
 	mu       sync.Mutex
-	requests []RequestLog
+	requests []*RequestLog
 	PRs      []MockPR
 	holds    map[string]*reviewsHold
 
@@ -48,11 +50,13 @@ type MockPR struct {
 	HeadSHA           string
 	DetailsHTTPStatus int
 	ReviewState       string
+	State             string
+	Merged            bool
 }
 
 func New() *Server {
 	s := &Server{
-		requests: []RequestLog{},
+		requests: []*RequestLog{},
 		PRs:      []MockPR{},
 		holds:    map[string]*reviewsHold{},
 	}
@@ -63,17 +67,43 @@ func New() *Server {
 	return s
 }
 
-func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
 
+func (r *statusRecorder) WriteHeader(status int) {
+	if r.status == 0 {
+		r.status = status
+	}
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
+	recorder := &statusRecorder{ResponseWriter: w}
+	s.mu.Lock()
 	var body map[string]interface{}
 	json.NewDecoder(r.Body).Decode(&body)
+	logged := &RequestLog{Method: r.Method, Path: r.URL.Path, Body: body}
+	s.requests = append(s.requests, logged)
+	s.mu.Unlock()
 
-	s.requests = append(s.requests, RequestLog{
-		Method: r.Method,
-		Path:   r.URL.Path,
-		Body:   body,
-	})
+	s.respond(recorder, r)
+
+	s.mu.Lock()
+	logged.Status = recorder.status
+	s.mu.Unlock()
+}
+
+func (s *Server) respond(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
 	rateLimitedUntil := s.rateLimitedUntil
 	if !s.windowResetAt.IsZero() {
 		resource := "core"
@@ -125,10 +155,18 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"message": http.StatusText(pr.DetailsHTTPStatus)})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		repo := map[string]string{"full_name": m[1]}
+		writeConditionally(w, r, map[string]interface{}{
+			"number":          pr.Number,
+			"html_url":        fmt.Sprintf("https://github.com/%s/pull/%d", m[1], pr.Number),
+			"title":           pr.Title,
+			"state":           pr.State,
+			"merged":          pr.Merged,
 			"mergeable":       true,
 			"mergeable_state": pr.MergeableState,
-			"head":            map[string]string{"sha": pr.HeadSHA, "ref": "feature"},
+			"user":            map[string]string{"login": "octocat"},
+			"head":            map[string]interface{}{"sha": pr.HeadSHA, "ref": "feature", "repo": repo},
+			"base":            map[string]interface{}{"sha": "base123", "ref": "main", "repo": repo},
 		})
 		return
 	}
@@ -148,12 +186,27 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		if state := s.detailsOf(m[1], m[2]).ReviewState; state != "" {
 			reviews = append(reviews, map[string]interface{}{"state": state})
 		}
-		json.NewEncoder(w).Encode(reviews)
+		writeConditionally(w, r, reviews)
 		return
 	}
 
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Not Found"})
+}
+
+func writeConditionally(w http.ResponseWriter, r *http.Request, value interface{}) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	etag := fmt.Sprintf(`"%x"`, sha256.Sum256(body))
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Write(body)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -186,11 +239,17 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) detailsOf(repo, number string) MockPR {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	details := MockPR{MergeableState: "clean", HeadSHA: "abc123"}
+	details := MockPR{MergeableState: "clean", HeadSHA: "abc123", State: "open"}
+	details.Number, _ = strconv.Atoi(number)
 	for _, pr := range s.PRs {
 		if pr.Repo != repo || strconv.Itoa(pr.Number) != number {
 			continue
 		}
+		details.Title = pr.Title
+		if pr.State != "" {
+			details.State = pr.State
+		}
+		details.Merged = pr.Merged
 		if pr.MergeableState != "" {
 			details.MergeableState = pr.MergeableState
 		}
@@ -250,16 +309,40 @@ func (s *Server) AddPR(pr MockPR) {
 	s.PRs = append(s.PRs, pr)
 }
 
+func (s *Server) Merge(repo string, number int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.PRs {
+		if s.PRs[i].Repo == repo && s.PRs[i].Number == number {
+			s.PRs[i].State, s.PRs[i].Merged = "closed", true
+		}
+	}
+}
+
+func (s *Server) SetMergeableState(repo string, number int, state string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.PRs {
+		if s.PRs[i].Repo == repo && s.PRs[i].Number == number {
+			s.PRs[i].MergeableState = state
+		}
+	}
+}
+
 func (s *Server) Requests() []RequestLog {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]RequestLog{}, s.requests...)
+	requests := make([]RequestLog, len(s.requests))
+	for i, request := range s.requests {
+		requests[i] = *request
+	}
+	return requests
 }
 
 func (s *Server) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.requests = []RequestLog{}
+	s.requests = []*RequestLog{}
 	s.PRs = []MockPR{}
 }
 
