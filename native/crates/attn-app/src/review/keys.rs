@@ -331,11 +331,11 @@ const ALL_KEYS: &[(&str, &str)] = &[
     ),
     (
         "c",
-        "Write a note on the line or the selected lines. It waits for the send.",
+        "Write a note on the line, the selected lines or the paragraph. It waits for the send.",
     ),
     (
         "a",
-        "Ask the agent about the line or the selected lines. The question goes at once; the answer shows under the line.",
+        "Ask the agent about the line, the selected lines or the paragraph. The question goes at once; the answer shows under the line.",
     ),
     (
         "i",

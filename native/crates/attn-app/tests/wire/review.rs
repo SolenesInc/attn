@@ -6665,3 +6665,100 @@ fn a_markdown_stops_local_image_shows_from_beside_its_file() {
         .collect();
     assert_eq!(pictures, ["chart"], "{}", world.screen());
 }
+
+/// The words of the place the document's cursor stands on.
+fn cursor_words(world: &World) -> Vec<String> {
+    let key = cursor(world).key.unwrap();
+    world
+        .screen()
+        .descendants(Target::key(key))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+fn painted(world: &World, words: &str) -> bool {
+    world
+        .screen()
+        .find(Target::role("button").name(words))
+        .is_some()
+}
+
+#[test]
+fn keeps_a_note_written_on_the_steps_prose_in_the_map_on_that_prose_in_the_brief() {
+    let mut world = start_with_session(Some("s-a"));
+    let (kept, _, _) = keep_drafts(&world);
+    deliver(&mut world, STORY, Some(story()));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    const STEP: &str = "The helper is new, and only Add calls it.";
+    press(&mut world, Key::Right);
+    for _ in 0..6 {
+        if cursor_words(&world).iter().any(|w| w == STEP) {
+            break;
+        }
+        press(&mut world, Key::Up);
+    }
+    assert!(cursor_words(&world).iter().any(|w| w == STEP));
+
+    type_key(&mut world, "c");
+    write(&mut world, "Why only Add?");
+    let marks = kept.lock().unwrap().clone();
+    assert_eq!(
+        (
+            marks[0]["type"].clone(),
+            marks[0]["text"].clone(),
+            marks[0]["anchor"]["exact"].clone()
+        ),
+        (json!("comment"), json!("Why only Add?"), json!(STEP))
+    );
+    assert!(painted(&world, STEP), "{}", world.screen());
+
+    type_key(&mut world, "1");
+    assert!(painted(&world, STEP));
+    assert!(!painted(&world, "Add names the sum before it returns it."));
+}
+
+#[test]
+fn keeps_an_answer_that_arrives_while_the_reader_still_holds_an_unsaved_copy_of_its_question() {
+    let (mut world, kept, sends, generation) = open_marking_counted(presented());
+    press(&mut world, Key::Down);
+    type_key(&mut world, "a");
+    write(&mut world, "Why name it?");
+    let id = kept.lock().unwrap()[0]["id"].clone();
+    assert_eq!(sends.lock().unwrap()[0]["only_ids"], json!([id]));
+    let question = kept.lock().unwrap()[0].clone();
+    assert_eq!(question["type"], "question");
+    assert!(
+        question["anchor"]["block_id"]
+            .as_str()
+            .is_some_and(|b| !b.is_empty()),
+        "{question}"
+    );
+
+    kept.lock().unwrap()[0]["answer"] = json!("So the return reads as a value.");
+    world.daemon.emit(DesktopTileContentMessage {
+        desktop_id: DESKTOP.into(),
+        tile_id: "m".into(),
+        tile_kind: "markdown".into(),
+        path: DOC.into(),
+        content: DOCUMENT.replace("head: 9f3a7e2", "head: 1c2d3e4"),
+        review: Some(presented()),
+        annotations_generation: Some(
+            generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst) as i64 + 1,
+        ),
+        ..DesktopTileContentMessage::new()
+    });
+    world.settle();
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    click(&mut world, Target::key("tile.m.document.notes"));
+    assert_eq!(
+        kept.lock().unwrap()[0]["answer"],
+        json!("So the return reads as a value.")
+    );
+    let screen = format!("{}", world.screen());
+    assert!(
+        screen.contains("So the return reads as a value."),
+        "{screen}"
+    );
+}

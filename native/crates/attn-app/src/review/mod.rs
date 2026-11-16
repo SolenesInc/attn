@@ -2110,6 +2110,12 @@ fn mark_target(
     cursor: Option<usize>,
 ) -> Option<attn_protocol::MarkdownAnnotationAnchor> {
     let review = state.readings.reviews.tiles.get(tile)?;
+    if let Some(Part::Prose { source, .. }) = cursor
+        .filter(|_| review.files.is_empty() && reading.frame != Frame::Walkthrough)
+        .map(|at| &reading.parts[reading.places[at].part])
+    {
+        return prose_anchor(state, tile, reading.source, source.start);
+    }
     let doc_line = |path: &str, head: Option<i64>| {
         let stops: Vec<_> = bundle.stops.iter().filter(|s| s.path == path).collect();
         stops
@@ -2138,6 +2144,25 @@ fn mark_target(
     let rows = reading.rows_of(stop);
     let s = &bundle.stops[stop];
     marks::anchor(&s.path, &rows[from..=to], &rows[to + 1..], s.heading_line)
+}
+
+/// The anchor of the whole prose block that starts at byte `start` of the document `source`
+/// shown in tile `tile`, as a selection of all its text makes it.
+fn prose_anchor(
+    state: &State,
+    tile: &str,
+    source: &str,
+    start: usize,
+) -> Option<attn_protocol::MarkdownAnnotationAnchor> {
+    let (uri, _) = crate::markdown::sending::destination_of(state, tile)?;
+    let passages = state.drafts.get(&uri)?.passages.as_ref()?.1.clone();
+    let line = source[..start].matches('\n').count() as i64 + 1;
+    let blocks = &passages.blocks;
+    let block = blocks
+        .blocks
+        .iter()
+        .position(|b| b.parent.is_none() && b.start_line == line)?;
+    blocks.anchor(block, 0, blocks.blocks[block].text.len())
 }
 
 /// Where each of `draft`'s file marks shows: under a line of its file, or moved; a mark no

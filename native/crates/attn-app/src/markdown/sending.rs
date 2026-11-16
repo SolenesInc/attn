@@ -776,11 +776,16 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
         mark.id.clone(),
         mark.id.clone(),
     );
-    col()
+    let answer = mark.answer.clone().filter(|a| !a.is_empty());
+    let card = col()
         .key(key(tile, &format!("notes.card.{}", mark.id)))
         .role("button")
-        .label(quote.clone().unwrap_or_else(|| badge.clone()))
-        .checked(selected)
+        .label(quote.clone().unwrap_or_else(|| badge.clone()));
+    let card = match &answer {
+        Some(a) => card.description(format!("answer: {a}")),
+        None => card,
+    };
+    card.checked(selected)
         .gap(4.0)
         .padding(8.0)
         .radius(6.0)
@@ -828,6 +833,12 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
                 .filter(|s| !s.is_empty())
                 .map(|c| text(c).font(type_::BODY).color(t.text_primary).wrap()),
         )
+        .children(answer.map(|a| {
+            text(format!("answer: {a}"))
+                .font(type_::BODY)
+                .color(t.text_secondary)
+                .wrap()
+        }))
 }
 
 /// Takes marks `ids` off tile `tile`'s document.
