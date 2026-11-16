@@ -528,6 +528,41 @@ fn the_seed_context_reads_its_latest_note_only_while_open_and_leaves_out_activit
 }
 
 #[test]
+fn the_seed_context_shows_the_newer_of_two_notes_written_in_the_same_second() {
+    let value = tended_by(seed("s-work11", "Garden icons"), "s1");
+    let mut world = start(vec![value.clone()], agent(None));
+    show_seeds(&mut world);
+    let read = reads(&world)
+        .pop()
+        .expect("the open popover reads its seed");
+    answer(
+        &mut world,
+        &read,
+        value,
+        vec![
+            note(
+                "n-2",
+                "note",
+                "A new note arrived while the card stayed open.",
+                "2026-11-16T17:02:31Z",
+            ),
+            note(
+                "n-1",
+                "note",
+                "The silhouettes work at 24px.",
+                "2026-11-16T17:02:31Z",
+            ),
+        ],
+    );
+    assert!(says(
+        &world,
+        "A new note arrived while the card stayed open."
+    ));
+    assert!(!says(&world, "The silhouettes work at 24px."));
+    assert!(rests(&mut world));
+}
+
+#[test]
 fn an_open_context_follows_each_garden_push_and_drops_an_answer_a_later_read_replaced() {
     let value = tended_by(seed("s-work11", "Garden icons"), "s1");
     let mut world = start(vec![value.clone()], agent(None));

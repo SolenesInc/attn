@@ -508,7 +508,17 @@ fn latest_note(document: Option<&SeedDocument>) -> Option<&SeedNote> {
         .iter()
         .filter(|n| !matches!(n.kind.as_str(), "attach" | "detach" | "move" | "link"))
         .filter(|n| !n.body.trim().is_empty())
-        .max_by_key(|n| crate::sidebar::queue::epoch_ms(&n.created_at).unwrap_or(i64::MIN))
+        .reduce(|latest, n| {
+            if written(n) > written(latest) {
+                n
+            } else {
+                latest
+            }
+        })
+}
+
+fn written(note: &SeedNote) -> i64 {
+    crate::sidebar::queue::epoch_ms(&note.created_at).unwrap_or(i64::MIN)
 }
 
 fn caption(words: &str, t: &Tokens) -> El {
