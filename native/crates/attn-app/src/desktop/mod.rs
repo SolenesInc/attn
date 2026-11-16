@@ -17,6 +17,7 @@ pub mod layout;
 mod overview;
 mod peek;
 mod provenance;
+pub(crate) mod refusal;
 mod role_icon;
 pub(crate) mod seed_chip;
 mod shared_conversation;
@@ -94,6 +95,7 @@ pub struct Desk {
     pub(crate) awaited: Option<arrival::Awaited>,
     /// Tiles that ring for a moment because they arrived on screen.
     pub(crate) rings: Vec<arrival::Ring>,
+    pub(crate) refusals: refusal::Refusals,
     /// A tile or shelf column being dragged.
     pub(crate) drag: Option<drag::LeafDrag>,
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
@@ -213,7 +215,8 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
     }
 }
 
-/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, tiles' rings, the rest a
+/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, tiles' rings
+/// and refusal flashes, the rest a
 /// drag takes on a sidebar desktop before the window switches to it, the delays of the peek
 /// and the header popover, and the peek's reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
@@ -227,7 +230,7 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
     let before = flashes.len();
     flashes.retain(|f| f.until > now);
     let flashed = flashes.len() != before;
-    switched | flashed | arrival::expire(state, now)
+    switched | flashed | arrival::expire(state, now) | refusal::expire(state, now)
 }
 
 impl Desk {

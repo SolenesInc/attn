@@ -211,7 +211,15 @@ fn send_to_terminal(state: &mut State, terminal: Option<String>, ev: &KeyEvent, 
     if bytes.is_empty() {
         return true;
     }
-    state.terminals.input(&id, &bytes, &state.daemon)
+    type_into(state, &id, &bytes)
+}
+
+fn type_into(state: &mut State, terminal: &str, bytes: &[u8]) -> bool {
+    let typed = state.terminals.input(terminal, bytes, &state.daemon);
+    if typed {
+        state.window.desk.refusals.sent(terminal);
+    }
+    typed
 }
 
 /// ⌘ or Ctrl went down or up: over a link in a terminal, the cursor shows it opens.
@@ -250,9 +258,7 @@ pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
             }
             true
         }
-        Ime::Commit(text) => {
-            !text.is_empty() && state.terminals.input(&id, text.as_bytes(), &state.daemon)
-        }
+        Ime::Commit(text) => !text.is_empty() && type_into(state, &id, text.as_bytes()),
         Ime::Enabled | Ime::Disabled => false,
     }
 }
@@ -278,7 +284,7 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
         state.terminals.encode_paste(&id, content.text())
     };
     if let Some(bytes) = bytes {
-        state.terminals.input(&id, &bytes, &state.daemon);
+        type_into(state, &id, &bytes);
     }
 }
 

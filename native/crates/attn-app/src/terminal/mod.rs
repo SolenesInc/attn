@@ -952,6 +952,11 @@ impl Terminals {
         Some((FONT_SIZE * h / metrics.cell_h, h))
     }
 
+    /// Whether this window shows terminal `id`.
+    pub(crate) fn shows(&self, id: &str) -> bool {
+        self.panes.contains_key(id)
+    }
+
     /// Whether terminal `id` has its screen from the daemon, so its output can be read.
     pub(crate) fn has_output(&self, id: &str) -> bool {
         self.panes

@@ -114,7 +114,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             }),
         ),
         desk.held_split().map(str::to_owned),
-        super::arrival::keys(&desk.rings),
+        (super::arrival::keys(&desk.rings), desk.refusals.keys()),
         facts.tile_contents.revision,
         (
             outpost_names(&facts.outposts),
@@ -397,6 +397,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         dividers: false,
         dragging: None,
         rings: &[],
+        refusals: &state.window.desk.refusals,
         screen: super::spotlight::Screen {
             many: false,
             zoomed: false,
@@ -481,6 +482,7 @@ fn screen(
                     dividers: view == super::layout::View::Normal,
                     dragging,
                     rings: &desk.rings,
+                    refusals: &desk.refusals,
                     screen: super::spotlight::Screen {
                         many: rendered.leaves().len() > 1,
                         zoomed: view == super::layout::View::Zoomed,
@@ -563,6 +565,8 @@ struct TileCx<'a> {
     dragging: Option<&'a str>,
     /// Tiles that ring because they arrived on screen.
     rings: &'a [super::arrival::Ring],
+    /// Input the daemon refused, by terminal.
+    refusals: &'a super::refusal::Refusals,
     screen: super::spotlight::Screen,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
@@ -776,14 +780,23 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 )),
                 None => slot,
             };
-            match cx.unsent.iter().find(|(r, _)| *r == pane.runtime_id) {
-                Some((runtime, reply)) => col()
+            let slot = slot.children(cx.refusals.flash(&pane.runtime_id, t));
+            let unsent = cx
+                .unsent
+                .iter()
+                .find(|(r, _)| *r == pane.runtime_id)
+                .map(|(runtime, reply)| super::peek::unsent_strip(runtime, reply, t));
+            let refused = cx.refusals.strip(&pane.runtime_id, t);
+            if unsent.is_none() && refused.is_none() {
+                slot
+            } else {
+                col()
                     .w_full()
                     .grow(1.0)
                     .min_h(0.0)
                     .child(slot)
-                    .child(super::peek::unsent_strip(runtime, reply, t)),
-                None => slot,
+                    .children(refused)
+                    .children(unsent)
             }
         }
         (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),

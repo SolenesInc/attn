@@ -285,6 +285,51 @@ fn the_terminal_holding_the_keyboard_gets_what_the_keymap_does_not_take() {
     assert!(world.runtime_is_at_rest());
 }
 
+#[test]
+fn keys_the_daemon_refuses_are_counted_under_their_tile_until_a_typed_key_goes_through() {
+    let world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.daemon.on("pty_input", |r| {
+        (r["data"] == "x").then(|| {
+            serde_json::json!({
+                "event": "command_error",
+                "cmd": "pty_input",
+                "terminal_id": r["id"],
+                "success": false,
+                "error": "the outpost is unreachable",
+            })
+        })
+    });
+    let mut world = world;
+    world.open_desktop();
+    let strip = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("tile.refused.r1"))
+            .and_then(|n| n.name)
+    };
+
+    world.gesture(|app| app.type_text("x"));
+    assert_eq!(
+        strip(&world).as_deref(),
+        Some("1 key may not have been sent")
+    );
+    world.gesture(|app| app.type_text("xx"));
+    assert_eq!(
+        strip(&world).as_deref(),
+        Some("2 keys may not have been sent"),
+        "the count starts again with each key typed, as the refusals come back after it"
+    );
+    assert_eq!(notice(&world), None, "a refused key is the tile's to show");
+    assert_eq!(world.screen().find(Target::key("tile.refused.r2")), None);
+
+    world.gesture(|app| app.type_text("a"));
+    assert_eq!(
+        strip(&world),
+        None,
+        "a key that went through clears the count"
+    );
+}
+
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn plain_ctrl_and_a_letter_belong_to_the_shell_on_linux() {
