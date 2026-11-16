@@ -101,6 +101,9 @@ pub(crate) enum Typed {
 pub struct Terminals {
     pub(crate) inbox: TerminalInbox,
     panes: HashMap<String, Term>,
+    /// The screen each hidden terminal last showed, without its images, by runtime id: a tile
+    /// shown again draws it until its attach brings the current one.
+    hidden_screens: HashMap<String, Grid>,
     connected: bool,
     daemon_instance: String,
     focused: Option<String>,
@@ -134,6 +137,9 @@ struct Term {
     vt: Vt,
     /// The screen as the renderer last took it.
     grid: Grid,
+    /// The grid is the screen the terminal showed before its tile hid, held until the attach
+    /// answers.
+    holding_hidden_screen: bool,
     stream: Stream,
     phase: Phase,
     agent: bool,
@@ -231,6 +237,7 @@ impl Term {
         Term {
             vt: themed(Vt::new(FIRST_SIZE.0, FIRST_SIZE.1), theme),
             grid: Grid::default(),
+            holding_hidden_screen: false,
             stream: Stream::Attaching(Default::default()),
             phase: Phase::Waiting,
             agent,
@@ -309,6 +316,9 @@ impl Terminals {
             self.seed_card_left(&id);
             save_leaving_note(term.marking.as_ref(), daemon);
             release(&id, &mut term, None, 0, daemon);
+            let mut screen = std::mem::take(&mut term.grid);
+            screen.set_images(Vec::new(), 0);
+            self.hidden_screens.insert(id.clone(), screen);
             if self.connected
                 && matches!(
                     term.phase,
@@ -321,11 +331,23 @@ impl Terminals {
                 });
             }
         }
+        self.hidden_screens.retain(|id, _| {
+            facts
+                .desktops
+                .iter()
+                .any(|desktop| desktop.panes.iter().any(|pane| pane.runtime_id == *id))
+        });
         for (id, agent, recoverable, place, streams) in drawn {
-            let term = self
-                .panes
-                .entry(id.clone())
-                .or_insert_with(|| Term::new(agent.is_some(), &self.theme));
+            let hidden_screens = &mut self.hidden_screens;
+            let theme = &self.theme;
+            let term = self.panes.entry(id.clone()).or_insert_with_key(|id| {
+                let mut term = Term::new(agent.is_some(), theme);
+                if let Some(screen) = hidden_screens.remove(id) {
+                    term.grid = screen;
+                    term.holding_hidden_screen = true;
+                }
+                term
+            });
             term.recoverable = recoverable;
             term.reached |= streams;
             match (streams, term.phase) {
@@ -641,6 +663,7 @@ impl Terminals {
             TerminalEvent::Exited(exited) => {
                 if let Some(term) = self.panes.get_mut(&exited.id) {
                     term.phase = Phase::Stopped;
+                    term.holding_hidden_screen = false;
                     let notice = exit_notice(exited.exit_code, exited.signal.as_deref());
                     term.vt.write(format!("\r\n{notice}\r\n").as_bytes());
                     Terminals::wrote(term);
@@ -707,6 +730,7 @@ impl Terminals {
                 tx.wake_at(at);
                 return;
             }
+            term.holding_hidden_screen = false;
             term.phase = Phase::Stopped;
             term.watermark = None;
             term.vt
@@ -714,6 +738,7 @@ impl Terminals {
             term.held.clear();
             return;
         }
+        term.holding_hidden_screen = false;
         if result.running == Some(false)
             && let Some(screen) = &result.screen
         {
@@ -1089,7 +1114,10 @@ impl Terminals {
         id: &str,
         term: &mut Term,
     ) {
-        if term.synchronizing_since.is_none() && term.vt.sync(&mut term.grid) {
+        if term.synchronizing_since.is_none()
+            && !term.holding_hidden_screen
+            && term.vt.sync(&mut term.grid)
+        {
             term.view.seeds = None;
         }
         let placed = Terminals::kitty_images(images, id, term);

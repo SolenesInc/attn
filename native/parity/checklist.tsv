@@ -3,7 +3,8 @@ item	statement	native_test	reason
 6	On Linux the instance's desktop entry handles its own scheme, not production's attn://	live:s-fmcb34/c36-linux.tgz	
 31	Option-modified letter shortcuts (⌥⌘N, the new session dialog's ⌥T, ⌥Q and ⌥1–⌥9) fire through AppKit despite macOS dead-key reporting		gap: s-70656g
 41	A terminal whose pane is no longer drawn detaches from its stream	attn-app/tests/wire/terminal.rs::a_terminal_no_longer_drawn_is_detached	
-41	Hidden tiles release GPU memory and return with one repaint; many tiles never fail		gap: s-gjttf8
+41	A tile shown again draws its last screen, not a blank one, until its attach brings the current one	attn-app/tests/wire/terminal.rs::a_tile_shown_again_draws_its_last_screen_until_its_attach_brings_the_current_one	
+41	Hidden tiles release their GPU buffers and memory, and dozens of tiles across desktops draw without failure	live:s-gjttf8/tile-memory.tgz	
 42	Cell metrics give the same rows and cols as the Tauri build for the same window and font size	attn-app/tests/wire/shelf_layout.rs::one_shell_tile_in_a_1200_by_800_window_gets_the_grid_the_tauri_app_gives_it	
 42	On Linux a lone shell tile gets Tauri's 34x106 at 1200x800 and 39x133 at 1440x900	live:s-rzb1xd/grid-linux-edge.tgz	
 43	An emoji ZWJ, flag, skin-tone or keycap sequence takes one cell, as grapheme clustering (DECSET 2027) stays on through a program's reset or DECRST	attn-app/tests/wire/terminal.rs::an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_turns_clustering_off	

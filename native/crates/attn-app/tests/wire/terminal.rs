@@ -1434,3 +1434,102 @@ fn a_drag_that_began_outside_the_terminal_is_not_reported_as_motion() {
 
     assert_eq!(inputs(&world), [pointed("\x1b[<35;2;1M")]);
 }
+
+/// Terminal r1 showed "hello", hid behind desktop d2 and came back, with its new attach in
+/// flight.
+fn returned_while_attaching() -> World {
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        profiles: Some(vec![profile()]),
+        desktops: Some(showing_desktop("d1").desktops),
+        ..showing(vec![], "daemon-1")
+    });
+    let r2 = AttachResultMessage {
+        id: "r2".into(),
+        ..attached()
+    };
+    daemon.answer_in_turn(
+        "attach_session",
+        [
+            Answer::Reply(message(attached())),
+            Answer::Reply(message(r2)),
+            Answer::Hold,
+        ],
+    );
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    output(&world, 1, b"hello");
+    world.settle();
+    world.daemon.emit(showing_desktop("d2"));
+    world.settle();
+    let hidden = world.terminal_frames();
+
+    world.daemon.emit(showing_desktop("d1"));
+    world.settle();
+    assert!(world.terminal_frames() > hidden, "the return drew");
+    world
+}
+
+#[test]
+fn a_tile_shown_again_draws_its_last_screen_until_its_attach_brings_the_current_one() {
+    let mut world = returned_while_attaching();
+    assert_eq!(
+        drawn(&mut world)[0],
+        "hello",
+        "while the attach is in flight"
+    );
+
+    let request = world.daemon.sent_of("attach_session")[2].clone();
+    world.daemon.reply_to(
+        &request,
+        AttachResultMessage {
+            snapshot: Some(snapshot_of(b"hello world", SNAPSHOT_FORMAT)),
+            last_seq: Some(1),
+            ..attached()
+        },
+    );
+    world.settle();
+    assert_eq!(drawn(&mut world)[0], "hello world");
+}
+
+#[test]
+fn a_process_that_ends_while_its_tile_returns_shows_that_it_ended() {
+    let mut world = returned_while_attaching();
+
+    world.daemon.emit(SessionExitedMessage {
+        id: "r1".into(),
+        session_id: "s1".into(),
+        exit_code: 2,
+        ..SessionExitedMessage::new()
+    });
+    world.settle();
+
+    assert!(
+        drawn(&mut world)
+            .iter()
+            .any(|row| row == "[Process exited with code 2]"),
+        "{:?}",
+        drawn(&mut world)
+    );
+}
+
+fn showing_desktop(current: &str) -> ProfileArrangementChangedMessage {
+    let other = Desktop {
+        id: "d2".into(),
+        name: "d2".into(),
+        panes: vec![DesktopPane {
+            desktop_id: "d2".into(),
+            ..pane("t2", "r2")
+        }],
+        active_pane_id: "t2".into(),
+        tree_json: tree::panes_in_a_row(&["t2"]),
+        ..desktop(vec![])
+    };
+    ProfileArrangementChangedMessage {
+        profile: Profile {
+            current_desktop_id: current.into(),
+            ..profile()
+        },
+        desktops: vec![desktop(vec![pane("t1", "r1")]), other],
+        ..ProfileArrangementChangedMessage::new()
+    }
+}
