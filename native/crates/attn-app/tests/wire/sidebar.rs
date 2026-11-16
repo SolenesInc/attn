@@ -99,7 +99,7 @@ fn two_desktops() -> InitialStateMessage {
     )
 }
 
-/// The sidebar's rows top to bottom, as their accessible names.
+/// The sidebar's desktop and agent rows top to bottom, as their accessible names.
 fn rows(world: &World) -> Vec<String> {
     world
         .screen()
@@ -108,7 +108,8 @@ fn rows(world: &World) -> Vec<String> {
         .filter(|n| {
             n.key.as_deref().is_some_and(|k| {
                 k.starts_with("sidebar.")
-                    && k != "sidebar.home"
+                    && !["sidebar.home", "sidebar.overview"].contains(&k)
+                    && !k.starts_with("sidebar.dock.")
                     && !k.ends_with(".actions")
                     && !k.ends_with(".close")
             })
@@ -554,5 +555,104 @@ fn a_desktop_dragged_after_the_rows_above_it_changed_lands_where_the_pointer_sho
             moved[0]["next_desktop_id"].as_str()
         ),
         (Some("d2"), None, Some("d1"))
+    );
+}
+
+fn keys_of(action: Action) -> String {
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    keymap.label(keymap.binding(&action).unwrap())
+}
+
+fn dock_chips(world: &World) -> Vec<String> {
+    let screen = world.screen();
+    ["button", "list-item"]
+        .iter()
+        .flat_map(|role| screen.all(Target::role(*role)))
+        .filter(|n| {
+            n.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("sidebar.dock.chip."))
+        })
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+#[test]
+fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
+    let mut world = World::start(Daemon::scripted().state(state(
+        vec![session("s1", "idle")],
+        vec![desktop("d1", "a", "One", vec![pane("d1", "p1", "s1")])],
+    )));
+    let screen = world.screen();
+    assert_eq!(
+        screen.get(Target::key("sidebar.home")).description,
+        Some(keys_of(Action::SessionGoToDashboard))
+    );
+    let overview = screen.get(Target::key("sidebar.overview"));
+    assert_eq!(overview.name.as_deref(), Some("Desktop overview"));
+    assert_eq!(overview.description, Some(keys_of(Action::DesktopOverview)));
+
+    let mut chips = dock_chips(&world);
+    chips.sort();
+    assert_eq!(
+        chips,
+        [
+            format!("{} sidebar", keys_of(Action::SessionToggleSidebar)),
+            format!("{} PRs", keys_of(Action::DockAttention)),
+        ],
+        "a chip for an agent's keys waits for an agent on screen"
+    );
+    world.gesture(|app| app.key(chord(Action::DesktopSelect1)));
+    let mut chips = dock_chips(&world);
+    chips.sort();
+    let mut docked = vec![
+        format!("{} PRs", keys_of(Action::DockAttention)),
+        format!("{} split v", keys_of(Action::TerminalSplitVertical)),
+        format!("{} split h", keys_of(Action::TerminalSplitHorizontal)),
+        format!("{} session h", keys_of(Action::SessionNewHorizontal)),
+        format!("{} zoom", keys_of(Action::TerminalToggleZoom)),
+        format!("{} sidebar", keys_of(Action::SessionToggleSidebar)),
+    ];
+    docked.sort();
+    assert_eq!(chips, docked, "{}", world.screen());
+
+    world
+        .automate(
+            "press",
+            serde_json::json!({"target": {"key": "sidebar.dock.chip.dock.attention"}}),
+        )
+        .unwrap();
+    let prs = world
+        .screen()
+        .get(Target::key("sidebar.dock.chip.dock.attention"));
+    assert_eq!(prs.value.as_deref(), Some("active"));
+    assert!(world.screen().find(Target::key("attention")).is_some());
+
+    world
+        .automate(
+            "press",
+            serde_json::json!({"target": {"key": "sidebar.dock.toggle"}}),
+        )
+        .unwrap();
+    assert!(dock_chips(&world).is_empty());
+    let written = world.daemon.sent_of("set_setting");
+    let config: serde_json::Value =
+        serde_json::from_str(written.last().unwrap()["value"].as_str().unwrap()).unwrap();
+    assert_eq!(config["dock"]["collapsed"], true);
+    assert_eq!(config["dock"]["items"].as_array().unwrap().len(), 6);
+    world.gesture(|app| app.click(Target::role("button").name("Show dock")));
+    assert_eq!(dock_chips(&world).len(), 6);
+
+    world
+        .automate(
+            "press",
+            serde_json::json!({"target": {"key": "sidebar.overview"}}),
+        )
+        .unwrap();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_some()
     );
 }

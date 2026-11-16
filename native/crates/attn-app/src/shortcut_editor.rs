@@ -86,7 +86,7 @@ fn close(state: &mut State) {
 
 /// The setting the editor shows and changes: what it last wrote, until the daemon's value
 /// moves on from what it was then.
-fn setting(state: &State) -> Option<&str> {
+pub(crate) fn setting(state: &State) -> Option<&str> {
     match &state.window.shortcut_editor.written {
         Some(written) => Some(written),
         None => state
@@ -385,6 +385,13 @@ fn write_overrides(state: &mut State, changes: Vec<(Action, Option<Value>)>, tx:
             None => overrides.remove(action.id()),
         };
     }
+    write(state, Value::Object(config).to_string(), tx);
+}
+
+/// The setting with its dock replaced by `dock`, keeping the rebinds.
+pub(crate) fn write_dock(state: &mut State, dock: Value, tx: &mut Tx) {
+    let mut config = config_of(setting(state));
+    config.insert("dock".into(), dock);
     write(state, Value::Object(config).to_string(), tx);
 }
 

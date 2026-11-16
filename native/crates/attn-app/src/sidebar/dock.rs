@@ -1,0 +1,236 @@
+//! The sidebar's dock, as the Tauri app's `SidebarFooter`: chips that remind the person of the
+//! keys they chose to keep in view, from the `dock` of the shortcuts setting the two apps share.
+//! The PRs chip also opens its drawer.
+
+use attn_ui::Tokens;
+use rune::tok::{space, type_};
+use rune::{El, Tx, col, row, text};
+use serde_json::{Value, json};
+
+use crate::State;
+use crate::action::Action;
+use crate::shell::Drawer;
+
+const KEYS: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
+    ..type_::MONO_CAPTION
+};
+
+const DEFAULT_ITEMS: &[&str] = &[
+    "dock.attention",
+    "terminal.splitVertical",
+    "terminal.splitHorizontal",
+    "session.newHorizontal",
+    "terminal.toggleZoom",
+    "session.toggleSidebar",
+];
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Chip {
+    action: Action,
+    keys: String,
+    label: &'static str,
+    active: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Dock {
+    collapsed: bool,
+    chips: Vec<Chip>,
+}
+
+struct Stored {
+    collapsed: bool,
+    items: Vec<String>,
+}
+
+fn stored(state: &State) -> Stored {
+    let dock = crate::shortcut_editor::setting(state)
+        .and_then(|s| serde_json::from_str::<Value>(s).ok())
+        .map(|config| config["dock"].clone())
+        .unwrap_or(Value::Null);
+    match dock["items"].as_array() {
+        Some(items) => Stored {
+            collapsed: dock["collapsed"].as_bool().unwrap_or(false),
+            items: items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect(),
+        },
+        None => Stored {
+            collapsed: false,
+            items: DEFAULT_ITEMS.iter().map(|id| (*id).to_owned()).collect(),
+        },
+    }
+}
+
+fn current_id(id: &str) -> String {
+    match id.strip_prefix("workspace.select") {
+        Some(slot) => format!("desktop.select{slot}"),
+        None => id.to_owned(),
+    }
+}
+
+/// The terse words a chip shows for `action`, or its label.
+fn chip_label(action: &Action) -> &'static str {
+    match action {
+        Action::SessionNewTerminal => "terminal",
+        Action::SessionNewHorizontal => "session h",
+        Action::DockAsks => "Asks",
+        Action::SessionToggleSidebar => "sidebar",
+        Action::TerminalSplitVertical => "split v",
+        Action::TerminalSplitHorizontal => "split h",
+        Action::TerminalToggleZoom => "zoom",
+        Action::MarkdownSendAnnotations => "send notes",
+        Action::TerminalSendAnnotations => "send marks",
+        Action::DockAttention => "PRs",
+        other => other.label(),
+    }
+}
+
+fn needs_an_agent(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::TerminalSplitVertical
+            | Action::TerminalSplitHorizontal
+            | Action::SessionNewHorizontal
+            | Action::TerminalToggleZoom
+    )
+}
+
+pub(crate) fn of(state: &State) -> Dock {
+    let stored = stored(state);
+    let agent_shown = state.window.on_screen(&state.facts).is_some();
+    let zoomed = agent_shown
+        && state.facts.current_desktop().is_some_and(|desktop| {
+            state.window.desk.row(&desktop.id).view == crate::desktop::layout::View::Zoomed
+        });
+    let mut seen = Vec::new();
+    let chips = stored
+        .items
+        .iter()
+        .filter_map(|id| Action::from_id(&current_id(id)))
+        .filter(|action| {
+            let first = !seen.contains(action);
+            seen.push(action.clone());
+            first
+        })
+        .filter(|action| agent_shown || !needs_an_agent(action))
+        .filter_map(|action| {
+            let keys = crate::palette::label_of(state, &action)?;
+            let active = match action {
+                Action::DockAttention => state.window.shows(Drawer::Attention),
+                Action::TerminalToggleZoom => zoomed,
+                _ => false,
+            };
+            Some(Chip {
+                label: chip_label(&action),
+                action,
+                keys,
+                active,
+            })
+        })
+        .collect();
+    Dock {
+        collapsed: stored.collapsed,
+        chips,
+    }
+}
+
+fn toggle_collapsed(state: &mut State, tx: &mut Tx) {
+    let stored = stored(state);
+    let dock = json!({"collapsed": !stored.collapsed, "items": stored.items});
+    crate::shortcut_editor::write_dock(state, dock, tx);
+}
+
+pub(crate) fn view(dock: &Dock, t: &Tokens) -> El {
+    let (toggle, toggle_said) = match dock.collapsed {
+        true => ("+", "Show dock"),
+        false => ("−", "Hide dock"),
+    };
+    let head = row()
+        .key("sidebar.dock.head")
+        .w_full()
+        .items_center()
+        .child(
+            text("DOCK")
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary)
+                .grow(1.0),
+        )
+        .child(
+            text(toggle)
+                .key("sidebar.dock.toggle")
+                .role("button")
+                .focusable(true)
+                .label(toggle_said)
+                .a11y_value(if dock.collapsed {
+                    "collapsed"
+                } else {
+                    "expanded"
+                })
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .w(18.0)
+                .h(18.0)
+                .radius(6.0)
+                .hover(t.bg_elevated)
+                .on_press_tx(toggle_collapsed),
+        );
+    let chips = (!dock.collapsed).then(|| {
+        row()
+            .key("sidebar.dock.chips")
+            .role("list")
+            .label("Dock")
+            .w_full()
+            .flex_wrap()
+            .gap(space::S2)
+            .children(dock.chips.iter().map(|chip| chip_view(chip, t)))
+    });
+    col()
+        .key("sidebar.dock")
+        .w_full()
+        .gap(space::S2)
+        .padding(space::S3)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+        .child(head)
+        .children(chips)
+}
+
+fn chip_view(chip: &Chip, t: &Tokens) -> El {
+    let said = format!("{} {}", chip.keys, chip.label);
+    let face = row()
+        .key(format!("sidebar.dock.chip.{}", chip.action.id()))
+        .label(said)
+        .items_center()
+        .gap(4.0)
+        .px(8.0)
+        .py(2.0)
+        .radius(999.0)
+        .child(text(chip.keys.clone()).font(KEYS).color(t.text_secondary))
+        .child(
+            text(chip.label)
+                .font(type_::MONO_CAPTION)
+                .color(if chip.active {
+                    t.text_primary
+                } else {
+                    t.text_tertiary
+                }),
+        );
+    let face = match chip.active {
+        true => face
+            .a11y_value("active")
+            .fill(t.accent.alpha(0.12))
+            .border(1.0, t.accent.alpha(0.35)),
+        false => face,
+    };
+    match chip.action {
+        Action::DockAttention => face
+            .role("button")
+            .focusable(true)
+            .hover(t.bg_elevated)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::attention::toggle(state, tx)),
+        _ => face.role("listitem"),
+    }
+}

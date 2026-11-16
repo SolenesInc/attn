@@ -1,6 +1,7 @@
 mod actions;
 pub(crate) mod bar_peek;
 mod chrome;
+mod dock;
 pub(crate) mod model;
 pub(crate) mod queue;
 mod queue_view;
@@ -180,6 +181,9 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         .drag
         .as_ref()
         .and_then(|d| d.new_desktop());
+    let dock = dock::of(state);
+    let home_keys = crate::palette::label_of(state, &Action::SessionGoToDashboard);
+    let overview_keys = crate::palette::label_of(state, &Action::DesktopOverview);
     let reads = (
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
@@ -190,8 +194,11 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         home,
         on_screen.clone(),
         width::of(state).to_bits(),
-        state.window.reorder.clone(),
-        new_desktop,
+        (
+            state.window.reorder.clone(),
+            new_desktop,
+            (dock.clone(), home_keys.clone(), overview_keys.clone()),
+        ),
         (
             *t,
             facts.notifications.unread_critical,
@@ -216,7 +223,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                 &facts.notifications,
                 &t,
             ))
-            .child(home_row(home, &t))
+            .child(home_row(home, home_keys.clone(), &t))
             .child(
                 col()
                     .key("sidebar.scroll")
@@ -226,6 +233,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                     .scroll(ScrollSpec {
                         stick_bottom: false,
                     })
+                    .child(overview_row(overview_keys.clone(), &t))
                     .child(
                         col()
                             .key(DESKTOP_LIST)
@@ -242,31 +250,66 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                     )
                     .children(new_desktop.map(|over| new_desktop_drop(over, &t))),
             )
+            .child(dock::view(&dock, &t))
     })
 }
 
-pub(crate) fn home_row(home: bool, t: &Tokens) -> El {
-    row()
-        .key("sidebar.home")
+pub(crate) fn home_row(home: bool, keys: Option<String>, t: &Tokens) -> El {
+    nav_row("sidebar.home", attn_ui::icon::HOME, "Home", keys, t)
+        .a11y_value(if home { "current" } else { "" })
+        .fill(if home { t.bg_selected } else { t.bg_panel })
+        .on_press(|state: &mut State| state.window.go_home())
+}
+
+fn overview_row(keys: Option<String>, t: &Tokens) -> El {
+    nav_row(
+        "sidebar.overview",
+        attn_ui::icon::GRID,
+        "Desktop overview",
+        keys,
+        t,
+    )
+    .fill(t.bg_panel)
+    .on_press_tx(|state: &mut State, tx: &mut Tx| {
+        crate::desktop::run(state, &Action::DesktopOverview, tx);
+    })
+}
+
+/// A row that goes somewhere rather than to an agent, with the keys that go there too, as the
+/// Tauri app's `sidebar-nav-row`.
+fn nav_row(key: &str, glyph: &str, label: &str, keys: Option<String>, t: &Tokens) -> El {
+    let row = row()
+        .key(key)
         .role("button")
         .focusable(true)
-        .label("Home")
-        .a11y_value(if home { "current" } else { "" })
+        .label(label)
         .w_full()
         .h(ROW_HEIGHT)
         .items_center()
         .gap(space::S2)
         .padding(space::S1)
         .radius(4.0)
-        .fill(if home { t.bg_selected } else { t.bg_panel })
         .hover(t.bg_elevated)
-        .on_press(|state: &mut State| state.window.go_home())
         .child(
-            text(attn_ui::icon::HOME)
+            text(glyph)
                 .font(type_::BODY)
-                .color(t.text_secondary),
+                .color(t.text_secondary)
+                .w(14.0),
         )
-        .child(text("Home").font(type_::BODY).color(t.text_primary))
+        .child(
+            text(label)
+                .font(type_::BODY)
+                .color(t.text_primary)
+                .grow(1.0)
+                .single_line()
+                .truncate(),
+        );
+    match keys {
+        Some(keys) => row
+            .description(keys.clone())
+            .child(text(keys).font(type_::MONO_CAPTION).color(t.text_tertiary)),
+        None => row,
+    }
 }
 
 fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
