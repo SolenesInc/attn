@@ -259,6 +259,7 @@ impl World {
                 terminals.clone(),
                 replies.clone(),
                 WALL_START_MS,
+                INSTANCE.into(),
                 move |update| {
                     inbox.lock().unwrap().push(update);
                     pulse.beat();

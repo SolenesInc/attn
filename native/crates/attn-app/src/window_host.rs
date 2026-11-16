@@ -191,6 +191,7 @@ impl crate::desktop::Opener for NativeOpener {
             crate::TerminalInbox::default(),
             crate::ReplyInbox::default(),
             self.epoch_ms,
+            String::new(),
             {
                 let handle = handle.clone();
                 move |update| handle.update(update)

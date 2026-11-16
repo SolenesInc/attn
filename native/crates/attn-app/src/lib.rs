@@ -85,6 +85,8 @@ pub struct State {
     age_wake: Option<f64>,
     /// Gives the menu bar's items the keys of each new keymap.
     menus: Option<Menus>,
+    /// The instance the window's link serves, `default` for production.
+    instance: String,
 }
 
 /// Sets the menu bar's items for a keymap.
@@ -137,6 +139,7 @@ pub fn bind(
     terminals: TerminalInbox,
     replies: ReplyInbox,
     epoch_ms: i64,
+    instance: String,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> Subscription {
     let deliver = Arc::new(deliver);
@@ -145,6 +148,7 @@ pub fn bind(
     deliver(Box::new(move |state, _| {
         state.pictures.start(wake);
         state.epoch_ms = epoch_ms;
+        state.instance = instance;
         state.daemon = daemon;
         state.terminals.inbox = terminals;
         state.requests.inbox = replies;
@@ -230,19 +234,19 @@ pub fn connect(
     let replies = ReplyInbox::default();
     let wake = Arc::new(wake);
     let (woken, replied) = (wake.clone(), wake);
-    let link = Link::start(
-        config(
-            terminals.sink(move || woken()),
-            replies.sink(move || replied()),
-        ),
-        store.clone(),
+    let config = config(
+        terminals.sink(move || woken()),
+        replies.sink(move || replied()),
     );
+    let instance = config.instance.clone();
+    let link = Link::start(config, store.clone());
     let window = bind(
         store,
         link.commands(),
         terminals,
         replies.clone(),
         epoch_ms,
+        instance,
         move |update| {
             let changed = changed.clone();
             deliver(Box::new(move |state, tx| {

@@ -450,7 +450,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .label("Title bar")
         .w_full()
         .h(TITLE_BAR_HEIGHT)
-        .pl(cx.chrome_insets().leading.max(8.0))
+        .pl(cx.chrome_insets().leading + 8.0)
         .pr(8.0)
         .fill(t.bg_panel)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
@@ -473,8 +473,28 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
                 .then(|| crate::asks::title_button(state, t))
                 .flatten(),
         )
+        .children(instance_marker(state, t))
         .children(connected.then(|| crate::profile_switcher::pill(state, t)))
 }
+
+/// The name of a non-production instance, so its window never passes for production's.
+fn instance_marker(state: &State, t: &Tokens) -> Option<El> {
+    let name = state.instance.as_str();
+    (name != "default" && !name.is_empty()).then(|| {
+        text(name.to_owned())
+            .key("titlebar.instance")
+            .role("note")
+            .label(name.to_owned())
+            .description(format!("Instance: {name}"))
+            .font(INSTANCE_TYPE)
+            .color(t.warning)
+            .single_line()
+            .truncate()
+            .max_w(96.0)
+    })
+}
+
+const INSTANCE_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
 
 fn centered(t: &Tokens, content: El) -> El {
     col()

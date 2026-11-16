@@ -139,6 +139,7 @@ impl TileRuntime {
                 attn_app::TerminalInbox::default(),
                 attn_app::ReplyInbox::default(),
                 crate::WALL_START_MS,
+                String::new(),
                 move |update| {
                     inbox.lock().unwrap().push(update);
                     pulse.beat();

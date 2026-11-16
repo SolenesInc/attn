@@ -65,6 +65,8 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShelfFewerTiles => super::shelf::step_width(state, true, tx),
         ShelfMoreTiles => super::shelf::step_width(state, false, tx),
         DesktopOverview => super::overview::toggle(state, tx),
+        SessionOrchestrator => show_dispatcher(state, tx),
+        TerminalOpen => focus_active(state, tx),
         TilePopOut => super::windows::toggle(state, tx),
         TerminalFind => find(state, tx),
         MarkdownSendAnnotations => {
@@ -83,6 +85,38 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         state.window.show_desktop(tx);
     }
     true
+}
+
+/// Shows the agent that dispatched the agent on screen, as the Tauri app's
+/// `handleSelectOrchestrator`.
+fn show_dispatcher(state: &mut State, tx: &mut Tx) {
+    let facts = &state.facts;
+    let Some(shown) = state.window.on_screen(facts) else {
+        return;
+    };
+    let dispatcher = facts
+        .sessions
+        .iter()
+        .find(|s| s.id == shown)
+        .and_then(|s| s.dispatcher_session_id.as_deref())
+        .filter(|d| facts.sessions.iter().any(|s| s.id == *d))
+        .map(str::to_owned);
+    if let Some(dispatcher) = dispatcher {
+        crate::sidebar::open_agent(state, &dispatcher, tx);
+    }
+}
+
+/// Gives the keyboard back to the active tile of the desktop on screen.
+fn focus_active(state: &mut State, tx: &mut Tx) {
+    if state.window.view != crate::shell::View::Desktop {
+        return;
+    }
+    let Some(desktop) = state.facts.current_desktop() else {
+        return;
+    };
+    let leaf = state.window.desk.acting_leaf(desktop);
+    let desktop = desktop.id.clone();
+    give_keyboard(state, &desktop, &leaf, tx);
 }
 
 /// Puts the profile's desktops in "Sort desktops" order, offering to put back the order they had.

@@ -412,6 +412,34 @@ fn in_desktop_flow_the_rail_marks_a_desktop_whose_agent_waits_for_the_user() {
 }
 
 #[test]
+fn the_focus_terminal_key_takes_the_keys_from_the_agent_filter_back_to_the_agent_on_screen() {
+    let mut message = queue(one_desktop(vec![
+        turn("t-old", 120),
+        session("w1", "working"),
+    ]));
+    for desktop in message.desktops.as_mut().unwrap() {
+        for pane in &mut desktop.panes {
+            pane.runtime_id = format!("rt-{}", pane.session_id);
+        }
+    }
+    let mut world = World::start(Daemon::scripted().state(message));
+    world.gesture(|app| app.click(Target::key("queue-turn.t-old")));
+    world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
+    world.gesture(|app| app.type_text("w"));
+    assert!(
+        world.daemon.sent_of("pty_input").is_empty(),
+        "the filter took the w"
+    );
+
+    world.gesture(|app| app.key(chord(Action::TerminalOpen)));
+    world.gesture(|app| app.type_text("x"));
+
+    let sent = world.daemon.sent_of("pty_input");
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert_eq!(sent[0]["id"], "rt-t-old");
+}
+
+#[test]
 fn the_title_bar_switches_flow_through_the_daemon_setting() {
     let mut world = World::start(Daemon::scripted().state(one_desktop(vec![])));
 

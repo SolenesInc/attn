@@ -594,6 +594,25 @@ fn the_title_bars_profile_pill_names_the_profile_and_opens_the_list_under_it() {
 }
 
 #[test]
+fn a_non_production_instance_names_itself_in_the_title_bar_before_the_profile_pill() {
+    let mut world = three("work");
+    let marker = world.screen().get(Target::key("titlebar.instance"));
+    assert_eq!(marker.name.as_deref(), Some(attn_testkit::INSTANCE));
+    assert_eq!(
+        marker.description.as_deref(),
+        Some(format!("Instance: {}", attn_testkit::INSTANCE).as_str())
+    );
+    let x = |world: &mut World, key: &str| -> f64 {
+        let found = world
+            .automate("find", json!({"target": {"key": key}}))
+            .unwrap();
+        found["rect"][0].as_f64().unwrap()
+    };
+    assert!(x(&mut world, "titlebar.instance") < x(&mut world, "titlebar.profile"));
+    rest(&mut world);
+}
+
+#[test]
 fn the_palette_opens_the_switcher_and_records_a_switch_in_the_profile_it_was_picked_in() {
     let mut world = three("work");
 

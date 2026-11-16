@@ -3611,3 +3611,39 @@ fn the_overview_sends_the_tile_shown_alone_while_another_window_selects_another(
     assert_eq!(moved[0]["leaf_id"], "root");
     assert_eq!(moved[0]["target_desktop_id"], "work/desktop_2");
 }
+
+#[test]
+fn jump_to_dispatcher_gives_the_keyboard_to_the_agent_that_dispatched_the_one_on_screen() {
+    let tiles = desktop(1, "delegate", Some(row([pane("root"), pane("delegate")])));
+    let state = InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile(&tiles.id)]),
+        desktops: Some(vec![tiles]),
+        sessions: Some(vec![
+            Session {
+                dispatcher_session_id: Some("s-ended".into()),
+                ..session("root")
+            },
+            Session {
+                dispatcher_session_id: Some("s-root".into()),
+                ..session("delegate")
+            },
+        ]),
+        ..InitialStateMessage::new()
+    };
+    let mut world = World::start_sized(Daemon::scripted().state(state), TWO_FIT);
+    world.open_desktop();
+    assert_eq!(keyboard(&mut world), "delegate");
+
+    press(&mut world, Action::SessionOrchestrator);
+    assert_eq!(keyboard(&mut world), "root");
+
+    press(&mut world, Action::SessionOrchestrator);
+    assert_eq!(
+        keyboard(&mut world),
+        "root",
+        "the root's dispatcher has ended"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
