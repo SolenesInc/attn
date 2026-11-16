@@ -70,6 +70,13 @@ Building from source needs, on either platform:
 - [pnpm](https://pnpm.io/installation) 9 or newer.
 - Git and Make.
 
+Two more tools are needed only in some cases:
+
+- [Zig](https://ziglang.org/download/) 0.17, if the build can't download the
+  prebuilt terminal library and has to compile it.
+- [Bun](https://bun.sh/), to run harness plugins written for Bun. See
+  [Writing a harness plugin](../reference/writing-harness-plugins.md).
+
 ### Build from source
 
 ```bash
