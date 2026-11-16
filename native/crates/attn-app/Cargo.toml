@@ -27,7 +27,7 @@ block2 = "0.6"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSAlert", "NSBitmapImageRep", "NSControl", "NSEvent", "NSImage", "NSImageRep", "NSResponder", "NSRunningApplication", "NSTextField", "NSView", "NSWindow"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSArray", "NSData", "NSDate", "NSDateFormatter", "NSDictionary", "NSFormatter", "NSError", "NSGeometry", "NSHTTPCookie", "NSKeyValueObserving", "NSLocale", "NSObject", "NSString", "NSURL", "NSURLRequest", "NSUndoManager", "NSUUID"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSData", "NSDate", "NSDateFormatter", "NSDictionary", "NSFormatter", "NSError", "NSGeometry", "NSHTTPCookie", "NSKeyValueObserving", "NSLocale", "NSObject", "NSString", "NSURL", "NSURLRequest", "NSUndoManager", "NSUUID"] }
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-app-kit", "objc2-core-foundation", "WKContentWorld", "WKFrameInfo", "WKHTTPCookieStore", "WKNavigation", "WKPDFConfiguration", "WKSnapshotConfiguration", "WKUIDelegate", "WKUserContentController", "WKUserScript", "WKWebView", "WKWebViewConfiguration", "WKWebsiteDataStore"] }
 raw-window-handle = "0.6"
 rusqlite = "0.42"

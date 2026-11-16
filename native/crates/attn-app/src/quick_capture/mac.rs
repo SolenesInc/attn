@@ -10,7 +10,7 @@ use attn_client::{Commands, Pulse, Store, Subscription};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject};
-use objc2_foundation::{NSPoint, NSRect};
+use objc2_foundation::{NSMouseInRect, NSPoint, NSRect};
 use rune::{AppHandle, DisplayTarget, OverlayPlacement, Shortcut, ShortcutId, WindowOptions};
 
 use super::{Panel, SIZE, Update, Window};
@@ -212,11 +212,7 @@ fn centered() -> Option<OverlayPlacement> {
         for index in 0..count {
             let screen: Retained<AnyObject> = msg_send![&all, objectAtIndex: index];
             let frame: NSRect = msg_send![&screen, frame];
-            let inside = pointer.x >= frame.origin.x
-                && pointer.x < frame.origin.x + frame.size.width
-                && pointer.y >= frame.origin.y
-                && pointer.y < frame.origin.y + frame.size.height;
-            if !inside {
+            if !NSMouseInRect(pointer, frame, false) {
                 continue;
             }
             let visible: NSRect = msg_send![&screen, visibleFrame];
