@@ -88,10 +88,8 @@ import {
 import {
   FONT_FAMILY,
   TERMINAL_SCROLLBACK_BYTES,
-  getTerminalAnsiPalette,
-  getTerminalTheme,
-  type ResolvedTheme,
 } from '../utils/terminalSizing';
+import { DEFAULT_SCHEME_ID, findScheme, terminalAnsiPalette, type TerminalColors } from '../colors/schemes';
 import {
   createResizeCoalescer,
   resizeGhosttyWithoutReflow,
@@ -181,7 +179,7 @@ import './GhosttyTerminal.css';
 
 export interface GhosttyTerminalProps {
   fontSize: number;
-  resolvedTheme?: ResolvedTheme;
+  terminalColors?: TerminalColors;
   debugName: string;
   cwd?: string;
   outpostName?: string;
@@ -330,10 +328,10 @@ interface SelectionRange {
   endCol: number;
 }
 
+const DEFAULT_TERMINAL_COLORS = findScheme(DEFAULT_SCHEME_ID).dark.terminal;
+
 // Ghostty's native renderer resets synchronized-output mode after 1000ms.
 const SYNCHRONIZED_OUTPUT_RENDER_TIMEOUT_MS = 1000;
-
-const ANNOTATION_COLOR = '#a78bfa';
 
 interface HoverLinkState {
   generation: number;
@@ -519,7 +517,7 @@ function cellText(
 }
 
 export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminalProps>(
-  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, outpostName, runtimeLogMeta, onInput, onPointerActivity, onFocus, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
+  function GhosttyTerminal({ fontSize, terminalColors = DEFAULT_TERMINAL_COLORS, debugName, cwd, outpostName, runtimeLogMeta, onInput, onPointerActivity, onFocus, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
     const tileWindow = useTileWindow();
     const frames = useFrameScheduler();
     const resizeWatch = useResizeWatch();
@@ -784,7 +782,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           startCol: range.startCol,
           endRow: viewportRowFromBufferRow(range.endRow, scrollbackLength, viewportOffsetRef.current),
           endCol: range.endCol,
-          color: getTerminalTheme(resolvedTheme).selectionBackground,
+          color: terminalColors.selection,
           kind: 'background',
         });
       }
@@ -795,7 +793,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           startCol: hover.linkSpan.startCol,
           endRow: hover.linkSpan.endRow,
           endCol: hover.linkSpan.endCol,
-          color: getTerminalTheme(resolvedTheme).foreground,
+          color: terminalColors.fg,
           alpha: 0.8,
           kind: 'underline',
         });
@@ -820,7 +818,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
               startCol: 0,
               endRow: span.endRow,
               endCol: terminal.cols,
-              color: '#4d9de0',
+              color: terminalColors.block,
               alpha: 0.08,
               kind: 'background',
             });
@@ -830,7 +828,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             startCol: 0,
             endRow: span.endRow,
             endCol: terminal.cols,
-            color: '#4d9de0',
+            color: terminalColors.block,
             alpha: 0.9,
             kind: 'outline',
           });
@@ -847,7 +845,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             startCol: match.startCol,
             endRow: match.bufferRow - firstRow,
             endCol: match.endCol,
-            color: '#f5c542',
+            color: terminalColors.find,
             alpha: match === focused ? 0.6 : 0.28,
             kind: 'background',
           });
@@ -867,7 +865,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
               startCol: range.startCol,
               endRow: viewportRow,
               endCol: range.endCol,
-              color: ANNOTATION_COLOR,
+              color: terminalColors.annotation,
               alpha: hovered ? 0.42 : 0.24,
               kind: 'background',
             });
@@ -876,7 +874,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
               startCol: range.startCol,
               endRow: viewportRow,
               endCol: range.endCol,
-              color: ANNOTATION_COLOR,
+              color: terminalColors.annotation,
               alpha: hovered ? 1 : 0.75,
               kind: 'underline',
             });
@@ -960,7 +958,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         recoverFromModelFault('render', reason);
         return false;
       }
-    }, [getViewportCells, recoverFromModelFault, resolvedTheme]);
+    }, [getViewportCells, recoverFromModelFault, terminalColors]);
 
     const setSurfaceReleased = useCallback((released: boolean) => {
       if (surfaceReleasedRef.current === released) return;
@@ -1136,7 +1134,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const range = selectionRef.current ? normalizeSelection(selectionRef.current) : null;
       if (!terminal || !range) return '';
       const history = terminal.getScrollbackLength();
-      const defaultForeground = colorNumber(getTerminalTheme(resolvedTheme).foreground);
+      const defaultForeground = colorNumber(terminalColors.fg);
       const lines: TerminalMarkdownLine[] = [];
       for (let row = range.startRow; row <= range.endRow; row += 1) {
         const start = row === range.startRow ? range.startCol : 0;
@@ -1182,7 +1180,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         lines.push({ runs, wrapped });
       }
       return terminalStyledSelectionToMarkdown(lines);
-    }, [resolvedTheme, selectionLineAtBufferRow]);
+    }, [terminalColors, selectionLineAtBufferRow]);
 
     const getText = useCallback(() => {
       const terminal = terminalRef.current;
@@ -2197,14 +2195,13 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
       void loadGhostty().then(async (ghostty) => {
         if (!active) return;
-        const theme = getTerminalTheme(resolvedTheme);
         const initialSize = modelSizeRef.current;
         const terminal = ghostty.createTerminal(initialSize.cols, initialSize.rows, {
           scrollbackLimit: TERMINAL_SCROLLBACK_BYTES,
-          fgColor: colorNumber(theme.foreground),
-          bgColor: colorNumber(theme.background),
-          cursorColor: colorNumber(theme.cursor),
-          palette: getTerminalAnsiPalette(resolvedTheme),
+          fgColor: colorNumber(terminalColors.fg),
+          bgColor: colorNumber(terminalColors.bg),
+          cursorColor: colorNumber(terminalColors.cursor),
+          palette: terminalAnsiPalette(terminalColors).map(colorNumber),
         });
         enableGraphemeClustering(terminal);
         modelOpRingRef.current.beginEpoch(initialSize.cols, initialSize.rows);
@@ -2234,15 +2231,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           rows: initialSize.rows,
         });
         const renderer = new WebGlTerminalRenderer(canvas, fontSizeRef.current, FONT_FAMILY, {
-          background: theme.background,
-          foreground: theme.foreground,
-          cursor: theme.cursor,
+          background: terminalColors.bg,
+          foreground: terminalColors.fg,
+          cursor: terminalColors.cursor,
         }, (event, surface) => {
           noteSurface(diagKeyRef.current, runtimeMetaRef.current?.sessionId ?? undefined, event, surface);
         });
         terminalRef.current = terminal;
         rendererRef.current = renderer;
-        // A theme change or fault recovery rebuilds every mounted pane, so the released
+        // A color change or fault recovery rebuilds every mounted pane, so the released
         // surface state has to survive the rebuild.
         if (surfaceReleasedRef.current) renderer.releaseDrawingBuffer();
         const recoveryAttempt = recoveryAttemptRef.current;
@@ -2465,7 +2462,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
     // Ghostty cells hold resolved default RGB, so a theme change needs a fresh model.
     // fontSize is not a dep: rebuilding every pane exhausts WKWebView's context pool.
-    }, [cancelScheduledOutputRender, clearSynchronizedOutputRenderTimer, fit, getText, captureStillFrame, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, rendererEpoch, resizeLocal, resolvedTheme, restoreSnapshot, scheduleCoalescedRefit, setSurfaceReleased, write]);
+    }, [cancelScheduledOutputRender, clearSynchronizedOutputRenderTimer, fit, getText, captureStillFrame, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, rendererEpoch, resizeLocal, terminalColors, restoreSnapshot, scheduleCoalescedRefit, setSurfaceReleased, write]);
 
     useEffect(() => {
       const renderer = rendererRef.current;

@@ -86,7 +86,6 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
   }), [daemon, sendFsWatch, sendFsUnwatch, unmountedDrafts]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
     window.__setTileWidth = (px: number) => setWidth(px);
     setTriggerRerender(() => {});
     onReady();

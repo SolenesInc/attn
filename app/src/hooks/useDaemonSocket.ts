@@ -756,12 +756,6 @@ export function useDaemonSocket({
   const attachQueueRef = useRef(new Map<string, Promise<unknown>>());
   const daemonInstanceIDRef = useRef<string>('');
   const hasReceivedInitialStateRef = useRef(false);
-  const lastTerminalThemeRef = useRef<{
-    foreground: string;
-    background: string;
-    cursor: string;
-    ansi_palette: string[];
-  } | null>(null);
   const instanceMismatchRef = useRef<boolean>(false);
   const instanceCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -1243,16 +1237,6 @@ export function useDaemonSocket({
             useAutomationsStore.getState().bumpChanged();
             flushQueuedCommands(ws);
             if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cmd: 'senders_get' }));
-            if (lastTerminalThemeRef.current && ws.readyState === WebSocket.OPEN) {
-              const theme = lastTerminalThemeRef.current;
-              ws.send(JSON.stringify({
-                cmd: 'set_terminal_theme',
-                foreground: theme.foreground,
-                background: theme.background,
-                cursor: theme.cursor,
-                ansi_palette: theme.ansi_palette,
-              }));
-            }
             break;
 
           case 'rename_result': {
@@ -2757,7 +2741,6 @@ export function useDaemonSocket({
     cursor: string;
     ansi_palette: string[];
   }) => {
-    lastTerminalThemeRef.current = theme;
     const ws = wsRef.current;
     if (hasReceivedInitialStateRef.current && ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ cmd: 'set_terminal_theme', ...theme }));

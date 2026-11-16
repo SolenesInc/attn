@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { agentPane, daemonSession, daemonDesktop, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
-import { openSettings } from './test/settings';
 
 const THEME = {
   cmd: 'set_terminal_theme',
@@ -30,21 +29,16 @@ describe('App daemon reconnect', () => {
     expect(daemon.sentOf('set_terminal_theme')).toEqual([THEME]);
   });
 
-  it('sends only the latest terminal colors after the reconnect handshake', async () => {
+  it('sends the terminal colors of the reconnected daemon\'s settings once its handshake completes', async () => {
     const { daemon } = await renderApp();
-    await openSettings(daemon);
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-general')));
     await gesture(daemon, () => daemon.disconnect());
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Light' })));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dark' })));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Light' })));
     daemon.on('client_hello', () => undefined);
 
     const reconnected = await daemon.reconnect();
     await daemon.idle();
     expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([]);
 
-    reconnected.emit(initialState());
+    reconnected.emit(initialState({ settings: { theme: 'light' } }));
     await daemon.idle();
     expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([expect.objectContaining({ background: '#ffffff' })]);
   });

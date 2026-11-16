@@ -61,7 +61,7 @@ export function AppDesktops() {
     setZoomModeBySessionId,
   } = useAppShell();
   const { seedPopoverRequest, usagePopoverRequest, openAsk } = useAppPanelsContext();
-  const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
+  const { terminalFontSize, terminalColors } = useAppAppearanceContext();
   const { delegationSessions, enrichedLocalSessions } = useAppSessionsContext();
   const { daemonSessions, settings } = useAppInputs();
   const { showError } = useAppErrorsContext();
@@ -186,7 +186,7 @@ export function AppDesktops() {
           desktopSelectionStyle={desktopSelectionStyle}
           activePaneId={desktop.active_pane_id}
           fontSize={terminalFontSize}
-          resolvedTheme={resolvedTheme}
+          terminalColors={terminalColors}
           focusRequestToken={utilityFocusRequestToken}
           focusClaim={focusRequest?.desktopId === desktop.id ? focusRequest : null}
           enabled={!blockingOverlayOpen}

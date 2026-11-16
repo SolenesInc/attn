@@ -3,9 +3,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { installVerbatimTextEntryGuard } from '../src/utils/verbatimTextEntry';
+import { applyColors, resolveColors } from '../src/colors/resolve';
 import { harnesses } from './harnesses';
 import type { HarnessAPI } from './types';
 // Note: Base styles are included via component CSS imports
+
+applyColors(resolveColors(undefined, undefined, 'dark'));
 
 // Initialize the harness API
 const initHarnessAPI = (componentName: string): HarnessAPI => ({

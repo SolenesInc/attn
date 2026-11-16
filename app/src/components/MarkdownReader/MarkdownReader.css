@@ -396,12 +396,6 @@
   color: var(--shiki-dark);
 }
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .md-reader .md-shiki span {
-    color: var(--shiki-light);
-  }
-}
-
 :root[data-theme='light'] .md-reader .md-shiki span {
   color: var(--shiki-light);
 }

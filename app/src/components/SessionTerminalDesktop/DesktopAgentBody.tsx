@@ -31,7 +31,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
     annotationApi,
     activeAgentPaneId,
     fontSize,
-    resolvedTheme,
+    terminalColors,
     isActiveSession,
     terminalsLive,
     onTerminalPointerActivity,
@@ -113,7 +113,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
             paneActive={(shortcutsEnabled && isActiveSession && sessionVisible && activeLeafId === agentPane.id) || poppedLeafIdSet.has(agentPane.id)}
             shortcutScope={{ desktopId, leafId: agentPane.id, active: isActiveSession && sessionVisible && activeLeafId === agentPane.id && !poppedLeafIdSet.has(agentPane.id) }}
             fontSize={fontSize}
-            resolvedTheme={resolvedTheme}
+            terminalColors={terminalColors}
             cwd={paneSession?.cwd}
             outpostName={paneSession?.host ? paneSession.hostName ?? paneSession.host : undefined}
             debugName={`agent:${paneTitle}:${paneSession?.agent ?? 'shell'}:${agentPane.sessionId}`}

@@ -6,7 +6,7 @@ import {
   PluginListResult,
   Task,
 } from '../hooks/useDaemonSocket';
-import type { ThemePreference } from '../hooks/useTheme';
+import type { ThemePreference } from '../colors/resolve';
 import { type SaveSetting } from './SettingsAutosave';
 
 export const OPEN_SENT_FILES_ENABLED_SETTING = 'open_sent_files_enabled';

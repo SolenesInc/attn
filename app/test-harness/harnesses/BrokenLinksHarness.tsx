@@ -33,7 +33,6 @@ export function BrokenLinksHarness({ onReady, setTriggerRerender }: HarnessProps
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
     setTriggerRerender(() => force((n) => n + 1));
     onReady();
   }, [onReady, setTriggerRerender]);

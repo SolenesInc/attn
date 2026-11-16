@@ -10,10 +10,16 @@ both settings.
 
 ## Pick a scheme
 
-Set `color_scheme` to a scheme's id:
+Attn comes with three schemes: `attn`, `catppuccin` (Mocha in dark,
+Latte in light) and `catppuccin-frappe` (Frappé in dark, Latte in light).
+
+In the app, open Settings → Appearance and pick one under Theme. Each scheme
+shows a few of its colors for the appearance in effect.
+
+From a terminal, set `color_scheme` to a scheme's id:
 
 ```sh
-attn settings set color_scheme <id>
+attn settings set color_scheme catppuccin
 ```
 
 Attn refuses an id it doesn't know, and the error lists the schemes it has. To
@@ -52,7 +58,9 @@ $ attn settings set color_overrides '{"dark":{"ui":{"bg_ap":"#24273a"}}}'
 settings: daemon error: color_overrides: dark.ui.bg_ap is not a color name; ui names: accent, annotation, bg_app, …
 ```
 
-To remove every override, clear the setting:
+While overrides are set, Settings → Appearance shows "Custom colors" under the
+schemes, with a Reset button that removes every override. From a terminal,
+clear the setting:
 
 ```sh
 attn settings set color_overrides ""

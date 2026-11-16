@@ -23,7 +23,8 @@ async function boot() {
   }
 
   dbg('boot: loading App');
-  const { default: App } = await import("./App");
+  const [{ default: App }, colors] = await Promise.all([import("./App"), import("./colors/resolve")]);
+  colors.applyColors(colors.resolveColors(undefined, undefined, 'dark'));
   dbg('boot: createRoot');
   // Note: StrictMode disabled because it causes double-mounting which breaks
   // the PTY connection (terminal gets disposed and recreated)

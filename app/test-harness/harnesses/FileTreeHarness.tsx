@@ -44,9 +44,6 @@ export function FileTreeHarness({ onReady, setTriggerRerender }: HarnessProps) {
   }, []);
 
   useEffect(() => {
-    // The app defaults to the dark theme; force it so the harness is deterministic
-    // regardless of the runner's OS color scheme.
-    document.documentElement.setAttribute('data-theme', 'dark');
     setTriggerRerender(() => {});
     onReady();
   }, [onReady, setTriggerRerender]);

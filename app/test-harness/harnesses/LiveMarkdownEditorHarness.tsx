@@ -64,7 +64,6 @@ export function LiveMarkdownEditorHarness({ onReady, setTriggerRerender }: Harne
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
     setTriggerRerender(() => force((n) => n + 1));
     window.__EDITOR_HARNESS__ = {
       applyExternal: (next: string) => editorRef.current?.applyExternalContent(next),

@@ -22,6 +22,7 @@ import { SavedMark } from './useSavedFlash';
 import { SettingRefusal } from './SettingsAutosave';
 import { SettingsSwitch } from './SettingsSwitch';
 import type { SettingsModalState } from './useSettingsModalState';
+import { ColorSchemeSettings } from '../colors/ColorSchemeSettings';
 import { BoolSetting, EXPERIMENTAL_FEATURES, FEATURES, isOn, type BoolSettingKey, type Feature } from '../utils/settings';
 
 const AVAILABILITY_SUMMARY: Record<HarnessAvailability, string> = {
@@ -117,7 +118,7 @@ export function AppearanceSettings({
       <section className="settings-block">
         <div className="settings-block-intro">
           <h3>Theme</h3>
-          <p className="settings-description">Choose how attn renders the application chrome.</p>
+          <p className="settings-description">Choose the appearance and the color scheme of attn and its terminals.</p>
         </div>
         <div className="settings-block-body">
           <div className="settings-segmented" role="group" aria-label="Theme preference">
@@ -146,6 +147,7 @@ export function AppearanceSettings({
               System
             </button>
           </div>
+          <ColorSchemeSettings />
         </div>
       </section>
 

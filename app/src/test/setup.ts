@@ -165,6 +165,10 @@ beforeEach(async () => {
   }
   forgetAppMemory();
   resetTauriFakes();
+  if (typeof document !== 'undefined') {
+    document.documentElement.removeAttribute('style');
+    document.documentElement.removeAttribute('data-theme');
+  }
 });
 
 afterEach(() => {

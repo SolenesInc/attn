@@ -43,6 +43,7 @@ frontend:
   - 'cmd/promptgen/**'
   - 'cmd/prompt-editor/**'
   - 'app/src/**'
+  - 'internal/colors/schemes/**'
   - 'app/e2e/**'
   - 'app/scripts/**'
   - 'app/test-harness/**'

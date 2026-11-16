@@ -17,10 +17,7 @@ import './Markdown.css';
 const OVERSIZED_FIT_RATIO = 0.8;
 
 function resolveTheme(): MermaidTheme {
-  const attr = document.documentElement.getAttribute('data-theme');
-  if (attr === 'dark') return 'dark';
-  if (attr === 'light') return 'neutral';
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'neutral' : 'dark';
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'neutral' : 'dark';
 }
 
 function useMermaidTheme(): MermaidTheme {
@@ -32,13 +29,7 @@ function useMermaidTheme(): MermaidTheme {
     const observer = new MutationObserver(recompute);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-    const media = window.matchMedia('(prefers-color-scheme: light)');
-    media.addEventListener('change', recompute);
-
-    return () => {
-      observer.disconnect();
-      media.removeEventListener('change', recompute);
-    };
+    return () => observer.disconnect();
   }, []);
 
   return theme;

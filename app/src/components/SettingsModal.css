@@ -485,6 +485,69 @@
   opacity: 0.45;
 }
 
+.settings-color-schemes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-color-scheme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-color-scheme {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  padding: 0 12px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-color-scheme:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-hover);
+}
+
+.settings-color-scheme.active {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent);
+}
+
+.settings-color-scheme-swatches {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.settings-color-scheme-swatch {
+  width: 14px;
+  height: 18px;
+}
+
+.settings-color-overrides {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-color-overrides-mark {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
 .settings-standby-explain {
   max-width: 640px;
   display: grid;

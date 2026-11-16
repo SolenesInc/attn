@@ -175,9 +175,6 @@ export function NotebookBrowserHarness({ onReady, setTriggerRerender }: HarnessP
   ], []);
 
   useEffect(() => {
-    // The app defaults to the dark theme (useTheme DEFAULT_PREFERENCE); force it here
-    // so the harness is deterministic regardless of the runner's OS color scheme.
-    document.documentElement.setAttribute('data-theme', 'dark');
     setTriggerRerender(() => {});
     window.__NB_HARNESS__ = {
       fsChanged: (path?: string, content?: string, hash?: string) => {

@@ -1,5 +1,5 @@
 /// <reference types="vitest" />
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 import { execFileSync } from "child_process";
 import { globSync, readFileSync } from "fs";
@@ -88,6 +88,9 @@ export default defineConfig(async ({ command }) => ({
           port: 1421,
         }
       : undefined,
+    fs: {
+      allow: [searchForWorkspaceRoot(__dirname), resolve(__dirname, "../internal/colors/schemes")],
+    },
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

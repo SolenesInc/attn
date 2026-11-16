@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useKeybindings } from '../contexts/KeybindingsContext';
 import { useGardenScale } from '../hooks/useGardenScale';
-import { useTheme } from '../hooks/useTheme';
+import { useColors } from '../colors/useColors';
+import { terminalAnsiPalette } from '../colors/schemes';
 import { useUIScale } from '../hooks/useUIScale';
 import { useDaemonStore } from '../store/daemonSessions';
 import {
   areSidebarHarnessLogosEnabled,
   SIDEBAR_HARNESS_LOGOS_SETTING,
 } from '../utils/sidebarHarnessLogos';
-import { getTerminalAnsiPaletteColors, getTerminalTheme } from '../utils/terminalSizing';
 import { AppContentProps } from './appSupport';
 import { QUICK_CAPTURE_FONT } from '../quickCapture/client';
 
@@ -17,7 +17,7 @@ interface Options {
   settings: AppContentProps['settings'];
 }
 export function useAppAppearance({ settings }: Options) {
-  const { hasReceivedInitialState, sendSetTerminalTheme, sendSetSetting } = useDaemonApi();
+  const { isReady, sendSetTerminalTheme, sendSetSetting } = useDaemonApi();
   const { repoStates, authorStates } = useDaemonStore();
   const { scale, increaseScale, decreaseScale, resetScale } = useUIScale();
   useEffect(() => {
@@ -32,20 +32,20 @@ export function useAppAppearance({ settings }: Options) {
 
   const gardenScale = useGardenScale(scale);
 
-  const { preference: themePreference, resolved: resolvedTheme, setTheme } = useTheme();
+  const { preference: themePreference, colors, setTheme } = useColors();
+  const terminalColors = colors.terminal;
   const keybindings = useKeybindings();
 
-  // The daemon worker answers OSC 10/11/12 on the frontend's behalf, so it needs the resolved theme; hasReceivedInitialState doubles as the reconnect signal.
+  // The daemon worker answers OSC 10/11/12 on the frontend's behalf, so each handshake, first or reconnect, sends the terminal colors in effect.
   useEffect(() => {
-    if (!hasReceivedInitialState) return;
-    const theme = getTerminalTheme(resolvedTheme);
+    if (!isReady) return;
     sendSetTerminalTheme({
-      foreground: theme.foreground,
-      background: theme.background,
-      cursor: theme.cursor,
-      ansi_palette: getTerminalAnsiPaletteColors(resolvedTheme),
+      foreground: terminalColors.fg,
+      background: terminalColors.bg,
+      cursor: terminalColors.cursor,
+      ansi_palette: terminalAnsiPalette(terminalColors),
     });
-  }, [hasReceivedInitialState, resolvedTheme, sendSetTerminalTheme]);
+  }, [isReady, terminalColors, sendSetTerminalTheme]);
 
   const mutedRepos = useMemo(
     () => repoStates.filter((r) => r.muted).map((r) => r.repo),
@@ -70,7 +70,7 @@ export function useAppAppearance({ settings }: Options) {
     terminalFontSize,
     gardenScale,
     themePreference,
-    resolvedTheme,
+    terminalColors,
     setTheme,
     keybindings,
     mutedRepos,

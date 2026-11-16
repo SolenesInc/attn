@@ -12,12 +12,6 @@
   letter-spacing: normal;
 }
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .md-ql-chip {
-    color: var(--md-ql-text, var(--color-text-primary));
-  }
-}
-
 :root[data-theme='light'] .md-ql-chip {
   color: var(--md-ql-text, var(--color-text-primary));
 }

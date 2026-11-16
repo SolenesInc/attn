@@ -207,7 +207,7 @@ run_checks() {
   touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox)/|^cmd/(settingsgen|cligen)/|^cli/|^scripts/generate-rust-protocol\.mjs|^go\.mod$' && targets+=(check-types)
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
-  touches '^app/' && targets+=(check-frontend)
+  touches '^app/|^internal/colors/schemes/' && targets+=(check-frontend)
   touches "$native_paths" && targets+=(check-native "NATIVE_CLIPPY=$(native_clippy_scope "$changed")")
   touches '^mobile/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
   script_tests="$(script_tests_for "$changed")"

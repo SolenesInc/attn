@@ -14,7 +14,7 @@ import {
   type TerminalDesktopState,
   type TileContentState,
 } from '../../types/desktop';
-import type { ResolvedTheme } from '../../utils/terminalSizing';
+import type { TerminalColors } from '../../colors/schemes';
 import type { DesktopSelectionStyle } from '../../utils/desktopSelectionStyle';
 import { type ChainSession } from '../DelegationChain';
 import { type SessionAnnotationApi } from '../TerminalAnnotations/AnnotatedTerminal';
@@ -95,7 +95,7 @@ export interface SessionTerminalDesktopProps {
   activePaneId: string;
   selectedSessionId?: string | null;
   fontSize: number;
-  resolvedTheme?: ResolvedTheme;
+  terminalColors?: TerminalColors;
   focusRequestToken?: number;
   focusClaim?: FocusClaim | null;
   enabled: boolean;

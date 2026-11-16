@@ -145,7 +145,7 @@ go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
 go ./cmd/attn-ingest TestEachRecordKindReadsBackAsTypedColumnsThroughItsView
 
-group app ^app/
+group app ^app/|^internal/colors/schemes/
 vitest .
 playwright e2e/queue-sidebar-fit.spec.ts
 playwright e2e/notebook-tile.spec.ts

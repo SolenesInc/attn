@@ -395,24 +395,6 @@
   --launcher-worktree-color: var(--color-success);
   border-color: var(--color-border-subtle);
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .new-session-launcher {
-    --launcher-accent-text: color-mix(in srgb, var(--color-brand) 83%, black);
-    --launcher-bg-input: var(--color-bg-input);
-    --launcher-bg-tile: var(--color-bg-elevated);
-    --launcher-border-tile: var(--color-border-subtle);
-    --launcher-border-input: var(--color-border);
-    --launcher-hairline: var(--color-border-subtle);
-    --launcher-footer-bg: rgba(0, 0, 0, 0.03);
-    --launcher-text-quiet: var(--color-text-secondary);
-    --launcher-text-path: var(--color-text-tertiary);
-    --launcher-text-section: var(--color-text-tertiary);
-    --launcher-text-faint: var(--color-text-muted);
-    --launcher-worktree-color: var(--color-success);
-    border-color: var(--color-border-subtle);
-  }
-}
-
 .launcher-status {
   margin: 8px 2px 0;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
