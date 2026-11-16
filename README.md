@@ -56,6 +56,8 @@ brew install --cask solenesinc/attn/attn
 Or grab the DMG from the
 [latest release](https://github.com/SolenesInc/attn/releases/latest), open it
 and drag attn to Applications. The app tells you when a new release is out.
+To build it from source instead, see
+[build from source](docs/guide/tutorials/getting-started.md#build-from-source).
 
 The Linux app is still in progress; build it from source as
 [getting started](docs/guide/tutorials/getting-started.md#linux) describes. The

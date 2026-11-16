@@ -37,13 +37,17 @@ upgrade the database, Attn first saves a snapshot in `~/.attn/backups/`. Attn
 is designed to restart without interrupting you or your agents, so you can
 update at any time.
 
+To build from source instead, install the [build tools](#build-tools) and the
+Xcode Command Line Tools (`xcode-select --install`), then follow
+[Build from source](#build-from-source). On a Mac, `make` installs the app in
+`~/Applications`.
+
 ### Linux
 
 The Linux app is still in progress, and releases don't package it yet, so build
 it from source. We test on Ubuntu 24.04.
 
-You need Go 1.27.1 or newer, Rust through rustup (the repository pins the Rust
-version to use), Node.js 26 or newer, pnpm 9 or newer, and these packages:
+Install the [build tools](#build-tools) and these packages:
 
 ```bash
 sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev \
@@ -51,17 +55,31 @@ sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev \
   desktop-file-utils xdg-utils
 ```
 
-Then clone the repository and build:
+Then follow [Build from source](#build-from-source). On Linux, `make` installs
+the app in `~/.local/share/attn` (`$XDG_DATA_HOME/attn` if you set it). Start
+it later with `~/.local/share/attn/bin/attn-app`.
+
+### Build tools
+
+Building from source needs, on either platform:
+
+- [Go](https://go.dev/dl/) 1.27.1 or newer.
+- [Rust](https://rustup.rs/) through rustup. The repository pins the Rust
+  version, and rustup installs it on the first build.
+- [Node.js](https://nodejs.org/) 26 or newer.
+- [pnpm](https://pnpm.io/installation) 9 or newer.
+- Git and Make.
+
+### Build from source
 
 ```bash
 git clone https://github.com/SolenesInc/attn.git && cd attn
 make
 ```
 
-`make` builds the app and the daemon, installs them in `~/.local/share/attn`
-(`$XDG_DATA_HOME/attn` if you set it), and launches the app. `make install`
-skips the launch. Start the app later with `~/.local/share/attn/bin/attn-app`.
-To update, pull and run `make` again. Source builds don't check for releases.
+`make` builds the app and the daemon, installs them, and launches the app.
+`make install` skips the launch. To update, pull and run `make` again. Source
+builds don't check for releases.
 
 ## The home screen
 
