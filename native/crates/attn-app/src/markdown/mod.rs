@@ -61,7 +61,7 @@ pub(crate) fn body(
     title: &str,
     session: Option<&str>,
     content: Option<&attn_client::TileContent>,
-    outposts: &[attn_protocol::OutpostInfo],
+    (outposts, servers): (&[attn_protocol::OutpostInfo], crate::review::setup::Servers),
     (pictures, drafts, readings, annotates): (&Pictures, &Drafts, &Readings, bool),
     t: &Tokens,
 ) -> El {
@@ -181,6 +181,7 @@ pub(crate) fn body(
             }),
             marking,
             drafts.get(&uri).map_or(&[][..], |d| &d.marks[..]),
+            (content.host.as_deref().filter(|h| !h.is_empty()), servers),
             t,
         );
     }

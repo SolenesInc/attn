@@ -3879,3 +3879,235 @@ fn says_why_a_question_got_no_answer_and_asks_nothing_about_a_removed_line_or_pr
         Some("The language server knows no definition of sum.")
     );
 }
+
+fn server(language: &str, state: &str) -> attn_protocol::ReviewNavigation {
+    attn_protocol::ReviewNavigation {
+        language: language.into(),
+        file: format!("main.{language}"),
+        state: state.into(),
+        ..Default::default()
+    }
+}
+
+fn with_servers(navigation: Vec<attn_protocol::ReviewNavigation>) -> ReviewBundle {
+    ReviewBundle {
+        navigation,
+        ..bundle()
+    }
+}
+
+/// What the key line says about the language servers, entry by entry.
+fn servers(world: &World) -> Vec<String> {
+    if world
+        .screen()
+        .find(Target::key("tile.m.review.servers"))
+        .is_none()
+    {
+        return Vec::new();
+    }
+    world
+        .screen()
+        .descendants(Target::key("tile.m.review.servers"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+#[test]
+fn says_each_language_server_state_and_counts_the_seconds_one_has_been_starting() {
+    let mut world = start();
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(with_servers(vec![
+            attn_protocol::ReviewNavigation {
+                started_at: Some(super::queue::ago(0)),
+                detail: Some("indexing 40%".into()),
+                ..server("go", "starting")
+            },
+            server("rust", "ready"),
+            attn_protocol::ReviewNavigation {
+                detail: Some("gopls exited".into()),
+                ..server("ts", "failed")
+            },
+        ])),
+    );
+    assert_eq!(
+        servers(&world),
+        [
+            "go loading 0s: indexing 40%",
+            "rust ready",
+            "ts failed: gopls exited",
+            "set up",
+            "not here"
+        ]
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("tile.m.review.server.ts"))
+            .description
+            .as_deref(),
+        Some("gopls exited")
+    );
+    world.advance(std::time::Duration::from_secs(3));
+    assert_eq!(servers(&world)[0], "go loading 3s: indexing 40%");
+
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(with_servers(vec![server("go", "ready")])),
+    );
+    assert_eq!(servers(&world), ["go ready"]);
+    world.advance(std::time::Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn s_starts_an_agent_that_sets_up_a_missing_server_and_says_why_it_could_not() {
+    let mut world = start();
+    let answers = std::sync::Arc::new(std::sync::Mutex::new(vec![
+        json!({"event": "code_nav_setup_result", "success": false, "error": "no agent fits"}),
+        json!({"event": "code_nav_setup_result", "success": true, "session_id": "s-setup"}),
+    ]));
+    world
+        .daemon
+        .on("code_nav_setup", move |_| answers.lock().unwrap().remove(0));
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(with_servers(vec![
+            server("go", "ready"),
+            attn_protocol::ReviewNavigation {
+                detail: Some("pyright not found".into()),
+                ..server("python", "missing")
+            },
+        ])),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+
+    type_key(&mut world, "s");
+    let asked = world.daemon.sent_of("code_nav_setup");
+    assert_eq!(
+        (
+            asked[0]["desktop_id"].clone(),
+            asked[0]["document"].clone(),
+            asked[0]["repository"].clone(),
+            asked[0]["language"].clone(),
+            asked[0]["file"].clone(),
+            asked[0]["state"].clone(),
+            asked[0]["detail"].clone(),
+        ),
+        (
+            json!(DESKTOP),
+            json!(DOC),
+            json!("/repo"),
+            json!("python"),
+            json!("main.python"),
+            json!("missing"),
+            json!("pyright not found"),
+        )
+    );
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("Could not start setup: no agent fits")
+    );
+
+    click(&mut world, Target::key("tile.m.review.setup.start"));
+    assert_eq!(world.daemon.sent_of("code_nav_setup").len(), 2);
+    assert_eq!(nav_note(&world), None);
+}
+
+#[test]
+fn shows_the_agent_setting_up_a_server_and_a_click_opens_it() {
+    let mut world = start();
+    let mut setup = server("python", "missing");
+    setup.setup_session_id = Some("s-setup".into());
+    deliver(&mut world, DOCUMENT, Some(with_servers(vec![setup])));
+    world.daemon.emit(attn_protocol::SessionsUpdatedMessage {
+        sessions: Some(vec![
+            Session {
+                id: "s-a".into(),
+                label: "Agent a".into(),
+                directory: "/repo".into(),
+                profile_id: "work".into(),
+                ..Session::default()
+            },
+            Session {
+                id: "s-setup".into(),
+                label: "Python setup".into(),
+                directory: "/repo".into(),
+                profile_id: "work".into(),
+                state: "working".into(),
+                ..Session::default()
+            },
+        ]),
+        ..attn_protocol::SessionsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(servers(&world), ["python setting up in Python setup"]);
+
+    click(&mut world, Target::key("tile.m.review.server.python"));
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(shown.last().unwrap()["session_id"], json!("s-setup"));
+}
+
+#[test]
+fn x_stops_offering_setup_in_the_repository_and_s_still_sets_up() {
+    let mut world = start();
+    world.daemon.on(
+        "code_nav_setup",
+        |_| json!({"event": "code_nav_setup_result", "success": true}),
+    );
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(with_servers(vec![server("python", "missing")])),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+
+    type_key(&mut world, "x");
+    let set = world.daemon.sent_of("set_setting");
+    assert_eq!(
+        (set[0]["key"].clone(), set[0]["value"].clone()),
+        (json!("code_review_setup_offer_local_/repo"), json!("off"))
+    );
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("Setup is no longer offered in this repository; s still sets up.")
+    );
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(std::collections::BTreeMap::from([(
+            "code_review_setup_offer_local_/repo".to_owned(),
+            "off".to_owned(),
+        )])),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(servers(&world), ["python no server", "offer setup"]);
+
+    type_key(&mut world, "s");
+    assert_eq!(world.daemon.sent_of("code_nav_setup").len(), 1);
+
+    click(&mut world, Target::key("tile.m.review.setup.offer"));
+    let set = world.daemon.sent_of("set_setting");
+    assert_eq!(set[1]["value"], json!(""));
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("Setup is offered again in this repository.")
+    );
+}
+
+#[test]
+fn offers_setup_again_once_the_setup_agent_is_gone_or_waits_without_a_server() {
+    let mut world = start();
+    let mut gone = server("go", "missing");
+    gone.setup_session_id = Some("s-closed".into());
+    let mut waits = server("python", "missing");
+    waits.setup_session_id = Some("s-a".into());
+    deliver(&mut world, DOCUMENT, Some(with_servers(vec![gone, waits])));
+    assert_eq!(
+        servers(&world),
+        ["go no server", "set up", "not here", "python no server"]
+    );
+}

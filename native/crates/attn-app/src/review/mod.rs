@@ -11,6 +11,7 @@ mod keys;
 mod marks;
 mod nav;
 mod search;
+pub(crate) mod setup;
 mod stop;
 
 use std::collections::HashMap;
@@ -521,6 +522,7 @@ pub(crate) fn body(
     (read, read_version): (&dyn Fn(std::ops::Range<usize>) -> El, u64),
     marking: Vec<El>,
     draft: &[attn_protocol::MarkdownAnnotation],
+    (host, servers): (Option<&str>, setup::Servers),
     t: &Tokens,
 ) -> El {
     let reviews = &readings.reviews;
@@ -827,6 +829,7 @@ pub(crate) fn body(
                 sides,
                 !review.files.is_empty() && reading.frame != Frame::Walkthrough,
             ),
+            setup::states(tile, bundle, host, servers, t),
             t,
         ))
         .children(review.help.then(|| keys::sheet(&prefix, t)))
@@ -2286,6 +2289,17 @@ fn nav_key(
     if let Some(Some(nav::Note::Status(_) | nav::Note::Alert(_))) = Some(&review.nav.note) {
         review.nav.note = None;
     }
+    let setup = match typed {
+        "s" if printable => Some(setup::start as fn(&mut State, &str, &mut Tx) -> bool),
+        "x" if printable => Some(setup::toggle_offer as fn(&mut State, &str, &mut Tx) -> bool),
+        _ => None,
+    };
+    if let Some(act) = setup
+        && act(state, tile, tx)
+    {
+        return Some(true);
+    }
+    let review = state.readings.reviews.tiles.get_mut(tile)?;
     let kind = nav::Kind::of_key(typed).filter(|_| printable)?;
     let line = nav_line(review, reading, tile);
     let review = state.readings.reviews.tiles.get_mut(tile)?;

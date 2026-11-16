@@ -112,6 +112,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             desktop.map(|d| {
                 super::shared_conversation::notices(&facts.sessions, &facts.desktops, &d.id)
             }),
+            desktop.map(|d| crate::review::setup::reads(facts, &d.id, state.window.now_ms)),
         ),
         desk.held_split().map(str::to_owned),
         (super::arrival::keys(&desk.rings), desk.refusals.keys()),
@@ -150,7 +151,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     (&state.drafts, &state.readings),
                     &state.browser,
                 ),
-                (t, scale),
+                (t, scale, state.window.now_ms),
             ))
         })
     });
@@ -422,6 +423,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         ),
         t,
         scale,
+        now_ms: state.window.now_ms,
     };
     tile(leaf, &cx).w_full().h_full()
 }
@@ -448,7 +450,7 @@ fn screen(
         (&crate::markdown::Drafts, &crate::markdown::Readings),
         &crate::browser::Browsers,
     ),
-    (t, scale): (&Tokens, f32),
+    (t, scale, now_ms): (&Tokens, f32, i64),
 ) -> El {
     match desktop {
         None => empty(t, "No desktop"),
@@ -503,6 +505,7 @@ fn screen(
                     shared: &shared,
                     t,
                     scale,
+                    now_ms,
                 };
                 let placed = desk.placement(&rendered, cx.focused.is_some());
                 let held = desk.held_divider(&placed);
@@ -583,6 +586,7 @@ struct TileCx<'a> {
     stale: &'a [String],
     /// Sessions whose conversation another terminal also has open, with where it is.
     shared: &'a [(String, String)],
+    now_ms: i64,
     t: &'a Tokens,
     scale: f32,
 }
@@ -811,7 +815,14 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     &title,
                     session.as_deref(),
                     cx.contents.get(&key),
-                    cx.outposts,
+                    (
+                        cx.outposts,
+                        crate::review::setup::Servers {
+                            sessions: &cx.facts.sessions,
+                            settings: &cx.facts.settings,
+                            now_ms: cx.now_ms,
+                        },
+                    ),
                     (cx.pictures, cx.marks.0, cx.marks.1, cx.annotates),
                     t,
                 ),

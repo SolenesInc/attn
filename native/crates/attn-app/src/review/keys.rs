@@ -260,6 +260,7 @@ pub(super) fn key_line(
     frame: Frame,
     offered: &[Frame],
     (sides, file_open): (bool, bool),
+    servers: Option<El>,
     t: &Tokens,
 ) -> El {
     let prefix = &prefix(tile);
@@ -296,12 +297,14 @@ pub(super) fn key_line(
         .role("toolbar")
         .label("Review keys")
         .w_full()
+        .flex_wrap()
         .gap(space::S3)
         .px(space::S3)
         .py(space::S1)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.5))
         .children(tabs)
         .children(keys.iter().map(|(k, w)| entry(k, w)))
+        .children(servers)
         .child(col().grow(1.0))
         .child(entry("?", "all keys"))
 }
@@ -350,6 +353,23 @@ const ALL_KEYS: &[(&str, &str)] = &[
     (
         "b",
         "Switch between the diagrams before and after the change, when the document has both. Every frame shows the same side.",
+    ),
+    (
+        "f",
+        "Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on is offered in one line above the keys: ↵ takes it, esc drops it, and every other key keeps working. The line asked about is marked … until the answer comes.",
+    ),
+    (
+        "r",
+        "List the uses of a name on the line; ↑↓ pick one, ↵ opens it.",
+    ),
+    ("h", "Show the type of a name on the line."),
+    (
+        "s",
+        "When a language of the review has no working server, start an agent on the review’s machine that sets one up. The review gains navigation once it works.",
+    ),
+    (
+        "x",
+        "Stop offering setup in this repository, or offer it again. s still sets up.",
     ),
     (
         "↵",
