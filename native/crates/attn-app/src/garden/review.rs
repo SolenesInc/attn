@@ -246,7 +246,7 @@ pub(super) fn follow(state: &mut State, tx: &mut Tx) {
     let selected = state.facts.profiles.selected.clone();
     if review(state).profile != selected {
         *review_mut(state) = Review {
-            profile: selected,
+            profile: selected.clone(),
             ..Review::default()
         };
     }
@@ -254,18 +254,11 @@ pub(super) fn follow(state: &mut State, tx: &mut Tx) {
     if review(state).heard != heard {
         let broadcast = state.facts.garden_review.as_ref().clone();
         review_mut(state).heard = heard;
-        if let Some(broadcast) = broadcast {
+        if let Some(broadcast) = broadcast.filter(|r| r.run.profile_id == selected) {
             hear(state, broadcast);
         }
     }
     if super::mode(state) == Mode::Closed {
-        if review(state).open || review(state).problem.is_some() || !review(state).rows.is_empty() {
-            let review = review_mut(state);
-            review.open = false;
-            review.problem = None;
-            review.rows.clear();
-            review.rows_at = 0;
-        }
         return;
     }
     let push = Arc::as_ptr(&state.facts.garden) as usize;
@@ -283,6 +276,16 @@ pub(super) fn follow(state: &mut State, tx: &mut Tx) {
     }
     review.rows = rows;
     read_overview(state, tx);
+}
+
+/// The garden opens on its walk, and reads the overview afresh.
+pub(super) fn opened(state: &mut State) {
+    let review = review_mut(state);
+    review.open = false;
+    review.problem = None;
+    review.asked = None;
+    review.rows.clear();
+    review.rows_at = 0;
 }
 
 fn read_overview(state: &mut State, tx: &mut Tx) {

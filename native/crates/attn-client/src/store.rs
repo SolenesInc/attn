@@ -798,7 +798,8 @@ impl Store {
                 profiles.selected = profile.id.clone();
                 facts.asks = Arc::default();
                 facts.vents = Arc::default();
-                changed |= Slices::ASKS | Slices::VENTS;
+                facts.garden_review = Arc::default();
+                changed |= Slices::ASKS | Slices::VENTS | Slices::GARDEN_REVIEW;
             }
             match profiles.all.iter_mut().find(|p| p.id == profile.id) {
                 Some(known) => *known = profile,

@@ -1000,3 +1000,63 @@ fn reads_the_overview_when_the_garden_opens_and_when_a_row_changes_never_on_a_pu
     );
     assert!(rests(&mut world));
 }
+
+#[test]
+fn reads_the_overview_again_each_time_an_empty_garden_opens() {
+    let (mut world, _) = garden(Script {
+        seeds: Vec::new(),
+        ..Script::of(None)
+    });
+    assert_eq!(world.daemon.sent_of("seed_review_show").len(), 1);
+
+    world.gesture(|app| app.click(Target::key("garden.close")));
+    world.gesture(|app| app.key(board()));
+
+    assert_eq!(world.daemon.sent_of("seed_review_show").len(), 2);
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn a_profile_switch_drops_the_review_another_profile_was_shown() {
+    let (mut world, _) = garden(Script::of(Some(review(vec![item()]))));
+    emit(&mut world, review(vec![item()]));
+    assert_eq!(prompt(&world).as_deref(), Some("1 seed needs review"));
+
+    let side = Profile {
+        id: "side".into(),
+        name: "Side".into(),
+        current_desktop_id: "side/desktop_1".into(),
+        ..Profile::default()
+    };
+    world.daemon.emit(attn_protocol::ProfilesChangedMessage {
+        profiles: vec![
+            Profile {
+                id: PROFILE.into(),
+                name: "Work".into(),
+                ..Profile::default()
+            },
+            side.clone(),
+        ],
+        ..attn_protocol::ProfilesChangedMessage::new()
+    });
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: side,
+            desktops: vec![Desktop {
+                id: "side/desktop_1".into(),
+                profile_id: "side".into(),
+                name: "Desktop 1".into(),
+                order_key: "1".into(),
+                tree_json: json!({}).to_string(),
+                revision: 1,
+                ..Desktop::default()
+            }],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+
+    assert_eq!(prompt(&world), None);
+    assert!(!has(&world, "Continue review"));
+    assert!(rests(&mut world));
+}

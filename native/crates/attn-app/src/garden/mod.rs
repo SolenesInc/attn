@@ -175,6 +175,9 @@ fn show(state: &mut State, frame: Mode, tx: &mut Tx) {
         window.garden.full = false;
         window.open_drawer(Drawer::Garden);
     }
+    if was == Mode::Closed {
+        review::opened(state);
+    }
     if was != frame {
         focus_frame(state, tx);
     }
