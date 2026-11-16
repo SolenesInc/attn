@@ -198,6 +198,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let notebook = crate::notebook::images(state);
     let followed = hash(&(
         contents.revision,
+        state.readings.reviews.widenings(),
         std::sync::Arc::as_ptr(&state.facts.asks) as usize,
         &shown_ask,
         &notebook,
@@ -213,10 +214,18 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
                 continue;
             }
             let host = c.host.clone().filter(|h| !h.is_empty());
-            let read = hash(&(&c.path, &host, &c.content));
+            let stops = c.review.as_ref().map_or_else(Vec::new, |bundle| {
+                crate::review::documents(&state.readings.reviews, &key.tile, bundle)
+            });
+            let read = hash(&(&c.path, &host, &c.content, &stops));
             let fresh = state.pictures.documents.get(key) != Some(&read);
             documents.insert(key.clone(), read);
-            for path in images_in(&c.path, &c.content) {
+            let shown = std::iter::once((c.path.as_str(), c.content.as_str())).chain(
+                stops
+                    .iter()
+                    .map(|(path, text)| (path.as_str(), text.as_str())),
+            );
+            for path in shown.flat_map(|(document, source)| images_in(document, source)) {
                 let source = Source {
                     reader: Reader::Tile { host: host.clone() },
                     path,

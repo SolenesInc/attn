@@ -166,6 +166,22 @@ pub struct Reviews {
 }
 
 impl Reviews {
+    /// Each widened stop, by its tile, path and first line, with the lines it was widened by.
+    pub(crate) fn widenings(&self) -> Vec<(&str, &str, i64, usize)> {
+        let mut all: Vec<_> = self
+            .tiles
+            .iter()
+            .flat_map(|(tile, review)| {
+                review
+                    .expansions
+                    .iter()
+                    .map(|((path, from), e)| (tile.as_str(), path.as_str(), *from, e.extra))
+            })
+            .collect();
+        all.sort_unstable();
+        all
+    }
+
     fn nav_mut(&mut self, tile: &str) -> Option<&mut nav::Nav> {
         self.tiles.get_mut(tile).map(|r| &mut r.nav)
     }
@@ -561,6 +577,11 @@ pub(crate) fn body(
     title: &str,
     (source, bundle, revision): (&str, &ReviewBundle, u64),
     readings: &crate::markdown::Readings,
+    (document, pictures, pictured): (
+        &crate::markdown::Document,
+        &Rc<HashMap<String, Option<rune::Image>>>,
+        u64,
+    ),
     (read, read_version): (&dyn Fn(std::ops::Range<usize>) -> El, u64),
     marking: Vec<El>,
     draft: &[attn_protocol::MarkdownAnnotation],
@@ -686,13 +707,19 @@ pub(crate) fn body(
                     rows.len(),
                     marked,
                     asking.clone(),
+                    pictured,
                     *t,
                 );
                 memo(key.clone(), version, || {
                     if blocks::is_document(&s.path) {
+                        let file = crate::markdown::Document {
+                            path: in_repository(bundle, &s.path),
+                            ..document.clone()
+                        };
                         return blocks::view(
                             (tile, &key, host.is_none()),
                             s,
+                            (&file, pictures),
                             (rows, &blocks::blocks(rows)),
                             (row, selected_places),
                             &on,
@@ -1820,6 +1847,40 @@ pub(crate) fn open_in_editor(state: &mut State, tile: &str, path: String, tx: &m
 /// Whether the file view shows a file outside the repository, which takes no marks or edits.
 fn reads_outside(review: &Review) -> bool {
     review.files.last().is_some_and(|f| f.target.outside)
+}
+
+/// Where file `path` of `bundle`'s repository is; empty when the review names no repository.
+fn in_repository(bundle: &ReviewBundle, path: &str) -> String {
+    if bundle.repository.is_empty() {
+        return String::new();
+    }
+    format!("{}/{path}", bundle.repository.trim_end_matches('/'))
+}
+
+/// The markdown files review tile `tile`'s stops show, each by where it is, with the text of
+/// the rows the stop shows.
+pub(crate) fn documents(
+    reviews: &Reviews,
+    tile: &str,
+    bundle: &ReviewBundle,
+) -> Vec<(String, String)> {
+    let expansions = reviews.tiles.get(tile).map(|r| &r.expansions);
+    bundle
+        .stops
+        .iter()
+        .filter(|s| blocks::is_document(&s.path))
+        .map(|s| {
+            let rows = expansions
+                .and_then(|e| e.get(&(s.path.clone(), s.from)))
+                .map_or(&s.rows[..], |e| &e.rows[..]);
+            let text = rows
+                .iter()
+                .map(|r| r.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            (in_repository(bundle, &s.path), text)
+        })
+        .collect()
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.

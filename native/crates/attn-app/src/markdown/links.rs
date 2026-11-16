@@ -114,13 +114,23 @@ pub(crate) struct Outpost {
     pub(crate) name: String,
 }
 
+impl Document {
+    /// How the reader treats the link `href` in this document.
+    pub(crate) fn verdict(&self, href: &str) -> Verdict {
+        verdict(
+            resolve(&self.path, href).as_ref(),
+            self.outpost.as_ref().map(|o| o.name.as_str()),
+        )
+    }
+}
+
 /// Follows the link `href` pressed in `document`.
 pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mut Tx) {
-    let target = resolve(&document.path, href);
-    let outpost = document.outpost.as_ref();
-    if !verdict(target.as_ref(), outpost.map(|o| o.name.as_str())).follows {
+    if !document.verdict(href).follows {
         return;
     }
+    let target = resolve(&document.path, href);
+    let outpost = document.outpost.as_ref();
     match (target, outpost) {
         (Some(Target::Fragment(fragment)), _) => {
             let id = decoded(&fragment);

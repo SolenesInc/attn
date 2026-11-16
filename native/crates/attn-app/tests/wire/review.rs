@@ -6535,3 +6535,125 @@ fn shows_an_edit_and_a_note_under_a_block_at_the_first_row_of_its_stop() {
         "{read:?}"
     );
 }
+
+/// A review whose one stop is on `docs/guide.md` in `repository`: an unchanged paragraph with
+/// a link to a file beside it and one to the web, a lightly reworded paragraph whose link is
+/// unchanged, and an unchanged image beside the file.
+fn linked_guide(repository: &str) -> ReviewBundle {
+    let rows = vec![
+        line(
+            " ",
+            Some(1),
+            Some(1),
+            "See [setup](setup.md) and [the site](https://example.test/site).",
+        ),
+        line(" ", Some(2), Some(2), ""),
+        line(
+            "-",
+            Some(3),
+            None,
+            "Read the old [release notes](notes.md) first.",
+        ),
+        line(
+            "+",
+            None,
+            Some(3),
+            "Read the new [release notes](notes.md) first.",
+        ),
+        line(" ", Some(4), Some(4), ""),
+        line(" ", Some(5), Some(5), "![chart](img/chart.png)"),
+    ];
+    ReviewBundle {
+        frame: "brief".into(),
+        repository: repository.into(),
+        base: Some("4be1c0d".into()),
+        head: "9f3a7e2".into(),
+        stops: vec![ReviewStop {
+            heading_line: 13,
+            path: "docs/guide.md".into(),
+            from: 1,
+            to: 5,
+            now_from: 1,
+            now_to: 5,
+            file_hash: "h1".into(),
+            rows,
+            ..ReviewStop::default()
+        }],
+        files: vec![file("docs/guide.md", 1, 1)],
+        ..ReviewBundle::default()
+    }
+}
+
+/// The review of `linked_guide` open in its tile, its repository a folder that holds the files
+/// the guide links to.
+fn open_linked_guide() -> (World, tempfile::TempDir) {
+    let project = tempfile::tempdir().unwrap();
+    let root = project.path().canonicalize().unwrap();
+    std::fs::create_dir_all(root.join("docs")).unwrap();
+    std::fs::write(root.join("docs/setup.md"), "# Setup").unwrap();
+    std::fs::write(root.join("docs/notes.md"), "# Notes").unwrap();
+    let mut world = start();
+    deliver(
+        &mut world,
+        GUIDE_DOCUMENT,
+        Some(linked_guide(&root.to_string_lossy())),
+    );
+    (world, project)
+}
+
+#[test]
+fn a_markdown_stops_links_open_from_its_file() {
+    let (mut world, project) = open_linked_guide();
+    let root = project.path().canonicalize().unwrap();
+    world.gesture(|app| app.click(Target::key("setup.md")));
+    world.gesture(|app| app.click(Target::key("https://example.test/site")));
+    assert_eq!(
+        world.opened_links(),
+        [
+            format!("file://{}/docs/setup.md", root.display()),
+            "https://example.test/site".into(),
+        ]
+    );
+}
+
+#[test]
+fn a_link_in_a_reworded_block_of_a_markdown_stop_opens_from_its_file() {
+    let (mut world, project) = open_linked_guide();
+    let root = project.path().canonicalize().unwrap();
+    world.gesture(|app| app.click(Target::key("notes.md")));
+    assert_eq!(
+        world.opened_links(),
+        [format!("file://{}/docs/notes.md", root.display())]
+    );
+}
+
+#[test]
+fn a_markdown_stops_local_image_shows_from_beside_its_file() {
+    let mut world = start();
+    world.daemon.on("tile_asset_read", |r| {
+        let found = r["path"] == "/repo/docs/img/chart.png";
+        json!({
+            "event": "tile_asset_read_result",
+            "request_id": r["request_id"],
+            "success": found,
+            "data_uri": found.then_some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAEklEQVR4nGP4z8DwHxkzEBQAAGHtF+mRbBMEAAAAAElFTkSuQmCC"),
+        })
+    });
+    deliver(&mut world, GUIDE_DOCUMENT, Some(linked_guide("/repo")));
+
+    let read: Vec<_> = world
+        .daemon
+        .sent_of("tile_asset_read")
+        .iter()
+        .map(|r| r["path"].clone())
+        .collect();
+    assert_eq!(read, [json!("/repo/docs/img/chart.png")]);
+    let pictures: Vec<_> = world
+        .screen()
+        .descendants(Target::key("tile.m"))
+        .into_iter()
+        .filter(|n| n.role == "image")
+        .map(|n| n.name.unwrap_or_default())
+        .collect();
+    assert_eq!(pictures, ["chart"], "{}", world.screen());
+}

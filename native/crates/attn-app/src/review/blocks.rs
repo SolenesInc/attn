@@ -1,12 +1,17 @@
 //! A stop on a markdown file, read as the document it is: its blocks now, each marked when it
 //! changed with the text it was, and the blocks deleted between them.
 
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use attn_protocol::{MarkdownAnnotation, ReviewRow, ReviewStop};
 use attn_ui::Tokens;
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeStream};
 use rune::tok::{radius, space, type_};
-use rune::{El, Span, col, text};
+use rune::{El, Image, Link, Span, col, text};
 use rune_kit::markdown::Markdown;
+
+use crate::markdown::{Document, linked};
 
 /// Whether a stop on `path` reads as a document rather than as code.
 pub(crate) fn is_document(path: &str) -> bool {
@@ -388,10 +393,11 @@ pub(crate) fn rewording(block: &Block) -> Option<Vec<(Op, Word)>> {
 }
 
 /// A block's words as one text: removed words struck, added words tinted, code in mono,
-/// strong and emphasis as they read, links underlined.
-fn worded(ops: &[(Op, Word)], key: String, t: &Tokens) -> El {
+/// strong and emphasis as they read, links underlined and followed as `document` follows them.
+fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> El {
     let mut said = String::new();
     let (mut spans, mut strikes) = (Vec::new(), Vec::new());
+    let mut linked: Vec<(std::ops::Range<usize>, &str)> = Vec::new();
     let (mut added, mut removed) = (Vec::new(), Vec::new());
     for (op, word) in ops {
         if !said.is_empty() {
@@ -405,7 +411,16 @@ fn worded(ops: &[(Op, Word)], key: String, t: &Tokens) -> El {
                 Mark::Code => span.mono(),
                 Mark::Strong => span.bold(),
                 Mark::Emphasis => span.italic(),
-                Mark::Link => span.underline(t.accent),
+                Mark::Link => {
+                    let href = word.href.as_deref().unwrap_or_default();
+                    match linked.last_mut() {
+                        Some((range, last)) if *last == href && range.end + 1 == start => {
+                            range.end = end
+                        }
+                        _ => linked.push((start..end, href)),
+                    }
+                    span.underline(t.accent)
+                }
                 Mark::Delete => {
                     strikes.push((start, end, None));
                     span
@@ -426,7 +441,18 @@ fn worded(ops: &[(Op, Word)], key: String, t: &Tokens) -> El {
         }
         spans.push(span);
     }
-    text(said)
+    let followed = linked
+        .into_iter()
+        .filter(|(_, href)| document.verdict(href).follows)
+        .map(|(range, href)| Link::new(range, href));
+    let document = document.clone();
+    followed
+        .fold(text(said), El::link)
+        .on_link(
+            move |state: &mut crate::State, href: &str, tx: &mut rune::Tx| {
+                crate::markdown::links::follow(state, &document, href, tx)
+            },
+        )
         .key(key)
         .description(format!(
             "added: {}; removed: {}",
@@ -441,8 +467,23 @@ fn worded(ops: &[(Op, Word)], key: String, t: &Tokens) -> El {
         .wrap()
 }
 
+/// The file a stop is on, which its blocks' links and images resolve from, and the pictures
+/// its images show.
+type File<'a> = (&'a Document, &'a Rc<HashMap<String, Option<Image>>>);
+
+/// `source` drawn as the file at `file` draws it.
+fn drawn(source: &str, (document, pictures): File, t: &Tokens) -> El {
+    linked(
+        Markdown::new(source.to_owned()).smart_punctuation(true),
+        document.clone(),
+        pictures.clone(),
+        t,
+    )
+    .build(attn_ui::kit(t))
+}
+
 /// Markdown a block was, drawn as the document drew it, dimmed in a removed frame.
-fn was(source: &str, key: String, t: &Tokens) -> El {
+fn was(source: &str, key: String, file: File, t: &Tokens) -> El {
     col()
         .key(key)
         .role("group")
@@ -452,11 +493,7 @@ fn was(source: &str, key: String, t: &Tokens) -> El {
         .border_sides([0.0, 0.0, 0.0, 2.0], t.error)
         .fill(t.error.alpha(0.06))
         .opacity(0.7)
-        .child(
-            Markdown::new(source.to_owned())
-                .smart_punctuation(true)
-                .build(attn_ui::kit(t)),
-        )
+        .child(drawn(source, file, t))
 }
 
 /// A stop on a markdown file keyed `key`, drawn as its blocks, with the cursor on block
@@ -464,6 +501,7 @@ fn was(source: &str, key: String, t: &Tokens) -> El {
 pub(super) fn view(
     (tile, key, editor): (&str, &str, bool),
     stop: &ReviewStop,
+    file: File,
     (rows, read): (&[ReviewRow], &Blocks),
     (cursor, selected): (Option<usize>, Option<(usize, usize)>),
     marks: &[(i64, &MarkdownAnnotation)],
@@ -480,23 +518,22 @@ pub(super) fn view(
                 .any(|b| n.now_from > 0 && within(b, n.now_to))
         })
         .map(|n| super::stop::note(n, t));
-    let kit = attn_ui::kit(t);
     let shown = read.blocks.iter().enumerate().flat_map(|(i, b)| {
         let keyed = super::stop::row_key(key, i);
         let before = b
             .deleted_before
             .as_deref()
-            .map(|d| was(d, format!("{keyed}.deleted"), t));
+            .map(|d| was(d, format!("{keyed}.deleted"), file, t));
         let body = match rewording(b) {
-            Some(ops) => col().child(worded(&ops, format!("{keyed}.words"), t)),
+            Some(ops) => col().child(worded(&ops, format!("{keyed}.words"), file.0, t)),
             None => col()
                 .gap(space::S1)
-                .children(b.was.as_deref().map(|w| was(w, format!("{keyed}.was"), t)))
-                .child(
-                    Markdown::new(b.source.clone())
-                        .smart_punctuation(true)
-                        .build(kit),
-                ),
+                .children(
+                    b.was
+                        .as_deref()
+                        .map(|w| was(w, format!("{keyed}.was"), file, t)),
+                )
+                .child(drawn(&b.source, file, t)),
         };
         let in_range = b.from <= stop.now_to && b.to >= stop.now_from;
         let block = body
@@ -556,7 +593,7 @@ pub(super) fn view(
     let after = read
         .removed_after
         .as_deref()
-        .map(|d| was(d, format!("{key}.removed"), t));
+        .map(|d| was(d, format!("{key}.removed"), file, t));
     let empty = (read.blocks.is_empty() && read.removed_after.is_none()).then(|| {
         text("The file is gone or empty now.")
             .font(type_::BODY)

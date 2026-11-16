@@ -131,17 +131,17 @@ pub(crate) fn body(
             .border(CARD_BORDER, t.border.alpha(0.5))
             .child(reading)
     };
+    let document = links::Document {
+        path: content.path.clone(),
+        session: session.map(str::to_owned),
+        outpost: outpost.clone(),
+        view: view.clone(),
+    };
     let read_source = |source: &str, marking: Option<Marking>| {
         let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
-        let document = links::Document {
-            path: content.path.clone(),
-            session: session.map(str::to_owned),
-            outpost: outpost.clone(),
-            view: view.clone(),
-        };
         reader(
             source,
-            document,
+            document.clone(),
             pictures,
             kept.clone(),
             marking,
@@ -171,6 +171,11 @@ pub(crate) fn body(
             title,
             (&content.content, bundle, *revision),
             readings,
+            (
+                &document,
+                &pictures.of(outpost.as_ref().map(|o| o.host.as_str())),
+                pictures.revision,
+            ),
             (&read_part, {
                 let mut h = std::hash::DefaultHasher::new();
                 std::hash::Hash::hash(
@@ -287,16 +292,6 @@ pub(crate) fn reader(
     if let Some(root) = &root {
         document.view = format!("{}/{root}", document.view);
     }
-    let path = document.path.clone();
-    let named_path = path.clone();
-    let verdict = {
-        let path = document.path.clone();
-        let outpost = document.outpost.as_ref().map(|o| o.name.clone());
-        move |href: &str| links::verdict(links::resolve(&path, href).as_ref(), outpost.as_deref())
-    };
-    let help = verdict.clone();
-    let plain = verdict;
-    let text_color = t.text_primary;
     let markdown = read_as(source)
         .details(
             {
@@ -308,28 +303,6 @@ pub(crate) fn reader(
                 state.readings.fold(&folded, nth(at), open)
             },
         )
-        .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
-            links::follow(state, &document, href, tx)
-        })
-        .link_help(move |href| help(href).help)
-        .missing_image_frame({
-            let (path, pictures, t) = (named_path, pictures.clone(), *t);
-            move |_, image| {
-                let failed = match links::resolve(&path, image.src) {
-                    Some(links::Target::Local(file))
-                        if !path.is_empty() && links::is_image(&file) =>
-                    {
-                        Some(matches!(pictures.get(&file), Some(None)))
-                    }
-                    _ => None,
-                };
-                missing(image, failed, &t)
-            }
-        })
-        .images(move |src| match links::resolve(&path, src) {
-            Some(links::Target::Local(file)) => pictures.get(&file).cloned().flatten(),
-            _ => None,
-        })
         .diagram_frame({
             let t = *t;
             move |card, frame| leaves_out(framed(card, frame, &t), frame, &t)
@@ -345,21 +318,8 @@ pub(crate) fn reader(
         .front_matter_frame({
             let t = *t;
             move |_, yaml| front_matter::card(yaml, &t)
-        })
-        .image_frame(|shown: El, frame: &ImageFrame<'_>| {
-            let (image, alt) = (frame.image.clone(), frame.alt.to_owned());
-            shown.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                images::show(state, image.clone(), &alt, tx)
-            })
-        })
-        .link_style(move |href| {
-            (!plain(href).follows).then(|| {
-                (
-                    Span::new(0, 0).color(text_color),
-                    LinkPaint::new().color(text_color),
-                )
-            })
         });
+    let markdown = linked(markdown, document, pictures, t);
     let style = look(t);
     let markdown = markdown.style(match text_width {
         Some(width) => style.text_width(width),
@@ -398,6 +358,59 @@ pub(crate) fn reader(
     } else {
         reading
     }
+}
+
+/// `markdown` read as a document at `document.path`: its links go where the reader sends them
+/// and read as text where it does not follow them, and its local images show the ready
+/// `pictures` by the paths they resolve to, opening larger on a press.
+pub(crate) fn linked(
+    markdown: Markdown,
+    document: Document,
+    pictures: Rc<HashMap<String, Option<Image>>>,
+    t: &Tokens,
+) -> Markdown {
+    let path = document.path.clone();
+    let named_path = path.clone();
+    let help = document.clone();
+    let plain = document.clone();
+    let text_color = t.text_primary;
+    markdown
+        .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
+            links::follow(state, &document, href, tx)
+        })
+        .link_help(move |href| help.verdict(href).help)
+        .missing_image_frame({
+            let (path, pictures, t) = (named_path, pictures.clone(), *t);
+            move |_, image| {
+                let failed = match links::resolve(&path, image.src) {
+                    Some(links::Target::Local(file))
+                        if !path.is_empty() && links::is_image(&file) =>
+                    {
+                        Some(matches!(pictures.get(&file), Some(None)))
+                    }
+                    _ => None,
+                };
+                missing(image, failed, &t)
+            }
+        })
+        .images(move |src| match links::resolve(&path, src) {
+            Some(links::Target::Local(file)) => pictures.get(&file).cloned().flatten(),
+            _ => None,
+        })
+        .image_frame(|shown: El, frame: &ImageFrame<'_>| {
+            let (image, alt) = (frame.image.clone(), frame.alt.to_owned());
+            shown.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                images::show(state, image.clone(), &alt, tx)
+            })
+        })
+        .link_style(move |href| {
+            (!plain.verdict(href).follows).then(|| {
+                (
+                    Span::new(0, 0).color(text_color),
+                    LinkPaint::new().color(text_color),
+                )
+            })
+        })
 }
 
 /// Which of `source`'s `<details>` blocks the one whose tag starts at a source byte is, counted
