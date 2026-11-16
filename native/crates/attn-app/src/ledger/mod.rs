@@ -674,9 +674,17 @@ fn row<'a>(state: &State, entry: &'a SessionLedgerEntry) -> Row<'a> {
     let shell_name = live_session
         .filter(|_| entry.agent == "shell")
         .map(|s| s.label.clone());
-    let title = entry
-        .member_name
-        .clone()
+    let member = entry.member_key.as_ref().map(|key| {
+        state
+            .facts
+            .crew
+            .iter()
+            .find(|m| &m.id == key)
+            .map(|m| m.name.clone())
+            .or_else(|| entry.member_name.clone())
+            .unwrap_or_default()
+    });
+    let title = member
         .filter(|n| !n.is_empty())
         .or(shell_name)
         .unwrap_or_else(|| entry.label.clone());

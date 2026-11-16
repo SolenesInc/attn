@@ -1134,3 +1134,47 @@ fn a_repository_path_longer_than_the_filter_row_still_takes_every_key() {
     let beside = long.screen().bounds(Target::key("ledger.chip.1")).unwrap();
     assert_eq!(beside[2], whole[2], "a short chip keeps its whole width");
 }
+
+#[test]
+fn a_member_row_takes_the_members_name_and_follows_a_rename_without_reading_again() {
+    let mut initial = state(Vec::new(), Vec::new());
+    initial.crew = Some(vec![attn_protocol::CrewMember {
+        id: "keel".into(),
+        name: "Keel".into(),
+        profile_id: "work".into(),
+        ..attn_protocol::CrewMember::default()
+    }]);
+    let mut day = entry("day", "Keel", 5);
+    day.member_key = Some("keel".into());
+    day.member_name = Some("Keel".into());
+    let mut world = World::start(ledger_daemon(initial, vec![day]));
+    open(&mut world);
+    let title = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("ledger.row.day"))
+            .and_then(|n| n.name)
+    };
+    assert!(
+        title(&world).is_some_and(|t| t.contains("Keel")),
+        "{:?}",
+        title(&world)
+    );
+    let reads = world.daemon.sent_of("session_list").len();
+    world.daemon.emit(attn_protocol::CrewUpdatedMessage {
+        members: vec![attn_protocol::CrewMember {
+            id: "keel".into(),
+            name: "Alfred".into(),
+            profile_id: "work".into(),
+            ..attn_protocol::CrewMember::default()
+        }],
+        ..attn_protocol::CrewUpdatedMessage::new()
+    });
+    world.settle();
+    let shown = title(&world).unwrap_or_default();
+    assert!(
+        shown.contains("Alfred") && !shown.contains("Keel"),
+        "{shown}"
+    );
+    assert_eq!(world.daemon.sent_of("session_list").len(), reads);
+}
