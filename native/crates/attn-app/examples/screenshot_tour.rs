@@ -10,11 +10,13 @@ use std::path::PathBuf;
 use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap, State};
 use attn_protocol::{
-    ActorView, Desktop, DesktopPane, DesktopTileContentMessage, GetCommandUsageResultMessage,
-    InitialStateMessage, Profile, ReviewBundle, ReviewFile, ReviewNote, ReviewRow, ReviewStop,
-    Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedPlotProgress, Session,
+    ActorView, DelegationPreferences, DelegationPreferencesResultMessage, Desktop, DesktopPane,
+    DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
+    InitialStateMessage, Profile, RecentLocation, RecentLocationsResultMessage, RepoInfo,
+    ReviewBundle, ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
+    SeedDocumentGetResultMessage, SeedEdge, SeedPlotProgress, Session,
     SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionMessage,
-    SessionMessagesGetResultMessage,
+    SessionMessagesGetResultMessage, Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -22,6 +24,7 @@ use attn_testkit::{Daemon, Request, Target, World, key_event, message};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::text::pixel_compare::Image;
 use rune::{Compositor, Frame, KeyPlatform, Runtime};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 const PROFILE: &str = "work";
@@ -608,6 +611,118 @@ fn tile_window(dark: bool) {
     snap_tile_window(&mut world, "tile-window", dark);
 }
 
+const SHOP: &str = "/home/me/projects/shop";
+
+/// Launcher 2.0 on: Claude picked, the shop repository last started in its main checkout, and
+/// its two recents, shop first. Desktop 1 is empty when `empty`, else it holds terminal `a`.
+fn launcher_daemon(dark: bool, empty: bool) -> Daemon {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    if let Some(desktops) = state.desktops.as_mut() {
+        desktops[0].tree_json = pane("a").to_string();
+        if empty {
+            desktops[0].tree_json.clear();
+            desktops[0].panes.clear();
+            desktops[0].active_pane_id.clear();
+        }
+    }
+    if let Some(settings) = state.settings.as_mut() {
+        for (key, value) in [
+            ("new_session_launcher_enabled", "true"),
+            ("new_session_agent", "claude"),
+            ("claude_cap_yolo", "true"),
+            ("projects_directory", "/home/me/projects"),
+            (
+                "new_session_destination_local_/home/me/projects/shop",
+                "main_repo",
+            ),
+        ] {
+            settings.insert(key.into(), value.into());
+        }
+    }
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("delegation_preferences_get", |_: &Request| {
+            message(DelegationPreferencesResultMessage {
+                success: true,
+                preferences: Some(DelegationPreferences::default()),
+                harnesses: Some(
+                    ["claude", "codex"]
+                        .iter()
+                        .map(|id| Harness {
+                            id: (*id).into(),
+                            name: (*id).into(),
+                            available: true,
+                            ..Harness::default()
+                        })
+                        .collect(),
+                ),
+                ..DelegationPreferencesResultMessage::new()
+            })
+        })
+        .on("get_recent_locations", |_: &Request| {
+            message(RecentLocationsResultMessage {
+                success: true,
+                home_path: Some("/home/me".into()),
+                recent_locations: [(SHOP, true), ("/home/me/projects/api", false)]
+                    .iter()
+                    .map(|(path, repo)| RecentLocation {
+                        path: (*path).into(),
+                        last_seen: "2026-11-13T08:00:00Z".into(),
+                        use_count: 1,
+                        repo_root: repo.then(|| (*path).into()),
+                        ..RecentLocation::default()
+                    })
+                    .collect(),
+                ..RecentLocationsResultMessage::new()
+            })
+        })
+        .on("get_repo_info", |_: &Request| {
+            message(GetRepoInfoResultMessage {
+                success: true,
+                info: Some(RepoInfo {
+                    repo: SHOP.into(),
+                    current_branch: "main".into(),
+                    default_branch: "main".into(),
+                    worktrees: vec![Worktree {
+                        path: format!("{SHOP}--feature"),
+                        branch: "feature".into(),
+                        main_repo: SHOP.into(),
+                        ..Worktree::default()
+                    }],
+                    ..RepoInfo::default()
+                }),
+                ..GetRepoInfoResultMessage::new()
+            })
+        });
+    daemon
+}
+
+fn launcher_dialog(dark: bool) {
+    let mut world = start(launcher_daemon(dark, false));
+    press(&mut world, Action::SessionNew);
+    snap(&mut world, "launcher-dialog", dark);
+}
+
+/// The shop's Where list with a branch typed, so the name it shows is not the random one: one
+/// that its `feature` worktree still matches.
+fn launcher_where(dark: bool) {
+    let mut world = start(launcher_daemon(dark, false));
+    press(&mut world, Action::SessionNew);
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods::default(),
+        })
+    });
+    world.gesture(|app| app.type_text("feat"));
+    snap(&mut world, "launcher-where", dark);
+}
+
+fn launcher_empty_desktop(dark: bool) {
+    let mut world = start(launcher_daemon(dark, true));
+    snap(&mut world, "launcher-empty-desktop", dark);
+}
+
 fn shoot(out: PathBuf) {
     OUT.set(out);
     for dark in [true, false] {
@@ -618,6 +733,9 @@ fn shoot(out: PathBuf) {
         palette(dark);
         terminal_overlays(dark);
         tile_window(dark);
+        launcher_dialog(dark);
+        launcher_where(dark);
+        launcher_empty_desktop(dark);
     }
 }
 

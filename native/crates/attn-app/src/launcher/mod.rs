@@ -23,8 +23,10 @@ use crate::picker::{
     Agents, Choice, Direction, Memory, Offer, Spawn, TERMINAL, Which, agent_key, agents, close,
     paths, remember, remembered, spawn_then, worktree_name,
 };
-pub(crate) use address::{Address, Machine, address_of, machine_for, parse, this_mac};
-pub(crate) use view::frame;
+pub(crate) use address::{
+    Address, Machine, address_of, machine_for, machine_prefix, parse, this_mac,
+};
+pub(crate) use view::framed;
 
 const OUTPOSTS_ENABLED: &str = "outposts_enabled";
 /// How often the launcher redraws while it waits on an outpost's listing, so the time it has

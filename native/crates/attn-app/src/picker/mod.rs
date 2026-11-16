@@ -19,7 +19,10 @@ use crate::State;
 pub(crate) use agents::{Agents, TERMINAL};
 pub(crate) use paths::display as display_path;
 pub(crate) use repo::{Memory, remember, remembered};
-pub(crate) use view::{controls, desktop_label, dialog, footer, inline, section, worktree_setup};
+pub(crate) use view::{
+    DIALOG_W, agent_option, agent_options, catalog_note, checking_mark, desktop_label, dialog,
+    inline, worktree_setup, yolo, yolo_switch,
+};
 
 /// How long typing settles before the picker browses the typed folder, as in the Tauri app.
 const BROWSE_DELAY: f64 = 0.15;

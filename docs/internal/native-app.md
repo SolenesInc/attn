@@ -74,8 +74,9 @@ review catches those.
 light, one PNG each: the sidebar with an agent in every state, a terminal with
 the 16 ANSI colors and a selection, a terminal with a comment mark, a seed id, a
 selected command block and find matches, a Markdown file with code and a Mermaid
-diagram, a review stop, the Garden, Settings, the command palette and a
-popped-out tile window. The `screenshot_tour` example of `attn-app` sets each
+diagram, a review stop, the Garden, Settings, the command palette, a
+popped-out tile window, and Launcher 2.0 in its dialog, its Where list and on an
+empty desktop. The `screenshot_tour` example of `attn-app` sets each
 one up on the wire-test world and draws it on Rune's offscreen GPU renderer, so
 it needs no window and no VM, and two runs of the same source match pixel for
 pixel.

@@ -10,22 +10,29 @@ use crate::State;
 /// The New Session dialog over the app.
 pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
     let frame = match state.window.launching.dialog.as_ref()? {
-        Opened::Classic(picker) => frame(state, picker, t)
-            .key("new-session")
-            .role("dialog")
-            .label("New Session Location")
-            .modal_tx(false, |state: &mut State, tx: &mut Tx| {
-                super::on_key(
-                    state,
-                    Which::Dialog,
-                    &rune::KeyEvent {
-                        key: rune::Key::Escape,
-                        mods: rune::Mods::default(),
-                    },
-                    tx,
-                );
-            }),
-        Opened::Launcher(launcher) => crate::launcher::frame(state, launcher, t)
+        Opened::Classic(picker) => {
+            let frame = frame(state, picker, t)
+                .key("new-session")
+                .role("dialog")
+                .label("New Session Location")
+                .modal_tx(false, |state: &mut State, tx: &mut Tx| {
+                    super::on_key(
+                        state,
+                        Which::Dialog,
+                        &rune::KeyEvent {
+                            key: rune::Key::Escape,
+                            mods: rune::Mods::default(),
+                        },
+                        tx,
+                    );
+                });
+            rune_kit::popover::raised(
+                attn_ui::kit(t),
+                frame.w_full().max_w(DIALOG_W).padding(space::S3),
+                8.0,
+            )
+        }
+        Opened::Launcher(launcher) => crate::launcher::framed(state, launcher, t)
             .key("new-session")
             .role("dialog")
             .label("New agent")
@@ -33,8 +40,6 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
                 crate::launcher::escape(state, tx)
             }),
     };
-    let frame = frame.w_full().max_w(DIALOG_W).padding(space::S3);
-    let frame = rune_kit::popover::raised(attn_ui::kit(t), frame, 8.0);
     Some(
         el().key("new-session.layer")
             .absolute(0.0, 0.0)
@@ -77,8 +82,14 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
         );
     }
     let frame = match launching.shown_inline()? {
-        Opened::Classic(picker) => frame(state, picker, t),
-        Opened::Launcher(launcher) => crate::launcher::frame(state, launcher, t),
+        Opened::Classic(picker) => frame(state, picker, t)
+            .w_full()
+            .max_w(640.0)
+            .radius(8.0)
+            .fill(t.bg_panel)
+            .border(1.0, t.border_subtle)
+            .padding(space::S3),
+        Opened::Launcher(launcher) => crate::launcher::framed(state, launcher, t),
     };
     Some(
         col()
@@ -87,18 +98,7 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
             .h_full()
             .items_center()
             .pt(80.0)
-            .child(
-                frame
-                    .key("launcher")
-                    .role("group")
-                    .label("New agent")
-                    .w_full()
-                    .max_w(640.0)
-                    .radius(8.0)
-                    .fill(t.bg_panel)
-                    .border(1.0, t.border_subtle)
-                    .padding(space::S3),
-            ),
+            .child(frame.key("launcher").role("group").label("New agent")),
     )
 }
 
@@ -123,99 +123,149 @@ fn frame(state: &State, picker: &Picker, t: &Tokens) -> El {
         .children(body)
 }
 
-/// The harness toggle and the YOLO switch a launcher starts with.
-pub(crate) fn controls(
-    state: &State,
-    which: Which,
-    choice: &Choice,
-    offer: &Offer,
-    t: &Tokens,
-) -> El {
-    let w = which.key();
+/// One harness the toggle offers, as both launchers show it.
+pub(crate) struct AgentOption {
+    pub(crate) agent: String,
+    pub(crate) label: String,
+    pub(crate) selectable: bool,
+    pub(crate) chosen: bool,
+    /// The key that picks it with ⌥: `T` for Terminal, its number for the first nine others.
+    pub(crate) key: Option<String>,
+    /// Struck through: the machine the start aims at lacks it.
+    pub(crate) absent: bool,
+    pub(crate) checking: bool,
+    pub(crate) title: Option<String>,
+}
+
+pub(crate) fn agent_options(state: &State, choice: &Choice, offer: &Offer) -> Vec<AgentOption> {
     let launching = &state.window.launching;
     let agents = &offer.agents;
     let current = choice.agent_among(agents);
     let numbered = numbered(agents, &launching.catalog);
-    let options = listed(agents, &launching.catalog).into_iter().map(|agent| {
-        let label = state
-            .facts
-            .settings
-            .get(&format!("{agent}_display_name"))
-            .filter(|name| !name.trim().is_empty())
-            .cloned()
-            .unwrap_or_else(|| agents::label(&agent));
-        let availability = agents.of(&agent);
-        let selectable = availability != agents::Availability::Unavailable;
-        let keys = if !selectable {
-            None
-        } else if agent == agents::TERMINAL {
-            Some("alt+t".to_owned())
+    listed(agents, &launching.catalog)
+        .into_iter()
+        .map(|agent| {
+            let label = state
+                .facts
+                .settings
+                .get(&format!("{agent}_display_name"))
+                .filter(|name| !name.trim().is_empty())
+                .cloned()
+                .unwrap_or_else(|| agents::label(&agent));
+            let availability = agents.of(&agent);
+            let selectable = availability != agents::Availability::Unavailable;
+            let key = if !selectable {
+                None
+            } else if agent == agents::TERMINAL {
+                Some("T".to_owned())
+            } else {
+                numbered
+                    .iter()
+                    .position(|a| *a == agent)
+                    .filter(|n| *n < 9)
+                    .map(|n| (n + 1).to_string())
+            };
+            let absent = offer
+                .missing
+                .as_ref()
+                .filter(|(_, lacking)| lacking.contains(&agent))
+                .map(|(machine, _)| machine);
+            let checking = availability == agents::Availability::Checking
+                && !offer.outpost
+                && absent.is_none();
+            let title = if !selectable {
+                Some(format!("{label} is not available on this machine"))
+            } else if let Some(machine) = absent {
+                Some(format!("{label} is not installed on {machine}"))
+            } else {
+                checking.then(|| format!("Checking for {label} on this machine"))
+            };
+            AgentOption {
+                chosen: current == agent,
+                absent: absent.is_some(),
+                agent,
+                label,
+                selectable,
+                key,
+                checking,
+                title,
+            }
+        })
+        .collect()
+}
+
+/// The YOLO switch: whether it is on, whether the chosen harness has the mode, and what its
+/// tooltip says.
+pub(crate) struct Yolo {
+    pub(crate) on: bool,
+    pub(crate) supported: bool,
+    pub(crate) title: String,
+}
+
+pub(crate) fn yolo(state: &State, choice: &Choice, offer: &Offer) -> Yolo {
+    let current = choice.agent_among(&offer.agents);
+    let supported = agents::supports_yolo(&state.facts.settings, &current);
+    Yolo {
+        on: choice.yolo_for(state, &current),
+        supported,
+        title: if supported {
+            "Run the agent without asking for permission".to_owned()
         } else {
-            numbered
-                .iter()
-                .position(|a| *a == agent)
-                .filter(|n| *n < 9)
-                .map(|n| format!("alt+{}", n + 1))
-        };
-        let absent = offer
-            .missing
-            .as_ref()
-            .filter(|(_, lacking)| lacking.contains(&agent))
-            .map(|(machine, _)| machine);
-        let checking =
-            availability == agents::Availability::Checking && !offer.outpost && absent.is_none();
-        let title = if !selectable {
-            Some(format!("{label} is not available on this machine"))
-        } else if let Some(machine) = absent {
-            Some(format!("{label} is not installed on {machine}"))
-        } else {
-            checking.then(|| format!("Checking for {label} on this machine"))
-        };
-        let chosen = current == agent;
-        let picked = agent.clone();
-        let mut option = row()
-            .key(format!("{w}.agent.{agent}"))
-            .role("radio")
-            .label(label.clone())
-            .checked(chosen)
-            .disabled(!selectable)
-            .items_center()
-            .gap(space::S2)
-            .px(12.0)
-            .py(6.0)
-            .radius(999.0)
-            .fill(if chosen { t.brand } else { t.bg_input })
-            .on_press_tx(move |state: &mut State, _: &mut Tx| {
-                super::choose_agent(state, which, &picked)
-            })
-            .child({
-                let name = text(label.clone()).font(OPTION_TYPE).color(if chosen {
-                    t.bg_app
-                } else if selectable {
-                    t.text_tertiary
-                } else {
-                    t.text_muted
-                });
-                match absent {
-                    Some(_) => name.strike(0, label.len(), None),
-                    None => name,
-                }
-            });
-        if let Some(title) = title {
-            option = option.description(title.clone()).help(title);
-        }
-        if checking {
-            option = option.child(
-                text("…")
-                    .key(format!("{w}.agent.{agent}.checking"))
-                    .role("img")
-                    .label("checking")
-                    .color(t.text_tertiary),
-            );
-        }
-        option.children(keys.map(|k| keycaps(format!("{w}.agent.{agent}.keys"), &k, chosen, t)))
-    });
-    let catalog_note = match &launching.catalog {
+            format!(
+                "{} does not support yolo mode",
+                agents::yolo_label(&current)
+            )
+        },
+    }
+}
+
+/// The harness option's row: its role, name, state and the press that picks it.
+pub(crate) fn agent_option(which: Which, option: &AgentOption) -> El {
+    let picked = option.agent.clone();
+    let mut el = row()
+        .key(format!("{}.agent.{}", which.key(), option.agent))
+        .role("radio")
+        .label(option.label.clone())
+        .checked(option.chosen)
+        .disabled(!option.selectable)
+        .items_center()
+        .on_press_tx(move |state: &mut State, _: &mut Tx| {
+            super::choose_agent(state, which, &picked)
+        });
+    if let Some(title) = &option.title {
+        el = el.description(title.clone()).help(title.clone());
+    }
+    el
+}
+
+pub(crate) fn checking_mark(which: Which, option: &AgentOption, t: &Tokens) -> Option<El> {
+    option.checking.then(|| {
+        text("…")
+            .key(format!("{}.agent.{}.checking", which.key(), option.agent))
+            .role("img")
+            .label("checking")
+            .color(t.text_tertiary)
+    })
+}
+
+/// The YOLO switch's row: its role, name, state and the press that flips it.
+pub(crate) fn yolo_switch(which: Which, yolo: &Yolo) -> El {
+    row()
+        .key(format!("{}.yolo", which.key()))
+        .role("switch")
+        .label("YOLO")
+        .checked(yolo.on)
+        .disabled(!yolo.supported)
+        .description(yolo.title.clone())
+        .help(yolo.title.clone())
+        .items_center()
+        .on_press_tx(move |state: &mut State, _: &mut Tx| super::toggle_yolo(state, which))
+}
+
+/// What the toggle says while the harness list loads or after it failed to.
+pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El> {
+    let w = which.key();
+    match &state.window.launching.catalog {
         Catalog::Unasked | Catalog::Loading => Some(
             text("Loading harnesses…")
                 .key(format!("{w}.agents.loading"))
@@ -241,17 +291,47 @@ pub(crate) fn controls(
                 ),
         ),
         Catalog::Loaded(_) => None,
-    };
-    let supported = agents::supports_yolo(&state.facts.settings, &current);
-    let yolo = choice.yolo_for(state, &current);
-    let yolo_title = if supported {
-        "Run the agent without asking for permission".to_owned()
-    } else {
-        format!(
-            "{} does not support yolo mode",
-            agents::yolo_label(&current)
-        )
-    };
+    }
+}
+
+/// The classic picker's harness toggle and YOLO switch.
+fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tokens) -> El {
+    let w = which.key();
+    let options = agent_options(state, choice, offer)
+        .into_iter()
+        .map(|option| {
+            let name = text(option.label.clone())
+                .font(OPTION_TYPE)
+                .color(if option.chosen {
+                    t.bg_app
+                } else if option.selectable {
+                    t.text_tertiary
+                } else {
+                    t.text_muted
+                });
+            let name = if option.absent {
+                name.strike(0, option.label.len(), None)
+            } else {
+                name
+            };
+            agent_option(which, &option)
+                .gap(space::S2)
+                .px(12.0)
+                .py(6.0)
+                .radius(999.0)
+                .fill(if option.chosen { t.brand } else { t.bg_input })
+                .child(name)
+                .children(checking_mark(which, &option, t))
+                .children(option.key.as_ref().map(|k| {
+                    keycaps(
+                        format!("{w}.agent.{}.keys", option.agent),
+                        &format!("alt+{}", k.to_lowercase()),
+                        option.chosen,
+                        t,
+                    )
+                }))
+        });
+    let yolo = yolo(state, choice, offer);
     col()
         .gap(space::S2)
         .child(
@@ -263,7 +343,7 @@ pub(crate) fn controls(
                 .items_center()
                 .child(section("SESSION AGENT", t))
                 .child(toggle(options, t))
-                .children(catalog_note),
+                .children(catalog_note(state, which, t)),
         )
         .child(
             row()
@@ -271,36 +351,26 @@ pub(crate) fn controls(
                 .items_center()
                 .child(section("YOLO", t))
                 .child(
-                    row()
-                        .key(format!("{w}.yolo"))
-                        .role("switch")
-                        .label("YOLO")
-                        .checked(yolo)
-                        .disabled(!supported)
-                        .description(yolo_title.clone())
-                        .help(yolo_title)
-                        .items_center()
+                    yolo_switch(which, &yolo)
                         .gap(space::S2)
                         .px(12.0)
                         .py(6.0)
                         .radius(999.0)
-                        .fill(if yolo { t.brand } else { t.bg_input })
-                        .on_press_tx(move |state: &mut State, _: &mut Tx| {
-                            super::toggle_yolo(state, which)
-                        })
+                        .fill(if yolo.on { t.brand } else { t.bg_input })
                         .child(
-                            text(if yolo { "On" } else { "Off" })
+                            text(if yolo.on { "On" } else { "Off" })
                                 .font(OPTION_TYPE)
-                                .color(if yolo {
+                                .color(if yolo.on {
                                     t.bg_app
-                                } else if supported {
+                                } else if yolo.supported {
                                     t.text_tertiary
                                 } else {
                                     t.text_muted
                                 }),
                         )
                         .children(
-                            supported.then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", yolo, t)),
+                            yolo.supported
+                                .then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", yolo.on, t)),
                         ),
                 ),
         )
@@ -923,11 +993,11 @@ pub(crate) fn desktop_label(state: &State, desktop: Option<&String>) -> String {
     format!("Desktop {number}")
 }
 
-pub(crate) fn section(title: &str, t: &Tokens) -> El {
+fn section(title: &str, t: &Tokens) -> El {
     text(title).font(type_::SECTION).color(t.text_tertiary)
 }
 
-pub(crate) fn footer(hints: &[&str], t: &Tokens) -> El {
+fn footer(hints: &[&str], t: &Tokens) -> El {
     row().gap(space::S3).children(
         hints
             .iter()
@@ -955,6 +1025,6 @@ fn link(
 pub(crate) const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();
 
 /// Tauri's `.location-picker` width.
-const DIALOG_W: f32 = 760.0;
+pub(crate) const DIALOG_W: f32 = 760.0;
 
 const CAP_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 500.0);

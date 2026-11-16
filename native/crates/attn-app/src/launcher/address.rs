@@ -82,6 +82,12 @@ fn named(query: &str, outposts: &[OutpostInfo]) -> Option<(Vec<Machine>, String)
     Some((machines, prefix))
 }
 
+/// The `<machine>:` that starts `query`, which the field shows in the accent colour: empty
+/// when the text names no machine.
+pub(crate) fn machine_prefix<'a>(query: &'a str, outposts: &[OutpostInfo]) -> &'a str {
+    named(query, outposts).map_or("", |(_, prefix)| &query[..prefix.len()])
+}
+
 pub(crate) fn parse(query: &str, outposts: &[OutpostInfo]) -> Address {
     let addressed = named(query, outposts);
     if let Some((machines, prefix)) = &addressed

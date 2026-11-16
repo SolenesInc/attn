@@ -1,58 +1,289 @@
+use attn_ui::colors::mix_srgb;
 use attn_ui::{Tokens, icon};
-use rune::tok::{space, type_};
-use rune::{El, Tx, col, row, text};
+use rune::{Color, El, KeyPlatform, Span, TextCase, TextStyle, Tx, col, el, row, text};
 use rune_kit::TextInput;
 
 use super::{
     Address, Kind, Launcher, Listing, Memory, Row, WhereRow, address_of, completion, machine_name,
-    machine_of, memory, outpost, outposts, reachable, split_browse,
+    machine_of, machine_prefix, memory, outpost, outposts, reachable, split_browse,
 };
 use crate::State;
-use crate::picker::{TERMINAL, Which, controls, desktop_label, footer, paths, section};
+use crate::picker::{
+    DIALOG_W, TERMINAL, Which, agent_option, agent_options, catalog_note, checking_mark,
+    desktop_label, paths, yolo, yolo_switch,
+};
 
-/// Launcher 2.0's body, which the dialog and the empty desktop each frame.
-pub(crate) fn frame(state: &State, launcher: &Launcher, t: &Tokens) -> El {
+const TITLE: TextStyle = TextStyle::new(10.0, 500.0).mono().tracking(1.5);
+const FIELD: TextStyle = TextStyle::new(14.0, 400.0).mono();
+const CHIP: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const SECTION: TextStyle = TextStyle::new(10.0, 600.0).mono().tracking(1.2);
+const SECTION_WORDS: TextStyle = TextStyle::new(10.0, 400.0).mono();
+const SECTION_NAME: TextStyle = TextStyle::new(10.0, 600.0).mono();
+const NAME: TextStyle = TextStyle::new(13.0, 500.0);
+const PATH: TextStyle = TextStyle::new(11.0, 400.0).mono();
+const BADGE: TextStyle = TextStyle::new(10.5, 400.0).mono();
+const OPTION: TextStyle = TextStyle::new(11.5, 400.0).mono();
+const OPTION_CHOSEN: TextStyle = TextStyle::new(11.5, 600.0).mono();
+const SHORTCUT: TextStyle = TextStyle::new(10.0, 400.0).mono();
+const TOGGLE: TextStyle = TextStyle::new(11.0, 400.0).mono();
+const CAP: TextStyle = TextStyle::new(10.5, 400.0).mono();
+const HINT: TextStyle = TextStyle::new(11.5, 400.0);
+const MESSAGE: TextStyle = TextStyle::new(12.5, 400.0);
+const STATUS: TextStyle = TextStyle::new(11.0, 400.0).mono();
+const ICON_SIZE: f32 = 14.0;
+const RADIUS: f32 = 10.0;
+
+/// The launcher's own shades of the color scheme, as Tauri's `--launcher-*` variables mix them.
+struct Look {
+    accent: Color,
+    accent_text: Color,
+    on_accent: Color,
+    bg_input: Color,
+    bg_tile: Color,
+    border_tile: Color,
+    border_input: Color,
+    hairline: Color,
+    footer: Color,
+    frame: Color,
+    text_quiet: Color,
+    text_path: Color,
+    text_section: Color,
+    text_faint: Color,
+    worktree: Color,
+}
+
+impl Look {
+    fn of(t: &Tokens) -> Look {
+        let (black, white) = (t.shadow, t.highlight);
+        let dark = t.dark;
+        Look {
+            accent: t.brand,
+            accent_text: if dark {
+                mix_srgb(t.brand, white, 0.2)
+            } else {
+                mix_srgb(t.brand, black, 0.17)
+            },
+            on_accent: mix_srgb(t.brand, black, 0.89),
+            bg_input: if dark {
+                mix_srgb(t.bg_input, black, 0.3)
+            } else {
+                t.bg_input
+            },
+            bg_tile: if dark {
+                mix_srgb(t.bg_elevated, t.bg_panel, 0.64)
+            } else {
+                t.bg_elevated
+            },
+            border_tile: if dark {
+                mix_srgb(t.border, t.border_subtle, 0.67)
+            } else {
+                t.border_subtle
+            },
+            border_input: t.border,
+            hairline: if dark {
+                mix_srgb(t.border_subtle, black, 0.11)
+            } else {
+                t.border_subtle
+            },
+            footer: black.alpha(if dark { 0.28 } else { 0.03 }),
+            frame: if dark {
+                mix_srgb(t.border, t.border_subtle, 0.3)
+            } else {
+                t.border_subtle
+            },
+            text_quiet: if dark {
+                t.text_tertiary
+            } else {
+                t.text_secondary
+            },
+            text_path: if dark {
+                mix_srgb(t.text_tertiary, t.text_muted, 0.49)
+            } else {
+                t.text_tertiary
+            },
+            text_section: if dark { t.text_muted } else { t.text_tertiary },
+            text_faint: if dark {
+                mix_srgb(t.text_muted, t.text_dimmed, 0.35)
+            } else {
+                t.text_muted
+            },
+            worktree: if dark {
+                mix_srgb(t.success, white, 0.5)
+            } else {
+                t.success
+            },
+        }
+    }
+}
+
+fn keycaps(spec: &str) -> Vec<String> {
+    rune::Chord::parse(spec)
+        .expect("a launcher chord parses")
+        .keycaps_on(KeyPlatform::current())
+}
+
+/// `spec` as this platform writes the chord: `⌥Q` on a Mac, `Alt+Q` elsewhere.
+fn combo(spec: &str) -> String {
+    let joint = if KeyPlatform::current() == KeyPlatform::Mac {
+        ""
+    } else {
+        "+"
+    };
+    keycaps(spec).join(joint)
+}
+
+/// Launcher 2.0 in the box the dialog and the empty desktop show it in.
+pub(crate) fn framed(state: &State, launcher: &Launcher, t: &Tokens) -> El {
+    let look = Look::of(t);
+    rune_kit::popover::raised(attn_ui::kit(t), frame(state, launcher, t, &look), RADIUS)
+        .w_full()
+        .max_w(DIALOG_W)
+        .fill(t.bg_app)
+        .border(1.0, look.frame)
+        .clip_rounded(RADIUS)
+}
+
+fn frame(state: &State, launcher: &Launcher, t: &Tokens, look: &Look) -> El {
     let which = launcher.which;
     let w = which.key();
     let terminal = launcher.agent(state) == TERMINAL;
     let body = match &launcher.place {
-        Some(place) => where_list(state, launcher, place, t),
-        None => locations(state, launcher, terminal, t),
+        Some(place) => where_list(state, launcher, place, t, look),
+        None => locations(state, launcher, terminal, t, look),
     };
     col()
-        .gap(space::S3)
         .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
             super::on_key(state, which, ev, tx)
         })
-        .child(controls(
-            state,
-            which,
-            &launcher.choice,
-            &launcher.offer(state),
-            t,
-        ))
-        .child(header(state, launcher, terminal, t))
+        .child(controls(state, launcher, terminal, t, look))
+        .child(header(state, launcher, terminal, t, look))
         .child(body)
         .children(launcher.problem.as_ref().map(|problem| {
+            let ink = mix_srgb(t.error, t.highlight, 0.6);
             col()
                 .key(format!("{w}.error"))
                 .role("alert")
                 .label(problem.message.clone())
-                .child(
-                    text(problem.message.clone())
-                        .font(type_::BODY)
-                        .color(t.error),
-                )
+                .mx(16.0)
+                .my(10.0)
+                .px(10.0)
+                .py(8.0)
+                .gap(2.0)
+                .radius(6.0)
+                .fill(t.error.alpha(0.1))
+                .border(1.0, t.error.alpha(0.3))
+                .child(text(problem.message.clone()).font(MESSAGE).color(ink))
                 .children(problem.reason.as_ref().map(|reason| {
                     text(reason.clone())
                         .key(format!("{w}.error.reason"))
                         .label(reason.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
+                        .font(MESSAGE)
+                        .color(ink.alpha(0.75))
                 }))
         }))
         .children(launcher.busy.then(|| progress(state, launcher, t)))
-        .child(hints(state, launcher, terminal, t))
+        .child(hints(state, launcher, terminal, look))
+}
+
+/// The harness toggle with one ⌥ before its bare key letters, and YOLO on the same row.
+fn controls(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: &Look) -> El {
+    let which = launcher.which;
+    let w = which.key();
+    let offer = launcher.offer(state);
+    let options = agent_options(state, &launcher.choice, &offer)
+        .into_iter()
+        .map(|option| {
+            let name = text(option.label.clone())
+                .font(if option.chosen { OPTION_CHOSEN } else { OPTION })
+                .color(if option.chosen {
+                    look.on_accent
+                } else {
+                    look.text_quiet
+                });
+            let name = if option.absent {
+                name.strike(0, option.label.len(), None)
+            } else {
+                name
+            };
+            agent_option(which, &option)
+                .gap(7.0)
+                .px(10.0)
+                .py(4.0)
+                .radius(6.0)
+                .fill(if option.chosen {
+                    look.accent
+                } else {
+                    Color::TRANSPARENT
+                })
+                .opacity(if option.selectable { 1.0 } else { 0.45 })
+                .child(name)
+                .children(option.key.as_ref().map(|key| {
+                    text(key.clone()).font(SHORTCUT).color(if option.chosen {
+                        look.on_accent.alpha(0.6)
+                    } else {
+                        look.text_faint
+                    })
+                }))
+                .children(checking_mark(which, &option, t))
+        });
+    let legend = keycaps("alt+t").swap_remove(0);
+    let agents = row()
+        .items_center()
+        .flex_wrap()
+        .gap(6.0)
+        .children(catalog_note(state, which, t))
+        .child(text(legend).font(CAP).color(look.text_faint).a11y_hidden())
+        .child(
+            row()
+                .key(format!("{w}.agents"))
+                .role("radiogroup")
+                .label("Session agent")
+                .items_center()
+                .flex_wrap()
+                .shrink()
+                .gap(2.0)
+                .padding(2.0)
+                .radius(8.0)
+                .fill(look.bg_input)
+                .border(1.0, look.border_tile)
+                .children(options),
+        );
+    let yolo = (!terminal).then(|| {
+        let yolo = yolo(state, &launcher.choice, &offer);
+        let dot = el().w(7.0).h(7.0).radius(999.0);
+        let dot = if yolo.on {
+            dot.fill(look.accent)
+        } else {
+            dot.border(1.5, look.text_faint)
+        };
+        yolo_switch(which, &yolo)
+            .gap(6.0)
+            .px(8.0)
+            .py(4.0)
+            .opacity(if yolo.supported { 1.0 } else { 0.45 })
+            .child(dot)
+            .child(text("YOLO").font(TOGGLE).color(if yolo.on {
+                look.accent_text
+            } else {
+                look.text_quiet
+            }))
+            .children(
+                yolo.supported
+                    .then(|| text(combo("alt+q")).font(SHORTCUT).color(look.text_faint)),
+            )
+    });
+    row()
+        .w_full()
+        .items_center()
+        .justify_between()
+        .flex_wrap()
+        .gaps(8.0, 14.0)
+        .px(16.0)
+        .py(10.0)
+        .fill(t.highlight.alpha(0.015))
+        .border_sides([0.0, 0.0, 1.0, 0.0], look.hairline)
+        .child(agents)
+        .children(yolo)
 }
 
 /// What a start under way says: where it starts, and how long a stalled outpost has not
@@ -63,7 +294,8 @@ fn progress(state: &State, launcher: &Launcher, t: &Tokens) -> El {
         Some(_) => format!("Starting on {}…", machine_name(outposts(state), host)),
         None => "Starting…".to_owned(),
     };
-    if let (Some(outpost), Some(starting)) = (launcher.stalled(state), &launcher.starting) {
+    let stalled = launcher.stalled(state);
+    if let (Some(outpost), Some(starting)) = (stalled, &launcher.starting) {
         let since = crate::calendar::seconds_of_rfc3339(&outpost.state_since)
             .map_or(0, |s| (s * 1000.0) as i64);
         let waited = (launcher.now_ms - starting.at_ms.max(since)).max(0);
@@ -76,11 +308,17 @@ fn progress(state: &State, launcher: &Launcher, t: &Tokens) -> El {
         .key(format!("{}.progress", launcher.which.key()))
         .role("status")
         .label(message)
-        .font(type_::LABEL)
-        .color(t.text_secondary)
+        .font(STATUS)
+        .color(if stalled.is_some() {
+            t.warning
+        } else {
+            t.text_secondary
+        })
+        .px(16.0)
+        .py(10.0)
 }
 
-fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El {
+fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: &Look) -> El {
     let which = launcher.which;
     let w = which.key();
     let outposts = outposts(state);
@@ -105,81 +343,705 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
     let chip = launcher.place.as_ref().map(|place| {
         text(format!("{} ›", paths::basename(&place.repo)))
             .key(format!("{w}.repo-chip"))
-            .font(type_::BODY)
+            .font(CHIP)
             .color(t.text_secondary)
+            .px(8.0)
+            .py(3.0)
+            .radius(6.0)
+            .fill(look.bg_tile)
+            .border(1.0, look.border_input)
     });
+    let prefix = match launcher.place {
+        Some(_) => "",
+        None => machine_prefix(&launcher.query.text, outposts),
+    };
+    let accent = (!prefix.is_empty())
+        .then(|| vec![Span::new(0, prefix.len()).color(mix_srgb(t.accent, t.highlight, 0.33))]);
+    let mut input = TextInput::new(edit)
+        .key(launcher.field_key())
+        .plain()
+        .text_style(FIELD)
+        .height(40.0)
+        .width(None)
+        .label("Path")
+        .placeholder(placeholder)
+        .on_edit(move |state: &mut State| super::field_mut(state, which))
+        .on_change(move |state: &mut State, tx: &mut Tx| super::edited(state, which, tx))
+        .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+            super::on_key(state, which, ev, tx)
+        });
+    if let Some(spans) = accent {
+        input = input.spans(spans);
+    }
     let field = row()
         .w_full()
+        .h(44.0)
+        .px(12.0)
         .items_center()
-        .gap(space::S1)
+        .gap(8.0)
+        .radius(8.0)
+        .fill(look.bg_input)
+        .border(1.0, look.border_input)
+        .focus_within_ring(1.0, -1.0, look.accent.alpha(0.55))
         .children(chip)
-        .child(
-            TextInput::new(edit)
-                .key(launcher.field_key())
-                .plain()
-                .text_style(type_::BODY)
-                .height(type_::BODY.line_px())
-                .width(None)
-                .label("Path")
-                .placeholder(placeholder)
-                .on_edit(move |state: &mut State| super::field_mut(state, which))
-                .on_change(move |state: &mut State, tx: &mut Tx| super::edited(state, which, tx))
-                .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
-                    super::on_key(state, which, ev, tx)
-                })
-                .build(attn_ui::kit(t))
-                .grow(1.0),
-        )
+        .child(input.build(attn_ui::kit(t)).grow(1.0))
         .children(ghost.map(|g| {
             text(g.clone())
                 .key(format!("{w}.ghost"))
                 .label(g)
-                .font(type_::BODY)
+                .font(FIELD)
                 .color(t.text_muted)
         }));
     let address = launcher.address(state);
-    let breadcrumb = match (&launcher.place, &address) {
-        (None, Address::Browse { path, machine, .. }) => {
-            let host = machine.host.as_deref();
-            match launcher.listing(state, host, &split_browse(path).0) {
-                Some(Listing::Listed { directory, .. }) => {
-                    Some(launcher.display(state, directory, host))
-                }
-                _ => None,
-            }
-        }
-        _ => None,
-    };
     let status = launcher
         .place
         .is_none()
         .then(|| status_line(state, launcher, &address))
         .flatten();
     col()
-        .gap(space::S1)
+        .w_full()
+        .px(16.0)
+        .pt(14.0)
+        .pb(12.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], look.hairline)
         .child(
             text(title.clone())
                 .key(format!("{w}.title"))
                 .role("heading")
                 .label(title)
-                .font(type_::TITLE)
-                .color(t.text_primary),
+                .font(TITLE)
+                .text_case(TextCase::Uppercase)
+                .color(look.accent)
+                .ml(2.0)
+                .mb(9.0),
         )
         .child(field)
-        .children(breadcrumb.map(|dir| {
-            text(dir.clone())
-                .key(format!("{w}.breadcrumb"))
-                .label(dir)
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-        }))
         .children(status.map(|(line, bad)| {
             text(line.clone())
                 .key(format!("{w}.status"))
                 .role("status")
                 .label(line)
-                .font(type_::LABEL)
-                .color(if bad { t.error } else { t.text_tertiary })
+                .font(STATUS)
+                .color(if bad {
+                    mix_srgb(t.error, t.highlight, 0.47)
+                } else {
+                    look.text_quiet
+                })
+                .mx(2.0)
+                .mt(8.0)
+        }))
+}
+
+/// A list's section header: letter-spaced capitals.
+fn section(title: &str, look: &Look) -> El {
+    text(title.to_owned())
+        .font(SECTION)
+        .text_case(TextCase::Uppercase)
+        .color(look.text_section)
+        .px(10.0)
+        .pt(10.0)
+        .pb(6.0)
+}
+
+/// The scrolling list under the field.
+fn results(key: String, label: &str, children: Vec<El>) -> El {
+    col()
+        .key(key)
+        .role("listbox")
+        .label(label)
+        .w_full()
+        .max_h(340.0)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .px(8.0)
+        .pt(6.0)
+        .pb(8.0)
+        .children(children)
+}
+
+/// A row's glyph in its tile, which turns to the accent while the row is highlighted.
+fn tile(glyph: &'static str, highlighted: bool, look: &Look) -> El {
+    row()
+        .w(28.0)
+        .h(28.0)
+        .center()
+        .radius(6.0)
+        .fill(if highlighted {
+            look.accent.alpha(0.14)
+        } else {
+            look.bg_tile
+        })
+        .border(
+            1.0,
+            if highlighted {
+                look.accent.alpha(0.35)
+            } else {
+                look.border_tile
+            },
+        )
+        .child(
+            text(glyph)
+                .font(TextStyle::new(ICON_SIZE, 400.0))
+                .color(if highlighted {
+                    look.accent_text
+                } else {
+                    look.text_quiet
+                }),
+        )
+}
+
+/// A list row: the accent border and tint while highlighted, a faint wash under the pointer.
+fn option(key: String, name: &str, highlighted: bool, look: &Look, t: &Tokens) -> El {
+    row()
+        .key(key)
+        .role("option")
+        .label(name.to_owned())
+        .focus_selected(highlighted)
+        .w_full()
+        .items_center()
+        .gap(12.0)
+        .px(10.0)
+        .py(7.0)
+        .radius(7.0)
+        .border(
+            1.0,
+            if highlighted {
+                look.accent.alpha(0.22)
+            } else {
+                Color::TRANSPARENT
+            },
+        )
+        .fill(if highlighted {
+            look.accent.alpha(0.075)
+        } else {
+            Color::TRANSPARENT
+        })
+        .hover(if highlighted {
+            look.accent.alpha(0.075)
+        } else {
+            t.highlight.alpha(0.025)
+        })
+}
+
+/// A row's name over its path.
+fn info(name: String, detail: Option<String>, highlighted: bool, t: &Tokens, look: &Look) -> El {
+    col()
+        .grow(1.0)
+        .shrink()
+        .min_w(0.0)
+        .child(
+            text(name)
+                .font(NAME)
+                .color(t.text_primary)
+                .single_line()
+                .truncate(),
+        )
+        .children(detail.map(|d| {
+            text(d)
+                .font(PATH)
+                .color(if highlighted {
+                    look.text_quiet
+                } else {
+                    look.text_path
+                })
+                .single_line()
+                .truncate()
+                .mt(2.0)
+        }))
+}
+
+fn badge(word: String, look: &Look) -> El {
+    text(word.clone())
+        .label(word)
+        .font(BADGE)
+        .color(look.text_faint)
+}
+
+fn age_badge(age: String, look: &Look) -> El {
+    row()
+        .w(30.0)
+        .justify_end()
+        .child(text(age).font(BADGE).color(look.text_faint))
+}
+
+fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: &Look) -> El {
+    let w = launcher.which.key();
+    let outposts = outposts(state);
+    let rows = launcher.rows(state);
+    let selected = launcher.selected(state, &rows);
+    let address = launcher.address(state);
+    let browsed = match &address {
+        Address::Browse { path, machine, .. } => {
+            let host = machine.host.as_deref();
+            Some((launcher.listing(state, host, &split_browse(path).0), host))
+        }
+        _ => None,
+    };
+    let folder_title = match browsed {
+        Some((Some(Listing::Listed { directory, .. }), host)) => format!(
+            "Folders in {}/{}",
+            launcher
+                .display(state, directory, host)
+                .trim_end_matches('/'),
+            if outposts.is_empty() {
+                String::new()
+            } else {
+                format!(" on {}", machine_name(outposts, host))
+            }
+        ),
+        _ => "Folders".to_owned(),
+    };
+    let mut children = Vec::new();
+    for (i, r) in rows.iter().enumerate() {
+        if i == 0 || rows[i - 1].kind != r.kind {
+            let title = match r.kind {
+                Kind::Recent => "Recent".to_owned(),
+                Kind::Machine => "Browse a machine".to_owned(),
+                Kind::Elsewhere => "Found elsewhere".to_owned(),
+                Kind::Folder => folder_title.clone(),
+            };
+            children.push(section(&title, look).key(format!("{w}.section.{i}")));
+        }
+        children.push(location_row(
+            state,
+            launcher,
+            i,
+            r,
+            selected == Some(i),
+            terminal,
+            t,
+            look,
+        ));
+    }
+    if rows.is_empty() {
+        let empty = match browsed {
+            None => Some("No recent project matches. Type ~/ to browse folders."),
+            Some((listing, host)) => (matches!(listing, Some(Listing::Listed { .. }))
+                || !reachable(outposts, host))
+            .then_some("No folders match. Enter uses the path as typed."),
+        };
+        children.extend(empty.map(|message| {
+            text(message)
+                .key(format!("{w}.empty"))
+                .label(message)
+                .font(MESSAGE)
+                .color(t.text_dimmed)
+                .px(12.0)
+                .py(16.0)
+        }));
+    }
+    results(format!("{w}.locations"), "Locations", children)
+}
+
+/// The dot before a machine's name: green while connected, amber while stalled, red once lost
+/// or refused, a ring for this machine and any other state.
+fn machine_dot(state: Option<&str>, t: &Tokens, look: &Look) -> El {
+    let dot = el().w(6.0).h(6.0).radius(999.0);
+    match state {
+        Some("connected") => dot.fill(t.success),
+        Some("stalled") => dot.fill(t.warning),
+        Some("lost" | "refused") => dot.fill(t.error),
+        _ => dot.border(1.5, look.text_faint),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn location_row(
+    state: &State,
+    launcher: &Launcher,
+    i: usize,
+    r: &Row,
+    highlighted: bool,
+    terminal: bool,
+    t: &Tokens,
+    look: &Look,
+) -> El {
+    let which = launcher.which;
+    let w = which.key();
+    let outposts = outposts(state);
+    let host = r.host.as_deref();
+    let name = match r.kind {
+        Kind::Folder => format!("{}/", r.name),
+        _ => r.name.clone(),
+    };
+    let detail = match r.kind {
+        Kind::Recent => Some(launcher.display(state, &r.path, host)),
+        Kind::Machine => Some(format!(
+            "{} · Tab browses {}",
+            host.and_then(|h| outpost(outposts, h))
+                .map(|o| o.state.clone())
+                .unwrap_or_default(),
+            address_of(&machine_of(outposts, host), "~/")
+        )),
+        Kind::Elsewhere => Some(format!(
+            "Enter browses {}",
+            address_of(&machine_of(outposts, host), &format!("{}/", r.path))
+        )),
+        Kind::Folder => None,
+    };
+    let badge_el = r.repo_root.as_ref().and_then(|root| {
+        if !terminal && (r.kind == Kind::Recent || highlighted) {
+            Some(match memory(state, root, host) {
+                Memory::NewWorktree => {
+                    let word = "⎇ new worktree";
+                    text(word)
+                        .label(word)
+                        .font(BADGE)
+                        .color(look.worktree)
+                        .px(6.0)
+                        .py(1.0)
+                        .radius(4.0)
+                        .fill(t.success.alpha(0.09))
+                }
+                Memory::MainRepo => badge("main checkout".to_owned(), look).color(look.text_quiet),
+            })
+        } else {
+            (r.kind == Kind::Folder).then(|| badge("repo".to_owned(), look))
+        }
+    });
+    let badge_el = badge_el.map(|b| b.key(format!("{w}.row.{i}.badge")));
+    let reach = host.map(|h| outpost(outposts, h).map(|o| o.reach.clone()));
+    let machine =
+        (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty()).then(|| {
+            let reach_word = match &reach {
+                None => "local".to_owned(),
+                Some(reach) => reach.clone().unwrap_or_else(|| "unreachable".to_owned()),
+            };
+            let name = machine_name(outposts, host);
+            let shown = host.map(|h| outpost(outposts, h).map_or("lost", |o| o.state.as_str()));
+            row()
+                .key(format!("{w}.row.{i}.machine"))
+                .label(name.clone())
+                .description(reach_word)
+                .items_center()
+                .gap(5.0)
+                .child(machine_dot(shown, t, look))
+                .child(badge(name, look))
+        });
+    let unreachable = r.kind != Kind::Machine
+        && reach
+            .as_ref()
+            .is_some_and(|reach| reach.as_deref().is_none_or(|r| r == "unreachable"));
+    let age = r
+        .last_seen
+        .as_deref()
+        .map(|seen| age(seen, state.window.now_ms));
+    let glyph = match r.kind {
+        Kind::Recent => icon::CLOCK,
+        Kind::Folder if r.repo_root.is_some() => icon::REPO,
+        Kind::Folder => icon::FOLDER,
+        Kind::Machine => icon::DESKTOP,
+        Kind::Elsewhere => icon::SEARCH,
+    };
+    let picked = r.clone();
+    let mut row_el = option(format!("{w}.row.{i}"), &name, highlighted, look, t)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::pick(state, which, i, picked.clone(), tx)
+        })
+        .child(tile(glyph, highlighted, look))
+        .child(info(name.clone(), detail.clone(), highlighted, t, look))
+        .children(badge_el)
+        .children(machine)
+        .children(age.filter(|a| !a.is_empty()).map(|a| age_badge(a, look)));
+    if unreachable {
+        row_el = row_el.opacity(0.55);
+    }
+    if let Some(detail) = detail {
+        row_el = row_el.description(detail);
+    }
+    row_el
+}
+
+fn where_list(
+    state: &State,
+    launcher: &Launcher,
+    place: &super::Where,
+    t: &Tokens,
+    look: &Look,
+) -> El {
+    let which = launcher.which;
+    let w = which.key();
+    let host = place.host.as_deref();
+    if place.info.is_none() {
+        let reading = format!("Reading {}…", paths::basename(&place.repo));
+        return col()
+            .key(format!("{w}.where"))
+            .children(launcher.problem.is_none().then(|| {
+                text(reading.clone())
+                    .key(format!("{w}.reading"))
+                    .role("status")
+                    .label(reading)
+                    .font(MESSAGE)
+                    .color(t.text_dimmed)
+                    .px(16.0)
+                    .py(16.0)
+            }));
+    }
+    let rows = place.rows();
+    let name = launcher.worktree_name();
+    let typed = !place.branch.text.trim().is_empty();
+    let memory = memory(state, &place.repo, host);
+    let shown = |path: &str| launcher.display(state, path, host);
+    let mut children = Vec::new();
+    for (i, r) in rows.iter().enumerate() {
+        let after_new = i > 0 && matches!(rows[i - 1], WhereRow::New { .. });
+        if i == 0 {
+            children.push(new_worktree_section(&name, typed, look).key(format!("{w}.where.new")));
+        } else if after_new && !matches!(r, WhereRow::New { .. }) {
+            children.push(section("Open existing", look).key(format!("{w}.where.existing")));
+        }
+        children.push(where_row(
+            launcher,
+            i,
+            r,
+            place.highlight == Some(i),
+            memory,
+            &shown(&place.repo),
+            &shown,
+            state.window.now_ms,
+            t,
+            look,
+        ));
+    }
+    results(format!("{w}.where"), "Where", children)
+}
+
+/// "NEW WORKTREE · name · type to rename", the name in green and as typed.
+fn new_worktree_section(name: &str, typed: bool, look: &Look) -> El {
+    let label = if typed {
+        format!("New worktree · {name}")
+    } else {
+        format!("New worktree · {name} · type to rename")
+    };
+    row()
+        .label(label)
+        .items_center()
+        .px(10.0)
+        .pt(10.0)
+        .pb(6.0)
+        .child(
+            text("New worktree")
+                .font(SECTION)
+                .text_case(TextCase::Uppercase)
+                .color(look.text_section),
+        )
+        .child(text(" · ").font(SECTION_WORDS).color(look.text_section))
+        .child(
+            text(name.to_owned())
+                .font(SECTION_NAME)
+                .color(look.worktree),
+        )
+        .children((!typed).then(|| {
+            text(" · type to rename")
+                .font(SECTION_WORDS)
+                .color(look.text_section)
+        }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn where_row(
+    launcher: &Launcher,
+    i: usize,
+    r: &WhereRow,
+    highlighted: bool,
+    memory: Memory,
+    repo: &str,
+    shown: &dyn Fn(&str) -> String,
+    now_ms: i64,
+    t: &Tokens,
+    look: &Look,
+) -> El {
+    let which = launcher.which;
+    let deleting = launcher
+        .deletion
+        .as_ref()
+        .filter(|d| matches!(r, WhereRow::Existing { path, .. } if *path == d.path));
+    let (name, detail) = match (r, deleting) {
+        (WhereRow::Existing { branch, .. }, Some(d)) if d.force => (
+            format!("{branch} has uncommitted changes"),
+            "Force delete local worktree and branch? (y/n)".to_owned(),
+        ),
+        (WhereRow::Existing { branch, path, .. }, Some(_)) => (
+            format!("Delete {branch}?"),
+            format!("{} (y/n)", shown(path)),
+        ),
+        (WhereRow::New { current, branch }, _) => (
+            format!("from {branch}"),
+            if *current {
+                "the branch the main checkout is on".to_owned()
+            } else {
+                "the default branch".to_owned()
+            },
+        ),
+        (WhereRow::Main { branch }, _) => {
+            ("main checkout".to_owned(), format!("{repo} · on {branch}"))
+        }
+        (WhereRow::Existing { branch, path, .. }, None) => (branch.clone(), shown(path)),
+    };
+    let trailing = match r {
+        WhereRow::Main { .. } if memory == Memory::MainRepo => {
+            Some(badge("last used".to_owned(), look))
+        }
+        WhereRow::New { current: false, .. } if memory == Memory::NewWorktree => {
+            Some(badge("last used".to_owned(), look))
+        }
+        WhereRow::Existing { .. } if deleting.is_some() => Some(badge("y / n".to_owned(), look)),
+        WhereRow::Existing { created_at, .. } => created_at
+            .as_deref()
+            .map(|at| age(at, now_ms))
+            .filter(|a| !a.is_empty())
+            .map(|a| age_badge(a, look)),
+        _ => None,
+    };
+    let glyph = match (r, deleting) {
+        (_, Some(_)) => icon::TRASH,
+        (WhereRow::New { .. }, _) => icon::PLUS,
+        (WhereRow::Main { .. }, _) => icon::COMMIT,
+        (WhereRow::Existing { .. }, _) => icon::BRANCH,
+    };
+    let picked = r.clone();
+    option(
+        format!("{}.where.row.{i}", which.key()),
+        &name,
+        highlighted,
+        look,
+        t,
+    )
+    .description(detail.clone())
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        super::pick_destination(state, which, i, picked.clone(), tx)
+    })
+    .child(tile(glyph, highlighted, look))
+    .child(info(name, Some(detail), highlighted, t, look))
+    .children(trailing)
+}
+
+/// One footer hint: its keys as keycaps among its words.
+enum Piece {
+    Key(String),
+    Words(&'static str),
+}
+
+fn hints(state: &State, launcher: &Launcher, terminal: bool, look: &Look) -> El {
+    use Piece::{Key, Words};
+    let accel = |key: &str| {
+        let modifier = if KeyPlatform::current() == KeyPlatform::Mac {
+            "⌘"
+        } else {
+            "Ctrl+"
+        };
+        format!("{modifier}{key}")
+    };
+    let mut hints: Vec<Vec<Piece>> = Vec::new();
+    let mut back = None;
+    if launcher.stalled(state).is_some() {
+        hints.push(vec![
+            Key("Esc".into()),
+            Words("keep waiting in the background"),
+        ]);
+    } else if launcher.busy {
+    } else if launcher.deletion.is_some() {
+        hints.push(vec![Key("y".into()), Words("delete")]);
+        hints.push(vec![
+            Key("n".into()),
+            Words("or"),
+            Key("Esc".into()),
+            Words("keep it"),
+        ]);
+    } else {
+        let place = launcher.place.as_ref();
+        if place.is_some() {
+            hints.push(vec![Words("type to name it")]);
+        }
+        hints.push(vec![
+            Key("↑↓".into()),
+            Words(if place.is_some() { "choose" } else { "move" }),
+        ]);
+        hints.push(vec![
+            Key("Enter".into()),
+            Words(if place.is_none() && terminal {
+                "open terminal"
+            } else {
+                "start"
+            }),
+        ]);
+        if place.is_none() {
+            let rows = launcher.rows(state);
+            let selected = launcher.selected(state, &rows).and_then(|i| rows.get(i));
+            let typed_repo = selected.is_none()
+                && match launcher.address(state) {
+                    Address::Browse { path, machine, .. } => {
+                        launcher.known_repo(state, machine.host.as_deref(), &path) == Some(true)
+                    }
+                    _ => false,
+                };
+            let where_next =
+                !terminal && (selected.is_some_and(|r| r.repo_root.is_some()) || typed_repo);
+            hints.push(vec![
+                Key("Tab".into()),
+                Words(if where_next { "where…" } else { "complete" }),
+            ]);
+        }
+        if place.is_some() || !terminal {
+            hints.push(vec![Key(accel("Enter")), Words("terminal here")]);
+        }
+        if place.is_none() && !outposts(state).is_empty() {
+            hints.push(vec![Key("name:".into()), Words("machine")]);
+        }
+        if let Some(place) = place
+            && matches!(
+                place.highlight.and_then(|i| place.rows().get(i).cloned()),
+                Some(WhereRow::Existing { .. })
+            )
+        {
+            hints.push(vec![Key(accel("⌫")), Words("delete")]);
+        }
+        back = Some(vec![
+            Key("Esc".into()),
+            Words(if place.is_some() { "back" } else { "close" }),
+        ]);
+    }
+    row()
+        .key(format!("{}.hints", launcher.which.key()))
+        .w_full()
+        .items_center()
+        .flex_wrap()
+        .gaps(6.0, 16.0)
+        .px(16.0)
+        .py(9.0)
+        .fill(look.footer)
+        .border_sides([1.0, 0.0, 0.0, 0.0], look.hairline)
+        .children(hints.into_iter().map(|pieces| hint(pieces, look)))
+        .children(back.map(|pieces| row().grow(1.0).justify_end().child(hint(pieces, look))))
+}
+
+fn hint(pieces: Vec<Piece>, look: &Look) -> El {
+    let name = pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Key(key) => key.as_str(),
+            Piece::Words(words) => words,
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    row()
+        .label(name)
+        .items_center()
+        .gap(5.0)
+        .children(pieces.into_iter().map(|piece| {
+            match piece {
+                Piece::Key(key) => text(key)
+                    .font(CAP)
+                    .color(look.text_quiet)
+                    .px(5.0)
+                    .py(1.0)
+                    .radius(4.0)
+                    .fill(look.bg_tile)
+                    .border_sides([1.0, 1.0, 2.0, 1.0], look.border_input)
+                    .a11y_hidden(),
+                Piece::Words(words) => text(words).font(HINT).color(look.text_faint).a11y_hidden(),
+            }
         }))
 }
 
@@ -260,422 +1122,6 @@ fn ghost(state: &State, launcher: &Launcher) -> Option<String> {
         .then(|| full.get(typed.len()..).map(str::to_owned))
         .flatten()
         .filter(|rest| !rest.is_empty())
-}
-
-fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El {
-    let w = launcher.which.key();
-    let outposts = outposts(state);
-    let rows = launcher.rows(state);
-    let selected = launcher.selected(state, &rows);
-    let address = launcher.address(state);
-    let browsed = match &address {
-        Address::Browse { path, machine, .. } => {
-            let host = machine.host.as_deref();
-            Some((launcher.listing(state, host, &split_browse(path).0), host))
-        }
-        _ => None,
-    };
-    let folder_title = match browsed {
-        Some((Some(Listing::Listed { directory, .. }), host)) => format!(
-            "Folders in {}/{}",
-            launcher
-                .display(state, directory, host)
-                .trim_end_matches('/'),
-            if outposts.is_empty() {
-                String::new()
-            } else {
-                format!(" on {}", machine_name(outposts, host))
-            }
-        ),
-        _ => "Folders".to_owned(),
-    };
-    let mut children = Vec::new();
-    for (i, r) in rows.iter().enumerate() {
-        if i == 0 || rows[i - 1].kind != r.kind {
-            let title = match r.kind {
-                Kind::Recent => "Recent".to_owned(),
-                Kind::Machine => "Browse a machine".to_owned(),
-                Kind::Elsewhere => "Found elsewhere".to_owned(),
-                Kind::Folder => folder_title.clone(),
-            };
-            children.push(section(&title, t).key(format!("{w}.section.{i}")));
-        }
-        children.push(location_row(
-            state,
-            launcher,
-            i,
-            r,
-            selected == Some(i),
-            terminal,
-            t,
-        ));
-    }
-    if rows.is_empty() {
-        let empty = match browsed {
-            None => Some("No recent project matches. Type ~/ to browse folders."),
-            Some((listing, host)) => (matches!(listing, Some(Listing::Listed { .. }))
-                || !reachable(outposts, host))
-            .then_some("No folders match. Enter uses the path as typed."),
-        };
-        children.extend(empty.map(|message| {
-            text(message)
-                .key(format!("{w}.empty"))
-                .label(message)
-                .font(type_::BODY)
-                .color(t.text_tertiary)
-        }));
-    }
-    col()
-        .key(format!("{w}.locations"))
-        .role("listbox")
-        .label("Locations")
-        .w_full()
-        .max_h(360.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .gap(2.0)
-        .children(children)
-}
-
-fn location_row(
-    state: &State,
-    launcher: &Launcher,
-    i: usize,
-    r: &Row,
-    highlighted: bool,
-    terminal: bool,
-    t: &Tokens,
-) -> El {
-    let which = launcher.which;
-    let w = which.key();
-    let outposts = outposts(state);
-    let host = r.host.as_deref();
-    let name = match r.kind {
-        Kind::Folder => format!("{}/", r.name),
-        _ => r.name.clone(),
-    };
-    let detail = match r.kind {
-        Kind::Recent => Some(launcher.display(state, &r.path, host)),
-        Kind::Machine => Some(format!(
-            "{} · Tab browses {}",
-            host.and_then(|h| outpost(outposts, h))
-                .map(|o| o.state.clone())
-                .unwrap_or_default(),
-            address_of(&machine_of(outposts, host), "~/")
-        )),
-        Kind::Elsewhere => Some(format!(
-            "Enter browses {}",
-            address_of(&machine_of(outposts, host), &format!("{}/", r.path))
-        )),
-        Kind::Folder => None,
-    };
-    let badge = r.repo_root.as_ref().and_then(|root| {
-        if !terminal && (r.kind == Kind::Recent || highlighted) {
-            Some(match memory(state, root, host) {
-                Memory::NewWorktree => "⎇ new worktree",
-                Memory::MainRepo => "main checkout",
-            })
-        } else {
-            (r.kind == Kind::Folder).then_some("repo")
-        }
-    });
-    let machine =
-        (matches!(r.kind, Kind::Recent | Kind::Elsewhere) && !outposts.is_empty()).then(|| {
-            let reach = match host {
-                None => "local".to_owned(),
-                Some(h) => outpost(outposts, h)
-                    .map_or_else(|| "unreachable".to_owned(), |o| o.reach.clone()),
-            };
-            let name = machine_name(outposts, host);
-            text(name.clone())
-                .key(format!("{w}.row.{i}.machine"))
-                .label(name)
-                .description(reach)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-        });
-    let age = r
-        .last_seen
-        .as_deref()
-        .map(|seen| age(seen, state.window.now_ms));
-    let picked = r.clone();
-    let mut option = row()
-        .key(format!("{w}.row.{i}"))
-        .role("option")
-        .label(name.clone())
-        .focus_selected(highlighted)
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .padding(space::S1)
-        .radius(4.0)
-        .fill(if highlighted {
-            t.bg_selected
-        } else {
-            t.bg_elevated
-        })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::pick(state, which, i, picked.clone(), tx)
-        })
-        .child(
-            text(match r.kind {
-                Kind::Recent => icon::CLOCK,
-                Kind::Folder => icon::FOLDER,
-                Kind::Machine => icon::WINDOW,
-                Kind::Elsewhere => icon::SEARCH,
-            })
-            .font(type_::BODY),
-        )
-        .child(
-            col()
-                .grow(1.0)
-                .shrink()
-                .min_w(0.0)
-                .child(text(name).font(type_::BODY).color(t.text_primary))
-                .children(
-                    detail
-                        .clone()
-                        .map(|s| text(s).font(type_::LABEL).color(t.text_tertiary)),
-                ),
-        )
-        .children(badge.map(|b| {
-            text(b)
-                .key(format!("{w}.row.{i}.badge"))
-                .label(b)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-        }))
-        .children(machine)
-        .children(
-            age.filter(|a| !a.is_empty())
-                .map(|a| text(a).font(type_::LABEL).color(t.text_tertiary)),
-        );
-    if let Some(detail) = detail {
-        option = option.description(detail);
-    }
-    option
-}
-
-fn where_list(state: &State, launcher: &Launcher, place: &super::Where, t: &Tokens) -> El {
-    let which = launcher.which;
-    let w = which.key();
-    let host = place.host.as_deref();
-    if place.info.is_none() {
-        let reading = format!("Reading {}…", paths::basename(&place.repo));
-        return col()
-            .key(format!("{w}.where"))
-            .children(launcher.problem.is_none().then(|| {
-                text(reading.clone())
-                    .key(format!("{w}.reading"))
-                    .role("status")
-                    .label(reading)
-                    .font(type_::BODY)
-                    .color(t.text_tertiary)
-            }));
-    }
-    let rows = place.rows();
-    let name = launcher.worktree_name();
-    let typed = !place.branch.text.trim().is_empty();
-    let memory = memory(state, &place.repo, host);
-    let shown = |path: &str| launcher.display(state, path, host);
-    let mut children = Vec::new();
-    for (i, r) in rows.iter().enumerate() {
-        let after_new = i > 0 && matches!(rows[i - 1], WhereRow::New { .. });
-        if i == 0 {
-            let title = if typed {
-                format!("New worktree · {name}")
-            } else {
-                format!("New worktree · {name} · type to rename")
-            };
-            children.push(section(&title, t).key(format!("{w}.where.new")));
-        } else if after_new && !matches!(r, WhereRow::New { .. }) {
-            children.push(section("Open existing", t).key(format!("{w}.where.existing")));
-        }
-        children.push(where_row(
-            launcher,
-            i,
-            r,
-            place.highlight == Some(i),
-            memory,
-            &shown(&place.repo),
-            &shown,
-            state.window.now_ms,
-            t,
-        ));
-    }
-    col()
-        .key(format!("{w}.where"))
-        .role("listbox")
-        .label("Where")
-        .w_full()
-        .max_h(360.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .gap(2.0)
-        .children(children)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn where_row(
-    launcher: &Launcher,
-    i: usize,
-    r: &WhereRow,
-    highlighted: bool,
-    memory: Memory,
-    repo: &str,
-    shown: &dyn Fn(&str) -> String,
-    now_ms: i64,
-    t: &Tokens,
-) -> El {
-    let which = launcher.which;
-    let deleting = launcher
-        .deletion
-        .as_ref()
-        .filter(|d| matches!(r, WhereRow::Existing { path, .. } if *path == d.path));
-    let (name, detail) = match (r, deleting) {
-        (WhereRow::Existing { branch, .. }, Some(d)) if d.force => (
-            format!("{branch} has uncommitted changes"),
-            "Force delete local worktree and branch? (y/n)".to_owned(),
-        ),
-        (WhereRow::Existing { branch, path, .. }, Some(_)) => (
-            format!("Delete {branch}?"),
-            format!("{} (y/n)", shown(path)),
-        ),
-        (WhereRow::New { current, branch }, _) => (
-            format!("from {branch}"),
-            if *current {
-                "the branch the main checkout is on".to_owned()
-            } else {
-                "the default branch".to_owned()
-            },
-        ),
-        (WhereRow::Main { branch }, _) => {
-            ("main checkout".to_owned(), format!("{repo} · on {branch}"))
-        }
-        (WhereRow::Existing { branch, path, .. }, None) => (branch.clone(), shown(path)),
-    };
-    let badge = match r {
-        WhereRow::Main { .. } if memory == Memory::MainRepo => Some("last used".to_owned()),
-        WhereRow::New { current: false, .. } if memory == Memory::NewWorktree => {
-            Some("last used".to_owned())
-        }
-        WhereRow::Existing { .. } if deleting.is_some() => Some("y / n".to_owned()),
-        WhereRow::Existing { created_at, .. } => created_at.as_deref().map(|at| age(at, now_ms)),
-        _ => None,
-    };
-    let glyph = match (r, deleting) {
-        (_, Some(_)) => icon::TRASH,
-        (WhereRow::New { .. }, _) => icon::MERGE,
-        (WhereRow::Main { .. }, _) => icon::CIRCLE,
-        (WhereRow::Existing { .. }, _) => icon::CIRCLE_DOT,
-    };
-    let picked = r.clone();
-    row()
-        .key(format!("{}.where.row.{i}", which.key()))
-        .role("option")
-        .label(name.clone())
-        .description(detail.clone())
-        .focus_selected(highlighted)
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .padding(space::S1)
-        .radius(4.0)
-        .fill(if highlighted {
-            t.bg_selected
-        } else {
-            t.bg_elevated
-        })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::pick_destination(state, which, i, picked.clone(), tx)
-        })
-        .child(text(glyph).font(type_::BODY))
-        .child(
-            col()
-                .grow(1.0)
-                .shrink()
-                .min_w(0.0)
-                .child(text(name).font(type_::BODY).color(t.text_primary))
-                .child(text(detail).font(type_::LABEL).color(t.text_tertiary)),
-        )
-        .children(
-            badge
-                .filter(|b| !b.is_empty())
-                .map(|b| text(b).font(type_::LABEL).color(t.text_secondary)),
-        )
-}
-
-fn hints(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El {
-    let accel = if rune::KeyPlatform::current() == rune::KeyPlatform::Mac {
-        "⌘"
-    } else {
-        "Ctrl+"
-    };
-    let hints: Vec<String> = if launcher.stalled(state).is_some() {
-        vec!["Esc keep waiting in the background".into()]
-    } else if launcher.busy {
-        Vec::new()
-    } else if launcher.deletion.is_some() {
-        vec!["y delete".into(), "n or Esc keep it".into()]
-    } else {
-        let mut hints = Vec::new();
-        let place = launcher.place.as_ref();
-        if place.is_some() {
-            hints.push("type to name it".to_owned());
-        }
-        hints.push(format!(
-            "↑↓ {}",
-            if place.is_some() { "choose" } else { "move" }
-        ));
-        hints.push(format!(
-            "Enter {}",
-            if place.is_none() && terminal {
-                "open terminal"
-            } else {
-                "start"
-            }
-        ));
-        if place.is_none() {
-            let rows = launcher.rows(state);
-            let selected = launcher.selected(state, &rows).and_then(|i| rows.get(i));
-            let typed_repo = selected.is_none()
-                && match launcher.address(state) {
-                    Address::Browse { path, machine, .. } => {
-                        launcher.known_repo(state, machine.host.as_deref(), &path) == Some(true)
-                    }
-                    _ => false,
-                };
-            let where_next =
-                !terminal && (selected.is_some_and(|r| r.repo_root.is_some()) || typed_repo);
-            hints.push(format!(
-                "Tab {}",
-                if where_next { "where…" } else { "complete" }
-            ));
-        }
-        if place.is_some() || !terminal {
-            hints.push(format!("{accel}Enter terminal here"));
-        }
-        if place.is_none() && !outposts(state).is_empty() {
-            hints.push("name: machine".to_owned());
-        }
-        if let Some(place) = place
-            && matches!(
-                place.highlight.and_then(|i| place.rows().get(i).cloned()),
-                Some(WhereRow::Existing { .. })
-            )
-        {
-            hints.push(format!("{accel}⌫ delete"));
-        }
-        hints.push(format!(
-            "Esc {}",
-            if place.is_some() { "back" } else { "close" }
-        ));
-        hints
-    };
-    let hints: Vec<&str> = hints.iter().map(String::as_str).collect();
-    footer(&hints, t).key(format!("{}.hints", launcher.which.key()))
 }
 
 /// How long ago an RFC 3339 time was, as the launcher says it: now, then minutes, hours, days.
