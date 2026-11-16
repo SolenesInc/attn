@@ -223,6 +223,8 @@ fn starting_takes_a_second_click_that_says_so_and_shows_the_session_the_daemon_n
     assert!(shows(&world, &format!("{}.confirm", row("trellis"))));
     click(&mut world, &sun("trellis"));
     assert_eq!(starts(&world), [json!("member:trellis")]);
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(shown.last().unwrap()["session_id"], "sess-trellis");
 }
 
 #[test]
@@ -377,4 +379,22 @@ fn a_member_in_sessions_row_opens_its_day() {
         .map(|m| m["session_id"].clone())
         .collect();
     assert_eq!(shown, [json!("sess-keel")]);
+}
+
+#[test]
+fn with_crew_in_the_queue_a_member_owing_a_turn_queues_and_every_crew_row_stays() {
+    let owed = Session {
+        turn_owed: Some(true),
+        turn_opened_at: Some(super::queue::ago(5)),
+        ..keel_day()
+    };
+    let mut state = in_queue(vec![session("s1", "idle"), owed], roster());
+    state
+        .settings
+        .as_mut()
+        .unwrap()
+        .insert("queue_crew_enabled".into(), "true".into());
+    let world = start(state);
+    assert!(shows(&world, "queue-turn.sess-keel"));
+    assert!(crew_lines(&world).contains(&"queue-crew.member.alder".to_owned()));
 }
