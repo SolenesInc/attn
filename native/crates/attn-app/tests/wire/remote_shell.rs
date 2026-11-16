@@ -83,6 +83,11 @@ fn solo(desktop: &str, slot: i64, session: &str, runtime: &str) -> Desktop {
 /// The remote shell `remote` on desktop d1, with terminal r1, and the local shells beside it
 /// on desktops of their own: `local` with terminal r2, then `other` with r3.
 fn start(outposts: Vec<OutpostInfo>, enabled: bool) -> World {
+    start_as(outposts, enabled, "idle")
+}
+
+/// As `start`, with the remote shell in `remote_state`.
+fn start_as(outposts: Vec<OutpostInfo>, enabled: bool, remote_state: &str) -> World {
     let desktops = vec![
         solo("d1", 1, "remote", "r1"),
         solo("d2", 2, "local", "r2"),
@@ -93,7 +98,10 @@ fn start(outposts: Vec<OutpostInfo>, enabled: bool) -> World {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile("d1")]),
         sessions: Some(vec![
-            shell("remote", Some(OUTPOST)),
+            Session {
+                state: remote_state.into(),
+                ..shell("remote", Some(OUTPOST))
+            },
             shell("local", None),
             shell("other", None),
         ]),
@@ -573,4 +581,37 @@ fn an_attach_answered_after_the_outpost_was_lost_leaves_the_recovered_terminal_t
         sent_input(&world),
         [("r1".into(), "z".into(), "user".into())]
     );
+}
+
+#[test]
+fn a_recoverable_shell_on_an_unreachable_outpost_closes_but_neither_reloads_nor_splits() {
+    let mut world = start_as(vec![lost()], true, "recoverable");
+    world.open_desktop();
+
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(
+                state,
+                Action::ReloadSession {
+                    session: "remote".into(),
+                },
+                tx,
+            );
+        })
+    });
+    assert!(world.daemon.sent_of("reload_session").is_empty());
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Failed to reload session: studio is unreachable; this needs it now")
+    );
+
+    press(&mut world, &Action::TerminalSplitVertical);
+    assert!(world.daemon.sent_of("spawn_session").is_empty());
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("studio is unreachable; this needs it now")
+    );
+
+    press(&mut world, &Action::SessionClose);
+    assert_eq!(world.daemon.sent_of("desktop_close_tile").len(), 1);
 }

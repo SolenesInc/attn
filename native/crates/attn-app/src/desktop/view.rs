@@ -1032,7 +1032,6 @@ fn tile_transition(kind: &LeafKind) -> rune::Transition {
     })
 }
 
-/// Each outpost's id and name, which a view that names outposts reads.
 /// What a remote terminal's strip says of its machine, and the machine whose screen the tile
 /// has never shown.
 fn reach_strip(cx: &TileCx, pane: &DesktopPane) -> (Option<String>, Option<String>) {
@@ -1069,6 +1068,7 @@ fn reaches(
         .collect()
 }
 
+/// Each outpost's id and name, which a view that names outposts reads.
 fn outpost_names(outposts: &[attn_protocol::OutpostInfo]) -> Vec<(String, String)> {
     outposts
         .iter()

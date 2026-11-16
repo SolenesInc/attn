@@ -563,7 +563,8 @@ pub(super) fn split_at(
         .find(|d| d.id == desktop)
         .and_then(|d| super::view::pane_of(d, leaf))
         .map(|p| p.session_id.clone());
-    if session.is_some_and(|s| crate::outpost::refuse_offline(state, &s, tx)) {
+    if let Some(why) = session.and_then(|s| crate::outpost::unreachable(state, &s)) {
+        state.window.notify(why, tx);
         return;
     }
     let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == desktop) else {
@@ -717,7 +718,7 @@ fn close(state: &mut State, tx: &mut Tx) {
         LeafKind::Pane => {
             if session
                 .as_deref()
-                .is_some_and(|s| crate::outpost::refuse_offline(state, s, tx))
+                .is_some_and(|s| crate::outpost::refuse_unless_recoverable(state, s, tx))
             {
                 return;
             }

@@ -43,7 +43,7 @@ pub(crate) fn request(state: &mut State, desktop_id: &str, tx: &mut Tx) {
     let sessions: Vec<String> = desktop.panes.iter().map(|p| p.session_id.clone()).collect();
     if sessions
         .iter()
-        .any(|s| crate::outpost::refuse_offline(state, s, tx))
+        .any(|s| crate::outpost::refuse_unless_recoverable(state, s, tx))
     {
         return;
     }

@@ -7,7 +7,7 @@ use crate::State;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Reach {
-    Home,
+    /// The home itself, or an outpost it reaches.
     Reachable,
     /// Reachable, but the bridge has been silent for a while; typing still goes.
     Stalled,
@@ -18,7 +18,7 @@ pub(crate) enum Reach {
 impl Reach {
     /// Whether the terminal attaches and takes typing.
     pub(crate) fn streams(self) -> bool {
-        matches!(self, Reach::Home | Reach::Reachable | Reach::Stalled)
+        matches!(self, Reach::Reachable | Reach::Stalled)
     }
 
     pub(crate) fn offline(self) -> bool {
@@ -29,7 +29,7 @@ impl Reach {
 /// How the home reaches `host`; a host no outpost row has is unreachable.
 pub(crate) fn reach(host: Option<&str>, outposts: &[OutpostInfo]) -> Reach {
     let Some(host) = host.filter(|h| !h.is_empty()) else {
-        return Reach::Home;
+        return Reach::Reachable;
     };
     let Some(outpost) = outposts.iter().find(|o| o.id == host) else {
         return Reach::Unreachable;
@@ -58,22 +58,33 @@ pub(crate) fn notice(session: &Session, outposts: &[OutpostInfo]) -> Option<Stri
         Reach::Unreachable => Some(format!("{name} unreachable · typing is not sent")),
         Reach::Connecting => Some(format!("Connecting to {name} · typing is not sent")),
         Reach::Stalled => Some(format!("{name} not responding")),
-        Reach::Home | Reach::Reachable => None,
+        Reach::Reachable => None,
     }
 }
 
-/// Refuses an action on `session` that needs its machine while that machine is unreachable,
-/// saying so; whether it refused. A recoverable session comes back without it.
-pub(crate) fn refuse_offline(state: &mut State, session: &str, tx: &mut Tx) -> bool {
-    let Some(session) = state.facts.sessions.iter().find(|s| s.id == session) else {
+/// Why an action on `session` that needs its machine cannot run now: its machine is
+/// unreachable.
+pub(crate) fn unreachable(state: &State, session: &str) -> Option<String> {
+    let session = state.facts.sessions.iter().find(|s| s.id == session)?;
+    if !offline(session, &state.facts.outposts) {
+        return None;
+    }
+    let name = crate::desktop::host::name(session, &state.facts.outposts)?;
+    Some(format!("{name} is unreachable; this needs it now"))
+}
+
+/// Refuses an action on `session` while its machine is unreachable, saying so; whether it
+/// refused. A recoverable session closes and reloads without its machine having to answer
+/// first.
+pub(crate) fn refuse_unless_recoverable(state: &mut State, session: &str, tx: &mut Tx) -> bool {
+    let recoverable = state
+        .facts
+        .sessions
+        .iter()
+        .any(|s| s.id == session && s.state == "recoverable");
+    let Some(why) = unreachable(state, session).filter(|_| !recoverable) else {
         return false;
     };
-    if session.state == "recoverable" || !offline(session, &state.facts.outposts) {
-        return false;
-    }
-    let name = crate::desktop::host::name(session, &state.facts.outposts).unwrap_or_default();
-    state
-        .window
-        .notify(format!("{name} is unreachable; this needs it now"), tx);
+    state.window.notify(why, tx);
     true
 }

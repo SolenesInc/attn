@@ -66,7 +66,13 @@ fn reload(state: &mut State, tx: &mut Tx) {
 }
 
 pub(crate) fn reload_session(state: &mut State, session: &str, tx: &mut Tx) {
-    if crate::outpost::refuse_offline(state, session, tx) {
+    if crate::outpost::refuse_unless_recoverable(state, session, tx) {
+        return;
+    }
+    if let Some(why) = crate::outpost::unreachable(state, session) {
+        state
+            .window
+            .notify(format!("Failed to reload session: {why}"), tx);
         return;
     }
     let (cols, rows) = state
@@ -95,7 +101,7 @@ fn close(state: &mut State, tx: &mut Tx) {
     let Some(session) = target(state) else {
         return;
     };
-    if crate::outpost::refuse_offline(state, &session.id, tx) {
+    if crate::outpost::refuse_unless_recoverable(state, &session.id, tx) {
         return;
     }
     if let Some(member) = session.crew_member.as_deref().filter(|m| !m.is_empty()) {
