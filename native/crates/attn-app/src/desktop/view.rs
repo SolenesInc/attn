@@ -1143,6 +1143,10 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .children(
             (pane.is_some() && !focused && !popped)
                 .then(|| focus_button(&key, &cx.desktop.id, &leaf.id, title, cx)),
+        )
+        .children(
+            pane.is_some()
+                .then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)),
         );
     let headline = row()
         .w_full()

@@ -3437,11 +3437,11 @@ fn an_agent_pops_out_into_a_window_with_its_live_terminal_and_comes_back_attache
     let mut world = start(vec![side_by_side(None)]);
     assert_eq!(attachments(&world, "r-a"), ["attach_session"]);
 
-    press(&mut world, Action::TilePopOut);
+    world.gesture(|app| app.click(Target::key("tile.a.popout")));
     assert_eq!(
         sent(&world, "desktop_pop_out_leaf")[0]["leaf_id"],
         "a",
-        "an agent's tile pops out"
+        "an agent's header pops its tile out"
     );
     arrange(&mut world, "work/desktop_1", vec![side_by_side(Some(OUT))]);
     let key = only_window(&world).key;
@@ -3452,6 +3452,16 @@ fn an_agent_pops_out_into_a_window_with_its_live_terminal_and_comes_back_attache
         attachments(&world, "r-a")
     );
     assert!(!shows(&world, "Agent a"));
+    assert_eq!(
+        world
+            .tile_screen(&key)
+            .get(Target::key("tile.a.popout"))
+            .name,
+        Some(format!(
+            "Bring back tile ({})",
+            key_label(Action::TilePopOut)
+        ))
+    );
 
     output(&world, "r-a", 1, b"hello from a");
     world.settle();
@@ -3509,6 +3519,12 @@ fn an_agent_pops_out_into_a_window_with_its_live_terminal_and_comes_back_attache
         Some("attach_session"),
         "the main window attaches the terminal again, and the window letting go does not end that attach: {:?}",
         attachments(&world, "r-a")
+    );
+    world.gesture(|w| w.type_text("z"));
+    assert_eq!(
+        sent_for(&world, "pty_input", "r-a").last().unwrap()["data"],
+        "z",
+        "typing reaches the terminal back in the main window"
     );
     output(&world, "r-a", 2, b"\r\nback home");
     world.settle();
