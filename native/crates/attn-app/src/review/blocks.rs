@@ -393,7 +393,7 @@ pub(crate) fn rewording(block: &Block) -> Option<Vec<(Op, Word)>> {
 }
 
 /// A block's words as one text: removed words struck, added words tinted, code in mono,
-/// strong and emphasis as they read, links underlined and followed as `document` follows them.
+/// strong and emphasis as they read, and the links `document` follows underlined and followed.
 fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> El {
     let mut said = String::new();
     let (mut spans, mut strikes) = (Vec::new(), Vec::new());
@@ -406,13 +406,14 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
         let (start, end) = (said.len(), said.len() + word.text.len());
         said.push_str(&word.text);
         let mut span = Span::new(start, end);
+        let href = word.href.as_deref().unwrap_or_default();
         for mark in &word.marks {
             span = match mark {
                 Mark::Code => span.mono(),
                 Mark::Strong => span.bold(),
                 Mark::Emphasis => span.italic(),
+                Mark::Link if !document.verdict(href).follows => span,
                 Mark::Link => {
-                    let href = word.href.as_deref().unwrap_or_default();
                     match linked.last_mut() {
                         Some((range, last)) if *last == href && range.end + 1 == start => {
                             range.end = end
@@ -441,12 +442,10 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
         }
         spans.push(span);
     }
-    let followed = linked
-        .into_iter()
-        .filter(|(_, href)| document.verdict(href).follows)
-        .map(|(range, href)| Link::new(range, href));
     let document = document.clone();
-    followed
+    linked
+        .into_iter()
+        .map(|(range, href)| Link::new(range, href))
         .fold(text(said), El::link)
         .on_link(
             move |state: &mut crate::State, href: &str, tx: &mut rune::Tx| {
