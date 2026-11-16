@@ -95,6 +95,11 @@ runs:
           app/src-tauri
           pty-host
 
+    - name: Ensure the attn CLI
+      uses: ./.github/actions/cache-attn-cli
+      with:
+        out: ${{ runner.temp }}/attn-cli-out/attn
+
     - name: Build the packaged app
       shell: bash
       env:
