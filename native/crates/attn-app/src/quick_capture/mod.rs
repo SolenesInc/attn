@@ -886,7 +886,6 @@ fn answer(panel: &mut Panel, tx: &mut Tx) -> bool {
 fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
     let today = crate::calendar::local_day(panel.epoch_ms + (now * 1000.0) as i64);
     let mut changed = std::mem::replace(&mut panel.today, today) != today;
-    panel.leader.take_if(|l| now >= l.until);
     changed |= answer(panel, tx);
     if panel.save.is_some_and(|due| now >= due.at) {
         panel.flush();
