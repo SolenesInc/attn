@@ -119,6 +119,36 @@ func TestATenderClosedBeforeReadingItsSeedMailIsResumedAgainForIt(t *testing.T) 
 	awaitStandbyEnded(t, app, mark, seed)
 }
 
+func TestATenderResumedBeforeItsCloseReleasedTheConversationKeepsItUnarchived(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	cli := w.Client()
+	registerSessions(t, w, cli, "sender")
+
+	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
+	session, seed := delegated.SessionID, delegated.SeedID
+	first := w.Launched(string(session))
+	first.Prompted()
+	releasing := w.PauseAt(pausepoint.SessionCloseReleasing)
+	released := w.PauseAt(pausepoint.SessionCloseReleased)
+	onStandbyAndClosed(t, w, cli, delegated, first)
+	releasing.Await()
+
+	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
+	woken := w.Launched(string(session))
+	if !woken.Resumed || woken.ConversationID != first.ConversationID {
+		t.Fatalf("the wake ran %s %q, want it resuming conversation %s", woken.Harness, woken.Argv, first.ConversationID)
+	}
+	if got := woken.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
+		t.Fatalf("the woken tender received %q, want the standby note", got)
+	}
+	releasing.Release()
+	released.Await()
+	released.Release()
+	if archivedInCodex(t, w, first.ConversationID) {
+		t.Fatalf("the earlier close of %s archived conversation %s, which the resumed tender holds", session, first.ConversationID)
+	}
+}
+
 func TestAResumedCodexTenderGetsItsMailOnlyOnceItHasBooted(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

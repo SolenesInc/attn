@@ -2240,14 +2240,15 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	if link != nil && session != nil {
 		profile, released := session.ProfileID, closure.ReleasedConversation
 		d.life.Go("linkAfterSessionClose", func() {
+			pausepoint.At(pausepoint.SessionCloseReleasing)
 			lifecycle := d.sessionLifecycleLockFor(sessionID)
 			lifecycle.Lock()
 			defer lifecycle.Unlock()
-			pausepoint.At(pausepoint.SessionCloseReleasing)
-			if d.store.OtherOpenSessionHolding(released, sessionID) != "" {
+			if len(d.store.OpenSessionsHolding(released)) > 0 {
 				released = ""
 			}
 			link.sessionClosed(sessionID, profile, released)
+			pausepoint.At(pausepoint.SessionCloseReleased)
 		})
 	}
 	return nil

@@ -70,6 +70,7 @@ const (
 	SessionTeardownKilling         = "session-teardown-killing"
 	AgentCloseDrained              = "agent-close-drained"
 	SessionCloseReleasing          = "session-close-releasing"
+	SessionCloseReleased           = "session-close-released"
 	SessionExitObserved            = "session-process-exit-observed"
 	AgentTerminalStarted           = "agent-terminal-started"
 	TerminalStarting               = "terminal-starting"
