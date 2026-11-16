@@ -286,6 +286,7 @@ impl Terminals {
             self.finds.remove(&id);
             self.filters.remove(&id);
             self.images.forget(&id);
+            self.seed_card_left(&id);
             save_leaving_note(term.marking.as_ref(), daemon);
             release(&id, &mut term, None, 0, daemon);
             if self.connected

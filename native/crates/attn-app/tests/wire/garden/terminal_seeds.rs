@@ -82,8 +82,12 @@ fn writing() -> World {
 }
 
 fn write(world: &mut World, seq: u32, data: &str) {
-    let mut frame = vec![0x01, 3];
-    frame.extend_from_slice(b"r-a");
+    write_to(world, "r-a", seq, data);
+}
+
+fn write_to(world: &mut World, runtime: &str, seq: u32, data: &str) {
+    let mut frame = vec![0x01, runtime.len() as u8];
+    frame.extend_from_slice(runtime.as_bytes());
     frame.extend_from_slice(&seq.to_be_bytes());
     frame.extend_from_slice(data.as_bytes());
     world.daemon.emit_frame(frame);
@@ -96,7 +100,11 @@ fn cols(world: &mut World) -> usize {
 
 /// Each marked seed id's underline, as its row and columns on screen.
 fn marks(world: &mut World) -> Vec<(u64, [u64; 2])> {
-    world.terminal_view("r-a").expect("r-a is drawn")["overlays"]
+    marks_in(world, "r-a")
+}
+
+fn marks_in(world: &mut World, runtime: &str) -> Vec<(u64, [u64; 2])> {
+    world.terminal_view(runtime).expect("the terminal is drawn")["overlays"]
         .as_array()
         .unwrap()
         .iter()
@@ -167,7 +175,9 @@ fn marks_the_seed_ids_the_garden_knows_as_whole_words_on_every_row_a_wrapped_one
     write(
         &mut world,
         1,
-        &format!("known {KNOWN}; unknown {OTHER}; x{KNOWN} {KNOWN}x é{KNOWN}\r\n{pad}{KNOWN}"),
+        &format!(
+            "known {KNOWN}; unknown {OTHER}; x{KNOWN} {KNOWN}x e\u{301}{KNOWN}\r\n{pad}{KNOWN}"
+        ),
     );
     let last = cols(&mut world) as u64;
     assert_eq!(
@@ -533,4 +543,91 @@ fn offers_no_agent_on_the_seed_card_when_its_last_tender_closed_nobody_tended_it
         let world = beside_reviewer(seed, reviewer(), vec![]);
         assert_eq!(card_buttons(&world), ["Open as tile"], "{case}");
     }
+}
+
+fn garden_of(world: &mut World, seeds: Vec<Seed>) {
+    world.daemon.emit(message(GardenSeedsUpdatedMessage {
+        profile_id: PROFILE.into(),
+        total: seeds.len() as i64,
+        seeds,
+        ..GardenSeedsUpdatedMessage::new()
+    }));
+    world.settle();
+}
+
+#[test]
+fn the_card_closes_when_its_seed_leaves_the_garden_and_opens_again_once_it_returns() {
+    let mut world = start(vec![navigable()], vec![], vec![]);
+    write(&mut world, 1, &format!("known {KNOWN}"));
+    rest_on(&mut world, 8, 0);
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key(CARD))
+        .expect("the card is open");
+    world.gesture(|app| app.runtime.pointer_move(x + w / 2.0, y + h / 2.0));
+
+    garden_of(&mut world, vec![seed(OTHER, "Another seed")]);
+    assert!(card(&world).is_none());
+    assert_eq!(marks(&mut world), []);
+
+    garden_of(&mut world, vec![navigable()]);
+    assert!(
+        card(&world).is_none(),
+        "the card stays closed when its seed comes back"
+    );
+    rest_on(&mut world, 8, 0);
+    assert_eq!(card_heading(&world), "Make seed IDs navigable");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_profile_switch_stops_marking_the_seed_ids_of_the_profile_left_behind() {
+    let mut world = start(vec![navigable()], vec![], vec![]);
+    write(&mut world, 1, &format!("known {KNOWN}"));
+    rest_on(&mut world, 8, 0);
+    assert!(card(&world).is_some());
+
+    let side = Profile {
+        id: "side".into(),
+        name: "Side".into(),
+        current_desktop_id: "side/desktop_1".into(),
+        ..Profile::default()
+    };
+    world
+        .daemon
+        .emit(message(attn_protocol::ProfilesChangedMessage {
+            profiles: vec![
+                Profile {
+                    id: PROFILE.into(),
+                    name: "Work".into(),
+                    ..Profile::default()
+                },
+                side.clone(),
+            ],
+            ..attn_protocol::ProfilesChangedMessage::new()
+        }));
+    world.daemon.emit(message(ProfileArrangementChangedMessage {
+        profile: side,
+        desktops: vec![Desktop {
+            id: "side/desktop_1".into(),
+            profile_id: "side".into(),
+            name: "Desktop 1".into(),
+            order_key: "1".into(),
+            tree_json: tree::pane("b").to_string(),
+            active_pane_id: "b".into(),
+            panes: vec![DesktopPane {
+                desktop_id: "side/desktop_1".into(),
+                ..agent_pane("b", "s9")
+            }],
+            revision: 1,
+            ..Desktop::default()
+        }],
+        ..ProfileArrangementChangedMessage::new()
+    }));
+    world.settle();
+    write_to(&mut world, "r-b", 1, &format!("known {KNOWN}"));
+
+    assert!(card(&world).is_none());
+    assert_eq!(marks_in(&mut world, "r-b"), []);
+    assert!(world.runtime_is_at_rest());
 }

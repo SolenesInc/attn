@@ -62,6 +62,11 @@ impl Terminals {
             return;
         }
         self.seeds = Arc::new(known);
+        let shown = |seed: &str| self.seeds.contains(seed);
+        let opening = matches!(&self.card_timer, Some(CardTimer::Open(c, _)) if !shown(&c.seed));
+        if opening || self.card.as_ref().is_some_and(|c| !shown(&c.seed)) {
+            self.close_seed_card();
+        }
         for term in self.panes.values_mut() {
             term.view.seeds = None;
         }
@@ -176,6 +181,15 @@ impl Terminals {
         self.over_card = false;
         self.undrawn = true;
         true
+    }
+
+    /// Terminal `runtime` left the screen: its seed card goes with it.
+    pub(super) fn seed_card_left(&mut self, runtime: &str) {
+        let opening =
+            matches!(&self.card_timer, Some(CardTimer::Open(c, _)) if c.runtime == runtime);
+        if opening || self.seed_card(runtime).is_some() {
+            self.close_seed_card();
+        }
     }
 
     pub(crate) fn close_seed_card(&mut self) {

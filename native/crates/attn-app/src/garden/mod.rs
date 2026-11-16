@@ -68,8 +68,9 @@ pub(crate) enum Mode {
 /// The window's garden: its frame and the walk through it. The seeds are the daemon's.
 #[derive(Default)]
 pub(crate) struct Garden {
-    /// The garden the terminals last marked seed ids from, by its address.
-    marked: usize,
+    /// The garden the terminals last marked seed ids from, by its address, and the profile it
+    /// was read for.
+    marked: (usize, String),
     /// The garden holds the window, over the dock.
     full: bool,
     /// The frame the garden opens in, as the user last chose it; read from prefs at first use.
@@ -284,11 +285,14 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
 }
 
 fn mark_in_terminals(state: &mut State) {
-    let push = Arc::as_ptr(&state.facts.garden) as usize;
-    if state.window.garden.marked == push {
+    let marking = (
+        Arc::as_ptr(&state.facts.garden) as usize,
+        state.facts.profiles.selected.clone(),
+    );
+    if state.window.garden.marked == marking {
         return;
     }
-    state.window.garden.marked = push;
+    state.window.garden.marked = marking;
     let known = state
         .facts
         .garden
