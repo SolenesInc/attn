@@ -1442,13 +1442,27 @@ fn with_launch_desktops(d: &Daemon) {
             request_id: r["request_id"].as_str().unwrap_or_default().into(),
             action: "launch_desktop_get".into(),
             success: true,
-            desktops: Some(vec![Desktop {
-                id: "d-work".into(),
-                profile_id: PROFILE.into(),
-                name: "Work".into(),
-                shortcut_slot: Some(1),
-                ..Desktop::default()
-            }]),
+            desktops: Some(vec![
+                Desktop {
+                    id: "d-work".into(),
+                    profile_id: PROFILE.into(),
+                    name: "Work".into(),
+                    shortcut_slot: Some(1),
+                    ..Desktop::default()
+                },
+                Desktop {
+                    id: "d-review-a".into(),
+                    profile_id: PROFILE.into(),
+                    name: "Review".into(),
+                    ..Desktop::default()
+                },
+                Desktop {
+                    id: "d-review-b".into(),
+                    profile_id: PROFILE.into(),
+                    name: "Review".into(),
+                    ..Desktop::default()
+                },
+            ]),
             ..LaunchDesktopResultMessage::new()
         })
     });
@@ -1479,17 +1493,22 @@ fn the_desktop_select_offers_the_profiles_desktops_and_empty_slots_as_the_daemon
     );
     let options = desktop_options(&mut world);
     assert_eq!(
-        options[..4],
+        options[..6],
         [
             "Its own desktop",
             "A new desktop…",
             "1 · Work",
+            "Review",
+            "Review (2)",
             "Empty slot 2…"
         ]
     );
     assert_eq!(options.last().map(String::as_str), Some("Empty slot 9…"));
-    choose_option(&mut world, "1 · Work");
-    assert_eq!(launch_desktops(&world), [json!({"desktop_id": "d-work"})]);
+    choose_option(&mut world, "Review (2)");
+    assert_eq!(
+        launch_desktops(&world),
+        [json!({"desktop_id": "d-review-b"})]
+    );
 
     click(&mut world, DESKTOP_SELECT);
     choose_option(&mut world, "Empty slot 3…");
@@ -1509,6 +1528,33 @@ fn the_desktop_select_offers_the_profiles_desktops_and_empty_slots_as_the_daemon
     assert_eq!(
         launch_desktops(&world)[1],
         json!({"desktop_id": "work/desktop_3", "desktop_name": "Keel"})
+    );
+}
+
+#[test]
+fn closing_manage_crew_lets_go_of_an_open_desktop_select_and_an_unfinished_name() {
+    let d = daemon(
+        vec![member("keel", 5)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    with_launch_desktops(&d);
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, DESKTOP_SELECT);
+    choose_option(&mut world, "A new desktop…");
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(state, Action::UiOpenSettings, tx);
+        })
+    });
+    open(&mut world);
+    assert!(!shows(&world, "launch-desktop.naming.hint"));
+    assert!(
+        world
+            .screen()
+            .all(Target::role("list-box-option"))
+            .is_empty()
     );
 }
 

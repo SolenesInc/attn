@@ -153,7 +153,6 @@ pub(crate) fn follow(state: &mut State) {
     }
 }
 
-/// The user's change to `member`'s launch fields, written at once.
 /// The user chose where `member`'s next session starts.
 pub(crate) fn choose_desktop(
     state: &mut State,
@@ -168,6 +167,7 @@ pub(crate) fn choose_desktop(
     update(state, member, change, tx);
 }
 
+/// The user's change to `member`'s launch fields, written at once.
 pub(crate) fn update(state: &mut State, member: &str, change: Pending, tx: &mut Tx) {
     let Some(edit) = state.window.crew.launches.get(member) else {
         return;

@@ -41,6 +41,7 @@ impl Field {
 
 struct Naming {
     field: Field,
+    layer: Option<crate::Layer>,
     slot: i64,
     name: TextEdit,
 }
@@ -123,6 +124,7 @@ fn options(state: &State, field: &Field) -> Vec<(String, Choice)> {
         options.push((label, current));
     }
     options.push(("A new desktop…".to_owned(), Choice::New(0)));
+    let mut alike: BTreeMap<String, usize> = BTreeMap::new();
     for desktop in &available {
         let name = if desktop.name.is_empty() {
             format!(
@@ -138,6 +140,13 @@ fn options(state: &State, field: &Field) -> Vec<(String, Choice)> {
         let label = match desktop.shortcut_slot {
             Some(slot) => format!("{slot} · {name}"),
             None => name,
+        };
+        let seen = alike.entry(label.clone()).or_insert(0);
+        *seen += 1;
+        let label = if *seen == 1 {
+            label
+        } else {
+            format!("{label} ({seen})")
         };
         options.push((label, Choice::Desktop(desktop.id.clone())));
     }
@@ -209,8 +218,17 @@ fn toggle(state: &mut State, field: &Field) {
     state.window.launch_desktop.reading = Some(field.clone());
 }
 
-/// Reads the desktops a select offers as it opens; whether it asked.
+/// Reads the desktops a select offers as it opens, and lets go of a select or a name whose
+/// layer has gone; whether it asked.
 pub(crate) fn poll(state: &mut State, tx: &mut Tx) -> bool {
+    let layer = state.window.layer;
+    let picker = &mut state.window.launch_desktop;
+    if picker.open.as_ref().is_some_and(|(_, l)| *l != layer) {
+        picker.open = None;
+    }
+    if picker.naming.as_ref().is_some_and(|n| n.layer != layer) {
+        picker.naming = None;
+    }
     let Some(field) = state.window.launch_desktop.reading.take() else {
         return false;
     };
@@ -249,6 +267,7 @@ fn name_new(state: &mut State, field: &Field, slot: i64, tx: &mut Tx) {
     edit.set_selection(0, name.len());
     state.window.launch_desktop.naming = Some(Naming {
         field: field.clone(),
+        layer: state.window.layer,
         slot,
         name: edit,
     });
