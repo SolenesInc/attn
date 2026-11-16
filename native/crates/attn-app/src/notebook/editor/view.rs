@@ -479,7 +479,7 @@ fn image_row(
         }
         Some(None) => col()
             .role("image")
-            .label(name.clone())
+            .label(format!("{name} (not found)"))
             .padding(space::S2)
             .radius(4.0)
             .border(1.0, t.border_subtle)
@@ -491,7 +491,7 @@ fn image_row(
             ),
         None => col()
             .role("image")
-            .label(name.clone())
+            .label(format!("{name} (loading)"))
             .w_full()
             .h(IMAGE_ESTIMATE)
             .radius(4.0)

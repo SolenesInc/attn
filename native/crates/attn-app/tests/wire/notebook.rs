@@ -1701,7 +1701,7 @@ fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_s
     );
     let badge = world
         .screen()
-        .bounds(Target::role("image").name("badge"))
+        .bounds(Target::role("image").name("badge (not found)"))
         .unwrap();
     assert!(
         (badge[3] - 220.0).abs() > 1.0,
@@ -2018,4 +2018,31 @@ fn the_finder_finds_in_a_popped_out_editor_tile_from_its_own_window() {
     let index = world.daemon.sent_of("fs_index");
     assert_eq!(index.len(), 1);
     assert_eq!(index[0]["root"], "/private/work/n");
+}
+
+#[test]
+fn an_edit_typed_before_the_daemon_restarts_is_saved_once_it_is_back() {
+    let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    type_at_end(&mut world, "Across a restart.");
+    world.reconnect();
+    assert!(
+        editor_text(&world, "notebook.editor").contains("Across a restart."),
+        "the edit stays in the editor"
+    );
+    world.advance(Duration::from_millis(700));
+    assert!(
+        disk.get("knowledge/index.md")
+            .unwrap()
+            .contains("Across a restart."),
+        "the edit saves once the daemon is back"
+    );
+    assert_eq!(
+        world.daemon.sent_of("fs_write").len(),
+        1,
+        "the one write the daemon heard came after it was back"
+    );
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest());
 }

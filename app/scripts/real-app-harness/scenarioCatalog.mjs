@@ -407,6 +407,20 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-notebook-link-nav',
+    runnerId: 'NATIVE-NOTEBOOK-LINK-NAV',
+    label: 'An editor tile follows links on a modifier press: to a sibling note, into a folder, to a heading, and up to a note whose image draws',
+    command: ['node', 'scripts/real-app-harness/scenario-native-notebook-link-nav.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-notebook-tile-close',
+    runnerId: 'NATIVE-NOTEBOOK-TILE-CLOSE',
+    label: 'The close key with an editor tile active closes the tile and keeps the shell beside it',
+    command: ['node', 'scripts/real-app-harness/scenario-native-notebook-tile-close.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-settings',
     runnerId: 'NATIVE-SETTINGS',
     label: 'The native Settings dialog opens three ways, searches, saves a click and a field, shows a refusal and a shell change, and closes three ways',

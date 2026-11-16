@@ -50,9 +50,20 @@ try {
   await runner.step('make_a_desktop', async () => {
     const before = observer.currentDesktopId();
     desktop = await observer.createDesktop();
-    runner.registerCleanup('close_desktop', () => {
-      const left = observer.desktop(desktop.id);
-      return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+    runner.registerCleanup('close_desktop', async () => {
+      for (;;) {
+        const left = observer.desktop(desktop.id);
+        if (!left) return;
+        const moved = observer.waitForMessage((m) => m.event === 'profile_arrangement_changed' && m, 'the desktop moves on', 10_000);
+        try {
+          await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+          moved.catch(() => {});
+          return;
+        } catch (error) {
+          if (!/stale_revision/.test(error.message)) throw error;
+          await moved;
+        }
+      }
     });
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });
@@ -131,6 +142,7 @@ try {
   await runner.step('leave_no_tile_behind', async () => {
     await observer.profileCommand('desktop_remove_leaf', { desktop_id: desktop.id, leaf_id: tile.tile_id });
     await driver.waitFor({ key: `tile.${tile.tile_id}` }, { gone: true });
+    await observer.waitForDesktopOf(id, (d) => notebookTiles(d).length === 0 && d, 'the daemon has the desktop without the tile');
   });
 
   await runner.finishSuccess({ desktopId: desktop.id, sessionId: id, file });

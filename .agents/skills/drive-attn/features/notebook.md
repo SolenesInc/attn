@@ -98,6 +98,38 @@ Preconditions:
 - **What agents are told.** `./attn crew prime` in the Chief's session prints the Chief's guidance, `## You are the Chief` (`internal/prompts/content/crew/v2/chief.md`), and `./attn skill --reference notebook` prints the notebook reference with `attn journal append` and `attn settings get notebook.root.effective`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, the day's journal file after each append and after the edit and undo, `./attn agent peek nb-agent` after the agent's append, and `wsctl list` with the editor tile open. Capture `bridge capture_screenshot '{"path":"<P>/notebook-fullscreen.png"}'` with the journal open and `<P>/notebook-tile.png` with the editor tile, `<P>` written out. Name each file for its way in, such as `notebook-agent-journal-peek.txt`.
 
+### In the native app
+
+The native app (`native/crates/attn-app/src/notebook/`) has the same notebook: the fullscreen surface, editor tiles, the note finder, the Editor root picker, and its own markdown editor (`notebook/editor/`). Agents, the CLI and the triggers are the daemon's and do not change. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), which name elements by key.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
+- Make `NB`, `P` and `A`, the mock agent's fixture and `nb-agent` as above.
+
+The steps press the macOS chords. On Linux press `mod+alt+shift+n` for the editor tile (`mod+alt+n`), `mod+alt+shift+f` for fullscreen (`mod+alt+shift+n`) and `mod+shift+p` for the finder (`mod+p`).
+
+Steps:
+
+- **Journal from the person's shell and from an agent.** As above: the CLI and the mock agent do not touch the app.
+- **Fullscreen with the shortcut.** Run `bridge key '{"chord":"mod+alt+shift+n"}'` and `bridge wait '{"target":{"key":"notebook.panel"}}'`. `bridge find '{"target":{"key":"notebook.title"}}'` is named `Notebook`, and `notebook.file.journal` is in `bridge tree`. Press Escape: `bridge wait '{"target":{"key":"notebook.panel"},"gone":true}'` answers.
+- **Fullscreen from the palette.** Run `bridge key '{"chord":"mod+shift+k"}'`, `bridge type '{"text":"Open the notebook"}'` and `bridge key '{"chord":"enter"}'`: `notebook.panel` answers.
+- **Find a note and read it.** With the notebook open, run `bridge run '{"name":"file.open"}'`, `bridge wait '{"target":{"key":"notebook.finder.field"}}'`, `bridge type '{"text":"<date>"}'` and `bridge key '{"chord":"enter"}'`. `notebook.document.title` is named `<date>`, and `bridge find '{"target":{"key":"notebook.editor"}}'` has a `value` holding `drive-attn journal` and `The mock agent wrote this.`. The markdown opener did not open: `opener` is not in `bridge tree`.
+- **It follows the disk.** Run `./attn journal append --entry "appended while open"`. `bridge wait '{"target":{"role":"text","name":"appended while open"}}'` answers.
+- **Edit, save and undo.** Run `bridge press '{"target":{"key":"notebook.editor"}}'`, `bridge key '{"chord":"mod+down"}'` and `bridge type '{"text":"\nTyped in attn."}'`. `notebook.status` reads `Saved` within a second, and `cat $NB/journal/<date>.md` ends with `Typed in attn.`. Run `bridge key '{"chord":"mod+z"}'`: the line leaves `notebook.editor`'s value, and once `notebook.status` reads `Saved` it leaves the file. `bridge key '{"chord":"mod+shift+z"}'` brings it back.
+- **Editor tile.**
+  - Close the notebook and run `bridge key '{"chord":"mod+alt+n"}'`. `bridge state '{"of":"desktops"}'` holds a tile whose `tile_kind` is `notebook`, and `wsctl list` shows it on the current desktop. With no agent on screen it opens on the notebook, and its finder opens: `notebook.finder.field` answers. Press Escape.
+  - `bridge press '{"target":{"key":"notebook.tile.<tile>.root-trigger"}}'` lists `Notebook` and `Browse…` as options. Press Escape.
+  - Close the tile: press `notebook.tile.<tile>.surface`, then run `bridge run '{"name":"session.close"}'`, which is what ⌘W's menu item runs. Open it again from the palette: type `Open Editor tile`.
+  - Press nb-agent's sidebar row, `sidebar.session.nb-agent`, and press ⌥⌘N again: the tile opens on `$A`, `bridge state '{"of":"desktops"}'` shows its `tile_params` `{"root":"$A"}` written out, and `bridge state '{"of":"desktops"}'` has no `context` rail for it because it is not the notebook.
+  - Press `notebook.tile.<tile>.surface`, then run `bridge run '{"name":"file.open"}'`: `notebook.finder.field` answers inside the tile, and the markdown opener does not.
+- **Drafts leave the screen with the tile.** With `narrowest_tile_cols` at 150, so only one tile fits, type in the editor tile and press another tile's shelf chip within 700 ms: `cat` shows the edit on disk, and pressing the tile's chip brings it back. Append to the file from a shell between typing and pressing: the tile returns with the edit and `notebook.tile.<tile>.document.conflict`, and pressing `notebook.tile.<tile>.document.overwrite` saves it. Run `chmod 555` on the folder before typing: the tile returns with the edit and an alert naming the error, and after `chmod 755` `notebook.tile.<tile>.status` reads `Saved`.
+- **Change the editor root.** Press `notebook.tile.<tile>.root-trigger`, then the option `Notebook`: `wsctl list` shows the tile's params empty.
+- **The Chief's status.** Start the Chief as above and open the notebook: `notebook.chief` reads `chief: idle`. Send `journal-entry` to the Chief: `bridge wait '{"target":{"key":"notebook.chief"}}'` reads `chief: active`, then `chief: idle`, and the open journal shows one more `The mock agent wrote this.` without a reload. Press `notebook.close`: `notebook.panel` goes.
+- **Settings, agents and the CLI.** As above.
+- **Proof.** In `$P`, keep each `./attn` command's output and exit code, the day's journal file after each append and after the edit and undo, `bridge tree` after each way in, and `wsctl list` with the editor tile open. Capture `bridge shot '{"path":"<P>/native-notebook-fullscreen.png"}'` with the journal open and `<P>/native-notebook-tile.png` with the editor tile, `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: the notebook is files on disk and does not depend on attn running. An edit that the app had not saved yet is the only thing a crash can lose, and the save status shows when an edit is unsaved. That includes an editor tile's edit whose save failed or conflicted while the tile was off screen, which the app holds in memory until the tile returns. The open editor tile comes back with its desktop.
@@ -114,8 +146,9 @@ Preconditions:
 
 - Wire: `internal/daemon/notebook_wire_test.go`, `internal/daemon/notebook_profiles_wire_test.go`, `internal/daemon/notebook_containment_wire_test.go`, `internal/daemon/journal_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`.
 - Stack: `cmd/attnd/notebook_sync_stack_test.go`, `cmd/attnd/agent_commands_stack_test.go`, `app/e2e/notebook-tile.spec.ts`, `app/e2e/notebook-tile-finder.spec.ts`, `app/e2e/notebook-browser.spec.ts`, `app/e2e/live-markdown-editor.spec.ts`, `app/e2e/broken-links.spec.ts`, `app/e2e/frontmatter-card.spec.ts`.
-- Scenario: `notebook-editor-undo`, `notebook-sync`, and outside the catalog, `app/scripts/real-app-harness/scenario-notebook-link-nav.mjs` and `scenario-notebook-tile-close.mjs`.
+- Scenario: `notebook-editor-undo`, `native-notebook-editor-undo`, `native-notebook-link-nav`, `native-notebook-tile-close`, `notebook-sync`, and outside the catalog, `app/scripts/real-app-harness/scenario-notebook-link-nav.mjs` and `scenario-notebook-tile-close.mjs`.
 - Kernel: `internal/notebook/*_test.go`.
+- Native wire and kernel: `native/crates/attn-app/tests/wire/notebook.rs`, and the tests beside `native/crates/attn-app/src/notebook/**`.
 - App: `app/src/App.notebook.test.tsx`, `app/src/App.notebookTile.test.tsx`, `app/src/App.editorTileDrafts.test.tsx`, `app/src/App.outpostsNotebook.test.tsx`, `app/src/components/notebook/*.test.ts`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
 
 ## Gotchas
