@@ -264,14 +264,25 @@ func fetchReadinessPage(ctx context.Context, transport QueryTransport, query str
 
 type graphQLError struct {
 	Type    string `json:"type"`
+	Path    []any  `json:"path"`
 	Message string `json:"message"`
 }
 
 func (e graphQLError) err() error {
-	if e.Type == "NOT_FOUND" {
+	if e.Type == "NOT_FOUND" && e.namesThePullRequest() {
 		return fmt.Errorf("%w: %s", ErrNotFound, e.Message)
 	}
 	return errors.New(e.Message)
+}
+
+func (e graphQLError) namesThePullRequest() bool {
+	switch len(e.Path) {
+	case 1:
+		return e.Path[0] == "repository"
+	case 2:
+		return e.Path[0] == "repository" && e.Path[1] == "pullRequest"
+	}
+	return false
 }
 
 func appendReadinessPages(ctx context.Context, transport QueryTransport, base map[string]any, pr *readinessPullRequest) error {

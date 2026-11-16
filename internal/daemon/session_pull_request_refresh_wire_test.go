@@ -32,6 +32,7 @@ type refreshedPullRequest struct {
 	readinessFails             bool
 	readinessDrops             bool
 	graphQLMissing             bool
+	nestedNotFound             bool
 	gone                       bool
 	readinessGate              <-chan struct{}
 	keepAlive                  bool
@@ -128,6 +129,13 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 				_ = conn.Close()
 			}
 			return
+		}
+		if gh.nestedNotFound {
+			answer = map[string]any{"data": nil, "errors": []any{map[string]any{
+				"type": "NOT_FOUND", "path": []any{"repository", "pullRequest", "commits"},
+				"message": "Could not resolve to a node with the global id of 'C_1'.",
+			}}}
+			break
 		}
 		if gh.gone {
 			answer = map[string]any{"data": map[string]any{"repository": nil}, "errors": []any{map[string]any{
@@ -524,6 +532,7 @@ func TestAWatchEndsWhenGitHubCannotFindThePullRequestAndOutlivesEveryOtherFailur
 			{"a rate limit", func(gh *refreshedPullRequest) { gh.limitedUntil = time.Now().Add(time.Second) }, "rate limit"},
 			{"a network failure", func(gh *refreshedPullRequest) { gh.readinessDrops = true }, "request failed"},
 			{"a missing GraphQL endpoint", func(gh *refreshedPullRequest) { gh.graphQLMissing = true }, "404"},
+			{"a NOT_FOUND inside the pull request", func(gh *refreshedPullRequest) { gh.nestedNotFound = true }, "global id"},
 		}
 		for _, failure := range failures {
 			gh.set(failure.fail)
@@ -537,7 +546,7 @@ func TestAWatchEndsWhenGitHubCannotFindThePullRequestAndOutlivesEveryOtherFailur
 				t.Errorf("after %s the agent's inbox = %q, want a note that monitoring is delayed", failure.name, inbox)
 			}
 			gh.set(func(gh *refreshedPullRequest) {
-				gh.readinessFails, gh.readinessDrops, gh.graphQLMissing = false, false, false
+				gh.readinessFails, gh.readinessDrops, gh.graphQLMissing, gh.nestedNotFound = false, false, false, false
 			})
 			w.advance(protocol.HeatHotInterval)
 			if pr := onlyPullRequest(t, cli, "s1"); protocol.Deref(pr.WatchHealth) != "current" {
