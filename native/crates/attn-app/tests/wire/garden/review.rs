@@ -689,7 +689,11 @@ fn reads_the_reviewed_seeds_body_and_log_without_a_way_to_mark_it() {
     click(&mut world, "Continue review");
 
     let log = says(&world, "garden.review.log");
-    assert!(log.iter().any(|w| w == "n-review1 body"), "{log:?}");
+    assert!(
+        log.iter()
+            .any(|w| w.replace(['\u{2066}', '\u{2069}'], "") == "n-review1 body"),
+        "{log:?}"
+    );
     assert!(
         world
             .screen()

@@ -181,6 +181,34 @@ impl Sheet<'_> {
             .label(sentence)
     }
 
+    /// A log entry's words, read as markdown as the plan is.
+    fn log_body(&self, id: &str, body: &str) -> El {
+        let view = format!("{}/log.{id}", self.view);
+        let kept = self.readings.kept(&view);
+        let t = *self.t;
+        let body = body.to_owned();
+        memo(
+            self.key(&format!("log.{id}.body")),
+            (body.clone(), view.clone(), kept.clone(), t),
+            move || {
+                crate::markdown::reader(
+                    &body,
+                    crate::markdown::Document {
+                        path: String::new(),
+                        session: None,
+                        outpost: None,
+                        view,
+                    },
+                    std::rc::Rc::default(),
+                    kept,
+                    None,
+                    None,
+                    &t,
+                )
+            },
+        )
+    }
+
     /// The seed's body, read where the sheet scrolls.
     pub(super) fn plan(&self, here: &Seed) -> El {
         if here.body.trim().is_empty() {
@@ -243,8 +271,19 @@ impl Sheet<'_> {
         )
     }
 
-    /// The seeds `rows` name, each a button that goes to it, under `title`.
+    /// The seeds `rows` name, each a button that goes to it beside its state, under `title`.
     pub(super) fn seeds(&self, part: &str, title: &str, rows: Vec<Relation>) -> Option<El> {
+        self.seeds_saying(part, title, rows, |seed| Some(seed.status.clone()))
+    }
+
+    /// The seeds `rows` name, each a button that goes to it beside what `says` of it.
+    pub(super) fn seeds_saying(
+        &self,
+        part: &str,
+        title: &str,
+        rows: Vec<Relation>,
+        says: impl Fn(&Seed) -> Option<String>,
+    ) -> Option<El> {
         if rows.is_empty() {
             return None;
         }
@@ -267,7 +306,7 @@ impl Sheet<'_> {
                     super::view::button(key, other.title.clone(), self.t)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| go.to(state, &id, tx)),
                 )
-                .child(meta_word(other.status.clone(), self.t)),
+                .children(says(&other).map(|words| meta_word(words, self.t))),
             );
         }
         Some(list)
@@ -301,17 +340,11 @@ impl Sheet<'_> {
             let mut item = col()
                 .key(self.key(&format!("log.{}", entry.id)))
                 .role("listitem")
-                .label(entry.body.clone())
                 .w_full()
                 .gap(2.0)
                 .child(head);
             if !entry.body.is_empty() {
-                item = item.child(
-                    text(entry.body.clone())
-                        .font(type_::BODY)
-                        .color(t.text_secondary)
-                        .wrap(),
-                );
+                item = item.child(self.log_body(&entry.id, &entry.body));
             }
             log = log.child(item);
         }

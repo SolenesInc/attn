@@ -407,3 +407,51 @@ fn a_press_on_a_plot_row_in_an_inactive_seed_tile_takes_the_tile_so_escape_climb
         [json!("s-kid111"), json!("s-plot11")]
     );
 }
+
+#[test]
+fn reads_a_seed_tile_from_its_status_through_its_plot_to_its_plan_and_a_log_of_what_is_withheld() {
+    let crown = with(plot("s-plan11", "Plan the reader", ""), |s| {
+        s.body = "# Rendered plan\n\nThe steps.".into();
+        s.plot_progress = Some(SeedPlotProgress {
+            total: 1,
+            done: 1,
+            ..SeedPlotProgress::default()
+        });
+    });
+    let child = closed(
+        part_of("s-plan11", "s-step11", "Build the reader"),
+        "harvested",
+    );
+    let read = crown.clone();
+    let world = start("s-plan11", vec![crown, child.clone()], move |r| {
+        let mut answer = document(r, read.clone(), vec![child.clone()], &[]);
+        answer["document"]["notes"] = json!([{
+            "id": "n-one111", "seed_id": "s-plan11", "kind": "note",
+            "body": "Verified the **reader**.",
+            "author": {"name": "the user", "ref": "user"},
+            "created_at": "2026-11-13T09:00:00Z",
+        }]);
+        answer["document"]["notes_total"] = json!(2);
+        answer
+    });
+
+    let seen = shown(&world);
+    let at = |words: &str| {
+        seen.iter()
+            .position(|w| w == words)
+            .unwrap_or_else(|| panic!("no {words:?} in {seen:?}"))
+    };
+    assert!(at("Plan the reader") < at("Plot"), "{seen:?}");
+    assert!(at("Plot") < at("Rendered plan"), "{seen:?}");
+    assert_eq!(seen[at("Build the reader") + 1], "done", "{seen:?}");
+    assert!(
+        seen.iter().any(|w| w.contains("Verified the reader")),
+        "{seen:?}"
+    );
+    assert!(!seen.iter().any(|w| w.contains("**")), "{seen:?}");
+    assert!(
+        seen.contains(&"1 more entry on the log.".to_owned()),
+        "{seen:?}"
+    );
+    assert!(world.runtime_is_at_rest());
+}

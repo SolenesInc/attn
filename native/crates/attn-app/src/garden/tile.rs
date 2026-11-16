@@ -110,10 +110,12 @@ pub(crate) fn body(
         )
         .children(sheet.handover_form(document))
         .children(sheet.chief_form(document))
+        .children(sheet.seeds_saying("plot", "Plot", children, |seed| {
+            model::signal(seed, 0).map(|(words, _)| words)
+        }))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))
         .children(sheet.checks(here, document))
-        .children(sheet.seeds("plot", "Plot", children))
         .children(sheet.seeds("related", "Related", related))
         .children(sheet.artifacts(document))
         .child(sheet.log(document, error));
