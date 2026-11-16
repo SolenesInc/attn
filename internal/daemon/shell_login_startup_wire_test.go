@@ -23,20 +23,23 @@ set -gx ATTN_TEST_STARTUP_HOME $HOME
 `
 
 var shellPaneStartups = []struct {
-	name, startupFile, startup, userENV string
-	bash                                bool
+	name, binary, startupFile, startup, histfile string
+	userENV, zdotdir                             string
+	bash                                         bool
 }{
-	{name: "bash", startupFile: ".bash_profile", startup: posixStartupThatPrependsOnATerminal, bash: true},
-	{name: "sh", startupFile: ".profile", startup: shStartupThatSetsItsOwnENV, userENV: ".shrc"},
-	{name: "fish", startupFile: ".config/fish/config.fish", startup: fishStartupThatPrependsOnATerminal},
+	{name: "bash", binary: "bash", startupFile: ".bash_profile", startup: posixStartupThatPrependsOnATerminal, histfile: ".bash_history", bash: true},
+	{name: "zsh", binary: "zsh", startupFile: ".zshrc", startup: posixStartupThatPrependsOnATerminal},
+	{name: "zsh with its own ZDOTDIR", binary: "zsh", startupFile: ".zshrc", startup: posixStartupThatPrependsOnATerminal, zdotdir: ".config/zsh"},
+	{name: "sh", binary: "sh", startupFile: ".profile", startup: shStartupThatSetsItsOwnENV, userENV: ".shrc"},
+	{name: "fish", binary: "fish", startupFile: ".config/fish/config.fish", startup: fishStartupThatPrependsOnATerminal},
 }
 
 func TestShellPanesKeepThePathTheirLoginStartupBuildsWithAttnFirst(t *testing.T) {
 	for _, shell := range shellPaneStartups {
 		t.Run(shell.name, func(t *testing.T) {
-			binary, err := exec.LookPath(shell.name)
+			binary, err := exec.LookPath(shell.binary)
 			if err != nil {
-				t.Skipf("%s is not installed", shell.name)
+				t.Skipf("%s is not installed", shell.binary)
 			}
 			if shell.bash && runtime.GOOS == "darwin" && binary == "/bin/bash" {
 				t.Skip("this test wraps the shell to give it a home, and a wrapped macOS /bin/bash gets the bash 4 start")
@@ -44,7 +47,12 @@ func TestShellPanesKeepThePathTheirLoginStartupBuildsWithAttnFirst(t *testing.T)
 			w := &world{World: prepareWorld(t)}
 			userHome := filepath.Join(w.Dir, "user-home")
 			userBin := filepath.Join(userHome, "bin")
-			startupFile := filepath.Join(userHome, shell.startupFile)
+			userZdotdir := ""
+			if shell.zdotdir != "" {
+				userZdotdir = filepath.Join(userHome, shell.zdotdir)
+				t.Setenv("ZDOTDIR", userZdotdir)
+			}
+			startupFile := filepath.Join(userHome, shell.zdotdir, shell.startupFile)
 			for _, dir := range []string{userBin, filepath.Dir(startupFile)} {
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					t.Fatal(err)
@@ -63,13 +71,13 @@ func TestShellPanesKeepThePathTheirLoginStartupBuildsWithAttnFirst(t *testing.T)
 			app := w.App()
 
 			pane := w.Spawn(app, shellHarness, w.Path("shop"))
-			envDump, bashDump := filepath.Join(w.Dir, "env.dump"), filepath.Join(w.Dir, "bash.dump")
+			envDump, shellDump := filepath.Join(w.Dir, "env.dump"), filepath.Join(w.Dir, "shell.dump")
 			dump := "env > " + envDump
-			if shell.bash {
-				dump += `; { printf '%s\n' "$HISTFILE"; shopt -q login_shell && echo login || echo not-login; } > ` + bashDump
+			if shell.histfile != "" {
+				dump += `; { printf '%s\n' "$HISTFILE"; if [ -n "${BASH_VERSION-}" ] && shopt -q login_shell; then echo login; else echo not-login; fi; } > ` + shellDump
 			}
 			marker := "; echo dumped-$((1+1))"
-			if shell.name == "fish" {
+			if shell.binary == "fish" {
 				marker = "; echo dumped-(math 1+1)"
 			}
 			app.TypeLine(pane, dump+marker)
@@ -84,6 +92,9 @@ func TestShellPanesKeepThePathTheirLoginStartupBuildsWithAttnFirst(t *testing.T)
 			if exported["HOME"] != userHome || exported["ATTN_TEST_STARTUP_HOME"] != userHome {
 				t.Errorf("~/%s ran with HOME %q and the pane has HOME %q, want %s for both", shell.startupFile, exported["ATTN_TEST_STARTUP_HOME"], exported["HOME"], userHome)
 			}
+			if exported["ZDOTDIR"] != userZdotdir {
+				t.Errorf("the pane's commands see ZDOTDIR %q, want %q, the user's own", exported["ZDOTDIR"], userZdotdir)
+			}
 			for name, value := range exported {
 				if strings.HasPrefix(name, "ATTN_SHELL_") || name == "ENV" && shell.userENV == "" || name == "HISTFILE" {
 					t.Errorf("the pane's commands inherit %s=%q from attn's startup", name, value)
@@ -94,16 +105,16 @@ func TestShellPanesKeepThePathTheirLoginStartupBuildsWithAttnFirst(t *testing.T)
 					t.Errorf("the pane has ENV %q and its ENV file ran: %q, want the %s its startup set, run", exported["ENV"], exported["ATTN_TEST_USER_ENV_RAN"], want)
 				}
 			}
-			if shell.bash {
-				raw, err := os.ReadFile(bashDump)
+			if shell.histfile != "" {
+				raw, err := os.ReadFile(shellDump)
 				if err != nil {
 					t.Fatal(err)
 				}
 				histfile, login, _ := strings.Cut(strings.TrimSuffix(string(raw), "\n"), "\n")
-				if want := filepath.Join(userHome, ".bash_history"); histfile != want {
-					t.Errorf("bash keeps history in %q, want %s", histfile, want)
+				if want := filepath.Join(userHome, shell.histfile); histfile != want {
+					t.Errorf("%s keeps history in %q, want %s", shell.name, histfile, want)
 				}
-				if login != "login" {
+				if shell.bash && login != "login" {
 					t.Errorf("the bash pane reports %s, want a login shell", login)
 				}
 			}
