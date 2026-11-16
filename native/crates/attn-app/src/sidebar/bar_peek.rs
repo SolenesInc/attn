@@ -10,6 +10,9 @@ use crate::State;
 const PILL: &str = "queue-bar.pill";
 const PEEK: &str = "queue-bar.peek";
 const WIDTH: f32 = 600.0;
+/// The room between the pill and the peek, inside the peek's hover region so the pointer
+/// crosses it without closing the peek.
+const GAP: f32 = 6.0;
 
 /// Whether the pointer is over the pill or over the peek; the peek shows while it is over
 /// either.
@@ -72,28 +75,46 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             .px(10.0)
             .py(space::S1)
     });
+    let panel = col()
+        .key(format!("{PEEK}.panel"))
+        .w(WIDTH)
+        .shrink()
+        .min_h(0.0)
+        .px(6.0)
+        .py(8.0)
+        .radius(12.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border_hover)
+        .box_shadow(Shadow {
+            y: 18.0,
+            blur: 50.0,
+            color: Color::BLACK.alpha(0.55),
+            ..Shadow::default()
+        })
+        .child(
+            col()
+                .key(format!("{PEEK}.rows"))
+                .w_full()
+                .shrink()
+                .min_h(0.0)
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                })
+                .children(rows),
+        )
+        .children(more);
     Some(
         col()
             .key(PEEK)
             .role("group")
             .label("Agents")
-            .w(WIDTH)
-            .px(6.0)
-            .py(8.0)
-            .radius(12.0)
-            .fill(t.bg_elevated)
-            .border(1.0, t.border_hover)
-            .box_shadow(Shadow {
-                y: 18.0,
-                blur: 50.0,
-                color: Color::BLACK.alpha(0.55),
-                ..Shadow::default()
-            })
-            .children(rows)
-            .children(more)
+            .shrink()
+            .min_h(0.0)
+            .pt(GAP)
+            .child(panel)
             .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
                 state.window.bar_peek.peek = inside;
             })
-            .anchored(PILL, Side::Bottom, Align::Start, 6.0),
+            .anchored_fit(PILL, Side::Bottom, Align::Start, 0.0),
     )
 }

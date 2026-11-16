@@ -518,7 +518,6 @@ fn record(state: &mut State, command: String, tx: &mut Tx) {
     );
 }
 
-/// The keys bound to `action`, as the user reads them.
 /// The most agent rows the queue bar's peek lists.
 const PEEK_ROWS: usize = 16;
 
@@ -569,6 +568,7 @@ pub(crate) fn open_peeked(state: &mut State, key: &str, tx: &mut Tx) {
     }
 }
 
+/// The keys bound to `action`, as the user reads them.
 pub(crate) fn label_of(state: &State, action: &Action) -> Option<String> {
     state.keymap.binding(action).map(|b| state.keymap.label(b))
 }

@@ -399,6 +399,13 @@ fn hovering_the_waiting_pill_peeks_at_the_agents_and_a_row_opens_its_agent() {
         Some("b".into())
     );
 
+    let [px, py, pw, ph] = world
+        .screen()
+        .bounds(Target::key("queue-bar.pill"))
+        .expect("the pill shows");
+    let below_pill = (px + pw / 2.0, py + ph + 3.0);
+    world.gesture(|app| app.move_to(below_pill));
+    assert!(peek(&world).is_some(), "crossing to the peek keeps it open");
     let row = centre(&world, "queue-bar.peek.agent:b");
     world.gesture(|app| app.move_to(row));
     assert!(
