@@ -50,6 +50,8 @@ pub struct World {
     orders: crate::tiles::Orders,
     tiles: Vec<crate::tiles::TileRuntime>,
     capture: crate::capture::CaptureRuntime,
+    /// The tile window that has the keyboard, by key; none while the main window has it.
+    keyboard: Option<String>,
 }
 
 type OnKey = fn(&mut State, &KeyEvent, &mut Tx) -> bool;
@@ -319,6 +321,7 @@ impl World {
             orders,
             tiles: Vec::new(),
             capture,
+            keyboard: None,
         };
         world.settle();
         world
@@ -510,7 +513,7 @@ impl World {
                 crate::tiles::Order::Open { key, frame, setup } => {
                     let daemon = self.link().commands();
                     let tile = crate::tiles::TileRuntime::open(
-                        key,
+                        key.clone(),
                         frame,
                         setup,
                         &self.store,
@@ -518,17 +521,48 @@ impl World {
                         &self.pulse,
                     );
                     self.tiles.push(tile);
+                    self.keyboard = Some(key);
                 }
-                crate::tiles::Order::Place { key, frame } => {
+                crate::tiles::Order::Place {
+                    key,
+                    frame,
+                    keyboard,
+                } => {
                     let tile = self.tile_mut(&key);
                     *tile.frame.lock().unwrap() = frame;
                     tile.shown = true;
+                    if keyboard {
+                        self.keyboard = Some(key);
+                    }
                 }
-                crate::tiles::Order::Hide { key } => self.tile_mut(&key).shown = false,
+                crate::tiles::Order::Hide { key } => {
+                    self.tile_mut(&key).shown = false;
+                    self.lose_keyboard(&key);
+                }
                 crate::tiles::Order::Update { key, update } => {
                     self.tile_mut(&key).inbox.lock().unwrap().push(update);
                 }
             }
+        }
+    }
+
+    /// Tile window `key` went off screen: the keyboard goes back to the main window if it had it.
+    fn lose_keyboard(&mut self, key: &str) {
+        if self.keyboard.as_deref() == Some(key) {
+            self.keyboard = None;
+        }
+    }
+
+    /// The tile window that has the keyboard, by key; none while the main window has it.
+    pub fn keyboard_window(&self) -> Option<&str> {
+        self.keyboard.as_deref()
+    }
+
+    /// Presses keys in whichever window has the keyboard, then settles.
+    pub fn keystrokes(&mut self, f: impl FnOnce(&mut Driver)) {
+        match self.keyboard.clone() {
+            Some(key) => self.tile_gesture(&key, f),
+            None => self.gesture(f),
         }
     }
 
@@ -568,6 +602,7 @@ impl World {
         tile.runtime.window_focus(true);
         *tile.frame.lock().unwrap() = frame;
         tile.runtime.window_focus(false);
+        self.lose_keyboard(key);
         self.settle();
     }
 
@@ -586,6 +621,7 @@ impl World {
         } else {
             self.tiles.remove(at);
         }
+        self.lose_keyboard(key);
         self.settle();
     }
 
@@ -595,6 +631,7 @@ impl World {
             tile.runtime.update(attn_app::desktop::tile_window_quits);
             tile.runtime.update(attn_app::desktop::tile_window_closed);
         }
+        self.keyboard = None;
         self.settle();
     }
 

@@ -114,8 +114,11 @@ pub trait Opener: Send + Sync {
 
 /// A window the pool opened.
 pub trait Opened {
-    /// Moves the window to `frame` and shows it.
+    /// Moves the window to `frame` and shows it, leaving the keyboard where it is.
     fn place(&self, frame: &Frame);
+    /// Moves the window to `frame` and shows it in front of the app's other windows with the
+    /// app's keyboard, as a newly opened window takes them, leaving the app's activation alone.
+    fn pop_out(&self, frame: &Frame);
     fn hide(&self);
     /// Runs `update` on the window's state.
     fn update(&self, update: Update);
@@ -289,7 +292,7 @@ pub(crate) fn follow(state: &mut State) {
                     }
                     follow_title(state, tx);
                 }));
-                pooled.window.place(&want.frame);
+                pooled.window.pop_out(&want.frame);
                 pooled.held = Some(want);
             }
             None => {
@@ -394,7 +397,14 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
         let Some(Node::Leaf(leaf)) = tree.find_leaf(&tile.leaf) else {
             return None;
         };
-        Some(super::view::lone(state, desktop, leaf, &t, cx.env().scale))
+        Some(super::view::lone(
+            state,
+            desktop,
+            leaf,
+            &t,
+            cx.env().scale,
+            cx.chrome_insets().leading,
+        ))
     });
     let root = col()
         .key("window")

@@ -3222,8 +3222,14 @@ fn the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back() {
 fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_shows_it_again() {
     let mut world = start(vec![with_document(Some(OUT))]);
     let key = only_window(&world).key;
+    assert_eq!(world.keyboard_window(), Some(key.as_str()));
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let Some(Binding::Chord(pop_out)) = keymap.binding(&Action::TilePopOut) else {
+        panic!("{} has no single chord", Action::TilePopOut.id());
+    };
 
     world.close_tile_window(&key);
+    assert_eq!(world.keyboard_window(), None);
     assert_eq!(
         sent(&world, "desktop_bring_back_leaf"),
         [serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "m"})]
@@ -3248,8 +3254,23 @@ fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_shows_it_agai
         assert_eq!(window.key, key, "the closed window shows the tile again");
         assert!(window.shown);
         assert_eq!(window.showing, Some(("work/desktop_1".into(), "m".into())));
+        assert_eq!(
+            world.keyboard_window(),
+            Some(key.as_str()),
+            "the window comes back in front with the keyboard, as a new one opens"
+        );
         world.close_tile_window(&key);
     }
+
+    arrange(&mut world, "work/desktop_1", vec![with_document(None)]);
+    arrange(&mut world, "work/desktop_1", vec![with_document(Some(OUT))]);
+    let before = sent(&world, "desktop_bring_back_leaf").len();
+    world.keystrokes(|app| app.key(key_event(&pop_out)));
+    assert_eq!(
+        sent(&world, "desktop_bring_back_leaf")[before..],
+        [serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "m"})],
+        "the next key reaches the reused window"
+    );
 }
 
 #[test]
@@ -3271,6 +3292,19 @@ fn a_tile_window_the_person_moved_tells_the_daemon_where_it_is_now() {
             "leaf_id": "m",
             "frame": {"x": 300.0, "y": 200.0, "width": 640.0, "height": 480.0},
         })]
+    );
+
+    let moved = (300.0, 200.0, 640.0, 480.0);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![with_document(Some(moved))],
+    );
+    assert_eq!(only_window(&world).frame, frame(moved));
+    assert_eq!(
+        world.keyboard_window(),
+        None,
+        "where the daemon keeps the window does not take the keyboard from the window the person works in"
     );
 }
 

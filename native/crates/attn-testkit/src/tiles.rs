@@ -21,6 +21,7 @@ pub(crate) enum Order {
     Place {
         key: String,
         frame: Frame,
+        keyboard: bool,
     },
     Hide {
         key: String,
@@ -70,6 +71,15 @@ impl Opened for HeadlessWindow {
         self.orders.push(Order::Place {
             key: self.key.clone(),
             frame: *frame,
+            keyboard: false,
+        });
+    }
+
+    fn pop_out(&self, frame: &Frame) {
+        self.orders.push(Order::Place {
+            key: self.key.clone(),
+            frame: *frame,
+            keyboard: true,
         });
     }
 

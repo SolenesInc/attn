@@ -180,7 +180,11 @@ impl crate::desktop::Opener for NativeOpener {
                 min_size: Some((320.0, 200.0)),
                 ..rune::WindowOptions::default()
             })
-            .on_created(move |window| place(&window, &created));
+            .on_created(move |window| {
+                if move_to(&window, &created) {
+                    window.show_key();
+                }
+            });
         let window = rune::open_window(spec);
         crate::frame::tile_window_opened(&window);
         let placed = window.clone();
@@ -207,7 +211,15 @@ impl crate::desktop::Opener for NativeOpener {
 
 impl crate::desktop::Opened for NativeWindow {
     fn place(&self, frame: &Frame) {
-        place(&self.window, frame);
+        if move_to(&self.window, frame) {
+            self.window.show();
+        }
+    }
+
+    fn pop_out(&self, frame: &Frame) {
+        if move_to(&self.window, frame) {
+            self.window.show_key();
+        }
     }
 
     fn hide(&self) {
@@ -219,11 +231,11 @@ impl crate::desktop::Opened for NativeWindow {
     }
 }
 
-/// Moves `window`'s content to `frame` and shows it. Before the native window exists, the
-/// window's `on_created` places it.
-fn place(window: &rune::WindowHandle, frame: &Frame) {
+/// Moves `window`'s content to `frame`; false before the native window exists, which the
+/// window's `on_created` then moves.
+fn move_to(window: &rune::WindowHandle, frame: &Frame) -> bool {
     let Some(p) = window.placement() else {
-        return;
+        return false;
     };
     let (dx, dy) = (
         p.content_position.0 - p.position.0,
@@ -234,7 +246,7 @@ fn place(window: &rune::WindowHandle, frame: &Frame) {
         (frame.y * p.scale) as i32 - dy,
     ));
     window.resize_instant((frame.width as f32, frame.height as f32));
-    window.show();
+    true
 }
 
 /// Where `window`'s content is on the desktop, in points.

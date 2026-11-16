@@ -378,8 +378,16 @@ fn with_key(label: &str, key: Option<&String>) -> String {
     }
 }
 
-/// `leaf` alone, filling a window of its own.
-pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, scale: f32) -> El {
+/// `leaf` alone, filling a window of its own; its header starts `chrome_leading` points in,
+/// clear of the window's own controls.
+pub(super) fn lone(
+    state: &State,
+    desktop: &Desktop,
+    leaf: &Leaf,
+    t: &Tokens,
+    scale: f32,
+    chrome_leading: f32,
+) -> El {
     let settles = settles(desktop, &state.facts.sessions);
     let keys = header_keys(state);
     let unsent = state.window.desk.peeks.unsent();
@@ -424,6 +432,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         t,
         scale,
         now_ms: state.window.now_ms,
+        chrome_leading,
     };
     tile(leaf, &cx).w_full().h_full()
 }
@@ -506,6 +515,7 @@ fn screen(
                     t,
                     scale,
                     now_ms,
+                    chrome_leading: 0.0,
                 };
                 let placed = desk.placement(&rendered, cx.focused.is_some());
                 let held = desk.held_divider(&placed);
@@ -589,6 +599,8 @@ struct TileCx<'a> {
     now_ms: i64,
     t: &'a Tokens,
     scale: f32,
+    /// Where the tile header starts, clear of the window's own controls.
+    chrome_leading: f32,
 }
 
 /// The screen's tiles and dividers as siblings pinned where `placed` lays them, so a tile that
@@ -1170,6 +1182,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .fill(look.header_fill(t).unwrap_or(rune::Color::TRANSPARENT))
         .w_full()
         .h(height)
+        .pl(cx.chrome_leading)
         .hover_group()
         .child(headline)
         .children(pane.map(|pane| {
