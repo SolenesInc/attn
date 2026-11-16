@@ -535,13 +535,12 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
 }
 
 impl Window {
-    pub(crate) fn take_keyboard(&mut self, desktop: &str, pane: &str, tx: &mut Tx) {
+    pub(crate) fn hold_keyboard(&mut self, desktop: &str, pane: &str) {
         self.keyboard = Some(Holder {
             desktop: desktop.into(),
             pane: pane.into(),
         });
         self.queue_cursor = None;
-        tx.blur();
     }
 }
 

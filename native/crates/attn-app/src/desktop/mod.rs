@@ -48,7 +48,6 @@ pub(crate) use host::outpost_name;
 pub(crate) use overview::{create as create_desktop, view as overview};
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
-pub(crate) use view::press_inside;
 pub(crate) use view::{area, session_of_leaf};
 pub use windows::{
     Deliver, Opened, Opener, Placement, Setup, TileWindow, on_close as tile_window_closed,

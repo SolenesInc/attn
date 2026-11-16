@@ -373,3 +373,37 @@ fn a_seed_tile_hands_its_seed_over_and_leaves_the_keyboard_with_the_agent() {
     );
     assert!(rests(&mut world));
 }
+
+#[test]
+fn a_press_on_a_plot_row_in_an_inactive_seed_tile_takes_the_tile_so_escape_climbs_back() {
+    let crown = plot("s-plot11", "Native app", "");
+    let child = part_of("s-plot11", "s-kid111", "Garden unit");
+    let (c, k) = (crown.clone(), child.clone());
+    let mut world = start("s-plot11", vec![crown, child], move |r| {
+        if r["seed_id"] == "s-plot11" {
+            document(r, c.clone(), vec![k.clone()], &[])
+        } else {
+            document(r, k.clone(), Vec::new(), &[])
+        }
+    });
+
+    world.gesture(|app| app.click(Target::key("seed-tile.t.plot.s-kid111")));
+    let shown = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(shown.last().map(|s| s["leaf_id"].clone()), Some(json!("t")));
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile(),
+        desktops: vec![desktop(row(vec![pane("a"), seed_tile("s-kid111")]), 2)],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+
+    key(&mut world, Key::Escape);
+    let moves = world.daemon.sent_of("desktop_update_tile");
+    assert_eq!(
+        moves
+            .iter()
+            .map(|m| m["tile_params"].clone())
+            .collect::<Vec<_>>(),
+        [json!("s-kid111"), json!("s-plot11")]
+    );
+}

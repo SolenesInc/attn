@@ -444,17 +444,39 @@ pub(crate) fn activate_started(state: &mut State, desktop: &str, leaf: &str, tx:
 }
 
 fn activate_as(state: &mut State, desktop: &str, leaf: &str, announced: bool, tx: &mut Tx) {
-    let current = state.facts.current_desktop();
-    let already = current.is_some_and(|d| d.id == desktop && d.active_pane_id == leaf);
-    if already {
-        give_keyboard(state, desktop, leaf, tx);
-    } else {
-        show_leaf_as(state, desktop, leaf, announced, tx);
+    give_keyboard(state, desktop, leaf, tx);
+    if !is_active(state, desktop, leaf) {
+        show_leaf_only(state, desktop, leaf, announced, tx);
     }
 }
 
+/// As `activate`, for a press anywhere in the tile, heard as the tile's `on_press_within`: a
+/// text field in the tile the press focused keeps the focus, and a control elsewhere loses it.
+pub(crate) fn activate_pressed(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    if !tx.focus_within() {
+        tx.blur();
+    }
+    hold_keyboard(state, desktop, leaf);
+    if !is_active(state, desktop, leaf) {
+        show_leaf_only(state, desktop, leaf, true, tx);
+    }
+}
+
+fn is_active(state: &State, desktop: &str, leaf: &str) -> bool {
+    state
+        .facts
+        .current_desktop()
+        .is_some_and(|d| d.id == desktop && d.active_pane_id == leaf)
+}
+
+/// The window's keys go to `leaf`, and off the control that had the focus.
 pub(crate) fn give_keyboard(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
-    state.window.take_keyboard(desktop, leaf, tx);
+    tx.blur();
+    hold_keyboard(state, desktop, leaf);
+}
+
+fn hold_keyboard(state: &mut State, desktop: &str, leaf: &str) {
+    state.window.hold_keyboard(desktop, leaf);
     let keyboard = state.window.keyboard_terminal(&state.facts);
     state.terminals.focus(keyboard, &state.daemon);
 }

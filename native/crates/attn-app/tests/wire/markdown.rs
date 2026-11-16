@@ -1040,3 +1040,25 @@ fn a_document_tile_that_returns_waits_for_its_content_again_instead_of_showing_w
     world.advance(std::time::Duration::from_secs(2));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_press_on_a_control_in_an_inactive_document_tile_takes_the_tile_and_the_control_still_acts() {
+    let mut world = start();
+    world
+        .daemon
+        .emit(content("Run it:\n\n```sh\nmake check\n```\n"));
+    world.settle();
+
+    world.gesture(|app| app.click(Target::role("button").name("Copy code")));
+
+    assert_eq!(
+        world.clipboard.text().map(|t| t.to_string()).as_deref(),
+        Some("make check")
+    );
+    let shown = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(shown.last().map(|s| s["leaf_id"].clone()), Some(json!("m")));
+    assert_eq!(
+        world.automate("state", json!({"of": "window"})).unwrap()["keyboard"]["pane"],
+        "m"
+    );
+}

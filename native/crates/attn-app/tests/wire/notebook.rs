@@ -2293,3 +2293,25 @@ fn a_popped_out_editor_brought_back_while_its_save_conflicts_shows_the_conflict_
     world.advance(Duration::from_secs(3));
     assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
 }
+
+#[test]
+fn a_press_on_an_outline_heading_in_an_inactive_editor_tile_takes_the_tile_and_its_editor_takes_the_keys()
+ {
+    let disk = Disk::with(&[("knowledge/plan.md", &twice_titled_note())]);
+    let params = r#"{"path":"knowledge/plan.md"}"#;
+    let mut world = start_with(&disk, Some(row(vec![pane("a"), editor_tile("n", params)])));
+    world.gesture(|d| d.click(Target::key("notebook.tile.n.fold.rail")));
+    world.gesture(|d| d.click(Target::key("tile.a")));
+    let keyboard = |world: &mut World| {
+        world.automate("state", json!({"of": "window"})).unwrap()["keyboard"]["pane"].clone()
+    };
+    assert_eq!(keyboard(&mut world), "a");
+
+    world.gesture(|d| d.click(Target::key("notebook.tile.n.outline.2")));
+
+    let shown = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(shown.last().map(|s| s["leaf_id"].clone()), Some(json!("n")));
+    assert_eq!(keyboard(&mut world), "n");
+    world.gesture(|d| d.type_text("Typed after the press."));
+    assert!(editor_text(&world, "notebook.tile.n.editor").contains("Typed after the press."));
+}

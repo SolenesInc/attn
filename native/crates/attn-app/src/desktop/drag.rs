@@ -10,7 +10,6 @@ use super::layout::{self, Edge, Node, ShelfDrop, TILE_MIN_HEIGHT, TILE_MIN_WIDTH
 use super::shelf::{PendingDrop, Shelf};
 use super::{Desk, actions};
 use crate::State;
-use crate::shell::Holder;
 
 /// How far the pointer travels from the press before a press becomes a drag.
 const ACTIVATION: f32 = 4.0;
@@ -364,14 +363,7 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
 
 fn click(state: &mut State, source: &Source, tx: &mut Tx) {
     match source {
-        Source::Header { desktop, leaf, .. } => super::view::take_tile(
-            state,
-            &Holder {
-                desktop: desktop.clone(),
-                pane: leaf.clone(),
-            },
-            tx,
-        ),
+        Source::Header { desktop, leaf, .. } => super::actions::activate(state, desktop, leaf, tx),
         Source::Chip { desktop, leaf, .. } => {
             state.window.desk.cap_open = None;
             super::shelf::bring(state, desktop, leaf, tx);

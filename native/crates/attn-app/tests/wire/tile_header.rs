@@ -1564,3 +1564,29 @@ fn a_press_hands_the_open_popover_between_the_delegation_chain_and_the_pull_requ
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_press_on_a_control_in_an_inactive_agents_tile_gives_its_terminal_the_keyboard_and_still_acts()
+{
+    let mut world = start(
+        session("a", "ledger sweep", Some(priced(0.42))),
+        session("b", "docs", Some(priced(0.10))),
+    );
+
+    world.gesture(|app| app.click(Target::key("tile.b.usage")));
+
+    assert!(
+        breakdown(&world, "b").is_some(),
+        "the press still pins the breakdown"
+    );
+    let shown = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(shown.last().map(|s| s["leaf_id"].clone()), Some("b".into()));
+    assert_eq!(
+        world
+            .automate("state", serde_json::json!({"of": "window"}))
+            .unwrap()["keyboard"]["pane"],
+        "b"
+    );
+    let focused = world.daemon.sent_of("terminal_focus");
+    assert_eq!(focused.last().map(|r| r["id"].clone()), Some("r-b".into()));
+}

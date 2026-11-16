@@ -983,3 +983,44 @@ fn a_popped_out_browser_tile_says_its_window_shows_no_page_and_agents_hear_why()
     world.advance(Duration::from_secs(2));
     assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
 }
+
+#[test]
+fn a_press_on_a_control_in_an_inactive_browser_tile_takes_the_tile_and_the_control_still_acts() {
+    let (mut world, engine) = start(START);
+    engine.take();
+
+    world.gesture(|app| app.click(Target::key(format!("tile.{TILE}.reload"))));
+
+    assert!(engine.take().contains(&Asked::Reload));
+    let shown = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(
+        shown.last().map(|s| s["leaf_id"].clone()),
+        Some(json!(TILE))
+    );
+    assert_eq!(
+        world.automate("state", json!({"of": "window"})).unwrap()["keyboard"]["pane"],
+        TILE
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_press_on_a_control_in_another_tile_takes_the_keys_off_the_address_field() {
+    let (mut world, _engine) = start(START);
+    world.gesture(|app| app.click(Target::key(format!("tile.{TILE}.address"))));
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(format!("tile.{TILE}.address").as_str())
+    );
+
+    world.gesture(|app| app.click(Target::key("tile.a.id")));
+    world.gesture(|app| app.type_text("zz"));
+
+    assert_eq!(world.screen().focused().and_then(|n| n.key), None);
+    assert_eq!(address(&world), START);
+    assert_eq!(
+        world.automate("state", json!({"of": "window"})).unwrap()["keyboard"]["pane"],
+        "a"
+    );
+    rest(&mut world);
+}

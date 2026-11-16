@@ -1563,8 +1563,8 @@ fn apply(
     state.readings.revision += 1;
 }
 
-/// A press on a control inside review tile `tile`: the tile takes the keyboard, as a press on
-/// it does, then `act` runs with what the daemon last sent the tile.
+/// A press on a control inside review tile `tile`, which the press took: `act` runs with what
+/// the daemon last sent the tile.
 fn pressed(
     tile: &str,
     act: impl Fn(&mut State, &str, &std::sync::Arc<attn_protocol::DesktopTileContentMessage>, &mut Tx)
@@ -1572,7 +1572,6 @@ fn pressed(
 ) -> impl Fn(&mut State, &mut Tx) + 'static {
     let tile = tile.to_owned();
     move |state: &mut State, tx: &mut Tx| {
-        crate::desktop::press_inside(state, &tile, tx);
         let Some((held, message)) = held(state).filter(|(held, _)| *held == tile) else {
             return;
         };

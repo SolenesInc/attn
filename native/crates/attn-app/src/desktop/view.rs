@@ -828,52 +828,44 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     .children(unsent)
             }
         }
-        (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
+        (LeafKind::Pane, _) => empty(t, "Starting…"),
         (LeafKind::Tile { kind, session, .. }, _) if kind == "markdown" => {
             let key = attn_client::TileKey {
                 desktop: desktop.id.clone(),
                 tile: leaf.id.clone(),
             };
-            takes(
-                crate::markdown::body(
-                    &leaf.id,
-                    &title,
-                    session.as_deref(),
-                    cx.contents.get(&key),
-                    (
-                        cx.outposts,
-                        crate::review::setup::Servers {
-                            sessions: &cx.facts.sessions,
-                            settings: &cx.facts.settings,
-                            now_ms: cx.now_ms,
-                        },
-                    ),
-                    (cx.pictures, cx.marks.0, cx.marks.1, cx.annotates),
-                    t,
+            crate::markdown::body(
+                &leaf.id,
+                &title,
+                session.as_deref(),
+                cx.contents.get(&key),
+                (
+                    cx.outposts,
+                    crate::review::setup::Servers {
+                        sessions: &cx.facts.sessions,
+                        settings: &cx.facts.settings,
+                        now_ms: cx.now_ms,
+                    },
                 ),
-                &holder,
+                (cx.pictures, cx.marks.0, cx.marks.1, cx.annotates),
+                t,
             )
         }
-        (LeafKind::Tile { kind, params, .. }, _) if kind == "seed" => takes(
-            crate::garden::tile_body(
-                &desktop.id,
-                &leaf.id,
-                params.as_deref().unwrap_or(""),
-                cx.seeds,
-                cx.annotates.then_some(cx.marks.0),
-                t,
-            ),
-            &holder,
+        (LeafKind::Tile { kind, params, .. }, _) if kind == "seed" => crate::garden::tile_body(
+            &desktop.id,
+            &leaf.id,
+            params.as_deref().unwrap_or(""),
+            cx.seeds,
+            cx.annotates.then_some(cx.marks.0),
+            t,
         ),
-        (LeafKind::Tile { kind, .. }, _) if kind == "notebook" => takes(
-            crate::notebook::tile_body(cx.notebook, &leaf.id, t),
-            &holder,
-        ),
-        (LeafKind::Tile { kind, .. }, _) if kind == crate::browser::KIND => takes(
-            crate::browser::page_area(&browser_page(desktop, leaf), leaf.window.is_some(), t),
-            &holder,
-        ),
-        (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
+        (LeafKind::Tile { kind, .. }, _) if kind == "notebook" => {
+            crate::notebook::tile_body(cx.notebook, &leaf.id, t)
+        }
+        (LeafKind::Tile { kind, .. }, _) if kind == crate::browser::KIND => {
+            crate::browser::page_area(&browser_page(desktop, leaf), leaf.window.is_some(), t)
+        }
+        (LeafKind::Tile { kind, .. }, _) => empty(t, tile_kind_label(kind)),
     };
     let look = super::spotlight::Look::of(
         matches!(leaf.kind, LeafKind::Pane),
@@ -897,6 +889,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         .fill(t.bg_tile)
         .role("group")
         .label(title.clone())
+        .on_press_within(move |state: &mut State, tx: &mut Tx| press_tile(state, &holder, tx))
         .transition(tile_transition(&leaf.kind));
     let key = format!("tile.{}", leaf.id);
     let below = header_height(pane_of(desktop, &leaf.id).is_some());
@@ -1027,18 +1020,12 @@ fn tile_transition(kind: &LeafKind) -> rune::Transition {
     })
 }
 
-/// `el`, where a press takes the tile into `holder`.
 /// Each outpost's id and name, which a view that names outposts reads.
 fn outpost_names(outposts: &[attn_protocol::OutpostInfo]) -> Vec<(String, String)> {
     outposts
         .iter()
         .map(|o| (o.id.clone(), o.name.clone()))
         .collect()
-}
-
-fn takes(el: El, holder: &Holder) -> El {
-    let holder = holder.clone();
-    el.on_press_tx(move |state: &mut State, tx: &mut Tx| press_tile(state, &holder, tx))
 }
 
 /// What dragging the header of the current desktop's tile `leaf` picks up. An agent alone on
@@ -1192,6 +1179,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
     };
     col()
         .key(format!("{key}.header"))
+        .keeps_press_from_within()
         .fill(look.header_fill(t).unwrap_or(rune::Color::TRANSPARENT))
         .w_full()
         .h(height)
@@ -1674,7 +1662,6 @@ fn terminal_slot(
             match d.phase {
                 rune::Phase::Down => {
                     crate::annotations::draft::pressed_anywhere(state, tx);
-                    press_tile(state, &tile, tx);
                     let button = match tx.button() {
                         PointerButton::Middle => mouse::MIDDLE,
                         PointerButton::Secondary => mouse::SECONDARY,
@@ -1774,35 +1761,13 @@ fn terminal_slot(
     slot.children(caret)
 }
 
-/// The window's keyboard goes to `tile`, which becomes the desktop's active tile.
-/// A press on a tile closes the peek and takes the tile into `tile`.
+/// A press anywhere in `tile`, on its body or a control inside, closes the peek and makes it the
+/// desktop's active tile, holding the window's keyboard, as the Tauri app's `mousedown` on the
+/// tile does. A press on the header's own surface may start a drag, so only its click takes the
+/// tile.
 fn press_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
     super::peek::dismiss(state);
-    take_tile(state, tile, tx);
-}
-
-/// A press that a control inside tile `pane` handles itself, which takes the tile as a press
-/// on the tile does.
-pub(crate) fn press_inside(state: &mut State, pane: &str, tx: &mut Tx) {
-    let Some(desktop) = state
-        .facts
-        .tile_contents
-        .tiles
-        .iter()
-        .find(|(key, _)| key.tile == pane)
-        .map(|(key, _)| key.desktop.clone())
-    else {
-        return;
-    };
-    let tile = Holder {
-        desktop,
-        pane: pane.to_owned(),
-    };
-    press_tile(state, &tile, tx);
-}
-
-pub(crate) fn take_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
-    super::actions::activate(state, &tile.desktop, &tile.pane, tx);
+    super::actions::activate_pressed(state, &tile.desktop, &tile.pane, tx);
 }
 
 fn report_mods(mods: Mods) -> u8 {
