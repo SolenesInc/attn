@@ -77,6 +77,7 @@ pub struct Window {
     pub(crate) outpost_updates: crate::outpost_updates::Banner,
     pub(crate) settings: crate::settings::Dialog,
     pub(crate) crew: crate::crew::Panel,
+    pub(crate) launch_desktop: crate::launch_desktop::Picker,
     pub(crate) shortcut_editor: crate::shortcut_editor::Editor,
     pub(crate) profile_switcher: crate::profile_switcher::Switcher,
     /// The migration failure screen's details went to the clipboard.

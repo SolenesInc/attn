@@ -87,6 +87,7 @@ pub(crate) fn panel(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         )
         .build(k, layers);
     crate::settings::route_overlay(state, t, layers);
+    crate::launch_desktop::overlay(state, t, layers);
 }
 
 fn roster(state: &State, t: &Tokens) -> El {
@@ -481,6 +482,24 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
                     })
                 })),
         )
+        .child(crate::launch_desktop::field(
+            state,
+            t,
+            &crate::launch_desktop::Field {
+                key: format!("crew.launch.{}", member.id),
+                kind: "crew".into(),
+                item_id: member.id.clone(),
+                profile_id: member.profile_id.clone(),
+                default_name: if member.name.is_empty() {
+                    member.id.clone()
+                } else {
+                    member.name.clone()
+                },
+                value: shown.draft.launch_desktop.clone(),
+                disabled: false,
+                on_change: launch::choose_desktop,
+            },
+        ))
         .child(crate::settings::route_chip(
             state,
             t,

@@ -23,6 +23,7 @@ pub mod instance;
 mod keymap;
 mod keys;
 pub mod launch;
+mod launch_desktop;
 mod ledger;
 mod markdown;
 mod migration_failure;
@@ -309,7 +310,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     annotations::draft::follow(state, tx);
     let expired = annotations::draft::expire(state, now) | annotations::draft::due(state, now, tx);
     let browsed = picker::browse_due(state, tx);
-    let launched = picker::follow(state, tx);
+    let launched = picker::follow(state, tx) | launch_desktop::poll(state, tx);
     let browsed = browsed | opener::browse_due(state, tx);
     let pictured = markdown::follow_images(state, now, tx);
     let reviewed = review::follow(state, tx);

@@ -12,8 +12,8 @@ use attn_protocol::{
     CrewHandoffDocument, CrewHandoffGetResultMessage, CrewHandoffSummary,
     CrewHandoffsGetResultMessage, CrewMember, CrewRenameResult, CrewRenameResultMessage,
     CrewSetResultMessage, CrewStartResultMessage, CrewUpdatedMessage, Desktop, DesktopPane,
-    InitialStateMessage, OpenSeedResultMessage, PartyView, Profile,
-    ProfileArrangementChangedMessage, Seed, Session, SettingsUpdatedMessage,
+    InitialStateMessage, LaunchDesktopResultMessage, LaunchDesktopSetting, OpenSeedResultMessage,
+    PartyView, Profile, ProfileArrangementChangedMessage, Seed, Session, SettingsUpdatedMessage,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message, tree};
 use rune::{Key, KeyEvent, Mods};
@@ -1401,5 +1401,175 @@ fn the_model_picker_closes_when_another_layer_replaces_manage_crew() {
         })
     });
     assert!(!picker_open(&world));
+    assert!(world.daemon.sent_of("crew_set").is_empty());
+}
+
+fn choose_option(world: &mut World, name: &str) {
+    world
+        .automate("press", json!({"target": {"role": "option", "name": name}}))
+        .unwrap_or_else(|why| panic!("choose {name}: {why}"));
+}
+
+fn desktop_options(world: &mut World) -> Vec<String> {
+    world
+        .automate(
+            "wait",
+            json!({"target": {"role": "option", "name": "A new desktop…"}}),
+        )
+        .expect("the Desktop list opened");
+    world
+        .screen()
+        .all(Target::role("list-box-option"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+fn launch_desktops(world: &World) -> Vec<Value> {
+    world
+        .daemon
+        .sent_of("crew_set")
+        .iter()
+        .map(|r| r["launch_desktop_setting"].clone())
+        .collect()
+}
+
+const DESKTOP_SELECT: &str = "crew.launch.keel.desktop-trigger";
+
+fn with_launch_desktops(d: &Daemon) {
+    d.on("launch_desktop_get", |r: &Request| {
+        message(LaunchDesktopResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            action: "launch_desktop_get".into(),
+            success: true,
+            desktops: Some(vec![Desktop {
+                id: "d-work".into(),
+                profile_id: PROFILE.into(),
+                name: "Work".into(),
+                shortcut_slot: Some(1),
+                ..Desktop::default()
+            }]),
+            ..LaunchDesktopResultMessage::new()
+        })
+    });
+}
+
+#[test]
+fn the_desktop_select_offers_the_profiles_desktops_and_empty_slots_as_the_daemon_reads_them() {
+    let d = daemon(
+        vec![member("keel", 5)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    with_launch_desktops(&d);
+    d.on("crew_set", |_| {
+        message(CrewSetResultMessage {
+            success: true,
+            member: Some(member("keel", 6)),
+            ..CrewSetResultMessage::new()
+        })
+    });
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, DESKTOP_SELECT);
+    let read = &world.daemon.sent_of("launch_desktop_get")[0];
+    assert_eq!(
+        (read["kind"].as_str(), read["item_id"].as_str()),
+        (Some("crew"), Some("keel"))
+    );
+    let options = desktop_options(&mut world);
+    assert_eq!(
+        options[..4],
+        [
+            "Its own desktop",
+            "A new desktop…",
+            "1 · Work",
+            "Empty slot 2…"
+        ]
+    );
+    assert_eq!(options.last().map(String::as_str), Some("Empty slot 9…"));
+    choose_option(&mut world, "1 · Work");
+    assert_eq!(launch_desktops(&world), [json!({"desktop_id": "d-work"})]);
+
+    click(&mut world, DESKTOP_SELECT);
+    choose_option(&mut world, "Empty slot 3…");
+    assert_eq!(
+        named(&world, "launch-desktop.naming.hint").as_deref(),
+        Some("On ⌘3.")
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("launch-desktop.name"))
+            .value
+            .as_deref(),
+        Some("Keel")
+    );
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launch_desktops(&world)[1],
+        json!({"desktop_id": "work/desktop_3", "desktop_name": "Keel"})
+    );
+}
+
+#[test]
+fn a_new_desktop_named_while_a_save_is_out_is_kept_when_another_launch_field_changes() {
+    let d = daemon(
+        vec![member("keel", 5)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    with_launch_desktops(&d);
+    d.answer_in_turn("crew_set", [Answer::Hold, Answer::Hold]);
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, DESKTOP_SELECT);
+    choose_option(&mut world, "A new desktop…");
+    assert_eq!(
+        named(&world, "launch-desktop.naming.hint").as_deref(),
+        Some("No ⌘ number.")
+    );
+    world.gesture(|app| app.type_text("Review"));
+    click(&mut world, "launch-desktop.naming.use");
+    assert_eq!(launch_desktops(&world), [json!({"desktop_name": "Review"})]);
+    pick_opus(&mut world);
+    let launch_desktop = LaunchDesktopSetting {
+        desktop_id: Some("desktop-review".into()),
+        label: Some("Review (no ⌘ number)".into()),
+        ..LaunchDesktopSetting::default()
+    };
+    let first = world.daemon.sent_of("crew_set").remove(0);
+    world.daemon.reply_to(
+        &first,
+        CrewSetResultMessage {
+            success: true,
+            member: Some(with(member("keel", 6), |m| {
+                m.launch_desktop = Some(launch_desktop.clone())
+            })),
+            ..CrewSetResultMessage::new()
+        },
+    );
+    world.settle();
+    let sent = world.daemon.sent_of("crew_set");
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[1]["launch_desktop_setting"], json!(launch_desktop));
+    assert_eq!(sent[1]["model"], "opus");
+}
+
+#[test]
+fn cancelling_the_new_desktops_name_writes_nothing() {
+    let d = daemon(
+        vec![member("keel", 5)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    with_launch_desktops(&d);
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, DESKTOP_SELECT);
+    choose_option(&mut world, "A new desktop…");
+    press(&mut world, Key::Escape);
+    assert!(!shows(&world, "launch-desktop.naming.hint"));
+    assert!(is_open(&world), "Escape closes only the name dialog");
     assert!(world.daemon.sent_of("crew_set").is_empty());
 }
