@@ -156,7 +156,7 @@ upstream_commit() {
 
 # Adds a commit to the Commits cell of the first row of FORK.md's "Our changes".
 list_commit() {
-  sed -i.bak "0,/\` |\$/s//\`, \`$2\` |/" "$1/FORK.md" && rm "$1/FORK.md.bak"
+  COMMIT="$2" perl -0pi -e 's/` \|\n/`, `$ENV{COMMIT}` |\n/' "$1/FORK.md"
   grep -qF "\`$2\` |" "$1/FORK.md" || { echo "list_commit could not list $2" >&2; exit 1; }
 }
 
