@@ -119,7 +119,9 @@ Cmd+Shift+R (Ctrl+Alt+R on Linux) opens the Asks drawer, where you answer them
 without opening the agent's terminal. Attn types your answer into the
 agent's conversation as your message. When the ask is about a seed, the answer
 goes to whoever tends that seed when you answer, and Attn adds the answer to the
-seed as a note.
+seed as a note. The seed stays open until you answer, because Attn refuses an
+agent's harvest while the seed's ask waits for you. When you harvest the seed
+yourself, or anyone withers it, its open asks close.
 
 When an ask has recommended answers for two or more questions, **Accept all
 recommended** (or `a`) selects every one of them in the draft, so you can review
