@@ -157,7 +157,7 @@ Preconditions:
 
 - Wire: `internal/daemon/garden_wire_test.go`, `internal/daemon/garden_*_wire_test.go`, `internal/daemon/seed_*_wire_test.go`, `internal/daemon/standby_session_wire_test.go`.
 - Stack: `cmd/attnd/seed_stack_test.go`, `cmd/attnd/seed_notes_stack_test.go`, `cmd/attnd/seed_authorization_stack_test.go`, `cmd/attnd/garden_advisor_stack_test.go`, `cmd/attnd/ticket_signpost_stack_test.go`, `app/e2e/garden-dock.spec.ts`, `app/e2e/garden-check-tally.spec.ts`, `app/e2e/seed-header.spec.ts`.
-- Scenario: `garden-plot-dispatch`, `garden-profile-scope`, `garden-seed-authorization`, `garden-seed-header`, `garden-seed-read-receipts`, `garden-seed-reopen`, `garden-seed-tile-navigation`, `crew-seed-header`.
+- Scenario: in the native app `native-garden-seed-header`, `native-garden-walk`, `native-garden-seed-authorization` and `native-garden-seed-reopen`; in the Tauri app `garden-plot-dispatch`, `garden-profile-scope`, `garden-seed-authorization`, `garden-seed-header`, `garden-seed-read-receipts`, `garden-seed-reopen`, `garden-seed-tile-navigation`, `crew-seed-header`.
 - Kernel: `internal/garden/*_test.go`, `internal/store/garden_*_test.go`.
 - App: `app/src/App.garden*.test.tsx`, `app/src/App.seedArtifactTransfer.test.tsx`, `app/src/App.terminalSeeds.test.tsx`, `app/src/components/PaneSeedChip.test.tsx`, `app/src/components/SeedArtifactRows.test.tsx`, `app/src/components/gardenBoardModel.takeover.test.ts`, `app/src/components/gardenSearch.test.ts`.
 
