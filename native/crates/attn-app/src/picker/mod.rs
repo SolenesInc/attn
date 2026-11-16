@@ -1,6 +1,7 @@
 pub(crate) mod agents;
 mod names;
 mod paths;
+pub(crate) mod pull_request;
 mod repo;
 mod view;
 
@@ -1153,7 +1154,10 @@ pub(crate) fn create_worktree(
     );
     let desktop = desktop.or_else(|| state.facts.current_desktop().map(|d| d.id.clone()));
     finish(state, which, None, tx);
-    state.window.launching.worktree = Some(repo::Setup::creating(&branch, &repo));
+    state.window.launching.worktree = Some(repo::Setup::new(
+        &branch,
+        repo::Step::CreatingWorktree(repo.clone()),
+    ));
     let (main_repo, wanted) = (repo.clone(), branch.clone());
     state.ask(
         |id| CreateWorktreeMessage {

@@ -293,6 +293,8 @@ struct Header {
     #[serde(default)]
     probe_id: Option<String>,
     #[serde(default)]
+    target_path: Option<String>,
+    #[serde(default)]
     action: Option<String>,
     #[serde(default)]
     protocol_version: Option<String>,
@@ -317,11 +319,15 @@ pub fn pr_action_id(action: &str, pr: &str) -> String {
 /// flight share it.
 pub const REFRESH_PRS_ID: &str = "refresh_prs";
 
+/// The id `fetch_pr_details` is answered under: its answer carries no request id.
+pub const FETCH_PR_DETAILS_ID: &str = "fetch_pr_details";
+
 impl Header {
     /// The request this message answers: its `request_id`, for `spawn_result`,
     /// `rename_result` and `reload_session_result` the session id the request named, for
-    /// `pty_input_probe_result` the input's `probe_id`, and for `pr_action_result` and
-    /// `refresh_prs_result` the ids above. The plugin commands carry no id:
+    /// `pty_input_probe_result` the input's `probe_id`, for `ensure_repo_result` the folder the
+    /// request named, and for `pr_action_result`, `refresh_prs_result` and
+    /// `fetch_pr_details_result` the ids above. The plugin commands carry no id:
     /// `plugins_updated` answers `list_plugins` as [`LIST_PLUGINS`], and
     /// `plugin_action_result` answers its action as [`plugin_action`] names it. The arrangement a spawn changes carries
     /// that id too, ahead of `spawn_result`, and answers nothing.
@@ -333,6 +339,8 @@ impl Header {
             "pty_input_probe_result" => self.probe_id.clone(),
             "pr_action_result" => Some(pr_action_id(self.action.as_deref()?, self.id.as_deref()?)),
             "refresh_prs_result" => Some(REFRESH_PRS_ID.to_owned()),
+            "fetch_pr_details_result" => Some(FETCH_PR_DETAILS_ID.to_owned()),
+            "ensure_repo_result" => self.target_path.clone(),
             "profile_arrangement_changed" => None,
             _ => self.request_id.clone(),
         }

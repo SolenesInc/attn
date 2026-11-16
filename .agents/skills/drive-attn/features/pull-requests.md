@@ -110,7 +110,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) has the attention drawer, `attention`, a region named "Needs Attention": the agents waiting for the user, then "Review Requested" and "Your PRs", each pull request with Approve, Merge and Mute. It has no pull requests on the home screen, on a tile header or in Settings yet.
+The native app (`native/`) has the attention drawer, `attention`, a region named "Needs Attention": the agents waiting for the user, then "Review Requested" and "Your PRs", each pull request with Approve, Merge and Mute. Home has the Pull Requests card, `home.prs`: "Yours", then "Review requested" grouped by repository, each group folding and muting its repository from its header. A card row, `home.pr.<id>`, opens the pull request and marks it visited, shows `.updated`, `.approved` and `.ci` marks, dims once the user approved it with no new changes, and carries New worktree session (`.new`), Approve, Merge, Mute and the author's name (`.mute-author`, "Mute all PRs by <author>"). It has no pull requests on a tile header or in Settings yet.
 
 Preconditions:
 
@@ -127,7 +127,11 @@ Steps:
 - **Approve.** Press a review request's `attention.pr.<id>.approve`: `bridge wait '{"target":{"role":"button","name":"Approved"}}'` answers, and `requests` in `/__control` gains a `POST` to that pull request's `/reviews`. The button reads "Approve" again 1.5 s later. Once the daemon marks it approved, the pull request leaves the drawer.
 - **Merge asks first.** Press one of your pull requests' `attention.pr.<id>.merge`: `attention.merge-dialog` shows, a dialog named "Merge PR #<number>?". Press Escape: the dialog goes and the Merge button holds the keyboard. Press Merge again, then `attention.merge.confirm`: `bridge wait '{"target":{"role":"button","name":"Merged"}}'` answers and `requests` gains a `PUT` to its `/merge`.
 - **Mute.** Press a pull request's `attention.pr.<id>.mute`: it leaves the drawer at once and `attention.count` drops by one. Mute toggles in the daemon, so the row stays hidden until the daemon reports the pull request muted.
-- **Proof.** In `$P`, keep `bridge tree` with the drawer open and at the end, `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge, and `bridge shot '{"path":"<P>/native-attention-drawer.png"}'` with the drawer open, with `<P>` written out.
+- **Home's card marks a visit.** Press a review request's `home.pr.<id>.open`: the daemon log has `Marking PR <id> as visited`. Seed the same pull request on the mock GitHub with a new `headSHA` (`replace:false`) and press `home.prs.refresh`: `bridge wait` on `home.pr.<id>.updated` answers, named "Updated". Press `.open` again: `.updated` goes.
+- **Home's card marks approval and CI.** A row the user approved shows `.approved` and dims. `.ci` reads "CI success", "CI pending" or "CI failure" from the mock's `mergeableState` `clean`, `blocked` or `unstable`, and `dirty`.
+- **Mute an author from Home.** Press `home.pr.<id>.mute-author`: every pull request by that author leaves the card, and the daemon log has `mute_author`.
+- **New worktree session from Home.** Set `./attn settings set projects_directory <dir>` to a folder holding a clone, named for the repository, whose `origin` has the pull request's `headRef` and no local branch of that name. Press `home.pr.<id>.new`: the corner `worktree-setup` names each step, then the agent starts in `<dir>/<repo>--<branch>`, labelled `<repo>#<number>`, and `home` goes. With no clone, the mock's clone URL does not resolve: the corner reads "Create failed: <repo>#<number> failed", and pressing it opens the reason.
+- **Proof.** In `$P`, keep `bridge tree` with the drawer open and at the end, `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge, and `bridge shot '{"path":"<P>/native-attention-drawer.png"}'` with the drawer open, with `<P>` written out. For Home, keep `bridge shot` with an Updated and an approved row showing, and with the failed corner.
 
 ## Contexts
 
@@ -142,7 +146,7 @@ Steps:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/attention.rs` (the native app's attention drawer), `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/attention.rs` (the native app's attention drawer and Home's Pull Requests card), `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attnd/pr_stack_test.go`, `app/e2e/pr-actions.spec.ts`.
 - Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `cli/attn/src/hooks/detect.rs`.
 - App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`, `app/src/components/SettingsModal.agents.test.tsx`.
@@ -158,6 +162,8 @@ Steps:
 - `attn pr` verbs other than `wait-ready` need a session. From a plain shell, pass `--session <id>`.
 - ⌘R and `wsctl refresh-prs` poll the GitHub list only. A session's recorded pull request refreshes on its own 30-second tick.
 - "New worktree session" needs a Projects Directory that holds a clone the launcher can fetch. The mock serves no Git, so on the baseline it fails with an alert naming the clone or fetch (`git worktree add failed: fatal: invalid reference: origin/fixture-head` for an empty clone). Focus-free input cannot dismiss that alert, and a native click aimed at its OK goes through to the page beneath, where it can hit a card's buttons. Quit the app with `./attn instance stop-app` and launch it again with `bridge --launch --wait-ready ping` to clear the alert. You cannot set `projects_directory` back to empty afterwards.
+- Under `xvfb-run`, the native window counts as covered, so a scroll lands only at the next view commit: a `bridge press` on a row below Home's Pull Requests card fold waits for it and times out. Seed the mock with `replace:true` and few enough pull requests that every row shows.
+- In the native app, a New worktree session onto a clone whose checkout holds the pull request's branch fails at `git worktree add`, which says the branch already exists. Give the clone another branch.
 - The mock GitHub keeps a merged pull request open. The merged row leaves the list for this run of the app, and comes back after a relaunch.
 - Approve and Merge on the baseline reach only the mock, so prove them through its `/__control` `requests`, not through GitHub. Their ✓ (`data-success="true"`) shows for 1.5 seconds, so start the `dom_wait` right after the click.
 - Working but wrong: a muted pull request has no way back. Settings lists muted repositories and authors, never single pull requests. The drawer's footer shows the agent palette's key (⌘K) as the drawer's toggle, while the real toggle is ⌘⇧P. The same drawer is "PRs drawer" in the shortcut list and "Open attention drawer" in the palette, and its own title reads "Needs Attention".

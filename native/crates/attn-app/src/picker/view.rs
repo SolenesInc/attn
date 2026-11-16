@@ -733,13 +733,13 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
     let (title, detail) = match &setup.failed {
         Some(_) => (
             "Create failed".to_owned(),
-            format!("{} failed", setup.branch),
+            format!("{} failed", setup.subject),
         ),
-        None => ("Creating worktree".to_owned(), setup.branch.clone()),
+        None => (setup.step.title().to_owned(), setup.subject.clone()),
     };
     let last = match setup.failed {
         Some(_) => "open to resolve".to_owned(),
-        None => format!("git worktree add · {}", paths::tildify(&setup.repo)),
+        None => setup.step.command(),
     };
     let lines = col()
         .items_start()

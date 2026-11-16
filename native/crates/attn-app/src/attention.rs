@@ -6,12 +6,12 @@ use std::collections::{HashMap, HashSet};
 
 use attn_client::{Facts, REFRESH_PRS_ID, pr_action_id};
 use attn_protocol::{
-    ApprovePRMessage, MergePRMessage, MutePRMessage, MuteRepoMessage, PR, RefreshPRsMessage,
-    Session,
+    ApprovePRMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, PR,
+    PRVisitedMessage, RefreshPRsMessage, Session,
 };
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row, text};
+use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
 
 use crate::State;
@@ -23,6 +23,15 @@ use crate::sidebar::queue;
 pub(crate) const DRAWER: &str = "attention";
 const WIDTH: f32 = 360.0;
 const DONE_SHOWS_SECONDS: f64 = 1.5;
+
+/// Where a pull request row shows. Home's rows are the Tauri dashboard's: opening one marks it
+/// visited, they show whether it is approved, updated or has CI, and they start a worktree
+/// session or mute its author. The drawer's rows are its compact ones.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Place {
+    Drawer,
+    Home,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Act {
@@ -303,6 +312,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
                     pr_row(
                         state,
                         p,
+                        Place::Drawer,
                         false,
                         format!("attention.pr.{}", p.id),
                         named(p),
@@ -325,6 +335,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
                     pr_row(
                         state,
                         p,
+                        Place::Drawer,
                         true,
                         format!("attention.pr.{}", p.id),
                         named(p),
@@ -446,9 +457,18 @@ fn repo_name(repo: &str) -> &str {
     repo.rsplit('/').next().unwrap_or(repo)
 }
 
-fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: &Tokens) -> El {
+fn pr_row(
+    state: &State,
+    pr: &PR,
+    place: Place,
+    yours: bool,
+    key: String,
+    heading: String,
+    t: &Tokens,
+) -> El {
     let k = attn_ui::kit(t);
     let url = pr.url.clone();
+    let visited = (place == Place::Home).then(|| pr.id.clone());
     let open = Button::new(format!("{heading}: {}", pr.title))
         .variant(ButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
@@ -461,9 +481,26 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: 
                     .child(text(heading.clone()).font(font).color(ink))
             }
         })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_url(state, &url, tx))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            if let Some(id) = &visited {
+                visit(state, id);
+            }
+            open_url(state, &url, tx)
+        })
         .build(k)
-        .key(format!("{key}.open"));
+        .key(format!("{key}.open"))
+        .grow(1.0);
+    let top = row()
+        .w_full()
+        .items_center()
+        .gap(space::S1)
+        .child(open)
+        .children(
+            (place == Place::Home)
+                .then(|| marks(pr, &key, t))
+                .into_iter()
+                .flatten(),
+        );
     let title = text(pr.title.clone())
         .font(type_::BODY)
         .color(t.text_primary)
@@ -494,6 +531,28 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: 
             .key(button)
     };
     let mute_id = pr.id.clone();
+    let home = place == Place::Home;
+    let new_session = home.then(|| {
+        let pr = pr.clone();
+        GlyphButton::new(icon::POP_OUT, "New worktree session")
+            .help("New worktree session")
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                crate::picker::pull_request::open_in_worktree(state, &pr, tx)
+            })
+            .build(k)
+            .key(format!("{key}.new"))
+    });
+    let mute_author = (home && !pr.author.is_empty()).then(|| {
+        let author = pr.author.clone();
+        Button::new(author.clone())
+            .variant(ButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .help(format!("Mute all PRs by {author}"))
+            .on_press(move |state: &mut State| mute_author(state, &author))
+            .build(k)
+            .key(format!("{key}.mute-author"))
+            .label(format!("Mute all PRs by {}", pr.author))
+    });
     let footer = row()
         .w_full()
         .items_center()
@@ -509,6 +568,7 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: 
             .color(t.text_tertiary)
             .grow(1.0),
         )
+        .children(new_session)
         .child(action(Act::Approve))
         .child(action(Act::Merge))
         .child(
@@ -517,7 +577,9 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: 
                 .on_press(move |state: &mut State| mute(state, &mute_id))
                 .build(k)
                 .key(format!("{key}.mute")),
-        );
+        )
+        .children(mute_author);
+    let settled = home && pr.approved_by_me && !pr.has_new_changes;
     col()
         .key(key)
         .role("group")
@@ -527,9 +589,79 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: 
         .padding(space::S2)
         .radius(6.0)
         .fill(t.bg_elevated)
-        .child(open)
+        .opacity(if settled { 0.5 } else { 1.0 })
+        .child(top)
         .child(title)
         .child(footer)
+}
+
+/// What changed on a pull request at a glance: new commits or comments since the user's last
+/// visit, the user's approval, and how its CI went.
+fn marks(pr: &PR, key: &str, t: &Tokens) -> Vec<El> {
+    let mut marks = Vec::new();
+    if pr.has_new_changes {
+        marks.push(
+            text("UPDATED")
+                .key(format!("{key}.updated"))
+                .role("status")
+                .label("Updated")
+                .help("New commits/comments since your last visit")
+                .font(type_::SECTION)
+                .color(t.accent)
+                .px(space::S1)
+                .radius(3.0)
+                .fill(t.bg_selected),
+        );
+    }
+    if pr.approved_by_me {
+        marks.push(
+            text(icon::CHECK)
+                .key(format!("{key}.approved"))
+                .role("status")
+                .label("Approved")
+                .help("You approved this PR")
+                .font(type_::LABEL)
+                .color(t.success),
+        );
+    }
+    let ci = pr
+        .ci_status
+        .as_deref()
+        .filter(|s| !s.is_empty() && *s != "none");
+    if let Some(ci) = ci {
+        let color = match ci {
+            "success" => t.success,
+            "failure" => t.error,
+            "pending" => t.warning,
+            _ => t.text_tertiary,
+        };
+        marks.push(
+            el().key(format!("{key}.ci"))
+                .role("status")
+                .label(format!("CI {ci}"))
+                .help(format!("CI {ci}"))
+                .w(6.0)
+                .h(6.0)
+                .radius(3.0)
+                .fill(color),
+        );
+    }
+    marks
+}
+
+/// Tells the daemon the user looked at the pull request, which clears its new changes.
+fn visit(state: &mut State, pr: &str) {
+    let _ = state.daemon.send(&PRVisitedMessage {
+        id: pr.to_owned(),
+        ..PRVisitedMessage::new()
+    });
+}
+
+fn mute_author(state: &mut State, author: &str) {
+    let _ = state.daemon.send(&MuteAuthorMessage {
+        author: author.to_owned(),
+        ..MuteAuthorMessage::new()
+    });
 }
 
 fn mute_repo(state: &mut State, repo: &str) {
@@ -626,7 +758,17 @@ fn pr_card(state: &State, t: &Tokens) -> El {
                 yours.len(),
                 yours
                     .iter()
-                    .map(|p| pr_row(state, p, true, format!("home.pr.{}", p.id), named(p), t))
+                    .map(|p| {
+                        pr_row(
+                            state,
+                            p,
+                            Place::Home,
+                            true,
+                            format!("home.pr.{}", p.id),
+                            named(p),
+                            t,
+                        )
+                    })
                     .collect(),
                 t,
             ));
@@ -751,6 +893,7 @@ fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
                             pr_row(
                                 state,
                                 p,
+                                Place::Home,
                                 false,
                                 format!("home.pr.{}", p.id),
                                 format!("#{}", p.number),

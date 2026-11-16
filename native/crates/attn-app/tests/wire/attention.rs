@@ -2,9 +2,10 @@ use std::time::Duration;
 
 use attn_app::Action;
 use attn_protocol::{
-    AuthorState, AuthorsUpdatedMessage, GitHubHostsUpdatedMessage, InitialStateMessage, PR,
+    AuthorState, AuthorsUpdatedMessage, CreateWorktreeResultMessage, EnsureRepoResultMessage,
+    FetchPRDetailsResultMessage, GitHubHostsUpdatedMessage, InitialStateMessage, PR,
     PRActionResultMessage, PRsUpdatedMessage, RefreshPRsResultMessage, RepoState,
-    ReposUpdatedMessage,
+    ReposUpdatedMessage, SpawnResultMessage,
 };
 use attn_testkit::{Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -582,5 +583,240 @@ fn home_leaves_out_an_empty_section_and_says_when_no_pr_needs_the_user_or_github
     assert_eq!(
         name(&world, "home.prs.empty").as_deref(),
         Some("GitHub polling is off for instance dev.")
+    );
+}
+
+#[test]
+fn opening_a_pr_from_home_marks_it_visited_so_the_daemon_clears_its_new_changes() {
+    let updated = PR {
+        approved_by_me: true,
+        has_new_changes: true,
+        ..pr("p1", 1, "reviewer", "changed since approval")
+    };
+    let mut world = start(one_desktop(vec![]), vec![updated.clone()]);
+    world.daemon.on("pr_visited", |_| ());
+    assert_eq!(
+        name(&world, "home.prs.count").as_deref(),
+        Some("1 need attention")
+    );
+
+    click(&mut world, "home.pr.p1.open");
+    let visited = world.daemon.sent_of("pr_visited");
+    assert_eq!(visited.len(), 1);
+    assert_eq!(visited[0]["id"], "p1");
+    assert_eq!(
+        world.opened_links(),
+        ["https://github.com/victorarias/attn/pull/1"]
+    );
+
+    world.daemon.emit(PRsUpdatedMessage {
+        prs: Some(vec![PR {
+            has_new_changes: false,
+            ..updated
+        }]),
+        ..PRsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        name(&world, "home.prs.count").as_deref(),
+        Some("0 need attention")
+    );
+    assert!(!has(&world, "home.pr.p1.updated"));
+}
+
+#[test]
+fn home_marks_each_pr_updated_approved_and_with_its_ci() {
+    let world = start(
+        one_desktop(vec![]),
+        vec![
+            PR {
+                has_new_changes: true,
+                ci_status: Some("failure".into()),
+                ..pr("u1", 1, "reviewer", "moved")
+            },
+            PR {
+                approved_by_me: true,
+                ci_status: Some("success".into()),
+                ..pr("a1", 2, "reviewer", "approved")
+            },
+            PR {
+                ci_status: Some("pending".into()),
+                ..pr("y1", 3, "author", "mine")
+            },
+            PR {
+                ci_status: Some("none".into()),
+                ..pr("n1", 4, "reviewer", "no ci")
+            },
+        ],
+    );
+    let marks = |id: &str| {
+        ["updated", "approved", "ci"]
+            .into_iter()
+            .filter_map(|mark| name(&world, &format!("home.pr.{id}.{mark}")))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(marks("u1"), ["Updated", "CI failure"]);
+    assert_eq!(marks("a1"), ["Approved", "CI success"]);
+    assert_eq!(marks("y1"), ["CI pending"]);
+    assert!(marks("n1").is_empty());
+    assert!(!has(&world, "attention.pr.u1.updated"));
+}
+
+#[test]
+fn home_mutes_every_pr_by_an_author_from_one_of_their_prs() {
+    let mut world = start(
+        one_desktop(vec![]),
+        vec![
+            PR {
+                author: "chatty-bot".into(),
+                ..pr("b1", 1, "reviewer", "bump a")
+            },
+            PR {
+                author: "chatty-bot".into(),
+                ..pr("b2", 2, "reviewer", "bump b")
+            },
+            pr("r1", 3, "reviewer", "real work"),
+        ],
+    );
+    world.daemon.on("mute_author", |_| ());
+    assert_eq!(
+        name(&world, "home.pr.b1.mute-author").as_deref(),
+        Some("Mute all PRs by chatty-bot")
+    );
+
+    click(&mut world, "home.pr.b1.mute-author");
+    let muted = world.daemon.sent_of("mute_author");
+    assert_eq!(muted.len(), 1);
+    assert_eq!(muted[0]["author"], "chatty-bot");
+
+    world.daemon.emit(AuthorsUpdatedMessage {
+        authors: Some(vec![AuthorState {
+            author: "chatty-bot".into(),
+            muted: true,
+        }]),
+        ..AuthorsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        home_listed(&world, "home.prs.repo.victorarias/attn"),
+        ["r1"]
+    );
+}
+
+fn with_projects(mut state: InitialStateMessage) -> InitialStateMessage {
+    state.settings = Some(
+        [(
+            "projects_directory".to_owned(),
+            "/home/me/projects/".to_owned(),
+        )]
+        .into(),
+    );
+    state
+}
+
+fn ensured(request: &attn_testkit::Request, success: bool) -> serde_json::Value {
+    message(EnsureRepoResultMessage {
+        success: Some(success),
+        error: (!success).then(|| "clone failed: no access".into()),
+        target_path: request["target_path"].as_str().map(str::to_owned),
+        ..EnsureRepoResultMessage::new()
+    })
+}
+
+#[test]
+fn a_new_worktree_session_from_home_checks_out_the_prs_branch_and_starts_the_agent_in_it() {
+    let mut world = start(
+        with_projects(one_desktop(vec![])),
+        vec![pr("r1", 10, "reviewer", "review this")],
+    );
+    world
+        .daemon
+        .on("fetch_pr_details", |r| {
+            message(FetchPRDetailsResultMessage {
+                success: true,
+                prs: Some(vec![PR {
+                    head_branch: Some("feature".into()),
+                    ..pr(r["id"].as_str().unwrap(), 10, "reviewer", "review this")
+                }]),
+                ..FetchPRDetailsResultMessage::new()
+            })
+        })
+        .on("ensure_repo", |r| ensured(r, true))
+        .on("create_worktree_from_branch", |_| {
+            message(CreateWorktreeResultMessage {
+                success: true,
+                path: Some("/home/me/projects/attn--feature".into()),
+                ..CreateWorktreeResultMessage::new()
+            })
+        })
+        .on("spawn_session", |r| {
+            message(SpawnResultMessage {
+                id: r["id"].as_str().unwrap().into(),
+                success: true,
+                ..SpawnResultMessage::new()
+            })
+        });
+    assert_eq!(
+        name(&world, "home.pr.r1.new").as_deref(),
+        Some("New worktree session")
+    );
+
+    click(&mut world, "home.pr.r1.new");
+
+    let fetched = world.daemon.sent_of("fetch_pr_details");
+    assert_eq!(fetched.len(), 1);
+    assert_eq!(fetched[0]["id"], "r1");
+    let ensured = world.daemon.sent_of("ensure_repo");
+    assert_eq!(ensured.len(), 1);
+    assert_eq!(ensured[0]["target_path"], "/home/me/projects/attn");
+    assert_eq!(
+        ensured[0]["clone_url"],
+        "https://github.com/victorarias/attn.git"
+    );
+    let created = world.daemon.sent_of("create_worktree_from_branch");
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0]["main_repo"], "/home/me/projects/attn");
+    assert_eq!(created[0]["branch"], "origin/feature");
+    let spawned = world.daemon.sent_of("spawn_session");
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0]["cwd"], "/home/me/projects/attn--feature");
+    assert_eq!(spawned[0]["label"], "attn#10");
+    assert_eq!(spawned[0]["agent"], "claude");
+    assert_eq!(spawned[0]["placement"]["desktop_id"], "d1");
+    assert!(!has(&world, "worktree-setup"));
+}
+
+#[test]
+fn a_new_worktree_session_that_cannot_sync_the_repo_says_why_and_starts_nothing() {
+    let mut world = start(
+        with_projects(one_desktop(vec![])),
+        vec![PR {
+            head_branch: Some("feature".into()),
+            ..pr("r1", 10, "reviewer", "review this")
+        }],
+    );
+    world.daemon.on("ensure_repo", |r| ensured(r, false));
+
+    click(&mut world, "home.pr.r1.new");
+
+    assert!(world.daemon.sent_of("fetch_pr_details").is_empty());
+    assert!(
+        world
+            .daemon
+            .sent_of("create_worktree_from_branch")
+            .is_empty()
+    );
+    assert!(world.daemon.sent_of("spawn_session").is_empty());
+    assert_eq!(
+        name(&world, "worktree-setup").as_deref(),
+        Some("Create failed: attn#10 failed")
+    );
+    click(&mut world, "worktree-setup");
+    let shown = name(&world, "worktree-setup.error");
+    assert!(
+        shown
+            .as_deref()
+            .is_some_and(|s| s.contains("clone failed: no access")),
+        "{shown:?}"
     );
 }

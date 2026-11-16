@@ -7,8 +7,9 @@ mod store;
 pub use clock::{Clock, ManualClock};
 pub use frame::{Frame, KittyFormat};
 pub use link::{
-    Commands, LIST_PLUGINS, Link, LinkConfig, NotConnected, Parked, REFRESH_PRS_ID, Reply,
-    ReplySink, StartDaemon, TerminalEvent, TerminalSink, Traffic, plugin_action, pr_action_id,
+    Commands, FETCH_PR_DETAILS_ID, LIST_PLUGINS, Link, LinkConfig, NotConnected, Parked,
+    REFRESH_PRS_ID, Reply, ReplySink, StartDaemon, TerminalEvent, TerminalSink, Traffic,
+    plugin_action, pr_action_id,
 };
 pub use pulse::Pulse;
 pub use store::{

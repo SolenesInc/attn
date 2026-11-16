@@ -576,17 +576,48 @@ fn ago(time: &str, now: f64) -> String {
 /// How far an agent started in a new worktree has got, shown in a corner without taking the
 /// keyboard, and opened as a dialog when it failed and the user asks.
 pub(crate) struct Setup {
-    pub(crate) branch: String,
-    pub(crate) repo: String,
+    /// What the worktree is for: its branch, or the pull request it checks out.
+    pub(crate) subject: String,
+    pub(crate) step: Step,
     pub(crate) failed: Option<String>,
     pub(crate) opened: bool,
 }
 
+pub(crate) enum Step {
+    FetchingDetails,
+    /// Cloning the repository into this folder, or fetching its remotes.
+    SyncingRepo(String),
+    /// Adding the worktree to the repository in this folder.
+    CreatingWorktree(String),
+}
+
+impl Step {
+    pub(crate) fn title(&self) -> &'static str {
+        match self {
+            Step::FetchingDetails => "Fetching branch details",
+            Step::SyncingRepo(_) => "Ensuring local repository",
+            Step::CreatingWorktree(_) => "Creating worktree",
+        }
+    }
+
+    pub(crate) fn command(&self) -> String {
+        match self {
+            Step::FetchingDetails => "from GitHub".to_owned(),
+            Step::SyncingRepo(repo) => {
+                format!("git clone or fetch · {}", super::paths::tildify(repo))
+            }
+            Step::CreatingWorktree(repo) => {
+                format!("git worktree add · {}", super::paths::tildify(repo))
+            }
+        }
+    }
+}
+
 impl Setup {
-    pub(crate) fn creating(branch: &str, repo: &str) -> Setup {
+    pub(crate) fn new(subject: &str, step: Step) -> Setup {
         Setup {
-            branch: branch.into(),
-            repo: repo.into(),
+            subject: subject.into(),
+            step,
             failed: None,
             opened: false,
         }
