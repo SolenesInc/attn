@@ -46,6 +46,7 @@ function seedTiles(desktop) {
 
 const GARDEN = { role: 'region', name: 'The garden' };
 const FULL = { role: 'dialog', name: 'The garden' };
+const DOCKED = { key: 'garden.frame-button', name: 'Expand the garden' };
 const heading = (title) => ({ key: 'garden.head.title', name: title });
 
 async function ask(query) {
@@ -113,6 +114,8 @@ try {
   await runner.step('search_finds_the_plot_in_this_profile_only', async () => {
     await driver.run('board.open');
     await driver.waitFor(GARDEN);
+    if (await driver.find(FULL)) await driver.click({ key: 'garden.frame-button' });
+    await driver.waitFor(DOCKED);
     await ask(tag);
     await driver.waitFor({ key: `garden.row.${nested.id}` });
     runner.assert(!(await driver.find({ key: `garden.row.${work.id}` })), 'another profile’s seed is not an answer');
@@ -135,7 +138,7 @@ try {
     runner.registerCleanup('dock_the_garden', async () => {
       if (!(await driver.find(GARDEN)) && !(await driver.find(FULL))) await driver.run('board.open');
       if (await driver.find(FULL)) await driver.click({ key: 'garden.frame-button' });
-      await driver.waitFor(GARDEN);
+      await driver.waitFor(DOCKED);
       await driver.pressKey('Escape');
       await driver.waitFor(GARDEN, { gone: true });
     });
@@ -145,7 +148,7 @@ try {
     await driver.waitFor({ key: `garden.row.${nested.id}` });
     await driver.screenshot(path.join(runner.runDir, 'native-garden-columns.png'));
     await driver.click({ key: 'garden.frame-button' });
-    await driver.waitFor(GARDEN);
+    await driver.waitFor(DOCKED);
     runner.assert(!(await driver.find({ key: `garden.row.${sibling.id}` })), 'the dock shows one level at a time');
   });
 

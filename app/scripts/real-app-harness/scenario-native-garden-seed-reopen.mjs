@@ -128,9 +128,8 @@ try {
 
   let handedOver;
   await runner.step('handover_gives_the_seed_to_a_new_agent', async () => {
-    await driver.run('board.open');
+    if (!(await driver.find({ role: 'region', name: 'The garden' }))) await driver.run('board.open');
     await driver.waitFor({ role: 'region', name: 'The garden' });
-    await driver.click({ key: `garden.row.${seedId}` }, { allowMiss: true });
     await driver.click({ role: 'button', name: 'Handover' });
     await driver.waitFor({ key: 'garden.handover.field' });
     await driver.typeInto({ key: 'garden.handover.field' }, HANDOFF);
