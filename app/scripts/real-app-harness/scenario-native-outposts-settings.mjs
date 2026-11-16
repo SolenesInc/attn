@@ -309,6 +309,41 @@ try {
     await shot('02-agent-online');
   });
 
+  await runner.step('remote_caller_delegation_and_terminal_defaults', async () => {
+    const remoteCallerEnv = instanceCliEnv(instance, { ...outpostEnv, ATTN_TERMINAL_ID: agent.runtime });
+    const remoteCli = async (...args) => (await run(binary, args, remoteCallerEnv)).stdout;
+    const host = observer.getSession(agent.session).host;
+    const opened = JSON.parse(await remoteCli('terminal', 'open', '--json'));
+    created.push(opened.session_id);
+    const shell = await paneOf(opened.session_id);
+    await focusTile(shell);
+    runner.assert(observer.getSession(opened.session_id)?.host === host, 'an outpost agent opens a shell on its own outpost', opened);
+    runner.assert((await named({ key: `tile.${shell.pane}.host` })) === 'Studio', 'the shell\'s tile names the outpost');
+    for (const target of ['outpost', 'home']) {
+      const cwd = path.join(fs.realpathSync(root), `delegated-${target}`);
+      writeMockAgentFixture(cwd, { minimumWorkingMs: 0, turns: [{ includes: 'Your assignment', actions: [{ type: 'reply', text: `DELEGATE_${target.toUpperCase()}_READY`, state: 'waiting_input' }] }] });
+      const args = ['delegate', '--brief', `Show the ${target} delegate`, '--cwd', cwd, '--model', 'default'];
+      if (target === 'home') args.push('--host', 'home');
+      const result = JSON.parse(await remoteCli(...args));
+      created.push(result.session_id);
+      const delegate = await paneOf(result.session_id);
+      await focusTile(delegate);
+      await screen(delegate, `DELEGATE_${target.toUpperCase()}_READY`);
+      const session = observer.getSession(result.session_id);
+      runner.assert((session.host || '') === (target === 'home' ? '' : host), `${target} delegation runs on the selected machine`, { result, session });
+      const named_host = await driver.find({ key: `tile.${delegate.pane}.host` });
+      runner.assert(target === 'home' ? !named_host : named_host?.name === 'Studio', `the ${target} delegate's tile names its machine`, named_host);
+      await shot(`02-delegate-${target}`);
+      observer.send({ cmd: 'unregister', id: result.session_id });
+      await driver.waitFor({ key: `tile.${delegate.pane}` }, { gone: true });
+      created.splice(created.indexOf(result.session_id), 1);
+    }
+    await remoteCli('terminal', 'close', opened.terminal_id);
+    await driver.waitFor({ key: `tile.${shell.pane}` }, { gone: true });
+    created.splice(created.indexOf(opened.session_id), 1);
+    await driver.waitFor({ role: 'button', name: '2 waiting' });
+  });
+
   await runner.step('stalled_agent_notice_and_recovery', async () => {
     await focusTile(agent);
     const stalled = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'stalled'));
