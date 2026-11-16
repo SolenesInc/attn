@@ -394,6 +394,7 @@ pub fn tile_window_app(size: (f32, f32)) -> rune::App<State> {
     .compositor(screen::Screens::default())
     .on_ime(keys::on_ime)
     .on_field_key(keys::on_field_key)
+    .on_modifiers(keys::on_modifiers)
     .on_focus(desktop::window_focus)
     .on_quit(desktop::tile_window_quits)
     .on_close(desktop::tile_window_closed)
