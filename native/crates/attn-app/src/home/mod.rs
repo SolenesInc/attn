@@ -25,7 +25,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
         std::sync::Arc::as_ptr(&facts.settings) as usize,
         std::sync::Arc::as_ptr(&facts.asks) as usize,
-        std::sync::Arc::as_ptr(&facts.garden) as usize,
+        (
+            std::sync::Arc::as_ptr(&facts.garden) as usize,
+            std::sync::Arc::as_ptr(&facts.outposts) as usize,
+        ),
         window.now_ms,
         window.follow_next_turn,
         window.home_snoozed_open,
@@ -400,6 +403,11 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
             .gap(space::S2)
             .items_center()
             .radius(4.0)
+            .fill(if a.agent.offline {
+                t.error.alpha(0.07)
+            } else {
+                rune::Color::TRANSPARENT
+            })
             .hover(t.bg_elevated)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
             .child(state_mark(&key, &a.agent, t))

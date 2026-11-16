@@ -8,6 +8,7 @@ use crate::action::Action;
 use crate::dispatch::{Outcome, run};
 use crate::keymap::{Focus, Keymap, Press};
 use crate::shell::{LEADER_TIMEOUT, Leader};
+use crate::terminal::Typed;
 
 /// A key the window hears: from Rune when nothing has focus, or after a focused control
 /// passed it on. A focused text field has already offered it to `on_field_key` and taken
@@ -219,7 +220,12 @@ fn is_shell_ctrl_letter(ev: &KeyEvent) -> bool {
         && matches!(ev.key, Key::Command(c) if c.is_ascii_alphabetic())
 }
 
-fn send_to_terminal(state: &mut State, terminal: Option<String>, ev: &KeyEvent, tx: &Tx) -> bool {
+fn send_to_terminal(
+    state: &mut State,
+    terminal: Option<String>,
+    ev: &KeyEvent,
+    tx: &mut Tx,
+) -> bool {
     let Some(id) = terminal else {
         return false;
     };
@@ -235,15 +241,16 @@ fn send_to_terminal(state: &mut State, terminal: Option<String>, ev: &KeyEvent, 
     if bytes.is_empty() {
         return true;
     }
-    type_into(state, &id, &bytes)
+    type_into(state, &id, &bytes, tx)
 }
 
-fn type_into(state: &mut State, terminal: &str, bytes: &[u8]) -> bool {
-    let typed = state.terminals.input(terminal, bytes, &state.daemon);
-    if typed {
-        state.window.desk.refusals.sent(terminal);
+fn type_into(state: &mut State, terminal: &str, bytes: &[u8], tx: &mut Tx) -> bool {
+    match state.terminals.input(terminal, bytes, &state.daemon) {
+        Typed::Taken => state.window.desk.refusals.sent(terminal),
+        Typed::Refused => crate::desktop::refusal::flash(state, terminal, tx),
+        Typed::Nowhere => return false,
     }
-    typed
+    true
 }
 
 /// ⌘ or Ctrl went down or up: over a link in a terminal, the cursor shows it opens.
@@ -282,7 +289,7 @@ pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
             }
             true
         }
-        Ime::Commit(text) => !text.is_empty() && type_into(state, &id, text.as_bytes()),
+        Ime::Commit(text) => !text.is_empty() && type_into(state, &id, text.as_bytes(), tx),
         Ime::Enabled | Ime::Disabled => false,
     }
 }
@@ -308,7 +315,7 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
         state.terminals.encode_paste(&id, content.text())
     };
     if let Some(bytes) = bytes {
-        type_into(state, &id, &bytes);
+        type_into(state, &id, &bytes, tx);
     }
 }
 

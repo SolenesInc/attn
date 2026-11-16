@@ -80,7 +80,7 @@ pub fn home(facts: &Facts, now_ms: i64) -> Home {
     let bands = queue_flow.then(|| queue::bands(facts, now_ms));
     let stale_ms = activity_stale_ms(facts);
     let row = |session: &Session, age: String, snoozed_until: String| HomeAgent {
-        agent: AgentRow::of(session, false),
+        agent: AgentRow::of(session, &facts.outposts, false),
         chief: session.chief_of_staff == Some(true),
         activity: activity(session, now_ms, stale_ms),
         age,

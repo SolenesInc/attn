@@ -1389,6 +1389,7 @@ fn a_remote_tile_names_its_outpost_only_in_its_header_and_its_split_opens_on_tha
         Some("studio-id"),
         "a host no outpost row names goes by its id"
     );
+    outposts(&mut world, vec![studio("studio")]);
 
     let split = match Keymap::from_setting(None, KeyPlatform::current())
         .binding(&Action::TerminalSplitVertical)
@@ -1460,7 +1461,15 @@ fn a_narrowing_header_shrinks_then_hides_its_pieces_in_order_and_never_runs_past
         usage: Some(priced(2.61)),
         ..with_pull_requests(vec![pull_request(71, "open", "2026-08-30T12:00:00Z")])
     };
-    let mut world = start_on(vec![builder], vec![alone()]);
+    let mut world = start_from(InitialStateMessage {
+        desktops: Some(vec![alone()]),
+        sessions: Some(vec![builder]),
+        outposts: Some(vec![OutpostInfo {
+            id: "gpu-box-2".into(),
+            ..studio("gpu-box-2")
+        }]),
+        ..InitialStateMessage::new()
+    });
 
     let mut steps: Vec<Fitted> = Vec::new();
     for width in (40..=1200).rev().step_by(2) {

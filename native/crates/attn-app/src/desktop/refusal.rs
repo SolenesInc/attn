@@ -93,32 +93,74 @@ impl Refusals {
         )
     }
 
-    /// The strip under `terminal` counting the keys the daemon refused, while there are any.
-    pub(crate) fn strip(&self, terminal: &str, t: &Tokens) -> Option<El> {
-        let keys = self.0.get(terminal)?.keys_not_sent;
-        let said = match keys {
-            0 => return None,
-            1 => "1 key may not have been sent".to_owned(),
-            n => format!("{n} keys may not have been sent"),
+    /// The strip under `terminal` that says what its machine is up to, that the screen is on
+    /// that machine, and how many keys the daemon refused, while any of them has something
+    /// to say.
+    pub(crate) fn strip(
+        &self,
+        terminal: &str,
+        notice: Option<String>,
+        screen_on: Option<String>,
+        t: &Tokens,
+    ) -> Option<El> {
+        let keys = self.0.get(terminal).map_or(0, |r| r.keys_not_sent);
+        let count = match keys {
+            0 => None,
+            1 => Some("1 key may not have been sent".to_owned()),
+            n => Some(format!("{n} keys may not have been sent")),
+        };
+        let screen_on = screen_on.map(|host| format!("The screen is on {host}."));
+        let said: Vec<String> = [notice.clone(), screen_on.clone(), count.clone()]
+            .into_iter()
+            .flatten()
+            .collect();
+        if said.is_empty() {
+            return None;
+        }
+        let part = |key: String, said: String| {
+            text(said.clone())
+                .key(key)
+                .label(said)
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .single_line()
+                .truncate()
         };
         Some(
             row()
-                .key(format!("tile.refused.{terminal}"))
+                .key(format!("tile.{terminal}.status"))
                 .role("status")
-                .label(said.clone())
+                .label(said.join(" "))
                 .w_full()
+                .gap(space::S3)
                 .px(space::S2)
                 .py(space::S1)
                 .fill(t.bg_panel)
-                .child(
-                    text(said)
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .single_line()
-                        .truncate(),
-                ),
+                .children(notice.map(|n| part(format!("tile.{terminal}.reach"), n)))
+                .children(screen_on.map(|n| part(format!("tile.{terminal}.screen-on"), n)))
+                .children(count.map(|n| part(format!("tile.refused.{terminal}"), n))),
         )
     }
+}
+
+/// A key typed for `terminal` that never left, since its machine is not streaming: its tile
+/// flashes, and no key counts as possibly sent.
+pub(crate) fn flash(state: &mut State, terminal: &str, tx: &mut Tx) {
+    refuse(state, terminal, 0, tx);
+}
+
+fn refuse(state: &mut State, terminal: &str, keys: u32, tx: &mut Tx) {
+    let until = tx.clock() + FLASH_SECONDS;
+    let refusal = state
+        .window
+        .desk
+        .refusals
+        .0
+        .entry(terminal.to_owned())
+        .or_default();
+    refusal.keys_not_sent += keys;
+    refusal.flashing_until = Some(until);
+    tx.wake_at(until);
 }
 
 /// A `command_error` for input or a resize sent to a terminal this window shows: its tile
@@ -138,17 +180,7 @@ pub(crate) fn receive(state: &mut State, reply: &attn_client::Reply, tx: &mut Tx
     if !state.terminals.shows(terminal) {
         return false;
     }
-    let until = tx.clock() + FLASH_SECONDS;
-    let refusal = state
-        .window
-        .desk
-        .refusals
-        .0
-        .entry(terminal.to_owned())
-        .or_default();
-    refusal.keys_not_sent += keys;
-    refusal.flashing_until = Some(until);
-    tx.wake_at(until);
+    refuse(state, terminal, keys, tx);
     true
 }
 

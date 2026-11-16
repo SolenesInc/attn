@@ -40,6 +40,16 @@ pub(crate) fn request(state: &mut State, desktop_id: &str, tx: &mut Tx) {
                 .then(|| model::display_name(session))
         })
         .collect();
+    let sessions: Vec<String> = desktop.panes.iter().map(|p| p.session_id.clone()).collect();
+    if sessions
+        .iter()
+        .any(|s| crate::outpost::refuse_offline(state, s, tx))
+    {
+        return;
+    }
+    let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == desktop_id) else {
+        return;
+    };
     if !protected.is_empty() {
         let names = protected.join(", ");
         state.window.notify(

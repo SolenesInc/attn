@@ -141,7 +141,7 @@ pub fn wanting(facts: &Facts) -> Vec<&Session> {
     let crew_in_queue = setting::on(&facts.settings, QUEUE_CREW);
     Places::of(facts)
         .agents()
-        .filter(|s| !crate::asks::offline(s, &facts.outposts))
+        .filter(|s| !crate::outpost::offline(s, &facts.outposts))
         .filter(|s| {
             if queue_flow {
                 participates(s, crew_in_queue) && s.turn_owed == Some(true)

@@ -296,7 +296,11 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
             "attention.sessions",
             "Sessions Needing Attention",
             lists.sessions.len(),
-            lists.sessions.iter().map(|s| session_row(s, t)).collect(),
+            lists
+                .sessions
+                .iter()
+                .map(|s| session_row(s, &state.facts.outposts, t))
+                .collect(),
             t,
         ));
     }
@@ -420,8 +424,8 @@ fn section(key: &str, title: &str, count: usize, rows: Vec<El>, t: &Tokens) -> E
         .children(rows)
 }
 
-fn session_row(session: &Session, t: &Tokens) -> El {
-    let agent = AgentRow::of(session, false);
+fn session_row(session: &Session, outposts: &[attn_protocol::OutpostInfo], t: &Tokens) -> El {
+    let agent = AgentRow::of(session, outposts, false);
     let key = format!("attention.session.{}", session.id);
     let id = session.id.clone();
     Button::new(agent.name.clone())

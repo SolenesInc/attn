@@ -4,7 +4,7 @@ mod view;
 use std::collections::{BTreeMap, HashMap};
 
 use attn_client::Facts;
-use attn_protocol::{Ask, AskAnswer, AskAnswerMessage, AskQuestion, OutpostInfo, Session};
+use attn_protocol::{Ask, AskAnswer, AskAnswerMessage, AskQuestion, Session};
 use rune::{TextEdit, Tx};
 
 use crate::State;
@@ -223,16 +223,6 @@ pub(crate) fn crew_display_name(id: &str) -> String {
 
 pub(crate) fn questions(ask: &Ask) -> impl Iterator<Item = &AskQuestion> {
     ask.parts.iter().filter_map(|p| p.question.as_ref())
-}
-
-/// Whether the agent runs on a machine the home cannot reach.
-pub(crate) fn offline(session: &Session, outposts: &[OutpostInfo]) -> bool {
-    session.host.as_deref().is_some_and(|host| {
-        outposts
-            .iter()
-            .find(|o| o.id == host)
-            .is_none_or(|o| o.reach == "unreachable")
-    })
 }
 
 /// Asks show while the setting is on or while any ask exists.
@@ -590,7 +580,7 @@ pub(crate) fn toggle_snooze(state: &mut State, tx: &mut Tx) {
         return;
     };
     let Some(holder) = holder(ask, &state.facts)
-        .filter(|s| !offline(s, &state.facts.outposts))
+        .filter(|s| !crate::outpost::offline(s, &state.facts.outposts))
         .cloned()
     else {
         return;

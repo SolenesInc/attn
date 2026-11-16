@@ -96,7 +96,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             d.panes
                 .iter()
                 .filter_map(|p| facts.sessions.iter().find(|s| s.id == p.session_id))
-                .map(|s| crate::sidebar::AgentRow::of(s, false))
+                .map(|s| crate::sidebar::AgentRow::of(s, &facts.outposts, false))
                 .collect()
         })
         .unwrap_or_default();
@@ -116,7 +116,11 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             desktop.map(|d| crate::review::setup::reads(facts, &d.id, state.window.now_ms)),
         ),
         desk.held_split().map(str::to_owned),
-        (super::arrival::keys(&desk.rings), desk.refusals.keys()),
+        (
+            super::arrival::keys(&desk.rings),
+            desk.refusals.keys(),
+            reaches(state, desktop),
+        ),
         facts.tile_contents.revision,
         (
             outpost_names(&facts.outposts),
@@ -315,6 +319,7 @@ fn sublines(
                         What::Seed => Piece::Seed,
                     })
                     .into_iter()
+                    .chain(crate::outpost::offline(s, &facts.outposts).then_some(Piece::Host))
                     .collect();
                 sub.levels = fit(&Row {
                     available,
@@ -821,7 +826,8 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 .iter()
                 .find(|(r, _)| *r == pane.runtime_id)
                 .map(|(runtime, reply)| super::peek::unsent_strip(runtime, reply, t));
-            let refused = cx.refusals.strip(&pane.runtime_id, t);
+            let (notice, screen_on) = reach_strip(cx, pane);
+            let refused = cx.refusals.strip(&pane.runtime_id, notice, screen_on, t);
             if unsent.is_none() && refused.is_none() {
                 slot
             } else {
@@ -1027,6 +1033,42 @@ fn tile_transition(kind: &LeafKind) -> rune::Transition {
 }
 
 /// Each outpost's id and name, which a view that names outposts reads.
+/// What a remote terminal's strip says of its machine, and the machine whose screen the tile
+/// has never shown.
+fn reach_strip(cx: &TileCx, pane: &DesktopPane) -> (Option<String>, Option<String>) {
+    let Some(session) = cx.sessions.iter().find(|s| s.id == pane.session_id) else {
+        return (None, None);
+    };
+    let notice = crate::outpost::notice(session, cx.outposts);
+    let unseen = crate::outpost::offline(session, cx.outposts)
+        && cx.terminals.away(&pane.runtime_id) == Some(false);
+    let screen_on = unseen
+        .then(|| super::host::name(session, cx.outposts))
+        .flatten();
+    (notice, screen_on)
+}
+
+/// What the tiles' strips read of their machines' reach.
+fn reaches(
+    state: &State,
+    desktop: Option<&Desktop>,
+) -> Vec<(String, Option<String>, Option<bool>)> {
+    let facts = &state.facts;
+    desktop
+        .into_iter()
+        .flat_map(|d| &d.panes)
+        .filter_map(|p| {
+            let s = facts.sessions.iter().find(|s| s.id == p.session_id)?;
+            s.host.as_ref()?;
+            Some((
+                p.runtime_id.clone(),
+                crate::outpost::notice(s, &facts.outposts),
+                state.terminals.away(&p.runtime_id),
+            ))
+        })
+        .collect()
+}
+
 fn outpost_names(outposts: &[attn_protocol::OutpostInfo]) -> Vec<(String, String)> {
     outposts
         .iter()
@@ -1076,42 +1118,45 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
             (pane.is_some() && !focused && !popped)
                 .then(|| focus_button(&key, &cx.desktop.id, &leaf.id, title, cx)),
         );
-    let headline =
-        row()
-            .w_full()
-            .h(HEADER_PX)
-            .items_center()
-            .gap(space::S2)
-            .px(space::S2)
-            .children(session.map(|s| {
-                crate::sidebar::state_mark(&key, &crate::sidebar::AgentRow::of(s, false), t)
-            }))
-            .child(
-                row()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .h_full()
-                    .items_center()
-                    .child(match &leaf.kind {
-                        LeafKind::Tile { kind, params, .. }
-                            if kind == crate::browser::KIND && !popped =>
-                        {
-                            crate::browser::address_field(
-                                cx.browsers,
-                                &browser_page(cx.desktop, leaf),
-                                params.as_deref().unwrap_or(""),
-                                t,
-                            )
-                        }
-                        _ => text(title.to_owned())
-                            .font(type_::LABEL)
-                            .color(look.title(t))
-                            .single_line()
-                            .truncate()
-                            .grow(1.0),
-                    })
-                    .child(actions),
-            );
+    let headline = row()
+        .w_full()
+        .h(HEADER_PX)
+        .items_center()
+        .gap(space::S2)
+        .px(space::S2)
+        .children(session.map(|s| {
+            crate::sidebar::state_mark(
+                &key,
+                &crate::sidebar::AgentRow::of(s, cx.outposts, false),
+                t,
+            )
+        }))
+        .child(
+            row()
+                .grow(1.0)
+                .min_w(0.0)
+                .h_full()
+                .items_center()
+                .child(match &leaf.kind {
+                    LeafKind::Tile { kind, params, .. }
+                        if kind == crate::browser::KIND && !popped =>
+                    {
+                        crate::browser::address_field(
+                            cx.browsers,
+                            &browser_page(cx.desktop, leaf),
+                            params.as_deref().unwrap_or(""),
+                            t,
+                        )
+                    }
+                    _ => text(title.to_owned())
+                        .font(type_::LABEL)
+                        .color(look.title(t))
+                        .single_line()
+                        .truncate()
+                        .grow(1.0),
+                })
+                .child(actions),
+        );
     let sub = cx
         .sublines
         .iter()

@@ -12,7 +12,7 @@ mod filter_panel;
 mod find_bar;
 mod fit;
 pub(crate) mod header_pop;
-mod host;
+pub(crate) mod host;
 pub mod layout;
 mod overview;
 mod peek;

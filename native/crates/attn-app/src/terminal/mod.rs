@@ -86,6 +86,16 @@ impl TerminalInbox {
     }
 }
 
+/// What became of what the person typed for a terminal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Typed {
+    /// Sent, or held until the terminal attaches.
+    Taken,
+    /// Refused here, since the terminal's machine is not streaming.
+    Refused,
+    Nowhere,
+}
+
 /// The terminals the window draws, each attached to its PTY while its tile is drawn.
 #[derive(Default)]
 pub struct Terminals {
@@ -153,6 +163,9 @@ struct Term {
     synchronizing_since: Option<f64>,
     /// An agent terminal's annotations, once its session is known.
     marking: Option<annotating::Marking>,
+    /// Its machine has streamed to this tile since the tile was drawn, so its screen is one
+    /// the tile has shown.
+    reached: bool,
 }
 
 #[derive(Debug)]
@@ -196,6 +209,9 @@ enum Phase {
         attaching: Attaching,
     },
     Live,
+    /// Its machine is unreachable or still connecting: the screen stays as it was left, typing
+    /// is refused and nothing streams until the machine is back.
+    Away,
     /// The process ended, or the attach failed: the screen stays as it was left.
     Stopped,
 }
@@ -235,6 +251,7 @@ impl Term {
             scrolled_back: 0,
             synchronizing_since: None,
             marking: None,
+            reached: false,
         }
     }
 }
@@ -255,7 +272,7 @@ impl Terminals {
     ) {
         self.follow_connection(facts, daemon);
         self.undrawn = true;
-        let drawn: Vec<(String, Option<String>, bool, links::Place)> = facts
+        let drawn: Vec<(String, Option<String>, bool, links::Place, bool)> = facts
             .current_desktop()
             .into_iter()
             .flat_map(|desktop| &desktop.panes)
@@ -273,7 +290,9 @@ impl Terminals {
                         .filter(|h| !h.is_empty()),
                 };
                 let agent = (pane.kind == "agent").then(|| pane.session_id.clone());
-                (pane.runtime_id.clone(), agent, recoverable, place)
+                let streams =
+                    crate::outpost::reach(place.outpost.as_deref(), &facts.outposts).streams();
+                (pane.runtime_id.clone(), agent, recoverable, place, streams)
             })
             .collect();
         let gone: Vec<String> = self
@@ -302,12 +321,27 @@ impl Terminals {
                 });
             }
         }
-        for (id, agent, recoverable, place) in drawn {
+        for (id, agent, recoverable, place, streams) in drawn {
             let term = self
                 .panes
-                .entry(id)
+                .entry(id.clone())
                 .or_insert_with(|| Term::new(agent.is_some(), &self.theme));
             term.recoverable = recoverable;
+            term.reached |= streams;
+            match (streams, term.phase) {
+                (true, Phase::Away) => term.phase = Phase::Waiting,
+                (false, Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live) => {
+                    if self.connected {
+                        let _ = daemon.send(&DetachSessionMessage {
+                            id,
+                            ..DetachSessionMessage::new()
+                        });
+                    }
+                    Terminals::go_away(term);
+                }
+                (false, Phase::Waiting) => Terminals::go_away(term),
+                _ => {}
+            }
             term.place = place;
             let session = agent.filter(|s| !s.is_empty());
             if term.marking.as_ref().map(|m| &m.session) != session.as_ref() {
@@ -419,7 +453,7 @@ impl Terminals {
             Phase::Attaching(attaching) | Phase::Retrying { attaching, .. } => {
                 attaching.relaid = true;
             }
-            Phase::Stopped => {}
+            Phase::Away | Phase::Stopped => {}
         }
     }
 
@@ -452,6 +486,20 @@ impl Terminals {
             };
             send_attach(id, term, attaching, daemon);
         }
+    }
+
+    /// The machine is not streaming: whatever was typed for it is dropped, never replayed.
+    fn go_away(term: &mut Term) {
+        term.phase = Phase::Away;
+        term.held.clear();
+        term.sent_size = None;
+        term.resize_due = None;
+    }
+
+    /// Whether terminal `id` waits for its machine, and whether the tile has shown its screen.
+    pub(crate) fn away(&self, id: &str) -> Option<bool> {
+        let term = self.panes.get(id)?;
+        (term.phase == Phase::Away).then_some(term.reached)
     }
 
     /// What the terminals have to tell the person, once.
@@ -527,7 +575,11 @@ impl Terminals {
                 seq,
                 data,
             }) => {
-                let Some(term) = self.panes.get_mut(&terminal) else {
+                let Some(term) = self
+                    .panes
+                    .get_mut(&terminal)
+                    .filter(|t| t.phase != Phase::Away)
+                else {
                     return;
                 };
                 if let Output::Write(bytes) = term.stream.receive(Chunk { seq, data }) {
@@ -599,7 +651,7 @@ impl Terminals {
 
     /// The daemon replaced the terminal's stream: start the screen over from a new attach.
     fn restart(&mut self, id: &str, policy: Option<Policy>, now: f64, daemon: &Commands) {
-        let Some(term) = self.panes.get_mut(id) else {
+        let Some(term) = self.panes.get_mut(id).filter(|t| t.phase != Phase::Away) else {
             return;
         };
         let streaming = matches!(term.phase, Phase::Attaching(_) | Phase::Live);
@@ -775,18 +827,19 @@ impl Terminals {
     }
 
     /// Sends what the user typed or pasted to the terminal, held while it attaches.
-    pub(crate) fn input(&mut self, id: &str, data: &[u8], daemon: &Commands) -> bool {
+    pub(crate) fn input(&mut self, id: &str, data: &[u8], daemon: &Commands) -> Typed {
         let Some(term) = self.panes.get_mut(id) else {
-            return false;
+            return Typed::Nowhere;
         };
         match term.phase {
             Phase::Live => send_input(id, data, "user", daemon),
             Phase::Waiting | Phase::Attaching(_) | Phase::Retrying { .. } => {
                 term.held.push(data.to_vec())
             }
+            Phase::Away => return Typed::Refused,
             Phase::Stopped => {}
         }
-        true
+        Typed::Taken
     }
 
     pub(crate) fn encode_key(&mut self, id: &str, key: &KeyInput) -> Option<Vec<u8>> {
@@ -825,7 +878,7 @@ impl Terminals {
             });
         }
         let modes = term.vt.mouse_modes();
-        let Some(cell) = cell_at(term, &metrics, at) else {
+        let Some(cell) = cell_at(term, &metrics, at).filter(|_| term.phase != Phase::Away) else {
             return pointing;
         };
         if !modes.tracking || !mouse::reports_move(modes, term.pointer.reported, held) {
@@ -862,7 +915,9 @@ impl Terminals {
             return false;
         }
         let modes = term.vt.mouse_modes();
-        let Some(cell) = cell_at(term, &metrics, at).filter(|_| modes.tracking) else {
+        let Some(cell) =
+            cell_at(term, &metrics, at).filter(|_| modes.tracking && term.phase != Phase::Away)
+        else {
             return false;
         };
         let report = mouse::report(Action::Press, Some(button), cell, modes.sgr, mods);
@@ -905,7 +960,7 @@ impl Terminals {
             }
             return true;
         }
-        if lines != 0 {
+        if lines != 0 && term.phase != Phase::Away {
             Terminals::anchor_selection(term);
             let cell = cell_at(term, &metrics, at).unwrap_or((0, 0));
             let source = if modes.tracking { "pointer" } else { "user" };
@@ -1104,7 +1159,7 @@ fn cell_at(term: &mut Term, metrics: &Metrics, at: (f32, f32)) -> Option<(u16, u
 /// Sends the release a program is owed for the press it heard, at `cell` or where it last
 /// heard the pointer.
 fn release(id: &str, term: &mut Term, cell: Option<(u16, u16)>, mods: u8, daemon: &Commands) {
-    if term.pointer.reported.take().is_none() {
+    if term.pointer.reported.take().is_none() || term.phase == Phase::Away {
         return;
     }
     let Some(cell) = cell.or(term.pointer.cell.take()) else {

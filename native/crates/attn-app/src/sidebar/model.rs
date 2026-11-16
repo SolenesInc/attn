@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use attn_client::Facts;
-use attn_protocol::{Desktop, Session};
+use attn_protocol::{Desktop, OutpostInfo, Session};
 use serde_json::Value;
 
 /// Desktops 1 to 9 have their own shortcut slot; the rest number on from 10.
@@ -76,6 +76,8 @@ pub struct AgentRow {
     pub unknown_because: Option<&'static str>,
     pub run: Option<crate::desktop::provenance::Run>,
     pub settle_run: bool,
+    /// Its machine is unreachable.
+    pub offline: bool,
 }
 
 /// The daemon's auto-settle countdown, as a row whose tile is not on screen shows it.
@@ -109,7 +111,7 @@ impl AgentRow {
         }
     }
 
-    pub fn of(session: &Session, selected: bool) -> AgentRow {
+    pub fn of(session: &Session, outposts: &[OutpostInfo], selected: bool) -> AgentRow {
         AgentRow {
             id: session.id.clone(),
             name: display_name(session),
@@ -125,6 +127,7 @@ impl AgentRow {
             delegated: session.delegated_from_chief == Some(true),
             run: crate::desktop::provenance::run(session),
             settle_run: session.automation.is_some() && session.turn_owed == Some(true),
+            offline: crate::outpost::offline(session, outposts),
             unknown_because: (session.state == "unknown")
                 .then(|| unknown_reason(session.state_reason.as_deref()))
                 .flatten(),
@@ -143,8 +146,12 @@ impl AgentRow {
         self
     }
 
-    /// What the state mark says to a screen reader: "Claude · working".
+    /// What the state mark says to a screen reader: "Claude · working", or "offline" while
+    /// its machine is unreachable.
     pub fn lead(&self) -> String {
+        if self.offline {
+            return "offline".into();
+        }
         format!(
             "{} · {}",
             self.harness,
@@ -628,7 +635,7 @@ fn agent_line(
     on_screen: &[String],
 ) -> Line {
     let selected = shown && active == Some(session.id.as_str());
-    let row = AgentRow::of(session, selected).asking(facts, session);
+    let row = AgentRow::of(session, &facts.outposts, selected).asking(facts, session);
     Line::Agent {
         desktop: desktop.id.clone(),
         row: if on_screen.contains(&session.id) {

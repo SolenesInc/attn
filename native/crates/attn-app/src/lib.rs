@@ -28,6 +28,7 @@ mod migration_gate;
 mod notebook;
 mod notifications;
 mod opener;
+mod outpost;
 mod palette;
 mod picker;
 mod profile_switcher;

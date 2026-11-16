@@ -556,6 +556,16 @@ pub(super) fn split_at(
     direction: Direction,
     tx: &mut Tx,
 ) {
+    let session = state
+        .facts
+        .desktops
+        .iter()
+        .find(|d| d.id == desktop)
+        .and_then(|d| super::view::pane_of(d, leaf))
+        .map(|p| p.session_id.clone());
+    if session.is_some_and(|s| crate::outpost::refuse_offline(state, &s, tx)) {
+        return;
+    }
     let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == desktop) else {
         return;
     };
@@ -705,6 +715,12 @@ fn close(state: &mut State, tx: &mut Tx) {
     match kind {
         LeafKind::Tile { .. } => remove_tile(state, desktop_id, leaf_id, tx),
         LeafKind::Pane => {
+            if session
+                .as_deref()
+                .is_some_and(|s| crate::outpost::refuse_offline(state, s, tx))
+            {
+                return;
+            }
             state.act(
                 |request_id| DesktopCloseTileMessage {
                     request_id,

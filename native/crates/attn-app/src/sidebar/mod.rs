@@ -195,6 +195,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         facts.tile_contents.revision,
         std::sync::Arc::as_ptr(&facts.asks) as usize,
         std::sync::Arc::as_ptr(&facts.garden) as usize,
+        std::sync::Arc::as_ptr(&facts.outposts) as usize,
         home,
         on_screen.clone(),
         width::of(state).to_bits(),
@@ -518,11 +519,7 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
         .pl(space::S3)
         .pr(space::S1)
         .radius(4.0)
-        .fill(if agent.selected {
-            t.bg_selected
-        } else {
-            t.bg_panel
-        })
+        .fill(row_fill(agent, t))
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
         .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
@@ -736,8 +733,18 @@ pub(crate) fn logos(state: &State) -> bool {
     crate::setting::on(&state.facts.settings, HARNESS_LOGOS)
 }
 
+/// An agent row's ground, tinted while its machine is unreachable.
+pub(crate) fn row_fill(agent: &AgentRow, t: &Tokens) -> rune::Color {
+    match (agent.offline, agent.selected) {
+        (true, false) => t.error.alpha(0.07),
+        (true, true) => t.error.alpha(0.12),
+        (false, true) => t.bg_selected,
+        (false, false) => t.bg_panel,
+    }
+}
+
 pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
-    if !logos || agent.state == AgentState::Launching {
+    if !logos || agent.state == AgentState::Launching || agent.offline {
         return state_mark(row_key, agent, t);
     }
     rune::icon(harness_icon::of(&agent.harness), 14.0)
@@ -750,14 +757,25 @@ pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> 
 
 /// The dot in each agent's colour of state, as the Tauri app's `.session-lead[data-state]`.
 pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
-    el().key(format!("{row_key}.state"))
+    let mark = el()
+        .key(format!("{row_key}.state"))
         .role("img")
         .label(agent.lead())
         .a11y_value(agent.state.wire())
         .w(8.0)
         .h(8.0)
-        .radius(4.0)
-        .fill(state_color(agent.state, t))
+        .radius(4.0);
+    if !agent.offline {
+        return mark.fill(state_color(agent.state, t));
+    }
+    mark.border(2.0, state_color(agent.state, t)).child(
+        el().absolute(-2.0, 3.25)
+            .w(12.0)
+            .h(1.5)
+            .fill(t.text_secondary)
+            .rotate(-std::f32::consts::FRAC_PI_4)
+            .inert(),
+    )
 }
 
 pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {

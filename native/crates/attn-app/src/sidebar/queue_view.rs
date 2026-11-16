@@ -137,6 +137,7 @@ fn agent(
         agent: {
             let row = AgentRow::of(
                 session,
+                &state.facts.outposts,
                 state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
             )
             .asking(&state.facts, session);
@@ -294,6 +295,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             std::sync::Arc::as_ptr(&facts.settings) as usize,
             std::sync::Arc::as_ptr(&facts.asks) as usize,
             std::sync::Arc::as_ptr(&facts.garden) as usize,
+            std::sync::Arc::as_ptr(&facts.outposts) as usize,
         ),
         window.view,
         window.agent_list_open,
@@ -588,11 +590,7 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
         .px(space::S1)
         .radius(4.0)
         .focus_selected(cursor)
-        .fill(if a.agent.selected {
-            t.bg_selected
-        } else {
-            t.bg_panel
-        })
+        .fill(super::row_fill(&a.agent, t))
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
         .child(lead(&key, &a.agent, logos, t))

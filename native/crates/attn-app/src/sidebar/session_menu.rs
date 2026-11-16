@@ -66,6 +66,9 @@ fn reload(state: &mut State, tx: &mut Tx) {
 }
 
 pub(crate) fn reload_session(state: &mut State, session: &str, tx: &mut Tx) {
+    if crate::outpost::refuse_offline(state, session, tx) {
+        return;
+    }
     let (cols, rows) = state
         .terminals
         .size(session)
@@ -92,6 +95,9 @@ fn close(state: &mut State, tx: &mut Tx) {
     let Some(session) = target(state) else {
         return;
     };
+    if crate::outpost::refuse_offline(state, &session.id, tx) {
+        return;
+    }
     if let Some(member) = session.crew_member.as_deref().filter(|m| !m.is_empty()) {
         let name = session.crew_member_name.as_deref().unwrap_or(member);
         state.window.notify(

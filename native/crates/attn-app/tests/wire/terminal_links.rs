@@ -51,7 +51,8 @@ fn opened(world: &mut World) -> Vec<String> {
     world.opened_links()
 }
 
-/// A terminal whose session works in `directory`, on an outpost when `host` names one.
+/// A terminal whose session works in `directory`, on a reachable outpost when `host` names
+/// one.
 fn in_directory(directory: &str, host: Option<&str>) -> Daemon {
     let mut state = showing(
         vec![attn_protocol::DesktopPane {
@@ -66,6 +67,17 @@ fn in_directory(directory: &str, host: Option<&str>) -> Daemon {
         host: host.map(str::to_owned),
         ..Session::default()
     }]);
+    state.outposts = Some(
+        host.into_iter()
+            .map(|id| attn_protocol::OutpostInfo {
+                id: id.into(),
+                name: id.into(),
+                state: "connected".into(),
+                reach: "reachable".into(),
+                ..attn_protocol::OutpostInfo::default()
+            })
+            .collect(),
+    );
     Daemon::scripted().state(state)
 }
 

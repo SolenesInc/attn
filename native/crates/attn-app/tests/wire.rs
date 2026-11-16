@@ -29,6 +29,7 @@ mod wire {
     mod queue;
     mod quick_capture;
     mod reach;
+    mod remote_shell;
     mod review;
     mod settings;
     mod shelf_drags;

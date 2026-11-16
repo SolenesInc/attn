@@ -313,7 +313,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
     let prose = Prose::of(state, ask, t);
     let snoozable = item
         .holder
-        .filter(|s| !super::offline(s, &state.facts.outposts));
+        .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
     let snoozed = snoozable
         .is_some_and(|s| queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms));
     let from = row()
@@ -323,7 +323,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .children(item.holder.map(|s| {
             crate::sidebar::lead(
                 "asks.from",
-                &crate::sidebar::AgentRow::of(s, false),
+                &crate::sidebar::AgentRow::of(s, &state.facts.outposts, false),
                 crate::sidebar::logos(state),
                 t,
             )
@@ -768,7 +768,7 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
     let ask = item.ask;
     let snoozable = item
         .holder
-        .filter(|s| !super::offline(s, &state.facts.outposts));
+        .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
     let snoozed = snoozable
         .is_some_and(|s| queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms));
     let mut hints = Vec::new();

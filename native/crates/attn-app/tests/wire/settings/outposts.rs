@@ -298,6 +298,64 @@ fn remove_asks_to_confirm_closing_the_outposts_terminals_and_cancel_keeps_it() {
 }
 
 #[test]
+fn remove_counts_the_outposts_terminals_in_every_profile_and_keeps_the_keyboard_through_cancel() {
+    let remote = |id: &str, profile: &str| Session {
+        id: id.into(),
+        label: id.into(),
+        agent: "shell".into(),
+        state: "idle".into(),
+        profile_id: profile.into(),
+        host: Some("outpost-1".into()),
+        ..Session::default()
+    };
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        sessions: Some(vec![
+            remote("remote", "work"),
+            remote("other", "other-profile"),
+            Session {
+                host: None,
+                ..remote("local", "work")
+            },
+        ]),
+        ..initial(vec![studio()])
+    });
+    daemon.on("remove_outpost", |_| ());
+    let mut world = World::start(daemon);
+    on_outposts(&mut world);
+    let focused = |world: &World| world.screen().focused().and_then(|n| n.key);
+    let tab_and_press = |world: &mut World, key: String| {
+        let mut seen = Vec::new();
+        while focused(world).as_ref() != Some(&key) {
+            assert!(!seen.contains(&focused(world)), "Tab never reaches {key}");
+            seen.push(focused(world));
+            press(world, Key::Tab);
+        }
+        click(world, &key);
+    };
+
+    tab_and_press(&mut world, part("remove"));
+    assert!(world.daemon.sent_of("remove_outpost").is_empty());
+    assert_eq!(
+        named(&world, &part("remove")).as_deref(),
+        Some("Remove and close 2 terminals")
+    );
+    assert_eq!(focused(&world), Some(part("remove")));
+    assert!(
+        !shows(&world, &part("remove-note")),
+        "a connected outpost stops its own shells"
+    );
+
+    tab_and_press(&mut world, part("cancel"));
+    assert_eq!(named(&world, &part("remove")).as_deref(), Some("Remove"));
+    assert_eq!(focused(&world), Some(part("remove")));
+    assert!(world.daemon.sent_of("remove_outpost").is_empty());
+
+    click(&mut world, &part("remove"));
+    click(&mut world, &part("remove"));
+    assert_eq!(sent(&world, "remove_outpost"), [json!({"id": "outpost-1"})]);
+}
+
+#[test]
 fn update_without_it_leaves_out_only_that_failed_outpost() {
     let laptop = OutpostInfo {
         id: "outpost-2".into(),
