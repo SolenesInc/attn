@@ -1,12 +1,12 @@
 use attn_term::keys;
-use rune::{ClipboardContent, Ime, Key, KeyEvent, KeyPlatform, Mods, Tx};
+use rune::{Chord, ClipboardContent, Ime, Key, KeyEvent, KeyPlatform, Mods, Tx};
 
 use attn_protocol::RecordAnalyticsMessage;
 
 use crate::State;
 use crate::action::Action;
 use crate::dispatch::{Outcome, run};
-use crate::keymap::{Focus, Press};
+use crate::keymap::{Focus, Keymap, Press};
 use crate::shell::{LEADER_TIMEOUT, Leader};
 
 /// A key the window hears: from Rune when nothing has focus, or after a focused control
@@ -24,18 +24,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if modal(state) {
         return bound(state, ev, tx);
     }
-    if let Some(leader) = state.window.leader.take().filter(|l| tx.clock() < l.until) {
-        if ev.key == Key::Escape {
-            return true;
-        }
-        if let Some(action) = state.keymap.then(ev, tx, &leader.sequences) {
+    if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
+        if let Some(action) = second {
             run_shortcut(state, action, tx);
-        } else if tx.key_repeat() || state.keymap.matches(&leader.chord, ev, tx) {
-            state.window.leader = Some(Leader {
-                until: tx.clock() + LEADER_TIMEOUT,
-                ..leader
-            });
-            tx.wake_at(tx.clock() + LEADER_TIMEOUT);
         }
         return true;
     }
@@ -103,16 +94,46 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         Press::Unbound => send_to_terminal(state, terminal, ev, tx),
         Press::Leader { chord, sequences } => {
-            let until = tx.clock() + LEADER_TIMEOUT;
-            state.window.leader = Some(Leader {
-                chord,
-                sequences,
-                until,
-            });
-            tx.wake_at(until);
+            start_leader(&mut state.window.leader, chord, sequences, tx);
             true
         }
     }
+}
+
+/// Waits for the second key of the sequences `chord` leads.
+pub(crate) fn start_leader(
+    pending: &mut Option<Leader>,
+    chord: Chord,
+    sequences: Vec<(Action, Chord)>,
+    tx: &mut Tx,
+) {
+    let until = tx.clock() + LEADER_TIMEOUT;
+    *pending = Some(Leader {
+        chord,
+        sequences,
+        until,
+    });
+    tx.wake_at(until);
+}
+
+/// The key after a leader still waiting in `pending`, which takes it: the action of the
+/// sequence it completes, if any. Escape drops the leader; the leader again, or a held key,
+/// keeps it waiting. `None` when no leader waits.
+pub(crate) fn follow_leader(
+    pending: &mut Option<Leader>,
+    keymap: &Keymap,
+    ev: &KeyEvent,
+    tx: &mut Tx,
+) -> Option<Option<Action>> {
+    let leader = pending.take().filter(|l| tx.clock() < l.until)?;
+    if ev.key == Key::Escape {
+        return Some(None);
+    }
+    let action = keymap.then(ev, tx, &leader.sequences);
+    if action.is_none() && (tx.key_repeat() || keymap.matches(&leader.chord, ev, tx)) {
+        start_leader(pending, leader.chord, leader.sequences, tx);
+    }
+    Some(action)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

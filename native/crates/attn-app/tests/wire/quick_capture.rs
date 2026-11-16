@@ -1816,6 +1816,44 @@ fn the_panel_sizes_its_text_with_the_app() {
     rest(&mut world);
 }
 
+#[test]
+fn a_text_size_key_bound_to_a_sequence_sizes_the_panel_on_its_second_key() {
+    let keybindings = r#"{"version":1,"overrides":{"ui.increaseFontSize":{"leader":{"key":"g","meta":true},"then":{"key":"e"}}}}"#;
+    let (daemon, _) = home();
+    let mut state = state(PROFILE);
+    state.settings = Some([("keybindings_config".to_owned(), keybindings.to_owned())].into());
+    let daemon = daemon.state(state);
+    keeping_settings(&daemon, &[("keybindings_config", keybindings)]);
+    let keymap = attn_app::Keymap::from_setting(Some(keybindings), rune::KeyPlatform::current());
+    let Some(attn_app::Binding::Sequence { leader, then }) =
+        keymap.binding(&Action::UiIncreaseFontSize)
+    else {
+        panic!("the rebind is a sequence");
+    };
+    let mut world = World::start(daemon);
+    open(&mut world);
+    world.capture_gesture(|d| d.click(Target::role("button").name("Recent messages")));
+    let scales = |world: &World| -> Vec<String> {
+        world
+            .daemon
+            .sent_of("set_setting")
+            .iter()
+            .filter(|r| r["key"] == "uiScale")
+            .map(|r| r["value"].as_str().unwrap().to_owned())
+            .collect()
+    };
+
+    world.capture_gesture(|d| d.key(attn_testkit::key_event(&leader)));
+    assert!(scales(&world).is_empty(), "the leader alone waits");
+    world.capture_gesture(|d| d.key(attn_testkit::key_event(&then)));
+    assert_eq!(scales(&world), ["1.1"]);
+    assert!(
+        world.capture_shown(),
+        "the leader's keys leave the panel open"
+    );
+    rest(&mut world);
+}
+
 fn capture_state(world: &mut World, expect: Value) -> Result<Value, String> {
     world.capture_automate("state", json!({"of": "capture", "expect": expect}))
 }

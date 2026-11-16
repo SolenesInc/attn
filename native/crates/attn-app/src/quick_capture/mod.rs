@@ -167,6 +167,7 @@ pub struct Panel {
     epoch_ms: i64,
     /// The user's calendar day when the panel last drew.
     pub(crate) today: i64,
+    leader: Option<crate::shell::Leader>,
 }
 
 const READS: Slices = Slices::CONNECTION
@@ -773,30 +774,58 @@ fn on_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
     false
 }
 
-/// The app's text size keys, which size the panel with the app.
+/// The app's text size keys, which size the panel with the app, read by the app's keymap: a
+/// sequence's leader waits for its second key, and a text field never starts one.
 fn text_size(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    use crate::action::Action;
-    use crate::keymap::{self, Binding, Keymap};
+    use crate::keymap::{self, Focus, Keymap, Press};
+    use crate::keys::{follow_leader, start_leader};
     let setting = panel
         .facts
         .settings
         .get(keymap::SETTING)
         .map(String::as_str);
     let keymap = Keymap::from_setting(setting, rune::KeyPlatform::current());
-    let pressed = [
-        Action::UiIncreaseFontSize,
-        Action::UiDecreaseFontSize,
-        Action::UiResetFontSize,
-    ]
-    .into_iter()
-    .find(|action| {
-        matches!(keymap.binding(action), Some(Binding::Chord(chord)) if keymap.matches(&chord, ev, tx))
-    });
-    let Some(action) = pressed else {
-        return false;
+    if let Some(second) = follow_leader(&mut panel.leader, &keymap, ev, tx) {
+        if let Some(action) = second {
+            size_text(panel, &action);
+        }
+        return true;
+    }
+    let focus = Focus {
+        field: tx.in_text_field(),
+        ..Focus::default()
     };
-    if let Some(message) =
-        crate::settings::appearance::ui_scale_step(&panel.facts.settings, &action)
+    match keymap.press(ev, tx, focus) {
+        Press::Action(action) => size_text(panel, &action),
+        Press::Leader { chord, sequences } => {
+            let sequences: Vec<_> = sequences
+                .into_iter()
+                .filter(|(action, _)| sizes_text(action))
+                .collect();
+            if sequences.is_empty() {
+                return false;
+            }
+            start_leader(&mut panel.leader, chord, sequences, tx);
+            true
+        }
+        Press::Unbound => false,
+    }
+}
+
+fn sizes_text(action: &crate::action::Action) -> bool {
+    use crate::action::Action;
+    matches!(
+        action,
+        Action::UiIncreaseFontSize | Action::UiDecreaseFontSize | Action::UiResetFontSize
+    )
+}
+
+/// Whether `action` sized the text.
+fn size_text(panel: &Panel, action: &crate::action::Action) -> bool {
+    if !sizes_text(action) {
+        return false;
+    }
+    if let Some(message) = crate::settings::appearance::ui_scale_step(&panel.facts.settings, action)
     {
         let _ = panel.daemon.send(&message);
     }
@@ -857,6 +886,7 @@ fn answer(panel: &mut Panel, tx: &mut Tx) -> bool {
 fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
     let today = crate::calendar::local_day(panel.epoch_ms + (now * 1000.0) as i64);
     let mut changed = std::mem::replace(&mut panel.today, today) != today;
+    panel.leader.take_if(|l| now >= l.until);
     changed |= answer(panel, tx);
     if panel.save.is_some_and(|due| now >= due.at) {
         panel.flush();
