@@ -437,7 +437,7 @@ export const scenarioCatalog = [
   {
     id: 'native-garden-seed-authorization',
     runnerId: 'NATIVE-GARDEN-SEED-AUTHORIZATION',
-    label: 'The user sets and clears a tended seed’s authorization from the keyboard in its seed tile, and the tending agent is typed each change',
+    label: 'The user sets and clears a tended seed’s authorization in its seed tile with Shift+Enter, Enter and Escape, and the tending agent is typed each change',
     command: ['node', 'scripts/real-app-harness/scenario-native-garden-seed-authorization.mjs'],
     app: 'native',
   },

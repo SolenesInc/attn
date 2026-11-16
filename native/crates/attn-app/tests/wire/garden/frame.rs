@@ -115,33 +115,35 @@ fn keeps_the_chosen_fullscreen_view_through_dismissal_the_dock_and_a_relaunch() 
 }
 
 #[test]
-fn a_long_plot_title_in_the_docked_trail_leaves_the_frame_and_close_buttons_clear() {
-    let long = "Walk drive native-garden-walk-2026-11-16T15-50-15-863Z with a title that runs on";
+fn a_long_plot_title_in_the_docked_trail_leaves_the_frame_button_clear() {
+    let long = "A plot whose title runs on well past what the docked garden can show in one line";
+    let inner = "An inner plot whose title also runs on past what the docked garden can show";
     let mut world = open_garden(vec![
         plot("s-crown1", long, ""),
-        plot(
-            "s-inner1",
-            "Inner plot with a long title of its own as well",
-            "s-crown1",
-        ),
+        plot("s-inner1", inner, "s-crown1"),
         part_of("s-inner1", "s-leaf11", "the actual work"),
     ]);
     open_row(&mut world, long);
-    open_row(
-        &mut world,
-        "Inner plot with a long title of its own as well",
-    );
+    open_row(&mut world, inner);
 
+    ends_before_the_frame_button(&world, "garden.trail.1");
+    world.gesture(|app| {
+        app.click(Target::key("garden.search.field"));
+        app.type_text("work");
+    });
+    ends_before_the_frame_button(&world, "garden.trail.here");
+    assert!(rests(&mut world));
+}
+
+fn ends_before_the_frame_button(world: &World, crumb: &str) {
     let screen = world.screen();
     let [frame_x, ..] = screen.bounds(Target::key("garden.frame-button")).unwrap();
-    let [crumb_x, _, crumb_w, _] = screen.bounds(Target::key("garden.trail.1")).unwrap();
+    let [x, _, w, _] = screen
+        .bounds(Target::key(crumb))
+        .unwrap_or_else(|| panic!("{crumb} is on screen"));
     assert!(
-        crumb_x + crumb_w <= frame_x,
-        "the plot's crumb ends at {} and the frame button starts at {frame_x}",
-        crumb_x + crumb_w
+        x + w <= frame_x,
+        "{crumb} ends at {} and the frame button starts at {frame_x}",
+        x + w
     );
-
-    click(&mut world, "Expand the garden");
-    assert_eq!(shown(&world), "full");
-    assert!(rests(&mut world));
 }

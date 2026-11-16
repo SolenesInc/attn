@@ -14,7 +14,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-GARDEN-SEED-AUTHORIZATION', tier: 'tier2-local-mock-agent', prefix: 'native-garden-seed-authorization',
-  metadata: { focus: 'The user sets and clears a tended seed’s authorization from the keyboard in its native seed tile, and the tending agent is typed each change' },
+  metadata: { focus: 'The user sets and clears a tended seed’s authorization in its native seed tile, writing the words with Shift+Enter, Enter and Escape, and the tending agent is typed each change' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -114,6 +114,7 @@ try {
     const stored = JSON.parse(attn('seed', 'show', seedId, '--json')).seed.authorization;
     runner.assert(stored?.text === 'You may land on main.\nAsk me before releasing.', 'the daemon keeps both lines', stored);
     await typedInto(agent, `The user changed the authorization for seed ${seedId}`);
+    await typedInto(agent, 'You may land on main.');
     await driver.screenshot(path.join(runner.runDir, 'native-authorization-set.png'));
     runner.writeText('seed-show-after-set.txt', attn('seed', 'show', seedId));
   });

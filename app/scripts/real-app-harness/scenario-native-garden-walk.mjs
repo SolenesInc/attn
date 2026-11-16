@@ -104,8 +104,8 @@ try {
     sibling.id = plant(home, sibling.title, plot.id);
     elsewhere = (await observer.profileCommand('profile_create', { name: `Garden walk ${tag}` })).profile;
     runner.registerCleanup('delete_profile', async () => {
-      const left = observer.profiles?.find?.((p) => p.id === elsewhere.id) ?? elsewhere;
-      await observer.profileCommand('profile_delete', { profile_id: left.id, expected_revision: left.revision }).catch(() => {});
+      const left = (await driver.state('profiles')).all.find((p) => p.id === elsewhere.id);
+      if (left) await observer.profileCommand('profile_delete', { profile_id: left.id, expected_revision: left.revision });
     });
     work = { title: `Only this profile ${tag}`, id: plant(elsewhere.id, `Only this profile ${tag}`) };
   });
@@ -132,6 +132,13 @@ try {
   await runner.step('expanded_the_walk_lays_out_in_columns', async () => {
     await driver.click({ key: `garden.row.${inner.id}` });
     await driver.waitFor(heading(inner.title));
+    runner.registerCleanup('dock_the_garden', async () => {
+      if (!(await driver.find(GARDEN)) && !(await driver.find(FULL))) await driver.run('board.open');
+      if (await driver.find(FULL)) await driver.click({ key: 'garden.frame-button' });
+      await driver.waitFor(GARDEN);
+      await driver.pressKey('Escape');
+      await driver.waitFor(GARDEN, { gone: true });
+    });
     await driver.click({ key: 'garden.frame-button' });
     await driver.waitFor(FULL);
     await driver.waitFor({ key: `garden.row.${sibling.id}` });

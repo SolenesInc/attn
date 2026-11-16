@@ -25,7 +25,7 @@ runner.registerFailureEvidence('native_screenshot', () => driver.screenshot(path
 
 const instance = currentHarnessInstance();
 const attn = (...args) => execFileSync(appCliInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
-const BRIEF = 'Reply with exactly GSREOPEN_READY and then wait for the user.';
+const BRIEF = `Reply with exactly GSREOPEN_READY and then wait for the user. Run ${runner.runId}.`;
 const HANDOFF = 'Continue this same seed from the resumed conversation.';
 
 async function newSession(known, description) {

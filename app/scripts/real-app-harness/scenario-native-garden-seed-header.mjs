@@ -23,7 +23,7 @@ runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerFailureEvidence('native_screenshot', () => driver.screenshot(path.join(runner.runDir, 'failure-native.png')));
 
-const BRIEF = 'Give the garden a little life';
+const BRIEF = `Give the garden a little life ${runner.runId}`;
 const FIRST_NOTE = 'The silhouettes work at 24px.';
 const LATER_NOTE = 'A new note arrived while the card stayed open.';
 const OUTCOME = 'All five garden states are clear in the agent header.';
