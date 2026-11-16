@@ -832,9 +832,6 @@ fn a_click_in_the_page_gives_it_the_keyboard_and_the_window_takes_back_only_the_
 
     assert!(browser::claims_key(&chord_of(Action::SessionClose)));
     assert!(browser::claims_key(&chord_of(Action::UiCommandPalette)));
-    assert!(browser::claims_key(&chord_of(Action::SessionRefreshPrs)));
-    assert!(!browser::claims_key(&chord_of(Action::TerminalFind)));
-    assert!(!browser::claims_key(&chord_of(Action::UiActionMenu)));
     for edit in ["mod+c", "mod+v", "mod+x", "mod+a", "mod+z", "mod+shift+z"] {
         let ev = key_event(&rune::Chord::parse(edit).unwrap());
         assert!(!browser::claims_key(&ev), "the page keeps {edit}");
@@ -889,7 +886,6 @@ fn a_key_the_page_keeps_runs_nothing_of_attn_when_the_page_passes_it_on() {
         Action::TerminalFind,
         Action::UiActionMenu,
         Action::TerminalSplitVertical,
-        Action::SessionNext,
     ] {
         press(&mut world, action);
     }

@@ -48,9 +48,7 @@ struct Entry {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kept {
     Not,
-    /// A web page in a browser tile, as a browser leaves the key to the page.
     ByPages,
-    /// A text field and a web page: ⌘F searches either, ⌘↑ moves the caret.
     ByFieldsAndPages,
 }
 
@@ -59,7 +57,6 @@ enum Kept {
 pub struct Focus {
     pub field: bool,
     pub terminal: bool,
-    /// A web page in a browser tile.
     pub page: bool,
 }
 
@@ -318,9 +315,7 @@ fn applies(entry: &Entry, focus: Focus) -> bool {
     }
 }
 
-/// The focused targets that keep `action`'s keys, wherever the user binds it. ⌘B stays a
-/// field's on macOS only: its Linux keys type nothing a field takes. A field leaves ⌘K and ⌘D
-/// to attn, so ⌘K turns the palette from its own field.
+/// ⌘B stays a field's on macOS only: its Linux keys type nothing a field takes.
 fn kept(action: &Action, platform: KeyPlatform) -> Kept {
     match action {
         Action::TerminalToggleZoom
