@@ -473,18 +473,8 @@ pub(crate) struct Review {
     pub(crate) moved: Vec<String>,
 }
 
-/// Sends document `uri`'s draft where `to` says, telling `done` how it went.
-pub(crate) fn submit(
-    state: &mut State,
-    uri: &str,
-    to: To,
-    done: impl FnOnce(&mut State, Sent, &mut Tx) + 'static,
-    tx: &mut Tx,
-) {
-    submit_review(state, uri, to, Review::default(), done, tx);
-}
-
-/// As `submit`, for a review document's send.
+/// Sends document `uri`'s draft where `to` says, with what `review` adds, telling `done` how
+/// it went.
 pub(crate) fn submit_review(
     state: &mut State,
     uri: &str,

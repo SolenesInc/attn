@@ -170,7 +170,7 @@ pub(crate) fn body(
             &view,
             title,
             (&content.content, bundle, *revision),
-            &readings.reviews,
+            readings,
             (&read_part, {
                 let mut h = std::hash::DefaultHasher::new();
                 std::hash::Hash::hash(

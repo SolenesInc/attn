@@ -9,7 +9,7 @@ use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::TextArea;
 
 use crate::State;
-use crate::markdown::drafts::{self, To};
+use crate::markdown::drafts::{self, Sent, To};
 
 pub(crate) const FIELD: &str = "review.composer.field";
 
@@ -318,35 +318,74 @@ pub(crate) fn composer_view(composer: &Composer, words: &TextEdit, t: &Tokens) -
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
 }
 
-/// The send: the marks in reading order with their places, and the verdict picked.
+/// Where a mark of the send sits: its file's lines, a line of the document, or the whole
+/// document.
+fn sent_place(mark: &MarkdownAnnotation) -> String {
+    match mark.anchor.as_ref() {
+        Some(a) if a.file.is_some() => {
+            format!("{} {}", a.file.clone().unwrap_or_default(), range(Some(a)))
+        }
+        Some(a) => format!("line {}", a.start_line),
+        None => "the document".into(),
+    }
+}
+
+/// What the last send of the sheet's review says, when it did not go.
+fn unsent(sent: Option<&Sent>) -> Option<String> {
+    match sent? {
+        Sent::Sending => Some("Sending…".into()),
+        Sent::Skipped => Some(
+            "Not sent — the session is waiting on an approval, where the sending Enter would \
+             answer it. Send again once you have answered."
+                .into(),
+        ),
+        Sent::Failed(why) => Some(format!("Not sent: {why}")),
+        Sent::Done { .. } | Sent::Warning(_) => None,
+    }
+}
+
+/// The send: every mark it carries in reading order with its place, the verdict picked, and
+/// how the last send went when it did not.
 pub(crate) fn sheet(
     marks: &[&MarkdownAnnotation],
     verdict: Verdict,
     to: Option<&To>,
+    sent: Option<&Sent>,
     t: &Tokens,
 ) -> El {
     let entries = marks.iter().map(|m| {
-        let kind = if m.r#type == "question" {
-            "question"
-        } else {
-            "note"
+        let kind = match m.r#type.as_str() {
+            "question" => "question",
+            "deletion" => "remove",
+            _ => "note",
         };
-        let place = format!(
-            "{} {}",
-            m.anchor
-                .as_ref()
-                .and_then(|a| a.file.clone())
-                .unwrap_or_default(),
-            range(m.anchor.as_ref())
-        );
-        text(format!(
-            "{kind} {place}: {}",
-            m.text.clone().unwrap_or_default()
-        ))
-        .role("listitem")
-        .font(type_::BODY)
-        .color(t.text_primary)
-        .wrap()
+        let words = m
+            .text
+            .clone()
+            .or_else(|| m.anchor.as_ref().map(|a| a.exact.clone()))
+            .unwrap_or_default();
+        text(format!("{kind} {}: {words}", sent_place(m)))
+            .role("listitem")
+            .font(type_::BODY)
+            .color(t.text_primary)
+            .wrap()
+    });
+    let alone = marks.is_empty().then(|| {
+        text("No notes: the verdict goes alone.")
+            .font(type_::BODY)
+            .color(t.text_tertiary)
+    });
+    let problem = unsent(sent).map(|why| {
+        text(why)
+            .key("review.send.status")
+            .role("status")
+            .font(type_::LABEL)
+            .color(if matches!(sent, Some(Sent::Sending)) {
+                t.text_secondary
+            } else {
+                t.warning
+            })
+            .wrap()
     });
     let choices = [Verdict::Approve, Verdict::RequestChanges, Verdict::Comment].map(|v| {
         let key = match v {
@@ -391,6 +430,7 @@ pub(crate) fn sheet(
                 .gap(space::S1)
                 .children(entries),
         )
+        .children(alone)
         .child(
             row()
                 .role("radiogroup")
@@ -398,6 +438,7 @@ pub(crate) fn sheet(
                 .gap(space::S3)
                 .children(choices),
         )
+        .children(problem)
         .child(
             text("a, r, c pick the verdict · ↵ send · esc back")
                 .font(type_::LABEL)
@@ -406,18 +447,21 @@ pub(crate) fn sheet(
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
 }
 
-/// Sends the review in document `uri`'s draft with `verdict`, its marks whose lines moved
-/// labelled so.
+/// Sends the review in document `uri`'s draft from review tile `tile` with `verdict`, its marks
+/// whose lines moved labelled so. The sheet closes and forgets the verdict once the review
+/// went; until then it stays to say why it did not.
 pub(crate) fn send(
     state: &mut State,
-    uri: &str,
+    (tile, uri): (&str, &str),
     to: To,
     verdict: Verdict,
     moved: Vec<String>,
     tx: &mut Tx,
 ) {
-    drafts::submit_review(
+    let closed = tile.to_owned();
+    crate::markdown::sending::deliver_review(
         state,
+        tile,
         uri,
         to,
         drafts::Review {
@@ -425,11 +469,9 @@ pub(crate) fn send(
             moved,
             ..drafts::Review::default()
         },
-        |state, sent, tx| {
-            if let drafts::Sent::Failed(why) = sent {
-                state
-                    .window
-                    .notify(format!("The review did not go: {why}"), tx);
+        move |state, sent, _| {
+            if matches!(sent, Sent::Done { .. } | Sent::Warning(_)) {
+                crate::review::sent(state, &closed);
             }
         },
         tx,

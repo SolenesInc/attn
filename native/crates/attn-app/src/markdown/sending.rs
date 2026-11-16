@@ -310,8 +310,11 @@ pub(crate) fn destination_of(state: &State, tile: &str) -> Option<(String, Optio
     Some((tiled.uri, to))
 }
 
-/// Sends tile `tile`'s marks to where its header says.
+/// Sends tile `tile`'s marks to where its header says; a review tile opens its send sheet.
 pub(crate) fn send(state: &mut State, tile: &str, tx: &mut Tx) {
+    if crate::review::open_sheet(state, tile, tx) {
+        return;
+    }
     let Some(tiled) = tile_of(state, tile) else {
         return;
     };
@@ -351,20 +354,50 @@ fn note_on_seed(state: &mut State, tile: &str, tx: &mut Tx) {
 }
 
 fn deliver(state: &mut State, tile: &str, uri: &str, to: To, tx: &mut Tx) {
-    let busy = state
+    if state.drafts.get(uri).is_none_or(|d| d.marks.is_empty()) {
+        return;
+    }
+    deliver_review(
+        state,
+        tile,
+        uri,
+        to,
+        drafts::Review::default(),
+        |_, _, _| {},
+        tx,
+    );
+}
+
+/// Whether tile `tile`'s send is on its way.
+pub(crate) fn busy(state: &State, tile: &str) -> bool {
+    state
         .readings
         .tiles
         .get(tile)
-        .is_some_and(|r| r.sent == Some(Sent::Sending));
-    if busy || state.drafts.get(uri).is_none_or(|d| d.marks.is_empty()) {
+        .is_some_and(|r| r.sent == Some(Sent::Sending))
+}
+
+/// Sends document `uri`'s draft from tile `tile` with what `review` adds, showing how it went
+/// in the tile's header and telling `done`.
+pub(crate) fn deliver_review(
+    state: &mut State,
+    tile: &str,
+    uri: &str,
+    to: To,
+    review: drafts::Review,
+    done: impl FnOnce(&mut State, &Sent, &mut Tx) + 'static,
+    tx: &mut Tx,
+) {
+    if busy(state, tile) {
         return;
     }
     set_sent(state, tile, Some(Sent::Sending));
     let tile = tile.to_owned();
-    drafts::submit(
+    drafts::submit_review(
         state,
         uri,
         to,
+        review,
         move |state, sent, tx| {
             let sent = match sent {
                 Sent::Done { noted, kept, .. } => {
@@ -374,6 +407,7 @@ fn deliver(state: &mut State, tile: &str, uri: &str, to: To, tx: &mut Tx) {
                 }
                 other => other,
             };
+            done(state, &sent, tx);
             set_sent(state, &tile, Some(sent));
         },
         tx,

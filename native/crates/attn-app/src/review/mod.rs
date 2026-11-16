@@ -101,6 +101,8 @@ pub(crate) struct Review {
     select_from: Option<Spot>,
     /// The send sheet, open with the verdict picked and where the review goes.
     sending: Option<(marks::Verdict, Option<crate::markdown::drafts::To>)>,
+    /// The verdict picked in the send sheet, kept until the review goes.
+    verdict: Option<marks::Verdict>,
     /// Counts the reads the tile asks for, so an answer to an older read of a file or a stop
     /// never lands over a newer one.
     asked: u64,
@@ -496,12 +498,14 @@ pub(crate) fn body(
     view: &str,
     title: &str,
     (source, bundle, revision): (&str, &ReviewBundle, u64),
-    reviews: &Reviews,
+    readings: &crate::markdown::Readings,
     (read, read_version): (&dyn Fn(std::ops::Range<usize>) -> El, u64),
     marking: Vec<El>,
     draft: &[attn_protocol::MarkdownAnnotation],
     t: &Tokens,
 ) -> El {
+    let reviews = &readings.reviews;
+    let sent = readings.tiles.get(tile).and_then(|r| r.sent.as_ref());
     let fresh = Review::default();
     let review = reviews.tiles.get(tile).unwrap_or(&fresh);
     let reading = Reading::new(tile, source, bundle, review);
@@ -757,11 +761,8 @@ pub(crate) fn body(
                 }),
         )
         .children(review.sending.as_ref().map(|(verdict, destination)| {
-            let sent: Vec<&attn_protocol::MarkdownAnnotation> = draft
-                .iter()
-                .filter(|m| m.anchor.as_ref().is_some_and(|a| a.file.is_some()))
-                .collect();
-            marks::sheet(&sent, *verdict, destination.as_ref(), t).pin(
+            let carried: Vec<&attn_protocol::MarkdownAnnotation> = draft.iter().collect();
+            marks::sheet(&carried, *verdict, destination.as_ref(), sent, t).pin(
                 Some(0.0),
                 Some(space::S6),
                 Some(0.0),
@@ -944,33 +945,59 @@ pub(crate) fn cursor_frame(el: El, current: bool, t: &Tokens) -> El {
     }
 }
 
-/// The send key on a review tile that holds the keyboard: the send sheet opens with request
-/// changes picked. False when no review tile holds the keyboard.
+/// The send key on a review tile that holds the keyboard: the send sheet opens with the
+/// verdict picked before, else request changes when the draft carries anything and approve
+/// when it does not. False when no review tile holds the keyboard.
 pub(crate) fn open_send(state: &mut State, tx: &mut Tx) -> bool {
     let Some((tile, _)) = held(state) else {
         return false;
     };
+    open_sheet(state, &tile, tx)
+}
+
+/// The send of tile `tile`, from the send key or its header's Send: on a review tile the send
+/// sheet opens, as `open_send` says. False when the tile shows no review.
+pub(crate) fn open_sheet(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
+    let reviewing = state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .any(|(k, c)| k.tile == tile && c.message.review.is_some());
+    if !reviewing {
+        return false;
+    }
     if state.readings.reviews.composer.is_some() {
         tx.focus(marks::FIELD, false);
         return true;
     }
-    let Some((uri, to)) = crate::markdown::sending::destination_of(state, &tile) else {
+    let Some((uri, to)) = crate::markdown::sending::destination_of(state, tile) else {
         return false;
     };
-    let marked = state.drafts.get(&uri).is_some_and(|d| {
-        d.marks
-            .iter()
-            .any(|m| m.anchor.as_ref().is_some_and(|a| a.file.is_some()))
-    });
-    let verdict = if marked {
+    let marked = state.drafts.get(&uri).is_some_and(|d| !d.marks.is_empty());
+    let review = state
+        .readings
+        .reviews
+        .tiles
+        .entry(tile.to_owned())
+        .or_default();
+    let verdict = review.verdict.unwrap_or(if marked {
         marks::Verdict::RequestChanges
     } else {
         marks::Verdict::Approve
-    };
-    let review = state.readings.reviews.tiles.entry(tile).or_default();
+    });
     review.sending = Some((verdict, to));
     state.readings.revision += 1;
     true
+}
+
+/// Review tile `tile`'s review went: its send sheet closes and its verdict is forgotten.
+pub(crate) fn sent(state: &mut State, tile: &str) {
+    if let Some(review) = state.readings.reviews.tiles.get_mut(tile) {
+        review.sending = None;
+        review.verdict = None;
+    }
+    state.readings.revision += 1;
 }
 
 /// The review tile that holds the keyboard, with what the daemon last sent it.
@@ -1026,13 +1053,15 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             Key::Escape => review.sending = None,
             Key::Enter => {
                 if let Some(to) = to {
-                    review.sending = None;
                     let moved = moved_marks(state, &tile, &message, bundle);
                     let uri = drafts_uri(&message);
-                    marks::send(state, &uri, to, verdict, moved, tx);
+                    marks::send(state, (&tile, &uri), to, verdict, moved, tx);
                 }
             }
-            _ if let Some(picked) = picked => review.sending = Some((picked, to)),
+            _ if let Some(picked) = picked => {
+                review.sending = Some((picked, to));
+                review.verdict = Some(picked);
+            }
             _ => {}
         }
         state.readings.revision += 1;

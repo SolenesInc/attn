@@ -2806,3 +2806,133 @@ fn switches_sides_when_before_or_after_is_clicked_as_b_does_in_the_map_and_the_b
     world.advance(std::time::Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+/// What the send sheet says, as assistive tech reads it.
+fn sheet_says(world: &World) -> Vec<String> {
+    let sheet = world
+        .screen()
+        .get(Target::role("dialog").name("Send the review"));
+    world
+        .screen()
+        .descendants(Target::key(sheet.key.unwrap()))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+fn picked_verdict(world: &World) -> Option<String> {
+    world
+        .screen()
+        .all(Target::role("radio-button"))
+        .into_iter()
+        .find(|n| n.is("checked"))
+        .and_then(|n| n.name)
+}
+
+#[test]
+fn a_review_skipped_for_an_approval_says_it_did_not_go_and_keeps_the_notes_and_the_verdict() {
+    let (mut world, kept, _) = open_marking(presented());
+    press(&mut world, Key::Right);
+    type_key(&mut world, "c");
+    write(&mut world, "Fine");
+    let sends: Marks = Default::default();
+    let tried = sends.clone();
+    world.daemon.on("markdown_annotations_submit", move |r| {
+        tried.lock().unwrap().push(r.clone());
+        json!({
+            "event": "markdown_annotations_submit_result",
+            "request_id": r["request_id"],
+            "document_uri": r["document_uri"],
+            "source_kind": r["source_kind"],
+            "success": false,
+            "status": "skipped_pending_approval",
+        })
+    });
+
+    send_key(&mut world);
+    type_key(&mut world, "c");
+    press(&mut world, Key::Enter);
+    world.settle();
+
+    assert_eq!(sends.lock().unwrap().len(), 1);
+    let said = sheet_says(&world);
+    assert!(
+        said.iter()
+            .any(|t| t.starts_with("Not sent — the session is waiting on an approval")),
+        "the sheet stays and says why: {said:?}"
+    );
+    assert_eq!(picked_verdict(&world).as_deref(), Some("comment"));
+    assert!(
+        shown(&world).iter().any(|t| t.contains("Approval needed")),
+        "the header says the send needs an approval: {:?}",
+        shown(&world)
+    );
+    assert_eq!(kept.lock().unwrap().len(), 1, "the note stays in the draft");
+
+    press(&mut world, Key::Escape);
+    world.gesture(|app| app.click(Target::key("tile.m.document.send")));
+    assert_eq!(
+        picked_verdict(&world).as_deref(),
+        Some("comment"),
+        "the header's Send opens the sheet again with the verdict picked"
+    );
+    press(&mut world, Key::Enter);
+    world.settle();
+    let sent = sends.lock().unwrap().clone();
+    assert_eq!(sent.len(), 2, "{sent:?}");
+    assert_eq!(sent[1]["verdict"], "comment");
+}
+
+#[test]
+fn the_send_sheet_lists_prose_comments_and_overall_notes_and_requests_changes_for_them() {
+    let mut world = start_with_session(Some("s-a"));
+    serve(&world);
+    let (kept, sends, _) = keep_drafts(&world);
+    let prose = attn_protocol::MarkdownAnnotation {
+        id: "prose".into(),
+        r#type: "comment".into(),
+        text: Some("Say why".into()),
+        anchor: Some(attn_protocol::MarkdownAnnotationAnchor {
+            start_line: 3,
+            end_line: 3,
+            exact: "the reason".into(),
+            ..attn_protocol::MarkdownAnnotationAnchor::default()
+        }),
+        ..attn_protocol::MarkdownAnnotation::default()
+    };
+    let overall = attn_protocol::MarkdownAnnotation {
+        id: "overall".into(),
+        r#type: "global".into(),
+        text: Some("Good overall".into()),
+        ..attn_protocol::MarkdownAnnotation::default()
+    };
+    kept.lock()
+        .unwrap()
+        .extend([prose, overall].map(|m| serde_json::to_value(m).unwrap()));
+    deliver(&mut world, DOCUMENT, Some(presented()));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+
+    send_key(&mut world);
+    let said = sheet_says(&world);
+    assert!(said.iter().any(|t| t == "note line 3: Say why"), "{said:?}");
+    assert!(
+        said.iter().any(|t| t == "note the document: Good overall"),
+        "{said:?}"
+    );
+    assert_eq!(picked_verdict(&world).as_deref(), Some("request changes"));
+
+    press(&mut world, Key::Enter);
+    world.settle();
+    let sent = sends.lock().unwrap().clone();
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert_eq!(sent[0]["verdict"], "request_changes");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Send the review"))
+            .is_none(),
+        "the sheet closes once the review went"
+    );
+}
