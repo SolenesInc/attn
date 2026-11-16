@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use attn_term::links::{Line, Span};
-use attn_term::{LinkRow, Overlay, OverlayKind, Rgb};
+use attn_term::{Overlay, OverlayKind, Rgb};
 
 use super::{Term, Terminals};
 
@@ -216,6 +216,7 @@ impl Terminals {
     fn seed_under_pointer(&mut self, id: &str) -> Option<(String, [f32; 4])> {
         let metrics = self.metrics();
         let known = self.seeds.clone();
+        self.current(id)?;
         let term = self.panes.get_mut(id)?;
         let cell = term.view.hover.as_ref()?.cell;
         let (slot, scale) = term.slot?;
@@ -280,18 +281,39 @@ fn marks<'a>(term: &'a mut Term, known: &HashSet<String>) -> &'a [SeedMark] {
     term.view.seeds.as_deref().unwrap_or_default()
 }
 
+/// A cell's first and last characters, none for an empty cell.
+type Ends = Option<(char, char)>;
+
+/// Reads the rows the view draws from the grid the renderer took, and the row past either
+/// edge of the view from the screen only when a line wraps across that edge.
 fn find(term: &mut Term, known: &HashSet<String>) -> Vec<SeedMark> {
-    let (cols, rows) = term.vt.size();
-    let top = term.vt.view_top();
+    let grid = &term.grid;
     let vt = &mut term.vt;
-    let mut first = top;
-    while first > 0 && top - first < 1 && vt.row_continues(first) {
-        first -= 1;
+    let (cols, rows) = (grid.cols, u32::from(grid.rows));
+    if cols == 0 || rows == 0 {
+        return Vec::new();
     }
-    let mut last = top + u32::from(rows) - 1;
+    let top = vt.view_top();
+    let mut outside: Vec<(u32, Vec<Ends>)> = Vec::new();
+    let mut first = top;
+    if top > 0 && vt.row_continues(top) {
+        first = top - 1;
+        outside.push((first, screen_row(vt, first)));
+    }
+    let mut last = top + rows - 1;
     if vt.scrolled_back() > 0 && vt.row_continues(last + 1) {
         last += 1;
+        outside.push((last, screen_row(vt, last)));
     }
+    let at = |row: u32, col: u16| -> Ends {
+        match row.checked_sub(top).filter(|r| *r < rows) {
+            Some(r) => grid.ends(grid.row(r as usize)[usize::from(col)].grapheme),
+            None => outside
+                .iter()
+                .find(|(r, _)| *r == row)
+                .and_then(|(_, cells)| cells.get(usize::from(col)).copied().flatten()),
+        }
+    };
     let mut marks = Vec::new();
     let mut start = first;
     while start <= last {
@@ -299,39 +321,52 @@ fn find(term: &mut Term, known: &HashSet<String>) -> Vec<SeedMark> {
         while end < last && vt.row_continues(end + 1) {
             end += 1;
         }
-        let text: String = (start..=end).map(|r| vt.row_text(r, 0..cols)).collect();
-        if text.contains("s-") {
-            let line = Line::over(start, end, cols, |r| LinkRow {
-                cells: vt.row_cells(r),
-                uris: Vec::new(),
-            });
-            marks.extend(ids_in(&line, known));
-        }
+        let line = Line {
+            first_row: start,
+            row_count: end - start + 1,
+            cols,
+            ..Line::default()
+        };
+        let width = usize::from(cols);
+        let cell = |i: usize| at(start + (i / width) as u32, (i % width) as u16);
+        marks.extend(ids_in(&line, line.row_count as usize * width, cell, known));
         start = end + 1;
     }
     marks
 }
 
-/// The seed ids in `line` that `known` holds, as whole words: no letter, digit or underscore
-/// right before or after.
-fn ids_in(line: &Line, known: &HashSet<String>) -> Vec<SeedMark> {
-    let cells = &line.cells;
+fn screen_row(vt: &mut attn_term::Vt, row: u32) -> Vec<Ends> {
+    vt.row_cells(row)
+        .iter()
+        .map(|t| Some((t.chars().next()?, t.chars().next_back()?)))
+        .collect()
+}
+
+/// The seed ids among the `len` cells of `line` that `known` holds, as whole words: no
+/// letter, digit or underscore right before or after.
+fn ids_in(
+    line: &Line,
+    len: usize,
+    cell: impl Fn(usize) -> Ends,
+    known: &HashSet<String>,
+) -> Vec<SeedMark> {
     let word = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
-    let one = |i: usize| -> Option<char> {
-        let mut chars = cells.get(i)?.chars();
-        let c = chars.next()?;
-        chars.next().is_none().then_some(c)
-    };
+    let one = |i: usize| cell(i).filter(|(a, b)| a == b).map(|(c, _)| c);
     let mut found = Vec::new();
     let mut i = 0;
-    while i + ID_CELLS <= cells.len() {
-        let id: Option<String> = (one(i) == Some('s') && one(i + 1) == Some('-'))
-            .then(|| (i + 2..i + ID_CELLS).map(one).collect::<Option<String>>())
+    while i + ID_CELLS <= len {
+        if one(i) != Some('s') || one(i + 1) != Some('-') {
+            i += 1;
+            continue;
+        }
+        let id = (i + 2..i + ID_CELLS)
+            .all(|j| one(j).is_some_and(|c| ID_BODY.contains(c)))
+            .then(|| (i..i + ID_CELLS).filter_map(one).collect::<String>());
+        let before = i.checked_sub(1).and_then(&cell).map(|(_, last)| last);
+        let after = (i + ID_CELLS < len)
+            .then(|| cell(i + ID_CELLS))
             .flatten()
-            .filter(|body| body.chars().all(|c| ID_BODY.contains(c)))
-            .map(|body| format!("s-{body}"));
-        let before = i.checked_sub(1).and_then(|p| cells[p].chars().last());
-        let after = cells.get(i + ID_CELLS).and_then(|c| c.chars().next());
+            .map(|(first, _)| first);
         match id {
             Some(id) if !word(before) && !word(after) && known.contains(&id) => {
                 found.push(SeedMark {

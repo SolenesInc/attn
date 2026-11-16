@@ -123,6 +123,18 @@ impl Grid {
         }
     }
 
+    /// The first and last characters of a cell's text, read without building it.
+    pub fn ends(&self, grapheme: Grapheme) -> Option<(char, char)> {
+        match grapheme.0 {
+            0 => None,
+            id if id >= INTERNED => {
+                let text = &self.strings[(id - INTERNED) as usize];
+                Some((text.chars().next()?, text.chars().next_back()?))
+            }
+            cp => char::from_u32(cp).map(|c| (c, c)),
+        }
+    }
+
     pub(crate) fn intern(&mut self, codepoints: &[u32]) -> Grapheme {
         match codepoints {
             [] | [0] => Grapheme(0),

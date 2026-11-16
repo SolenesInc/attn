@@ -1033,8 +1033,8 @@ impl Terminals {
         id: &str,
         term: &mut Term,
     ) {
-        if term.synchronizing_since.is_none() {
-            term.vt.sync(&mut term.grid);
+        if term.synchronizing_since.is_none() && term.vt.sync(&mut term.grid) {
+            term.view.seeds = None;
         }
         let placed = Terminals::kitty_images(images, id, term);
         let top = term.vt.view_top();
