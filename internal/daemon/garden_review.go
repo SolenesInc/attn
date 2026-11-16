@@ -50,10 +50,35 @@ type gardenReviewCapture struct {
 	observations map[string]garden.ReviewObservation
 	candidates   []garden.ReviewCandidate
 	items        map[string]garden.ReviewItem
-	notes        map[string][]gardenReviewNote
+	notes        map[string]gardenReviewSeedNotes
+}
+
+type gardenReviewSeedNotes struct {
+	newest []gardenReviewNote
+	total  int
 }
 
 func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, error) {
+	capture, err := d.judgeGardenReview(profileID...)
+	if err != nil {
+		return gardenReviewCapture{}, err
+	}
+	capture.notes, err = d.readGardenReviewCandidateNotes(capture.candidates)
+	if err != nil {
+		return gardenReviewCapture{}, err
+	}
+	capture.items = make(map[string]garden.ReviewItem, len(capture.candidates))
+	for _, candidate := range capture.candidates {
+		item, itemErr := capture.reviewItem(candidate)
+		if itemErr != nil {
+			return gardenReviewCapture{}, itemErr
+		}
+		capture.items[candidate.SeedID] = item
+	}
+	return capture, nil
+}
+
+func (d *Daemon) judgeGardenReview(profileID ...string) (gardenReviewCapture, error) {
 	read, err := d.readGarden(profileID...)
 	if err != nil {
 		return gardenReviewCapture{}, err
@@ -62,56 +87,71 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 	if err != nil {
 		return gardenReviewCapture{}, err
 	}
-	notes, newestNotes, err := d.readGardenReviewNotes()
-	if err != nil {
-		return gardenReviewCapture{}, err
-	}
 
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
-	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
+	indexOf := make(map[string]int, len(read.seeds))
+	for _, seed := range read.seeds {
+		doc := read.docs[seed.ID]
+		lifecycleAt, exact := reviewLifecycleTime(seed, doc)
+		indexOf[seed.ID] = len(observations)
+		observations = append(observations, garden.ReviewObservation{
+			Seed:              seed,
+			LifecycleAt:       lifecycleAt,
+			LifecycleExact:    exact,
+			DocumentUpdatedAt: doc.UpdatedAt,
+			TenderHolds:       read.parties.claimHolds(seed),
+			DirectoryState:    garden.ReviewDirectoryUnknown,
+			ReviewAgainAt:     reviewAgainAt[seed.ID],
+		})
+	}
+
+	now := d.gardenTime()
+	judged := garden.ReviewJudged(observations, now)
+	d.probeGardenReviewContinuations(observations, indexOf, judged.Seeds)
+	for _, id := range judged.Subtree {
+		at, noteErr := d.newestNoteAt(id)
+		if noteErr != nil {
+			return gardenReviewCapture{}, noteErr
+		}
+		observations[indexOf[id]].NewestNoteAt = at
+	}
+
+	byID := make(map[string]garden.ReviewObservation, len(observations))
+	for _, observation := range observations {
+		byID[observation.Seed.ID] = observation
+	}
+	return gardenReviewCapture{
+		read: read, observations: byID,
+		candidates: garden.ReviewCandidates(observations, garden.DefaultStaleWindow, now),
+	}, nil
+}
+
+func (d *Daemon) probeGardenReviewContinuations(observations []garden.ReviewObservation, indexOf map[string]int, judged []string) {
 	type pendingInspection struct {
 		seedIndex    int
 		conversation pluginResumeConversation
 	}
 	pending := make(map[string][]pendingInspection)
 	registrations := make(map[string]pluginDriverRegistration)
-	checkResume := func(agentName, resumeID, cwd string) conversationAvailability {
-		if reg, ok := d.ensurePluginRegistry().driver(agentName); ok && reg.Capabilities["resume"] && reg.Capabilities["resume_availability"] {
-			pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{len(observations), pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}})
-			registrations[reg.PluginName] = reg
-			return conversationAvailability{}
+	for _, id := range judged {
+		seedIndex := indexOf[id]
+		checkResume := func(agentName, resumeID, cwd string) conversationAvailability {
+			if reg, ok := d.ensurePluginRegistry().driver(agentName); ok && reg.Capabilities["resume"] && reg.Capabilities["resume_availability"] {
+				pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{seedIndex, pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}})
+				registrations[reg.PluginName] = reg
+				return conversationAvailability{}
+			}
+			return d.conversationResumable(agentName, resumeID, cwd)
 		}
-		return d.conversationResumable(agentName, resumeID, cwd)
-	}
-	for _, seed := range read.seeds {
-		doc := read.docs[seed.ID]
-		lifecycleAt, exact := reviewLifecycleTime(seed, doc)
-		continuation := d.continuationIgnoringReach(seed, checkResume)
-		directoryState := garden.ReviewDirectoryUnknown
-		resumeAvailable := false
-		handoverAvailable := false
-		directoryNote := ""
-		if continuation != nil {
-			directoryState = garden.ReviewDirectoryState(continuation.DirectoryState)
-			resumeAvailable = continuation.ResumeAvailable
-			handoverAvailable = continuation.HandoverPlacement != handoverNeedsPlacement
-			directoryNote = outpostDirectoryEvidence(continuation)
+		continuation := d.continuationIgnoringReach(observations[seedIndex].Seed, checkResume)
+		if continuation == nil {
+			continue
 		}
-		observation := garden.ReviewObservation{
-			Seed:              seed,
-			LifecycleAt:       lifecycleAt,
-			LifecycleExact:    exact,
-			DocumentUpdatedAt: doc.UpdatedAt,
-			NewestNoteAt:      newestNotes[seed.ID],
-			TenderHolds:       read.parties.claimHolds(seed),
-			DirectoryState:    directoryState,
-			DirectoryNote:     directoryNote,
-			ResumeAvailable:   resumeAvailable,
-			HandoverAvailable: handoverAvailable,
-			ReviewAgainAt:     reviewAgainAt[seed.ID],
-		}
-		observations = append(observations, observation)
-		byID[seed.ID] = observation
+		observation := &observations[seedIndex]
+		observation.DirectoryState = garden.ReviewDirectoryState(continuation.DirectoryState)
+		observation.ResumeAvailable = continuation.ResumeAvailable
+		observation.HandoverAvailable = continuation.HandoverPlacement != handoverNeedsPlacement
+		observation.DirectoryNote = outpostDirectoryEvidence(continuation)
 	}
 
 	type inspectionResult struct {
@@ -136,28 +176,8 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 	for _, result := range results {
 		for _, check := range result.checks {
 			observations[check.seedIndex].ResumeAvailable = result.availability[check.conversation].Available
-			observation := observations[check.seedIndex]
-			byID[observation.Seed.ID] = observation
 		}
 	}
-
-	candidates := garden.ReviewCandidates(
-		observations,
-		garden.DefaultStaleWindow,
-		d.gardenTime(),
-	)
-	capture := gardenReviewCapture{
-		read: read, observations: byID, candidates: candidates,
-		items: make(map[string]garden.ReviewItem, len(candidates)), notes: notes,
-	}
-	for _, candidate := range candidates {
-		item, itemErr := capture.reviewItem(candidate)
-		if itemErr != nil {
-			return gardenReviewCapture{}, itemErr
-		}
-		capture.items[candidate.SeedID] = item
-	}
-	return capture, nil
 }
 
 func reviewLifecycleTime(seed garden.Seed, doc docstore.Document) (time.Time, bool) {
@@ -172,40 +192,54 @@ func reviewLifecycleTime(seed garden.Seed, doc docstore.Document) (time.Time, bo
 	return at, true
 }
 
-func (d *Daemon) readGardenReviewNotes() (map[string][]gardenReviewNote, map[string]time.Time, error) {
-	bySeed := make(map[string][]gardenReviewNote)
-	newest := make(map[string]time.Time)
-	after := ""
-	for {
-		page, _, err := d.runDocQuery(docstore.Query{
-			Namespace: garden.Namespace, Collection: garden.CollectionNotes,
-			Sort:  &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
-			Limit: docstore.MaxLimit, After: after,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, doc := range page.Documents {
-			note, decodeErr := garden.DecodeNote(doc.Body)
-			if decodeErr != nil {
-				d.logf("garden review: note %s has an unreadable body: %v", doc.ID, decodeErr)
+func (d *Daemon) readGardenReviewCandidateNotes(candidates []garden.ReviewCandidate) (map[string]gardenReviewSeedNotes, error) {
+	bySeed := make(map[string]gardenReviewSeedNotes)
+	for _, candidate := range candidates {
+		for _, id := range candidate.SubtreeIDs {
+			if _, read := bySeed[id]; read {
 				continue
 			}
-			entry := gardenReviewNote{
-				ID: note.ID, SeedID: note.Seed, Kind: note.Kind,
-				Body: note.Body, CreatedAt: doc.CreatedAt,
+			notes, err := d.readGardenReviewSeedNotes(id)
+			if err != nil {
+				return nil, err
 			}
-			bySeed[note.Seed] = append(bySeed[note.Seed], entry)
-			if doc.CreatedAt.After(newest[note.Seed]) {
-				newest[note.Seed] = doc.CreatedAt
-			}
+			bySeed[id] = notes
 		}
-		if len(page.Documents) < docstore.MaxLimit {
-			break
-		}
-		after = page.Documents[len(page.Documents)-1].ID
 	}
-	return bySeed, newest, nil
+	return bySeed, nil
+}
+
+func (d *Daemon) readGardenReviewSeedNotes(seedID string) (gardenReviewSeedNotes, error) {
+	filters := []docstore.Filter{{Field: "seed", Op: docstore.OpEq, Value: seedID}}
+	page, _, err := d.runDocQuery(docstore.Query{
+		Namespace: garden.Namespace, Collection: garden.CollectionNotes,
+		Filters: filters,
+		Sort:    &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
+		Limit:   gardenReviewNoteEvidenceLimit,
+	})
+	if err != nil {
+		return gardenReviewSeedNotes{}, err
+	}
+	result := gardenReviewSeedNotes{newest: make([]gardenReviewNote, 0, len(page.Documents))}
+	for _, doc := range page.Documents {
+		note, decodeErr := garden.DecodeNote(doc.Body)
+		if decodeErr != nil {
+			d.logf("garden review: note %s has an unreadable body: %v", doc.ID, decodeErr)
+			continue
+		}
+		result.newest = append(result.newest, gardenReviewNote{
+			ID: note.ID, SeedID: note.Seed, Kind: note.Kind,
+			Body: note.Body, CreatedAt: doc.CreatedAt,
+		})
+	}
+	counted, _, err := d.store.CountQuery(docstore.Query{
+		Namespace: garden.Namespace, Collection: garden.CollectionNotes, Filters: filters,
+	})
+	if err != nil {
+		return gardenReviewSeedNotes{}, err
+	}
+	result.total = counted.Count
+	return result, nil
 }
 
 func (capture gardenReviewCapture) reviewItem(candidate garden.ReviewCandidate) (garden.ReviewItem, error) {
@@ -331,7 +365,7 @@ func (capture gardenReviewCapture) reviewEvidence(candidate garden.ReviewCandida
 		}
 	}
 
-	notes := capture.reviewNotesFor(candidate)
+	notes, total := capture.reviewNotesFor(candidate)
 	limit := min(len(notes), gardenReviewNoteEvidenceLimit)
 	for _, note := range notes[:limit] {
 		evidence = append(evidence, garden.ReviewEvidence{
@@ -339,24 +373,26 @@ func (capture gardenReviewCapture) reviewEvidence(candidate garden.ReviewCandida
 			Text:  note.Body,
 		})
 	}
-	if len(notes) > limit {
+	if total > limit {
 		evidence = append(evidence, garden.ReviewEvidence{
 			Label: "Seed log omitted",
-			Text:  fmt.Sprintf("%d older relevant log entries were omitted.", len(notes)-limit),
+			Text:  fmt.Sprintf("%d older relevant log entries were omitted.", total-limit),
 		})
 	}
 	return evidence
 }
 
-func (capture gardenReviewCapture) reviewNotesFor(candidate garden.ReviewCandidate) []gardenReviewNote {
+func (capture gardenReviewCapture) reviewNotesFor(candidate garden.ReviewCandidate) ([]gardenReviewNote, int) {
 	var notes []gardenReviewNote
+	total := 0
 	for _, id := range candidate.SubtreeIDs {
-		notes = append(notes, capture.notes[id]...)
+		notes = append(notes, capture.notes[id].newest...)
+		total += capture.notes[id].total
 	}
-	slices.SortFunc(notes, func(a, b gardenReviewNote) int {
+	slices.SortStableFunc(notes, func(a, b gardenReviewNote) int {
 		return b.CreatedAt.Compare(a.CreatedAt)
 	})
-	return notes
+	return notes, total
 }
 
 func reviewCandidateReason(candidate garden.ReviewCandidate) string {
@@ -950,7 +986,7 @@ func (d *Daemon) gardenReviewOverview(profileID ...string) (*garden.ReviewRun, [
 		items = d.overlayGardenReviewReach(d.overlayGardenReviewJobStates(items))
 		return &run, items, unresolvedGardenReviewItemCount(items), nil
 	}
-	capture, err := d.captureGardenReview(profileID...)
+	capture, err := d.judgeGardenReview(profileID...)
 	if err != nil {
 		return nil, nil, 0, err
 	}

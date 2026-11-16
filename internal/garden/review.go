@@ -164,7 +164,36 @@ type ReviewCandidate struct {
 	SubtreeIDs        []string
 }
 
-func ReviewCandidates(observations []ReviewObservation, window time.Duration, now time.Time) []ReviewCandidate {
+type ReviewJudgement struct {
+	Seeds   []string
+	Subtree []string
+}
+
+type reviewJudged struct {
+	observation ReviewObservation
+	subtree     []string
+}
+
+func ReviewJudged(observations []ReviewObservation, now time.Time) ReviewJudgement {
+	judged, _ := judgeReview(observations, now)
+	result := ReviewJudgement{Seeds: make([]string, 0, len(judged))}
+	inSubtree := make(map[string]bool)
+	for _, seed := range judged {
+		result.Seeds = append(result.Seeds, seed.observation.Seed.ID)
+		if len(seed.subtree) < 2 {
+			continue
+		}
+		for _, id := range seed.subtree {
+			if !inSubtree[id] {
+				inSubtree[id] = true
+				result.Subtree = append(result.Subtree, id)
+			}
+		}
+	}
+	return result
+}
+
+func judgeReview(observations []ReviewObservation, now time.Time) ([]reviewJudged, map[string]ReviewObservation) {
 	bySeed := make(map[string]ReviewObservation, len(observations))
 	seeds := make([]Seed, 0, len(observations))
 	children := make(map[string][]string)
@@ -178,7 +207,7 @@ func ReviewCandidates(observations []ReviewObservation, window time.Duration, no
 	}
 
 	index := byID(seeds)
-	result := make([]ReviewCandidate, 0)
+	var judged []reviewJudged
 	for _, observation := range observations {
 		seed := observation.Seed
 		if seed.Status != StatusGrowing || seed.Gate || underTemplate(index, seed) {
@@ -187,16 +216,25 @@ func ReviewCandidates(observations []ReviewObservation, window time.Duration, no
 		if observation.ReviewAgainAt.After(now) {
 			continue
 		}
-
 		subtree := reviewSubtree(seed.ID, children)
-		isPlot := len(subtree) > 1
 		if reviewSubtreeHeld(subtree, bySeed) {
 			continue
 		}
+		judged = append(judged, reviewJudged{observation: observation, subtree: subtree})
+	}
+	return judged, bySeed
+}
 
+func ReviewCandidates(observations []ReviewObservation, window time.Duration, now time.Time) []ReviewCandidate {
+	judged, bySeed := judgeReview(observations, now)
+	result := make([]ReviewCandidate, 0)
+	for _, seed := range judged {
+		observation := seed.observation
+		subtree := seed.subtree
+		isPlot := len(subtree) > 1
 		lifecycleAt, exact := reviewLifecycleAt(observation)
 		candidate := ReviewCandidate{
-			SeedID:            seed.ID,
+			SeedID:            observation.Seed.ID,
 			DirectoryState:    normalizedReviewDirectoryState(observation.DirectoryState),
 			LifecycleAt:       lifecycleAt,
 			LifecycleExact:    exact,

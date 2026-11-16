@@ -2,6 +2,7 @@ package garden
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -195,6 +196,78 @@ func TestReviewCandidateSubtreeProtectionProperties(t *testing.T) {
 			if candidate.Plot && slices.Contains(candidate.SubtreeIDs, observations[recent].Seed.ID) {
 				t.Fatalf("plot candidate %s contains recent activity at %s", candidate.SeedID, observations[recent].Seed.ID)
 			}
+		}
+	})
+}
+
+func TestReviewCandidatesNeedProbesOnlyForJudgedSeeds(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+		offsets := []time.Duration{
+			0, time.Hour, DefaultStaleWindow - time.Second, DefaultStaleWindow, 2 * DefaultStaleWindow, -time.Hour,
+		}
+		instant := func(label string) time.Time {
+			if rapid.Bool().Draw(t, label+" unset") {
+				return time.Time{}
+			}
+			return now.Add(-rapid.SampledFrom(offsets).Draw(t, label))
+		}
+		statuses := []string{StatusPlanted, StatusGrowing, StatusParked, StatusHarvested, StatusWithered}
+		directories := []ReviewDirectoryState{
+			ReviewDirectoryPresent, ReviewDirectoryMissing, ReviewDirectoryUnavailable, ReviewDirectoryUnknown, "",
+		}
+
+		n := rapid.IntRange(1, 30).Draw(t, "seed count")
+		probed := make([]ReviewObservation, n)
+		unprobed := make([]ReviewObservation, n)
+		for i := range n {
+			id := fmt.Sprintf("s-%06x", i)
+			seed := Seed{
+				ID:       id,
+				Status:   rapid.SampledFrom(statuses).Draw(t, "status "+id),
+				Gate:     rapid.IntRange(0, 9).Draw(t, "gate "+id) == 0,
+				Template: rapid.IntRange(0, 9).Draw(t, "template "+id) == 0,
+			}
+			if i > 0 && rapid.Bool().Draw(t, "has parent "+id) {
+				parent := rapid.IntRange(0, i-1).Draw(t, "parent "+id)
+				seed.Edges = []Edge{{Kind: EdgePartOf, To: fmt.Sprintf("s-%06x", parent)}}
+			}
+			lifecycleAt := instant("lifecycle " + id)
+			unprobed[i] = ReviewObservation{
+				Seed:              seed,
+				LifecycleAt:       lifecycleAt,
+				LifecycleExact:    !lifecycleAt.IsZero() && rapid.Bool().Draw(t, "exact "+id),
+				DocumentUpdatedAt: instant("updated " + id),
+				TenderHolds:       rapid.IntRange(0, 4).Draw(t, "held "+id) == 0,
+				ReviewAgainAt:     instant("review again " + id),
+			}
+			probed[i] = unprobed[i]
+			probed[i].NewestNoteAt = instant("newest note " + id)
+			probed[i].DirectoryState = rapid.SampledFrom(directories).Draw(t, "directory "+id)
+			probed[i].DirectoryNote = rapid.SampledFrom([]string{"", "on an outpost"}).Draw(t, "directory note "+id)
+			probed[i].ResumeAvailable = rapid.Bool().Draw(t, "resume "+id)
+			probed[i].HandoverAvailable = rapid.Bool().Draw(t, "handover "+id)
+		}
+
+		judgement := ReviewJudged(unprobed, now)
+		judgedOnly := slices.Clone(unprobed)
+		for i := range judgedOnly {
+			id := judgedOnly[i].Seed.ID
+			if slices.Contains(judgement.Seeds, id) {
+				judgedOnly[i].DirectoryState = probed[i].DirectoryState
+				judgedOnly[i].DirectoryNote = probed[i].DirectoryNote
+				judgedOnly[i].ResumeAvailable = probed[i].ResumeAvailable
+				judgedOnly[i].HandoverAvailable = probed[i].HandoverAvailable
+			}
+			if slices.Contains(judgement.Subtree, id) {
+				judgedOnly[i].NewestNoteAt = probed[i].NewestNoteAt
+			}
+		}
+
+		want := ReviewCandidates(probed, DefaultStaleWindow, now)
+		got := ReviewCandidates(judgedOnly, DefaultStaleWindow, now)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("candidates from judged probes differ\n got: %+v\nwant: %+v\njudged: %+v", got, want, judgement)
 		}
 	})
 }

@@ -223,10 +223,11 @@ sends `seed_list` and `seed_ready` with `all` straight to the daemon's socket,
 so process start and CLI decoding stay out of the number, and reports the
 median, minimum and maximum time to first byte and to the whole reply, the
 reply's bytes and its item counts. `-show <seed id>` and `-search <query>` add
-`seed_show` and `seed_search`:
+`seed_show` and `seed_search`. `-review` adds `seed_review_show`, the overview
+the Garden panel asks for, and reports its `candidate_count`:
 
 ```bash
-go run ./scripts/gardenreadperf -profile <profile id> -n 20 -show <seed id> -search render
+go run ./scripts/gardenreadperf -profile <profile id> -n 20 -show <seed id> -search render -review
 ```
 
 Start the daemon with `ATTN_PPROF=<port>` and pass
@@ -237,6 +238,14 @@ milliseconds a second, since a daemon fresh from start uses hundreds. Each
 binary and reports wall and CPU time. Several `-cli` binaries run in
 interleaved rounds, so load on the machine reaches each one alike. CPU is the
 number to compare when other agents load the machine.
+
+An overview probes the working directory of each seed the review judges, so
+its cost depends on git and on which closed sessions still point at this
+machine. Count git with a shim first on the daemon's `PATH` that logs each
+launch and execs the real git. A copy made with
+`scripts/gardenpushperf/copy-production.sh` moves every session to an outpost,
+so nothing is probed. Keep closed sessions local, with their paths rewritten to
+this machine's layout, to measure the review.
 
 To compare two builds, run each build's daemon on the same copy in turn. For
 what limits a read, take a CPU profile while a loop of `seed ls` runs, and read
