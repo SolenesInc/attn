@@ -40,12 +40,19 @@ pub(crate) struct Review {
     open: bool,
     starting: bool,
     problem: Option<String>,
-    selected: String,
-    browsed: String,
+    reading: Reading,
     failure: Option<String>,
     retrying: bool,
     drafting: Option<(String, String)>,
     drafted: Option<(String, String)>,
+}
+
+/// The item the review decides on, and the seed the reader shows: the item's own, or another
+/// of its plot the user went to.
+#[derive(Default)]
+struct Reading {
+    item: String,
+    seed: String,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -202,7 +209,7 @@ fn selected(review: &Review) -> Option<&GardenReviewItem> {
     shown
         .items
         .iter()
-        .find(|i| i.id == review.selected)
+        .find(|i| i.id == review.reading.item)
         .or_else(|| unresolved(shown).next())
         .or_else(|| shown.items.first())
 }
@@ -215,7 +222,7 @@ pub(super) fn is_open(state: &State) -> bool {
 
 /// The seed the open review reads, for the garden to read its document.
 pub(super) fn browsed(state: &State) -> Option<String> {
-    is_open(state).then(|| review(state).browsed.clone())
+    is_open(state).then(|| review(state).reading.seed.clone())
 }
 
 /// The receipt a move made from the review carries: the review and the evidence it decided on.
@@ -346,28 +353,28 @@ fn take(state: &mut State, result: Option<SeedReviewResultMessage>) {
 /// Moves off an item that is no longer unresolved while some still are, and reads the item
 /// chosen; a composer for another seed closes.
 fn settle_selection(state: &mut State) {
-    let review = &mut state.window.garden.review;
-    let Some(shown) = review.shown.clone() else {
+    let review = review(state);
+    let Some(shown) = review.shown.as_deref() else {
         return;
     };
-    let first_open = unresolved(&shown).next().map(|i| i.id.clone());
-    let current = shown.items.iter().find(|i| i.id == review.selected);
-    if let Some(first) = first_open
-        && current.is_none_or(|i| i.resolution != "unresolved")
-    {
-        review.selected = first;
+    let current = shown.items.iter().find(|i| i.id == review.reading.item);
+    let item = match unresolved(shown).next() {
+        Some(first) if current.is_none_or(|i| i.resolution != "unresolved") => Some(first),
+        _ => selected(review),
+    };
+    if let Some(item) = item.cloned() {
+        choose(state, &item);
     }
-    choose(state);
 }
 
-fn choose(state: &mut State) {
-    let Some(item) = selected(review(state)).cloned() else {
-        return;
-    };
+/// Decides on `item`, reading its own seed unless it is already the item decided on.
+fn choose(state: &mut State, item: &GardenReviewItem) {
     let review = review_mut(state);
-    if review.selected != item.id || review.browsed.is_empty() {
-        review.selected = item.id.clone();
-        review.browsed = item.seed_id.clone();
+    if review.reading.item != item.id {
+        review.reading = Reading {
+            item: item.id.clone(),
+            seed: item.seed_id.clone(),
+        };
         review.failure = None;
     }
     forget_composers(state, Some(&item.seed_id));
@@ -436,8 +443,7 @@ fn begin(state: &mut State, tx: &mut Tx) {
 fn open_panel(state: &mut State, tx: &mut Tx) {
     let review = review_mut(state);
     review.open = true;
-    review.selected.clear();
-    review.browsed.clear();
+    review.reading = Reading::default();
     settle_selection(state);
     tx.focus(PANEL.to_owned(), true);
     super::follow(state, tx);
@@ -450,8 +456,15 @@ fn exit(state: &mut State, tx: &mut Tx) {
 }
 
 fn select(state: &mut State, id: &str, tx: &mut Tx) {
-    review_mut(state).selected = id.to_owned();
-    choose(state);
+    let Some(item) = review(state)
+        .shown
+        .as_deref()
+        .and_then(|s| s.items.iter().find(|i| i.id == id))
+        .cloned()
+    else {
+        return;
+    };
+    choose(state, &item);
     super::follow(state, tx);
 }
 
@@ -459,7 +472,7 @@ fn select(state: &mut State, id: &str, tx: &mut Tx) {
 pub(super) fn browse(state: &mut State, id: &str, tx: &mut Tx) {
     forget_composers(state, None);
     let review = review_mut(state);
-    review.browsed = id.to_owned();
+    review.reading.seed = id.to_owned();
     review.failure = None;
     super::follow(state, tx);
 }
@@ -990,7 +1003,7 @@ fn reader(
     sheet: &Sheet,
     t: &Tokens,
 ) -> El {
-    let browsed = review.browsed.as_str();
+    let browsed = review.reading.seed.as_str();
     let at_review_seed = browsed == item.seed_id;
     let (document, error) = super::reading(&state.window.garden, browsed);
     let held = sheet.seeds.iter().find(|s| s.id == browsed);
@@ -1084,7 +1097,7 @@ fn decision(
     sheet: &Sheet,
     t: &Tokens,
 ) -> El {
-    let at_review_seed = review.browsed == item.seed_id;
+    let at_review_seed = review.reading.seed == item.seed_id;
     let mut aside = col()
         .key("garden.review.decision")
         .w_full()

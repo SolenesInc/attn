@@ -773,6 +773,128 @@ fn walks_up_and_down_a_plot_and_returns_to_the_reviewed_seed() {
     assert!(rests(&mut world));
 }
 
+const NEXT: &str = "Review the next seed";
+
+fn next() -> Seed {
+    with(seed("s-review2", NEXT), |s| {
+        s.status = "growing".into();
+        s.body = "The next seed's plan.".into();
+    })
+}
+
+fn next_item() -> GardenReviewItem {
+    GardenReviewItem {
+        id: "r-1.s-review2".into(),
+        seed_id: "s-review2".into(),
+        title: NEXT.into(),
+        recommendation: Some("harvest".into()),
+        explanation: Some("The next seed's work is done.".into()),
+        ..item()
+    }
+}
+
+fn reviewing_two() -> (World, Showing) {
+    let (mut world, showing) = garden(Script {
+        seeds: vec![reviewed(), next()],
+        ..Script::of(Some(review(vec![item(), next_item()])))
+    });
+    world.daemon.on("seed_document_get", |r: &Request| {
+        let seed = [reviewed(), next()]
+            .into_iter()
+            .find(|s| s.id == r["seed_id"]);
+        document_reply(r, seed)
+    });
+    click(&mut world, "Continue review");
+    (world, showing)
+}
+
+fn read_title(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("garden.review.head.title"))
+        .and_then(|n| n.name)
+}
+
+fn reads_the_next_seed_and_decides_on_it(world: &World) {
+    assert_eq!(read_title(world).as_deref(), Some(NEXT));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.review.plan.s-review2"))
+            .is_some()
+    );
+    assert!(decides(world));
+    let advice = advice(world);
+    assert!(
+        advice.iter().any(|w| w == "The next seed's work is done."),
+        "{advice:?}"
+    );
+}
+
+#[test]
+fn reads_and_decides_on_the_item_chosen_from_the_rail() {
+    let (mut world, _) = reviewing_two();
+    assert_eq!(read_title(&world).as_deref(), Some(SEED));
+
+    press(&mut world, "rail.r-1.s-review2");
+
+    reads_the_next_seed_and_decides_on_it(&world);
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn reads_and_decides_on_the_next_item_once_one_is_resolved() {
+    let (mut world, showing) = reviewing_two();
+    world
+        .daemon
+        .on("seed_review_keep", |r: &Request| result(r, "keep", None, 1));
+    let kept = review(vec![advised(|i| i.resolution = "kept".into()), next_item()]);
+    *showing.lock().unwrap() = (Some(kept), 1);
+
+    click(&mut world, "Keep growing");
+
+    reads_the_next_seed_and_decides_on_it(&world);
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn stays_on_the_plot_seed_the_user_went_to_while_the_review_updates() {
+    let reviewed = with(reviewed(), |s| s.edges.push(edge("part-of", "s-plot11")));
+    let sibling = part_of("s-plot11", "s-sibling", "Check the sibling");
+    let plot = plot("s-plot11", "Ship the review garden", "");
+    let seeds = vec![reviewed.clone(), sibling.clone(), plot.clone()];
+    let (mut world, _) = open_review(item(), seeds.clone());
+    let children = vec![reviewed, sibling];
+    world.daemon.on("seed_document_get", move |r: &Request| {
+        let seed = seeds.iter().find(|s| s.id == r["seed_id"]).cloned();
+        let mut reply = document_reply(r, seed.clone());
+        if seed.is_some_and(|s| s.id == "s-plot11") {
+            reply["document"]["children"] = serde_json::to_value(&children).unwrap();
+        }
+        reply
+    });
+    click(&mut world, "Ship the review garden");
+    click(&mut world, "Check the sibling");
+
+    emit(
+        &mut world,
+        review(vec![advised(|i| {
+            i.explanation = Some("Advice that arrived later.".into());
+        })]),
+    );
+
+    assert_eq!(read_title(&world).as_deref(), Some("Check the sibling"));
+    assert!(!decides(&world));
+    click(&mut world, "‹ Review seed");
+    assert_eq!(read_title(&world).as_deref(), Some(SEED));
+    assert!(
+        advice(&world)
+            .iter()
+            .any(|w| w == "Advice that arrived later.")
+    );
+    assert!(rests(&mut world));
+}
+
 fn handover_review(item: GardenReviewItem, seed: Seed) -> World {
     open_review(item, vec![seed]).0
 }
