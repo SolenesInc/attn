@@ -2391,3 +2391,155 @@ fn an_unsupported_models_cleared_effort_stays_cleared_through_a_conflict() {
     );
     assert_eq!(launch_status(&world).as_deref(), Some("Saved"));
 }
+
+fn on_tab(world: &World, tab: &str) -> bool {
+    world
+        .screen()
+        .get(Target::key(format!("crew.tab.{tab}")))
+        .is("checked")
+}
+
+#[test]
+fn a_normal_reopen_returns_to_the_first_member_on_launch_settings() {
+    let mut world = start(vec![member("alder", 2), member("trellis", 3)]);
+    open(&mut world);
+    click(&mut world, "crew.roster.trellis");
+    click(&mut world, "crew.tab.handoffs");
+    assert!(on_tab(&world, "handoffs"));
+    press(&mut world, Key::Escape);
+    assert!(!is_open(&world));
+    open(&mut world);
+    assert_eq!(heading(&world).as_deref(), Some("Alder"));
+    assert!(on_tab(&world, "launch"));
+}
+
+#[test]
+fn a_failed_save_on_leaving_the_charter_stays_in_view_and_retry_writes_the_kept_edit() {
+    let d = daemon(
+        vec![member("fern", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn("crew_charter_get", [charter_read("fern", "old", "old")]);
+    d.answer_in_turn(
+        "crew_charter_set",
+        [
+            Answer::Reply(message(CrewCharterSetResultMessage {
+                success: false,
+                error: Some("disk is read-only".into()),
+                ..CrewCharterSetResultMessage::new()
+            })),
+            charter_saved("fern", "old local edit", "new"),
+        ],
+    );
+    let mut world = World::start(d);
+    on_charter(&mut world);
+    click(&mut world, "crew.charter.editor");
+    world.gesture(|app| app.press("mod+down"));
+    world.gesture(|app| app.type_text(" local edit"));
+    click(&mut world, "crew.tab.launch");
+    let error = named(&world, "crew.charter.error").unwrap_or_default();
+    assert!(error.contains("disk is read-only"), "{error}");
+    assert_eq!(editor(&world), "old local edit");
+    assert!(on_tab(&world, "charter"));
+    click(&mut world, "crew.charter.retry");
+    assert_eq!(
+        named(&world, "crew.charter.status").as_deref(),
+        Some("Saved")
+    );
+    click(&mut world, "crew.tab.launch");
+    assert!(on_tab(&world, "launch"));
+}
+
+#[test]
+fn an_offline_charter_edit_outlasts_closing_and_reopening_manage_crew() {
+    let d = daemon(
+        vec![member("fern", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn("crew_charter_get", [charter_read("fern", "old", "old")]);
+    let mut world = World::start(d);
+    on_charter(&mut world);
+    super::ledger::hang_up(&mut world);
+    click(&mut world, "crew.charter.editor");
+    world.gesture(|app| app.press("mod+down"));
+    world.gesture(|app| app.type_text(" offline edit"));
+    click(&mut world, "crew.tab.launch");
+    assert!(named(&world, "crew.charter.error").is_some());
+
+    press(&mut world, Key::Escape);
+    if is_open(&world) {
+        press(&mut world, Key::Escape);
+    }
+    assert!(!is_open(&world));
+    open(&mut world);
+    assert!(on_tab(&world, "launch"));
+    click(&mut world, "crew.tab.charter");
+    assert_eq!(editor(&world), "old offline edit");
+    assert_ne!(
+        named(&world, "crew.charter.status").as_deref(),
+        Some("Saved")
+    );
+}
+
+#[test]
+fn entering_the_charter_tab_again_reads_the_saved_charter_again() {
+    let d = daemon(
+        vec![member("trellis", 4)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.answer_in_turn(
+        "crew_charter_get",
+        [
+            charter_read("trellis", "first", "first"),
+            charter_read("trellis", "edited elsewhere", "second"),
+        ],
+    );
+    let mut world = World::start(d);
+    on_charter(&mut world);
+    assert_eq!(editor(&world), "first");
+    click(&mut world, "crew.tab.launch");
+    click(&mut world, "crew.tab.charter");
+    assert_eq!(editor(&world), "edited elsewhere");
+    assert_eq!(world.daemon.sent_of("crew_charter_get").len(), 2);
+}
+
+#[test]
+fn the_inner_escape_commits_a_launch_field_and_the_next_closes_manage_crew() {
+    let d = daemon(
+        vec![member("keel", 6)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    d.on("crew_set", |r| {
+        let mut m = member("keel", 7);
+        m.model = r["model"].as_str().map(str::to_owned);
+        m.effort = r["effort"].as_str().map(str::to_owned);
+        message(CrewSetResultMessage {
+            success: true,
+            member: Some(m),
+            ..CrewSetResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(d, (1200.0, 1000.0));
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    click(&mut world, "settings.route-picker.filter");
+    world.gesture(|app| app.type_text("unlisted"));
+    click(&mut world, "settings.route-picker.manual");
+    let before = world.daemon.sent_of("crew_set").len();
+    click(&mut world, "settings.route-picker.effort");
+    world.gesture(|app| app.type_text("high"));
+    press(&mut world, Key::Escape);
+    assert!(is_open(&world));
+    let sent = world.daemon.sent_of("crew_set");
+    assert_eq!(sent.len(), before + 1);
+    assert_eq!(sent.last().unwrap()["effort"], "high");
+    if picker_open(&world) {
+        press(&mut world, Key::Escape);
+    }
+    press(&mut world, Key::Escape);
+    assert!(!is_open(&world));
+}
