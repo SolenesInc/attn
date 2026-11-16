@@ -31,7 +31,7 @@ pub(super) fn row_key(stop: &str, row: usize) -> String {
 }
 
 /// How the stop names its lines: as they are now, or as written at head when the file is gone.
-fn range(stop: &ReviewStop, rows: &[ReviewRow]) -> String {
+pub(super) fn range(stop: &ReviewStop, rows: &[ReviewRow]) -> String {
     if rows.len() != stop.rows.len() {
         let lines: Vec<i64> = rows.iter().filter_map(|r| r.now).collect();
         if let (Some(first), Some(last)) = (lines.first(), lines.last()) {
@@ -151,7 +151,7 @@ pub(super) fn stop(
         .children(empty)
 }
 
-fn header(stop: &ReviewStop, rows: &[ReviewRow], t: &Tokens) -> El {
+pub(super) fn header(stop: &ReviewStop, rows: &[ReviewRow], t: &Tokens) -> El {
     let (dir, name) = stop
         .path
         .rsplit_once('/')

@@ -150,10 +150,16 @@ fn first_file(state: &mut State, id: SurfaceId, tx: &mut Tx) {
 /// Docks an editor tile beside the active leaf, rooted at the agent on screen's folder when
 /// that is not the notebook.
 pub(crate) fn open_tile(state: &mut State, tx: &mut Tx) {
+    let root = tile_root(state);
+    open_tile_at(state, Params { root, path: None }, tx);
+}
+
+/// Docks an editor tile beside the active leaf, rooted at `params.root` with `params.path`
+/// open.
+pub(crate) fn open_tile_at(state: &mut State, params: Params, tx: &mut Tx) {
     let Some(desktop) = state.facts.current_desktop().map(|d| d.id.clone()) else {
         return;
     };
-    let root = tile_root(state);
     let tile_id = format!("notebook-tile-{}", uuid::Uuid::new_v4());
     let docked = (desktop.clone(), tile_id.clone());
     state.act(
@@ -162,13 +168,7 @@ pub(crate) fn open_tile(state: &mut State, tx: &mut Tx) {
             desktop_id: desktop,
             tile_id,
             tile_kind: "notebook".into(),
-            tile_params: root.map(|root| {
-                Params {
-                    root: Some(root),
-                    path: None,
-                }
-                .wire()
-            }),
+            tile_params: (params.root.is_some() || params.path.is_some()).then(|| params.wire()),
             edge: "right".into(),
             tile_share: Some(TILE_SHARE),
             ..DesktopDockTileMessage::new()

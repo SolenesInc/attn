@@ -3590,7 +3590,7 @@ fn says_why_i_edits_nothing_on_prose() {
     assert!(edit_box(&world).is_none());
     let screen = format!("{}", world.screen());
     assert!(
-        screen.contains("Put the cursor on a line of code to edit it."),
+        screen.contains("Put the cursor on a line of code or a document stop to edit it."),
         "{screen}"
     );
 }
@@ -4281,5 +4281,520 @@ fn offers_setup_again_once_the_setup_agent_is_gone_or_waits_without_a_server() {
     assert_eq!(
         servers(&world),
         ["go no server", "set up", "not here", "python no server"]
+    );
+}
+
+const GUIDE_DOCUMENT: &str = "---
+attn: review
+frame: brief
+repository: /repo
+base: 4be1c0d
+head: 9f3a7e2
+---
+
+# Explain the guide
+
+The guide says how a review reads.
+
+### docs/guide.md:1-9
+
+- L3: Reworded.
+";
+
+/// docs/guide.md now: a heading, a reworded paragraph, a rewritten one, a list with a reworded
+/// item, an added paragraph, a hard-wrapped paragraph with one word changed, and a paragraph
+/// deleted before one kept as it was.
+fn guide_now() -> Vec<String> {
+    [
+        "# Reviews",
+        "",
+        "Press `c` to leave a note on the line.",
+        "",
+        "Questions reach the agent at once and come back answered.",
+        "",
+        "- one",
+        "- two",
+        "- three",
+        "",
+        "A paragraph added at the end.",
+        "",
+        "Hard-wrapped lines",
+        "keep their words",
+        "when one of them changes.",
+        "",
+        "A paragraph kept as it was.",
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+
+/// The guide's rows against its base, with each line's head the line it is now.
+fn guide_rows(now: &[String]) -> Vec<ReviewRow> {
+    let row = |kind: &str, old: Option<i64>, n: Option<i64>, text: &str| ReviewRow {
+        head: n,
+        ..line(kind, old, n, text)
+    };
+    let mut rows = vec![
+        row(" ", Some(1), Some(1), &now[0]),
+        row(" ", Some(2), Some(2), &now[1]),
+        row("-", Some(3), None, "Press `c` to write a note on a line."),
+        row("+", None, Some(3), &now[2]),
+        row(" ", Some(4), Some(4), &now[3]),
+        row(
+            "-",
+            Some(5),
+            None,
+            "Nothing else is sent until you send the review.",
+        ),
+        row("+", None, Some(5), &now[4]),
+    ];
+    for (i, text) in now[5..].iter().enumerate() {
+        let n = 6 + i as i64;
+        match text.as_str() {
+            "A paragraph kept as it was." => rows.extend([
+                row("-", Some(n), None, "A paragraph that was deleted."),
+                row("-", Some(n), None, ""),
+                row(" ", Some(n), Some(n), text),
+            ]),
+            "keep their words" => rows.extend([
+                row("-", Some(n), None, "keep all words"),
+                row("+", None, Some(n), text),
+            ]),
+            "- two" => rows.extend([
+                row("-", Some(n), None, "- to"),
+                row("+", None, Some(n), text),
+            ]),
+            t if t.starts_with("A paragraph added") => rows.push(row("+", None, Some(n), text)),
+            _ => rows.push(row(" ", Some(n), Some(n), text)),
+        }
+    }
+    rows
+}
+
+fn guide_bundle(rows: Vec<ReviewRow>, lines_above: i64) -> ReviewBundle {
+    let now_to = rows.iter().filter_map(|r| r.now).max().unwrap_or(0);
+    ReviewBundle {
+        frame: "brief".into(),
+        repository: "/repo".into(),
+        base: Some("4be1c0d".into()),
+        head: "9f3a7e2".into(),
+        stops: vec![ReviewStop {
+            heading_line: 13 + lines_above,
+            path: "docs/guide.md".into(),
+            from: 1,
+            to: 9,
+            now_from: 1,
+            now_to,
+            file_hash: "h1".into(),
+            rows,
+            notes: vec![ReviewNote {
+                line: 15 + lines_above,
+                from: 3,
+                to: 3,
+                now_from: 3,
+                now_to: 3,
+                look: false,
+                text: "Reworded.".into(),
+            }],
+            ..ReviewStop::default()
+        }],
+        files: vec![ReviewFile {
+            path: "docs/guide.md".into(),
+            status: "modified".into(),
+            added: 2,
+            removed: 2,
+            ..ReviewFile::default()
+        }],
+        ..ReviewBundle::default()
+    }
+}
+
+type Guide = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// The guide's review open in its tile, with the file and its edits served from `guide` and
+/// the user's marks kept.
+fn open_guide() -> (World, Guide, Marks) {
+    open_guide_with(guide_rows)
+}
+
+fn open_guide_with(rows_of: fn(&[String]) -> Vec<ReviewRow>) -> (World, Guide, Marks) {
+    let mut world = start_with_session(Some("s-a"));
+    let guide: Guide = std::sync::Arc::new(std::sync::Mutex::new(guide_now()));
+    let version = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1));
+    let (read, v) = (guide.clone(), version.clone());
+    world.daemon.on("review_file", move |r| {
+        let hash = format!("h{}", v.load(std::sync::atomic::Ordering::SeqCst));
+        json!({"event": "review_file_result", "success": true, "path": r["path"],
+            "rows": rows_of(&read.lock().unwrap()), "hash": hash})
+    });
+    let (written, v) = (guide.clone(), version.clone());
+    world.daemon.on("review_edit", move |r| {
+        let (from, to) = (r["from"].as_i64().unwrap() as usize, r["to"].as_i64().unwrap() as usize);
+        let text = r["text"].as_str().unwrap_or_default();
+        let mut lines = written.lock().unwrap();
+        lines.splice(from - 1..to, text.split('\n').map(str::to_owned));
+        let n = v.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        json!({"event": "review_edit_result", "success": true, "conflict": false, "hash": format!("h{n}")})
+    });
+    let (kept, _, _) = keep_drafts(&world);
+    let rows = rows_of(&guide.lock().unwrap());
+    deliver(&mut world, GUIDE_DOCUMENT, Some(guide_bundle(rows, 0)));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    (world, guide, kept)
+}
+
+/// The blocks of the document stop, as their names read.
+fn guide_blocks(world: &World) -> Vec<(String, String)> {
+    world
+        .screen()
+        .descendants(Target::key("tile.m"))
+        .into_iter()
+        .filter_map(|n| Some((n.name.filter(|s| s.contains(" block, line"))?, n.key?)))
+        .collect()
+}
+
+fn to_block(world: &mut World, line: &str) {
+    press(world, Key::Right);
+    for _ in 0..12 {
+        if cursor(world)
+            .name
+            .as_deref()
+            .is_some_and(|n| n.ends_with(line))
+        {
+            return;
+        }
+        press(world, Key::Down);
+    }
+    panic!("no block {line}");
+}
+
+#[test]
+fn renders_a_markdown_stop_as_a_document_with_a_light_rewording_s_words_and_a_rewrite_s_old_text_struck()
+ {
+    let (world, _, _) = open_guide();
+    let blocks = guide_blocks(&world);
+    let names: Vec<&str> = blocks.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "unchanged block, line 1",
+            "changed block, line 3",
+            "changed block, line 5",
+            "unchanged block, line 7",
+            "changed block, line 8",
+            "unchanged block, line 9",
+            "changed block, line 11",
+            "changed block, lines 13–15",
+            "unchanged block, line 17",
+        ]
+    );
+    let node = |key: String| world.screen().get(Target::key(key));
+    let words = node(format!("{}.words", blocks[1].1));
+    assert_eq!(
+        (words.name.as_deref(), words.description.as_deref()),
+        (
+            Some("Press c to write leave a note on a the line."),
+            Some("added: leave the; removed: write a")
+        )
+    );
+    assert_eq!(
+        node(format!("{}.words", blocks[7].1))
+            .description
+            .as_deref(),
+        Some("added: their; removed: all")
+    );
+    let said = |key: String| {
+        world
+            .screen()
+            .descendants(Target::key(key))
+            .into_iter()
+            .filter_map(|n| n.name)
+            .fold(Vec::<String>::new(), |mut said, name| {
+                if said.last() != Some(&name) {
+                    said.push(name);
+                }
+                said
+            })
+            .join(" ")
+    };
+    assert_eq!(
+        said(format!("{}.was", blocks[2].1)),
+        "Nothing else is sent until you send the review."
+    );
+    assert_eq!(said(format!("{}.was", blocks[4].1)), "to");
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("{}.was", blocks[6].1)))
+            .is_none()
+    );
+    assert_eq!(
+        said(format!("{}.deleted", blocks[8].1)),
+        "A paragraph that was deleted."
+    );
+    let read = shown(&world);
+    let at = |t: &str| {
+        read.iter()
+            .position(|s| s == t)
+            .unwrap_or_else(|| panic!("{t:?} in {read:?}"))
+    };
+    assert!(at("Reworded.") > at("Press c to write leave a note on a the line."));
+    assert!(at("Reworded.") < at("Nothing else is sent until you send the review."));
+}
+
+#[test]
+fn edits_a_block_as_markdown_with_i_and_keeps_the_cursor_on_it_when_the_stop_and_the_document_change()
+ {
+    let (mut world, guide, kept) = open_guide();
+    to_block(&mut world, "line 3");
+    type_key(&mut world, "i");
+    let shown_box = edit_box(&world).expect("the edit box opens");
+    assert!(
+        shown_box
+            .iter()
+            .any(|t| t == "Editing docs/guide.md: this block, as markdown"),
+        "{shown_box:?}"
+    );
+    append(&mut world, " Then send.");
+    press(&mut world, Key::Enter);
+    assert!(edit_box(&world).is_some());
+    append(&mut world, "It waits.");
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        })
+    });
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    let edited = "Press `c` to leave a note on the line. Then send.\nIt waits.";
+    assert_eq!(guide.lock().unwrap()[2..4].join("\n"), edited);
+    let mark = kept
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|m| m["type"] == "edit")
+        .cloned()
+        .expect("the edit is listed");
+    assert_eq!(
+        (
+            mark["edit_now"].clone(),
+            mark["anchor"]["file_start_line"].clone(),
+            mark["anchor"]["file_end_line"].clone()
+        ),
+        (json!(edited), json!(3), json!(4))
+    );
+
+    let rows = guide_rows(&guide.lock().unwrap());
+    let content = GUIDE_DOCUMENT.replace(
+        "The guide says how a review reads.",
+        "The guide says how a review reads.\n\nIt changed today.",
+    );
+    deliver(&mut world, &content, Some(guide_bundle(rows, 2)));
+    assert!(shown(&world).iter().any(|t| t == "It changed today."));
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("changed block, lines 3–4")
+    );
+}
+
+#[test]
+fn writes_a_note_on_a_whole_block() {
+    let (mut world, _, kept) = open_guide();
+    to_block(&mut world, "line 5");
+    type_key(&mut world, "c");
+    write(&mut world, "Say when.");
+    let marks = kept.lock().unwrap().clone();
+    assert_eq!(marks.len(), 1, "{marks:?}");
+    let anchor = &marks[0]["anchor"];
+    assert_eq!(
+        (
+            marks[0]["type"].clone(),
+            anchor["file"].clone(),
+            anchor["file_start_line"].clone(),
+            anchor["file_end_line"].clone(),
+            anchor["start_line"].clone()
+        ),
+        (
+            json!("comment"),
+            json!("docs/guide.md"),
+            json!(5),
+            json!(5),
+            json!(13)
+        )
+    );
+    let read = shown(&world);
+    let at = |t: &str| {
+        read.iter()
+            .position(|s| s.contains(t))
+            .unwrap_or_else(|| panic!("{t:?} in {read:?}"))
+    };
+    assert!(at("Say when.") > at("Questions reach the agent"));
+    assert!(at("Say when.") < at("one"));
+}
+
+#[test]
+fn says_a_document_block_is_not_code_when_asked_about_a_name() {
+    let (mut world, _, _) = open_guide();
+    to_block(&mut world, "line 3");
+    type_key(&mut world, "f");
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("Put the cursor on a line of code to ask about it.")
+    );
+}
+
+/// The guide's rows after two lines were added below its first line, past the review's head.
+fn guide_grown_since_head(now: &[String]) -> Vec<ReviewRow> {
+    let rows = guide_rows(now);
+    let mut grown = vec![rows[0].clone()];
+    grown.extend(
+        ["", "Added since the head."]
+            .iter()
+            .zip(2..)
+            .map(|(t, n)| line("+", None, Some(n), t)),
+    );
+    grown.extend(rows[1..].iter().cloned().map(|mut r| {
+        r.now = r.now.map(|n| n + 2);
+        r
+    }));
+    grown
+}
+
+#[test]
+fn anchors_a_note_on_a_block_at_its_lines_at_head_when_the_file_gained_lines_above_it_since() {
+    let (mut world, _, kept) = open_guide_with(guide_grown_since_head);
+    to_block(&mut world, "line 5");
+    assert!(
+        shown(&world)
+            .iter()
+            .any(|t| t.starts_with("Press c to write leave")),
+    );
+    type_key(&mut world, "c");
+    write(&mut world, "Say which line.");
+    let marks = kept.lock().unwrap().clone();
+    let anchor = &marks[0]["anchor"];
+    assert_eq!(
+        (
+            anchor["file"].clone(),
+            anchor["file_start_line"].clone(),
+            anchor["file_end_line"].clone()
+        ),
+        (json!("docs/guide.md"), json!(3), json!(3))
+    );
+    let read = shown(&world);
+    let at = |t: &str| read.iter().position(|s| s.contains(t)).unwrap();
+    assert!(at("Say which line.") > at("Press c to write leave"));
+    assert!(at("Say which line.") < at("Questions reach the agent"));
+}
+
+#[test]
+fn shows_a_changed_link_destination_as_the_old_link_struck_and_the_new_one_added() {
+    let (world, _, _) = open_guide_with(|_| {
+        vec![
+            line(" ", Some(1), Some(1), "# Links"),
+            line(" ", Some(2), Some(2), ""),
+            line("-", Some(3), None, "Read the [guide](old.md) first."),
+            line("+", None, Some(3), "Read the [guide](new.md) first."),
+        ]
+    });
+    let blocks = guide_blocks(&world);
+    let words = world
+        .screen()
+        .get(Target::key(format!("{}.words", blocks[1].1)));
+    assert_eq!(
+        (words.name.as_deref(), words.description.as_deref()),
+        (
+            Some("Read the guide guide first."),
+            Some("added: guide; removed: guide")
+        )
+    );
+}
+
+#[test]
+fn opens_a_document_on_this_machine_in_the_editor_tile_rooted_at_the_repository() {
+    let (mut world, _, _) = open_guide();
+    world.daemon.on(
+        "desktop_dock_tile",
+        |r| json!({"event": "command_result", "request_id": r["request_id"], "success": true}),
+    );
+    to_block(&mut world, "line 5");
+    type_key(&mut world, "o");
+    click(&mut world, Target::key("tile.m.review.part.3.editor"));
+    let docked = world.daemon.sent_of("desktop_dock_tile");
+    assert_eq!(docked.len(), 2);
+    for d in &docked {
+        let params: serde_json::Value =
+            serde_json::from_str(d["tile_params"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            (d["tile_kind"].clone(), params),
+            (
+                json!("notebook"),
+                json!({"root": "/repo", "path": "docs/guide.md"})
+            )
+        );
+    }
+}
+
+#[test]
+fn offers_no_editor_tile_for_a_document_on_an_outpost_and_reads_and_saves_its_edits_there() {
+    let (mut world, guide, _) = open_guide();
+    let rows = guide_rows(&guide.lock().unwrap());
+    world.daemon.emit(DesktopTileContentMessage {
+        desktop_id: DESKTOP.into(),
+        tile_id: "m".into(),
+        tile_kind: "markdown".into(),
+        path: DOC.into(),
+        host: Some("outpost-1".into()),
+        content: GUIDE_DOCUMENT.into(),
+        review: Some(guide_bundle(rows, 0)),
+        ..DesktopTileContentMessage::new()
+    });
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.m.review.part.3.editor"))
+            .is_none()
+    );
+    to_block(&mut world, "line 5");
+    type_key(&mut world, "o");
+    assert!(world.daemon.sent_of("desktop_dock_tile").is_empty());
+
+    type_key(&mut world, "i");
+    assert!(edit_box(&world).is_some());
+    append(&mut world, " Fast.");
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        })
+    });
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    let reads: Vec<_> = world
+        .daemon
+        .sent_of("review_file")
+        .iter()
+        .map(|r| (r["host"].clone(), r["path"].clone()))
+        .collect();
+    assert!(
+        reads.contains(&(json!("outpost-1"), json!("docs/guide.md"))),
+        "{reads:?}"
+    );
+    let edit = world.daemon.sent_of("review_edit");
+    assert_eq!(
+        (
+            edit[0]["host"].clone(),
+            edit[0]["from"].clone(),
+            edit[0]["to"].clone()
+        ),
+        (json!("outpost-1"), json!(5), json!(5))
     );
 }

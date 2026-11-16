@@ -2,6 +2,7 @@
 //! sends a markdown tile its review bundle only while `code_review_enabled` is on, so a tile
 //! with a bundle is a review and one without is plain markdown.
 
+mod blocks;
 mod diagram;
 mod document;
 mod edits;
@@ -74,6 +75,9 @@ pub(crate) struct Place {
     pub(crate) stop: Option<usize>,
     /// The stop this arrow shows.
     pub(crate) arrow: Option<usize>,
+    /// The first and last of its stop's rows this place covers: a row itself, a block of a
+    /// document stop its lines.
+    pub(crate) rows: (usize, usize),
 }
 
 /// What people did in one review tile.
@@ -303,6 +307,7 @@ impl<'a> Reading<'a> {
             part,
             stop: None,
             arrow: None,
+            rows: (0, 0),
         };
         for (part, at) in self.parts.iter().zip(0..) {
             if !self.shows(at) {
@@ -330,14 +335,29 @@ impl<'a> Reading<'a> {
                 }
                 Part::Stop(stop) => {
                     let rows = self.rows_of(*stop);
-                    places.extend(rows.iter().zip(0..).map(|(row, j)| Place {
-                        stop: Some(*stop),
-                        ..place(
-                            row_spot(&bundle.stops[*stop].path, row),
-                            stop::row_key(&key, j),
-                            at,
-                        )
-                    }));
+                    let path = &bundle.stops[*stop].path;
+                    if blocks::is_document(path) {
+                        let read = blocks::blocks(rows);
+                        places.extend(read.blocks.iter().zip(0..).map(|(b, j)| Place {
+                            stop: Some(*stop),
+                            rows: b.rows,
+                            ..place(
+                                Spot::Row {
+                                    path: path.clone(),
+                                    old: None,
+                                    now: Some(b.from),
+                                },
+                                stop::row_key(&key, j),
+                                at,
+                            )
+                        }));
+                    } else {
+                        places.extend(rows.iter().zip(0..).map(|(row, j)| Place {
+                            stop: Some(*stop),
+                            rows: (j, j),
+                            ..place(row_spot(path, row), stop::row_key(&key, j), at)
+                        }));
+                    }
                 }
                 Part::NotShown => {
                     places.extend(bundle.not_shown.iter().zip(0..).map(|(entry, j)| {
@@ -624,6 +644,10 @@ pub(crate) fn body(
                 let colors = reviews.colors(&s.path, &s.file_hash);
                 let rows = reading.rows_of(*index);
                 let on = marks_on(&s.path);
+                let selected_places = current
+                    .filter(|_| review.select_from.is_some())
+                    .and_then(|c| selected_places(&reading, review, c))
+                    .map(|(a, b)| (a - first, b - first));
                 let selected = current
                     .filter(|_| review.select_from.is_some())
                     .and_then(|c| selected_rows(&reading, review, c))
@@ -643,6 +667,16 @@ pub(crate) fn body(
                     *t,
                 );
                 memo(key.clone(), version, || {
+                    if blocks::is_document(&s.path) {
+                        return blocks::view(
+                            (tile, &key, host.is_none()),
+                            s,
+                            (rows, &blocks::blocks(rows)),
+                            (row, selected_places),
+                            &on,
+                            t,
+                        );
+                    }
                     stop::stop(
                         (tile, &key),
                         s,
@@ -1302,6 +1336,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             );
             return true;
         }
+        (_, "o") if !viewing => match editable_document(&message, &reading, cursor) {
+            Some(path) => Some(Move::Editor(path)),
+            None => return false,
+        },
         (_, "i") => Some(Move::Edit),
         (_, "u") => Some(Move::Undo),
         (_, "c" | "a") => Some(Move::Mark(if typed == "a" {
@@ -1435,6 +1473,7 @@ fn apply(
                 Err(why) => state.window.notify(why.to_owned(), tx),
             }
         }
+        Some(Move::Editor(path)) => open_in_editor(state, tile, path, tx),
         Some(Move::Undo) => {
             let Some(reading) = reading else { return };
             let cursor = reading.cursor(review);
@@ -1707,6 +1746,47 @@ enum Move {
     Edit,
     /// Undo the newest edit on the cursor's line.
     Undo,
+    /// Open this document of the repository in the editor tile.
+    Editor(String),
+}
+
+/// The document of the stop the cursor stands in, when the editor tile can open it: a review on
+/// this machine.
+fn editable_document(
+    message: &attn_protocol::DesktopTileContentMessage,
+    reading: &Reading,
+    cursor: Option<usize>,
+) -> Option<String> {
+    if source_of(message).0.is_some() {
+        return None;
+    }
+    let stop = reading.places[cursor?].stop?;
+    let path = &reading.bundle.stops[stop].path;
+    blocks::is_document(path).then(|| path.clone())
+}
+
+/// Opens document `path` of tile `tile`'s review in the editor tile, rooted at the repository,
+/// when the review is on this machine.
+pub(crate) fn open_in_editor(state: &mut State, tile: &str, path: String, tx: &mut Tx) {
+    let Some(content) = state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .find(|(k, c)| k.tile == tile && c.message.review.is_some())
+        .map(|(_, c)| c.message.clone())
+    else {
+        return;
+    };
+    if source_of(&content).0.is_some() {
+        return;
+    }
+    let bundle = content.review.as_ref().expect("filtered on a review");
+    let params = crate::notebook::Params {
+        root: Some(bundle.repository.clone()),
+        path: Some(path),
+    };
+    crate::notebook::open_tile_at(state, params, tx);
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.
@@ -1903,7 +1983,13 @@ fn selected_rows(
     cursor: usize,
 ) -> Option<(usize, usize, usize)> {
     let stop = reading.places[cursor].stop?;
-    let first = reading.places.iter().position(|p| p.stop == Some(stop))?;
+    let (a, b) = selected_places(reading, review, cursor)?;
+    Some((stop, reading.places[a].rows.0, reading.places[b].rows.1))
+}
+
+/// The first and last places of the selection in the cursor's stop, which ends at the cursor.
+fn selected_places(reading: &Reading, review: &Review, cursor: usize) -> Option<(usize, usize)> {
+    let stop = reading.places[cursor].stop?;
     let from = review
         .select_from
         .as_ref()
@@ -1917,7 +2003,7 @@ fn selected_rows(
                 .min_by_key(|i| i.abs_diff(cursor))
         })
         .unwrap_or(cursor);
-    Some((stop, from.min(cursor) - first, from.max(cursor) - first))
+    Some((from.min(cursor), from.max(cursor)))
 }
 
 /// The anchor of a mark on what the cursor stands on: the rows selected in the file view or
@@ -2015,7 +2101,8 @@ fn placements<'m>(
 /// the document line the edit is listed at.
 struct EditAt {
     path: String,
-    at: (i64, Option<(i64, i64)>),
+    /// The line now, the lines now selected, and whether they are a document's block.
+    at: (i64, Option<(i64, i64)>, bool),
     doc_line: i64,
 }
 
@@ -2029,7 +2116,7 @@ fn edit_target(
     cursor: Option<usize>,
 ) -> Result<EditAt, &'static str> {
     const REMOVED: &str = "This line was removed. i edits the code as it is now.";
-    const NOT_CODE: &str = "Put the cursor on a line of code to edit it.";
+    const NOT_CODE: &str = "Put the cursor on a line of code or a document stop to edit it.";
     let review = state.readings.reviews.tiles.get(tile).ok_or(NOT_CODE)?;
     let doc_line = |path: &str| {
         bundle
@@ -2057,7 +2144,7 @@ fn edit_target(
             .then(|| (lines[0], lines[lines.len() - 1]));
         return Ok(EditAt {
             path: open.target.path.clone(),
-            at: (line, selection),
+            at: (line, selection, false),
             doc_line: doc_line(&open.target.path),
         });
     }
@@ -2071,11 +2158,12 @@ fn edit_target(
         _ => return Err(NOT_CODE),
     };
     let lines: Vec<i64> = rows[from..=to].iter().filter_map(|r| r.now).collect();
-    let selection = (review.select_from.is_some() && !lines.is_empty())
+    let block = blocks::is_document(&s.path);
+    let selection = ((block || review.select_from.is_some()) && !lines.is_empty())
         .then(|| (lines[0], lines[lines.len() - 1]));
     Ok(EditAt {
         path: s.path.clone(),
-        at: (line, selection),
+        at: (line, selection, block),
         doc_line: s.heading_line,
     })
 }
@@ -2333,7 +2421,10 @@ fn nav_line(review: &Review, reading: &Reading, tile: &str) -> Result<nav::Line,
     }
     let at = reading.cursor(review).ok_or(NOT_CODE)?;
     let place = &reading.places[at];
-    let stop = place.stop.ok_or(NOT_CODE)?;
+    let stop = place
+        .stop
+        .filter(|s| !blocks::is_document(&reading.bundle.stops[*s].path))
+        .ok_or(NOT_CODE)?;
     let Spot::Row { old, now, .. } = &place.spot else {
         return Err(NOT_CODE);
     };

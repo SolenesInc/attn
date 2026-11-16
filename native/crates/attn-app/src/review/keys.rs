@@ -355,6 +355,10 @@ const ALL_KEYS: &[(&str, &str)] = &[
         "Switch between the diagrams before and after the change, when the document has both. Every frame shows the same side.",
     ),
     (
+        "o",
+        "On a stop of a markdown file, open the file in the editor tile, rooted at the repository. Only for a review on this machine.",
+    ),
+    (
         "f",
         "Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on is offered in one line above the keys: ↵ takes it, esc drops it, and every other key keeps working. The line asked about is marked … until the answer comes.",
     ),

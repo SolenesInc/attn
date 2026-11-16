@@ -21,6 +21,8 @@ pub(crate) enum UnitKind {
     String,
     Comment,
     Line,
+    /// A block of a document stop, edited as markdown.
+    Block,
 }
 
 /// Lines of a file, 0-based and inclusive, that one edit takes.
@@ -254,7 +256,7 @@ impl Open {
     }
 
     fn several(&self) -> bool {
-        self.unit.to > self.unit.from
+        self.unit.to > self.unit.from || self.unit.kind == UnitKind::Block
     }
 
     fn describe(&self) -> String {
@@ -262,6 +264,7 @@ impl Open {
         match self.unit.kind {
             UnitKind::String => format!("this string, {count} lines"),
             UnitKind::Comment => format!("this comment, {count} lines"),
+            UnitKind::Block => "this block, as markdown".to_owned(),
             _ if count > 1 => format!("lines {}–{}", self.unit.from + 1, self.unit.to + 1),
             _ => format!("line {}", self.unit.from + 1),
         }
@@ -278,7 +281,7 @@ pub(crate) fn begin(
     tile: &str,
     source: (Option<String>, String),
     path: &str,
-    (line, selection): (i64, Option<(i64, i64)>),
+    (line, selection, block): (i64, Option<(i64, i64)>, bool),
     doc_line: i64,
     uri: String,
     tx: &mut Tx,
@@ -315,7 +318,14 @@ pub(crate) fn begin(
             };
             let selection = selection.and_then(|(a, b)| Some((index(a)?, index(b)?)));
             let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
-            let unit = unit(&refs, &path_, cursor, selection);
+            let unit = match selection {
+                Some((from, to)) if block => Unit {
+                    kind: UnitKind::Block,
+                    from,
+                    to,
+                },
+                _ => unit(&refs, &path_, cursor, selection),
+            };
             let open = Open {
                 tile,
                 source,
