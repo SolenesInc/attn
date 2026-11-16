@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,7 +26,11 @@ type Server struct {
 	holds    map[string]*reviewsHold
 
 	rateLimitedUntil time.Time
+	windowResetAt    time.Time
+	windowUsed       map[string]int
 }
+
+const rateLimitPerWindow = 5000
 
 type reviewsHold struct {
 	held    chan struct{}
@@ -70,6 +75,19 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		Body:   body,
 	})
 	rateLimitedUntil := s.rateLimitedUntil
+	if !s.windowResetAt.IsZero() {
+		resource := "core"
+		if strings.HasSuffix(r.URL.Path, "/graphql") {
+			resource = "graphql"
+		}
+		s.windowUsed[resource]++
+		used := s.windowUsed[resource]
+		w.Header().Set("X-RateLimit-Resource", resource)
+		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rateLimitPerWindow))
+		w.Header().Set("X-RateLimit-Used", strconv.Itoa(used))
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(rateLimitPerWindow-used))
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(s.windowResetAt.Unix(), 10))
+	}
 	s.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -211,6 +229,19 @@ func (s *Server) RateLimitUntil(resetAt time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rateLimitedUntil = resetAt
+}
+
+func (s *Server) StartRateLimitWindow(resetAt time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.windowResetAt = resetAt
+	s.windowUsed = map[string]int{}
+}
+
+func (s *Server) SpendElsewhere(resource string, requests int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.windowUsed[resource] += requests
 }
 
 func (s *Server) AddPR(pr MockPR) {

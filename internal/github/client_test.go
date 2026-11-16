@@ -7,7 +7,7 @@ import (
 )
 
 func TestATestTokenIsNeverSentToTheRealGitHubAPI(t *testing.T) {
-	_, err := NewClientForHost(context.Background(), "github.com", "https://api.github.com", "test-token")
+	_, err := NewClientForHost(context.Background(), nil, "github.com", "https://api.github.com", "test-token")
 	if err == nil || !strings.Contains(err.Error(), "refusing to use real GitHub API") {
 		t.Fatalf("NewClientForHost with the test token and the real API = %v, want a refusal", err)
 	}

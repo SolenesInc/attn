@@ -53,12 +53,14 @@ type Client struct {
 
 	rateLimitsMu sync.RWMutex
 	rateLimits   map[string]*RateLimitInfo
+	spend        map[string]*spendWindow
+	logf         func(format string, args ...any)
 
 	selfLimiter *rate.Limiter
 	stopPacing  context.Context
 }
 
-func newClientWithToken(stopPacing context.Context, host, baseURL, token string) (*Client, error) {
+func newClientWithToken(stopPacing context.Context, logf func(format string, args ...any), host, baseURL, token string) (*Client, error) {
 	if token == "" {
 		return nil, ErrNoToken
 	}
@@ -74,6 +76,8 @@ func newClientWithToken(stopPacing context.Context, host, baseURL, token string)
 			Timeout: 30 * time.Second,
 		},
 		rateLimits:  make(map[string]*RateLimitInfo),
+		spend:       make(map[string]*spendWindow),
+		logf:        logf,
 		selfLimiter: rate.NewLimiter(rate.Limit(1), 60),
 		stopPacing:  stopPacing,
 	}, nil
@@ -132,7 +136,7 @@ func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Clien
 	}
 	defer resp.Body.Close()
 
-	c.parseRateLimitHeaders(resp)
+	c.recordResponse(req.URL.Path, resp)
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -168,36 +172,46 @@ func (c *Client) awaitBudget(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) parseRateLimitHeaders(resp *http.Response) {
+func (c *Client) recordResponse(requestPath string, resp *http.Response) {
 	resource := resp.Header.Get("X-RateLimit-Resource")
 	if resource == "" {
 		resource = "core"
 	}
-
-	remainingStr := resp.Header.Get("X-RateLimit-Remaining")
-	resetStr := resp.Header.Get("X-RateLimit-Reset")
-
-	if remainingStr == "" || resetStr == "" {
-		return
-	}
-
-	remaining, err := strconv.Atoi(remainingStr)
-	if err != nil {
-		return
-	}
-
-	resetUnix, err := strconv.ParseInt(resetStr, 10, 64)
-	if err != nil {
-		return
-	}
+	remaining, remainingErr := strconv.Atoi(resp.Header.Get("X-RateLimit-Remaining"))
+	resetUnix, resetErr := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64)
+	used, usedErr := strconv.Atoi(resp.Header.Get("X-RateLimit-Used"))
 
 	c.rateLimitsMu.Lock()
-	c.rateLimits[resource] = &RateLimitInfo{
-		Resource:  resource,
-		Remaining: remaining,
-		ResetAt:   time.Unix(resetUnix, 0),
+	if remainingErr == nil && resetErr == nil {
+		c.rateLimits[resource] = &RateLimitInfo{
+			Resource:  resource,
+			Remaining: remaining,
+			ResetAt:   time.Unix(resetUnix, 0),
+		}
 	}
+	window := c.spend[resource]
+	closedLine := ""
+	if window == nil {
+		window = newSpendWindow()
+		c.spend[resource] = window
+	}
+	if resetErr == nil && window.reset != resetUnix {
+		if window.reset != 0 {
+			closedLine = window.line(c.host, resource)
+			window = newSpendWindow()
+			c.spend[resource] = window
+		}
+		window.reset = resetUnix
+	}
+	if usedErr == nil {
+		window.accountUsed = used
+	}
+	window.count(spendEndpointOf(requestPath), spendStatusOf(resp.StatusCode))
 	c.rateLimitsMu.Unlock()
+
+	if closedLine != "" {
+		c.logf("%s", closedLine)
+	}
 }
 
 func (c *Client) IsRateLimited(resource string) (bool, time.Time) {

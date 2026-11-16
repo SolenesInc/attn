@@ -72,14 +72,14 @@ func (r *ClientRegistry) FetchAllPRs() ([]*protocol.PR, error) {
 	return allPRs, errOut
 }
 
-func NewClientForHost(stopPacing context.Context, host, apiURL, token string) (*Client, error) {
+func NewClientForHost(stopPacing context.Context, logf func(format string, args ...any), host, apiURL, token string) (*Client, error) {
 	if apiURL == "" {
 		apiURL = mapHostToAPIURL(host)
 	}
 	if token == "" {
 		return nil, ErrNoToken
 	}
-	return newClientWithToken(stopPacing, host, apiURL, token)
+	return newClientWithToken(stopPacing, logf, host, apiURL, token)
 }
 
 func (r *ClientRegistry) snapshotClients() map[string]*Client {
