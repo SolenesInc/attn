@@ -112,6 +112,7 @@ fn rows(world: &World) -> Vec<String> {
                     && !k.starts_with("sidebar.dock.")
                     && !k.ends_with(".actions")
                     && !k.ends_with(".close")
+                    && !k.ends_with(".rename")
             })
         })
         .filter_map(|n| n.name)
@@ -675,4 +676,100 @@ fn an_agent_row_leads_with_its_harness_logo_until_the_user_turns_logos_off() {
     });
     world.settle();
     assert_eq!(lead(&world), ("Claude · working".into(), 8.0, 8.0));
+}
+
+#[test]
+fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_in_place() {
+    use super::desktop_close::{desktop, session, start};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let mut world = start(
+        false,
+        vec![session("agent", "claude")],
+        desktop("work", 1, "Work", None, &["agent"]),
+    );
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let select = |action| keymap.label(keymap.binding(&action).unwrap());
+    let heading = |world: &World, id: &str| {
+        world
+            .screen()
+            .get(Target::key(format!("sidebar.desktop.{id}")))
+            .description
+    };
+    assert_eq!(
+        heading(&world, "work"),
+        Some(select(Action::DesktopSelect1))
+    );
+    assert_eq!(
+        heading(&world, "other"),
+        Some(select(Action::DesktopSelect2))
+    );
+
+    let refuse = Arc::new(AtomicBool::new(true));
+    let refusing = refuse.clone();
+    world
+        .daemon
+        .on("desktop_rename", move |r: &attn_testkit::Request| {
+            if refusing.load(Ordering::SeqCst) {
+                serde_json::json!({
+                    "event": "profile_action_result",
+                    "request_id": r["request_id"],
+                    "action": "desktop_rename",
+                    "success": false,
+                    "error": "desktop work changed since revision 1",
+                })
+            } else {
+                serde_json::json!({
+                    "event": "profile_action_result",
+                    "request_id": r["request_id"],
+                    "action": "desktop_rename",
+                    "success": true,
+                })
+            }
+        });
+    let renamed = |world: &World| -> Vec<String> {
+        world
+            .daemon
+            .sent_of("desktop_rename")
+            .iter()
+            .map(|c| {
+                assert_eq!(c["desktop_id"], "work");
+                c["name"].as_str().unwrap().to_owned()
+            })
+            .collect()
+    };
+
+    world.gesture(|app| app.click(Target::role("button").name("Rename Work")));
+    world.settle();
+    let dialog = world.screen().get(Target::key("desktop.rename"));
+    assert_eq!(dialog.name.as_deref(), Some("Rename desktop"));
+    let field = world.screen().get(Target::key("desktop.rename.field"));
+    assert_eq!(field.value.as_deref(), Some("Work"));
+    world.gesture(|app| app.type_text("Reviews"));
+    world.gesture(|app| app.press("enter"));
+    world.settle();
+    assert_eq!(renamed(&world), ["Reviews"]);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("desktop.rename.refused"))
+            .name
+            .as_deref(),
+        Some("desktop work changed since revision 1")
+    );
+
+    refuse.store(false, Ordering::SeqCst);
+    world.gesture(|app| app.press("enter"));
+    world.settle();
+    assert_eq!(renamed(&world), ["Reviews", "Reviews"]);
+    assert!(world.screen().find(Target::key("desktop.rename")).is_none());
+
+    world.gesture(|app| app.click(Target::role("button").name("Rename Work")));
+    world.settle();
+    world.gesture(|app| app.press("backspace"));
+    world.gesture(|app| app.press("enter"));
+    world.settle();
+    assert_eq!(renamed(&world), ["Reviews", "Reviews", ""]);
+    assert!(world.screen().find(Target::key("desktop.rename")).is_none());
 }

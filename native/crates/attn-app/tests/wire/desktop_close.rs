@@ -5,7 +5,7 @@ use attn_testkit::{Request, Target, World, key_event};
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::{Value, json};
 
-fn session(id: &str, agent: &str) -> Session {
+pub(super) fn session(id: &str, agent: &str) -> Session {
     Session {
         id: id.into(),
         label: format!("Agent {id}"),
@@ -17,7 +17,13 @@ fn session(id: &str, agent: &str) -> Session {
     }
 }
 
-fn desktop(id: &str, slot: i64, name: &str, tree: Option<Value>, sessions: &[&str]) -> Desktop {
+pub(super) fn desktop(
+    id: &str,
+    slot: i64,
+    name: &str,
+    tree: Option<Value>,
+    sessions: &[&str],
+) -> Desktop {
     Desktop {
         id: id.into(),
         profile_id: "work".into(),
@@ -45,7 +51,7 @@ fn desktop(id: &str, slot: i64, name: &str, tree: Option<Value>, sessions: &[&st
     }
 }
 
-fn start(queue: bool, sessions: Vec<Session>, work: Desktop) -> World {
+pub(super) fn start(queue: bool, sessions: Vec<Session>, work: Desktop) -> World {
     let other = desktop("other", 2, "", None, &[]);
     let daemon = super::palette::daemon(
         InitialStateMessage {

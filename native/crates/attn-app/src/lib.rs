@@ -203,6 +203,7 @@ pub fn bind(
             state.tick(tx);
             sidebar::snooze::follow(state);
             sidebar::session_menu::follow(state);
+            sidebar::rename::follow(state);
             sidebar::width::follow(state);
             palette::follow(state);
             asks::follow(state, tx);

@@ -1291,9 +1291,7 @@ fn rename_button(key: &str, session: &Session, title: &str, t: &Tokens) -> El {
         format!("Rename session {title}"),
         attn_ui::icon::PENCIL,
         t,
-        move |state, tx| {
-            crate::sidebar::session_menu::rename_session(state, &id, under.clone(), tx)
-        },
+        move |state, tx| crate::sidebar::rename::session(state, &id, under.clone(), tx),
     )
 }
 

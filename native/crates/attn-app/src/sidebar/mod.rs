@@ -6,6 +6,7 @@ mod harness_icon;
 pub(crate) mod model;
 pub(crate) mod queue;
 mod queue_view;
+pub(crate) mod rename;
 pub(crate) mod reorder;
 pub(crate) mod session_menu;
 pub(crate) mod snooze;
@@ -97,7 +98,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         Action::SessionSettle => actions::settle_key(state, tx),
         Action::RenameSession { session } => {
             let under = tile_header_of(state, session);
-            session_menu::rename_session(state, session, under, tx)
+            rename::session(state, session, under, tx)
         }
         Action::ReloadSession { session } => session_menu::reload_session(state, session, tx),
         Action::WakeSession { session } => actions::wake(state, session),
@@ -329,47 +330,57 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
         .as_ref()
         .and_then(|d| d.desktop_mark(line.desktop()));
     let logos = logos(state);
-    memo(key.clone(), (line, draining, seam, mark, logos, *t), || {
-        ROWS_BUILT.with(|n| n.set(n.get() + 1));
-        let row = match line {
-            Line::Desktop(desktop) => {
-                let close = rune::row()
-                    .key(format!("{key}.controls"))
-                    .group_opacity(0.0, 1.0)
-                    .child(close_desktop_button(&key, desktop, t));
-                desktop_row(key.clone(), desktop, t)
-                    .hover_group()
-                    .child(close)
-            }
-            Line::Agent { row, .. } => {
-                let bar = settling_bar(state, &key, row, t);
-                let more = rune::row()
-                    .key(format!("{key}.controls"))
-                    .group_opacity(0.0, 1.0)
-                    .child(actions_button(&key, row, t));
-                agent_row(key.clone(), row, logos, t)
-                    .hover_group()
-                    .child(more)
-                    .children(bar)
-            }
-            Line::Tile(tile) => tile_row(key.clone(), tile, t),
-        };
-        drop_mark(row, mark, t).children(seam.map(|seam| {
-            rune::el()
-                .key(format!("{key}.seam"))
-                .absolute(
-                    0.0,
-                    if seam == reorder::Seam::Above {
-                        0.0
-                    } else {
-                        ROW_HEIGHT - 2.0
-                    },
-                )
-                .w_full()
-                .h(2.0)
-                .fill(t.accent)
-        }))
-    })
+    let keys = match line {
+        Line::Desktop(desktop) => Action::desktop_select(desktop.number)
+            .and_then(|select| crate::palette::label_of(state, &select)),
+        _ => None,
+    };
+    memo(
+        key.clone(),
+        (line, draining, seam, mark, logos, keys.clone(), *t),
+        || {
+            ROWS_BUILT.with(|n| n.set(n.get() + 1));
+            let row = match line {
+                Line::Desktop(desktop) => {
+                    let close = rune::row()
+                        .key(format!("{key}.controls"))
+                        .group_opacity(0.0, 1.0)
+                        .child(rename_desktop_button(&key, desktop, t))
+                        .child(close_desktop_button(&key, desktop, t));
+                    desktop_row(key.clone(), desktop, keys.clone(), t)
+                        .hover_group()
+                        .child(close)
+                }
+                Line::Agent { row, .. } => {
+                    let bar = settling_bar(state, &key, row, t);
+                    let more = rune::row()
+                        .key(format!("{key}.controls"))
+                        .group_opacity(0.0, 1.0)
+                        .child(actions_button(&key, row, t));
+                    agent_row(key.clone(), row, logos, t)
+                        .hover_group()
+                        .child(more)
+                        .children(bar)
+                }
+                Line::Tile(tile) => tile_row(key.clone(), tile, t),
+            };
+            drop_mark(row, mark, t).children(seam.map(|seam| {
+                rune::el()
+                    .key(format!("{key}.seam"))
+                    .absolute(
+                        0.0,
+                        if seam == reorder::Seam::Above {
+                            0.0
+                        } else {
+                            ROW_HEIGHT - 2.0
+                        },
+                    )
+                    .w_full()
+                    .h(2.0)
+                    .fill(t.accent)
+            }))
+        },
+    )
 }
 
 /// A line as its desktop shows to a dragged tile: muted on the desktop the tile comes from,
@@ -412,11 +423,14 @@ fn new_desktop_drop(over: bool, t: &Tokens) -> El {
         )
 }
 
-fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
+fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &Tokens) -> El {
     let id = desktop.id.clone();
     let dragged = desktop.id.clone();
-    row()
-        .key(key)
+    let row = match &keys {
+        Some(keys) => row().description(keys.clone()),
+        None => row(),
+    };
+    row.key(key.clone())
         .role("button")
         .focusable(true)
         .label(format!("Open {}", desktop.title))
@@ -465,6 +479,12 @@ fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+        .children(keys.map(|keys| {
+            text(keys)
+                .key(format!("{key}.keys"))
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary)
+        }))
 }
 
 fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
@@ -500,6 +520,18 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
                 .grow(1.0),
         )
         .children(crate::asks::marker(&key, agent.asks, t))
+}
+
+fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> El {
+    let (id, under) = (desktop.id.clone(), format!("{row_key}.rename"));
+    queue_view::control(
+        row_key,
+        "rename",
+        format!("Rename {}", desktop.title),
+        attn_ui::icon::PENCIL,
+        t,
+        move |state, tx| rename::desktop(state, &id, under.clone(), tx),
+    )
 }
 
 /// The × button that closes a desktop, asking first when it holds tiles.

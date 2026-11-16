@@ -65,6 +65,7 @@ pub struct Window {
     pub(crate) width: crate::sidebar::width::Width,
     pub(crate) reorder: Option<crate::sidebar::reorder::Reorder>,
     pub(crate) session_menu: Option<crate::sidebar::session_menu::Menu>,
+    pub(crate) rename: Option<crate::sidebar::rename::Rename>,
     /// The popped-out leaf this window shows, when it is a tile window.
     pub(crate) tile: Option<crate::desktop::TileWindow>,
     pub(crate) garden: crate::garden::Garden,
@@ -605,6 +606,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::sidebar::bar_peek::view(state, t));
     layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::sidebar::session_menu::view(state, t));
+    layers.extend(crate::sidebar::rename::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));
     layers.extend(crate::desktop::drag_overlay(state, t));
     layers.extend(crate::picker::worktree_setup(state, t));
