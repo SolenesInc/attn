@@ -250,11 +250,19 @@ fn toolbar(state: &State, t: &Tokens) -> El {
             let token = token.to_owned();
             let lost = unresolved.contains(&token);
             let removed = token.clone();
+            let gives_way = token.chars().count() > SHORT_TOKEN;
             let face = format!("{token} ×");
             let ink = if lost { t.warning } else { t.text_secondary };
-            Button::new(token.clone())
+            let chip = Button::new(token.clone())
                 .control_size(ControlSize::Mini)
-                .label_with(move |_, _| text(face).font(type_::MONO_CAPTION).color(ink))
+                .label_with(move |_, _| {
+                    text(face)
+                        .font(type_::MONO_CAPTION)
+                        .color(ink)
+                        .single_line()
+                        .truncate_middle()
+                        .shrink()
+                })
                 .help(format!("Remove {token}"))
                 .build(attn_ui::kit(t))
                 .key(format!("ledger.chip.{at}"))
@@ -263,7 +271,8 @@ fn toolbar(state: &State, t: &Tokens) -> El {
                     let text = query::remove_token(&state.window.ledger.query.text, &removed);
                     state.window.ledger.query = rune::TextEdit::new(text);
                     super::query_edited(state, tx);
-                })
+                });
+            if gives_way { chip.shrink() } else { chip }
         })
         .collect::<Vec<_>>();
     let field = text_input(&ledger.query, type_::MONO_CAPTION)
@@ -278,7 +287,7 @@ fn toolbar(state: &State, t: &Tokens) -> El {
         .on_input_change(|state: &mut State, tx: &mut Tx| super::query_edited(state, tx))
         .on_input_key(query_key)
         .grow(1.0)
-        .min_w(0.0)
+        .min_w(QUERY_ROOM)
         .color(t.text_primary);
     row()
         .w_full()
@@ -1044,6 +1053,12 @@ pub(super) fn button(key: &str, words: &str, t: &Tokens) -> El {
         .build(attn_ui::kit(t))
         .key(key.to_owned())
 }
+
+/// The width the filter field keeps beside its chips, as Tauri's ledger keeps for its input.
+const QUERY_ROOM: f32 = 80.0;
+
+/// The longest token that keeps its whole chip: a date bound such as `from:2026-09-01` is 15.
+const SHORT_TOKEN: usize = 16;
 
 pub(super) fn chip_button(key: &str, words: &str, on: bool, t: &Tokens) -> El {
     Button::new(words)

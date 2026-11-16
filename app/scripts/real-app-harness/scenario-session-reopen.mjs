@@ -170,7 +170,10 @@ async function main() {
     await runner.step('start_the_conversation', async () => {
       const pane = await waitForFirstDesktopPane(client, sessionId, 'the worktree session pane', 20_000);
       await submitPrompt(client, sessionId, pane.paneId, 'start the conversation');
-      await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'the first turn to finish', 30_000);
+      await observer.waitFor(() => {
+        const session = observer.getSession(sessionId);
+        return session?.conversation_started && session.state === 'idle';
+      }, 'the first turn to finish with its conversation saved', 30_000);
     });
 
     await runner.step('close_the_session', async () => {

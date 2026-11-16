@@ -96,7 +96,11 @@ try {
     await driver.state(`terminal:${runtimeId}`, { includes: '›', timeoutMs: 15_000 });
     await driver.typeInto(null, 'start the conversation');
     await driver.pressKey('Enter');
-    await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'the first turn ends', 30_000);
+    await driver.state(`terminal:${runtimeId}`, { includes: 'conversation started', timeoutMs: 30_000 });
+    await observer.waitFor(() => {
+      const session = observer.getSession(sessionId);
+      return session?.conversation_started && session.state === 'idle';
+    }, 'the first turn ends with its conversation saved', 30_000);
   });
 
   await runner.step('close_from_the_app', closeFromTheApp);

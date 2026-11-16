@@ -1097,3 +1097,40 @@ fn the_title_bar_opens_the_list_last_shown_and_the_shortcut_opens_sessions() {
     open(&mut world);
     assert_eq!(shown_list(&world).as_deref(), Some("sessions"));
 }
+
+#[test]
+fn a_repository_path_longer_than_the_filter_row_still_takes_every_key() {
+    let mut long = world();
+    open(&mut long);
+    let deep = format!("/private/var/folders/{}/ledger-repo", "x".repeat(220));
+
+    click(&mut long, "ledger.query.field");
+    let pasted = format!("repo-path:{deep} ");
+    long.gesture(|app| app.runtime.paste(pasted));
+    long.gesture(|app| app.type_text("7d"));
+
+    let read = last_read(&long);
+    assert_eq!(read["repository"], deep.as_str(), "{read}");
+    assert!(
+        read["since"].as_str().is_some(),
+        "the key after the chip arrived: {read}"
+    );
+    let field = long
+        .screen()
+        .bounds(Target::key("ledger.query.field"))
+        .unwrap();
+    assert!(field[2] >= 80.0, "the field keeps room to type: {field:?}");
+    let panel = long.screen().bounds(Target::key("ledger.panel")).unwrap();
+    let chip = long.screen().bounds(Target::key("ledger.chip.0")).unwrap();
+    assert!(
+        chip[0] + chip[2] <= panel[0] + panel[2],
+        "the chip stays inside the list: {chip:?} {panel:?}"
+    );
+
+    let mut alone = world();
+    open(&mut alone);
+    type_query(&mut alone, "7d");
+    let whole = alone.screen().bounds(Target::key("ledger.chip.0")).unwrap();
+    let beside = long.screen().bounds(Target::key("ledger.chip.1")).unwrap();
+    assert_eq!(beside[2], whole[2], "a short chip keeps its whole width");
+}
