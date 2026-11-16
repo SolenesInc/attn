@@ -17,6 +17,7 @@ mod wire {
     mod garden;
     mod home;
     mod keys;
+    mod launcher;
     mod ledger;
     mod markdown;
     mod markdown_annotations;

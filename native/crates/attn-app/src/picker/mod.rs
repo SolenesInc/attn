@@ -1,6 +1,6 @@
 pub(crate) mod agents;
 mod names;
-mod paths;
+pub(crate) mod paths;
 pub(crate) mod pull_request;
 mod repo;
 mod view;
@@ -18,7 +18,8 @@ use rune::{Chord, Key, KeyEvent, KeyPlatform, TextEdit, Tx};
 use crate::State;
 pub(crate) use agents::{Agents, TERMINAL};
 pub(crate) use paths::display as display_path;
-pub(crate) use view::{dialog, inline, worktree_setup};
+pub(crate) use repo::memory_key;
+pub(crate) use view::{controls, desktop_label, dialog, footer, inline, section, worktree_setup};
 
 /// How long typing settles before the picker browses the typed folder, as in the Tauri app.
 const BROWSE_DELAY: f64 = 0.15;
@@ -26,6 +27,7 @@ const MAX_RECENTS: usize = 10;
 const SAVED_AGENT: &str = "new_session_agent";
 const SAVED_YOLO: &str = "new_session_yolo_local";
 const PROJECTS: &str = "projects_directory";
+const LAUNCHER_2: &str = "new_session_launcher_enabled";
 pub(crate) const NO_DESKTOP: &str =
     "No desktop is open yet; choose a profile before starting an agent.";
 
@@ -70,12 +72,112 @@ pub(crate) enum Catalog {
     Failed(String),
 }
 
+/// One opening of a new-session launcher: the classic picker, or Launcher 2.0 while the
+/// `new_session_launcher_enabled` setting is on.
+pub(crate) enum Opened {
+    Classic(Picker),
+    Launcher(crate::launcher::Launcher),
+}
+
+impl Opened {
+    fn open(
+        which: Which,
+        desktop: Option<String>,
+        anchor: Option<String>,
+        direction: Direction,
+        agent: Option<&str>,
+        state: &State,
+    ) -> Opened {
+        if crate::setting::on(&state.facts.settings, LAUNCHER_2) {
+            Opened::Launcher(crate::launcher::Launcher::open(
+                which, desktop, anchor, direction, agent, state,
+            ))
+        } else {
+            Opened::Classic(Picker::open(
+                which, desktop, anchor, direction, agent, state,
+            ))
+        }
+    }
+
+    pub(crate) fn opening(&self) -> u64 {
+        match self {
+            Opened::Classic(p) => p.opening,
+            Opened::Launcher(l) => l.opening,
+        }
+    }
+
+    pub(crate) fn desktop(&self) -> Option<&String> {
+        match self {
+            Opened::Classic(p) => p.desktop.as_ref(),
+            Opened::Launcher(l) => l.desktop.as_ref(),
+        }
+    }
+
+    pub(crate) fn choice(&self) -> &Choice {
+        match self {
+            Opened::Classic(p) => &p.choice,
+            Opened::Launcher(l) => &l.choice,
+        }
+    }
+
+    fn choice_mut(&mut self) -> &mut Choice {
+        match self {
+            Opened::Classic(p) => &mut p.choice,
+            Opened::Launcher(l) => &mut l.choice,
+        }
+    }
+
+    fn focus_key(&self) -> String {
+        match self {
+            Opened::Classic(p) => focus_key(p),
+            Opened::Launcher(l) => l.field_key(),
+        }
+    }
+
+    fn is_launcher(&self) -> bool {
+        matches!(self, Opened::Launcher(_))
+    }
+}
+
+/// The harness a launcher starts and whether it starts it in YOLO mode, as the user left them.
+pub(crate) struct Choice {
+    /// The agent the user picked, or the saved one; [`Choice::agent`] is what launches.
+    wanted: String,
+    pub(crate) yolo: bool,
+}
+
+impl Choice {
+    pub(crate) fn new(
+        agent: Option<&str>,
+        settings: &std::collections::BTreeMap<String, String>,
+    ) -> Choice {
+        let preferred = agent
+            .or(settings.get(SAVED_AGENT).map(String::as_str))
+            .unwrap_or("claude");
+        Choice {
+            wanted: preferred.to_owned(),
+            yolo: agents::saved_yolo(settings),
+        }
+    }
+
+    /// The agent a launch starts: the wanted one while this machine has it, else the first
+    /// that is there.
+    pub(crate) fn agent(&self, state: &State) -> String {
+        Agents::from_settings(&state.facts.settings).resolve(&self.wanted)
+    }
+
+    /// Whether a launch starts in YOLO mode: chosen, and the agent supports it.
+    pub(crate) fn yolo_on(&self, state: &State) -> bool {
+        self.yolo && agents::supports_yolo(&state.facts.settings, &self.agent(state))
+    }
+}
+
 /// What the new-session pickers share, and remember between openings.
 pub struct Launching {
-    pub(crate) dialog: Option<Picker>,
+    pub(crate) dialog: Option<Opened>,
     /// The launcher of an empty desktop, kept while that desktop stays empty so a pick the
     /// user left behind still starts there.
-    pub(crate) inline: Option<Picker>,
+    pub(crate) inline: Option<Opened>,
     pub(crate) starting: Option<Starting>,
     /// The empty desktop on screen, whose launcher shows.
     shown_on: Option<String>,
@@ -92,17 +194,17 @@ impl Launching {
     /// Which launchers are kept, and where: what `follow` changes.
     fn kept(&self) -> (Option<u64>, Option<String>, Option<String>) {
         (
-            self.inline.as_ref().map(|p| p.opening),
+            self.inline.as_ref().map(Opened::opening),
             self.starting.as_ref().map(|s| s.desktop.clone()),
             self.shown_on.clone(),
         )
     }
 
     /// The launcher on screen: the one of the empty desktop shown.
-    pub(crate) fn shown_inline(&self) -> Option<&Picker> {
+    pub(crate) fn shown_inline(&self) -> Option<&Opened> {
         self.inline
             .as_ref()
-            .filter(|p| p.desktop.is_some() && p.desktop == self.shown_on)
+            .filter(|p| p.desktop().is_some() && p.desktop() == self.shown_on.as_ref())
     }
 
     pub(crate) fn shown_starting(&self) -> Option<&Starting> {
@@ -180,9 +282,7 @@ pub(crate) struct Picker {
     /// Bumped by every change that makes answers to earlier requests stale.
     generation: u64,
     pub(crate) chooser: Option<repo::Chooser>,
-    /// The agent the user picked, or the saved one; [`Picker::agent`] is what launches.
-    wanted: String,
-    pub(crate) yolo: bool,
+    pub(crate) choice: Choice,
 }
 
 /// One row the path list offers.
@@ -208,9 +308,6 @@ impl Picker {
         let launching = &state.window.launching;
         let projects = settings.get(PROJECTS).map(String::as_str).unwrap_or("");
         let text = paths::initial_input(projects, &launching.home);
-        let preferred = agent
-            .or(settings.get(SAVED_AGENT).map(String::as_str))
-            .unwrap_or("claude");
         let mut input = TextEdit::new(text.clone());
         input.anchor = text.len();
         input.focus = text.len();
@@ -231,8 +328,7 @@ impl Picker {
             error: None,
             generation: 0,
             chooser: None,
-            wanted: preferred.to_owned(),
-            yolo: agents::saved_yolo(settings),
+            choice: Choice::new(agent, settings),
         }
     }
 
@@ -281,14 +377,8 @@ impl Picker {
         .then(|| candidate.path.clone())
     }
 
-    pub(crate) fn agents(&self, state: &State) -> Agents {
-        Agents::from_settings(&state.facts.settings)
-    }
-
-    /// The agent a launch starts: the wanted one while this machine has it, else the first
-    /// that is there.
     pub(crate) fn agent(&self, state: &State) -> String {
-        self.agents(state).resolve(&self.wanted)
+        self.choice.agent(state)
     }
 
     fn stale(&mut self) {
@@ -296,18 +386,55 @@ impl Picker {
     }
 }
 
+/// A fresh name for a new worktree, one none of `taken` has.
+pub(crate) fn worktree_name(taken: &[String]) -> String {
+    names::worktree_name(taken, &mut names::SystemDraw)
+}
+
 impl Launching {
-    pub(crate) fn picker(&self, which: Which) -> Option<&Picker> {
+    pub(crate) fn openings(&self) -> u64 {
+        self.openings
+    }
+
+    pub(crate) fn slot(&self, which: Which) -> Option<&Opened> {
         match which {
             Which::Dialog => self.dialog.as_ref(),
             Which::Inline => self.inline.as_ref(),
         }
     }
 
-    pub(crate) fn picker_mut(&mut self, which: Which) -> Option<&mut Picker> {
+    fn slot_mut(&mut self, which: Which) -> Option<&mut Opened> {
         match which {
             Which::Dialog => self.dialog.as_mut(),
             Which::Inline => self.inline.as_mut(),
+        }
+    }
+
+    pub(crate) fn picker(&self, which: Which) -> Option<&Picker> {
+        match self.slot(which)? {
+            Opened::Classic(picker) => Some(picker),
+            Opened::Launcher(_) => None,
+        }
+    }
+
+    pub(crate) fn picker_mut(&mut self, which: Which) -> Option<&mut Picker> {
+        match self.slot_mut(which)? {
+            Opened::Classic(picker) => Some(picker),
+            Opened::Launcher(_) => None,
+        }
+    }
+
+    pub(crate) fn launcher(&self, which: Which) -> Option<&crate::launcher::Launcher> {
+        match self.slot(which)? {
+            Opened::Launcher(launcher) => Some(launcher),
+            Opened::Classic(_) => None,
+        }
+    }
+
+    pub(crate) fn launcher_mut(&mut self, which: Which) -> Option<&mut crate::launcher::Launcher> {
+        match self.slot_mut(which)? {
+            Opened::Launcher(launcher) => Some(launcher),
+            Opened::Classic(_) => None,
         }
     }
 
@@ -316,7 +443,16 @@ impl Launching {
             Which::Dialog => self.dialog.as_mut(),
             Which::Inline => self.inline.as_mut(),
         }
-        .map_or(&mut self.spare, |picker| &mut picker.input)
+        .and_then(|opened| match opened {
+            Opened::Classic(picker) => Some(&mut picker.input),
+            Opened::Launcher(_) => None,
+        })
+        .unwrap_or(&mut self.spare)
+    }
+
+    /// The field of a picker that is gone, so a late edit has somewhere to land.
+    pub(crate) fn spare(&mut self) -> &mut TextEdit {
+        &mut self.spare
     }
 }
 
@@ -331,15 +467,15 @@ pub(crate) fn new_session(
     if agent.is_none()
         && let Some(picker) = state.window.launching.shown_inline()
     {
-        let key = focus_key(picker);
+        let key = picker.focus_key();
         if state.window.layer.is_none() {
             tx.focus(key, false);
         }
         return;
     }
-    let picker = Picker::open(Which::Dialog, None, None, direction, agent, state);
-    let key = picker.field_key();
-    state.window.launching.openings = picker.opening;
+    let picker = Opened::open(Which::Dialog, None, None, direction, agent, state);
+    let key = picker.focus_key();
+    state.window.launching.openings = picker.opening();
     state.window.launching.dialog = Some(picker);
     state.window.layer = Some(crate::shell::Layer::NewSession);
     tx.focus(key, false);
@@ -361,6 +497,15 @@ fn opened(state: &mut State, which: Which, tx: &mut Tx) {
         Catalog::Unasked | Catalog::Failed(_)
     ) {
         ask_catalog(state, tx);
+    }
+    if state
+        .window
+        .launching
+        .slot(which)
+        .is_some_and(Opened::is_launcher)
+    {
+        crate::launcher::opened(state, which, tx);
+        return;
     }
     let opening = state
         .window
@@ -407,7 +552,7 @@ pub(crate) fn reconnected(state: &mut State, tx: &mut Tx) {
         state.window.launching.catalog = Catalog::Unasked;
     }
     for which in [Which::Dialog, Which::Inline] {
-        if state.window.launching.picker(which).is_some() {
+        if state.window.launching.slot(which).is_some() {
             opened(state, which, tx);
         }
     }
@@ -669,12 +814,12 @@ pub(crate) fn refocus_inline_window(window: &crate::shell::Window, tx: &mut Tx) 
     if window.layer.is_none()
         && let Some(picker) = window.launching.shown_inline()
     {
-        tx.focus(focus_key(picker), false);
+        tx.focus(picker.focus_key(), false);
     }
 }
 
 /// ⌥T, ⌥Q and ⌥1 to ⌥9, by key position, wherever the keyboard is in the picker.
-fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx) -> bool {
+pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if !ev.mods.alt || ev.mods.cmd || ev.mods.ctrl {
         return false;
     }
@@ -684,10 +829,10 @@ fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx) -> boo
             .expect("a picker chord parses")
             .matches_tx_on(ev, tx, platform)
     };
-    let Some(picker) = state.window.launching.picker(which) else {
+    if state.window.launching.slot(which).is_none() {
         return false;
-    };
-    let agents = picker.agents(state);
+    }
+    let agents = Agents::from_settings(&state.facts.settings);
     if pressed("alt+q") {
         toggle_yolo(state, which);
         return true;
@@ -730,42 +875,42 @@ pub(crate) fn listed(agents: &Agents, catalog: &Catalog) -> Vec<String> {
 }
 
 pub(crate) fn choose_agent(state: &mut State, which: Which, agent: &str) {
-    let Some(picker) = state.window.launching.picker_mut(which) else {
+    let Some(picker) = state.window.launching.slot_mut(which) else {
         return;
     };
     if !Agents::from_settings(&state.facts.settings).selectable(agent) {
         return;
     }
-    picker.wanted = agent.to_owned();
+    picker.choice_mut().wanted = agent.to_owned();
     if agent != TERMINAL {
         set_setting(state, SAVED_AGENT, agent);
     }
 }
 
 pub(crate) fn toggle_yolo(state: &mut State, which: Which) {
-    let supported = state
+    let supported =
+        state.window.launching.slot(which).is_some_and(|p| {
+            agents::supports_yolo(&state.facts.settings, &p.choice().agent(state))
+        });
+    let Some(choice) = state
         .window
         .launching
-        .picker(which)
-        .is_some_and(|p| agents::supports_yolo(&state.facts.settings, &p.agent(state)));
-    let Some(picker) = state
-        .window
-        .launching
-        .picker_mut(which)
+        .slot_mut(which)
         .filter(|_| supported)
+        .map(Opened::choice_mut)
     else {
         return;
     };
-    picker.yolo = !picker.yolo;
-    let value = if picker.yolo { "true" } else { "false" };
+    choice.yolo = !choice.yolo;
+    let value = if choice.yolo { "true" } else { "false" };
     set_setting(state, SAVED_YOLO, value);
 }
 
 pub(crate) fn yolo_on(state: &State, picker: &Picker) -> bool {
-    picker.yolo && agents::supports_yolo(&state.facts.settings, &picker.agent(state))
+    picker.choice.yolo_on(state)
 }
 
-fn set_setting(state: &State, key: &str, value: &str) {
+pub(crate) fn set_setting(state: &State, key: &str, value: &str) {
     let _ = state.daemon.send(&SetSettingMessage {
         key: key.into(),
         value: value.into(),
@@ -958,7 +1103,7 @@ fn finish(state: &mut State, which: Which, starting: Option<String>, tx: &mut Tx
         Which::Dialog => close(state, tx),
         Which::Inline => {
             let launching = &mut state.window.launching;
-            let desktop = launching.inline.take().and_then(|p| p.desktop);
+            let desktop = launching.inline.take().and_then(|p| p.desktop().cloned());
             launching.starting = desktop
                 .zip(starting)
                 .map(|(desktop, name)| Starting { desktop, name });
@@ -978,9 +1123,28 @@ pub(crate) struct Spawn {
 }
 
 pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
+    spawn_then(
+        state,
+        spawn,
+        |state, result, tx| {
+            if let Err(error) = result {
+                state.window.notify(error, tx);
+            }
+        },
+        tx,
+    );
+}
+
+/// Starts a session as [`spawn`] does, and tells `then` whether it started or why not.
+pub(crate) fn spawn_then(
+    state: &mut State,
+    spawn: Spawn,
+    then: impl FnOnce(&mut State, Result<(), String>, &mut Tx) + 'static,
+    tx: &mut Tx,
+) {
     let Some(target) = target(state, spawn.desktop.as_deref(), spawn.anchor.as_deref()) else {
         state.window.launching.starting = None;
-        state.window.notify(NO_DESKTOP.into(), tx);
+        then(state, Err(NO_DESKTOP.into()), tx);
         return;
     };
     let label = spawn.label.or_else(|| {
@@ -1014,7 +1178,7 @@ pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
         move |state, reply, tx| {
             state.window.launching.starting = None;
             let result: Option<SpawnResultMessage> = reply.parse();
-            match result {
+            let outcome = match result {
                 Some(SpawnResultMessage {
                     success: true,
                     desktop_id,
@@ -1029,21 +1193,21 @@ pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
                         state.window.follow_next_turn = false;
                         crate::desktop::activate_started(state, &desktop, &pane, tx);
                     }
+                    Ok(())
                 }
                 Some(SpawnResultMessage { success: true, .. }) => {
                     crate::desktop::arrival::forget(state, &started);
+                    Ok(())
                 }
                 other => {
                     crate::desktop::arrival::forget(state, &started);
-                    state.window.notify(
-                        other
-                            .and_then(|r| r.error)
-                            .filter(|e| !e.is_empty())
-                            .unwrap_or_else(|| "Failed to start the agent".into()),
-                        tx,
-                    );
+                    Err(other
+                        .and_then(|r| r.error)
+                        .filter(|e| !e.is_empty())
+                        .unwrap_or_else(|| "Failed to start the agent".into()))
                 }
-            }
+            };
+            then(state, outcome, tx);
             let _ = follow(state, tx);
         },
         tx,
@@ -1087,13 +1251,12 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
             crate::desktop::holds_nothing(d) && state.window.view == crate::shell::View::Desktop
         })
         .map(|d| d.id.clone());
+    let wants_launcher = crate::setting::on(&facts.settings, LAUNCHER_2);
     let launching = &mut state.window.launching;
     let before = launching.kept();
-    if launching
-        .inline
-        .as_ref()
-        .is_some_and(|p| !p.desktop.as_deref().is_some_and(empty))
-    {
+    if launching.inline.as_ref().is_some_and(|p| {
+        !p.desktop().is_some_and(|d| empty(d)) || p.is_launcher() != wants_launcher
+    }) {
         launching.inline = None;
     }
     if launching
@@ -1107,7 +1270,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
     launching.shown_on = shown.clone();
     if let Some(desktop) = shown {
         if launching.shown_inline().is_none() && launching.shown_starting().is_none() {
-            let picker = Picker::open(
+            let picker = Opened::open(
                 Which::Inline,
                 Some(desktop),
                 None,
@@ -1115,7 +1278,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
                 None,
                 state,
             );
-            state.window.launching.openings = picker.opening;
+            state.window.launching.openings = picker.opening();
             state.window.launching.inline = Some(picker);
             opened(state, Which::Inline, tx);
             refocus_inline(state, tx);

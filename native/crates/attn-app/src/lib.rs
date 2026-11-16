@@ -25,6 +25,7 @@ mod keymap;
 mod keys;
 pub mod launch;
 mod launch_desktop;
+mod launcher;
 mod ledger;
 mod markdown;
 mod migration_failure;

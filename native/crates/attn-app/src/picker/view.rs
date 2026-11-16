@@ -4,30 +4,36 @@ use rune::{El, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Dialog, TextInput};
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
-use super::{Catalog, Picker, Which, agents, listed, numbered, paths};
+use super::{Catalog, Choice, Opened, Picker, Which, agents, listed, numbered, paths};
 use crate::State;
 
 /// The New Session dialog over the app.
 pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
-    let picker = state.window.launching.dialog.as_ref()?;
-    let frame = frame(state, picker, t)
-        .key("new-session")
-        .role("dialog")
-        .label("New Session Location")
-        .modal_tx(false, |state: &mut State, tx: &mut Tx| {
-            super::on_key(
-                state,
-                Which::Dialog,
-                &rune::KeyEvent {
-                    key: rune::Key::Escape,
-                    mods: rune::Mods::default(),
-                },
-                tx,
-            );
-        })
-        .w_full()
-        .max_w(DIALOG_W)
-        .padding(space::S3);
+    let frame = match state.window.launching.dialog.as_ref()? {
+        Opened::Classic(picker) => frame(state, picker, t)
+            .key("new-session")
+            .role("dialog")
+            .label("New Session Location")
+            .modal_tx(false, |state: &mut State, tx: &mut Tx| {
+                super::on_key(
+                    state,
+                    Which::Dialog,
+                    &rune::KeyEvent {
+                        key: rune::Key::Escape,
+                        mods: rune::Mods::default(),
+                    },
+                    tx,
+                );
+            }),
+        Opened::Launcher(launcher) => crate::launcher::frame(state, launcher, t)
+            .key("new-session")
+            .role("dialog")
+            .label("New agent")
+            .modal_tx(false, |state: &mut State, tx: &mut Tx| {
+                crate::launcher::escape(state, tx)
+            }),
+    };
+    let frame = frame.w_full().max_w(DIALOG_W).padding(space::S3);
     let frame = rune_kit::popover::raised(attn_ui::kit(t), frame, 8.0);
     Some(
         el().key("new-session.layer")
@@ -42,7 +48,13 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
                     .backdrop_blur(2.0)
                     .fill(t.shadow.alpha(0.5))
                     .a11y_hidden()
-                    .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx)),
+                    .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                        if state.window.launching.launcher(Which::Dialog).is_some() {
+                            crate::launcher::dismiss(state, tx)
+                        } else {
+                            super::close(state, tx)
+                        }
+                    }),
             )
             .child(col().w_full().h_full().pt(80.0).items_center().child(frame)),
     )
@@ -64,7 +76,10 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
             ),
         );
     }
-    let picker = launching.shown_inline()?;
+    let frame = match launching.shown_inline()? {
+        Opened::Classic(picker) => frame(state, picker, t),
+        Opened::Launcher(launcher) => crate::launcher::frame(state, launcher, t),
+    };
     Some(
         col()
             .key("launcher.area")
@@ -73,7 +88,7 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
             .items_center()
             .pt(80.0)
             .child(
-                frame(state, picker, t)
+                frame
                     .key("launcher")
                     .role("group")
                     .label("New agent")
@@ -98,16 +113,16 @@ fn frame(state: &State, picker: &Picker, t: &Tokens) -> El {
         .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
             super::on_key(state, which, ev, tx)
         })
-        .child(controls(state, picker, t))
+        .child(controls(state, which, &picker.choice, t))
         .children(body)
 }
 
-fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
-    let which = picker.which;
+/// The harness toggle and the YOLO switch a launcher starts with.
+pub(crate) fn controls(state: &State, which: Which, choice: &Choice, t: &Tokens) -> El {
     let w = which.key();
     let launching = &state.window.launching;
-    let agents = picker.agents(state);
-    let current = picker.agent(state);
+    let agents = agents::Agents::from_settings(&state.facts.settings);
+    let current = choice.agent(state);
     let numbered = numbered(&agents, &launching.catalog);
     let options = listed(&agents, &launching.catalog)
         .into_iter()
@@ -207,7 +222,7 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
         Catalog::Loaded(_) => None,
     };
     let supported = agents::supports_yolo(&state.facts.settings, &current);
-    let yolo = super::yolo_on(state, picker);
+    let yolo = choice.yolo_on(state);
     let yolo_title = if supported {
         "Run the agent without asking for permission".to_owned()
     } else {
@@ -329,7 +344,10 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
     let home = &launching.home;
     let title = match which {
         Which::Dialog => "New Session Location".to_owned(),
-        Which::Inline => format!("New agent on {}", desktop_label(state, picker)),
+        Which::Inline => format!(
+            "New agent on {}",
+            desktop_label(state, picker.desktop.as_ref())
+        ),
     };
     let field_key = picker.field_key();
     let rows = picker.rows(launching);
@@ -859,11 +877,8 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
     )
 }
 
-fn desktop_label(state: &State, picker: &Picker) -> String {
-    let Some(desktop) = picker
-        .desktop
-        .as_ref()
-        .and_then(|id| state.facts.desktops.iter().find(|d| d.id == *id))
+pub(crate) fn desktop_label(state: &State, desktop: Option<&String>) -> String {
+    let Some(desktop) = desktop.and_then(|id| state.facts.desktops.iter().find(|d| d.id == *id))
     else {
         return "this desktop".into();
     };
@@ -887,11 +902,11 @@ fn desktop_label(state: &State, picker: &Picker) -> String {
     format!("Desktop {number}")
 }
 
-fn section(title: &str, t: &Tokens) -> El {
+pub(crate) fn section(title: &str, t: &Tokens) -> El {
     text(title).font(type_::SECTION).color(t.text_tertiary)
 }
 
-fn footer(hints: &[&str], t: &Tokens) -> El {
+pub(crate) fn footer(hints: &[&str], t: &Tokens) -> El {
     row().gap(space::S3).children(
         hints
             .iter()
@@ -916,7 +931,7 @@ fn link(
         .px(0.0)
 }
 
-const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();
+pub(crate) const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();
 
 /// Tauri's `.location-picker` width.
 const DIALOG_W: f32 = 760.0;
