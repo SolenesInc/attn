@@ -610,6 +610,28 @@ impl World {
             .screen()
     }
 
+    /// The text on terminal `runtime_id`'s screen in tile window `key`, row by row.
+    pub fn tile_terminal_text(&mut self, key: &str, runtime_id: &str) -> Vec<String> {
+        self.tile_mut(key)
+            .runtime
+            .state_mut()
+            .terminals
+            .screen_text(runtime_id)
+            .unwrap_or_else(|| panic!("tile window {key} draws no terminal {runtime_id}"))
+    }
+
+    /// The person resizes tile window `key` to `size` points, then settles.
+    pub fn resize_tile_window(&mut self, key: &str, size: (f32, f32)) {
+        let tile = self.tile_mut(key);
+        let scale = tile.runtime.env.scale;
+        tile.runtime.set_viewport(size, scale);
+        let mut frame = tile.frame.lock().unwrap();
+        frame.width = f64::from(size.0);
+        frame.height = f64::from(size.1);
+        drop(frame);
+        self.settle();
+    }
+
     /// Runs a user action in tile window `key`, then settles.
     pub fn tile_gesture(&mut self, key: &str, f: impl FnOnce(&mut Driver)) {
         f(&mut Driver {

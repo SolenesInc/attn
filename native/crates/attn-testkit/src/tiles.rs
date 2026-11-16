@@ -7,7 +7,7 @@ use attn_app::State;
 use attn_app::desktop::layout::Frame;
 use attn_app::desktop::{Opened, Opener, Setup};
 use attn_client::{Pulse, Store, Subscription};
-use rune::{Env, Runtime};
+use rune::{Compositor, Env, Runtime};
 
 use crate::screen::Screen;
 
@@ -107,6 +107,8 @@ pub(crate) struct TileRuntime {
     pub keeps_running: bool,
     /// Where the window is, which the app reads back as its placement.
     pub frame: Arc<Mutex<Frame>>,
+    terminals: attn_app::TerminalInbox,
+    screens: attn_app::screen::Screens,
     _bound: Subscription,
 }
 
@@ -141,6 +143,10 @@ impl TileRuntime {
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
         let placed = Arc::new(Mutex::new(frame));
         let read = placed.clone();
+        let terminals = {
+            let pulse = pulse.clone();
+            setup.terminals.for_window(move || pulse.beat())
+        };
         inbox
             .lock()
             .unwrap()
@@ -150,7 +156,7 @@ impl TileRuntime {
             attn_app::bind(
                 store,
                 daemon,
-                attn_app::TerminalInbox::default(),
+                terminals.clone(),
                 attn_app::ReplyInbox::default(),
                 crate::WALL_START_MS,
                 String::new(),
@@ -167,6 +173,8 @@ impl TileRuntime {
             shown: true,
             keeps_running,
             frame: placed,
+            terminals,
+            screens: attn_app::screen::Screens::default(),
             _bound: bound,
         }
     }
@@ -196,6 +204,9 @@ impl TileRuntime {
             self.runtime.frame(0.0);
             self.land_motion();
         }
+        if self.shown && self.screens.redraws(&self.runtime) {
+            self.screens.draw_without_gpu(&mut self.runtime);
+        }
     }
 
     /// Moves the window's clock on by `by`, as `World::advance` moves the main window's.
@@ -212,6 +223,8 @@ impl TileRuntime {
     }
 
     pub(crate) fn idle(&self) -> bool {
-        self.inbox.lock().unwrap().is_empty() && !self.runtime.state().pictures.decoding()
+        self.inbox.lock().unwrap().is_empty()
+            && self.terminals.is_empty()
+            && !self.runtime.state().pictures.decoding()
     }
 }

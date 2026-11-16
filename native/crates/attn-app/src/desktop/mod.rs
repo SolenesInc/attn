@@ -39,8 +39,8 @@ use rune::Tx;
 use crate::State;
 
 pub(crate) use actions::{
-    activate, activate_started, escape, give_keyboard, remove_tile, reveal_leaf, run, show_leaf,
-    show_unseen,
+    activate, activate_started, escape, find as find_in_terminal, give_keyboard, remove_tile,
+    reveal_leaf, run, show_leaf, show_unseen,
 };
 pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
@@ -489,6 +489,37 @@ pub(crate) fn drawn_leaves(state: &crate::State) -> Option<(&Desktop, Vec<String
             ))
         }
         None => Some((state.facts.current_desktop()?, on_screen_leaves(state))),
+    }
+}
+
+/// The panes whose terminals this window keeps: a tile window's own pane while it is out,
+/// else the current desktop's panes that are not out in windows of their own.
+pub(crate) fn terminal_panes<'f>(
+    facts: &'f Facts,
+    window: &crate::Window,
+) -> Vec<&'f attn_protocol::DesktopPane> {
+    let popped = |desktop: &Desktop| -> Vec<String> {
+        Node::parse(&desktop.tree_json)
+            .map(|tree| tree.popped().into_iter().map(|l| l.id.clone()).collect())
+            .unwrap_or_default()
+    };
+    match &window.tile {
+        Some(tile) => facts
+            .desktops
+            .iter()
+            .find(|d| d.id == tile.desktop)
+            .filter(|d| popped(d).contains(&tile.leaf))
+            .into_iter()
+            .flat_map(|d| d.panes.iter().filter(|p| p.pane_id == tile.leaf))
+            .collect(),
+        None => facts
+            .current_desktop()
+            .into_iter()
+            .flat_map(|d| {
+                let out = popped(d);
+                d.panes.iter().filter(move |p| !out.contains(&p.pane_id))
+            })
+            .collect(),
     }
 }
 

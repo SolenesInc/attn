@@ -32,8 +32,7 @@ pub(crate) fn toggle_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut
     }
 }
 
-/// Whether `leaf` can show in a window of its own. A tile window draws no terminal yet, so
-/// terminal tiles stay on their desktop.
+/// Whether `leaf` is a tile of `desktop`, which can show in a window of its own.
 pub(crate) fn pops_out(state: &State, desktop: &str, leaf: &str) -> bool {
     state
         .facts
@@ -41,11 +40,7 @@ pub(crate) fn pops_out(state: &State, desktop: &str, leaf: &str) -> bool {
         .iter()
         .find(|d| d.id == desktop)
         .and_then(|d| Node::parse(&d.tree_json))
-        .and_then(|tree| match tree.find_leaf(leaf)? {
-            Node::Leaf(l) => Some(matches!(l.kind, super::layout::LeafKind::Tile { .. })),
-            Node::Split(_) => None,
-        })
-        .unwrap_or(false)
+        .is_some_and(|tree| matches!(tree.find_leaf(leaf), Some(Node::Leaf(_))))
 }
 
 pub(super) fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
@@ -124,13 +119,15 @@ pub trait Opened {
     fn update(&self, update: Update);
 }
 
-/// What a tile window needs before it shows its leaf: which leaf, and its way to the main
-/// window.
+/// What a tile window needs before it shows its leaf: which leaf, its way to the main
+/// window, and the main window's terminal events, whose share for this window
+/// `TerminalInbox::for_window` takes.
 pub struct Setup {
     pub key: String,
     pub desktop: String,
     pub leaf: String,
     pub main: Deliver,
+    pub terminals: crate::TerminalInbox,
 }
 
 impl Setup {
@@ -142,8 +139,10 @@ impl Setup {
             desktop,
             leaf,
             main,
+            ..
         } = self;
         Box::new(move |state: &mut State, tx: &mut Tx| {
+            state.window.hold_keyboard(&desktop, &leaf);
             state.window.tile = Some(TileWindow {
                 key,
                 desktop,
@@ -154,6 +153,7 @@ impl Setup {
                 title: None,
             });
             follow_title(state, tx);
+            crate::follow_terminals(state, tx);
         })
     }
 }
@@ -232,6 +232,7 @@ pub(crate) fn follow(state: &mut State) {
     if state.window.tile.is_some() {
         return;
     }
+    let terminals = state.terminals.inbox.clone();
     let pool = &mut state.window.desk.windows;
     let (Some(opener), Some(main)) = (pool.opener.clone(), pool.main.clone()) else {
         return;
@@ -286,11 +287,13 @@ pub(crate) fn follow(state: &mut State) {
         match pool.windows.iter_mut().find(|p| p.held.is_none()) {
             Some(pooled) => {
                 pooled.window.update(Box::new(move |state, tx| {
+                    state.window.hold_keyboard(&desktop, &leaf);
                     if let Some(tile) = &mut state.window.tile {
                         tile.desktop = desktop;
                         tile.leaf = leaf;
                     }
                     follow_title(state, tx);
+                    crate::follow_terminals(state, tx);
                 }));
                 pooled.window.pop_out(&want.frame);
                 pooled.held = Some(want);
@@ -306,6 +309,7 @@ pub(crate) fn follow(state: &mut State) {
                         desktop,
                         leaf,
                         main: main.clone(),
+                        terminals: terminals.clone(),
                     },
                 );
                 pool.windows.push(Pooled {

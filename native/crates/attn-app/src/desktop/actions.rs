@@ -68,7 +68,9 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         SessionOrchestrator => show_dispatcher(state, tx),
         TerminalOpen => focus_active(state, tx),
         TilePopOut => super::windows::toggle(state, tx),
-        TerminalFind => find(state, tx),
+        TerminalFind => {
+            find(state, tx);
+        }
         MarkdownSendAnnotations => {
             if !crate::review::open_send(state, tx) {
                 crate::markdown::sending::send_key(state, tx);
@@ -170,11 +172,13 @@ fn set_order(
     );
 }
 
-/// Opens find in the terminal holding the keyboard.
-fn find(state: &mut State, tx: &mut Tx) {
-    if let Some(id) = state.window.keyboard_terminal(&state.facts) {
-        state.terminals.open_find(&id, tx);
-    }
+/// Opens find in the terminal holding the keyboard; false when no terminal holds it.
+pub(crate) fn find(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(id) = state.window.keyboard_terminal(&state.facts) else {
+        return false;
+    };
+    state.terminals.open_find(&id, tx);
+    true
 }
 
 /// The actions that take the window to a desktop or a tile, which leave home.

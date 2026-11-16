@@ -151,7 +151,7 @@ fn capture(window: u64, path: &str) -> Command {
 }
 
 /// Opens tile windows as native windows beside the main one, each bound to the main window's
-/// store and sending on its link.
+/// store, sending on its link and hearing its terminals' events.
 pub struct NativeOpener {
     pub store: attn_client::Store,
     pub daemon: attn_client::Commands,
@@ -188,11 +188,15 @@ impl crate::desktop::Opener for NativeOpener {
         let window = rune::open_window(spec);
         crate::frame::tile_window_opened(&window);
         let placed = window.clone();
+        let terminals = {
+            let handle = handle.clone();
+            setup.terminals.for_window(move || handle.wake())
+        };
         handle.update(setup.into_update(Box::new(move || content_frame(&placed))));
         let bound = crate::bind(
             &self.store,
             self.daemon.clone(),
-            crate::TerminalInbox::default(),
+            terminals,
             crate::ReplyInbox::default(),
             self.epoch_ms,
             String::new(),

@@ -3,6 +3,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use std::sync::{Arc, Mutex};
 
 use attn_client::{Commands, Connection, Facts, Frame, Pulse, TerminalEvent, TerminalSink};
+use attn_protocol::DesktopPane;
 use attn_protocol::{
     AttachResultMessage, AttachSessionMessage, DetachSessionMessage, PtyInputMessage,
     PtyResizeMessage, SetTerminalThemeMessage, TerminalFocusMessage,
@@ -53,38 +54,139 @@ const FIRST_SIZE: (u16, u16) = (80, 24);
 /// the Tauri app: sampled well inside the daemon's five-second quiet window.
 const POINTER_ACTIVITY_INTERVAL: f64 = 0.25;
 
-/// What the link hears about terminals, waiting for the window's next frame.
-#[derive(Clone, Default)]
+/// What the link hears about terminals, waiting for a window's next frame. The windows of one
+/// link share it: each terminal's events go to the window that last attached it, the main
+/// window's when none has, and what concerns no one terminal goes to every window.
+#[derive(Clone)]
 pub struct TerminalInbox {
-    queue: Arc<Mutex<Vec<TerminalEvent>>>,
+    own: Arc<Queue>,
+    main: Arc<Queue>,
+    owners: Arc<Mutex<HashMap<String, Arc<Queue>>>>,
     taken: Pulse,
+}
+
+impl Default for TerminalInbox {
+    fn default() -> TerminalInbox {
+        let main = Arc::new(Queue::default());
+        TerminalInbox {
+            own: main.clone(),
+            main,
+            owners: Arc::default(),
+            taken: Pulse::default(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct Queue {
+    events: Mutex<Vec<TerminalEvent>>,
+    wake: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+}
+
+impl Queue {
+    fn push(&self, event: TerminalEvent) {
+        self.events.lock().unwrap().push(event);
+        let wake = self.wake.lock().unwrap().clone();
+        if let Some(wake) = wake {
+            wake();
+        }
+    }
 }
 
 impl TerminalInbox {
     /// An inbox that beats `taken` each time the window has applied what it took.
     pub fn beating(taken: Pulse) -> TerminalInbox {
         TerminalInbox {
-            queue: Arc::default(),
             taken,
+            ..TerminalInbox::default()
         }
     }
 
-    /// The link's terminal sink: queues each event and calls `wake` so the window takes it.
+    /// The link's terminal sink: queues each event for the window it belongs to and calls
+    /// that window's wake, `wake` for this main window, so the window takes it.
     pub fn sink(&self, wake: impl Fn() + Send + Sync + 'static) -> TerminalSink {
-        let queue = self.queue.clone();
-        Box::new(move |event| {
-            queue.lock().unwrap().push(event);
-            wake();
+        *self.main.wake.lock().unwrap() = Some(Arc::new(wake));
+        let (main, owners) = (self.main.clone(), self.owners.clone());
+        Box::new(move |event| match terminal_of(&event) {
+            Some(id) => {
+                let owner = owners.lock().unwrap().get(id).cloned();
+                owner.unwrap_or_else(|| main.clone()).push(event);
+            }
+            None => {
+                let mut queues: Vec<Arc<Queue>> = vec![main.clone()];
+                for queue in owners.lock().unwrap().values() {
+                    if !queues.iter().any(|q| Arc::ptr_eq(q, queue)) {
+                        queues.push(queue.clone());
+                    }
+                }
+                for queue in queues {
+                    queue.push(event.clone());
+                }
+            }
         })
     }
 
-    /// Whether the window has taken everything the link handed on.
+    /// Another window's share of this link's terminal events, woken by `wake`.
+    pub fn for_window(&self, wake: impl Fn() + Send + Sync + 'static) -> TerminalInbox {
+        TerminalInbox {
+            own: Arc::new(Queue {
+                events: Mutex::default(),
+                wake: Mutex::new(Some(Arc::new(wake))),
+            }),
+            main: self.main.clone(),
+            owners: self.owners.clone(),
+            taken: self.taken.clone(),
+        }
+    }
+
+    /// Whether the window has taken everything the link handed it.
     pub fn is_empty(&self) -> bool {
-        self.queue.lock().unwrap().is_empty()
+        self.own.events.lock().unwrap().is_empty()
+    }
+
+    /// Whether this is the main window's inbox, which speaks for the link: the daemon's
+    /// terminal colors are one per connection.
+    fn is_main(&self) -> bool {
+        Arc::ptr_eq(&self.own, &self.main)
     }
 
     fn take(&self) -> Vec<TerminalEvent> {
-        std::mem::take(&mut *self.queue.lock().unwrap())
+        std::mem::take(&mut *self.own.events.lock().unwrap())
+    }
+
+    /// This window attaches terminal `id`: its events come here from now on.
+    fn claim(&self, id: &str) {
+        let own = self.own.clone();
+        self.owners.lock().unwrap().insert(id.to_owned(), own);
+    }
+
+    /// This window lets go of terminal `id`: true when it held the attach, which is then its
+    /// to end. A terminal another window attached since stays with that window.
+    fn release(&self, id: &str) -> bool {
+        let mut owners = self.owners.lock().unwrap();
+        let owned = owners
+            .get(id)
+            .is_some_and(|owner| Arc::ptr_eq(owner, &self.own));
+        if owned {
+            owners.remove(id);
+        }
+        owned
+    }
+}
+
+/// The terminal an event is about, by runtime id; none for what concerns a session.
+fn terminal_of(event: &TerminalEvent) -> Option<&str> {
+    match event {
+        TerminalEvent::Frame(Frame::PtyOutput { terminal, .. })
+        | TerminalEvent::Frame(Frame::KittyImage { terminal, .. }) => Some(terminal),
+        TerminalEvent::Attached(result) => Some(&result.id),
+        TerminalEvent::Resized(resized) => Some(&resized.id),
+        TerminalEvent::Placements(described) => Some(&described.id),
+        TerminalEvent::ImageResult(result) => Some(&result.id),
+        TerminalEvent::Desync(desync) => Some(&desync.id),
+        TerminalEvent::Respawned(respawned) => Some(&respawned.id),
+        TerminalEvent::Exited(exited) => Some(&exited.id),
+        TerminalEvent::MessagesChanged(_) => None,
     }
 }
 
@@ -272,20 +374,19 @@ pub fn mark(runtime_id: &str) -> u32 {
 }
 
 impl Terminals {
-    /// Attaches the terminals the current desktop draws and lets go of the rest.
+    /// Keeps the terminals of `panes`, attached once drawn, and lets go of the rest.
     pub(crate) fn follow(
         &mut self,
         facts: &Facts,
+        panes: &[&DesktopPane],
         keyboard: Option<String>,
         now: f64,
         daemon: &Commands,
     ) {
         self.follow_connection(facts, daemon);
         self.undrawn = true;
-        let drawn: Vec<(String, Option<String>, bool, links::Place, bool)> = facts
-            .current_desktop()
-            .into_iter()
-            .flat_map(|desktop| &desktop.panes)
+        let drawn: Vec<(String, Option<String>, bool, links::Place, bool)> = panes
+            .iter()
             .filter(|pane| !pane.runtime_id.is_empty())
             .map(|pane| {
                 let session = facts.sessions.iter().find(|s| s.id == pane.session_id);
@@ -323,7 +424,8 @@ impl Terminals {
             let mut screen = std::mem::take(&mut term.grid);
             screen.set_images(Vec::new(), 0);
             self.hidden_screens.insert(id.clone(), screen);
-            if self.connected
+            if self.inbox.release(&id)
+                && self.connected
                 && matches!(
                     term.phase,
                     Phase::Attaching(_) | Phase::Retrying { .. } | Phase::Live
@@ -401,7 +503,9 @@ impl Terminals {
                 term.watermark = None;
             }
         }
-        send_theme(&self.theme, daemon);
+        if self.inbox.is_main() {
+            send_theme(&self.theme, daemon);
+        }
         self.focused = None;
     }
 
@@ -504,6 +608,7 @@ impl Terminals {
                 send_resize(id, term, at, Pixels::Sent, daemon);
             }
             term.stream = Stream::Attaching(Default::default());
+            self.inbox.claim(id);
             let attaching = Attaching {
                 policy,
                 requested,
@@ -709,6 +814,7 @@ impl Terminals {
             started: now,
             relaid: false,
         });
+        self.inbox.claim(id);
         let _ = daemon.send(&AttachSessionMessage {
             id: id.into(),
             attach_policy: policy.map(|p| p.wire().into()),
@@ -1095,7 +1201,7 @@ impl Terminals {
         for term in self.panes.values_mut() {
             term.vt.set_theme(&theme);
         }
-        if self.connected {
+        if self.connected && self.inbox.is_main() {
             send_theme(&theme, daemon);
         }
     }

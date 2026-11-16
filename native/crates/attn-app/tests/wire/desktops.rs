@@ -3386,16 +3386,235 @@ fn a_tile_window_leaves_the_main_windows_terminals_alone() {
     assert_eq!(attached(true), attached(false));
 }
 
+/// The daemon's output `data` for terminal `runtime`, numbered `seq`.
+fn output(world: &World, runtime: &str, seq: u32, data: &[u8]) {
+    let mut frame = vec![0x01, runtime.len() as u8];
+    frame.extend_from_slice(runtime.as_bytes());
+    frame.extend_from_slice(&seq.to_be_bytes());
+    frame.extend_from_slice(data);
+    world.daemon.emit_frame(frame);
+}
+
+/// The attaches and detaches the app sent for terminal `runtime`, in order.
+fn attachments(world: &World, runtime: &str) -> Vec<String> {
+    world
+        .daemon
+        .sent()
+        .iter()
+        .filter(|r| r["id"] == runtime)
+        .filter_map(|r| r["cmd"].as_str())
+        .filter(|c| ["attach_session", "detach_session"].contains(c))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Each `cmd` the app sent for terminal `runtime`.
+fn sent_for(world: &World, cmd: &str, runtime: &str) -> Vec<Value> {
+    world
+        .daemon
+        .sent_of(cmd)
+        .into_iter()
+        .filter(|r| r["id"] == runtime)
+        .collect()
+}
+
+/// The find key: ⌘F on macOS, Ctrl+Shift+F elsewhere, where Ctrl+F is the shell's.
+const FIND: &str = if cfg!(target_os = "macos") {
+    "mod+f"
+} else {
+    "mod+shift+f"
+};
+
 #[test]
-fn a_terminal_tile_stays_on_its_desktop() {
-    let tree = row([pane("a"), document("m", "a")]);
-    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+fn an_agent_pops_out_into_a_window_with_its_live_terminal_and_comes_back_attached() {
+    let side_by_side = |out: Option<(f64, f64, f64, f64)>| {
+        let a = match out {
+            Some(at) => popped(pane("a"), at),
+            None => pane("a"),
+        };
+        desktop(1, "a", Some(row([a, pane("b")])))
+    };
+    let mut world = start(vec![side_by_side(None)]);
+    assert_eq!(attachments(&world, "r-a"), ["attach_session"]);
 
     press(&mut world, Action::TilePopOut);
+    assert_eq!(
+        sent(&world, "desktop_pop_out_leaf")[0]["leaf_id"],
+        "a",
+        "an agent's tile pops out"
+    );
+    arrange(&mut world, "work/desktop_1", vec![side_by_side(Some(OUT))]);
+    let key = only_window(&world).key;
+    assert_eq!(
+        attachments(&world, "r-a").last().map(String::as_str),
+        Some("attach_session"),
+        "the window attaches the terminal, and the main window letting go does not end that attach: {:?}",
+        attachments(&world, "r-a")
+    );
+    assert!(!shows(&world, "Agent a"));
 
-    assert!(sent(&world, "desktop_pop_out_leaf").is_empty());
-    assert!(world.screen().find(Target::key("tile.a.popout")).is_none());
-    assert!(world.screen().find(Target::key("tile.m.popout")).is_some());
+    output(&world, "r-a", 1, b"hello from a");
+    world.settle();
+    assert_eq!(world.tile_terminal_text(&key, "r-a")[0], "hello from a");
+
+    world.tile_gesture(&key, |w| w.type_text("ls"));
+    let typed: Vec<_> = sent_for(&world, "pty_input", "r-a")
+        .iter()
+        .map(|r| r["data"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(typed, ["l", "s"]);
+    assert!(sent_for(&world, "pty_input", "r-b").is_empty());
+
+    let before = sent_for(&world, "pty_resize", "r-a").len();
+    world.resize_tile_window(&key, (900.0, 700.0));
+    world.advance(Duration::from_secs(1));
+    let resized = sent_for(&world, "pty_resize", "r-a");
+    assert!(resized.len() > before, "the PTY follows the window's size");
+    let last = resized.last().unwrap();
+    let first = &resized[before - 1];
+    assert!(
+        last["cols"].as_i64() > first["cols"].as_i64()
+            && last["rows"].as_i64() > first["rows"].as_i64(),
+        "{first} then {last}"
+    );
+
+    world.tile_gesture(&key, |w| w.press(FIND));
+    let field = Target::key("terminal.r-a.find.field");
+    assert!(world.tile_screen(&key).find(field.clone()).is_some());
+    assert!(world.screen().find(field).is_none());
+    world.tile_gesture(&key, |w| {
+        w.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+
+    world.tile_gesture(&key, |w| {
+        w.key(
+            match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::TilePopOut) {
+                Some(Binding::Chord(chord)) => key_event(&chord),
+                other => panic!("no single chord: {other:?}"),
+            },
+        )
+    });
+    assert_eq!(
+        sent(&world, "desktop_bring_back_leaf"),
+        [serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "a"})]
+    );
+    arrange(&mut world, "work/desktop_1", vec![side_by_side(None)]);
+    assert!(!only_window(&world).shown);
+    assert!(shows(&world, "Agent a"));
+    assert_eq!(
+        attachments(&world, "r-a").last().map(String::as_str),
+        Some("attach_session"),
+        "the main window attaches the terminal again, and the window letting go does not end that attach: {:?}",
+        attachments(&world, "r-a")
+    );
+    output(&world, "r-a", 2, b"\r\nback home");
+    world.settle();
+    assert_eq!(world.terminal_text("r-a")[1], "back home");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn two_agents_out_each_draw_and_split_in_their_own_window_while_main_shows_another_desktop() {
+    let elsewhere = (600.0, 20.0, 500.0, 400.0);
+    let desktops = || {
+        vec![
+            desktop(
+                1,
+                "a",
+                Some(row([popped(pane("a"), OUT), popped(pane("c"), elsewhere)])),
+            ),
+            desktop(2, "b", Some(pane("b"))),
+        ]
+    };
+    let mut world = start(desktops());
+    arrange(&mut world, "work/desktop_2", desktops());
+    let windows = world.tile_windows();
+    let window_of = |leaf: &str| {
+        windows
+            .iter()
+            .find(|w| w.showing == Some(("work/desktop_1".into(), leaf.into())))
+            .unwrap_or_else(|| panic!("a window shows {leaf}: {windows:?}"))
+            .key
+            .clone()
+    };
+    let (a, c) = (window_of("a"), window_of("c"));
+
+    output(&world, "r-a", 1, b"in a");
+    output(&world, "r-c", 1, b"in c");
+    world.settle();
+    assert_eq!(world.tile_terminal_text(&a, "r-a")[0], "in a");
+    assert_eq!(world.tile_terminal_text(&c, "r-c")[0], "in c");
+    assert!(
+        shows(&world, "Agent b"),
+        "the main window shows the other desktop"
+    );
+
+    let split = match Keymap::from_setting(None, KeyPlatform::current())
+        .binding(&Action::TerminalSplitVertical)
+    {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("no single chord: {other:?}"),
+    };
+    world.tile_gesture(&c, |w| w.key(split.clone()));
+    world.tile_gesture(&a, |w| w.key(split));
+    let anchors: Vec<_> = sent(&world, "spawn_session")
+        .iter()
+        .map(|s| {
+            (
+                s["spawned_from"].as_str().unwrap().to_owned(),
+                s["placement"]["desktop_id"].as_str().unwrap().to_owned(),
+                s["placement"]["anchor_pane_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        anchors,
+        [
+            ("s-c".into(), "work/desktop_1".into(), "c".into()),
+            ("s-a".into(), "work/desktop_1".into(), "a".into()),
+        ]
+    );
+}
+
+#[test]
+fn an_agent_out_at_launch_attaches_in_its_window_and_takes_the_keyboard_there() {
+    let mut world = start(vec![desktop(
+        1,
+        "b",
+        Some(row([popped(pane("a"), OUT), pane("b")])),
+    )]);
+    let key = only_window(&world).key;
+
+    assert_eq!(attachments(&world, "r-a"), ["attach_session"]);
+    let focused: Vec<_> = world
+        .daemon
+        .sent_of("terminal_focus")
+        .iter()
+        .map(|r| r["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(focused.contains(&"r-a".to_owned()), "{focused:?}");
+
+    world.reconnect();
+    assert_eq!(
+        world.daemon.sent_of("set_terminal_theme").len(),
+        2,
+        "the main window alone tells the daemon its terminal colors, once a handshake"
+    );
+
+    output(&world, "r-a", 1, b"still here");
+    world.settle();
+    assert_eq!(world.tile_terminal_text(&key, "r-a")[0], "still here");
+    world.tile_gesture(&key, |w| w.type_text("y"));
+    assert_eq!(sent_for(&world, "pty_input", "r-a")[0]["data"], "y");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
 }
 
 #[test]

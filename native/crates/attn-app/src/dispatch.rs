@@ -42,6 +42,13 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         if action == Action::FileOpen && crate::notebook::find_note(state, tx) {
             return Outcome::Ran;
         }
+        if action == Action::TerminalFind {
+            return if crate::desktop::find_in_terminal(state, tx) {
+                Outcome::Ran
+            } else {
+                Outcome::Unavailable
+            };
+        }
         return if crate::desktop::forward_to_main(state, action) {
             Outcome::Ran
         } else {

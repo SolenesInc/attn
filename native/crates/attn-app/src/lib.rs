@@ -249,15 +249,21 @@ pub fn bind(
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             crew::follow(state);
+            follow_terminals(state, tx);
             if state.window.tile.is_none() {
-                let keyboard = state.window.keyboard_terminal(&state.facts);
-                state
-                    .terminals
-                    .follow(&state.facts, keyboard, tx.clock(), &state.daemon);
                 annotations::draft::follow(state, tx);
             }
         }));
     })
+}
+
+/// Keeps the terminals this window draws attached, with the keyboard's terminal focused.
+pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
+    let keyboard = state.window.keyboard_terminal(&state.facts);
+    let panes = desktop::terminal_panes(&state.facts, &state.window);
+    state
+        .terminals
+        .follow(&state.facts, &panes, keyboard, tx.clock(), &state.daemon);
 }
 
 /// Connects a window to the daemon: the link starts from what `config` makes of the terminal
@@ -385,6 +391,7 @@ pub fn tile_window_app(size: (f32, f32)) -> rune::App<State> {
         min_size: Some((320.0, 200.0)),
         ..AppSpec::new("attn", size, State::default, desktop::windows_view)
     })
+    .compositor(screen::Screens::default())
     .on_ime(keys::on_ime)
     .on_field_key(keys::on_field_key)
     .on_focus(desktop::window_focus)
