@@ -33,19 +33,11 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         state.pictures.logo().map(Image::id),
         *t,
     );
-    memo("home", reads, || {
+    let top = memo("home.top", reads, || {
         let home = model::home(facts, window.now_ms);
-        let asks = crate::asks::Lists::of(facts, window.now_ms).live;
         col()
-            .key("home")
-            .role("main")
-            .label("Home")
-            .grow(1.0)
-            .h_full()
-            .min_w(0.0)
-            .padding(space::S6)
+            .w_full()
             .gap(space::S3)
-            .fill(t.bg_app)
             .child(header(state.pictures.logo(), t))
             .children(crate::whats_new::banner(state, t))
             .children(
@@ -53,8 +45,34 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                     .as_ref()
                     .map(|running| all_settled(running, window.follow_next_turn, t)),
             )
-            .child(sessions_card(&home, &asks, window.home_snoozed_open, t))
-    })
+    });
+    let sessions = memo("home.sessions", reads, || {
+        let home = model::home(facts, window.now_ms);
+        let asks = crate::asks::Lists::of(facts, window.now_ms).live;
+        sessions_card(&home, &asks, window.home_snoozed_open, t)
+    });
+    col()
+        .key("home")
+        .role("main")
+        .label("Home")
+        .grow(1.0)
+        .h_full()
+        .min_w(0.0)
+        .padding(space::S6)
+        .gap(space::S3)
+        .fill(t.bg_app)
+        .child(top)
+        .child(
+            row()
+                .key("home.cards")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .gap(16.0)
+                .flex_wrap()
+                .child(sessions)
+                .child(crate::attention::home_card(state, t)),
+        )
 }
 
 fn header(logo: Option<&Image>, t: &Tokens) -> El {
@@ -207,9 +225,8 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
         .key("home.sessions")
         .role("region")
         .label("Sessions")
-        .w_full()
-        .max_w(720.0)
         .grow(1.0)
+        .min_w(300.0)
         .min_h(0.0)
         .padding(space::S3)
         .gap(space::S3)

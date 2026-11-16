@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use attn_app::Action;
 use attn_protocol::{
-    AuthorState, AuthorsUpdatedMessage, InitialStateMessage, PR, PRActionResultMessage,
-    PRsUpdatedMessage, RefreshPRsResultMessage, RepoState, ReposUpdatedMessage,
+    AuthorState, AuthorsUpdatedMessage, GitHubHostsUpdatedMessage, InitialStateMessage, PR,
+    PRActionResultMessage, PRsUpdatedMessage, RefreshPRsResultMessage, RepoState,
+    ReposUpdatedMessage,
 };
 use attn_testkit::{Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -428,4 +429,158 @@ fn escape_closes_the_drawer_and_every_control_is_reached_by_tab() {
     assert!(has(&world, DRAWER));
     world.gesture(|app| app.key(chord(Action::DockAttention)));
     assert!(!has(&world, DRAWER));
+}
+
+fn home_pr(id: &str, number: i64, role: &str, repo: &str, title: &str) -> PR {
+    PR {
+        repo: repo.into(),
+        ..pr(id, number, role, title)
+    }
+}
+
+fn home_listed(world: &World, within: &str) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::key(within))
+        .into_iter()
+        .filter_map(|n| n.key?.strip_prefix("home.pr.").map(str::to_owned))
+        .filter(|rest| !rest.contains('.'))
+        .collect()
+}
+
+#[test]
+fn home_lists_the_users_prs_by_repo_name_then_review_requests_grouped_by_repo() {
+    let mut world = start(
+        one_desktop(vec![]),
+        vec![
+            home_pr("r1", 10, "reviewer", "victorarias/attn", "review this"),
+            home_pr("a1", 20, "author", "victorarias/attn", "my attn change"),
+            home_pr("a2", 21, "author", "other/tool", "my tool change"),
+        ],
+    );
+    world.daemon.on("mute_repo", |_| ());
+    let screen = world.screen();
+    let cards = screen.bounds(Target::key("home.cards")).unwrap();
+    let sessions = screen.bounds(Target::key("home.sessions")).unwrap();
+    let prs = screen.bounds(Target::key("home.prs")).unwrap();
+    assert!(
+        prs[0] >= sessions[0] + sessions[2],
+        "side by side: {sessions:?} {prs:?} in {cards:?}"
+    );
+
+    assert_eq!(home_listed(&world, "home.prs.yours"), ["a1", "a2"]);
+    assert_eq!(
+        name(&world, "home.pr.a1.open").as_deref(),
+        Some("attn #20: my attn change")
+    );
+    assert_eq!(
+        name(&world, "home.pr.a2.open").as_deref(),
+        Some("tool #21: my tool change")
+    );
+    assert_eq!(
+        home_listed(&world, "home.prs.repo.victorarias/attn"),
+        ["r1"]
+    );
+    assert_eq!(
+        name(&world, "home.pr.r1.open").as_deref(),
+        Some("#10: review this")
+    );
+    assert_eq!(
+        name(&world, "home.prs.repo.victorarias/attn.fold").as_deref(),
+        Some("attn, 1 review")
+    );
+    assert_eq!(
+        name(&world, "home.prs.count").as_deref(),
+        Some("3 need attention")
+    );
+
+    click(&mut world, "home.prs.repo.victorarias/attn.fold");
+    assert!(home_listed(&world, "home.prs.repo.victorarias/attn").is_empty());
+    click(&mut world, "home.prs.repo.victorarias/attn.mute");
+    let muted = world.daemon.sent_of("mute_repo");
+    assert_eq!(muted.len(), 1);
+    assert_eq!(muted[0]["repo"], "victorarias/attn");
+
+    world.resize((900.0, 900.0));
+    let screen = world.screen();
+    let sessions = screen.bounds(Target::key("home.sessions")).unwrap();
+    let prs = screen.bounds(Target::key("home.prs")).unwrap();
+    assert!(
+        prs[1] >= sessions[1] + sessions[3],
+        "stacked when narrow: {sessions:?} {prs:?}"
+    );
+}
+
+#[test]
+fn home_counts_only_prs_needing_the_user_and_takes_a_merged_one_off_after_its_check() {
+    let approved = PR {
+        approved_by_me: true,
+        ..pr("p1", 1, "reviewer", "approved already")
+    };
+    let mut world = start(
+        one_desktop(vec![]),
+        vec![approved.clone(), pr("a1", 7, "author", "ship it")],
+    );
+    answering(&world, "merge_pr", "merge", None);
+    assert_eq!(
+        name(&world, "home.prs.count").as_deref(),
+        Some("1 need attention")
+    );
+    assert!(has(&world, "home.pr.p1"));
+
+    world.daemon.emit(PRsUpdatedMessage {
+        prs: Some(vec![
+            PR {
+                has_new_changes: true,
+                ..approved
+            },
+            pr("a1", 7, "author", "ship it"),
+        ]),
+        ..PRsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        name(&world, "home.prs.count").as_deref(),
+        Some("2 need attention")
+    );
+
+    click(&mut world, "home.pr.a1.merge");
+    click(&mut world, "attention.merge.cancel");
+    assert_eq!(focused(&world).as_deref(), Some("home.pr.a1.merge"));
+    click(&mut world, "home.pr.a1.merge");
+    click(&mut world, "attention.merge.confirm");
+    assert!(has(&world, "home.pr.a1"));
+    world.advance(Duration::from_millis(1600));
+    assert!(!has(&world, "home.pr.a1"));
+}
+
+#[test]
+fn home_leaves_out_an_empty_section_and_says_when_no_pr_needs_the_user_or_github_is_not_polled() {
+    let mut world = start(
+        one_desktop(vec![]),
+        vec![pr("r1", 1, "reviewer", "review this")],
+    );
+    assert!(has(&world, "home.prs.review"));
+    assert!(!has(&world, "home.prs.yours"));
+    assert!(!has(&world, "home.prs.empty"));
+
+    world.daemon.emit(PRsUpdatedMessage {
+        prs: Some(vec![]),
+        ..PRsUpdatedMessage::new()
+    });
+    world.settle();
+    assert!(!has(&world, "home.prs.review"));
+    assert_eq!(
+        name(&world, "home.prs.empty").as_deref(),
+        Some("No PRs need attention")
+    );
+    world.daemon.emit(GitHubHostsUpdatedMessage {
+        github_polling_off_reason: Some("GitHub polling is off for instance dev.".into()),
+        ..GitHubHostsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        name(&world, "home.prs.empty").as_deref(),
+        Some("GitHub polling is off for instance dev.")
+    );
 }

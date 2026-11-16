@@ -41,3 +41,4 @@ pub const COLUMNS: &str = "\u{f0db}";
 pub const BOOK: &str = "\u{f02d}";
 pub const SITEMAP: &str = "\u{f0e8}";
 pub const GRID: &str = "\u{f009}";
+pub const BAN: &str = "\u{f05e}";

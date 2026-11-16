@@ -1,15 +1,17 @@
 //! The attention drawer: the agents waiting for the user, then the pull requests the user was
-//! asked to review and the user's own, each with Approve, Merge and Mute.
+//! asked to review and the user's own, each with Approve, Merge and Mute. Home lists the same
+//! pull requests in its Pull Requests card, as the Tauri app's dashboard does.
 
 use std::collections::{HashMap, HashSet};
 
 use attn_client::{Facts, REFRESH_PRS_ID, pr_action_id};
 use attn_protocol::{
-    ApprovePRMessage, MergePRMessage, MutePRMessage, PR, RefreshPRsMessage, Session,
+    ApprovePRMessage, MergePRMessage, MutePRMessage, MuteRepoMessage, PR, RefreshPRsMessage,
+    Session,
 };
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, Tx, col, row, text};
+use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
 
 use crate::State;
@@ -22,7 +24,7 @@ pub(crate) const DRAWER: &str = "attention";
 const WIDTH: f32 = 360.0;
 const DONE_SHOWS_SECONDS: f64 = 1.5;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Act {
     Approve,
     Merge,
@@ -56,14 +58,26 @@ enum Phase {
     Done(f64),
 }
 
+struct Merging {
+    pr: String,
+    number: i64,
+    /// The Merge button that asked, to take the keyboard back.
+    button: String,
+}
+
 #[derive(Default)]
 pub(crate) struct Attention {
     acts: HashMap<(Act, String), Phase>,
-    /// The pull request whose merge waits for the user's yes: its id and number.
-    merging: Option<(String, i64)>,
+    /// The pull request whose merge waits for the user's yes.
+    merging: Option<Merging>,
     /// Pull requests the user muted, hidden until the daemon reports them muted or gone: Mute
     /// toggles, so a second press on a row still shown would unmute it.
     muting: HashSet<String>,
+    /// Pull requests merged here, gone from the lists once their check has shown, until the
+    /// daemon stops reporting them.
+    merged: HashSet<String>,
+    /// The repositories whose review requests home's card folds away.
+    folded_repos: HashSet<String>,
 }
 
 /// What the drawer lists: the agents waiting for the user, then the pull requests needing them.
@@ -74,21 +88,11 @@ struct Lists<'a> {
 }
 
 impl<'a> Lists<'a> {
-    fn of(facts: &'a Facts, muting: &HashSet<String>) -> Lists<'a> {
+    fn of(facts: &'a Facts, attention: &Attention) -> Lists<'a> {
         let sessions = queue::wanting(facts);
-        let pulls = &facts.pull_requests;
-        let needing: Vec<&PR> = pulls
-            .prs
-            .iter()
-            .filter(|p| !p.muted && !muting.contains(&p.id))
-            .filter(|p| !pulls.repos.iter().any(|r| r.repo == p.repo && r.muted))
-            .filter(|p| {
-                !pulls
-                    .authors
-                    .iter()
-                    .any(|a| a.author == p.author && a.muted)
-            })
-            .filter(|p| !p.approved_by_me || p.has_new_changes)
+        let needing: Vec<&PR> = active(facts, attention)
+            .into_iter()
+            .filter(|p| needs_the_user(p))
             .collect();
         Lists {
             sessions,
@@ -108,6 +112,29 @@ impl<'a> Lists<'a> {
     fn total(&self) -> usize {
         self.sessions.len() + self.review.len() + self.yours.len()
     }
+}
+
+/// The pull requests nobody muted, not the pull request, its repository or its author, and not
+/// merged here.
+fn active<'a>(facts: &'a Facts, attention: &Attention) -> Vec<&'a PR> {
+    let pulls = &facts.pull_requests;
+    pulls
+        .prs
+        .iter()
+        .filter(|p| !p.muted && !attention.muting.contains(&p.id))
+        .filter(|p| !attention.merged.contains(&p.id))
+        .filter(|p| !pulls.repos.iter().any(|r| r.repo == p.repo && r.muted))
+        .filter(|p| {
+            !pulls
+                .authors
+                .iter()
+                .any(|a| a.author == p.author && a.muted)
+        })
+        .collect()
+}
+
+fn needs_the_user(pr: &PR) -> bool {
+    !pr.approved_by_me || pr.has_new_changes
 }
 
 /// Asks the daemon to poll GitHub for the pull requests now; a failed poll says why.
@@ -182,18 +209,27 @@ fn act(state: &mut State, act: Act, pr: &str, tx: &mut Tx) {
     }
 }
 
-/// Lets a done action's check lapse when its time is up, and forgets a mute the daemon has
-/// taken.
+/// Lets a done action's check lapse when its time is up, a merged pull request with it, and
+/// forgets a mute the daemon has taken and a merge the daemon no longer reports.
 pub(crate) fn poll(state: &mut State, now: f64) -> bool {
     let attention = &mut state.window.attention;
     let before = attention.acts.len();
-    attention
-        .acts
-        .retain(|_, phase| !matches!(phase, Phase::Done(until) if now >= *until));
+    let mut merged = Vec::new();
+    attention.acts.retain(|(act, pr), phase| {
+        let lapsed = matches!(phase, Phase::Done(until) if now >= *until);
+        if lapsed && *act == Act::Merge {
+            merged.push(pr.clone());
+        }
+        !lapsed
+    });
+    attention.merged.extend(merged);
     let prs = &state.facts.pull_requests.prs;
     attention
         .muting
         .retain(|id| prs.iter().any(|p| &p.id == id && !p.muted));
+    attention
+        .merged
+        .retain(|id| prs.iter().any(|p| &p.id == id));
     attention.acts.len() != before
 }
 
@@ -207,8 +243,12 @@ fn mute(state: &mut State, pr: &str) {
     });
 }
 
-fn ask_merge(state: &mut State, pr: &str, number: i64) {
-    state.window.attention.merging = Some((pr.to_owned(), number));
+fn ask_merge(state: &mut State, pr: &str, number: i64, button: String) {
+    state.window.attention.merging = Some(Merging {
+        pr: pr.to_owned(),
+        number,
+        button,
+    });
 }
 
 fn confirm_merge(state: &mut State, tx: &mut Tx) {
@@ -219,8 +259,8 @@ fn confirm_merge(state: &mut State, tx: &mut Tx) {
 
 /// Closes the merge confirmation and hands the keyboard back to the button that opened it.
 fn end_merge(state: &mut State, tx: &mut Tx) -> Option<String> {
-    let (pr, _) = state.window.attention.merging.take()?;
-    tx.focus(format!("attention.pr.{pr}.merge"), true);
+    let Merging { pr, button, .. } = state.window.attention.merging.take()?;
+    tx.focus(button, true);
     Some(pr)
 }
 
@@ -229,7 +269,7 @@ fn cancel_merge(state: &mut State, tx: &mut Tx) {
 }
 
 pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
-    let lists = Lists::of(&state.facts, &state.window.attention.muting);
+    let lists = Lists::of(&state.facts, &state.window.attention);
     let total = lists.total();
     let k = attn_ui::kit(t);
     let mut body = col()
@@ -244,7 +284,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
         });
     if !lists.sessions.is_empty() {
         body = body.child(section(
-            "sessions",
+            "attention.sessions",
             "Sessions Needing Attention",
             lists.sessions.len(),
             lists.sessions.iter().map(|s| session_row(s, t)).collect(),
@@ -253,26 +293,44 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
     }
     if !lists.review.is_empty() {
         body = body.child(section(
-            "review",
+            "attention.review",
             "Review Requested",
             lists.review.len(),
             lists
                 .review
                 .iter()
-                .map(|p| pr_row(state, p, false, t))
+                .map(|p| {
+                    pr_row(
+                        state,
+                        p,
+                        false,
+                        format!("attention.pr.{}", p.id),
+                        named(p),
+                        t,
+                    )
+                })
                 .collect(),
             t,
         ));
     }
     if !lists.yours.is_empty() {
         body = body.child(section(
-            "yours",
+            "attention.yours",
             "Your PRs",
             lists.yours.len(),
             lists
                 .yours
                 .iter()
-                .map(|p| pr_row(state, p, true, t))
+                .map(|p| {
+                    pr_row(
+                        state,
+                        p,
+                        true,
+                        format!("attention.pr.{}", p.id),
+                        named(p),
+                        t,
+                    )
+                })
                 .collect(),
             t,
         ));
@@ -333,7 +391,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
 
 fn section(key: &str, title: &str, count: usize, rows: Vec<El>, t: &Tokens) -> El {
     col()
-        .key(format!("attention.{key}"))
+        .key(key.to_owned())
         .role("group")
         .label(title)
         .w_full()
@@ -379,15 +437,18 @@ fn session_row(session: &Session, t: &Tokens) -> El {
         .w_full()
 }
 
+/// A pull request by its repository's name and number: "attn #20".
+fn named(pr: &PR) -> String {
+    format!("{} #{}", repo_name(&pr.repo), pr.number)
+}
+
 fn repo_name(repo: &str) -> &str {
     repo.rsplit('/').next().unwrap_or(repo)
 }
 
-fn pr_row(state: &State, pr: &PR, yours: bool, t: &Tokens) -> El {
+fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: &Tokens) -> El {
     let k = attn_ui::kit(t);
-    let key = format!("attention.pr.{}", pr.id);
     let url = pr.url.clone();
-    let heading = format!("{} #{}", repo_name(&pr.repo), pr.number);
     let open = Button::new(format!("{heading}: {}", pr.title))
         .variant(ButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
@@ -421,14 +482,16 @@ fn pr_row(state: &State, pr: &PR, yours: bool, t: &Tokens) -> El {
     let action = |chosen: Act| {
         let (glyph, label) = chosen.shown(phase(chosen));
         let id = pr.id.clone();
+        let button = format!("{key}.{}", chosen.wire());
+        let asking = button.clone();
         GlyphButton::new(glyph, label)
             .help(label)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| match chosen {
                 Act::Approve => act(state, Act::Approve, &id, tx),
-                Act::Merge => ask_merge(state, &id, number),
+                Act::Merge => ask_merge(state, &id, number, asking.clone()),
             })
             .build(k)
-            .key(format!("{key}.{}", chosen.wire()))
+            .key(button)
     };
     let mute_id = pr.id.clone();
     let footer = row()
@@ -469,6 +532,238 @@ fn pr_row(state: &State, pr: &PR, yours: bool, t: &Tokens) -> El {
         .child(footer)
 }
 
+fn mute_repo(state: &mut State, repo: &str) {
+    let _ = state.daemon.send(&MuteRepoMessage {
+        repo: repo.to_owned(),
+        ..MuteRepoMessage::new()
+    });
+}
+
+fn fold_repo(state: &mut State, repo: &str) {
+    let folded = &mut state.window.attention.folded_repos;
+    if !folded.remove(repo) {
+        folded.insert(repo.to_owned());
+    }
+}
+
+/// Home's Pull Requests card: the user's own pull requests, then the review requests by
+/// repository, each repository folding away or muted from its header.
+pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
+    let attention = &state.window.attention;
+    let mut acts: Vec<(Act, String, Option<u64>)> = attention
+        .acts
+        .iter()
+        .map(|((act, pr), phase)| {
+            let done = match phase {
+                Phase::Busy => None,
+                Phase::Done(until) => Some(until.to_bits()),
+            };
+            (*act, pr.clone(), done)
+        })
+        .collect();
+    acts.sort();
+    let mut muting: Vec<&String> = attention.muting.iter().collect();
+    muting.sort();
+    let mut folded: Vec<&String> = attention.folded_repos.iter().collect();
+    folded.sort();
+    let mut merged: Vec<&String> = attention.merged.iter().collect();
+    merged.sort();
+    let reads = (
+        std::sync::Arc::as_ptr(&state.facts.pull_requests) as usize,
+        std::sync::Arc::as_ptr(&state.facts.github) as usize,
+        std::sync::Arc::as_ptr(&state.keymap) as usize,
+        acts,
+        (muting, merged),
+        folded,
+        *t,
+    );
+    memo("home.prs", reads, || pr_card(state, t))
+}
+
+fn pr_card(state: &State, t: &Tokens) -> El {
+    let k = attn_ui::kit(t);
+    let facts = &state.facts;
+    let attention = &state.window.attention;
+    let active = active(facts, attention);
+    let needing = active.iter().filter(|p| needs_the_user(p)).count();
+    let yours: Vec<&PR> = active
+        .iter()
+        .copied()
+        .filter(|p| p.role == "author")
+        .collect();
+    let mut repos: Vec<(&str, Vec<&PR>)> = Vec::new();
+    for pr in active.iter().copied().filter(|p| p.role != "author") {
+        match repos.iter_mut().find(|(repo, _)| *repo == pr.repo) {
+            Some((_, prs)) => prs.push(pr),
+            None => repos.push((&pr.repo, vec![pr])),
+        }
+    }
+    let mut body = col()
+        .key("home.prs.body")
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .gap(space::S3)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        });
+    let empty = |said: String| {
+        text(said)
+            .key("home.prs.empty")
+            .role("status")
+            .font(type_::BODY)
+            .color(t.text_muted)
+    };
+    if let Some(reason) = &facts.github.polling_off_reason {
+        body = body.child(empty(reason.clone()));
+    } else if active.is_empty() {
+        body = body.child(empty("No PRs need attention".into()));
+    } else {
+        if !yours.is_empty() {
+            body = body.child(section(
+                "home.prs.yours",
+                "Yours",
+                yours.len(),
+                yours
+                    .iter()
+                    .map(|p| pr_row(state, p, true, format!("home.pr.{}", p.id), named(p), t))
+                    .collect(),
+                t,
+            ));
+        }
+        if !repos.is_empty() {
+            let count = repos.iter().map(|(_, prs)| prs.len()).sum();
+            let groups = repos
+                .iter()
+                .map(|(repo, prs)| repo_group(state, repo, prs, t))
+                .collect();
+            body = body.child(section(
+                "home.prs.review",
+                "Review requested",
+                count,
+                groups,
+                t,
+            ));
+        }
+    }
+    let refresh_help = match crate::palette::label_of(state, &crate::Action::SessionRefreshPrs) {
+        Some(keys) => format!("Refresh PRs ({keys})"),
+        None => "Refresh PRs".to_owned(),
+    };
+    col()
+        .key("home.prs")
+        .role("region")
+        .label("Pull Requests")
+        .grow(1.0)
+        .min_w(300.0)
+        .min_h(0.0)
+        .padding(space::S3)
+        .gap(space::S3)
+        .radius(8.0)
+        .fill(t.bg_panel)
+        .border(1.0, t.border_subtle)
+        .child(
+            row()
+                .w_full()
+                .items_center()
+                .gap(space::S2)
+                .child(
+                    text("Pull Requests")
+                        .role("heading")
+                        .font(type_::SECTION)
+                        .color(t.text_primary)
+                        .grow(1.0),
+                )
+                .child(
+                    GlyphButton::new(icon::REFRESH, "Refresh PRs")
+                        .help(refresh_help)
+                        .on_press_tx(refresh)
+                        .build(k)
+                        .key("home.prs.refresh"),
+                )
+                .child(
+                    text(needing.to_string())
+                        .key("home.prs.count")
+                        .role("status")
+                        .label(format!("{needing} need attention"))
+                        .font(type_::LABEL)
+                        .color(t.text_secondary),
+                ),
+        )
+        .child(body)
+}
+
+fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
+    let k = attn_ui::kit(t);
+    let folded = state.window.attention.folded_repos.contains(repo);
+    let key = format!("home.prs.repo.{repo}");
+    let name = repo_name(repo);
+    let (fold_repo_id, mute_repo_id) = (repo.to_owned(), repo.to_owned());
+    let header = row()
+        .w_full()
+        .items_center()
+        .gap(space::S1)
+        .child(
+            Button::new(format!("{name}, {} review", prs.len()))
+                .variant(ButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label_with({
+                    let said = format!(
+                        "{} {name}  {} review",
+                        if folded {
+                            icon::CARET_RIGHT
+                        } else {
+                            icon::CARET_DOWN
+                        },
+                        prs.len()
+                    );
+                    move |font, ink| {
+                        row()
+                            .grow(1.0)
+                            .child(text(said.clone()).font(font).color(ink))
+                    }
+                })
+                .on_press(move |state: &mut State| fold_repo(state, &fold_repo_id))
+                .build(k)
+                .key(format!("{key}.fold"))
+                .a11y_value(if folded { "collapsed" } else { "expanded" })
+                .grow(1.0),
+        )
+        .child(
+            GlyphButton::new(icon::BAN, "Mute all PRs from this repo")
+                .help("Mute all PRs from this repo")
+                .on_press(move |state: &mut State| mute_repo(state, &mute_repo_id))
+                .build(k)
+                .key(format!("{key}.mute")),
+        );
+    col()
+        .key(key)
+        .role("group")
+        .label(name.to_owned())
+        .w_full()
+        .gap(space::S1)
+        .child(header)
+        .children(
+            (!folded)
+                .then(|| {
+                    prs.iter()
+                        .map(|p| {
+                            pr_row(
+                                state,
+                                p,
+                                false,
+                                format!("home.pr.{}", p.id),
+                                format!("#{}", p.number),
+                                t,
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .into_iter()
+                .flatten(),
+        )
+}
+
 fn open_url(state: &mut State, url: &str, tx: &mut Tx) {
     if let Err(why) = tx.open_url(url) {
         state
@@ -479,7 +774,7 @@ fn open_url(state: &mut State, url: &str, tx: &mut Tx) {
 
 /// The yes the user gives before a merge, over the window.
 pub(crate) fn merge_confirmation(state: &State, t: &Tokens) -> Vec<El> {
-    let Some((_, number)) = &state.window.attention.merging else {
+    let Some(Merging { number, .. }) = &state.window.attention.merging else {
         return Vec::new();
     };
     let k = attn_ui::kit(t);
