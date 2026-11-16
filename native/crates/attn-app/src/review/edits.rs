@@ -373,8 +373,8 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(open) = state.readings.reviews.editing.as_mut() else {
         return false;
     };
-    if open.saving.is_some() {
-        return matches!(ev.key, Key::Escape | Key::Enter) || ev.mods.alt;
+    if open.saving.is_some() && ev.key != Key::Escape {
+        return ev.key == Key::Enter || ev.mods.alt;
     }
     match ev.key {
         Key::Escape => {
@@ -554,19 +554,43 @@ pub(crate) fn view(open: &Open, words: &TextEdit, t: &Tokens) -> El {
         .key("review.edit")
         .role("dialog")
         .label("Edit the file")
-        .modal_tx(true, close)
+        .modal_tx(false, close)
         .w_full()
         .max_w(720.0)
         .padding(space::S3)
         .gap(space::S2)
-        .child(text(format!("Editing {}: {}", open.path, open.describe())).font(type_::LABEL).color(t.text_secondary))
+        .child(
+            text(format!("Editing {}: {}", open.path, open.describe()))
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
         .child(area)
         .children(problem)
         .child(
-            text(format!("{save} save · ⌥↑ ⌥↓ take in a line · esc cancel · saved to the file and listed in the review"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .wrap(),
+            rune::row()
+                .gap(space::S2)
+                .child(
+                    text(format!("{save} save"))
+                        .key("review.edit.save")
+                        .role("button")
+                        .font(type_::LABEL)
+                        .color(t.text_secondary)
+                        .on_press_tx(self::save),
+                )
+                .child(
+                    text("esc cancel")
+                        .key("review.edit.cancel")
+                        .role("button")
+                        .font(type_::LABEL)
+                        .color(t.text_secondary)
+                        .on_press_tx(close),
+                )
+                .child(
+                    text("⌥↑ ⌥↓ take in a line · saved to the file and listed in the review")
+                        .font(type_::LABEL)
+                        .color(t.text_tertiary)
+                        .wrap(),
+                ),
         );
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
 }

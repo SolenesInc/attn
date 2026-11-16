@@ -3885,11 +3885,6 @@ fn refuses_an_edit_of_a_file_that_changed_underneath_shows_why_and_records_nothi
     assert!(edit_box(&world).is_none());
 }
 
-fn click_beside_the_edit_box(world: &mut World) {
-    let window = world.screen().bounds(Target::key("window")).unwrap();
-    world.gesture(|app| app.click_at((window[2] - 40.0, window[3] - 40.0)));
-}
-
 #[test]
 fn an_edit_saved_as_its_box_is_dismissed_lands_in_the_review_and_leaves_a_newer_box_open() {
     let (mut world, calc, kept, _) = open_editing();
@@ -3897,7 +3892,7 @@ fn an_edit_saved_as_its_box_is_dismissed_lands_in_the_review_and_leaves_a_newer_
     type_key(&mut world, "i");
     append(&mut world, " // named");
     press(&mut world, Key::Enter);
-    click_beside_the_edit_box(&mut world);
+    press(&mut world, Key::Escape);
     assert!(edit_box(&world).is_none());
     type_key(&mut world, "i");
     assert!(edit_box(&world).is_some());
@@ -3939,7 +3934,7 @@ fn an_edit_refused_after_its_box_is_dismissed_says_why() {
     type_key(&mut world, "i");
     append(&mut world, " // named");
     press(&mut world, Key::Enter);
-    click_beside_the_edit_box(&mut world);
+    press(&mut world, Key::Escape);
     assert!(edit_box(&world).is_none());
 
     calc.lock().unwrap()[3].text = "func Add(x, y int) int {".into();
@@ -4518,8 +4513,7 @@ fn names_the_save_key_of_several_lines_as_the_platform_binds_it_and_saves_on_it(
     let label = save_several_chord().label_on(rune::KeyPlatform::current());
     let said = edit_box(&e.world).unwrap();
     assert!(
-        said.iter()
-            .any(|t| t.starts_with(&format!("{label} save · "))),
+        said.iter().any(|t| *t == format!("{label} save")),
         "{said:?}"
     );
     retype(&mut e.world, "const query = `\nSELECT 2\n`");
@@ -4846,11 +4840,23 @@ fn keeps_the_lines_e_showed_when_an_edit_there_changes_the_file_with_the_cursor_
 }
 
 #[test]
-fn keeps_an_open_edit_on_top_and_the_send_waits_for_it() {
+fn keeps_an_open_edit_on_top_when_the_reader_is_clicked_and_the_send_waits_for_it() {
     let mut e = open_calc();
     e.walk_to_row(4);
     type_key(&mut e.world, "i");
     retype(&mut e.world, "\ttotal := a + b");
+
+    let window = e.world.screen().bounds(Target::key("window")).unwrap();
+    e.world
+        .gesture(|app| app.click_at((window[2] - 40.0, window[3] - 40.0)));
+    assert!(edit_box(&e.world).is_some());
+    assert!(
+        e.world
+            .screen()
+            .find(Target::role("dialog").name("Search the repository"))
+            .is_none()
+    );
+    assert_eq!(edit_text(&e.world), "\ttotal := a + b");
 
     send_key(&mut e.world);
     assert!(
@@ -4866,6 +4872,8 @@ fn keeps_an_open_edit_on_top_and_the_send_waits_for_it() {
             .get(Target::key("review.edit.field"))
             .is("focused")
     );
+    click(&mut e.world, Target::key("review.edit.cancel"));
+    assert!(edit_box(&e.world).is_none());
 }
 
 #[test]
