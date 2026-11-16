@@ -210,6 +210,49 @@ impl Open {
     }
 }
 
+/// An edit on its way to another window: its draft as text, since each window keeps its own
+/// editor.
+pub(crate) struct Handed {
+    home: Home,
+    path: String,
+    kind: FileKind,
+    disk: String,
+    hash: String,
+    text: String,
+    save: Save,
+    edited_at: Option<f64>,
+}
+
+impl Open {
+    pub(crate) fn hand(self) -> Handed {
+        Handed {
+            text: self.draft.text(),
+            home: self.home,
+            path: self.path,
+            kind: self.kind,
+            disk: self.disk,
+            hash: self.hash,
+            save: self.save,
+            edited_at: self.edited_at,
+        }
+    }
+}
+
+impl Handed {
+    pub(crate) fn open(self) -> Open {
+        Open {
+            draft: Draft::of(self.kind, &self.text),
+            home: self.home,
+            path: self.path,
+            kind: self.kind,
+            disk: self.disk,
+            hash: self.hash,
+            save: self.save,
+            edited_at: self.edited_at,
+        }
+    }
+}
+
 impl Notebook {
     pub(crate) fn surface(&self, id: &SurfaceId) -> Option<&Surface> {
         match id {

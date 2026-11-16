@@ -93,6 +93,8 @@ pub(crate) struct TileRuntime {
     pub runtime: Runtime<State>,
     pub inbox: Arc<Mutex<Vec<attn_app::Update>>>,
     pub shown: bool,
+    /// Closing it hides it with its state, as the native host closes an app that keeps running.
+    pub keeps_running: bool,
     /// Where the window is, which the app reads back as its placement.
     pub frame: Arc<Mutex<Frame>>,
     _bound: Subscription,
@@ -122,7 +124,9 @@ impl TileRuntime {
             scale: 2.0,
         };
         let size = (frame.width as f32, frame.height as f32);
-        let mut runtime = attn_app::tile_window_app(size).headless_runtime(size, env);
+        let app = attn_app::tile_window_app(size);
+        let keeps_running = app.keeps_running();
+        let mut runtime = app.headless_runtime(size, env);
         runtime.use_clipboard(&rune::clipboard::memory());
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
         let placed = Arc::new(Mutex::new(frame));
@@ -151,6 +155,7 @@ impl TileRuntime {
             runtime,
             inbox,
             shown: true,
+            keeps_running,
             frame: placed,
             _bound: bound,
         }

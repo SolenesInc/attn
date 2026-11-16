@@ -327,7 +327,8 @@ pub fn app() -> rune::App<State> {
 }
 
 /// The app of a window that shows one popped-out tile, `size` points large;
-/// `desktop::Setup` makes a bound window of it a tile window.
+/// `desktop::Setup` makes a bound window of it a tile window. Closing it hides it, keeping its
+/// state for the next tile.
 pub fn tile_window_app(size: (f32, f32)) -> rune::App<State> {
     rune::App::new(AppSpec {
         on_key: Some(keys::on_key),
@@ -342,6 +343,7 @@ pub fn tile_window_app(size: (f32, f32)) -> rune::App<State> {
     .on_focus(desktop::window_focus)
     .on_quit(desktop::tile_window_quits)
     .on_close(desktop::tile_window_closed)
+    .keep_running()
 }
 
 impl State {

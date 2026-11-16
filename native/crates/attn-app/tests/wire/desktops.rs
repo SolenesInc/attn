@@ -3219,7 +3219,7 @@ fn the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back() {
 }
 
 #[test]
-fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_opens_a_new_one() {
+fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_shows_it_again() {
     let mut world = start(vec![with_document(Some(OUT))]);
     let key = only_window(&world).key;
 
@@ -3237,15 +3237,19 @@ fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_opens_a_new_o
     });
     world.settle();
     assert!(
-        world.tile_windows().is_empty(),
-        "the closed window does not come back"
+        !only_window(&world).shown,
+        "the closed window does not come back before the tile does"
     );
 
-    arrange(&mut world, "work/desktop_1", vec![with_document(None)]);
-    arrange(&mut world, "work/desktop_1", vec![with_document(Some(OUT))]);
-    let window = only_window(&world);
-    assert_ne!(window.key, key);
-    assert!(window.shown);
+    for _ in 0..20 {
+        arrange(&mut world, "work/desktop_1", vec![with_document(None)]);
+        arrange(&mut world, "work/desktop_1", vec![with_document(Some(OUT))]);
+        let window = only_window(&world);
+        assert_eq!(window.key, key, "the closed window shows the tile again");
+        assert!(window.shown);
+        assert_eq!(window.showing, Some(("work/desktop_1".into(), "m".into())));
+        world.close_tile_window(&key);
+    }
 }
 
 #[test]

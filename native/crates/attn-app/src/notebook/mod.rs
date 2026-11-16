@@ -236,6 +236,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let before = state.notebook.revision;
     let mut changed = follow_focus(state, tx);
     changed |= place_tiles(state, tx);
+    changed |= hand_settled_to_main(state);
     changed |= follow_watches(state, tx);
     changed |= follow_notebook(state, tx);
     let ids: Vec<SurfaceId> = state
@@ -277,15 +278,8 @@ fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
         let Some(surface) = state.notebook.tiles.remove(&tile) else {
             continue;
         };
-        let key = shelf_key(&tile, surface.root.as_deref());
-        if let Doc::Open(open) = surface.doc
-            && (open.dirty() || open.save.writing.is_some() || open.save.conflict.is_some())
-        {
-            let save = open.dirty() && open.save.writing.is_none() && open.save.conflict.is_none();
-            state.notebook.shelved.insert(key.clone(), *open);
-            if save {
-                write(state, Target::Shelved(key), None, tx);
-            }
+        if let Doc::Open(open) = surface.doc {
+            shelve(state, shelf_key(&tile, surface.root.as_deref()), *open, tx);
         }
     }
     for (tile, params) in shown {
@@ -294,29 +288,112 @@ fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
         }
         changed = true;
         let changes = changes_of(state, params.root.as_deref());
-        let mut surface = Surface::new(params.root.clone(), notebook_root(state), changes);
+        let surface = Surface::new(params.root.clone(), notebook_root(state), changes);
         let key = shelf_key(&tile, params.root.as_deref());
         let returning = state.notebook.shelved.remove(&key);
-        if let Some(open) = returning.as_ref() {
-            if let Home::Notebook(read_in) = &open.home {
-                surface.notebook.clone_from(read_in);
-            }
-            surface.doc = Doc::Open(Box::new(open.clone()));
-        }
         state.notebook.tiles.insert(tile.clone(), surface);
-        let id = SurfaceId::Tile(tile);
+        let id = SurfaceId::Tile(tile.clone());
         io::list(state, &id, "", tx);
         match (returning, params.path) {
-            (Some(open), _) => {
-                if open.kind == file_kind::FileKind::Markdown && params.root.is_none() {
-                    io::backlinks(state, &id, open.path, tx);
-                }
-            }
+            (Some(open), _) => show_returning(state, &tile, open, tx),
             (None, Some(path)) => io::read(state, &id, path, tx),
             (None, None) => finder::open(state, id, tx),
         }
     }
     changed
+}
+
+/// Keeps the edit of a tile that left the screen until it is on disk: it saves now unless a
+/// save is in flight or the person has a conflict to settle first.
+fn shelve(state: &mut State, key: String, open: model::Open, tx: &mut Tx) {
+    let (writing, conflict) = (open.save.writing.is_some(), open.save.conflict.is_some());
+    if !(open.dirty() || writing || conflict) {
+        return;
+    }
+    let save = open.dirty() && !writing && !conflict;
+    state.notebook.shelved.insert(key.clone(), open);
+    if save {
+        write(state, Target::Shelved(key), None, tx);
+    }
+}
+
+/// Shows `open`, the edit of tile `tile` back from the shelf or another window, on the tile's
+/// surface, which drops any answer for what it was loading.
+fn show_returning(state: &mut State, tile: &str, open: model::Open, tx: &mut Tx) {
+    let Some(surface) = state.notebook.tiles.get_mut(tile) else {
+        return;
+    };
+    if let Home::Notebook(read_in) = &open.home {
+        surface.notebook.clone_from(read_in);
+    }
+    surface.load += 1;
+    let backlinks = (open.kind == file_kind::FileKind::Markdown && surface.on_notebook())
+        .then(|| open.path.clone());
+    surface.doc = Doc::Open(Box::new(open));
+    if let Some(path) = backlinks {
+        io::backlinks(state, &SurfaceId::Tile(tile.to_owned()), path, tx);
+    }
+}
+
+/// A tile window keeps the edit of a tile it no longer shows only while its save is in flight;
+/// then the main window takes it, so a save that failed or conflicted is never left in a window
+/// the person cannot see.
+fn hand_settled_to_main(state: &mut State) -> bool {
+    if state.window.tile.is_none() {
+        return false;
+    }
+    let settled: Vec<String> = state
+        .notebook
+        .shelved
+        .iter()
+        .filter(|(_, open)| open.save.writing.is_none())
+        .map(|(key, _)| key.clone())
+        .collect();
+    for key in &settled {
+        if let Some(open) = state.notebook.shelved.remove(key) {
+            let (key, handed) = (key.clone(), open.hand());
+            crate::desktop::to_main(
+                state,
+                Box::new(move |state: &mut State, tx: &mut Tx| take(state, key, handed.open(), tx)),
+            );
+        }
+    }
+    !settled.is_empty()
+}
+
+/// The main window takes the edit a tile window settled: its tile shows it when the tile is on
+/// screen here without an edit of its own; otherwise it waits on the shelf, saving again if it
+/// can, and the window says why when it conflicts.
+fn take(state: &mut State, key: String, open: model::Open, tx: &mut Tx) {
+    let tile = key
+        .split_once('\0')
+        .map_or(key.as_str(), |(tile, _)| tile)
+        .to_owned();
+    let shows_disk = state.notebook.tiles.get(&tile).is_some_and(|surface| {
+        shelf_key(&tile, surface.root.as_deref()) == key
+            && surface
+                .open()
+                .is_none_or(|o| !o.dirty() && o.save.writing.is_none() && o.save.conflict.is_none())
+    });
+    if shows_disk {
+        let unsaved = open.dirty() && open.save.conflict.is_none();
+        show_returning(state, &tile, open, tx);
+        if unsaved {
+            edited(state, &SurfaceId::Tile(tile), tx);
+        }
+        state.notebook.revision += 1;
+        return;
+    }
+    let notice = open
+        .save
+        .conflict
+        .is_some()
+        .then(|| io::save_notice(&open))
+        .flatten();
+    shelve(state, key, open, tx);
+    if let Some(notice) = notice {
+        state.window.notify(notice, tx);
+    }
 }
 
 /// Watches each folder an on-screen tile reads outside the notebook, and stops watching the

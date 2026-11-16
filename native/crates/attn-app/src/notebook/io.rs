@@ -386,12 +386,7 @@ pub(crate) fn write(state: &mut State, target: Target, over: Option<Option<Strin
             match result {
                 Ok(result) if result.conflict => {
                     open.save.conflict = Some(result.current_hash.filter(|h| !h.is_empty()));
-                    failed(
-                        state,
-                        &target,
-                        format!("Could not save {path}: it changed on disk"),
-                        tx,
-                    );
+                    failed(state, &target, tx);
                 }
                 Ok(result) => {
                     open.disk = sent;
@@ -400,14 +395,9 @@ pub(crate) fn write(state: &mut State, target: Target, over: Option<Option<Strin
                     landed(state, &target, tx);
                 }
                 Err(error) => {
-                    open.save.error = Some(error.clone());
+                    open.save.error = Some(error);
                     open.edited_at = Some(now);
-                    failed(
-                        state,
-                        &target,
-                        format!("Could not save {path}: {error}"),
-                        tx,
-                    );
+                    failed(state, &target, tx);
                 }
             }
         },
@@ -445,17 +435,32 @@ fn landed(state: &mut State, target: &Target, tx: &mut Tx) {
 }
 
 /// A save conflicted or failed: a surface shows why and stays where it is; an edit on the shelf
-/// says so in the window, and its tile shows why when it comes back.
-fn failed(state: &mut State, target: &Target, notice: String, tx: &mut Tx) {
+/// says so in the main window, and its tile shows why when it comes back.
+fn failed(state: &mut State, target: &Target, tx: &mut Tx) {
     match locate(state, target) {
         Some(Place::Surface(id)) => {
             state.notebook.after_save.remove(&id);
         }
         Some(Place::Shelf(key)) => {
             forget_waiting(state, &key);
-            state.window.notify(notice, tx);
+            let notice = state.notebook.shelved.get(&key).and_then(save_notice);
+            if let Some(notice) = notice
+                && state.window.tile.is_none()
+            {
+                state.window.notify(notice, tx);
+            }
         }
         None => {}
+    }
+}
+
+/// Why the edit's last save did not reach disk, if it did not.
+pub(crate) fn save_notice(open: &Open) -> Option<String> {
+    let path = &open.path;
+    match (&open.save.conflict, &open.save.error) {
+        (Some(_), _) => Some(format!("Could not save {path}: it changed on disk")),
+        (None, Some(error)) => Some(format!("Could not save {path}: {error}")),
+        (None, None) => None,
     }
 }
 

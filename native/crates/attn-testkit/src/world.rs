@@ -524,7 +524,8 @@ impl World {
             .unwrap_or_else(|| panic!("the app has no tile window {key}"))
     }
 
-    /// The tile windows the app opened and has not closed, oldest first.
+    /// The tile windows the app opened, shown or hidden, and has not closed for good, oldest
+    /// first.
     pub fn tile_windows(&self) -> Vec<crate::TileWindowView> {
         self.tiles.iter().map(|t| t.view()).collect()
     }
@@ -555,15 +556,21 @@ impl World {
         self.settle();
     }
 
-    /// The person closes tile window `key` from its title bar.
+    /// The person closes tile window `key` from its title bar: it hides if its app keeps
+    /// running, and otherwise ends with its state.
     pub fn close_tile_window(&mut self, key: &str) {
         let at = self
             .tiles
             .iter()
             .position(|t| t.key == key)
             .unwrap_or_else(|| panic!("the app has no tile window {key}"));
-        let mut tile = self.tiles.remove(at);
+        let tile = &mut self.tiles[at];
         tile.runtime.update(attn_app::desktop::tile_window_closed);
+        if tile.keeps_running {
+            tile.shown = false;
+        } else {
+            self.tiles.remove(at);
+        }
         self.settle();
     }
 

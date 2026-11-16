@@ -191,13 +191,13 @@ impl Pool {
         self.windows.iter().any(|w| w.held.is_some() && !w.closed)
     }
 
-    /// Hands each tile window the replies the main window heard and did not wait for, so a
-    /// tile window's requests are answered.
+    /// Hands each tile window, shown or hidden, the replies the main window heard and did not
+    /// wait for, so a tile window's requests are answered, its saves among them.
     pub(crate) fn hand(&self, replies: Vec<attn_client::Reply>) {
         if replies.is_empty() {
             return;
         }
-        for pooled in self.windows.iter().filter(|p| !p.closed) {
+        for pooled in &self.windows {
             let replies = replies.clone();
             pooled.window.update(Box::new(move |state, _| {
                 crate::requests::receive(state, replies);
@@ -210,7 +210,8 @@ struct Pooled {
     key: String,
     held: Option<Held>,
     window: Box<dyn Opened>,
-    /// The person closed the window; it holds its leaf until the daemon brings it back.
+    /// The person closed the window, which hid it; it holds its leaf until the daemon brings
+    /// it back, and is then used again.
     closed: bool,
 }
 
@@ -222,8 +223,8 @@ struct Held {
 }
 
 /// Keeps a window on each popped-out leaf of the profile's desktops, where the daemon says
-/// it is, hides the windows of leaves that came back, and shows the main window it hid once no
-/// tile window shows.
+/// it is, hides the windows of leaves that came back to use them again, and shows the main
+/// window it hid once no tile window shows.
 pub(crate) fn follow(state: &mut State) {
     if state.window.tile.is_some() {
         return;
@@ -262,9 +263,9 @@ pub(crate) fn follow(state: &mut State) {
         }
         if gone {
             pooled.held = None;
+            pooled.closed = false;
         }
     }
-    pool.windows.retain(|p| !(p.closed && p.held.is_none()));
     for want in wanted {
         let held = pool.windows.iter_mut().find(|p| {
             p.held
@@ -279,11 +280,7 @@ pub(crate) fn follow(state: &mut State) {
             continue;
         }
         let (desktop, leaf) = (want.desktop.clone(), want.leaf.clone());
-        match pool
-            .windows
-            .iter_mut()
-            .find(|p| p.held.is_none() && !p.closed)
-        {
+        match pool.windows.iter_mut().find(|p| p.held.is_none()) {
             Some(pooled) => {
                 pooled.window.update(Box::new(move |state, tx| {
                     if let Some(tile) = &mut state.window.tile {
@@ -323,13 +320,22 @@ pub(crate) fn follow(state: &mut State) {
     }
 }
 
-/// The tile window `key` closed: it leaves the pool once the daemon brings its leaf back.
+/// The tile window `key` closed, which hid it: it waits for the daemon to bring its leaf back.
 fn forget(state: &mut State, key: &str) {
     let pool = &mut state.window.desk.windows;
     if let Some(pooled) = pool.windows.iter_mut().find(|p| p.key == key) {
         pooled.closed = true;
     }
     follow(state);
+}
+
+/// Runs `update` in the main window, when this is a tile window.
+pub(crate) fn to_main(state: &State, update: Update) -> bool {
+    let Some(tile) = &state.window.tile else {
+        return false;
+    };
+    (tile.main)(update);
+    true
 }
 
 /// Runs `action`, pressed in a tile window, in the main window: the tile's own actions act on
@@ -478,7 +484,8 @@ pub fn on_quit(state: &mut State, _: &mut Tx) {
     }
 }
 
-/// The person closed the tile window: its tile comes back to its desktop.
+/// The person closed the tile window: its tile comes back to its desktop, and the window
+/// hides with its state, as bringing the tile back hides it, so an edit it holds still saves.
 pub fn on_close(state: &mut State, _: &mut Tx) {
     let Some(tile) = &state.window.tile else {
         return;

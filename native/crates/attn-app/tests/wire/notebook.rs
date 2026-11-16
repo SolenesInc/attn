@@ -2056,3 +2056,154 @@ fn an_edit_typed_before_the_daemon_restarts_is_saved_once_it_is_back() {
     world.advance(Duration::from_secs(3));
     assert!(world.runtime_is_at_rest());
 }
+
+/// Pops editor tile n out into its own window, on plan.md, and returns the window's key.
+fn popped_out_editor(disk: &Disk) -> (World, String) {
+    let mut world = start_with(
+        disk,
+        Some(row(vec![pane("a"), editor_tile("n", "plan.md")])),
+    );
+    arrange(
+        &mut world,
+        row(vec![pane("a"), popped_out(editor_tile("n", "plan.md"))]),
+        2,
+    );
+    let window = world.tile_windows()[0].key.clone();
+    (world, window)
+}
+
+fn type_in_tile_window(world: &mut World, window: &str, words: &str) {
+    world.tile_gesture(window, |d| {
+        d.click(Target::key("notebook.tile.n.editor"));
+        d.press("mod+down");
+        d.type_text(words);
+    });
+}
+
+fn main_tile_editor(world: &World) -> String {
+    world
+        .screen()
+        .get(Target::key("notebook.tile.n.editor"))
+        .value
+        .clone()
+        .unwrap_or_default()
+}
+
+#[test]
+fn closing_a_popped_out_editor_before_it_saves_still_saves_its_last_edit() {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let (mut world, window) = popped_out_editor(&disk);
+    type_in_tile_window(&mut world, &window, "Typed just before closing.");
+
+    world.close_tile_window(&window);
+    arrange(
+        &mut world,
+        row(vec![pane("a"), editor_tile("n", "plan.md")]),
+        3,
+    );
+    world.advance(Duration::from_secs(1));
+
+    assert!(
+        disk.get("plan.md")
+            .unwrap()
+            .contains("Typed just before closing."),
+        "{:?}",
+        disk.get("plan.md")
+    );
+    world.daemon.emit(FsChangedMessage {
+        paths: vec!["plan.md".into()],
+        origin: "ui".into(),
+        root: NOTEBOOK.into(),
+        ..FsChangedMessage::new()
+    });
+    world.settle();
+    assert!(main_tile_editor(&world).contains("Typed just before closing."));
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn bringing_a_popped_out_editor_back_while_it_saves_saves_what_was_typed_after_that_save_began() {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let (mut world, window) = popped_out_editor(&disk);
+    world
+        .daemon
+        .answer_in_turn("fs_write", [Answer::Hold, Answer::Hold]);
+    type_in_tile_window(&mut world, &window, "First.");
+    world.advance(Duration::from_millis(700));
+    let held = world.daemon.sent_of("fs_write").pop().unwrap();
+    type_in_tile_window(&mut world, &window, " Second.");
+
+    arrange(
+        &mut world,
+        row(vec![pane("a"), editor_tile("n", "plan.md")]),
+        3,
+    );
+    let land = |world: &mut World, held: &Value| {
+        let content = held["content"].as_str().unwrap();
+        disk.put("plan.md", content);
+        world.daemon.reply_to(held, written("plan.md", content));
+        world.settle();
+    };
+    land(&mut world, &held);
+    let again = world.daemon.sent_of("fs_write");
+    assert_eq!(again.len(), 2, "{again:?}");
+    assert_eq!(
+        again[1]["base_hash"],
+        hash(held["content"].as_str().unwrap())
+    );
+    land(&mut world, &again[1]);
+
+    assert!(
+        disk.get("plan.md").unwrap().contains("First. Second."),
+        "{:?}",
+        disk.get("plan.md")
+    );
+    world.daemon.emit(FsChangedMessage {
+        paths: vec!["plan.md".into()],
+        origin: "ui".into(),
+        root: NOTEBOOK.into(),
+        ..FsChangedMessage::new()
+    });
+    world.settle();
+    assert!(main_tile_editor(&world).contains("First. Second."));
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn a_popped_out_editor_brought_back_while_its_save_conflicts_shows_the_conflict_and_its_edit_in_the_main_window()
+ {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let (mut world, window) = popped_out_editor(&disk);
+    world.daemon.answer_in_turn("fs_write", [Answer::Hold]);
+    type_in_tile_window(&mut world, &window, "Kept through the conflict.");
+    world.advance(Duration::from_millis(700));
+    let held = world.daemon.sent_of("fs_write").pop().unwrap();
+
+    arrange(
+        &mut world,
+        row(vec![pane("a"), editor_tile("n", "plan.md")]),
+        3,
+    );
+    disk.put("plan.md", "changed on disk\n");
+    world.daemon.reply_to(
+        &held,
+        json!({ "event": "fs_write_result", "success": true,
+            "result": { "path": "plan.md", "conflict": true, "current_hash": hash("changed on disk\n") } }),
+    );
+    world.settle();
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("notebook.tile.n.document.conflict"))
+            .is_some(),
+        "{}",
+        world.screen()
+    );
+    assert!(main_tile_editor(&world).contains("Kept through the conflict."));
+    assert_eq!(disk.get("plan.md").as_deref(), Some("changed on disk\n"));
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
