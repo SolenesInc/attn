@@ -1917,3 +1917,50 @@ fn a_queue_row_says_its_harness_on_hover_with_its_logo_turned_off() {
         Some("Codex")
     );
 }
+
+fn with_hidden_turn(settings: &[(&str, &str)]) -> (InitialStateMessage, Session, Session) {
+    let s1 = turn("s1", 60);
+    let h1 = Session {
+        hidden: Some(true),
+        ..turn("h1", 120)
+    };
+    let mut message = queue(one_desktop(vec![s1.clone()]));
+    message.sessions.as_mut().unwrap().push(h1.clone());
+    let kept = message.settings.as_mut().unwrap();
+    for (key, value) in settings {
+        kept.insert((*key).into(), (*value).into());
+    }
+    (message, s1, h1)
+}
+
+#[test]
+fn a_hidden_agent_queues_without_a_desktop_slot_and_opens_in_a_tile_when_chosen() {
+    let (message, s1, h1) = with_hidden_turn(&[]);
+    let mut world = World::start(Daemon::scripted().state(message));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-turn.s1.slot"))
+            .is_some()
+    );
+    assert!(world.screen().find(Target::key("queue-turn.h1")).is_some());
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-turn.h1.slot"))
+            .is_none()
+    );
+
+    world.gesture(|app| app.click(Target::key("queue-turn.h1")));
+    assert_eq!(sent_ids(&world, "desktop_show_session"), ["h1"]);
+    daemon_shows(&mut world, &[&s1, &h1], "h1");
+    assert!(world.screen().find(Target::key("tile.p1")).is_some());
+}
+
+#[test]
+fn hidden_agents_stay_out_of_the_queue_with_the_setting_off() {
+    let (message, _, _) = with_hidden_turn(&[("queue_show_hidden_sessions", "false")]);
+    let world = World::start(Daemon::scripted().state(message));
+    assert!(world.screen().find(Target::key("queue-turn.s1")).is_some());
+    assert!(world.screen().find(Target::key("queue-turn.h1")).is_none());
+}
