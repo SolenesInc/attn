@@ -1628,3 +1628,151 @@ fn cancelling_the_new_desktops_name_writes_nothing() {
     assert!(is_open(&world), "Escape closes only the name dialog");
     assert!(world.daemon.sent_of("crew_set").is_empty());
 }
+
+fn push_seeds(world: &mut World, seeds: Vec<Seed>, total: i64) {
+    world.daemon.emit(attn_protocol::GardenSeedsUpdatedMessage {
+        profile_id: PROFILE.into(),
+        total,
+        seeds,
+        ..attn_protocol::GardenSeedsUpdatedMessage::new()
+    });
+    world.settle();
+}
+
+fn tab_to(world: &mut World, key: &str) {
+    for _ in 0..60 {
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some(key) {
+            return;
+        }
+        press(world, Key::Tab);
+    }
+    panic!("Tab never reached {key}:\n{}", world.screen());
+}
+
+#[test]
+fn a_planted_seed_shows_its_state_and_plot_and_opens_from_the_keyboard() {
+    let plot = Seed {
+        plot_progress: Some(attn_protocol::SeedPlotProgress {
+            total: 5,
+            done: 2,
+            growing: 1,
+            parked: 1,
+            ready: 1,
+            ..attn_protocol::SeedPlotProgress::default()
+        }),
+        ..seed("s-dssvxq", "Garden follow-up work")
+    };
+    let child = Seed {
+        status: "planted".into(),
+        edges: vec![attn_protocol::SeedEdge {
+            kind: "part-of".into(),
+            to: plot.id.clone(),
+        }],
+        ..planted_by(
+            seed("s-g9yxwv", "Artifact presence comes from the daemon"),
+            "trellis",
+        )
+    };
+    let d = daemon(
+        vec![member("trellis", 4)],
+        vec![session("s1", "claude")],
+        vec![child, plot],
+    );
+    d.on("open_seed", |_| ());
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, "crew.tab.seeds");
+    click(&mut world, "crew.seeds.planted");
+    let row = named(&world, "crew.seed.s-g9yxwv").unwrap();
+    assert!(row.contains("Garden follow-up work · 2/5"), "{row}");
+    assert!(row.ends_with("Planted"), "{row}");
+
+    tab_to(&mut world, "crew.seed.s-g9yxwv");
+    press(&mut world, Key::Enter);
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], "s-g9yxwv");
+}
+
+#[test]
+fn what_a_member_tends_follows_garden_broadcasts_its_days_claims_and_its_own_alike() {
+    let claimed = tended_by(seed("s-live", "Live claim"), "day", Some("day-current"));
+    let own = tended_by(seed("s-member", "Member claim"), "alder", None);
+    let mut world = World::start(daemon(
+        vec![in_session(member("alder", 1), "day-current")],
+        vec![session("day-current", "claude")],
+        vec![claimed.clone(), own.clone()],
+    ));
+    open(&mut world);
+    click(&mut world, "crew.tab.seeds");
+    assert_eq!(
+        seed_rows(&world),
+        ["crew.seed.s-live", "crew.seed.s-member"]
+    );
+
+    push_seeds(
+        &mut world,
+        vec![
+            Seed {
+                status: "parked".into(),
+                tender: None,
+                ..claimed.clone()
+            },
+            Seed {
+                status: "harvested".into(),
+                tender: None,
+                ..own
+            },
+        ],
+        2,
+    );
+    assert_eq!(
+        named(&world, "crew.seeds.empty").as_deref(),
+        Some("Alder isn't tending a seed.")
+    );
+
+    click(&mut world, "crew.seeds.planted");
+    push_seeds(
+        &mut world,
+        vec![Seed {
+            status: "planted".into(),
+            tender: None,
+            ..planted_by(claimed, "alder")
+        }],
+        1,
+    );
+    assert_eq!(seed_rows(&world), ["crew.seed.s-live"]);
+}
+
+#[test]
+fn the_seeds_tab_says_when_its_list_is_only_the_newest_part_of_the_garden() {
+    let mut world = World::start(daemon(
+        vec![member("keel", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    ));
+    open(&mut world);
+    click(&mut world, "crew.tab.seeds");
+    click(&mut world, "crew.seeds.planted");
+    assert_eq!(
+        named(&world, "crew.seeds.empty").as_deref(),
+        Some("No seeds were explicitly planted by Keel.")
+    );
+
+    let others = ["a", "b", "c", "d"]
+        .map(|id| planted_by(seed(&format!("s-{id}"), id), "alder"))
+        .to_vec();
+    push_seeds(&mut world, others, 481);
+    assert_eq!(
+        named(&world, "crew.seeds.cap").as_deref(),
+        Some("Showing matches in the newest 4 of 481 seeds.")
+    );
+    assert_eq!(
+        named(&world, "crew.seeds.empty").as_deref(),
+        Some("No seeds in this Garden snapshot are explicitly planted by Keel.")
+    );
+    assert_eq!(
+        named(&world, "crew.seeds.planted").as_deref(),
+        Some("Planted 0+")
+    );
+}

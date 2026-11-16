@@ -1034,6 +1034,7 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         col()
             .key("crew.seeds.list")
             .role("list")
+            .focus_group()
             .label(match filter {
                 SeedFilter::Tending => "Tended seeds",
                 SeedFilter::Planted => "Planted seeds",
