@@ -29,6 +29,7 @@ jobs:
   changes:
     name: Changes
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     runs-on: ubuntu-24.04
@@ -59,17 +60,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Find the commit main's last run that ran tested
+        id: base
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=50" \
+            --jq "[.workflow_runs[] | select(.id < $GITHUB_RUN_ID and (.conclusion | IN(\"success\", \"failure\")))][0].head_sha // empty")" || sha=""
+          if [ -n "$sha" ] && git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$BEFORE" >> "$GITHUB_OUTPUT"
+          fi
+          echo "paths changed since $(sed -n 's/^sha=//p' "$GITHUB_OUTPUT")"
+
       - name: Classify changed paths
         id: filter
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
+          base: ${{ steps.base.outputs.sha }}
           # PR API quota is shared by the installation. Full history lets the
           # action use git instead, so an unrelated busy repo cannot break CI.
           token: ''
           filters: |
-            release_commit:
-              - '.github/release-candidate.yml'
             cli:
               - 'cli/**'
               - 'rust-toolchain.toml'
@@ -236,7 +251,16 @@ jobs:
 
       - name: Decide whether every macOS job runs
         id: full
-        run: echo "macos=${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.filter.outputs.release_commit == 'true') }}" >> "$GITHUB_OUTPUT"
+        env:
+          BEFORE: ${{ github.event.before }}
+          FULL_EVENT: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
+          MAIN_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          macos="$FULL_EVENT"
+          if [ "$MAIN_PUSH" = true ] && [ -n "$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- .github/release-candidate.yml)" ]; then
+            macos=true
+          fi
+          echo "macos=$macos" >> "$GITHUB_OUTPUT"
 
   release-candidate:
     name: Release candidate
