@@ -432,6 +432,14 @@ func (q Query) afterTuple(table, sortExpr string, desc bool, anchor *Document) (
 		return "id " + cmp + " ?", []any{q.After}, nil
 	}
 
+	if reservedField[q.Sort.Field] {
+		at := anchor.CreatedAt
+		if q.Sort.Field == FieldUpdatedAt {
+			at = anchor.UpdatedAt
+		}
+		return "(" + sortExpr + ", id) " + cmp + " (?, ?)", []any{at.UTC().Format(TimeFormat), q.After}, nil
+	}
+
 	isNull, err := q.anchorSortIsNull(anchor)
 	if err != nil {
 		return "", nil, err
@@ -458,9 +466,6 @@ func (q Query) afterTuple(table, sortExpr string, desc bool, anchor *Document) (
 }
 
 func (q Query) anchorSortIsNull(anchor *Document) (bool, error) {
-	if reservedField[q.Sort.Field] {
-		return false, nil
-	}
 	var body map[string]json.RawMessage
 	if err := json.Unmarshal(anchor.Body, &body); err != nil {
 		return false, fmt.Errorf("docstore: %s/%s cannot page after %q: its body is not a JSON object (%w)", q.Namespace, q.Collection, anchor.ID, err)

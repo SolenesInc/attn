@@ -832,3 +832,49 @@ func randomDeclaration(rng *rand.Rand) docstore.CollectionSchema {
 func (w *modelWorld) storedIDs() []string {
 	return w.scanIDs("SELECT id FROM "+w.table+" ORDER BY id ASC", nil)
 }
+
+func TestPagingDocumentsThatShareAStampFindsEachOnceInOrderBothWays(t *testing.T) {
+	ids := []string{"a", "b", "c", "d", "e", "f", "g"}
+	stamps := []int{0, 0, 0, 1, 1, 2, 2}
+	for _, field := range []string{docstore.FieldCreatedAt, docstore.FieldUpdatedAt} {
+		for _, desc := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s desc=%v", field, desc), func(t *testing.T) {
+				w := newModelWorld(t)
+				base := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+				for i, id := range ids {
+					at := base.Add(time.Duration(stamps[i]) * time.Second)
+					if _, err := w.s.PutDocument(w.schema, id, []byte(`{}`), at, nil); err != nil {
+						t.Fatalf("put %s: %v", id, err)
+					}
+				}
+				want := append([]string(nil), ids...)
+				if desc {
+					want = reversed(want)
+				}
+				for _, limit := range []int{1, 2, 3, len(ids)} {
+					q := docstore.Query{
+						Namespace:  w.schema.Namespace,
+						Collection: w.schema.Collection,
+						Sort:       &docstore.Sort{Field: field, Desc: desc},
+						Limit:      limit,
+					}
+					var walked []string
+					for {
+						page, err := w.realIDs(q)
+						if err != nil {
+							t.Fatalf("limit %d after %q: %v", limit, q.After, err)
+						}
+						if len(page) == 0 {
+							break
+						}
+						walked = append(walked, page...)
+						q.After = page[len(page)-1]
+					}
+					if !sameIDs(walked, want) {
+						t.Fatalf("limit %d: paging walked %v, want each document once as %v", limit, walked, want)
+					}
+				}
+			})
+		}
+	}
+}
