@@ -2,7 +2,7 @@
 
 mod agents;
 mod analytics;
-mod appearance;
+pub(crate) mod appearance;
 pub(crate) mod autosave;
 mod background;
 mod bus;

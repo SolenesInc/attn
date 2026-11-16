@@ -6,6 +6,9 @@
 mod attach;
 mod draft;
 mod history;
+#[cfg(target_os = "macos")]
+pub mod mac;
+pub(crate) mod shortcut;
 mod view;
 
 use std::path::PathBuf;
@@ -45,6 +48,9 @@ pub trait Window: Send + Sync {
     fn hide(&self);
     /// Runs `update` on the panel's state.
     fn update(&self, update: Update);
+    /// Has the system open the panel on `shortcut` from any app, in place of the shortcut it
+    /// held, or on none. A shortcut the system refuses leaves the previous one held.
+    fn bind(&self, shortcut: Option<&rune::Shortcut>) -> Result<(), String>;
 }
 
 /// Which of its two faces the panel shows.
@@ -207,14 +213,10 @@ pub(crate) fn open(state: &State) {
 pub(crate) fn hand(state: &State, replies: &[Reply]) {
     if let (Some(window), false) = (&state.capture, replies.is_empty()) {
         let replies = replies.to_vec();
-        window.update(Box::new(move |panel, _| panel.requests.inbox.put(replies)));
-    }
-}
-
-impl State {
-    /// Lets this main window open Quick Capture in `window`.
-    pub fn use_quick_capture(&mut self, window: Arc<dyn Window>) {
-        self.capture = Some(window);
+        window.update(Box::new(move |panel, tx| {
+            panel.requests.inbox.put(replies);
+            answer(panel, tx);
+        }));
     }
 }
 
@@ -729,7 +731,7 @@ fn on_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    if shortcut(panel, ev, tx) {
+    if shortcut(panel, ev, tx) || text_size(panel, ev, tx) {
         return true;
     }
     if ev.key == Key::Escape {
@@ -748,6 +750,36 @@ fn on_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     false
+}
+
+/// The app's text size keys, which size the panel with the app.
+fn text_size(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    use crate::action::Action;
+    use crate::keymap::{self, Binding, Keymap};
+    let setting = panel
+        .facts
+        .settings
+        .get(keymap::SETTING)
+        .map(String::as_str);
+    let keymap = Keymap::from_setting(setting, rune::KeyPlatform::current());
+    let pressed = [
+        Action::UiIncreaseFontSize,
+        Action::UiDecreaseFontSize,
+        Action::UiResetFontSize,
+    ]
+    .into_iter()
+    .find(|action| {
+        matches!(keymap.binding(action), Some(Binding::Chord(chord)) if keymap.matches(&chord, ev, tx))
+    });
+    let Some(action) = pressed else {
+        return false;
+    };
+    if let Some(message) =
+        crate::settings::appearance::ui_scale_step(&panel.facts.settings, &action)
+    {
+        let _ = panel.daemon.send(&message);
+    }
+    true
 }
 
 /// ⌘1 to ⌘4 pick the roster's first four mailboxes and ⌘K opens the list, before a field's own
@@ -785,7 +817,8 @@ pub(crate) fn on_message_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> b
     false
 }
 
-fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
+/// Runs what waited on each reply the panel was handed.
+fn answer(panel: &mut Panel, tx: &mut Tx) -> bool {
     let mut changed = false;
     for reply in panel.requests.inbox.take() {
         if let Some(then) = panel.requests.answered_by(&reply) {
@@ -793,6 +826,11 @@ fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
             changed = true;
         }
     }
+    changed
+}
+
+fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
+    let mut changed = answer(panel, tx);
     if panel.save.is_some_and(|due| now >= due.at) {
         panel.flush();
         changed = true;

@@ -37,6 +37,8 @@ pub(crate) struct Editor {
     recording: Option<(Action, Mode)>,
     /// Records the key that follows a chord's leader.
     then: ShortcutRecorderState,
+    /// Records Quick Capture's system-wide shortcut.
+    capture: ShortcutRecorderState,
     pending: Option<Pending>,
     /// The setting as last written, until the daemon's value is it, so a change made before
     /// the last one comes back builds on it.
@@ -577,7 +579,10 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             })
         })
         .collect();
-    let empty = sections.is_empty().then(|| {
+    let capture = (state.capture.is_some()
+        && (query.is_empty() || "quick capture system-wide".contains(&query)))
+    .then(|| capture_section(state, t, k));
+    let empty = (sections.is_empty() && capture.is_none()).then(|| {
         let said = format!("No shortcuts match “{}”", editor.filter.text.trim());
         text(said.clone())
             .key("shortcut-editor.no-matches")
@@ -607,6 +612,7 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
+        .children(capture)
         .children(sections)
         .children(empty);
     let footer = row()
@@ -878,4 +884,117 @@ fn message(error: &ShortcutError, shortcut: Option<&Shortcut>) -> String {
         ShortcutError::Backend(said) => said.clone(),
         _ => shortcut_error_message(error, shortcut),
     }
+}
+
+const CAPTURE_RECORDER: &str = "shortcut-editor.capture.keys";
+
+/// Quick Capture's system-wide shortcut: recorded, reset to the default or turned off, with
+/// what the system holds now.
+fn capture_section(state: &State, t: &Tokens, k: &Kit) -> El {
+    let global = &state.capture_shortcut;
+    let shown = ShortcutRecorderState::new(active_shortcut(state));
+    let recorder = &state.window.shortcut_editor.capture;
+    let recorder = if recorder.is_recording() {
+        recorder
+    } else {
+        &shown
+    };
+    let error = global.error.clone();
+    col()
+        .key("shortcut-editor.capture")
+        .role("region")
+        .label("Global Quick Capture shortcut")
+        .w_full()
+        .gap(space::S1)
+        .child(
+            text("Quick Capture · system-wide")
+                .role("heading")
+                .font(type_::SECTION)
+                .color(t.text_tertiary),
+        )
+        .child(
+            text("Open Quick Capture over the current app. Escape keeps your draft.")
+                .font(type_::BODY)
+                .color(t.text_secondary),
+        )
+        .child(
+            row()
+                .gap(space::S2)
+                .items_center()
+                .child(
+                    ShortcutRecorder::new(CAPTURE_RECORDER, recorder, capture_recorder)
+                        .label("Quick Capture shortcut")
+                        .width(200.0)
+                        .on_change(|state: &mut State, shortcut: Option<&Shortcut>, _: &mut Tx| {
+                            let next = shortcut.map(crate::quick_capture::shortcut::stored);
+                            crate::quick_capture::shortcut::choose(state, next)
+                                .map_err(ShortcutError::Backend)
+                        })
+                        .error_message(|error, shortcut| match error {
+                            ShortcutError::InvalidAccelerator(_) => {
+                                "Use Command, Control or Option with another key.".to_owned()
+                            }
+                            _ => message(error, shortcut),
+                        })
+                        .build(k),
+                )
+                .child(
+                    Button::new("Reset")
+                        .on_press(|state: &mut State| {
+                            let _ = crate::quick_capture::shortcut::choose(
+                                state,
+                                Some(crate::quick_capture::shortcut::DEFAULT.to_owned()),
+                            );
+                        })
+                        .build(k)
+                        .key("shortcut-editor.capture.reset"),
+                )
+                .child(
+                    Button::new("Turn off")
+                        .on_press(|state: &mut State| {
+                            let _ = crate::quick_capture::shortcut::choose(state, None);
+                        })
+                        .build(k)
+                        .key("shortcut-editor.capture.off"),
+                ),
+        )
+        .children(error.map(|said| {
+            text(said.clone())
+                .key("shortcut-editor.capture.error")
+                .role("alert")
+                .label(said)
+                .font(type_::LABEL)
+                .color(t.error)
+        }))
+        .child({
+            let active = format!("Active: {}", global.active.as_deref().unwrap_or("Off"));
+            text(active.clone())
+                .key("shortcut-editor.capture.active")
+                .label(active)
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+        })
+        .child(
+            text("macOS system and exclusive conflicts are reported. Shared shortcuts may not be detectable.")
+                .font(type_::LABEL)
+                .color(t.text_tertiary),
+        )
+}
+
+fn active_shortcut(state: &State) -> Option<Shortcut> {
+    state
+        .capture_shortcut
+        .active
+        .as_deref()
+        .and_then(|b| crate::quick_capture::shortcut::parse(b).ok())
+}
+
+/// The recorder of the Quick Capture shortcut, showing the active one while it does not record.
+fn capture_recorder(state: &mut State) -> &mut ShortcutRecorderState {
+    let active = active_shortcut(state);
+    let recorder = &mut state.window.shortcut_editor.capture;
+    if !recorder.is_recording() {
+        *recorder = ShortcutRecorderState::new(active);
+    }
+    recorder
 }

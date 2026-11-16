@@ -16,6 +16,8 @@ pub(crate) struct HeadlessPanel {
     shown: AtomicBool,
     inbox: Mutex<Vec<Update>>,
     pulse: Pulse,
+    /// The shortcut the system would open the panel on.
+    pub(crate) bound: Mutex<Option<rune::Shortcut>>,
 }
 
 impl quick_capture::Window for HeadlessPanel {
@@ -32,6 +34,11 @@ impl quick_capture::Window for HeadlessPanel {
     fn update(&self, update: Update) {
         self.inbox.lock().unwrap().push(update);
         self.pulse.beat();
+    }
+
+    fn bind(&self, shortcut: Option<&rune::Shortcut>) -> Result<(), String> {
+        *self.bound.lock().unwrap() = shortcut.cloned();
+        Ok(())
     }
 }
 
@@ -61,6 +68,7 @@ impl CaptureRuntime {
             shown: AtomicBool::new(false),
             inbox: Mutex::default(),
             pulse: pulse.clone(),
+            bound: Mutex::default(),
         });
         let bound = {
             let window = window.clone();

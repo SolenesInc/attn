@@ -81,6 +81,7 @@ pub struct State {
     pub(crate) browser: browser::Browsers,
     /// The Quick Capture panel's window, on a platform that has one.
     capture: Option<Arc<dyn quick_capture::Window>>,
+    capture_shortcut: quick_capture::shortcut::Global,
     daemon: Commands,
     requests: requests::Requests,
     /// Wall-clock milliseconds when the runtime's clock read zero.
@@ -208,6 +209,7 @@ pub fn bind(
             update_run::follow(state, tx);
             settings::follow(state, changed, tx);
             shortcut_editor::follow(state);
+            quick_capture::shortcut::follow(state);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             if state.window.tile.is_none() {

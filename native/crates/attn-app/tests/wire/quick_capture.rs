@@ -7,7 +7,7 @@ use attn_protocol::{
     CrewMember, CrewUpdatedMessage, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
     QuickCaptureAttachment, QuickCaptureAttachmentPutResult, QuickCaptureDraftAsset,
     QuickCaptureListResult, QuickCaptureReadMessage, QuickCaptureRecord, QuickCaptureResult,
-    QuickCaptureResultMessage, QuickCaptureUnreadMessage,
+    QuickCaptureResultMessage, QuickCaptureUnreadMessage, SettingsUpdatedMessage,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message};
 use base64::Engine;
@@ -1483,5 +1483,203 @@ fn a_file_attached_after_the_draft_was_saved_keeps_its_bytes_and_uploads_them() 
     );
     assert_eq!(kept.lock().unwrap().bytes[&id], png());
     assert!(alert(&world).is_none());
+    rest(&mut world);
+}
+
+/// A daemon that keeps the settings the app writes and tells every client, as the real one
+/// does.
+fn keeping_settings(daemon: &Daemon, settings: &[(&str, &str)]) {
+    let kept: Arc<Mutex<std::collections::BTreeMap<String, String>>> = Arc::new(Mutex::new(
+        settings
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect(),
+    ));
+    daemon.on("set_setting", move |r| {
+        let mut kept = kept.lock().unwrap();
+        kept.insert(
+            r["key"].as_str().unwrap().into(),
+            r["value"].as_str().unwrap().into(),
+        );
+        message(SettingsUpdatedMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            changed_key: r["key"].as_str().map(str::to_owned),
+            success: Some(true),
+            settings: Some(kept.clone()),
+            ..SettingsUpdatedMessage::new()
+        })
+    });
+}
+
+fn shortcut_writes(world: &World) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("set_setting")
+        .iter()
+        .filter(|r| r["key"] == "capture.shortcut")
+        .map(|r| r["value"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn click(world: &mut World, key: &str) {
+    world
+        .automate("press", json!({"target": {"key": key}}))
+        .unwrap_or_else(|why| panic!("press {key}: {why}"));
+}
+
+/// Records `binding`, written as the app stores it, in the editor's Quick Capture row.
+fn record_capture(world: &mut World, binding: &str) {
+    let shortcut: rune::Shortcut = binding.parse().unwrap();
+    let (key, mods) = (shortcut.physical_key(), shortcut.modifiers());
+    click(world, "shortcut-editor.capture.keys");
+    world.gesture(|app| {
+        for pressed in [true, false] {
+            app.runtime.physical_input(rune::PhysicalInput::Key {
+                key,
+                mods,
+                pressed,
+                repeat: false,
+            });
+        }
+    });
+}
+
+fn capture_row(world: &World) -> String {
+    world
+        .screen()
+        .find(Target::key("shortcut-editor.capture"))
+        .map(|_| world.screen().to_string())
+        .unwrap_or_default()
+}
+
+#[test]
+fn edits_and_turns_off_its_system_wide_shortcut_in_the_shortcut_editor() {
+    let (daemon, _) = home();
+    keeping_settings(&daemon, &[]);
+    let mut world = World::start(daemon);
+    assert_eq!(world.capture_shortcut(), None);
+    world.gesture(|d| {
+        d.update(|state, tx| {
+            attn_app::dispatch(state, Action::OpenShortcutEditor, tx);
+        });
+    });
+    assert!(
+        capture_row(&world).contains("Active: Off"),
+        "{}",
+        world.screen()
+    );
+
+    record_capture(&mut world, "Shift+KeyA");
+    assert!(
+        world
+            .screen()
+            .to_string()
+            .contains("Use Command, Control or Option with another key."),
+        "{}",
+        world.screen()
+    );
+    assert_eq!(shortcut_writes(&world), Vec::<String>::new());
+    assert_eq!(world.capture_shortcut(), None);
+
+    record_capture(&mut world, "Control+Alt+KeyB");
+    assert_eq!(shortcut_writes(&world), ["Control+Alt+KeyB"]);
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+    assert!(capture_row(&world).contains("Active: Control+Alt+KeyB"));
+
+    click(&mut world, "shortcut-editor.capture.off");
+    assert_eq!(shortcut_writes(&world).last().map(String::as_str), Some(""));
+    assert_eq!(world.capture_shortcut(), None);
+    assert!(capture_row(&world).contains("Active: Off"));
+
+    click(&mut world, "shortcut-editor.capture.reset");
+    assert_eq!(
+        shortcut_writes(&world).last().map(String::as_str),
+        Some("Control+Alt+Super+Space")
+    );
+    assert!(world.capture_shortcut().is_some());
+    assert!(capture_row(&world).contains("Active: Control+Alt+Super+Space"));
+    rest(&mut world);
+}
+
+#[test]
+fn binds_the_daemons_shortcut_once_connected_and_follows_its_changes() {
+    let (daemon, _) = home();
+    let daemon = daemon.state(InitialStateMessage {
+        settings: Some([("capture.shortcut".to_owned(), "Control+Alt+KeyQ".to_owned())].into()),
+        ..state(PROFILE)
+    });
+    let mut world = World::start(daemon);
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+q"));
+
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: Some([("capture.shortcut".to_owned(), String::new())].into()),
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(world.capture_shortcut(), None);
+    assert_eq!(
+        std::fs::read_to_string(world.data_dir().join("capture-shortcut.json")).unwrap(),
+        "null"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_relaunch_binds_the_cached_shortcut_while_the_daemon_has_none() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    world.gesture(|d| {
+        d.update(|state, tx| {
+            attn_app::dispatch(state, Action::OpenShortcutEditor, tx);
+        });
+    });
+    record_capture(&mut world, "Super+Alt+KeyJ");
+    assert_eq!(shortcut_writes(&world), ["Super+Alt+KeyJ"]);
+
+    world.restart_capture();
+    assert_eq!(world.capture_shortcut().as_deref(), Some("alt+super+j"));
+    rest(&mut world);
+}
+
+/// Presses the keys the app's default keymap gives `action`, in the panel.
+fn press_action(world: &mut World, action: Action) {
+    let keymap = attn_app::Keymap::from_setting(None, rune::KeyPlatform::current());
+    let Some(attn_app::Binding::Chord(chord)) = keymap.binding(&action) else {
+        panic!("{} has no single chord", action.id());
+    };
+    let ev = attn_testkit::key_event(&chord);
+    world.capture_gesture(|d| d.key(ev));
+}
+
+#[test]
+fn the_panel_sizes_its_text_with_the_app() {
+    let (daemon, _) = home();
+    keeping_settings(&daemon, &[]);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    type_text(&mut world, "Keep me");
+    let drawn = |world: &World| {
+        world
+            .capture_screen()
+            .bounds(Target::key("capture.to"))
+            .unwrap()[3]
+            * world.capture_zoom()
+    };
+    let unscaled = drawn(&world);
+
+    press_action(&mut world, Action::UiIncreaseFontSize);
+    let scales: Vec<String> = world
+        .daemon
+        .sent_of("set_setting")
+        .iter()
+        .filter(|r| r["key"] == "uiScale")
+        .map(|r| r["value"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(scales, ["1.1"]);
+    assert!((drawn(&world) - unscaled * 1.1).abs() < 0.5);
+
+    press_action(&mut world, Action::UiResetFontSize);
+    assert!((drawn(&world) - unscaled).abs() < 0.5);
+    assert_eq!(message_text(&world), "Keep me");
     rest(&mut world);
 }

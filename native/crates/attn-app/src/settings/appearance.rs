@@ -55,15 +55,28 @@ fn store(state: &State, key: &str, value: String) {
 
 /// ⌘=, ⌘- and ⌘0: a tenth larger or smaller, within 70% to 150%, or back to 100%.
 pub(super) fn step_ui_scale(state: &mut State, action: &Action, _: &mut Tx) {
-    let scale = text_scale(&state.facts.settings);
+    if let Some(message) = ui_scale_step(&state.facts.settings, action) {
+        let _ = state.daemon.send(&message);
+    }
+}
+
+/// The setting `action` writes to make the app's text a step larger or smaller, or back to
+/// its size, when that changes it.
+pub(crate) fn ui_scale_step(
+    settings: &BTreeMap<String, String>,
+    action: &Action,
+) -> Option<SetSettingMessage> {
+    let scale = text_scale(settings);
     let next = match action {
         Action::UiIncreaseFontSize => clamp(scale + SCALE_STEP),
         Action::UiDecreaseFontSize => clamp(scale - SCALE_STEP),
         _ => 1.0,
     };
-    if next != scale {
-        store(state, UI_SCALE, format_scale(next));
-    }
+    (next != scale).then(|| SetSettingMessage {
+        key: UI_SCALE.into(),
+        value: format_scale(next),
+        ..SetSettingMessage::new()
+    })
 }
 
 /// As JavaScript's `Number#toString` writes the scale, so both apps store the same text.

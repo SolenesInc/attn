@@ -87,10 +87,22 @@ fn main() -> ExitCode {
         let main = main.clone();
         Arc::new(move |update| main.update(update))
     };
+    #[cfg(target_os = "macos")]
+    let capture = (
+        store.clone(),
+        link.commands(),
+        launch.instance.data_dir.clone(),
+    );
     let menus = main.clone();
     main.update(Box::new(
         move |state: &mut attn_app::State, _: &mut rune::Tx| {
             state.open_tile_windows(opener, deliver);
+            #[cfg(target_os = "macos")]
+            {
+                let (store, daemon, data_dir) = capture;
+                let window = attn_app::quick_capture::mac::open(&store, daemon, data_dir.clone());
+                state.use_quick_capture(window, &data_dir);
+            }
             if cfg!(target_os = "macos") {
                 state.follow_menus(Arc::new(move |keymap| {
                     if let Err(why) = menus.set_menu(attn_app::menu_items(keymap)) {

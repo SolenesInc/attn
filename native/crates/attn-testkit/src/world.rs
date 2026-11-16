@@ -299,7 +299,8 @@ impl World {
             crate::capture::CaptureRuntime::start(&store, link.commands(), &pulse, &data_dir);
         {
             let window: Arc<dyn attn_app::quick_capture::Window> = capture.window.clone();
-            runtime.update(move |state, _| state.use_quick_capture(window));
+            let data_dir = data_dir.clone();
+            runtime.update(move |state, _| state.use_quick_capture(window, &data_dir));
         }
         let mut world = World {
             files,
@@ -722,6 +723,22 @@ impl World {
         self.capture.screen()
     }
 
+    /// How much the Quick Capture panel zooms what it draws.
+    pub fn capture_zoom(&self) -> f32 {
+        self.capture.runtime.zoom()
+    }
+
+    /// The shortcut the system would open Quick Capture on, as Rune names it.
+    pub fn capture_shortcut(&self) -> Option<String> {
+        self.capture
+            .window
+            .bound
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(ToString::to_string)
+    }
+
     /// Whether the platform would show the Quick Capture panel's window.
     pub fn capture_shown(&self) -> bool {
         self.capture.shown()
@@ -747,8 +764,10 @@ impl World {
             &self.capture.data_dir.clone(),
         );
         let window: Arc<dyn attn_app::quick_capture::Window> = self.capture.window.clone();
-        self.runtime
-            .update(move |state, _| state.use_quick_capture(window));
+        self.runtime.update({
+            let data_dir = self.capture.data_dir.clone();
+            move |state, _| state.use_quick_capture(window, &data_dir)
+        });
         self.settle();
     }
 
