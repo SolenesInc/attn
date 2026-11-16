@@ -136,25 +136,45 @@ pub fn page_alert(page: &TileKey, alert: Alert) -> Option<Alert> {
     None
 }
 
+/// An edit key a focused page keeps for itself, as a web page's own Edit menu would run it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageEdit {
+    SelectAll,
+    Copy,
+    Cut,
+    Paste,
+    Undo,
+    Redo,
+}
+
+/// The edit `ev` asks of a focused page: Command with a, c, x, v or z, and Shift-Command-Z.
+pub fn page_edit(ev: &KeyEvent) -> Option<PageEdit> {
+    let Key::Command(c) = ev.key else {
+        return None;
+    };
+    if ev.mods.alt || (cfg!(target_os = "macos") && ev.mods.ctrl) {
+        return None;
+    }
+    match (c, ev.mods.shift) {
+        ('a', false) => Some(PageEdit::SelectAll),
+        ('c', false) => Some(PageEdit::Copy),
+        ('x', false) => Some(PageEdit::Cut),
+        ('v', false) => Some(PageEdit::Paste),
+        ('z', false) => Some(PageEdit::Undo),
+        ('z', true) => Some(PageEdit::Redo),
+        _ => None,
+    }
+}
+
 /// Whether the window takes `ev` from a focused page: a key attn binds, other than the edit
 /// keys the page keeps.
 pub fn claims_key(ev: &KeyEvent) -> bool {
-    const PAGE_KEEPS: [char; 5] = ['c', 'v', 'x', 'a', 'z'];
-    let edit = match ev.key {
-        Key::Command(c) => {
-            let other = ev.mods.alt || (cfg!(target_os = "macos") && ev.mods.ctrl);
-            PAGE_KEEPS.contains(&c) && !other && (c == 'z' || !ev.mods.shift)
-        }
-        _ => false,
-    };
-    if edit {
-        return false;
-    }
-    CLAIMED.with_borrow(|claimed| {
-        claimed
-            .iter()
-            .any(|chord| chord.matches_on(ev, KeyPlatform::current()))
-    })
+    page_edit(ev).is_none()
+        && CLAIMED.with_borrow(|claimed| {
+            claimed
+                .iter()
+                .any(|chord| chord.matches_on(ev, KeyPlatform::current()))
+        })
 }
 
 pub(super) fn claim_keys(chords: Vec<Chord>) {

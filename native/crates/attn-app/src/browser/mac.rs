@@ -158,6 +158,22 @@ struct Shown {
 }
 
 impl WebKitHost {
+    /// Gives the keyboard back to the window when `web` holds it, so the window's keys reach
+    /// attn and not the window's own close.
+    fn focus_window_from(&self, web: &WKWebView) {
+        let Some(window) = self.content.window() else {
+            return;
+        };
+        if window
+            .firstResponder()
+            .is_some_and(|responder| same(&responder, web))
+        {
+            HANDING.set(true);
+            window.makeFirstResponder(Some(&self.content));
+            HANDING.set(false);
+        }
+    }
+
     fn new(content: Retained<NSView>, mtm: MainThreadMarker, unoccluded: bool) -> Self {
         let world =
             unsafe { WKContentWorld::worldWithName(&NSString::from_str(CONTROL_WORLD), mtm) };
@@ -257,6 +273,7 @@ impl BrowserHost for WebKitHost {
         let Some(shown) = self.pages.remove(page) else {
             return;
         };
+        self.focus_window_from(&shown.web);
         unsafe {
             shown
                 .web
@@ -292,20 +309,21 @@ impl BrowserHost for WebKitHost {
         let Some(shown) = self.pages.get(page) else {
             return;
         };
+        if !focused {
+            return self.focus_window_from(&shown.web);
+        }
         let Some(window) = self.content.window() else {
             return;
         };
         let web: &NSResponder = &shown.web;
-        let holds = window
+        if !window
             .firstResponder()
-            .is_some_and(|responder| same(&responder, &*shown.web));
-        HANDING.set(true);
-        if focused && !holds {
+            .is_some_and(|responder| same(&responder, web))
+        {
+            HANDING.set(true);
             window.makeFirstResponder(Some(web));
-        } else if !focused && holds {
-            window.makeFirstResponder(Some(&self.content));
+            HANDING.set(false);
         }
-        HANDING.set(false);
     }
 
     fn control(&mut self, page: &TileKey, request: Control) {
@@ -364,12 +382,14 @@ fn run_page_action(
 ) {
     let body = format!(
         r#"try {{
+  if (!window.__attnBrowser) {{ {runtime} }}
   if (!window.__attnBrowser) throw new Error('attn browser runtime failed to install');
   const value = await window.__attnBrowser.execute({action}, {params});
   return JSON.stringify({{ success: true, value }});
 }} catch (error) {{
   return JSON.stringify({{ success: false, error: String(error?.message || error) }});
 }}"#,
+        runtime = RUNTIME_JS,
         action = Value::String(action.to_owned()),
         params = Value::Object(params.clone()),
     );
@@ -814,8 +834,13 @@ define_class!(
                 .and_then(|window| window.firstResponder())
                 .is_some_and(|responder| same(&responder, self));
             let content = window.and_then(|window| window.contentView());
-            if let Some(content) = content.filter(|_| holds)
-                && key_event(event).is_some_and(|ev| super::claims_key(&ev))
+            let key = key_event(event).filter(|_| holds);
+            if let Some(edit) = key.as_ref().and_then(super::page_edit) {
+                self.edit(edit);
+                return Bool::YES;
+            }
+            if let Some(content) = content
+                && key.as_ref().is_some_and(super::claims_key)
             {
                 content.keyDown(event);
                 return Bool::YES;
@@ -826,6 +851,31 @@ define_class!(
 );
 
 impl PageView {
+    /// Runs `edit` on the page, as AppKit's Edit menu would for a web view with the keyboard:
+    /// undo and redo through the undo manager the page records its edits in, the others as
+    /// the page's own commands.
+    fn edit(&self, edit: super::PageEdit) {
+        use super::PageEdit;
+        let command = match edit {
+            PageEdit::Undo | PageEdit::Redo => {
+                let Some(manager) = self.undoManager() else {
+                    return;
+                };
+                match edit {
+                    PageEdit::Undo if manager.canUndo() => manager.undo(),
+                    PageEdit::Redo if manager.canRedo() => manager.redo(),
+                    _ => {}
+                }
+                return;
+            }
+            PageEdit::SelectAll => objc2::sel!(selectAll:),
+            PageEdit::Copy => objc2::sel!(copy:),
+            PageEdit::Cut => objc2::sel!(cut:),
+            PageEdit::Paste => objc2::sel!(paste:),
+        };
+        let _: Bool = unsafe { msg_send![self, tryToPerform: command, with: self] };
+    }
+
     fn new(
         mtm: MainThreadMarker,
         page: TileKey,

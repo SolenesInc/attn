@@ -105,8 +105,8 @@ try {
   await runner.step('an_agent_opens_a_page_and_the_tile_shows_it', async () => {
     const opened = await browser('open', at('page'));
     runner.assert(opened.includes(`opened ${at('page')}`), 'open reports the address', opened);
-    await driver.waitFor({ key: `tile.${TILE}.page` });
     await waitFor('#page');
+    await driver.waitFor({ key: `tile.${TILE}.page` });
     const read = await snapshot();
     runner.assert(read.title === 'page', 'the snapshot reads the page the tile shows', read);
     const stored = leafOf(observer.desktop(desktop.id), TILE);

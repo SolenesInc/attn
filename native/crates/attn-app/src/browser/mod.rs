@@ -19,8 +19,8 @@ use rune::{TextEdit, Tx};
 use serde_json::{Map, Value};
 
 pub use host::{
-    Alert, AlertKind, BrowserHost, Control, Heard, Placement, claims_key, hear, hosts_pages,
-    page_alert, use_host,
+    Alert, AlertKind, BrowserHost, Control, Heard, PageEdit, Placement, claims_key, hear,
+    hosts_pages, page_alert, page_edit, use_host,
 };
 pub(crate) use view::{address_field, page_area, reload_button};
 
