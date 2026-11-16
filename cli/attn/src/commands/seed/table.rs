@@ -310,8 +310,11 @@ only the optional comment. Moves print who they rang."#,
 succeeds with the earlier reason; a different reason goes on its log.
 A withered seed must be replanted first. A plot refuses while any direct
 child is open, including with --force or --when-merged; replant hands it
-back if your part is done. Closing the last child leaves a ringing note
-on the plot, names it here and keeps the plot's state. Moves print who they rang.
+back if your part is done. A seed with an ask the user has not answered
+refuses and names the ask: end your turn or wait with attn seed standby,
+harvest after you act on the answer, or withdraw the ask with attn ask close.
+Closing the last child leaves a ringing note on the plot, names it here and
+keeps the plot's state. Moves print who they rang.
 --when-merged releases your claim and harvests the seed with your -m
 reason when the pull request merges. Without -m it uses "PR #N merged:
 <title>". This command merges nothing. Use it only when the merge is
@@ -331,6 +334,7 @@ keeps the earlier reason and adds a different reason to the log. A
 harvested seed must be replanted first. A plot refuses while any direct
 child is open, even with --force; replant hands it back if your part is done.
 Closing its last child leaves a ringing note on the plot and names it here.
+Withering withdraws the seed's open asks from the user and names them here.
 Moves print who they rang."#,
             move_authority!()
         ),

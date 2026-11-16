@@ -20,5 +20,6 @@ Pipe the ask as markdown to `attn ask`. The command prints the ask's id and retu
 - To ask permission for a risky action, name the exact action and its target in the question, such as the command, branch or environment. The permission you get covers only the action the question names.
 - Ask only what you cannot settle yourself, a few questions at a time.
 - After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll.
+- An ask about your seed keeps the seed open: attn refuses to harvest it until the user answers. To wait with your session closed, run `attn seed standby <seed> -m "<what to do with the answer>"`. Harvest after you act on the answer, and withdraw an ask that no longer matters with `attn ask close <id>`.
 - When the user answers, attn types the answer into this conversation as their message, approvals included. By then the user has likely moved on and will not read what you write back here. If the user asks you something in their answer, reply with a new ask. If you still need the user, ask again.
 - `attn ask --help` covers other question types, images, which seed an ask is about, and listing and withdrawing asks.

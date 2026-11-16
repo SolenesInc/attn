@@ -113,7 +113,7 @@ func openAsk(c *client.Client, sessionID protocol.SessionID, seedID, subject, fi
 		fmt.Fprintf(stdout, "Asked %s: %q. attn types the answer into this conversation as the user's message.\n", opened.ID, opened.Subject)
 		return nil
 	}
-	fmt.Fprintf(stdout, "Asked %s about %s: %q. The answer goes to whoever tends the seed by then, and the seed keeps it as a note: attn seed notes %s\n",
+	fmt.Fprintf(stdout, "Asked %s about %s: %q. The answer goes to whoever tends the seed by then, and the seed cannot be harvested until the user answers: end your turn, or wait with attn seed standby %s -m \"<what to do with the answer>\"\n",
 		opened.ID, askSeedName(*opened), opened.Subject, *opened.SeedID)
 	return nil
 }
@@ -211,8 +211,10 @@ opening your terminal.
 
 When a delegation assigned you a seed, the ask is about that seed; --seed makes
 it about another seed you tend. The user sees which seed it concerns. The
-answer goes to whoever tends the seed by then, and the seed keeps it as a note
-(attn seed notes <id>).
+answer goes to whoever tends the seed by then. The seed stays open until the
+user answers: attn refuses an agent's harvest and names the open ask, so end
+your turn or wait with attn seed standby <id>, and harvest after you act on the
+answer. Withering the seed withdraws its open asks.
 
 To ask permission for a risky action, name the exact action and its target in
 the question, such as the command, branch or environment. The answer approves

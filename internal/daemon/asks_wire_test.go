@@ -588,7 +588,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	}
 }
 
-func TestClosingASeedClosesTheAsksAboutIt(t *testing.T) {
+func TestAnAgentHarvestsASeedOnlyAfterItsAskIsAnsweredAndAWitherWithdrawsTheAsk(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
@@ -600,16 +600,65 @@ func TestClosingASeedClosesTheAsksAboutIt(t *testing.T) {
 	w.Launched(string(delegated.SessionID))
 	side := plantSeedAs(t, cli, string(delegated.SessionID), "Tune the queue")
 	moveDelegationSeed(t, cli, string(delegated.SessionID), side, "tend", "")
-
-	for _, close := range []struct{ seed, named, verb string }{{delegated.SeedID, "", "wither"}, {side, side, "harvest"}} {
-		asked, err := cli.AskOpen(delegated.SessionID, close.named, cacheAsk, "", cwd)
-		if err != nil || protocol.Deref(asked.SeedID) != close.seed {
-			t.Fatalf("asking about %s = %+v, %v", close.seed, asked, err)
+	ask := func(seed, named string) protocol.Ask {
+		t.Helper()
+		asked, err := cli.AskOpen(delegated.SessionID, named, cacheAsk, "", cwd)
+		if err != nil || protocol.Deref(asked.SeedID) != seed {
+			t.Fatalf("asking about %s = %+v, %v", seed, asked, err)
 		}
-		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
-		moveDelegationSeed(t, cli, string(delegated.SessionID), close.seed, close.verb, "settled without asking")
-		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+			return slices.ContainsFunc(m.Asks, func(a protocol.Ask) bool { return a.ID == asked.ID })
+		})
+		return *asked
 	}
+	noLongerShown := func(id string) {
+		t.Helper()
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+			return !slices.ContainsFunc(m.Asks, func(a protocol.Ask) bool { return a.ID == id })
+		})
+	}
+
+	asked := ask(side, side)
+	for _, harvester := range []string{string(delegated.SessionID), "caller"} {
+		_, err := cli.SeedTransition(protocol.SessionID(harvester), side, "harvest", "tuned", true, client.SeedTransitionOptions{})
+		for _, want := range []string{asked.ID, asked.Subject, "attn seed standby " + side, "attn ask close"} {
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s harvested %s with an open ask: %v; want a refusal naming %q", harvester, side, err, want)
+			}
+		}
+	}
+	if listed, err := cli.AskList(delegated.SessionID); err != nil || len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {
+		t.Fatalf("after the refused harvests the asker lists %+v (%v), want %s still open", listed, err, asked.ID)
+	}
+	answered := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "answer", AskID: asked.ID,
+		Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
+	if !answered.Success {
+		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
+	}
+	harvested, err := cli.SeedTransition(delegated.SessionID, side, "harvest", "tuned with Postgres", false, client.SeedTransitionOptions{})
+	if err != nil || harvested.Seed.Status != "harvested" || len(harvested.ClosedAsks) != 0 {
+		t.Fatalf("harvest after the answer = %+v, %v; want it harvested with no ask withdrawn", harvested, err)
+	}
+
+	byUser := plantSeedAs(t, cli, string(delegated.SessionID), "Trim the logs")
+	moveDelegationSeed(t, cli, string(delegated.SessionID), byUser, "tend", "")
+	userAsked := ask(byUser, byUser)
+	moved := testworld.Request(app, protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("user-harvest"), SeedID: byUser, Verb: "harvest", Reason: protocol.Ptr("not needed"), Force: protocol.Ptr(true),
+	}, protocol.EventSeedTransitionResult, func(m protocol.SeedTransitionResultMessage) bool { return m.RequestID == "user-harvest" })
+	if !moved.Success || moved.Seed == nil || moved.Seed.Status != "harvested" {
+		t.Fatalf("the user's harvest of %s = %+v (%s), want it harvested", byUser, moved, protocol.Deref(moved.Error))
+	}
+	noLongerShown(userAsked.ID)
+
+	stakeAsk := ask(delegated.SeedID, "")
+	withered, err := cli.SeedTransition(delegated.SessionID, delegated.SeedID, "wither", "superseded", false, client.SeedTransitionOptions{})
+	if err != nil || len(withered.ClosedAsks) != 1 || withered.ClosedAsks[0] != (protocol.SeedClosedAsk{ID: stakeAsk.ID, Subject: stakeAsk.Subject}) {
+		t.Fatalf("wither = %+v, %v; want it to name %s as withdrawn", withered, err, stakeAsk.ID)
+	}
+	noLongerShown(stakeAsk.ID)
 	if after, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", cwd); err != nil || after.SeedID != nil {
 		t.Errorf("a delegate whose stake withered asked %+v (%v), want an ask about no seed", after, err)
 	}

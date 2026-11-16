@@ -120,8 +120,8 @@ is parked, and attn releases your claim. Every surface then shows
 lands, attn harvests the seed as the member `attn`, with your reason. Without
 `-m`, attn uses `PR #n merged: <title>`. If a pull request closes without
 merging, attn clears the arming and rings instead, and the seed stays where it
-was. If the seed has gained open children, attn clears the arming at the merge and
-explains why.
+was. If the seed has gained open children or an open ask, attn clears the
+arming at the merge and explains why.
 
 Use `--when-merged` only when the merge is genuinely the last step. Review notes to
 answer, docs to write, and evidence to attach are work, and work belongs to a
@@ -204,6 +204,13 @@ The note is the first thing the resumed session reads, so write down anything
 the user approved up front, such as "merge once approved". The resumed session
 should act without waiting for the user: go on standby again, harvest, ask with
 `attn ask`, or report on the seed. A new standby replaces the note.
+
+An ask about the seed keeps it open. An agent's harvest refuses while the user
+has not answered, and names each open ask. The answer comes to whoever tends the
+seed, so end your turn or go on standby, and harvest after you act on the
+answer. Withdraw an ask that no longer matters with `attn ask close <id>`. The
+user's own harvest and any wither withdraw the seed's open asks, and the command
+names them.
 
 Standby ends once the tender has read all of the seed's mail, or when the seed
 is parked, harvested, withered or gets a new tender. If the session closes

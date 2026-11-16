@@ -7,7 +7,9 @@ answer every agent's asks from one drawer, one after another, without opening
 the agents' terminals. attn types the answer into the asking agent's
 conversation as the user's message. An ask about a seed goes to whoever tends
 the seed by the time the user answers, and attn saves the answer as a note on
-the seed. Asks are on by default, and an agent keeps the setting it launched with.
+the seed. The seed stays open until the user answers: an agent's harvest
+refuses and names the open asks, while the user's own harvest and any wither
+withdraw them. Asks are on by default, and an agent keeps the setting it launched with.
 
 ## Sub-features
 
@@ -18,6 +20,7 @@ the seed. Asks are on by default, and an agent keeps the setting it launched wit
 - `ask-answer`: the user's answer, typed into the addressee's conversation as the user's message.
 - `ask-replied`: asks answered in the last day, shown again with their answers.
 - `ask-on-seed`: an ask about a seed the agent tends, answered to the seed's tender and kept as a note.
+- `ask-holds-harvest`: an agent's harvest of a seed with an open ask refuses and names each ask, a harvest-on-merge clears its arming instead, and a wither or the user's harvest withdraws the asks; `seed wither` names them.
 - `ask-list`: an agent lists its open asks and those about seeds it tends.
 - `ask-close`: an agent withdraws an ask it no longer needs.
 - `ask-snooze`: snoozing or waking the agent that holds an ask from the drawer; a snoozed agent's asks wait under Snoozed, leave every open-ask count and send no phone push.
@@ -65,6 +68,9 @@ Preconditions:
     {"type": "attn", "args": ["ask", "--file", "ask.md", "--subject", "Ship day", "--json"]}]},
   {"includes": "json list", "actions": [
     {"type": "attn", "args": ["ask", "list", "--json"]}]},
+  {"includes": "harvest", "actions": [
+    {"type": "capture", "name": "seed", "pattern": "(s-[a-z0-9]+)"},
+    {"type": "attn", "args": ["seed", "harvest", "{{seed}}", "-m", "done"]}]},
   {"includes": "list asks", "actions": [
     {"type": "attn", "args": ["ask", "list"]}]},
   {"includes": "ask about", "actions": [
@@ -111,7 +117,10 @@ Preconditions:
   - Plant a seed: `./attn seed plant "Asks drive"` prints `<seed>  <slug>  Asks drive`. Run `wsctl input --id <terminal> --text "ask about <seed>" --enter`. Peek shows `Asked <ask> about asks-drive: "Release note".`
   - Select ask-agent for setup with `bridge select_session '{"sessionId":"ask-agent"}'`. `[data-testid="ask-chip-ask-agent"]` carries `aria-label="Open ask: Release note"`. Click it natively: the drawer opens on that ask, and `bridge dom_text '{"selector":".asks-ask-seed"}'` names `asks-drive`. The text field has focus.
   - Click `[data-seed-target="<seed>"]` natively. `bridge garden_get_state` shows `here` naming the seed. Press Escape to return to the ask.
+  - Before answering, run `wsctl input --id <terminal> --text "harvest <seed>" --enter`. Peek shows `mock agent error:` with `<seed> has 1 open ask(s) to the user: <ask> ("Release note")`, the standby command and `attn ask close`, and the seed is still growing.
   - Run `bridge native_text '{"text":"Ship it on Friday."}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `./attn seed notes <seed>` shows the answer as a note.
+  - Run `wsctl input --id <terminal> --text "harvest <seed>" --enter` again: the seed is harvested.
+  - Plant another seed, ask about it, and run `./attn seed wither <seed> -m "dropped" --force`: the output ends with `this withdrew 1 open ask(s) from the user:` and the ask, and the drawer no longer shows it.
 - **List and withdraw from the agent.** Run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "list asks" --enter`: peek shows `<ask>  Cache store`. Run `wsctl input --id <terminal> --text "withdraw <ask>" --enter`: peek shows `Withdrew <ask>.`, and the drawer shows `.asks-empty`. The drawer reopens in the Replied list when you last left it there, so when `.asks-list` reads `Replied in the last day`, press `r` once with focus off any text field.
 - **Ask from a file, as JSON.** Run `wsctl input --id <terminal> --text "file ask" --enter`: peek shows the ask as JSON with `"subject":"Ship day"` and its `"id"`. Run `wsctl input --id <terminal> --text "json list" --enter`: peek shows `{"asks":[...]` naming that id and `"enabled":true`. Withdraw it as above.
 - **Images travel with the ask.** Save a png as `$A/shots/shot.png` and run `./attn ask --session ask-agent` from `$A` with `![shot](shots/shot.png)` and a `:::question-text` block on stdin. Delete `$A/shots`, open the drawer with ⌘⇧R: `bridge dom_wait '{"selector":".asks-markdown img[src^=\"data:image/png\"]","timeoutMs":5000}'` matches. From an outpost session, the same ask shows its image at the home. `ls <data-dir>/asks/<ask>` lists the copy; after `./attn ask close <ask> --session ask-agent` the folder is gone. An image over the limit refuses with `max_ask_image_bytes=5242880`.

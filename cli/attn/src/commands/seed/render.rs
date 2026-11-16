@@ -18,7 +18,7 @@ use attn_protocol::go_values::{
 use attn_protocol::{
     ActorView, AgentCloseResult, GardenReview, PartyView, Seed, SeedArtifact,
     SeedArtifactReference, SeedAuthorization, SeedAuthorizationResult, SeedAuthorizationUpdate,
-    SeedBoardRow, SeedClosedCount, SeedHarvestCondition, SeedListResult, SeedNote,
+    SeedBoardRow, SeedClosedAsk, SeedClosedCount, SeedHarvestCondition, SeedListResult, SeedNote,
     SeedPlotProgress, SeedReadyResult, SeedRelation, SeedReminder, SeedRow, SeedSearchResult,
     SeedShowResult, SeedSimilar, SeedSinceExpired, SeedStandbyView, SeedTransitionResult,
     SeedWatchResult,
@@ -1322,6 +1322,20 @@ fn unblocked(out: &mut String, seeds: &[Seed]) {
     }
 }
 
+fn closed_asks(out: &mut String, asks: &[SeedClosedAsk]) {
+    if asks.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "this withdrew {} open ask(s) from the user:",
+        asks.len()
+    );
+    for ask in asks {
+        let _ = writeln!(out, "  {}  {}", ask.id, ask.subject);
+    }
+}
+
 fn transition_line(seed: &Seed) -> String {
     let mut line = format!("{} is {}", seed_handle(seed), seed.status);
     let tender = party_label(seed.tender.as_ref());
@@ -1407,6 +1421,7 @@ pub fn transition(result: &SeedTransitionResult, cleared: bool) -> String {
         }
     }
     unblocked(&mut out, result.unblocked.as_deref().unwrap_or_default());
+    closed_asks(&mut out, result.closed_asks.as_deref().unwrap_or_default());
     if not_moved {
         out.push_str("rang nobody: the seed did not move\n");
     } else {

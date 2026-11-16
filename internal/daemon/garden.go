@@ -1639,7 +1639,8 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 			return
 		}
 		result := &protocol.SeedTransitionResult{Seed: d.seedWire(seed, doc),
-			Moved: protocol.Ptr(details.Moved), Noted: details.Noted, Audit: details.Audit, PlotEmptied: details.PlotEmptied, RingRecipients: details.RingRecipients}
+			Moved: protocol.Ptr(details.Moved), Noted: details.Noted, Audit: details.Audit, PlotEmptied: details.PlotEmptied, RingRecipients: details.RingRecipients,
+			ClosedAsks: details.ClosedAsks}
 		if details.Moved && garden.Closed(seed.Status) {
 			_, result.Unblocked = d.seedUnblocked(seed.ID)
 		}
@@ -1655,6 +1656,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	result := &protocol.SeedTransitionResult{
 		Seed: d.seedWire(seed, doc), Moved: protocol.Ptr(details.Moved),
 		Noted: details.Noted, Audit: details.Audit, PlotEmptied: details.PlotEmptied, RingRecipients: details.RingRecipients,
+		ClosedAsks: details.ClosedAsks,
 	}
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
@@ -1706,6 +1708,7 @@ type seedTransitionDetails struct {
 	RingRecipients []string
 	Audit          *protocol.SeedNote
 	Comment        *protocol.SeedNote
+	ClosedAsks     []protocol.SeedClosedAsk
 }
 
 func (d *Daemon) applySeedTransitionDetailed(
@@ -1792,6 +1795,11 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		next := outcome.Seed
+		if verb == garden.VerbHarvest && outcome.Moved && ask.Actor != who.User() {
+			if err := d.refuseHarvestWithOpenAsks(seed.ID); err != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+			}
+		}
 		if working, ok := d.liveSessionOf(ask.Claimant); verb == garden.VerbTend && ok &&
 			(outcome.Moved || working != protocol.TrimID(seed.LastExecutionID)) {
 			execution, executionErr := d.ensureObservedGardenExecution(working, tending)
@@ -1925,7 +1933,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 			d.queueConversationKeepIfReferenceMoved(seed, next)
 			if garden.Closed(next.Status) {
-				d.closeAsksTo(who.ToTenderOf(next.ID))
+				notes.ClosedAsks = d.closeSeedAsks(next.ID)
 				if err := d.stopSeedPullRequestWatches(next.ID); err != nil {
 					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 						"%s succeeded, but its pull request watches could not be stopped: %w", verb, err)

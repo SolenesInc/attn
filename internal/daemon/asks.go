@@ -284,12 +284,49 @@ func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, e
 	return map[string]any{"forgotten": len(ids)}, nil
 }
 
-func (d *Daemon) closeAsksTo(to who.Address) {
+type openAsksError struct {
+	seedID string
+	asks   []store.Ask
+}
+
+func (e *openAsksError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
+
+func (e *openAsksError) Error() string {
+	asks := make([]string, len(e.asks))
+	for i, ask := range e.asks {
+		asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
+	}
+	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, or wait with your session closed with `attn seed standby %s -m \"…\"`, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`",
+		e.seedID, len(asks), strings.Join(asks, ", "), e.seedID)
+}
+
+func (d *Daemon) refuseHarvestWithOpenAsks(seedID string) error {
+	asks, err := d.store.OpenAsksTo(who.ToTenderOf(seedID))
+	if err != nil {
+		return fmt.Errorf("reading the open asks about %s: %w", seedID, err)
+	}
+	if len(asks) > 0 {
+		return &openAsksError{seedID: seedID, asks: asks}
+	}
+	return nil
+}
+
+func (d *Daemon) closeSeedAsks(seedID string) []protocol.SeedClosedAsk {
+	to := who.ToTenderOf(seedID)
+	open, err := d.store.OpenAsksTo(to)
+	if err != nil {
+		d.logf("asks: reading the open asks to %s: %v", to, err)
+	}
 	ids, err := d.store.CloseAsksTo(to)
 	if err != nil {
 		d.logf("asks: closing the asks to %s: %v", to, err)
 	}
 	d.announceClosedAsks(ids)
+	var closed []protocol.SeedClosedAsk
+	for _, ask := range open {
+		closed = append(closed, protocol.SeedClosedAsk{ID: ask.ID, Subject: ask.Subject})
+	}
+	return closed
 }
 
 func (d *Daemon) announceClosedAsks(ids []string) {

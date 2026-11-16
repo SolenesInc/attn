@@ -10965,6 +10965,14 @@ type SeedCheckVerdict struct {
 	Reason *string `json:"reason,omitempty,omitzero"`
 }
 
+type SeedClosedAsk struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject string `json:"subject"`
+}
+
 type SeedClosedCount struct {
 	// Harvested corresponds to the JSON schema field "harvested".
 	Harvested int `json:"harvested"`
@@ -12182,6 +12190,9 @@ type SeedTransitionMessage struct {
 type SeedTransitionResult struct {
 	// Audit corresponds to the JSON schema field "audit".
 	Audit *SeedNote `json:"audit,omitempty,omitzero"`
+
+	// ClosedAsks corresponds to the JSON schema field "closed_asks".
+	ClosedAsks []SeedClosedAsk `json:"closed_asks,omitempty,omitzero"`
 
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *SeedNote `json:"handoff,omitempty,omitzero"`

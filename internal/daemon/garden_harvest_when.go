@@ -264,9 +264,10 @@ func (d *Daemon) fulfilHarvestWhen(
 		harvested, doc, details, err = d.applySeedTransitionDetailedAsAtRevision(
 			current.ID, garden.VerbHarvest, ask, "", read.Rev)
 		var openChildren *garden.OpenChildrenError
-		if errors.As(err, &openChildren) {
+		var openAsks *openAsksError
+		if errors.As(err, &openChildren) || errors.As(err, &openAsks) {
 			cleared, written, clearErr := d.clearHarvestWhen(current.ID, current.HarvestWhen,
-				"Harvest-on-merge cleared: "+openChildren.Error(), ask.Actor, excludedSessions...)
+				"Harvest-on-merge cleared: "+err.Error(), ask.Actor, excludedSessions...)
 			return cleared, written, seedTransitionDetails{}, clearErr
 		}
 		if errors.Is(err, errSeedRevisionMoved) && attempt+1 < attempts {

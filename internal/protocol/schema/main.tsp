@@ -7163,6 +7163,14 @@ model SeedTransitionResult {
   // What the close set free, on harvest and wither alone: the seeds this one
   // was the last blocker of. Absent when the move freed nothing.
   "unblocked"?: Seed[];
+  // The open asks to the seed's tender that the close withdrew from the user,
+  // so the closer can tell the user. Absent when none was open.
+  "closed_asks"?: SeedClosedAsk[];
+}
+
+model SeedClosedAsk {
+  id: string;
+  subject: string;
 }
 
 // One entry on a seed's log: what happened and what was learned, written for
