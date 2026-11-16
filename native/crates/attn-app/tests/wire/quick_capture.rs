@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use attn_app::Action;
+use attn_app::quick_capture::DEFAULT_SHORTCUT;
 use attn_protocol::{
     CrewMember, CrewUpdatedMessage, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
     QuickCaptureAttachment, QuickCaptureAttachmentPutResult, QuickCaptureDraftAsset,
@@ -1486,6 +1487,11 @@ fn a_file_attached_after_the_draft_was_saved_keeps_its_bytes_and_uploads_them() 
     rest(&mut world);
 }
 
+/// The binding Rune's `spec` names, as the app stores it.
+fn binding(spec: &str) -> String {
+    attn_app::quick_capture::stored_shortcut(&spec.parse().unwrap())
+}
+
 /// A daemon that keeps the settings the app writes and tells every client, as the real one
 /// does.
 fn keeping_settings(daemon: &Daemon, settings: &[(&str, &str)]) {
@@ -1569,7 +1575,7 @@ fn edits_and_turns_off_its_system_wide_shortcut_in_the_shortcut_editor() {
         world.screen()
     );
 
-    record_capture(&mut world, "Shift+KeyA");
+    record_capture(&mut world, &binding("shift+a"));
     assert!(
         world
             .screen()
@@ -1581,10 +1587,10 @@ fn edits_and_turns_off_its_system_wide_shortcut_in_the_shortcut_editor() {
     assert_eq!(shortcut_writes(&world), Vec::<String>::new());
     assert_eq!(world.capture_shortcut(), None);
 
-    record_capture(&mut world, "Control+Alt+KeyB");
-    assert_eq!(shortcut_writes(&world), ["Control+Alt+KeyB"]);
+    record_capture(&mut world, &binding("ctrl+alt+b"));
+    assert_eq!(shortcut_writes(&world), [binding("ctrl+alt+b")]);
     assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
-    assert!(capture_row(&world).contains("Active: Control+Alt+KeyB"));
+    assert!(capture_row(&world).contains(&format!("Active: {}", binding("ctrl+alt+b"))));
 
     click(&mut world, "shortcut-editor.capture.off");
     assert_eq!(shortcut_writes(&world).last().map(String::as_str), Some(""));
@@ -1594,10 +1600,10 @@ fn edits_and_turns_off_its_system_wide_shortcut_in_the_shortcut_editor() {
     click(&mut world, "shortcut-editor.capture.reset");
     assert_eq!(
         shortcut_writes(&world).last().map(String::as_str),
-        Some("Control+Alt+Super+Space")
+        Some(DEFAULT_SHORTCUT)
     );
     assert!(world.capture_shortcut().is_some());
-    assert!(capture_row(&world).contains("Active: Control+Alt+Super+Space"));
+    assert!(capture_row(&world).contains(&format!("Active: {DEFAULT_SHORTCUT}")));
     rest(&mut world);
 }
 
@@ -1605,7 +1611,7 @@ fn edits_and_turns_off_its_system_wide_shortcut_in_the_shortcut_editor() {
 fn binds_the_daemons_shortcut_once_connected_and_follows_its_changes() {
     let (daemon, _) = home();
     let daemon = daemon.state(InitialStateMessage {
-        settings: Some([("capture.shortcut".to_owned(), "Control+Alt+KeyQ".to_owned())].into()),
+        settings: Some([("capture.shortcut".to_owned(), binding("ctrl+alt+q"))].into()),
         ..state(PROFILE)
     });
     let mut world = World::start(daemon);
@@ -1633,8 +1639,8 @@ fn a_relaunch_binds_the_cached_shortcut_while_the_daemon_has_none() {
             attn_app::dispatch(state, Action::OpenShortcutEditor, tx);
         });
     });
-    record_capture(&mut world, "Super+Alt+KeyJ");
-    assert_eq!(shortcut_writes(&world), ["Super+Alt+KeyJ"]);
+    record_capture(&mut world, &binding("super+alt+j"));
+    assert_eq!(shortcut_writes(&world), [binding("super+alt+j")]);
 
     world.restart_capture();
     assert_eq!(world.capture_shortcut().as_deref(), Some("alt+super+j"));
@@ -1728,16 +1734,22 @@ fn automation_binds_the_system_wide_shortcut_and_says_why_it_refuses_one() {
     let mut world = World::start(daemon);
 
     world
-        .automate("run", json!({"name": "capture.shortcut=Control+Alt+KeyB"}))
+        .automate(
+            "run",
+            json!({"name": format!("capture.shortcut={}", binding("ctrl+alt+b"))}),
+        )
         .unwrap();
     assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
     let slice = world
         .automate("state", json!({"of": "capture-shortcut"}))
         .unwrap();
-    assert_eq!(slice["binding"], "Control+Alt+KeyB");
+    assert_eq!(slice["binding"], binding("ctrl+alt+b"));
 
     let refused = world
-        .automate("run", json!({"name": "capture.shortcut=Shift+KeyA"}))
+        .automate(
+            "run",
+            json!({"name": format!("capture.shortcut={}", binding("shift+a"))}),
+        )
         .unwrap_err();
     assert!(
         refused.contains(
@@ -1752,5 +1764,80 @@ fn automation_binds_the_system_wide_shortcut_and_says_why_it_refuses_one() {
         .unwrap();
     assert_eq!(world.capture_shortcut(), None);
     assert_eq!(shortcut_writes(&world).last().map(String::as_str), Some(""));
+    rest(&mut world);
+}
+
+#[test]
+fn reset_after_recording_the_default_in_another_spelling_keeps_it_without_an_error() {
+    let (daemon, _) = home();
+    keeping_settings(&daemon, &[]);
+    let mut world = World::start(daemon);
+    world.gesture(|d| {
+        d.update(|state, tx| {
+            attn_app::dispatch(state, Action::OpenShortcutEditor, tx);
+        });
+    });
+    record_capture(&mut world, &binding("super+ctrl+alt+space"));
+    assert_eq!(shortcut_writes(&world), [binding("super+ctrl+alt+space")]);
+
+    click(&mut world, "shortcut-editor.capture.reset");
+    assert_eq!(
+        shortcut_writes(&world).last().map(String::as_str),
+        Some(DEFAULT_SHORTCUT)
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shortcut-editor.capture.error"))
+            .is_none(),
+        "{}",
+        world.screen()
+    );
+    assert!(world.capture_shortcut().is_some());
+    rest(&mut world);
+}
+
+#[test]
+fn a_choice_holds_while_a_change_carrying_the_earlier_setting_arrives_before_its_echo() {
+    let (daemon, _) = home();
+    let earlier = || [("capture.shortcut".to_owned(), binding("ctrl+alt+q"))].into();
+    let daemon = daemon.state(InitialStateMessage {
+        settings: Some(earlier()),
+        ..state(PROFILE)
+    });
+    let mut world = World::start(daemon);
+    world.gesture(|d| {
+        d.update(|state, tx| {
+            attn_app::dispatch(state, Action::OpenShortcutEditor, tx);
+        });
+    });
+    record_capture(&mut world, &binding("ctrl+alt+b"));
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+
+    let mut settings: std::collections::BTreeMap<String, String> = earlier();
+    settings.insert("theme".into(), "dark".into());
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: Some(settings),
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+    rest(&mut world);
+}
+
+#[test]
+fn cmd_w_hides_the_panel_keeping_the_draft() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    type_text(&mut world, "Half a thought");
+    press(&mut world, "mod+w");
+    assert!(!world.capture_shown());
+    assert_eq!(
+        draft_on_disk(&world, PROFILE).unwrap()["text"],
+        "Half a thought"
+    );
+    open(&mut world);
+    assert_eq!(message_text(&world), "Half a thought");
     rest(&mut world);
 }

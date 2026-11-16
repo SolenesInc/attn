@@ -36,8 +36,13 @@ impl quick_capture::Window for HeadlessPanel {
         self.pulse.beat();
     }
 
+    /// As the system does, refuses a shortcut already registered, this panel's own included.
     fn bind(&self, shortcut: Option<&rune::Shortcut>) -> Result<(), String> {
-        *self.bound.lock().unwrap() = shortcut.cloned();
+        let mut bound = self.bound.lock().unwrap();
+        if shortcut.is_some() && bound.as_ref() == shortcut {
+            return Err(rune::ShortcutError::Conflict.to_string());
+        }
+        *bound = shortcut.cloned();
         Ok(())
     }
 }

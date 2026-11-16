@@ -10,6 +10,7 @@ mod history;
 #[cfg(target_os = "macos")]
 pub mod mac;
 pub(crate) mod shortcut;
+pub use shortcut::{DEFAULT as DEFAULT_SHORTCUT, stored as stored_shortcut};
 mod view;
 
 use std::path::PathBuf;
@@ -785,7 +786,7 @@ fn text_size(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// ⌘1 to ⌘4 pick the roster's first four mailboxes and ⌘K opens the list, before a field's own
+/// ⌘W hides the panel; ⌘1 to ⌘4 pick the roster's first four mailboxes and ⌘K opens the list, before a field's own
 /// keys do.
 fn shortcut(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let only_cmd = ev.mods.cmd && !ev.mods.alt && !ev.mods.shift;
@@ -801,6 +802,10 @@ fn shortcut(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         if typed == 'k' {
             toggle_picker(panel);
+            return true;
+        }
+        if typed == 'w' {
+            panel.hide();
             return true;
         }
     }

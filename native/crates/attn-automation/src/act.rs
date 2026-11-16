@@ -266,7 +266,7 @@ pub fn act<S: 'static>(
                 Ok(None) if waits => Attempt::Wait(format!("state {of:?} to be there")),
                 Ok(None) => Attempt::Fail(format!("state {of:?} is not there yet")),
                 Ok(Some(value)) if includes.as_ref().is_some_and(|text| !holds(&value, text)) => {
-                    Attempt::Wait(format!("state {of:?} to include {includes:?}"))
+                    Attempt::Wait(format!("state {of:?} to include {:?}", includes.unwrap()))
                 }
                 Ok(Some(value)) if expect.as_ref().is_some_and(|e| !agrees(&value, e)) => {
                     Attempt::Wait(format!("state {of:?} to agree with {}", expect.unwrap()))

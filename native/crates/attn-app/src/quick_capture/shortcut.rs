@@ -11,7 +11,7 @@ use rune::{Shortcut, ShortcutError};
 use crate::State;
 
 pub(crate) const SETTING: &str = "capture.shortcut";
-pub(crate) const DEFAULT: &str = "Control+Alt+Super+Space";
+pub const DEFAULT: &str = "Control+Alt+Super+Space";
 const CACHE: &str = "capture-shortcut.json";
 const NEEDS_MODIFIER: &str =
     "Use Command, Control or Option with another key for a system-wide shortcut.";
@@ -23,8 +23,8 @@ pub(crate) struct Global {
     /// The binding the system holds, as stored.
     pub active: Option<String>,
     pub error: Option<String>,
-    /// The binding was taken up once the app connected.
-    pub followed: bool,
+    /// The binding the daemon's setting last named, once the app connected.
+    pub named: Option<Option<String>>,
 }
 
 /// A stored binding as Rune registers it, refusing one that would take a key from typing.
@@ -37,7 +37,7 @@ pub(crate) fn parse(binding: &str) -> Result<Shortcut, String> {
 }
 
 /// `shortcut` as the Tauri app stores it: ⌘, ⌃, ⌥ and ⇧ by name, then the key by its code.
-pub(crate) fn stored(shortcut: &Shortcut) -> String {
+pub fn stored(shortcut: &Shortcut) -> String {
     let display = shortcut.to_string();
     let mut parts: Vec<String> = Vec::new();
     let (mods, key) = display.rsplit_once('+').unwrap_or(("", &display));
@@ -134,10 +134,10 @@ pub(crate) fn follow(state: &mut State) {
         None => state.capture_shortcut.cached(state.instance == "default"),
     };
     let global = &mut state.capture_shortcut;
-    if global.followed && wanted == global.active {
+    if global.named.as_ref() == Some(&wanted) {
         return;
     }
-    global.followed = true;
+    global.named = Some(wanted.clone());
     match bind(&*window, global.active.as_deref(), wanted.as_deref()) {
         Ok(()) => {
             global.active = wanted.clone();
@@ -154,10 +154,10 @@ fn bind(
     previous: Option<&str>,
     next: Option<&str>,
 ) -> Result<(), String> {
-    if previous == next {
+    let shortcut = next.map(parse).transpose()?;
+    if shortcut == previous.and_then(|p| parse(p).ok()) {
         return Ok(());
     }
-    let shortcut = next.map(parse).transpose()?;
     window.bind(shortcut.as_ref()).map_err(|why| match next {
         Some(next) => format!("Cannot register {next}: {why}. Previous shortcut remains active."),
         None => why,
@@ -208,10 +208,5 @@ mod tests {
             assert_eq!(stored(&parse(binding).unwrap()), binding);
         }
         assert_eq!(stored(&parse(DEFAULT).unwrap()), "Super+Control+Alt+Space");
-    }
-
-    #[test]
-    fn refuses_a_binding_that_would_take_a_key_from_typing() {
-        assert_eq!(parse("Shift+KeyA").unwrap_err(), NEEDS_MODIFIER);
     }
 }
