@@ -169,9 +169,9 @@ pub struct TileWindow {
     title: Option<String>,
 }
 
-/// The leaf a tile window shows, by desktop and leaf id.
+/// The leaf a tile window shows, by desktop and leaf id; none once it gave its leaf back.
 pub fn tile_window_leaf(state: &State) -> Option<(String, String)> {
-    let tile = state.window.tile.as_ref()?;
+    let tile = state.window.tile.as_ref().filter(|t| !t.leaf.is_empty())?;
     Some((tile.desktop.clone(), tile.leaf.clone()))
 }
 
@@ -266,6 +266,12 @@ pub(crate) fn follow(state: &mut State) {
             pooled.window.hide();
         }
         if gone {
+            pooled.window.update(Box::new(|state, tx| {
+                if let Some(tile) = &mut state.window.tile {
+                    tile.leaf.clear();
+                }
+                crate::follow_terminals(state, tx);
+            }));
             pooled.held = None;
             pooled.closed = false;
         }

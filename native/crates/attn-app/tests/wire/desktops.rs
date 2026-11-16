@@ -3600,6 +3600,44 @@ fn two_agents_out_each_draw_and_split_in_their_own_window_while_main_shows_anoth
 }
 
 #[test]
+fn an_agent_popped_again_into_another_reused_window_streams_to_that_window_alone() {
+    let tiles = |out_a: bool, out_c: bool| {
+        let leaf = |id: &str, out: bool| match out {
+            true => popped(pane(id), OUT),
+            false => pane(id),
+        };
+        desktop(
+            1,
+            "b",
+            Some(row([leaf("a", out_a), pane("b"), leaf("c", out_c)])),
+        )
+    };
+    let mut world = start(vec![tiles(true, true)]);
+    arrange(&mut world, "work/desktop_1", vec![tiles(false, false)]);
+    let before = attachments(&world, "r-c").len();
+
+    arrange(&mut world, "work/desktop_1", vec![tiles(false, true)]);
+
+    let windows = world.tile_windows();
+    let showing: Vec<_> = windows.iter().filter(|w| w.showing.is_some()).collect();
+    assert_eq!(
+        showing.len(),
+        1,
+        "a window that gave its tile back shows none: {windows:?}"
+    );
+    assert!(showing[0].shown);
+    let key = showing[0].key.clone();
+    let attaches = attachments(&world, "r-c")[before..]
+        .iter()
+        .filter(|c| *c == "attach_session")
+        .count();
+    assert_eq!(attaches, 1, "one window attaches the terminal");
+    output(&world, "r-c", 1, b"only here");
+    world.settle();
+    assert_eq!(world.tile_terminal_text(&key, "r-c")[0], "only here");
+}
+
+#[test]
 fn an_agent_out_at_launch_attaches_in_its_window_and_takes_the_keyboard_there() {
     let mut world = start(vec![desktop(
         1,
