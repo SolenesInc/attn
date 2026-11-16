@@ -296,8 +296,8 @@ func (e *openAsksError) Error() string {
 	for i, ask := range e.asks {
 		asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
 	}
-	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, or wait with your session closed with `attn seed standby %s -m \"…\"`, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`",
-		e.seedID, len(asks), strings.Join(asks, ", "), e.seedID)
+	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, or wait with your session closed with `attn seed standby %s -m \"…\"`, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`. If you do not tend the seed, `attn seed tend %s` first",
+		e.seedID, len(asks), strings.Join(asks, ", "), e.seedID, e.seedID)
 }
 
 func (d *Daemon) refuseHarvestWithOpenAsks(seedID string) error {
