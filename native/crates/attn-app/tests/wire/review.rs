@@ -4858,12 +4858,21 @@ fn keeps_an_open_edit_on_top_when_the_reader_is_clicked_and_the_send_waits_for_i
     );
     assert_eq!(edit_text(&e.world), "\ttotal := a + b");
 
-    send_key(&mut e.world);
+    e.world
+        .automate("run", json!({"name": "markdown.sendAnnotations"}))
+        .unwrap();
+    e.world.settle();
     assert!(
         e.world
             .screen()
             .find(Target::role("dialog").name("Send the review"))
             .is_none()
+    );
+    assert!(
+        e.world
+            .daemon
+            .sent_of("markdown_annotations_submit")
+            .is_empty()
     );
     assert_eq!(edit_text(&e.world), "\ttotal := a + b");
     assert!(
