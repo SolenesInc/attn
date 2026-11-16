@@ -36,8 +36,10 @@ repository root.
 
 ## Writing scenarios
 
-- New scenario files get a `scenarioCatalog.mjs` entry. After a shape change,
-  update its weight in `scenario-durations.json` from a green run.
+- New scenario files get a `scenarioCatalog.mjs` entry. `scenario-durations.json`
+  weighs each scenario for the shard plan. Give a new scenario a weight by hand
+  until CI has run it, then regenerate the file from CI's receipts:
+  `go tool test-history sync && node app/scripts/real-app-harness/measure-scenario-durations.mjs`.
 - A scenario shares its instance with the scenarios before it in the shard, and
   which ones those are changes with the recorded durations. Leave no tile behind,
   and do not drive onto a desktop the scenario did not make.
