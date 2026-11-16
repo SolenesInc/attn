@@ -783,7 +783,7 @@ pub(crate) fn run(state: &mut State, id: &str, verb: Verb, tx: &mut Tx) {
 /// Leaves the ledger for a seed's tile.
 pub(crate) fn open_seed(state: &mut State, id: String, tx: &mut Tx) {
     close(state, tx);
-    crate::garden::open_tile(state, &id, None, tx);
+    crate::garden::open_tile(state, &id, tx);
 }
 
 fn keep_conversation(state: &mut State, id: String, keep: bool, tx: &mut Tx) {

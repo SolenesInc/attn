@@ -1,4 +1,4 @@
-use attn_protocol::{OpenSeedMessage, OpenSeedResultMessage, Seed, Session};
+use attn_protocol::{Seed, Session};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Tx, col, row, text};
@@ -157,32 +157,7 @@ pub(super) fn card(
     Some(body)
 }
 
-/// Opens the seed as a tile beside the terminal's agent and shows it, putting the keyboard in
-/// it unless the user moved the keyboard while it opened.
 fn open_tile(state: &mut State, seed: &str, session: &str, tx: &mut Tx) {
     state.terminals.close_seed_card();
-    let before = tx.focused().map(str::to_owned);
-    let (seed_id, session_id) = (seed.to_owned(), session.to_owned());
-    state.act(
-        |request_id| OpenSeedMessage {
-            seed_id,
-            request_id: Some(request_id),
-            session_id: Some(session_id),
-            ..OpenSeedMessage::new()
-        },
-        crate::requests::Refused::Prefixed("Could not open the seed"),
-        move |state, reply, tx| {
-            let Some(OpenSeedResultMessage {
-                desktop_id: Some(desktop),
-                tile_id: Some(tile),
-                ..
-            }) = reply.parse::<OpenSeedResultMessage>()
-            else {
-                return;
-            };
-            let moved = tx.focused().is_some_and(|f| Some(f) != before.as_deref());
-            super::actions::reveal_leaf(state, &desktop, &tile, !moved, tx);
-        },
-        tx,
-    );
+    crate::garden::open_tile_beside(state, seed, Some(session.to_owned()), tx);
 }

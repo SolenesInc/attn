@@ -1126,8 +1126,12 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
 
 fn open_as_tile(id: &str, t: &Tokens) -> El {
     let id = id.to_owned();
-    button("garden.open-tile".into(), "Open as tile", t)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::open_tile(state, &id, None, tx))
+    button("garden.open-tile".into(), "Open as tile", t).on_press_tx(
+        move |state: &mut State, tx: &mut Tx| {
+            super::close(state);
+            super::open_tile(state, &id, tx)
+        },
+    )
 }
 
 fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> El {

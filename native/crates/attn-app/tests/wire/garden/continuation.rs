@@ -1,5 +1,9 @@
-use attn_protocol::{SeedContinuation, SeedResumeResultMessage, SeedSendToChiefResultMessage};
-use attn_testkit::{Request, Target, World};
+use attn_protocol::{
+    Desktop, DesktopPane, InitialStateMessage, OpenSeedResultMessage, Profile,
+    ProfileArrangementChangedMessage, SeedContinuation, SeedResumeResultMessage,
+    SeedSendToChiefResultMessage,
+};
+use attn_testkit::{Request, Target, World, tree};
 use serde_json::json;
 
 use super::*;
@@ -168,4 +172,135 @@ fn sends_a_seed_to_the_chief_with_the_users_note_once_the_profile_has_a_chief() 
         Some("garden.chief.open")
     );
     assert!(rests(&mut world));
+}
+
+const DESKTOP: &str = "work/desktop_1";
+
+fn agent_pane(pane: &str, session: &str) -> DesktopPane {
+    DesktopPane {
+        desktop_id: DESKTOP.into(),
+        pane_id: pane.into(),
+        runtime_id: format!("r-{pane}"),
+        session_id: session.into(),
+        kind: "agent".into(),
+        ..DesktopPane::default()
+    }
+}
+
+fn seed_tile(session: &str) -> Value {
+    json!({
+        "type": "tile",
+        "tile_id": "tile-seed",
+        "tile_kind": "seed",
+        "tile_params": "s-cont11",
+        "tile_session_id": session,
+    })
+}
+
+fn profile() -> Profile {
+    Profile {
+        id: PROFILE.into(),
+        name: "Work".into(),
+        current_desktop_id: DESKTOP.into(),
+        ..Profile::default()
+    }
+}
+
+/// Agent `s1`'s pane with the tiles of `tiles` docked beside it, and `active` the pane the
+/// desktop acts on.
+fn desktop(tiles: Vec<Value>, active: &str) -> Desktop {
+    let tree = if tiles.is_empty() {
+        tree::pane("a")
+    } else {
+        tree::row(
+            std::iter::once(tree::pane("a"))
+                .chain(tiles)
+                .collect::<Vec<_>>(),
+        )
+    };
+    Desktop {
+        id: DESKTOP.into(),
+        profile_id: PROFILE.into(),
+        name: "Desktop 1".into(),
+        shortcut_slot: Some(1),
+        order_key: "1".into(),
+        tree_json: tree.to_string(),
+        active_pane_id: active.into(),
+        panes: vec![agent_pane("a", "s1")],
+        revision: 1,
+    }
+}
+
+/// `desktop(tiles, active)` as the current desktop, then the garden over it, open on its seed.
+fn on_desktop(tiles: Vec<Value>, active: &str, sessions: Vec<Session>) -> World {
+    let world_daemon = Daemon::scripted().state(InitialStateMessage {
+        profiles: Some(vec![profile()]),
+        desktops: Some(vec![desktop(tiles, active)]),
+        ..initial(vec![continued(resumable())], sessions)
+    });
+    let known = continued(resumable());
+    world_daemon.on("seed_document_get", move |r: &Request| {
+        document_reply(r, Some(known.clone()))
+    });
+    let mut world = World::start_sized(world_daemon, (1248.0, 800.0));
+    world.open_desktop();
+    world.gesture(|app| app.key(board()));
+    open_row(&mut world, "Cache store migration");
+    world
+}
+
+#[test]
+fn opens_a_seed_as_a_tile_beside_the_session_the_user_is_in_and_shows_it() {
+    let mut world = on_desktop(Vec::new(), "a", vec![session("s1", "Agent a")]);
+    let docked = desktop(vec![seed_tile("s1")], "a");
+    world.daemon.on("open_seed", move |r: &Request| {
+        vec![
+            message(OpenSeedResultMessage {
+                request_id: r["request_id"].as_str().map(str::to_owned),
+                success: true,
+                seed_id: "s-cont11".into(),
+                desktop_id: Some(DESKTOP.into()),
+                tile_id: Some("tile-seed".into()),
+                ..OpenSeedResultMessage::new()
+            }),
+            message(ProfileArrangementChangedMessage {
+                profile: profile(),
+                desktops: vec![Desktop {
+                    revision: 2,
+                    ..docked.clone()
+                }],
+                ..ProfileArrangementChangedMessage::new()
+            }),
+        ]
+    });
+
+    click(&mut world, "Open as tile");
+
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], "s-cont11");
+    assert_eq!(opened[0]["session_id"], "s1");
+    assert!(opened[0].get("standalone").is_none());
+    let leaves = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(leaves.last().unwrap()["leaf_id"], "tile-seed");
+    assert_eq!(shown(&world), "closed");
+    let window = world.automate("state", json!({"of": "window"})).unwrap();
+    assert_eq!(window["keyboard"]["pane"], "tile-seed");
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn opens_a_seed_from_a_session_bound_seed_tile_beside_the_session_that_tile_is_bound_to() {
+    let mut world = on_desktop(
+        vec![seed_tile("tender")],
+        "tile-seed",
+        vec![session("s1", "Agent a"), session("tender", "Tender")],
+    );
+    world.daemon.on("open_seed", |_: &Request| ());
+
+    click(&mut world, "Open as tile");
+
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["session_id"], "tender");
 }

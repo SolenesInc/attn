@@ -433,7 +433,7 @@ fn press(state: &mut State, leaf: &str, session: &str, opens: Option<&str>, tx: 
 
 fn open(state: &mut State, seed: &str, session: &str, tx: &mut Tx) {
     header_pop::close(state);
-    crate::garden::open_tile(state, seed, Some(session), tx);
+    crate::garden::open_tile_beside(state, seed, Some(session.to_owned()), tx);
 }
 
 /// Plain words from markdown `body`, cut at a word near `max` characters.

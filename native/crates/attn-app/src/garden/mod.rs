@@ -16,8 +16,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use attn_protocol::{
-    FsExistsMessage, FsExistsResultMessage, OpenSeedMessage, Seed, SeedDocument,
-    SeedDocumentGetMessage, SeedDocumentGetResultMessage,
+    FsExistsMessage, FsExistsResultMessage, OpenSeedMessage, OpenSeedResultMessage, Seed,
+    SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage,
 };
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col};
 
@@ -482,16 +482,35 @@ pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
 }
 
 /// Opens seed `id` in a tile, beside `session` when one asks for it.
-pub(crate) fn open_tile(state: &mut State, id: &str, session: Option<&str>, tx: &mut Tx) {
+pub(crate) fn open_tile(state: &mut State, id: &str, tx: &mut Tx) {
+    let session = crate::opener::behind_screen(state).map(|s| s.id.clone());
+    open_tile_beside(state, id, session, tx);
+}
+
+/// Opens seed `id` as a tile beside `session` and shows it, putting the keyboard in it unless
+/// the user moved the keyboard while it opened.
+pub(crate) fn open_tile_beside(state: &mut State, id: &str, session: Option<String>, tx: &mut Tx) {
+    let before = tx.focused().map(str::to_owned);
     state.act(
         |request_id| OpenSeedMessage {
             seed_id: id.to_owned(),
             request_id: Some(request_id),
-            session_id: session.map(str::to_owned),
+            session_id: session,
             ..OpenSeedMessage::new()
         },
         Refused::Prefixed("Could not open the seed"),
-        |_, _, _| {},
+        move |state, reply, tx| {
+            let Some(OpenSeedResultMessage {
+                desktop_id: Some(desktop),
+                tile_id: Some(tile),
+                ..
+            }) = reply.parse::<OpenSeedResultMessage>()
+            else {
+                return;
+            };
+            let moved = tx.focused().is_some_and(|f| Some(f) != before.as_deref());
+            crate::desktop::reveal_leaf(state, &desktop, &tile, !moved, tx);
+        },
         tx,
     );
 }

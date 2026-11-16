@@ -155,7 +155,7 @@ pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
         crate::garden::open_seed(state, id, tx);
         return;
     }
-    crate::garden::open_tile(state, id, None, tx);
+    crate::garden::open_tile(state, id, tx);
 }
 
 /// The agent an ask waits on: whoever the garden says tends its seed, its crew member's
