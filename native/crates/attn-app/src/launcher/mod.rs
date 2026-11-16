@@ -55,8 +55,8 @@ pub(crate) struct Launcher {
     arrivals: u64,
     /// Each outpost's home folder, as it last reported it.
     homes: BTreeMap<String, String>,
-    /// The harnesses each reachable outpost has installed.
-    catalogs: BTreeMap<String, BTreeSet<String>>,
+    /// The harnesses each outpost asked this opening has installed, once it said.
+    catalogs: BTreeMap<String, Option<BTreeSet<String>>>,
     /// The repository whose destinations show, once Tab opened them.
     pub(crate) place: Option<Where>,
     pub(crate) problem: Option<Problem>,
@@ -359,10 +359,25 @@ impl Launcher {
         }
     }
 
+    /// Forgets what `host` was asked and has not answered, so it is asked again once it is
+    /// reachable.
+    fn forget_unanswered(&mut self, host: &str) {
+        let on_host = key_on(Some(host), "");
+        self.catalogs
+            .retain(|h, catalog| h != host || catalog.is_some());
+        self.listings.retain(|key, listing| {
+            !key.starts_with(&on_host)
+                || matches!(listing, Listing::Listed { .. } | Listing::Missing)
+        });
+        self.inspections.retain(|key, inspection| {
+            !key.starts_with(&on_host) || matches!(inspection, Inspection::Inspected { .. })
+        });
+    }
+
     /// The harnesses on offer: this machine's, and those any outpost has installed.
     pub(crate) fn agents(&self, state: &State) -> Agents {
         Agents::from_settings(&state.facts.settings)
-            .with_installed(self.catalogs.values().flatten().cloned())
+            .with_installed(self.catalogs.values().flatten().flatten().cloned())
     }
 
     pub(crate) fn agent(&self, state: &State) -> String {
@@ -372,8 +387,11 @@ impl Launcher {
     /// What `host` has installed, once any outpost said: for this machine, what it has.
     fn installed_on(&self, state: &State, host: Option<&str>) -> Option<BTreeSet<String>> {
         match host {
-            Some(host) => self.catalogs.get(host).cloned(),
-            None => (!self.catalogs.is_empty())
+            Some(host) => self.catalogs.get(host).cloned().flatten(),
+            None => self
+                .catalogs
+                .values()
+                .any(Option::is_some)
                 .then(|| Agents::from_settings(&state.facts.settings).installed()),
         }
     }
@@ -753,53 +771,18 @@ fn learn_home(
     }
 }
 
-/// Asks for the recents, on every machine while outposts are attached, and for each reachable
-/// outpost's harnesses, home and the folders its recents sit in.
+/// Asks for the recents, on every machine while outposts are attached, then for what the
+/// launcher wants from each machine.
 pub(crate) fn opened(state: &mut State, which: Which, tx: &mut Tx) {
-    let attached = outposts(state).to_vec();
-    let Some(launcher) = state.window.launching.launcher_mut(which) else {
+    let home_only = outposts(state).is_empty().then_some(true);
+    let Some(launcher) = state.window.launching.launcher(which) else {
         return;
     };
     let opening = launcher.opening;
-    for o in &attached {
-        if let Some(home) = o.home.clone().filter(|h| !h.is_empty()) {
-            launcher.homes.insert(o.id.clone(), home);
-        }
-    }
-    let reachable_hosts: Vec<String> = attached
-        .iter()
-        .filter(|o| o.reach == "reachable")
-        .map(|o| o.id.clone())
-        .collect();
-    for host in reachable_hosts.clone() {
-        let asked = host.clone();
-        state.ask(
-            |id| AgentCatalogMessage {
-                host: asked,
-                request_id: Some(id),
-                ..AgentCatalogMessage::new()
-            },
-            move |state, reply, _| {
-                let result: Option<AgentCatalogResultMessage> = reply.parse();
-                let Some(catalog) = result.filter(|r| r.success).and_then(|r| r.catalog) else {
-                    return;
-                };
-                if let Some(launcher) = this(state, which, opening) {
-                    let installed = catalog
-                        .harnesses
-                        .into_iter()
-                        .filter(|h| h.available)
-                        .map(|h| h.id)
-                        .collect();
-                    launcher.catalogs.insert(host, installed);
-                }
-            },
-            tx,
-        );
-    }
+    fetch_wanted(state, which, tx);
     state.ask(
         |id| GetRecentLocationsMessage {
-            home_only: attached.is_empty().then_some(true),
+            home_only,
             request_id: Some(id),
             ..GetRecentLocationsMessage::new()
         },
@@ -820,19 +803,42 @@ pub(crate) fn opened(state: &mut State, which: Which, tx: &mut Tx) {
                 return;
             };
             launcher.fresh = true;
-            let recents = state.window.launching.recents.clone();
-            for host in &reachable_hosts {
-                request_listing(state, which, opening, Some(host), "~", tx);
-                for item in recents.iter().filter(|r| r.host.as_deref() == Some(host)) {
-                    let trimmed = item.path.trim_end_matches('/');
-                    let parent = match trimmed.rfind('/') {
-                        Some(0) | None => "/",
-                        Some(slash) => &trimmed[..slash],
-                    };
-                    request_listing(state, which, opening, Some(host), parent, tx);
-                }
-            }
             fetch_wanted(state, which, tx);
+        },
+        tx,
+    );
+}
+
+/// Asks `host` for the harnesses it has installed, once per opening.
+fn request_catalog(state: &mut State, which: Which, opening: u64, host: String, tx: &mut Tx) {
+    let Some(launcher) = this(state, which, opening) else {
+        return;
+    };
+    if launcher.catalogs.contains_key(&host) {
+        return;
+    }
+    launcher.catalogs.insert(host.clone(), None);
+    let asked = host.clone();
+    state.ask(
+        |id| AgentCatalogMessage {
+            host: asked,
+            request_id: Some(id),
+            ..AgentCatalogMessage::new()
+        },
+        move |state, reply, _| {
+            let result: Option<AgentCatalogResultMessage> = reply.parse();
+            let Some(catalog) = result.filter(|r| r.success).and_then(|r| r.catalog) else {
+                return;
+            };
+            if let Some(launcher) = this(state, which, opening) {
+                let installed = catalog
+                    .harnesses
+                    .into_iter()
+                    .filter(|h| h.available)
+                    .map(|h| h.id)
+                    .collect();
+                launcher.catalogs.insert(host, Some(installed));
+            }
         },
         tx,
     );
@@ -1019,22 +1025,55 @@ fn request_inspection(
     );
 }
 
-/// Asks for what the text needs that no request asked yet: the browsed folder on its
-/// machine, the same folder on the other machines when the target lacks it, and whether the
-/// machine an aimed search targets has the other machines' matching recents.
+/// Asks each machine for what the launcher wants from it that this opening has not asked
+/// yet, or that an outpost left unanswered before it became unreachable, so an outpost that
+/// becomes reachable while the launcher is open is asked too: each reachable outpost's
+/// harnesses and, once the recents arrived, its home folder and the folders its recents sit
+/// in; then what the text needs: the browsed folder on its machine, the same folder on the
+/// other machines when the target lacks it, and whether the machine an aimed search targets
+/// has the other machines' matching recents.
 fn fetch_wanted(state: &mut State, which: Which, tx: &mut Tx) {
-    let Some(launcher) = state.window.launching.launcher(which) else {
+    let outposts = outposts(state).to_vec();
+    let Some(launcher) = state.window.launching.launcher_mut(which) else {
         return;
     };
-    if launcher.place.is_some() {
-        return;
+    for o in &outposts {
+        if let Some(home) = o.home.clone().filter(|h| !h.is_empty()) {
+            launcher.homes.entry(o.id.clone()).or_insert(home);
+        }
+        if o.reach != "reachable" {
+            launcher.forget_unanswered(&o.id);
+        }
     }
+    let launcher = state.window.launching.launcher(which).expect("open");
     let opening = launcher.opening;
-    let outposts = outposts(state).to_vec();
+    let reachable_hosts: Vec<String> = outposts
+        .iter()
+        .filter(|o| o.reach == "reachable")
+        .map(|o| o.id.clone())
+        .collect();
     let mut listings: Vec<(Option<String>, String)> = Vec::new();
     let mut inspections: Vec<(Option<String>, String)> = Vec::new();
-    match launcher.address(state) {
-        Address::Browse { path, machine, .. } => {
+    if launcher.fresh {
+        for host in &reachable_hosts {
+            listings.push((Some(host.clone()), "~".to_owned()));
+            let recents = state.window.launching.recents.iter();
+            for item in recents.filter(|r| r.host.as_deref() == Some(host)) {
+                let trimmed = item.path.trim_end_matches('/');
+                let parent = match trimmed.rfind('/') {
+                    Some(0) | None => "/",
+                    Some(slash) => &trimmed[..slash],
+                };
+                listings.push((Some(host.clone()), parent.to_owned()));
+            }
+        }
+    }
+    let address = match launcher.place {
+        None => Some(launcher.address(state)),
+        Some(_) => None,
+    };
+    match address {
+        Some(Address::Browse { path, machine, .. }) => {
             let host = machine.host;
             let (dir, _) = split_browse(&path);
             if reachable(&outposts, host.as_deref()) {
@@ -1054,11 +1093,11 @@ fn fetch_wanted(state: &mut State, which: Which, tx: &mut Tx) {
                 );
             }
         }
-        Address::Search {
+        Some(Address::Search {
             text,
             machine: Some(machine),
             ..
-        } if reachable(&outposts, machine.host.as_deref()) => {
+        }) if reachable(&outposts, machine.host.as_deref()) => {
             let needle = text.to_lowercase();
             inspections.extend(
                 state
@@ -1074,6 +1113,9 @@ fn fetch_wanted(state: &mut State, which: Which, tx: &mut Tx) {
         }
         _ => {}
     }
+    for host in reachable_hosts {
+        request_catalog(state, which, opening, host, tx);
+    }
     for (host, dir) in listings {
         request_listing(state, which, opening, host.as_deref(), &dir, tx);
     }
@@ -1082,7 +1124,7 @@ fn fetch_wanted(state: &mut State, which: Which, tx: &mut Tx) {
     }
 }
 
-/// Asks again what the open launchers need once the daemon's facts changed, such as an
+/// Asks again what the open launchers want once the daemon's facts changed, such as an
 /// outpost that became reachable.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     for which in [Which::Dialog, Which::Inline] {

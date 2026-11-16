@@ -1455,3 +1455,85 @@ fn an_outpost_that_becomes_reachable_is_asked_for_the_folder_the_text_browses() 
     assert!(browses(&world).contains(&("~/".to_owned(), FIELD.to_owned())));
     rest(&mut world);
 }
+
+#[test]
+fn an_outpost_that_becomes_reachable_is_asked_once_for_its_harnesses_and_offers_them() {
+    let mut world = open(Setup {
+        settings: vec![("codex_available".into(), "false".into())],
+        outposts: vec![OutpostInfo {
+            state: "connecting".into(),
+            ..field_lab()
+        }],
+        ..Setup::default()
+    });
+    assert!(world.daemon.sent_of("agent_catalog").is_empty());
+    assert!(harness(&world, "codex").is("disabled"));
+
+    let reachable = OutpostInfo {
+        state: "connected".into(),
+        reach: "reachable".into(),
+        ..field_lab()
+    };
+    emit_outposts(&mut world, vec![reachable.clone()]);
+    emit_outposts(&mut world, vec![reachable]);
+
+    assert_eq!(
+        world
+            .daemon
+            .sent_of("agent_catalog")
+            .iter()
+            .map(host)
+            .collect::<Vec<_>>(),
+        [FIELD]
+    );
+    assert!(!harness(&world, "codex").is("disabled"));
+    rest(&mut world);
+}
+
+#[test]
+fn an_outpost_that_failed_to_say_its_harnesses_is_asked_again_when_it_is_reachable_again() {
+    let reachable = OutpostInfo {
+        state: "connected".into(),
+        reach: "reachable".into(),
+        ..field_lab()
+    };
+    let mut world = open(Setup {
+        settings: vec![("codex_available".into(), "false".into())],
+        outposts: vec![field_lab()],
+        ..Setup::default()
+    });
+    let held = hold(&world, "agent_catalog");
+    emit_outposts(&mut world, vec![reachable.clone()]);
+    let first = held.lock().unwrap()[0].clone();
+    world.daemon.reply_to(
+        &first,
+        message(AgentCatalogResultMessage {
+            success: false,
+            host: FIELD.into(),
+            ..AgentCatalogResultMessage::new()
+        }),
+    );
+    world.settle();
+    assert!(harness(&world, "codex").is("disabled"));
+
+    emit_outposts(&mut world, vec![field_lab()]);
+    emit_outposts(&mut world, vec![reachable]);
+    let asked = held.lock().unwrap().clone();
+    assert_eq!(asked.len(), 2);
+    world.daemon.reply_to(
+        &asked[1],
+        message(AgentCatalogResultMessage {
+            success: true,
+            host: FIELD.into(),
+            catalog: Some(AgentCatalogResult {
+                machine: FIELD.into(),
+                harnesses: harnesses(&["claude", "codex"]),
+                ..AgentCatalogResult::default()
+            }),
+            ..AgentCatalogResultMessage::new()
+        }),
+    );
+    world.settle();
+    assert!(!harness(&world, "codex").is("disabled"));
+    rest(&mut world);
+}
