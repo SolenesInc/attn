@@ -25,6 +25,8 @@ pub(crate) struct Global {
     pub error: Option<String>,
     /// The binding the daemon's setting last named, once the app connected.
     pub named: Option<Option<String>>,
+    /// The panel's app runs, so the system can bind a shortcut to it.
+    pub running: bool,
 }
 
 /// A stored binding as Rune registers it, refusing one that would take a key from typing.
@@ -115,6 +117,11 @@ impl State {
             data_dir: data_dir.to_owned(),
             ..Global::default()
         };
+    }
+
+    /// The Quick Capture panel's app runs: bind its shortcut.
+    pub fn quick_capture_runs(&mut self) {
+        self.capture_shortcut.running = true;
         follow(self);
     }
 }
@@ -125,7 +132,9 @@ pub(crate) fn follow(state: &mut State) {
     let Some(window) = state.capture.clone() else {
         return;
     };
-    if state.facts.connection != attn_client::Connection::Connected {
+    if !state.capture_shortcut.running
+        || state.facts.connection != attn_client::Connection::Connected
+    {
         return;
     }
     let wanted = match state.facts.settings.get(SETTING) {

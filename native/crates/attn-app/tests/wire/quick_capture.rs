@@ -1069,6 +1069,14 @@ fn folder(world: &World) -> std::path::PathBuf {
 
 /// Leaves a draft on disk as an earlier run of the panel did, and relaunches the panel on it.
 fn relaunch_with(world: &mut World, text: &str, files: &[(&str, &str, &[u8])]) -> String {
+    let id = leave_draft(world, text, files);
+    world.restart_capture();
+    open(world);
+    id
+}
+
+/// Leaves a draft on disk as an earlier run of the panel did.
+fn leave_draft(world: &World, text: &str, files: &[(&str, &str, &[u8])]) -> String {
     let id = "7d1c3a4e-0000-4000-8000-00000000c0de".to_owned();
     let folder = folder(world);
     std::fs::create_dir_all(folder.join("capture-draft-files")).unwrap();
@@ -1089,8 +1097,6 @@ fn relaunch_with(world: &mut World, text: &str, files: &[(&str, &str, &[u8])]) -
         "uncertain": false,
     });
     std::fs::write(folder.join("quick-capture-draft.json"), stored.to_string()).unwrap();
-    world.restart_capture();
-    open(world);
     id
 }
 
@@ -2160,5 +2166,60 @@ fn a_copy_failing_after_the_profile_changes_shows_in_its_draft_on_return() {
     assert!(said.starts_with("Cannot attach held.png"), "{said}");
     world.advance(Duration::from_secs(2));
     assert_eq!(draft_on_disk(&world, PROFILE).unwrap()["files"], json!([]));
+    rest(&mut world);
+}
+
+#[test]
+fn a_drop_from_another_app_gives_the_panel_the_keyboard_back() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    let dropped = world.data_dir().with_file_name("notes.txt");
+    std::fs::write(&dropped, b"notes").unwrap();
+    open(&mut world);
+    world.capture_gesture(|d| d.runtime.window_focus(false));
+    let before = world.capture_took_keys();
+    world.capture_gesture(|d| {
+        d.runtime
+            .drop_files(vec![dropped.clone()], Some((200.0, 200.0)))
+    });
+    assert_eq!(world.capture_took_keys(), before + 1);
+    world.capture_gesture(|d| d.runtime.window_focus(true));
+    type_text(&mut world, "See the notes");
+    assert_eq!(message_text(&world), "See the notes");
+    rest(&mut world);
+}
+
+#[test]
+fn a_restored_draft_uploads_and_sends_while_the_panels_app_starts_and_binds_its_shortcut_once_it_runs()
+ {
+    let (daemon, kept) = home();
+    let daemon = daemon.state(InitialStateMessage {
+        settings: Some([("capture.shortcut".to_owned(), binding("ctrl+alt+b"))].into()),
+        ..state(PROFILE)
+    });
+    let mut world = World::start(daemon);
+    let id = leave_draft(&world, "The scan", &[(IMAGE, "scan.png", &png())]);
+
+    world.restart_capture_before_it_runs();
+    assert_eq!(
+        world.capture_shortcut(),
+        None,
+        "no shortcut binds before the panel's app runs"
+    );
+    assert!(
+        !world
+            .daemon
+            .sent_of("quick_capture_attachment_put")
+            .is_empty()
+    );
+
+    world.capture_runs();
+    assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+    open(&mut world);
+    press(&mut world, "enter");
+    let sent = world.daemon.sent_of("quick_capture_send");
+    assert_eq!(sent.len(), 1, "{}", world.capture_screen());
+    assert_eq!(sent[0]["capture_id"], id.as_str());
+    assert_eq!(kept.lock().unwrap().bytes[IMAGE], png());
     rest(&mut world);
 }

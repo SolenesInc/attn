@@ -52,16 +52,16 @@ struct Front {
 }
 
 /// Opens the panel's window, hidden until `Window::show`, bound to `store`, with an
-/// automation server that writes `automation` as its manifest when given one, and hands the
-/// window to `running` once the system can bind its shortcut. Call it on the UI thread, as
+/// automation server that writes `automation` as its manifest when given one, and calls
+/// `running` once the system can bind its shortcut. Call it on the UI thread, as
 /// `rune::open_window` needs.
 pub fn open(
     store: &Store,
     daemon: Commands,
     data_dir: PathBuf,
     automation: Option<PathBuf>,
-    running: impl FnOnce(Arc<dyn Window>) + 'static,
-) {
+    running: impl FnOnce() + 'static,
+) -> Arc<dyn Window> {
     let frames = Pulse::default();
     let app = super::app().on_frame_encoded({
         let frames = frames.clone();
@@ -77,10 +77,10 @@ pub fn open(
     });
     let window: Arc<dyn Window> = panel.clone();
     let app = app.on_ready({
-        let mut running = Some((running, window.clone()));
+        let mut running = Some(running);
         move |_| {
-            if let Some((running, window)) = running.take() {
-                running(window);
+            if let Some(running) = running.take() {
+                running();
             }
         }
     });
@@ -94,10 +94,17 @@ pub fn open(
             .corner_radius(12.0)
     });
     rune::open_window(rune::WindowSpec::from_app("quick-capture", app).configured_options(options));
-    let bound = super::bind(store, daemon, window, data_dir, crate::wall_clock_ms(), {
-        let handle = handle.clone();
-        move |update| handle.update(update)
-    });
+    let bound = super::bind(
+        store,
+        daemon,
+        window.clone(),
+        data_dir,
+        crate::wall_clock_ms(),
+        {
+            let handle = handle.clone();
+            move |update| handle.update(update)
+        },
+    );
     *panel.bound.lock().unwrap() = Some(bound);
     if let Some(manifest) = automation {
         let host = Arc::new(PanelHost { handle, frames });
@@ -106,6 +113,7 @@ pub fn open(
             Err(why) => eprintln!("attn-app: Quick Capture automation is off: {why}"),
         }
     }
+    window
 }
 
 impl Window for MacPanel {
@@ -123,6 +131,10 @@ impl Window for MacPanel {
             self.handle.place(DisplayTarget::UnderPointer, placement);
         }
         self.handle.open();
+    }
+
+    fn take_keys(&self) {
+        self.handle.focus();
     }
 
     fn hide(&self, holding_keys: bool) {

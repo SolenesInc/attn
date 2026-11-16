@@ -40,6 +40,7 @@ pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
                     .map(|p| (file_name(p), Source::Path(p.clone())))
                     .collect();
                 attach::add(panel, files, tx);
+                panel.take_keys();
                 tx.focus(MESSAGE, false);
             },
         )

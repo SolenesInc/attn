@@ -316,7 +316,10 @@ impl World {
         {
             let window: Arc<dyn attn_app::quick_capture::Window> = capture.window.clone();
             let data_dir = data_dir.clone();
-            runtime.update(move |state, _| state.use_quick_capture(window, &data_dir));
+            runtime.update(move |state, _| {
+                state.use_quick_capture(window, &data_dir);
+                state.quick_capture_runs();
+            });
         }
         let mut world = World {
             files,
@@ -790,6 +793,11 @@ impl World {
         self.settle();
     }
 
+    /// How often the shown Quick Capture panel asked the system for the keyboard back.
+    pub fn capture_took_keys(&self) -> usize {
+        self.capture.took_keys()
+    }
+
     /// Whether the Quick Capture panel's last hide handed the keyboard back to the app it opened
     /// over; none before it first hides.
     pub fn capture_handed_keys_back(&self) -> Option<bool> {
@@ -809,6 +817,13 @@ impl World {
     /// Quits and relaunches the Quick Capture panel, as an app restart does: it keeps only what
     /// it wrote to disk.
     pub fn restart_capture(&mut self) {
+        self.restart_capture_before_it_runs();
+        self.capture_runs();
+    }
+
+    /// Relaunches the Quick Capture panel as [`Self::restart_capture`] does, stopping before the
+    /// system reports that the panel's app runs, the moment it can first bind a shortcut.
+    pub fn restart_capture_before_it_runs(&mut self) {
         self.capture = crate::capture::CaptureRuntime::start(
             &self.store,
             self.link().commands(),
@@ -820,6 +835,12 @@ impl World {
             let data_dir = self.capture.data_dir.clone();
             move |state, _| state.use_quick_capture(window, &data_dir)
         });
+        self.settle();
+    }
+
+    /// The system reports that the Quick Capture panel's app runs.
+    pub fn capture_runs(&mut self) {
+        self.runtime.update(|state, _| state.quick_capture_runs());
         self.settle();
     }
 

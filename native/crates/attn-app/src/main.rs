@@ -105,19 +105,20 @@ fn main() -> ExitCode {
             #[cfg(target_os = "macos")]
             {
                 let (store, daemon, data_dir, manifest) = capture;
-                attn_app::quick_capture::mac::open(
+                let window = attn_app::quick_capture::mac::open(
                     &store,
                     daemon,
                     data_dir.clone(),
                     manifest,
-                    move |window| {
+                    move || {
                         capture_owner.update(Box::new(
-                            move |state: &mut attn_app::State, _: &mut rune::Tx| {
-                                state.use_quick_capture(window, &data_dir);
+                            |state: &mut attn_app::State, _: &mut rune::Tx| {
+                                state.quick_capture_runs();
                             },
                         ));
                     },
                 );
+                state.use_quick_capture(window, &data_dir);
             }
             if cfg!(target_os = "macos") {
                 state.follow_menus(Arc::new(move |keymap| {

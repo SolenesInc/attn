@@ -50,6 +50,8 @@ pub trait Window: Send + Sync {
     /// Hides the panel and, when it holds the keyboard, gives the keyboard back to the app that
     /// had it. Once the person has moved to another window, that window keeps it.
     fn hide(&self, holding_keys: bool);
+    /// Gives the shown panel the keyboard again, leaving the app in front where it is.
+    fn take_keys(&self);
     /// Runs `update` on the panel's state.
     fn update(&self, update: Update);
     /// Has the system open the panel on `shortcut` from any app, in place of the shortcut it
@@ -368,6 +370,12 @@ impl Panel {
             && let Err(why) = self.write()
         {
             self.error = Some(format!("Draft could not be saved: {why}"));
+        }
+    }
+
+    pub(crate) fn take_keys(&self) {
+        if let Some(window) = &self.window {
+            window.take_keys();
         }
     }
 

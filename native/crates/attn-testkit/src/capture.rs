@@ -16,6 +16,8 @@ pub(crate) struct HeadlessPanel {
     shown: AtomicBool,
     /// Whether the last hide handed the keyboard back to the app the panel opened over.
     handed_back: Mutex<Option<bool>>,
+    /// How often the panel asked for the keyboard back while it showed.
+    took_keys: std::sync::atomic::AtomicUsize,
     inbox: Mutex<Vec<Update>>,
     pulse: Pulse,
     /// The shortcut the system would open the panel on.
@@ -26,6 +28,10 @@ impl quick_capture::Window for HeadlessPanel {
     fn show(&self) {
         self.shown.store(true, Ordering::Release);
         self.pulse.beat();
+    }
+
+    fn take_keys(&self) {
+        self.took_keys.fetch_add(1, Ordering::AcqRel);
     }
 
     fn hide(&self, holding_keys: bool) {
@@ -76,6 +82,7 @@ impl CaptureRuntime {
         let window = Arc::new(HeadlessPanel {
             shown: AtomicBool::new(false),
             handed_back: Mutex::default(),
+            took_keys: Default::default(),
             inbox: Mutex::default(),
             pulse: pulse.clone(),
             bound: Mutex::default(),
@@ -105,6 +112,10 @@ impl CaptureRuntime {
 
     pub(crate) fn shown(&self) -> bool {
         self.window.shown.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn took_keys(&self) -> usize {
+        self.window.took_keys.load(Ordering::Acquire)
     }
 
     pub(crate) fn handed_back(&self) -> Option<bool> {
