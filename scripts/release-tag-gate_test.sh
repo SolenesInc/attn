@@ -31,6 +31,14 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/43/jobs?'* ]]
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]] && \
+  [[ "$*" == *'Full macOS run'* ]]; then
+  if [[ "${FAKE_FULL_MACOS_MODE:-success}" == success ]]; then
+    printf '%s\t%s\t%s\n' completed success \
+      'https://github.com/example/attn/actions/runs/42/job/11'
+  fi
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]] && \
   [[ "$*" == *'App acceptance'* ]]; then
   if [[ "${FAKE_CI_APP_MODE:-missing}" == success ]]; then
     printf '%s\t%s\t%s\n' completed success \
@@ -117,6 +125,10 @@ export FAKE_APP_MODE=success
 export FAKE_ACCEPTANCE_CONCLUSION=failure
 expect_failure 'Acceptance is completed/failure' run_gate v99.98.97
 export FAKE_ACCEPTANCE_CONCLUSION=success
+
+export FAKE_FULL_MACOS_MODE=missing
+expect_failure "has 0 'Full macOS run' jobs" run_gate v99.98.97
+export FAKE_FULL_MACOS_MODE=success
 
 printf '%s\n' 'work after the release' >"$repo/later.txt"
 git -C "$repo" add later.txt

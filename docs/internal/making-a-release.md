@@ -36,9 +36,10 @@ The script compiles the commits since the last release into `CHANGELOG.md`,
 bumps every version, and opens a PR to `main`. Merge the PR once `PR gate` and
 `App acceptance` are green. The merged commit is the release commit. CI on `main` runs one push at a
 time and drops a waiting push when a newer one arrives, but the release commit
-gets a run of its own that later landings cannot drop. CI tags and publishes
-the release commit once both hold: its Acceptance is green and `reviewed`
-contains it. Whichever happens last triggers the publish: CI finishing on the release
+gets a run of its own that later landings cannot drop. That run runs every
+macOS job, and its `Full macOS run` job passes only when all of them passed.
+CI tags and publishes the release commit once both hold: its Acceptance and
+its `Full macOS run` are green, and `reviewed` contains it. Whichever happens last triggers the publish: CI finishing on the release
 commit, or a review moving `reviewed` to contain it.
 
 `main` may have moved past that commit, and may keep moving while the release
@@ -50,8 +51,10 @@ If the automated app acceptance cannot cover the release PR or the merged
 release commit, record a manual receipt for that exact commit with the command
 printed in the release PR, then rerun the CI for that commit.
 
-If Acceptance fails on the release commit, fix the failure on `main` and
-prepare the release again with the same version.
+If Acceptance or `Full macOS run` fails on the release commit, fix the failure
+on `main` and prepare the release again with the same version. When a macOS
+job failed only because no runner picked it up, re-run that run's failed jobs
+instead.
 
 ## Hotfix
 

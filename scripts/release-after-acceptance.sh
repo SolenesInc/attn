@@ -97,6 +97,8 @@ else
     app-acceptance.yml "$sha" workflow_dispatch main 'App acceptance'
   echo "release after acceptance: manual App acceptance receipt is green for $sha"
 fi
+"$script_root/workflow-job-gate.sh" ci.yml "$sha" push main 'Full macOS run'
+echo "release after acceptance: every macOS job is green for main $sha"
 
 if create_error="$({
   gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \

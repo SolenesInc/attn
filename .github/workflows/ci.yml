@@ -8,10 +8,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: >-
     ci-${{ github.event.pull_request.number
+    || ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    && format('full-{0}', github.run_id))
     || (github.ref == 'refs/heads/main'
     && (startsWith(github.event.head_commit.message, 'chore(release): prepare v')
     || (startsWith(github.event.head_commit.message, 'Merge pull request ')
@@ -28,7 +33,8 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-24.04
     outputs:
-      force_all: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
+      force_all: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
+      full_macos: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.filter.outputs.release_commit == 'true') }}
       daemon: ${{ steps.filter.outputs.daemon }}
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -50,12 +56,15 @@ jobs:
 
       - name: Classify changed paths
         id: filter
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
           # PR API quota is shared by the installation. Full history lets the
           # action use git instead, so an unrelated busy repo cannot break CI.
           token: ''
           filters: |
+            release_commit:
+              - '.github/release-candidate.yml'
             daemon:
               - '**/*.go'
               - 'docs/guide/tutorials/**'
@@ -1328,6 +1337,18 @@ jobs:
       contents: read
     uses: ./.github/workflows/release-preflight.yml
 
+  full-macos:
+    name: Full macOS run
+    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos]
+    if: always() && needs.changes.outputs.full_macos == 'true'
+    permissions: {}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every macOS job
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success")' <<< "$NEEDS_JSON"
+
   pr-gate:
     name: PR gate
     if: always() && github.event_name == 'pull_request'
@@ -1367,7 +1388,7 @@ jobs:
 
   acceptance:
     name: Acceptance
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs:
       - changes
       - generated-types
@@ -1386,6 +1407,7 @@ jobs:
       - app-acceptance-macos
       - app-acceptance
       - release-preflight
+      - full-macos
     permissions:
       contents: read
     runs-on: ubuntu-24.04
@@ -1393,17 +1415,19 @@ jobs:
       - name: Aggregate exact-SHA acceptance
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-        run: jq -e 'all(.[]; .result == "success")' <<< "$NEEDS_JSON"
+        run: >-
+          jq -e 'all(to_entries[]; .value.result == "success" or
+          (.key == "full-macos" and .value.result == "skipped"))' <<< "$NEEDS_JSON"
 
   branch-health:
     name: Report branch health
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: acceptance
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [changes, acceptance]
     permissions:
       contents: read
       issues: write
     concurrency:
-      group: branch-health-${{ github.ref_name }}
+      group: branch-health-${{ github.ref_name }}-${{ needs.changes.outputs.full_macos == 'true' && 'full-run' || 'acceptance' }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     steps:
@@ -1415,10 +1439,11 @@ jobs:
         env:
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
           BRANCH_HEALTH_ASSIGNEE: victorarias
+          RECORD: ${{ needs.changes.outputs.full_macos == 'true' && 'full run' || 'acceptance' }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
           ./scripts/ci-branch-health.sh "$ACCEPTANCE_RESULT"
-          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL"
+          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL" "$RECORD"
 
       - name: Report issue-update failure
         if: steps.branch-health-issue.outcome == 'failure'

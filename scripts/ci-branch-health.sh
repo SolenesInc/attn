@@ -1,14 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-conclusion="${1:?usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url>}"
-branch="${2:?usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url>}"
-sha="${3:?usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url>}"
-run_url="${4:?usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url>}"
+usage="usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url> <acceptance|full run>"
+conclusion="${1:?$usage}"
+branch="${2:?$usage}"
+sha="${3:?$usage}"
+run_url="${4:?$usage}"
+record="${5:?$usage}"
 
 case "$branch" in
   main|next) ;;
   *) echo "branch health: unsupported branch '$branch'" >&2; exit 2 ;;
+esac
+
+case "$record" in
+  acceptance)
+    record_summary="The exact-SHA \`Acceptance\` gate is not green for \`$branch\`."
+    record_recovered="Acceptance recovered"
+    ;;
+  'full run')
+    record_summary="The full run of every job, macOS included, is not green for \`$branch\`. Push runs skip the macOS jobs a push cannot break, so only the next full run closes this issue."
+    record_recovered="The full run recovered"
+    ;;
+  *) echo "branch health: unsupported record '$record'" >&2; exit 2 ;;
 esac
 
 if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -21,13 +35,15 @@ for tool in gh jq; do
   command -v "$tool" >/dev/null || { echo "branch health: missing $tool" >&2; exit 2; }
 done
 
-remote_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --jq .commit.sha)"
-if [ "$remote_sha" != "$sha" ]; then
-  echo "branch health: $branch moved to $remote_sha; ignoring stale result for $sha"
-  exit 0
+if [ "$record" = acceptance ]; then
+  remote_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --jq .commit.sha)"
+  if [ "$remote_sha" != "$sha" ]; then
+    echo "branch health: $branch moved to $remote_sha; ignoring stale result for $sha"
+    exit 0
+  fi
 fi
 
-title="Branch health: $branch acceptance"
+title="Branch health: $branch $record"
 issues="$(
   gh api --paginate "repos/$GITHUB_REPOSITORY/issues?state=all&per_page=100" \
     --jq '.[] | select(has("pull_request") | not) | {number,state,title}' \
@@ -47,7 +63,7 @@ state="$(printf '%s' "$state" | tr '[:lower:]' '[:upper:]')"
 if [ "$conclusion" = success ]; then
   if [ -n "$number" ] && [ "$state" = OPEN ]; then
     gh issue close "$number" --repo "$GITHUB_REPOSITORY" --reason completed \
-      --comment "Acceptance recovered on [$sha]($run_url)."
+      --comment "$record_recovered on [$sha]($run_url)."
     echo "branch health: closed #$number after recovery"
   else
     echo "branch health: $branch is healthy; no open issue"
@@ -59,7 +75,7 @@ body="$(mktemp "${TMPDIR:-/tmp}/attn-branch-health.XXXXXX")"
 trap 'rm -f "$body"' EXIT
 commit_url="https://github.com/$GITHUB_REPOSITORY/commit/$sha"
 cat >"$body" <<EOF
-The exact-SHA \`Acceptance\` gate is not green for \`$branch\`.
+$record_summary
 
 - Commit: [$sha]($commit_url)
 - Result: \`$conclusion\`

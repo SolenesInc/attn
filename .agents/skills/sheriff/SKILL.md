@@ -81,10 +81,11 @@ git fetch origin main && git rev-parse origin/main
 ```
 
 `ci-main-red.sh` prints `<run-id> <attempt>` for main's newest completed CI
-run with a failed job, unless a newer completed run passed. A run can conclude
-`cancelled` while jobs inside it failed, so the script reads the jobs, not the
-run's conclusion. The script reads only completed runs, so read the run list
-beside the script's output:
+push run with a failed job, unless a newer completed push run passed. It
+prints a second line the same way for main's nightly and dispatched full
+runs. A run can conclude `cancelled` while jobs inside it failed, so the
+script reads the jobs, not the run's conclusion. The script reads only completed runs, so read
+the run list beside the script's output:
 
 - A newer run that is still queued or running may already hold the first
   failure. List the failed jobs of that run and start there, without waiting
@@ -93,15 +94,26 @@ beside the script's output:
 - While a newer run is in progress, the script can print an older red run.
   The older run's failure still stands unless a landed repair covers it, as
   [Before you diagnose](#before-you-diagnose) says.
-- When the script prints nothing, the newest completed run passed. `main` is
-  green only when that run's `headSha` is `origin/main`. Otherwise report the
-  last green SHA and that `main`'s head is still in CI, and end. Never call
-  `main` green from the script's empty output alone.
+- When the script prints nothing, the newest completed push run and the
+  newest nightly run passed. `main` is green only when that push run's
+  `headSha` is `origin/main`. Otherwise report the last green SHA and that
+  `main`'s head is still in CI, and end. Never call `main` green from the
+  script's empty output alone.
+
+A push run skips the macOS jobs that the push's paths cannot break. The
+nightly run, and the run on a release commit, run every job, macOS included,
+and their `Full macOS run` job requires every macOS job to pass. A green push
+run after a red nightly run does not clear it: only the next green nightly run
+does, so treat a red nightly run like a red push run, and find its culprit
+among the commits since the last green nightly run.
+`gh run list --workflow ci.yml --branch main --event schedule` lists the
+nightly runs.
 
 ## Before you diagnose
 
-The `Branch health: main acceptance` issue is the record. CI opens it only
-when a run's `Acceptance` finishes red, so when you act on a run still in
+The `Branch health: main acceptance` issue is the record of push runs, and
+`Branch health: main full run` is the record of full runs: nightly,
+dispatched and release-commit runs. CI opens each only when a run's `Acceptance` finishes red, so when you act on a run still in
 progress and the issue is closed, reopen it (`gh issue reopen <number>`). Read
 the comments on the issue first and comment each step. Keep one record per
 failure, with the job, the test and its error, the failing SHA, the owner (a

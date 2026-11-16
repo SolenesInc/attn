@@ -14,14 +14,17 @@ jq_filter=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --jq) jq_filter="$2"; shift 2 ;;
+    --event) event="$2"; shift 2 ;;
     view) run="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
 if [ -n "${run:-}" ]; then
   jq -r "$jq_filter" "$FAKE_RUNS/$run.json"
-else
-  jq -r "$jq_filter" "$FAKE_RUNS/list.json"
+elif [ "${event:-}" = push ]; then
+  jq -r "$jq_filter" "$FAKE_RUNS/push.json"
+elif [ -f "$FAKE_RUNS/all.json" ]; then
+  jq -r "$jq_filter" "$FAKE_RUNS/all.json"
 fi
 EOF
 chmod +x "$work/bin/gh"
@@ -29,7 +32,7 @@ chmod +x "$work/bin/gh"
 fixture() {
   local name="$1"
   mkdir -p "$work/$name"
-  printf '%s' "$2" >"$work/$name/list.json"
+  printf '%s' "$2" >"$work/$name/push.json"
   shift 2
   while [ "$#" -gt 0 ]; do
     printf '%s' "$2" >"$work/$name/$1.json"
@@ -60,6 +63,19 @@ fixture green-after-cancelled '[{"databaseId":5},{"databaseId":4}]' \
   5 '{"attempt":1,"conclusion":"cancelled","jobs":[{"conclusion":"success"},{"conclusion":"cancelled"}]}' \
   4 '{"attempt":1,"conclusion":"success","jobs":[{"conclusion":"success"}]}'
 expect green-after-cancelled 0 ""
+
+fixture red-nightly-behind-green-pushes '[{"databaseId":9}]' \
+  all '[{"databaseId":9,"event":"push"},{"databaseId":8,"event":"schedule"}]' \
+  9 '{"attempt":1,"conclusion":"success","jobs":[]}' \
+  8 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"success"},{"conclusion":"failure"}]}'
+expect red-nightly-behind-green-pushes 0 "8 1"
+
+fixture red-push-and-green-nightly '[{"databaseId":11}]' \
+  all '[{"databaseId":12,"event":"workflow_dispatch"},{"databaseId":10,"event":"schedule"}]' \
+  12 '{"attempt":1,"conclusion":"success","jobs":[]}' \
+  11 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}' \
+  10 '{"attempt":1,"conclusion":"success","jobs":[]}'
+expect red-push-and-green-nightly 0 "11 1"
 
 fixture undecided '[{"databaseId":6}]' \
   6 '{"attempt":1,"conclusion":"cancelled","jobs":[]}'

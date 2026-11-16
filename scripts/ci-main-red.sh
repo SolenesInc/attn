@@ -3,24 +3,37 @@ set -euo pipefail
 
 run_limit=20
 
-runs="$(
-  gh run list --workflow ci.yml --branch main --event push --status completed \
-    --limit "$run_limit" --json databaseId --jq '.[].databaseId'
-)"
+newest_red() {
+  local kind="$1" runs run verdict
+  if [ "$kind" = push ]; then
+    runs="$(
+      gh run list --workflow ci.yml --branch main --event push --status completed \
+        --limit "$run_limit" --json databaseId --jq '.[].databaseId'
+    )"
+  else
+    runs="$(
+      gh run list --workflow ci.yml --branch main --status completed \
+        --limit 100 --json databaseId,event \
+        --jq "[.[] | select(.event | IN(\"schedule\", \"workflow_dispatch\"))][:$run_limit][].databaseId"
+    )"
+  fi
+  for run in $runs; do
+    verdict="$(
+      gh run view "$run" --json attempt,conclusion,jobs --jq '
+        def failed: . == "failure" or . == "timed_out";
+        if .conclusion == "success" then "green"
+        elif (.conclusion | failed) or any(.jobs[]; .conclusion | failed) then "red \(.attempt)"
+        else "" end'
+    )"
+    case "$verdict" in
+      green) return 0 ;;
+      red*) echo "$run ${verdict#red }"; return 0 ;;
+    esac
+  done
+  [ -z "$runs" ] && return 0
+  echo "ci-main-red: none of main's last $run_limit completed $kind CI runs passed or failed a job; raise run_limit in scripts/ci-main-red.sh" >&2
+  return 1
+}
 
-for run in $runs; do
-  verdict="$(
-    gh run view "$run" --json attempt,conclusion,jobs --jq '
-      def failed: . == "failure" or . == "timed_out";
-      if .conclusion == "success" then "green"
-      elif (.conclusion | failed) or any(.jobs[]; .conclusion | failed) then "red \(.attempt)"
-      else "" end'
-  )"
-  case "$verdict" in
-    green) exit 0 ;;
-    red*) echo "$run ${verdict#red }"; exit 0 ;;
-  esac
-done
-
-echo "ci-main-red: none of main's last $run_limit completed CI runs passed or failed a job; raise run_limit in scripts/ci-main-red.sh" >&2
-exit 1
+newest_red push
+newest_red full

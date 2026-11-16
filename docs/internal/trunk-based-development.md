@@ -169,7 +169,9 @@ delegation watch, even after harvest. Corrections are new landings.
 
 CI runs on `main` after every landing, and it batches pushes that arrive during
 a run into the next run. When Acceptance fails, CI opens the
-`Branch health: main acceptance` issue. The sheriff automation watches `main`'s
+`Branch health: main acceptance` issue. Every night CI also runs every job,
+macOS included, on `main`'s head. A red nightly run opens
+`Branch health: main full run`, which only the next green full run closes. The sheriff automation watches `main`'s
 CI and counts a run as red when any job in it failed, even when the run itself
 concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
 sheriff reads it, finds the commit that broke it, and delegates an agent
@@ -186,6 +188,7 @@ release waits for green.
 ## Releases
 
 A release is cut on demand from a `main` commit that has green Acceptance and
-that `reviewed` contains. Its notes are written from the commits since the last
+that `reviewed` contains. CI runs every macOS job on the release commit, and
+the release ships only when that commit's `Full macOS run` is green. Its notes are written from the commits since the last
 release, grouped by their `Attn-Seed:` trailers, so landings add no changelog
 fragment. See [Making a release](making-a-release.md).

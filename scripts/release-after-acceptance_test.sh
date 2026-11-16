@@ -44,6 +44,14 @@ if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?event=push'*
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]] && \
+  [[ "$*" == *'Full macOS run'* ]]; then
+  if [[ "${FAKE_FULL_MACOS_MODE:-success}" == success ]]; then
+    printf '%s\t%s\t%s\n' completed success \
+      'https://github.com/example/attn/actions/runs/42/job/11'
+  fi
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]] && \
   [[ "$*" == *'App acceptance'* ]]; then
   if [[ "${FAKE_CI_APP_MODE:-missing}" != missing ]]; then
     printf 'completed\t%s\t%s\n' "${FAKE_CI_APP_CONCLUSION:-success}" \
@@ -146,6 +154,7 @@ setup_fixture() {
   export FAKE_RELEASE_RUN_CONCLUSION=success
   export FAKE_CREATE_RACE_TAG=0
   export FAKE_CI_STATUS=completed
+  export FAKE_FULL_MACOS_MODE=success
 
   git clone -q --bare "$template" "$fixture_origin"
   git clone -q "$fixture_origin" "$fixture_repo"
@@ -215,6 +224,11 @@ if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candida
   echo "missing App acceptance created a tag" >&2
   exit 1
 fi
+
+setup_fixture skipped-full-macos
+export FAKE_FULL_MACOS_MODE=missing
+expect_failure "has 0 'Full macOS run' jobs" run_release_after_acceptance
+expect_untagged 'a release commit whose macOS jobs did not all run'
 
 setup_fixture automated-app
 export FAKE_CI_APP_MODE=success
