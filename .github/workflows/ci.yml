@@ -334,6 +334,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check migration history
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         env:
           MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: make check-migrations
