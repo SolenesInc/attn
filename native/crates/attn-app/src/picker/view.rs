@@ -124,13 +124,13 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
             let keys = if !selectable {
                 None
             } else if agent == agents::TERMINAL {
-                Some("⌥T".to_owned())
+                Some("alt+t".to_owned())
             } else {
                 numbered
                     .iter()
                     .position(|a| *a == agent)
                     .filter(|n| *n < 9)
-                    .map(|n| format!("⌥{}", n + 1))
+                    .map(|n| format!("alt+{}", n + 1))
             };
             let title = match availability {
                 agents::Availability::Unavailable => {
@@ -149,15 +149,19 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                 .label(label.clone())
                 .checked(chosen)
                 .disabled(!selectable)
-                .gap(space::S1)
-                .padding(space::S1)
-                .radius(4.0)
-                .fill(if chosen { t.bg_selected } else { t.bg_panel })
+                .items_center()
+                .gap(space::S2)
+                .px(12.0)
+                .py(6.0)
+                .radius(999.0)
+                .fill(if chosen { t.brand } else { t.bg_input })
                 .on_press_tx(move |state: &mut State, _: &mut Tx| {
                     super::choose_agent(state, which, &picked)
                 })
-                .child(text(label).font(type_::BODY).color(if selectable {
-                    t.text_primary
+                .child(text(label).font(OPTION_TYPE).color(if chosen {
+                    t.bg_app
+                } else if selectable {
+                    t.text_tertiary
                 } else {
                     t.text_muted
                 }));
@@ -173,7 +177,7 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                         .color(t.text_tertiary),
                 );
             }
-            option.children(keys.map(|k| text(k).font(type_::MONO_CAPTION).color(t.text_tertiary)))
+            option.children(keys.map(|k| keycaps(format!("{w}.agent.{agent}.keys"), &k, t)))
         });
     let catalog_note = match &launching.catalog {
         Catalog::Unasked | Catalog::Loading => Some(
@@ -222,7 +226,7 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                 .gap(space::S2)
                 .items_center()
                 .child(section("SESSION AGENT", t))
-                .children(options)
+                .child(toggle(options, t))
                 .children(catalog_note),
         )
         .child(
@@ -239,22 +243,51 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                         .disabled(!supported)
                         .description(yolo_title.clone())
                         .help(yolo_title)
-                        .gap(space::S1)
+                        .items_center()
+                        .gap(space::S2)
+                        .px(12.0)
+                        .py(6.0)
+                        .radius(999.0)
+                        .fill(if yolo { t.brand } else { t.bg_input })
                         .on_press_tx(move |state: &mut State, _: &mut Tx| {
                             super::toggle_yolo(state, which)
                         })
                         .child(
                             text(if yolo { "On" } else { "Off" })
-                                .font(type_::BODY)
-                                .color(t.text_primary),
+                                .font(OPTION_TYPE)
+                                .color(if yolo {
+                                    t.bg_app
+                                } else if supported {
+                                    t.text_tertiary
+                                } else {
+                                    t.text_muted
+                                }),
                         )
-                        .children(
-                            supported.then(|| {
-                                text("⌥Q").font(type_::MONO_CAPTION).color(t.text_tertiary)
-                            }),
-                        ),
+                        .children(supported.then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", t))),
                 ),
         )
+}
+
+/// Tauri's agent toggle: a pill track holding the options.
+fn toggle(options: impl IntoIterator<Item = El>, t: &Tokens) -> El {
+    row()
+        .items_center()
+        .gap(4.0)
+        .padding(3.0)
+        .radius(999.0)
+        .fill(t.bg_input)
+        .border(1.0, t.border)
+        .children(options)
+}
+
+/// The chord `spec` that picks an option, as this platform's keycaps.
+fn keycaps(key: String, spec: &str, t: &Tokens) -> El {
+    let caps = rune::Chord::parse(spec)
+        .expect("a picker chord parses")
+        .keycaps_on(rune::KeyPlatform::current());
+    rune_kit::Keybind::new(&caps)
+        .build(attn_ui::kit(t))
+        .key(key)
 }
 
 fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
@@ -846,3 +879,5 @@ fn link(
         .h(font.line_px())
         .px(0.0)
 }
+
+const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();

@@ -694,6 +694,38 @@ fn offers_the_agents_the_daemon_advertises_and_falls_back_from_a_missing_one() {
 }
 
 #[test]
+fn each_harness_and_yolo_shows_its_keys_as_keycaps() {
+    let mut world = busy_desktop_with(&[], &[("claude_cap_yolo", "true")]);
+    world.daemon.on("delegation_preferences_get", |_| {
+        catalog(&["claude", "codex"])
+    });
+    open_dialog(&mut world);
+
+    let caps = |world: &World, key: &str| {
+        world
+            .screen()
+            .get(Target::key(key))
+            .name
+            .unwrap_or_default()
+    };
+    let spoken = |spec: &str| {
+        rune::Chord::parse(spec)
+            .unwrap()
+            .keycaps_on(KeyPlatform::current())
+            .join(" ")
+    };
+    for (key, spec) in [
+        ("new-session.agent.shell.keys", "alt+t"),
+        ("new-session.agent.claude.keys", "alt+1"),
+        ("new-session.agent.codex.keys", "alt+2"),
+        ("new-session.yolo.keys", "alt+q"),
+    ] {
+        assert_eq!(caps(&world, key), spoken(spec), "{key}");
+    }
+    rest(&mut world);
+}
+
+#[test]
 fn a_plugin_display_name_is_shown_on_its_stored_harness_control() {
     let mut world = busy_desktop_with(
         &[],
