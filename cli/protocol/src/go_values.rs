@@ -140,6 +140,8 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "editor_executable", machine: false, default_on: false },
     Setting { key: "new_session_agent", machine: false, default_on: false },
     Setting { key: "theme", machine: false, default_on: false },
+    Setting { key: "color_scheme", machine: false, default_on: false },
+    Setting { key: "color_overrides", machine: false, default_on: false },
     Setting { key: "narrowest_tile_cols", machine: false, default_on: false },
     Setting { key: "sidebar_width", machine: false, default_on: false },
     Setting { key: "auto_approve_enabled", machine: false, default_on: true },

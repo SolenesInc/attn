@@ -117,6 +117,8 @@ var (
 	EditorExecutable             = add(&Setting{Key: "editor_executable", Class: Home, Kind: Checked, Description: "Command to open files in your editor. Empty uses the default editor."})
 	NewSessionAgent              = add(&Setting{Key: "new_session_agent", Class: Home, Kind: Checked, Description: "Harness selected for new sessions. Empty uses the default harness."})
 	Theme                        = add(&Setting{Key: "theme", Class: Home, Kind: Checked, Description: "App color theme: dark, light or system."})
+	ColorScheme                  = add(&Setting{Key: "color_scheme", Class: Home, Kind: Checked, Description: "App color scheme, by id. Empty uses attn; an unknown id's error lists the schemes."})
+	ColorOverrides               = add(&Setting{Key: "color_overrides", Class: Home, Kind: Checked, Description: "Colors laid over the color scheme, as JSON: {\"dark\":{\"ui\":{...},\"terminal\":{...}},\"light\":{...}}. Empty sets none; an unknown name's error lists the names."})
 	NarrowestTileCols            = add(&Setting{Key: "narrowest_tile_cols", Class: Home, Kind: Checked, Description: "Narrowest width of a tile in a desktop's row, in terminal columns: a positive whole number. Empty uses the default of 66."})
 	SidebarWidth                 = add(&Setting{Key: "sidebar_width", Class: Home, Kind: Checked, Description: "Width of the open sidebar in pixels, from 200 to 600. Empty uses the default of 240."})
 	AutoApproveEnabled           = add(&Setting{Key: "auto_approve_enabled", Class: Home, Kind: Bool, Default: On, Description: "Auto-approve supported agent requests: true or false."})

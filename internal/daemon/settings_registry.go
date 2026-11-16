@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/victorarias/attn/internal/colors"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/prreadiness"
@@ -59,6 +60,12 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 	},
 	setting.Theme: func(d *Daemon, key, value string) error {
 		return validateTheme(value)
+	},
+	setting.ColorScheme: func(d *Daemon, key, value string) error {
+		return keyedError(key, colors.CheckScheme(value))
+	},
+	setting.ColorOverrides: func(d *Daemon, key, value string) error {
+		return keyedError(key, colors.CheckOverrides(value))
 	},
 	setting.NarrowestTileCols: func(d *Daemon, key, value string) error { return validateNarrowestTileCols(value) },
 	setting.SidebarWidth:      func(d *Daemon, key, value string) error { return validateSidebarWidth(value) },
@@ -302,4 +309,11 @@ func (d *Daemon) storedSettingValues() map[string]string {
 		values[key] = value
 	}
 	return values
+}
+
+func keyedError(key string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", key, err)
 }
