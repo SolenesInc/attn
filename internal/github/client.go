@@ -195,7 +195,7 @@ func (c *Client) recordResponse(requestPath string, resp *http.Response) {
 		window = newSpendWindow()
 		c.spend[resource] = window
 	}
-	if resetErr == nil && window.reset != resetUnix {
+	if resetErr == nil && resetUnix > window.reset {
 		if window.reset != 0 {
 			closedLine = window.line(c.host, resource)
 			window = newSpendWindow()

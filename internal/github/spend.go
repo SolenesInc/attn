@@ -12,6 +12,7 @@ var spendEndpoints = []string{"pulls", "reviews", "search", "graphql", "other"}
 var spendStatuses = []string{"200", "304", "error"}
 
 var (
+	searchPath  = regexp.MustCompile(`^(/api/v3)?/search/`)
 	reviewsPath = regexp.MustCompile(`/repos/[^/]+/[^/]+/pulls/\d+/reviews$`)
 	pullsPath   = regexp.MustCompile(`/repos/[^/]+/[^/]+/pulls(/|$)`)
 )
@@ -30,7 +31,7 @@ func spendEndpointOf(requestPath string) string {
 	switch {
 	case strings.HasSuffix(requestPath, "/graphql"):
 		return "graphql"
-	case strings.Contains(requestPath, "/search/"):
+	case searchPath.MatchString(requestPath):
 		return "search"
 	case reviewsPath.MatchString(requestPath):
 		return "reviews"
