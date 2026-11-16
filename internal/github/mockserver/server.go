@@ -16,6 +16,7 @@ import (
 type RequestLog struct {
 	Method string
 	Path   string
+	Token  string
 	Body   map[string]interface{}
 	Status int
 }
@@ -52,6 +53,21 @@ type MockPR struct {
 	ReviewState       string
 	State             string
 	Merged            bool
+
+	Gone           bool
+	FailingChecks  []string
+	ReviewDecision string
+	Reviews        []MockReview
+	Comments       []MockComment
+	CodexThumbsUp  bool
+}
+
+type MockReview struct {
+	ID, Author, State, Body, SubmittedAt string
+}
+
+type MockComment struct {
+	ID, Author, Body, CreatedAt string
 }
 
 func New() *Server {
@@ -91,18 +107,18 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	var body map[string]interface{}
 	json.NewDecoder(r.Body).Decode(&body)
-	logged := &RequestLog{Method: r.Method, Path: r.URL.Path, Body: body}
+	logged := &RequestLog{Method: r.Method, Path: r.URL.Path, Token: strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), Body: body}
 	s.requests = append(s.requests, logged)
 	s.mu.Unlock()
 
-	s.respond(recorder, r)
+	s.respond(recorder, r, body)
 
 	s.mu.Lock()
 	logged.Status = recorder.status
 	s.mu.Unlock()
 }
 
-func (s *Server) respond(w http.ResponseWriter, r *http.Request) {
+func (s *Server) respond(w http.ResponseWriter, r *http.Request, body map[string]interface{}) {
 	s.mu.Lock()
 	rateLimitedUntil := s.rateLimitedUntil
 	if !s.windowResetAt.IsZero() {
@@ -135,6 +151,11 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Path == "/graphql" && r.Method == "POST" {
+		s.handleGraphQL(w, body)
+		return
+	}
+
 	reviewPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)/reviews$`)
 	if reviewPattern.MatchString(r.URL.Path) && r.Method == "POST" {
 		json.NewEncoder(w).Encode(map[string]interface{}{"id": 1, "state": "APPROVED"})
@@ -150,6 +171,9 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request) {
 	prPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)$`)
 	if m := prPattern.FindStringSubmatch(r.URL.Path); m != nil && r.Method == "GET" {
 		pr := s.detailsOf(m[1], m[2])
+		if pr.Gone {
+			pr.DetailsHTTPStatus = http.StatusNotFound
+		}
 		if pr.DetailsHTTPStatus != 0 {
 			w.WriteHeader(pr.DetailsHTTPStatus)
 			json.NewEncoder(w).Encode(map[string]string{"message": http.StatusText(pr.DetailsHTTPStatus)})
@@ -218,6 +242,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		isAuthorSearch := regexp.MustCompile(`author:@me`).MatchString(q)
 		isReviewSearch := regexp.MustCompile(`review-requested:@me`).MatchString(q)
 
+		if pr.Gone {
+			continue
+		}
 		if (isAuthorSearch && pr.Role == "author") || (isReviewSearch && pr.Role == "reviewer") {
 			items = append(items, map[string]interface{}{
 				"number":         pr.Number,
@@ -258,6 +285,7 @@ func (s *Server) detailsOf(repo, number string) MockPR {
 		}
 		details.DetailsHTTPStatus = pr.DetailsHTTPStatus
 		details.ReviewState = pr.ReviewState
+		details.Gone = pr.Gone
 		break
 	}
 	return details
@@ -301,6 +329,122 @@ func (s *Server) SpendElsewhere(resource string, requests int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.windowUsed[resource] += requests
+}
+
+func (s *Server) handleGraphQL(w http.ResponseWriter, body map[string]interface{}) {
+	query, _ := body["query"].(string)
+	variables, _ := body["variables"].(map[string]interface{})
+	owner, _ := variables["owner"].(string)
+	name, _ := variables["name"].(string)
+	number, _ := variables["number"].(float64)
+	pr, known := s.find(owner+"/"+name, int(number))
+	if !known || pr.Gone {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{"repository": map[string]interface{}{"pullRequest": nil}},
+			"errors": []interface{}{map[string]interface{}{
+				"type": "NOT_FOUND", "path": []string{"repository", "pullRequest"},
+				"message": fmt.Sprintf("Could not resolve to a PullRequest with the number of %d.", int(number)),
+			}},
+		})
+		return
+	}
+	var pullRequest map[string]interface{}
+	switch {
+	case strings.Contains(query, "query PullRequestReadiness("):
+		pullRequest = readinessOf(pr)
+	case strings.Contains(query, "query PullRequestFeedback("):
+		pullRequest = feedbackOf(pr)
+	default:
+		json.NewEncoder(w).Encode(map[string]interface{}{"errors": []interface{}{map[string]interface{}{"message": "the mock serves only the first readiness and feedback pages"}}})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"data": map[string]interface{}{"repository": map[string]interface{}{"pullRequest": pullRequest}}})
+}
+
+func readinessOf(pr MockPR) map[string]interface{} {
+	state := "OPEN"
+	switch {
+	case pr.Merged:
+		state = "MERGED"
+	case pr.State == "closed":
+		state = "CLOSED"
+	}
+	mergeState := "CLEAN"
+	if pr.MergeableState != "" {
+		mergeState = strings.ToUpper(pr.MergeableState)
+	}
+	head := pr.HeadSHA
+	if head == "" {
+		head = "abc123"
+	}
+	reactions := []interface{}{}
+	if pr.CodexThumbsUp {
+		reactions = append(reactions, map[string]interface{}{"id": "reaction-codex", "content": "THUMBS_UP", "user": map[string]interface{}{"__typename": "Bot", "login": "chatgpt-codex-connector"}})
+	}
+	checks := []interface{}{}
+	for _, check := range pr.FailingChecks {
+		checks = append(checks, map[string]interface{}{"__typename": "CheckRun", "id": "check-" + check, "name": check, "status": "COMPLETED", "conclusion": "FAILURE"})
+	}
+	return map[string]interface{}{
+		"number": pr.Number, "url": fmt.Sprintf("https://github.com/%s/pull/%d", pr.Repo, pr.Number), "title": pr.Title,
+		"state": state, "isDraft": pr.Draft, "merged": pr.Merged, "headRefOid": head, "headRefName": "feature",
+		"mergeStateStatus": mergeState, "reviewDecision": pr.ReviewDecision,
+		"author":                   map[string]interface{}{"__typename": "User", "login": "octocat"},
+		"reactions":                map[string]interface{}{"nodes": reactions},
+		"latestOpinionatedReviews": map[string]interface{}{"nodes": reviewNodes(pr.Reviews)},
+		"reviews":                  map[string]interface{}{"nodes": reviewNodes(pr.Reviews)},
+		"reviewRequests":           map[string]interface{}{"nodes": []interface{}{}},
+		"commits": map[string]interface{}{"nodes": []interface{}{map[string]interface{}{"commit": map[string]interface{}{
+			"statusCheckRollup": map[string]interface{}{"contexts": map[string]interface{}{"nodes": checks}},
+		}}}},
+	}
+}
+
+func feedbackOf(pr MockPR) map[string]interface{} {
+	comments := []interface{}{}
+	for _, comment := range pr.Comments {
+		comments = append(comments, map[string]interface{}{
+			"id": comment.ID, "bodyText": comment.Body, "createdAt": comment.CreatedAt,
+			"author": map[string]interface{}{"__typename": "User", "login": comment.Author},
+		})
+	}
+	return map[string]interface{}{
+		"comments":      map[string]interface{}{"nodes": comments},
+		"reviews":       map[string]interface{}{"nodes": reviewNodes(pr.Reviews)},
+		"reviewThreads": map[string]interface{}{"nodes": []interface{}{}},
+	}
+}
+
+func reviewNodes(reviews []MockReview) []interface{} {
+	nodes := []interface{}{}
+	for _, review := range reviews {
+		nodes = append(nodes, map[string]interface{}{
+			"id": review.ID, "state": review.State, "bodyText": review.Body, "submittedAt": review.SubmittedAt,
+			"author": map[string]interface{}{"__typename": "User", "login": review.Author},
+		})
+	}
+	return nodes
+}
+
+func (s *Server) find(repo string, number int) (MockPR, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, pr := range s.PRs {
+		if pr.Repo == repo && pr.Number == number {
+			return pr, true
+		}
+	}
+	return MockPR{}, false
+}
+
+func (s *Server) UpdatePR(repo string, number int, change func(pr *MockPR)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.PRs {
+		if s.PRs[i].Repo == repo && s.PRs[i].Number == number {
+			change(&s.PRs[i])
+		}
+	}
 }
 
 func (s *Server) AddPR(pr MockPR) {
