@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# The native app's screenshot tour: native/crates/attn-app/examples/screenshot_tour.rs draws a
+# fixed set of screens offscreen, in dark and in light, one PNG each.
+#
+#   scripts/native-screenshot-tour shoot OUT [REV]   the tour of this checkout, or of REV
+#   scripts/native-screenshot-tour diff BASE AFTER DIFF
+#
+# shoot REV builds REV in a temporary worktree with this checkout's tour, so a revision from
+# before the tour existed can be shot too. diff writes one image per changed screen to DIFF,
+# each changed pixel in red, and exits 1 when any pixel differs.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tour="native/crates/attn-app/examples/screenshot_tour.rs"
+worktree=""
+
+usage() {
+  sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  exit 2
+}
+
+absolute() {
+  mkdir -p "$1"
+  (cd "$1" && pwd)
+}
+
+vt_archive() {
+  local os arch
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$(uname -m)" in
+  arm64 | aarch64) arch=arm64 ;;
+  *) arch=amd64 ;;
+  esac
+  echo "third_party/ghostty-vt/${os}_${arch}/lib/libghostty-vt.a"
+}
+
+remove_worktree() {
+  [ -n "$worktree" ] || return 0
+  local build
+  build="${CARGO_HOME:-$HOME/.cargo}/attn-native-build$(cd "$worktree/native" && pwd -P)"
+  git -C "$root" worktree remove --force "$worktree"
+  rm -rf "$build"
+}
+
+run_tour() {
+  local checkout="$1"
+  shift
+  (cd "$checkout/native" && cargo run --locked -q -p attn-app --example screenshot_tour -- "$@")
+}
+
+shoot() {
+  local out rev="${2:-}" checkout="$root"
+  out="$(absolute "$1")"
+  if [ -n "$rev" ]; then
+    worktree="$(mktemp -d "${TMPDIR:-/tmp}/attn-tour.XXXXXX")"
+    trap remove_worktree EXIT
+    git -C "$root" worktree add --detach "$worktree" "$rev" >/dev/null
+    mkdir -p "$(dirname "$worktree/$tour")"
+    cp "$root/$tour" "$worktree/$tour"
+    if [ -d "$root/third_party/ghostty-vt" ]; then
+      mkdir -p "$worktree/third_party"
+      cp -R "$root/third_party/ghostty-vt" "$worktree/third_party/"
+    fi
+    checkout="$worktree"
+  fi
+  make -C "$checkout" -s "$(vt_archive)"
+  find "$out" -name '*.png' -delete
+  run_tour "$checkout" shoot "$out"
+  echo "native-screenshot-tour: wrote $(find "$out" -name '*.png' | wc -l | tr -d ' ') screens to $out"
+}
+
+diff_runs() {
+  local base after diff
+  base="$(absolute "$1")"
+  after="$(absolute "$2")"
+  diff="$(absolute "$3")"
+  find "$diff" -name '*.png' -delete
+  run_tour "$root" compare "$base" "$after" "$diff"
+}
+
+case "${1:-}" in
+shoot) [ $# -ge 2 ] && [ $# -le 3 ] || usage; shoot "${@:2}" ;;
+diff) [ $# -eq 4 ] || usage; diff_runs "${@:2}" ;;
+*) usage ;;
+esac
