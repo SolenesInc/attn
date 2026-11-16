@@ -358,18 +358,20 @@ fn open_menu(state: &mut State, member: &str, under: &str, tx: &mut Tx) {
 }
 
 /// Opens Manage crew on `member`.
-pub(crate) fn details(state: &mut State, member: &str, tx: &mut Tx) {
+pub(crate) fn details(state: &mut State, member: &str, opener: Option<String>, tx: &mut Tx) {
     crate::crew::open(state, Some(member.to_owned()), tx);
+    state.window.crew.opener = opener;
 }
 
 /// Opens Manage crew on `member`'s charter.
-pub(crate) fn charter(state: &mut State, member: &str, tx: &mut Tx) {
+pub(crate) fn charter(state: &mut State, member: &str, opener: Option<String>, tx: &mut Tx) {
     crate::crew::open_on(
         state,
         Some(member.to_owned()),
         crate::crew::Tab::Charter,
         tx,
     );
+    state.window.crew.opener = opener;
 }
 
 /// The member menu, over the window.
@@ -424,11 +426,11 @@ pub(crate) fn menu_view(state: &State, t: &Tokens) -> Vec<El> {
                 .w(14.0),
         )
         .on_select_tx(move |state: &mut State, tx: &mut Tx| {
-            state.window.crew_rows.menu = None;
+            let opener = state.window.crew_rows.menu.take().map(|m| m.under);
             if is_chief {
-                charter(state, &id, tx);
+                charter(state, &id, opener, tx);
             } else {
-                details(state, &id, tx);
+                details(state, &id, opener, tx);
             }
         }),
     );

@@ -832,3 +832,430 @@ fn a_dialog_opened_over_the_first_setup_keeps_the_focus_its_controls_take() {
         Some("shortcut-editor.capture.keys")
     );
 }
+
+fn reply_to_claude_models(world: &mut World, models: Vec<attn_protocol::HarnessModel>) {
+    for request in sent(world, "harness_models")
+        .into_iter()
+        .filter(|r| r["harness"] == "claude")
+    {
+        world.daemon.reply_to(
+            &request,
+            reported("claude", &Settings::default(), models.clone()),
+        );
+    }
+    world.settle();
+}
+
+fn deep(id: &str, name: &str) -> attn_protocol::HarnessModel {
+    super::settings::harness_catalogs::model("claude", id, name, Some("deep"), &["low", "high"])
+}
+
+#[test]
+fn a_late_model_list_readies_start_on_the_focus_it_held_and_leaves_a_focus_the_user_moved() {
+    let held = daemon(initial(true, chief(false), Vec::new()));
+    held.on("harness_models", |r: &Request| {
+        if r["harness"] == "claude" {
+            Value::Null
+        } else {
+            serve_models(r)
+        }
+    });
+    let mut world = World::start(held);
+    world.settle();
+    assert_eq!(value(&world, PRIMARY).as_deref(), Some("unavailable"));
+    assert_eq!(focused(&world).as_deref(), Some(SETUP));
+    reply_to_claude_models(&mut world, vec![deep("opus", "Opus 5.5")]);
+    assert_eq!(value(&world, PRIMARY).as_deref(), Some("ready"));
+    assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+
+    let held = daemon(initial(
+        true,
+        chief(false),
+        vec![super::sidebar::session("agent", "idle")],
+    ));
+    held.on("harness_models", |r: &Request| {
+        if r["harness"] == "claude" {
+            Value::Null
+        } else {
+            serve_models(r)
+        }
+    });
+    let mut world = World::start(held);
+    world.settle();
+    click(&mut world, SLOT);
+    assert_eq!(value(&world, PRIMARY).as_deref(), Some("unavailable"));
+    world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
+    let elsewhere = focused(&world);
+    reply_to_claude_models(&mut world, vec![deep("opus", "Opus 5.5")]);
+    assert_eq!(focused(&world), elsewhere);
+    assert!(sent(&world, "crew_set").is_empty());
+}
+
+fn refreshed_catalog(world: &mut World) {
+    world.daemon.on("harness_models", |r: &Request| {
+        if r["harness"] == "claude" {
+            Value::Null
+        } else {
+            serve_models(r)
+        }
+    });
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: {
+            let mut s = settings(true);
+            s.insert("claude_executable".into(), "/refreshed-harness".into());
+            Some(s)
+        },
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
+}
+
+#[test]
+fn a_replaced_catalog_keeps_the_focus_on_the_model_group_on_close_or_outside_the_setup() {
+    for destination in ["model", "close", "outside"] {
+        let mut world = start(initial(
+            true,
+            chief(false),
+            vec![super::sidebar::session("agent", "idle")],
+        ));
+        click(&mut world, SLOT);
+        tab_to(&mut world, "chief-setup.model./opus", true);
+        assert_eq!(focused(&world).as_deref(), Some("chief-setup.model./opus"));
+        refreshed_catalog(&mut world);
+        match destination {
+            "close" => tab_to(&mut world, "chief-setup.close", false),
+            "outside" => world.gesture(|app| app.click(Target::key("queue.agents-toggle"))),
+            _ => {}
+        }
+        let before = focused(&world);
+        reply_to_claude_models(&mut world, vec![deep("new-deep", "New deep model")]);
+        let expected = match destination {
+            "model" => Some("chief-setup.model./new-deep".to_owned()),
+            _ => before,
+        };
+        assert_eq!(focused(&world), expected, "{destination}");
+        assert!(sent(&world, "crew_set").is_empty(), "{destination}");
+    }
+}
+
+#[test]
+fn option_digits_in_the_new_agent_picker_pick_its_harness_and_leave_the_setup_behind_it() {
+    let mut world = start(initial(true, chief(false), Vec::new()));
+    assert!(shows(&world, SETUP));
+    dispatch(&mut world, Action::SessionNew);
+    world.gesture(|app| app.press("alt+2"));
+    assert!(!shows(&world, SETUP));
+    assert!(
+        world
+            .screen()
+            .get(Target::key("new-session.agent.codex"))
+            .is("checked")
+    );
+    assert!(sent(&world, "crew_set").is_empty());
+}
+
+fn reached(world: &World) -> Option<String> {
+    let focused = focused(world);
+    if focused.as_deref() != Some("sidebar.queue") {
+        return focused;
+    }
+    world
+        .screen()
+        .children(Target::key("sidebar.queue"))
+        .into_iter()
+        .find(|n| n.is("selected"))
+        .and_then(|n| n.key)
+}
+
+fn open_route(world: &mut World, in_session: bool) {
+    if in_session {
+        super::crew_start::hover(world, "queue-chief.chief-day");
+        click(world, "queue-chief.chief-day.actions");
+        click(world, "session.menu.route");
+    } else {
+        super::crew_start::hover(world, SLOT);
+        click(world, "chief-slot.actions");
+        click(world, "crew-member-menu.route");
+    }
+    assert!(shows(world, SETUP));
+}
+
+#[test]
+fn escape_and_a_late_configured_save_both_hand_the_focus_back_to_the_chiefs_row() {
+    for in_session in [false, true] {
+        let (member, sessions) = if in_session {
+            (
+                bound(chief(true), "chief-day"),
+                vec![chief_day(), super::queue::turn("agent", 5)],
+            )
+        } else {
+            (chief(true), Vec::new())
+        };
+        let mut world = start(initial(true, member, sessions));
+        let row = if in_session {
+            "queue-chief.chief-day"
+        } else {
+            "chief-slot.start"
+        };
+        open_route(&mut world, in_session);
+        press(&mut world, Key::Escape);
+        assert!(!shows(&world, SETUP));
+        assert_eq!(
+            reached(&world).as_deref(),
+            Some(row),
+            "in session={in_session}"
+        );
+        if in_session {
+            press(&mut world, Key::Down);
+            assert_ne!(reached(&world).as_deref(), Some(row));
+            assert_eq!(focused(&world).as_deref(), Some("sidebar.queue"));
+        }
+
+        open_route(&mut world, in_session);
+        world.daemon.on("crew_set", |_| ());
+        click(&mut world, PRIMARY);
+        assert_eq!(value(&world, PRIMARY).as_deref(), Some("unavailable"));
+        save(
+            &mut world,
+            CrewMember {
+                revision: 2,
+                ..if in_session {
+                    bound(chief(true), "chief-day")
+                } else {
+                    chief(true)
+                }
+            },
+        );
+        assert!(!shows(&world, SETUP));
+        assert_eq!(
+            reached(&world).as_deref(),
+            Some(row),
+            "in session={in_session}"
+        );
+        assert!(sent(&world, "crew_start").is_empty());
+    }
+}
+
+#[test]
+fn enter_on_a_radio_saves_a_configured_chiefs_route_and_returns_to_its_row_without_starting_it() {
+    let mut world = start(initial(true, chief(true), Vec::new()));
+    open_route(&mut world, false);
+    tab_to(&mut world, "chief-setup.model./opus", true);
+    world.daemon.on("crew_set", |_| ());
+    press(&mut world, Key::Enter);
+    let set = &sent(&world, "crew_set")[0];
+    assert_eq!(
+        (&set["member"], &set["agent"], &set["model"], &set["effort"]),
+        (
+            &json!("member:chief-key"),
+            &json!("claude"),
+            &json!("opus"),
+            &json!("low")
+        )
+    );
+    save(
+        &mut world,
+        CrewMember {
+            revision: 2,
+            ..chief(true)
+        },
+    );
+    assert!(!shows(&world, SETUP));
+    assert_eq!(focused(&world).as_deref(), Some("chief-slot.start"));
+    assert!(sent(&world, "crew_start").is_empty());
+}
+
+#[test]
+fn a_focused_primary_stays_inert_while_the_models_are_read_again_and_works_once_they_return() {
+    let mut world = start(initial(
+        true,
+        bound(chief(true), "chief-day"),
+        vec![chief_day()],
+    ));
+    open_route(&mut world, true);
+    assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    world.daemon.on("harness_models", |r: &Request| {
+        if r["harness"] == "claude" {
+            Value::Null
+        } else {
+            serve_models(r)
+        }
+    });
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: {
+            let mut s = settings(true);
+            s.insert(
+                "model_tier_overrides".into(),
+                r#"[{"harness":"claude","provider":"","model":"opus","tier":"standard"}]"#.into(),
+            );
+            Some(s)
+        },
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(value(&world, PRIMARY).as_deref(), Some("unavailable"));
+    assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    world.daemon.on("crew_set", |_| ());
+    click(&mut world, PRIMARY);
+    press(&mut world, Key::Enter);
+    press(&mut world, Key::Text(" ".into()));
+    assert!(sent(&world, "crew_set").is_empty());
+    reply_to_claude_models(
+        &mut world,
+        vec![super::settings::harness_catalogs::model(
+            "claude",
+            "opus",
+            "Opus",
+            Some("standard"),
+            &["low", "high"],
+        )],
+    );
+    assert_eq!(value(&world, PRIMARY).as_deref(), Some("ready"));
+    assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    press(&mut world, Key::Enter);
+    let set = sent(&world, "crew_set");
+    assert_eq!(set.len(), 1);
+    assert_eq!(
+        (&set[0]["member"], &set[0]["model"]),
+        (&json!("member:chief-key"), &json!("opus"))
+    );
+}
+
+fn profile(id: &str, desktop: &str) -> attn_protocol::Profile {
+    attn_protocol::Profile {
+        id: id.into(),
+        name: id.into(),
+        current_desktop_id: desktop.into(),
+        ..attn_protocol::Profile::default()
+    }
+}
+
+fn arrange(world: &mut World, id: &str, desktop_id: &str) {
+    let mut d = desktop(desktop_id, "a", "", Vec::new());
+    d.profile_id = id.into();
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile(id, desktop_id),
+        desktops: vec![d],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+}
+
+#[test]
+fn a_save_that_completes_in_another_profile_starts_nothing_there_and_leaves_start_to_the_user() {
+    for configured in [false, true] {
+        let mut world = start(initial(true, chief(configured), Vec::new()));
+        world.daemon.on("crew_set", |_| ());
+        if configured {
+            open_route(&mut world, false);
+            click(&mut world, "chief-setup.model./sonnet");
+        }
+        click(&mut world, PRIMARY);
+        assert_eq!(sent(&world, "crew_set").len(), 1, "configured={configured}");
+        world.daemon.emit(attn_protocol::ProfilesChangedMessage {
+            profiles: vec![profile("work", "d-work"), profile("side", "d-side")],
+            ..attn_protocol::ProfilesChangedMessage::new()
+        });
+        arrange(&mut world, "side", "d-side");
+        assert!(!shows(&world, SLOT), "configured={configured}");
+        world.daemon.on("crew_start", |_| ());
+        save(
+            &mut world,
+            CrewMember {
+                revision: 2,
+                model: Some(if configured { "sonnet" } else { "opus" }.into()),
+                ..chief(true)
+            },
+        );
+        assert!(
+            sent(&world, "crew_start").is_empty(),
+            "configured={configured}"
+        );
+        arrange(&mut world, "work", "d-work");
+        assert_eq!(value(&world, SLOT).as_deref(), Some("between sessions"));
+        assert!(!shows(&world, SETUP), "configured={configured}");
+        assert!(
+            sent(&world, "crew_start").is_empty(),
+            "configured={configured}"
+        );
+        click(&mut world, "chief-slot.start");
+        assert_eq!(sent(&world, "crew_start")[0]["member"], "member:chief-key");
+    }
+}
+
+#[test]
+fn edit_charter_opens_the_chiefs_charter_and_closing_crew_returns_the_focus_to_its_menu_button() {
+    for in_session in [false, true] {
+        let (member, sessions) = if in_session {
+            (bound(chief(true), "chief-day"), vec![chief_day()])
+        } else {
+            (chief(true), Vec::new())
+        };
+        let daemon = daemon(initial(true, member, sessions));
+        daemon.on("crew_charter_get", |_| {
+            message(attn_protocol::CrewCharterGetResultMessage {
+                success: true,
+                member: Some("chief-key".into()),
+                charter: Some(attn_protocol::CrewCharterDocument {
+                    content: "# Captain".into(),
+                    token: "charter-one".into(),
+                }),
+                ..attn_protocol::CrewCharterGetResultMessage::new()
+            })
+        });
+        let mut world = World::start(daemon);
+        world.settle();
+        let (row, trigger, item) = if in_session {
+            (
+                "queue-chief.chief-day",
+                "queue-chief.chief-day.actions",
+                "session.menu.member-details",
+            )
+        } else {
+            (SLOT, "chief-slot.actions", "crew-member-menu.details")
+        };
+        super::crew_start::hover(&mut world, row);
+        click(&mut world, trigger);
+        click(&mut world, item);
+        assert!(
+            world
+                .screen()
+                .get(Target::key("crew.tab.charter"))
+                .is("checked"),
+            "in session={in_session}"
+        );
+        click(&mut world, "crew.charter.editor");
+        let close = world
+            .screen()
+            .descendants(Target::key("crew-dialog"))
+            .into_iter()
+            .find(|n| n.role == "button" && n.name.as_deref() == Some("Close"))
+            .and_then(|n| n.key)
+            .expect("Manage crew has a close button");
+        click(&mut world, &close);
+        assert!(!shows(&world, "crew-dialog"), "in session={in_session}");
+        assert_eq!(
+            focused(&world).as_deref(),
+            Some(trigger),
+            "in session={in_session}"
+        );
+    }
+}
+
+#[test]
+fn home_shows_the_chief_slot_and_no_chief_of_staff_card() {
+    let world = start(initial(true, chief(false), Vec::new()));
+    assert!(shows(&world, "home.new"));
+    assert!(shows(&world, SLOT));
+    let screen = world.screen();
+    assert!(
+        !screen
+            .all(Target::role("group"))
+            .into_iter()
+            .chain(screen.all(Target::role("region")))
+            .any(|n| n.name.as_deref() == Some("Chief of Staff")
+                || n.key
+                    .as_deref()
+                    .is_some_and(|k| k.contains("chief-of-staff")))
+    );
+}

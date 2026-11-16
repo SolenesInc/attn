@@ -212,11 +212,11 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
             .item(
                 item("member-details", attn_ui::icon::BOLT, label).on_select_tx(
                     move |state: &mut State, tx: &mut Tx| {
-                        state.window.session_menu = None;
+                        let opener = state.window.session_menu.take().map(|m| m.under);
                         if is_chief {
-                            super::crew::charter(state, &member, tx);
+                            super::crew::charter(state, &member, opener, tx);
                         } else {
-                            super::crew::details(state, &member, tx);
+                            super::crew::details(state, &member, opener, tx);
                         }
                     },
                 ),

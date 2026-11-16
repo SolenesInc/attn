@@ -106,6 +106,8 @@ pub(crate) struct Panel {
     pub(crate) back: Option<Back>,
     /// The member whose charter the focus was in at the last frame.
     pub(crate) charter_focus: Option<String>,
+    /// The control that opened the panel from a menu, which takes the focus back on close.
+    pub(crate) opener: Option<String>,
 }
 
 /// Addresses a member by its permanent key; a bare word would be read as a name.
@@ -159,6 +161,7 @@ fn show(state: &mut State, tx: &mut Tx) {
     panel.pending = None;
     panel.rename = None;
     panel.applied = None;
+    panel.opener = None;
     state.window.layer = Some(Layer::Crew);
     launch::follow(state);
     crate::settings::crew_opened(state);
@@ -245,7 +248,10 @@ fn close_now(state: &mut State, tx: &mut Tx) {
     crate::settings::close_route_picker(state, tx);
     state.window.crew.rename = None;
     state.window.layer = None;
-    crate::picker::refocus_inline(state, tx);
+    match state.window.crew.opener.take() {
+        Some(opener) => tx.focus(opener, true),
+        None => crate::picker::refocus_inline(state, tx),
+    }
 }
 
 /// Starts a session for `member` and shows it.
