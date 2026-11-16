@@ -1080,7 +1080,7 @@ fn reader(
     if let Some(error) = error {
         page = page.child(alert("garden.review.read-error", error, t));
     }
-    page.child(sheet.head(here, meta_word(status, t)))
+    page.child(sheet.head(here, meta_word(status, t), Vec::new()))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))
         .children(sheet.checks(here, document))

@@ -21,6 +21,8 @@ use query::{Filters, ProfileChoice, Scope, Verdict};
 pub(crate) use view::{row_menu, view};
 
 mod conversations;
+
+pub(crate) use conversations::{amount, date};
 mod worktrees;
 
 /// Rows per page, as the Tauri app reads them.

@@ -1,5 +1,6 @@
 use attn_protocol::{
-    Seed, SeedDocument, SeedResumeMessage, SeedResumeResultMessage, SeedSendToChiefMessage,
+    KeptConversation, Seed, SeedDocument, SeedResumeMessage, SeedResumeResultMessage,
+    SeedSendToChiefMessage,
 };
 use rune::tok::{space, type_};
 use rune::{El, KeyEvent, Tx, col, row, text, text_input};
@@ -10,6 +11,23 @@ use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
 use crate::requests::Refused;
+
+fn kept_words(kept: &KeptConversation) -> String {
+    use crate::ledger::{amount, date};
+    if let Some(deleted) = &kept.deleted_at {
+        let who = match kept.deleted_by.as_deref() {
+            Some("user") => "you deleted attn’s copy",
+            _ => "attn deleted its copy",
+        };
+        return format!("{who} on {}", date(deleted));
+    }
+    let size = format!("kept by attn ({})", amount(kept.bytes));
+    match (&kept.pinned_at, &kept.delete_after) {
+        (Some(_), _) => format!("{size} forever; pinned"),
+        (None, Some(after)) => format!("{size} until {}; replant to keep it", date(after)),
+        (None, None) => format!("{size} while an open seed points at it"),
+    }
+}
 
 impl Sheet<'_> {
     fn chief_spot(&self, here: &Seed) -> Spot {
@@ -78,6 +96,35 @@ impl Sheet<'_> {
             );
         }
         actions
+    }
+
+    /// What became of the conversation attn keeps for the seed's agent, and why Resume is not
+    /// offered, while the daemon's reading answers the garden as last pushed.
+    pub(super) fn continuation_notes(
+        &self,
+        held: &Seed,
+        document: Option<&SeedDocument>,
+    ) -> Vec<El> {
+        let Some(seed) = document
+            .map(|d| &d.seed)
+            .filter(|s| s.rev == held.rev && super::answered(self.garden, &s.id))
+        else {
+            return Vec::new();
+        };
+        let Some(continuation) = &seed.continuation else {
+            return Vec::new();
+        };
+        let resumes = continuation.resume_available && !model::is_closed(seed);
+        let kept = continuation
+            .kept_conversation
+            .as_ref()
+            .map(|kept| self.note("head.kept", format!("conversation {}", kept_words(kept))));
+        let reason = continuation
+            .resume_reason
+            .clone()
+            .filter(|_| !resumes && continuation.directory_state != "unreachable")
+            .map(|reason| self.note("head.resume-reason", reason));
+        kept.into_iter().chain(reason).collect()
     }
 
     /// The note to the Chief being written, under the seed's head.

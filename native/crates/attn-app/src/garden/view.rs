@@ -1108,6 +1108,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
                     .gap(space::S1)
                     .child(open_as_tile(&here.id, t))
                     .children(sheet.continuation(Some(here), document)),
+                sheet.continuation_notes(here, document),
             ),
         )
         .children(sheet.handover_form(document))

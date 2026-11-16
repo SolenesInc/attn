@@ -17,6 +17,7 @@ mod checks;
 mod continuation;
 mod drafts;
 mod handover;
+mod kept_conversation;
 mod review;
 mod scale;
 mod seed_chip;

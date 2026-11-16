@@ -105,6 +105,7 @@ pub(crate) fn body(
                     .gap(space::S1)
                     .child(to_garden)
                     .children(sheet.continuation(held.map(|s| s.as_ref()), document)),
+                Vec::new(),
             ),
         )
         .children(sheet.handover_form(document))

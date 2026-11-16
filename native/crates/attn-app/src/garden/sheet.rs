@@ -72,8 +72,8 @@ impl Sheet<'_> {
     }
 
     /// The seed's title beside `action`, then its state, who tends it, its checks, its age and
-    /// id, then why it closed and its plot's progress.
-    pub(super) fn head(&self, here: &Seed, action: El) -> El {
+    /// id, then `notes`, why it closed and its plot's progress.
+    pub(super) fn head(&self, here: &Seed, action: El, notes: Vec<El>) -> El {
         let t = self.t;
         let mut head = col().key(self.key("head")).w_full().gap(space::S1).child(
             row()
@@ -119,7 +119,7 @@ impl Sheet<'_> {
                     .font(type_::MONO_CAPTION)
                     .color(t.text_tertiary),
             );
-        head = head.child(meta);
+        head = head.child(meta).children(notes);
         if let Some(reason) = here.reason.as_ref().filter(|r| !r.is_empty()) {
             head = head.child(self.note("head.reason", reason.clone()));
         }

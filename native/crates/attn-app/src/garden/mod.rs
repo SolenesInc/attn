@@ -112,6 +112,8 @@ struct Reading {
     /// The garden push the latest read followed, and its request.
     asked: Option<(usize, String)>,
     document: Option<Arc<SeedDocument>>,
+    /// The latest read's document arrived, so it describes the garden as last pushed.
+    answered: bool,
     error: Option<String>,
     /// The linked files asked about, and those the daemon says are not on disk.
     looked_for: Vec<String>,
@@ -307,6 +309,9 @@ fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {
     let request_id = state.next_request_id();
     let reading = state.window.garden.readings.entry(id.clone()).or_default();
     reading.asked = Some((push, request_id.clone()));
+    if std::mem::take(&mut reading.answered) {
+        state.window.garden.revision += 1;
+    }
     let command = SeedDocumentGetMessage {
         seed_id: id.clone(),
         request_id: request_id.clone(),
@@ -327,6 +332,7 @@ fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {
             match answer.parse::<SeedDocumentGetResultMessage>() {
                 Some(reply) if reply.success => {
                     reading.document = reply.document.map(Arc::new);
+                    reading.answered = true;
                     reading.error = None;
                     let linked = linked_files(reading.document.as_deref());
                     if linked != reading.looked_for {
@@ -397,6 +403,11 @@ fn look_for(state: &mut State, id: &str, paths: Vec<String>, tx: &mut Tx) {
             tx,
         );
     }
+}
+
+/// Whether seed `id`'s document answers the read the latest garden push asked for.
+pub(super) fn answered(garden: &Garden, id: &str) -> bool {
+    garden.readings.get(id).is_some_and(|r| r.answered)
 }
 
 /// The linked files of seed `id` the daemon says are not on disk.
