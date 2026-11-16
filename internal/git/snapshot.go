@@ -152,7 +152,7 @@ func copyIndex(from, to string) error {
 // untracked mode because only that mode uses the untracked cache; the others
 // read every directory of the repository.
 func (c *Client) stageWorktree(ctx context.Context, root string, limits UntrackedLimits) (map[string]string, []LeftOut, func(), error) {
-	status, err := c.outputWithEnv(ctx, OpStatus, root, nil, nil, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal")
+	status, err := c.outputWithEnv(ctx, OpStatus, root, nil, nil, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal", "--ignore-submodules=dirty")
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -202,16 +202,20 @@ func (c *Client) oversizedUntracked(ctx context.Context, root string, tops []str
 	if len(tops) == 0 {
 		return nil, nil
 	}
-	type sum struct {
-		files   int
-		bytes   int64
-		biggest int64
-	}
-	sums := make(map[string]*sum, len(tops))
+	sums := make(map[string]*untrackedSum, len(tops))
+	var dirs []string
 	for _, top := range tops {
-		sums[top] = &sum{}
+		sums[top] = &untrackedSum{}
+		if strings.HasSuffix(top, "/") {
+			dirs = append(dirs, top)
+		} else {
+			sums[top].add(root, top)
+		}
 	}
-	args := append([]string{"--literal-pathspecs", "ls-files", "-o", "--exclude-standard", "-z", "--"}, tops...)
+	if len(dirs) == 0 {
+		return leftOver(tops, sums, limits), nil
+	}
+	args := append([]string{"--literal-pathspecs", "ls-files", "-o", "--exclude-standard", "-z", "--"}, dirs...)
 	files, err := c.outputWithEnv(ctx, OpStatus, root, nil, nil, args...)
 	if err != nil {
 		return nil, err
@@ -227,18 +231,30 @@ func (c *Client) oversizedUntracked(ctx context.Context, root string, tops []str
 			}
 			owner = parent[:cut+1]
 		}
-		if owner == "" {
-			continue
+		if owner != "" {
+			sums[owner].add(root, file)
 		}
-		var size int64
-		if info, err := os.Lstat(filepath.Join(root, file)); err == nil {
-			size = info.Size()
-		}
-		s := sums[owner]
-		s.files++
-		s.bytes += size
-		s.biggest = max(s.biggest, size)
 	}
+	return leftOver(tops, sums, limits), nil
+}
+
+type untrackedSum struct {
+	files   int
+	bytes   int64
+	biggest int64
+}
+
+func (s *untrackedSum) add(root, file string) {
+	var size int64
+	if info, err := os.Lstat(filepath.Join(root, file)); err == nil {
+		size = info.Size()
+	}
+	s.files++
+	s.bytes += size
+	s.biggest = max(s.biggest, size)
+}
+
+func leftOver(tops []string, sums map[string]*untrackedSum, limits UntrackedLimits) []LeftOut {
 	var leftOut []LeftOut
 	for _, top := range tops {
 		s, isDir := sums[top], strings.HasSuffix(top, "/")
@@ -255,7 +271,7 @@ func (c *Client) oversizedUntracked(ctx context.Context, root string, tops []str
 		}
 		leftOut = append(leftOut, LeftOut{Path: top, Reason: reason})
 	}
-	return leftOut, nil
+	return leftOut
 }
 
 func megabytes(n int64) string {
