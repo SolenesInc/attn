@@ -180,6 +180,7 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 			if errors.Is(err, github.ErrStopping) {
 				break
 			}
+			gone := d.notFoundForAColdInterval(group.prID, err, now)
 			if resetAt, limited := hostRateLimitReset(host, resource, err); limited {
 				d.logf("session pull requests: %s rate limited mid-refresh, stopping there: %v", group.host, err)
 				limitedRequests[limitKey] = resetAt
@@ -187,13 +188,14 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 				changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
 				continue
 			}
-			if !errors.Is(err, github.ErrNotFound) {
+			if !gone {
 				d.logf("session pull requests: refresh %s: %v", group.prID, err)
 				changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
 				d.markSessionPullRequestChecked(group.prID, now)
 				continue
 			}
-			d.logf("session pull requests: GitHub cannot find %s, so its watches end and it is recorded closed: %v", group.prID, err)
+			d.logf("session pull requests: GitHub has not found %s for %s, so its watches end and it is recorded closed: %v", group.prID, protocol.HeatColdInterval, err)
+			delete(d.sessionPRNotFoundSince, group.prID)
 			status = group.previous
 			status.State = sessionPullRequestClosed
 			changedSessions = append(changedSessions, d.endPullRequestWatches(group, status, err, now)...)
@@ -202,6 +204,7 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 				continue
 			}
 		} else {
+			delete(d.sessionPRNotFoundSince, group.prID)
 			fetched++
 			if observation != nil {
 				changedSessions = append(changedSessions, d.processPullRequestWatches(group, *observation, feedbackErr, status, now)...)
@@ -244,6 +247,22 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 		d.settleHarvestConditions()
 	}
 	return fetched, changed
+}
+
+func (d *Daemon) notFoundForAColdInterval(prID string, err error, now time.Time) bool {
+	if !errors.Is(err, github.ErrNotFound) {
+		delete(d.sessionPRNotFoundSince, prID)
+		return false
+	}
+	since, seen := d.sessionPRNotFoundSince[prID]
+	if !seen {
+		if d.sessionPRNotFoundSince == nil {
+			d.sessionPRNotFoundSince = make(map[string]time.Time)
+		}
+		d.sessionPRNotFoundSince[prID] = now
+		return false
+	}
+	return now.Sub(since) >= protocol.HeatColdInterval
 }
 
 func (d *Daemon) dueSessionPullRequests(

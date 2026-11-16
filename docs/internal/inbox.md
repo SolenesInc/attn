@@ -146,10 +146,11 @@ item.
 
 A PR watch update tells the watching agent what happened on a pull request:
 ready, checks failed, changes requested, merged, closed, new review feedback, a
-reopened thread, or that monitoring is delayed. When GitHub answers that it
-cannot find the pull request, the watcher gets a last update saying the watch
-ended and why, attn removes the watch and records the pull request closed. A
-network failure, a server error or a rate limit is a delay, not an end.
+reopened thread, or that monitoring is delayed. When GitHub has answered
+that it cannot find the pull request on every refresh for 10 minutes, the
+watcher gets a last update saying the watch ended and why, attn removes the
+watch and records the pull request closed. Until then, and for a network
+failure, a server error or a rate limit, the update is a delay.
 Feedback that attn's GitHub
 account for the host wrote, and reopened threads that account started on its own
 pull request, make no update unless the profile sets

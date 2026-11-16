@@ -225,9 +225,11 @@ permission to merge.
 
 `attn pr status` lists the watches, and `attn pr unwatch <url>` stops a watch and
 clears the watch's unread notifications. Closing or merging the PR ends the
-watch. So does GitHub answering that it cannot find the PR, for example after
-its repository is deleted or attn's account loses access: the agent gets a last
-update that says so, and Attn records the PR as closed. Network failures, server
+watch. So does GitHub answering that it cannot find the PR on every check for 10
+minutes, for example after its repository is deleted or attn's account loses
+access: the agent gets a last update that says so, and Attn records the PR as
+closed. A shorter not-found, such as GitHub's brief delay after `gh pr create`,
+is an outage. Network failures, server
 errors and rate limits are outages, and the watch keeps going. For a script or a terminal that should block until the PR is ready, use
 `attn pr wait-ready <pr> --repo <owner/repo> --mode <mode>`. The command's
 `--help` explains reviewers, baselines, resuming, and exit codes.

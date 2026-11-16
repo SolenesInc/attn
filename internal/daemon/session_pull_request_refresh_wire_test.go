@@ -515,12 +515,15 @@ func TestAWatchOutageTellsTheAgentOnceAndRecoveryTellsItTheNews(t *testing.T) {
 	})
 }
 
-func TestAWatchEndsWhenGitHubCannotFindThePullRequestAndOutlivesEveryOtherFailure(t *testing.T) {
+func TestAWatchEndsOnceGitHubCannotFindThePullRequestForAColdIntervalAndOutlivesEveryOtherFailure(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "s1")
 		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
+		seed := plantSeedAs(t, cli, "s1", "ships the watched pull request")
+		lifeMove(t, cli, "s1", seed, "tend", "", "")
+		harvestArm(t, cli, "s1", seed, shopPull(71))
 		w.advance(protocol.HeatHotInterval)
 
 		failures := []struct {
@@ -562,12 +565,38 @@ func TestAWatchEndsWhenGitHubCannotFindThePullRequestAndOutlivesEveryOtherFailur
 
 		gh.set(func(gh *refreshedPullRequest) { gh.gone = true })
 		w.advance(protocol.HeatHotInterval)
+		if pr := onlyPullRequest(t, cli, "s1"); pr.WatchMode == nil || pr.State != "open" || protocol.Deref(pr.WatchHealth) != "delayed" {
+			t.Errorf("after GitHub's first not-found the watch = %+v, want it kept, open and delayed", pr)
+		}
+		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "monitoring is delayed") {
+			t.Errorf("after GitHub's first not-found the agent's inbox = %q, want a note that monitoring is delayed", inbox)
+		}
+		gh.set(func(gh *refreshedPullRequest) { gh.gone, gh.checkFails = false, false })
+		w.advance(protocol.HeatHotInterval)
+		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "ready") {
+			t.Errorf("after GitHub found the pull request again the agent's inbox = %q, want the update that it is ready", inbox)
+		}
+		if shown := lifeShow(t, cli, seed).Seed; shown.HarvestWhen == nil {
+			t.Errorf("after a brief not-found the seed = %+v, want it still armed on the pull request", shown)
+		}
+
+		gh.set(func(gh *refreshedPullRequest) { gh.gone = true })
+		w.advance(protocol.HeatHotInterval)
+		w.advance(protocol.HeatColdInterval - 2*protocol.HeatHotInterval)
+		if pr := onlyPullRequest(t, cli, "s1"); pr.WatchMode == nil || pr.State != "open" {
+			t.Errorf("after %s of not-found the watch = %+v, want it kept and open", protocol.HeatColdInterval-protocol.HeatHotInterval, pr)
+		}
+		readInbox(t, cli, "s1", 0)
+		w.advance(2 * protocol.HeatHotInterval)
 		items := readInbox(t, cli, "s1", 0).Items
 		if len(items) != 1 || !strings.Contains(items[0].Content, "watch ended") || !strings.Contains(items[0].Content, "GitHub cannot find this pull request") {
-			t.Errorf("after GitHub lost the pull request the agent's inbox = %q, want one final update that the watch ended because GitHub cannot find it", inboxContents(items))
+			t.Errorf("one tick past %s of not-found the agent's inbox = %q, want one final update that the watch ended because GitHub cannot find it", protocol.HeatColdInterval, inboxContents(items))
 		}
 		if pr := onlyPullRequest(t, cli, "s1"); pr.WatchMode != nil || pr.State != "closed" {
 			t.Errorf("the pull request GitHub cannot find = %+v, want no watch and state closed", pr)
+		}
+		if shown := lifeShow(t, cli, seed).Seed; shown.HarvestWhen != nil || shown.Status == "harvested" || shown.Status == "withered" {
+			t.Errorf("once the watch ended the seed is %s waiting on %+v, want it open and no longer armed", shown.Status, shown.HarvestWhen)
 		}
 		if snapshots, readinessReads := gh.fetchesDuring(w, 3*protocol.HeatColdInterval); snapshots+readinessReads != 0 {
 			t.Errorf("GitHub was asked %d times about a pull request it cannot find, want none", snapshots+readinessReads)
@@ -575,7 +604,7 @@ func TestAWatchEndsWhenGitHubCannotFindThePullRequestAndOutlivesEveryOtherFailur
 	})
 }
 
-func TestAnUnwatchedPullRequestGitHubCannotFindIsNoLongerAskedAbout(t *testing.T) {
+func TestAnUnwatchedPullRequestGitHubCannotFindForAColdIntervalIsNoLongerAskedAbout(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gh.set(func(gh *refreshedPullRequest) { gh.gone = true })
 	inBubble(t, func(t *testing.T, w *world) {
@@ -585,8 +614,12 @@ func TestAnUnwatchedPullRequestGitHubCannotFindIsNoLongerAskedAbout(t *testing.T
 		if first, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); first != 1 {
 			t.Fatalf("GitHub was asked %d times about a new pull request, want once", first)
 		}
+		if pr := onlyPullRequest(t, cli, "s1"); pr.State != "open" {
+			t.Errorf("after GitHub's first not-found the pull request = %+v, want it open", pr)
+		}
+		w.advance(2 * protocol.HeatColdInterval)
 		if pr := onlyPullRequest(t, cli, "s1"); pr.State != "closed" {
-			t.Errorf("a pull request GitHub cannot find = %+v, want it closed", pr)
+			t.Errorf("at the first refresh past %s of not-found, as the pull request cools, it = %+v, want it closed", protocol.HeatColdInterval, pr)
 		}
 		if later, _ := gh.fetchesDuring(w, 3*protocol.HeatColdInterval); later != 0 {
 			t.Errorf("GitHub was asked %d more times about a pull request it cannot find, want none", later)

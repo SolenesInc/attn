@@ -305,14 +305,15 @@ type Daemon struct {
 	gardenSeedEventConsumerErr     error
 	gardenSeedEventConsumerStarted bool
 
-	docSubsMu           sync.Mutex
-	docSubs             map[string]*docSubscription
-	docSubsSeq          int64
-	docUnsubHooks       func()
-	sessionPRUnsubHooks func()
-	sessionPRHosts      func(host string) (sessionPRHost, bool)
-	sessionPRRefreshMu  sync.Mutex
-	beforeSeedMoveWrite func(seedID string)
+	docSubsMu              sync.Mutex
+	docSubs                map[string]*docSubscription
+	docSubsSeq             int64
+	docUnsubHooks          func()
+	sessionPRUnsubHooks    func()
+	sessionPRHosts         func(host string) (sessionPRHost, bool)
+	sessionPRRefreshMu     sync.Mutex
+	sessionPRNotFoundSince map[string]time.Time
+	beforeSeedMoveWrite    func(seedID string)
 
 	harvestWhenMu        sync.Mutex
 	harvestWhenUntracked map[string]bool
