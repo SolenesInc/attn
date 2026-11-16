@@ -110,3 +110,12 @@ get a new one.
   agents load it.
 - Right after a boot the guest is busy for several minutes. A capture can time
   out then with `could not create image from display`; run it again.
+- The guest's display can stop showing a native window's new frames while the
+  app keeps drawing them. `shot`, `record` and the screen then keep an old
+  picture until the window is activated or resized. Real Macs don't do this
+  (seed `s-bk8n80`), and current builds rarely trigger it (seed `s-bjt0b1`).
+  The bridge's `find` and `wait` read the app's state, not the screen, so trust
+  them over a still. When a still disagrees with them, run
+  `macvm exec open -a Applications/attn-<instance>.app` and capture again.
+- Metal in the guest reports every drawable as skipped, so a native `--trace`
+  writes `present_ms: null` on every frame. Measure presentation on the host.
