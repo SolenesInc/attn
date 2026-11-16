@@ -416,6 +416,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
         .key("queue-bar")
         .role("group")
         .label("Queue bar")
+        .shrink()
         .h_full()
         .items_center()
         .gap(space::S2)
@@ -425,13 +426,23 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                     super::bar_peek::dismiss(state);
                     crate::dispatch(state, crate::Action::UiActionMenu, tx);
                 })
-                .label_with(move |_, _| text(pill).font(type_::LABEL).color(pill_ink))
+                .label_with(move |_, _| {
+                    text(pill)
+                        .font(type_::LABEL)
+                        .color(pill_ink)
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                })
                 .build(attn_ui::kit(t))
                 .key("queue-bar.pill")
                 .a11y_value(waiting.to_string())
                 .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
                     super::bar_peek::pill_hovered(state, inside)
                 })
+                .shrink()
+                .min_w(124.0)
+                .max_w(640.0)
                 .h(22.0)
                 .px(space::S2)
                 .radius(11.0)

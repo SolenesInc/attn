@@ -68,6 +68,7 @@ pub(crate) fn title_middle(state: &State, t: &Tokens) -> Option<El> {
     (actions::queue_flow(state) && state.window.sidebar_hidden).then(|| {
         let bands = queue::bands(&state.facts, state.window.now_ms);
         row()
+            .shrink()
             .h_full()
             .items_center()
             .gap(space::S2)

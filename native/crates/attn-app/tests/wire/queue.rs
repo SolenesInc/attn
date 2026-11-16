@@ -1763,3 +1763,33 @@ fn the_snooze_key_opens_its_menu_centred_across_the_tile_of_the_agent_on_screen(
         [tx, ty, tw, th]
     );
 }
+
+#[test]
+fn a_long_waiting_pill_keeps_to_its_width_and_leaves_the_title_bar_its_profile_pill() {
+    let long = |id: &str, age| Session {
+        label: format!("{id} keeps the prompt cache warm across every fork of the conversation"),
+        ..turn(id, age)
+    };
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        long("a", 50),
+        long("b", 40),
+        long("c", 30),
+    ]))));
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    for width in [1280.0, 900.0] {
+        world.resize((width, 700.0));
+        let screen = world.screen();
+        let bounds = |key: &str| screen.bounds(Target::key(key)).expect("it shows");
+        let bar = bounds("titlebar");
+        let pill = bounds("queue-bar.pill");
+        let profile = bounds("titlebar.profile");
+        assert!(
+            (124.0..=640.0).contains(&pill[2]),
+            "the pill keeps between 124 and 640 wide at {width}: {pill:?}"
+        );
+        assert!(
+            profile[0] + profile[2] <= bar[0] + bar[2],
+            "the profile pill stays in the title bar at {width}: {profile:?} in {bar:?}"
+        );
+    }
+}
