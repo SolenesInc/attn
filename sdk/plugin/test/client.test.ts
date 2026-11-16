@@ -88,7 +88,7 @@ describe("AttnPluginClient", () => {
     expect(server.requests[0]?.params).toMatchObject({
       surfaces: ["worktree.after_create", "worktree.create", "worktree.delete"],
     });
-    expect((server.requests[0]?.params as Record<string, unknown>).surface_timeouts_ms).toEqual({
+    expect((server.requests[0]?.params as Record<string, unknown> | undefined)?.surface_timeouts_ms).toEqual({
       "worktree.create": 600_000,
       "worktree.delete": 300_000,
     });
