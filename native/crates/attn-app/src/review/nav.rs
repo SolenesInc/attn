@@ -378,18 +378,27 @@ fn answered(
     }
 }
 
-/// Keys while a list of places shows: ↑/↓ and the page keys pick, and Enter says to open the
-/// pick. Escape is left to the caller.
-pub(crate) fn panel_key(panel: &mut Answer, ev: &KeyEvent) -> bool {
+fn list_key(tile: &str) -> String {
+    format!("{}.nav.list", super::prefix(tile))
+}
+
+fn place_key(i: usize) -> String {
+    format!("review.nav.place.{i}")
+}
+
+/// Keys while a list of places shows: ↑/↓ and the page keys pick and bring the pick into view,
+/// and Enter says to open the pick. Escape is left to the caller.
+pub(crate) fn panel_key(tile: &str, panel: &mut Answer, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let last = panel.locations.len().saturating_sub(1);
-    match ev.key {
-        Key::Down => panel.cursor = (panel.cursor + 1).min(last),
-        Key::Up => panel.cursor = panel.cursor.saturating_sub(1),
-        Key::PageDown => panel.cursor = (panel.cursor + PAGE).min(last),
-        Key::PageUp => panel.cursor = panel.cursor.saturating_sub(PAGE),
+    panel.cursor = match ev.key {
+        Key::Down => (panel.cursor + 1).min(last),
+        Key::Up => panel.cursor.saturating_sub(1),
+        Key::PageDown => (panel.cursor + PAGE).min(last),
+        Key::PageUp => panel.cursor.saturating_sub(PAGE),
         Key::Enter => return true,
-        _ => {}
-    }
+        _ => return false,
+    };
+    tx.scroll_into_view_in(list_key(tile), place_key(panel.cursor));
     false
 }
 
@@ -454,7 +463,7 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
     let rows = answer.locations.iter().enumerate().map(|(i, l)| {
         let outside = if l.outside { " outside" } else { "" };
         let el = row()
-            .key(format!("review.nav.place.{i}"))
+            .key(place_key(i))
             .role("option")
             .label(format!("{}:{}{outside} {}", l.path, l.line, l.text.trim()))
             .w_full()
@@ -528,7 +537,7 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
         }))
         .children((!answer.locations.is_empty()).then(|| {
             col()
-                .key("review.nav.list")
+                .key(list_key(tile))
                 .role("listbox")
                 .label(title)
                 .w_full()

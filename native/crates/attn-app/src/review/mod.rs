@@ -2262,7 +2262,7 @@ fn nav_key(
             close_panel(state, tile);
             return Some(true);
         }
-        if nav::panel_key(panel, ev) {
+        if nav::panel_key(tile, panel, ev, tx) {
             let i = panel.cursor;
             open_answer_place(state, tile, i, tx);
         }

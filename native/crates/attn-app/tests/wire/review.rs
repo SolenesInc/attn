@@ -2274,6 +2274,42 @@ fn lists_the_changed_files_in_an_empty_search_searches_the_repository_by_name_an
 }
 
 #[test]
+fn keeps_the_picked_result_in_view_as_down_moves_it_down_a_long_search() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("review_search", |_| {
+        serde_json::to_value(ReviewSearchResultMessage {
+            success: true,
+            files: Some(vec![]),
+            hits: Some(
+                (1..=60)
+                    .map(|i| ReviewSearchHit {
+                        path: "calc.go".into(),
+                        line: i,
+                        text: format!("line {i}"),
+                    })
+                    .collect(),
+            ),
+            ..ReviewSearchResultMessage::new()
+        })
+        .unwrap()
+    });
+    type_key(&mut world, "/");
+    search(&mut world, "line");
+    let list = "review.search.list";
+    assert!(!shows_inside(&world, list, "review.search.option.40"));
+    for _ in 0..40 {
+        press(&mut world, Key::Down);
+    }
+    world.settle();
+    assert!(shows_inside(&world, list, "review.search.option.40"));
+    for _ in 0..30 {
+        press(&mut world, Key::Up);
+    }
+    world.settle();
+    assert!(shows_inside(&world, list, "review.search.option.10"));
+}
+
+#[test]
 fn opens_a_file_found_over_the_one_open_and_goes_back_to_it() {
     let (mut world, _) = open_served(DOCUMENT, bundle());
     serve_search(&world);
@@ -3171,35 +3207,39 @@ fn serve_edits(world: &World, calc: &Files) -> Marks {
     let (held, seen) = (calc.clone(), asked.clone());
     world.daemon.on("review_edit", move |r| {
         seen.lock().unwrap().push(r.clone());
-        let mut rows = held.lock().unwrap();
-        let hash = if rows.len() == calc_file().len() && rows[3].text == calc_file()[3].text {
-            "h1".to_owned()
-        } else {
-            format!("h1-{}", rows.len())
-        };
-        if r["base_hash"] != json!(hash) {
-            return json!({"event": "review_edit_result", "success": true, "conflict": true, "current_hash": hash});
-        }
-        let (from, to) = (r["from"].as_i64().unwrap(), r["to"].as_i64().unwrap());
-        let text = r["text"].as_str().unwrap_or_default();
-        let at = rows.iter().position(|x| x.now == Some(from)).unwrap();
-        let end = rows.iter().position(|x| x.now == Some(to)).unwrap();
-        let taken: Vec<ReviewRow> = text
-            .split('\n')
-            .zip(from..)
-            .map(|(t, n)| line("+", None, Some(n), t))
-            .collect();
-        let grew = taken.len() as i64 - (to - from + 1);
-        let mut after: Vec<ReviewRow> = rows[end + 1..].to_vec();
-        for r in &mut after {
-            r.now = r.now.map(|n| n + grew);
-        }
-        rows.truncate(at);
-        rows.extend(taken);
-        rows.extend(after);
-        json!({"event": "review_edit_result", "success": true, "conflict": false, "hash": "edited"})
+        apply_edit(&held, r)
     });
     asked
+}
+
+fn apply_edit(calc: &Files, r: &serde_json::Value) -> serde_json::Value {
+    let mut rows = calc.lock().unwrap();
+    let hash = if rows.len() == calc_file().len() && rows[3].text == calc_file()[3].text {
+        "h1".to_owned()
+    } else {
+        format!("h1-{}", rows.len())
+    };
+    if r["base_hash"] != json!(hash) {
+        return json!({"event": "review_edit_result", "success": true, "conflict": true, "current_hash": hash});
+    }
+    let (from, to) = (r["from"].as_i64().unwrap(), r["to"].as_i64().unwrap());
+    let text = r["text"].as_str().unwrap_or_default();
+    let at = rows.iter().position(|x| x.now == Some(from)).unwrap();
+    let end = rows.iter().position(|x| x.now == Some(to)).unwrap();
+    let taken: Vec<ReviewRow> = text
+        .split('\n')
+        .zip(from..)
+        .map(|(t, n)| line("+", None, Some(n), t))
+        .collect();
+    let grew = taken.len() as i64 - (to - from + 1);
+    let mut after: Vec<ReviewRow> = rows[end + 1..].to_vec();
+    for r in &mut after {
+        r.now = r.now.map(|n| n + grew);
+    }
+    rows.truncate(at);
+    rows.extend(taken);
+    rows.extend(after);
+    json!({"event": "review_edit_result", "success": true, "conflict": false, "hash": "edited"})
 }
 
 fn edit_box(world: &World) -> Option<Vec<String>> {
@@ -3314,6 +3354,83 @@ fn refuses_an_edit_of_a_file_that_changed_underneath_shows_why_and_records_nothi
     assert!(kept.lock().unwrap().iter().all(|m| m["type"] != "edit"));
     press(&mut world, Key::Escape);
     assert!(edit_box(&world).is_none());
+}
+
+fn click_beside_the_edit_box(world: &mut World) {
+    let window = world.screen().bounds(Target::key("window")).unwrap();
+    world.gesture(|app| app.click_at((window[2] - 40.0, window[3] - 40.0)));
+}
+
+#[test]
+fn an_edit_saved_as_its_box_is_dismissed_lands_in_the_review_and_leaves_a_newer_box_open() {
+    let (mut world, calc, kept, _) = open_editing();
+    world.daemon.on("review_edit", |_| ());
+    type_key(&mut world, "i");
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    click_beside_the_edit_box(&mut world);
+    assert!(edit_box(&world).is_none());
+    type_key(&mut world, "i");
+    assert!(edit_box(&world).is_some());
+
+    let asked = world.daemon.sent_of("review_edit")[0].clone();
+    world.daemon.reply_to(&asked, apply_edit(&calc, &asked));
+    world.settle();
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    assert!(edit_box(&world).is_some(), "the newer box stays open");
+    assert!(kept.lock().unwrap().iter().any(|m| m["type"] == "edit"));
+    press(&mut world, Key::Escape);
+    let view = file_view(&world).unwrap();
+    assert!(
+        view.iter()
+            .any(|t| t == "added line 4: \tsum := a + b // named"),
+        "{view:?}"
+    );
+    assert!(
+        marks_strip(&world)
+            .iter()
+            .any(|t| t == "you edited L4: it was \tsum := a + b"),
+        "{:?}",
+        marks_strip(&world)
+    );
+
+    serve_edits(&world, &calc);
+    type_key(&mut world, "u");
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    assert_eq!(calc.lock().unwrap()[4].text, "\tsum := a + b");
+    assert!(kept.lock().unwrap().iter().all(|m| m["type"] != "edit"));
+}
+
+#[test]
+fn an_edit_refused_after_its_box_is_dismissed_says_why() {
+    let (mut world, calc, kept, _) = open_editing();
+    world.daemon.on("review_edit", |_| ());
+    type_key(&mut world, "i");
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    click_beside_the_edit_box(&mut world);
+    assert!(edit_box(&world).is_none());
+
+    calc.lock().unwrap()[3].text = "func Add(x, y int) int {".into();
+    let asked = world.daemon.sent_of("review_edit")[0].clone();
+    world.daemon.reply_to(&asked, apply_edit(&calc, &asked));
+    world.settle();
+    let notices: Vec<String> = world
+        .screen()
+        .all(Target::role("status"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        notices
+            .iter()
+            .any(|t| t
+                .starts_with("calc.go changed since this edit opened, so nothing was written.")),
+        "{notices:?}"
+    );
+    assert!(kept.lock().unwrap().iter().all(|m| m["type"] != "edit"));
 }
 
 #[test]
@@ -3626,6 +3743,61 @@ fn lists_the_uses_of_a_name_with_f_on_its_own_definition_and_opens_the_one_picke
     assert_eq!(
         file_reads(&world).last().map(String::as_str),
         Some("pkg1.go")
+    );
+}
+
+/// Whether the element keyed `row` shows whole inside the scroll view keyed `list`.
+fn shows_inside(world: &World, list: &str, row: &str) -> bool {
+    let screen = world.screen();
+    let (Some([_, ly, _, lh]), Some([_, ry, _, rh])) = (
+        screen.bounds(Target::key(list)),
+        screen.bounds(Target::key(row)),
+    ) else {
+        return false;
+    };
+    ry >= ly - 0.5 && ry + rh <= ly + lh + 0.5
+}
+
+#[test]
+fn keeps_the_picked_place_in_view_as_the_keys_move_it_down_a_long_list_of_uses() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |r| {
+        if r["kind"] == "definition" {
+            nav_answer(vec![place("calc.go", 3, 5, "func Add(a, b int) int {")])
+        } else {
+            nav_answer(
+                (0..60)
+                    .map(|i| place(&format!("pkg{i}.go"), i + 1, 2, "\tAdd(1, 2)"))
+                    .collect(),
+            )
+        }
+    });
+    press(&mut world, Key::Right);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    let list = "tile.m.review.nav.list";
+    assert!(!shows_inside(&world, list, "review.nav.place.59"));
+
+    for (key, picked) in [
+        (Key::PageDown, 20),
+        (Key::PageDown, 40),
+        (Key::Down, 41),
+        (Key::PageDown, 59),
+        (Key::PageUp, 39),
+        (Key::PageUp, 19),
+        (Key::Up, 18),
+    ] {
+        press(&mut world, key.clone());
+        world.settle();
+        assert!(
+            shows_inside(&world, list, &format!("review.nav.place.{picked}")),
+            "place {picked} after {key:?}"
+        );
+    }
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_reads(&world).last().map(String::as_str),
+        Some("pkg18.go")
     );
 }
 

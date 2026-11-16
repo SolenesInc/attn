@@ -242,7 +242,8 @@ pub(crate) struct Open {
     pub(crate) unit: Unit,
     pub(crate) doc_line: i64,
     pub(crate) problem: Option<String>,
-    pub(crate) saving: bool,
+    /// The id of the edit this box is saving, until the daemon answers.
+    pub(crate) saving: Option<String>,
     /// The draft the edit is listed in.
     pub(crate) uri: String,
 }
@@ -325,7 +326,7 @@ pub(crate) fn begin(
                 unit,
                 doc_line,
                 problem: None,
-                saving: false,
+                saving: None,
                 uri,
             };
             state.readings.reviews.edit_text = TextEdit::new(open.text());
@@ -353,7 +354,7 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(open) = state.readings.reviews.editing.as_mut() else {
         return false;
     };
-    if open.saving {
+    if open.saving.is_some() {
         return matches!(ev.key, Key::Escape | Key::Enter) || ev.mods.alt;
     }
     match ev.key {
@@ -385,20 +386,41 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 /// Writes the box's text over the lines it took, against the hash they were read with, and
-/// lists the edit in the review. A file that changed underneath writes nothing.
+/// lists the edit in the review. A file that changed underneath writes nothing. The answer
+/// lands whether or not the box is still open; it touches the box only while that box is the
+/// one saving this edit.
 fn save(state: &mut State, tx: &mut Tx) {
     let Some(open) = state.readings.reviews.editing.as_mut() else {
         return;
     };
     let text = state.readings.reviews.edit_text.text.clone();
     let was = open.text();
-    if text == was || open.saving {
+    if text == was || open.saving.is_some() {
         if text == was {
             close(state, tx);
         }
         return;
     }
-    open.saving = true;
+    let (after, before) = where_it_stands(&open.heads, open.unit.from, open.unit.to);
+    let mut mark = MarkdownAnnotation {
+        id: format!("review-edit-{}", uuid::Uuid::new_v4()),
+        r#type: "edit".into(),
+        anchor: Some(MarkdownAnnotationAnchor {
+            start_line: open.doc_line,
+            end_line: open.doc_line,
+            exact: text.clone(),
+            file: Some(open.path.clone()),
+            file_start_line: Some(open.unit.from as i64 + 1),
+            file_end_line: Some(open.unit.from as i64 + text.split('\n').count() as i64),
+            ..MarkdownAnnotationAnchor::default()
+        }),
+        edit_was: Some(was),
+        edit_now: Some(text.clone()),
+        edit_after_head: Some(after),
+        edit_before_head: Some(before),
+        ..MarkdownAnnotation::default()
+    };
+    open.saving = Some(mark.id.clone());
     open.problem = None;
     let (host, document) = open.source.clone();
     let (path, hash, from, to) = (
@@ -407,72 +429,62 @@ fn save(state: &mut State, tx: &mut Tx) {
         open.unit.from,
         open.unit.to,
     );
+    let (uri, tile, source) = (open.uri.clone(), open.tile.clone(), open.source.clone());
     state.readings.revision += 1;
-    let asked = text.clone();
+    let asked_path = path.clone();
     state.ask(
         |id| ReviewEditMessage {
             host,
             document,
-            path,
+            path: asked_path,
             base_hash: hash,
             from: from as i64 + 1,
             to: to as i64 + 1,
-            text: asked,
+            text,
             request_id: Some(id),
             ..ReviewEditMessage::new()
         },
         move |state, answer, tx| {
-            let written_at = state.wall_ms(tx);
             let result = answer
                 .outcome()
                 .and_then(|r| r.parse::<ReviewEditResultMessage>().ok_or_else(|| "the daemon's answer did not parse".into()));
-            let Some(open) = state.readings.reviews.editing.as_mut() else {
-                return;
-            };
-            open.saving = false;
-            match result {
-                Ok(r) if r.conflict => {
-                    open.problem = Some(format!(
-                        "{} changed since this edit opened, so nothing was written. Press esc, then i to edit it as it is now.",
-                        open.path
-                    ));
-                }
-                Ok(_) => {
-                    let (after, before) = where_it_stands(&open.heads, open.unit.from, open.unit.to);
-                    let now_to = open.unit.from as i64 + text.split('\n').count() as i64;
-                    let mark = MarkdownAnnotation {
-                        id: format!("review-edit-{}", uuid::Uuid::new_v4()),
-                        r#type: "edit".into(),
-                        anchor: Some(MarkdownAnnotationAnchor {
-                            start_line: open.doc_line,
-                            end_line: open.doc_line,
-                            exact: text.clone(),
-                            file: Some(open.path.clone()),
-                            file_start_line: Some(open.unit.from as i64 + 1),
-                            file_end_line: Some(now_to),
-                            ..MarkdownAnnotationAnchor::default()
-                        }),
-                        edit_was: Some(was),
-                        edit_now: Some(text),
-                        edit_after_head: Some(after),
-                        edit_before_head: Some(before),
-                        created_at: written_at,
-                        ..MarkdownAnnotation::default()
-                    };
-                    let (uri, tile, path, source) =
-                        (open.uri.clone(), open.tile.clone(), open.path.clone(), open.source.clone());
+            let shown = state
+                .readings
+                .reviews
+                .editing
+                .as_ref()
+                .is_some_and(|o| o.saving.as_deref() == Some(mark.id.as_str()));
+            let problem = match result {
+                Ok(r) if !r.conflict => {
+                    mark.created_at = state.wall_ms(tx);
                     let now = tx.clock();
                     if let Some(draft) = state.drafts.get_mut(&uri) {
                         draft.marks.push(mark);
                         draft.changed(now);
                     }
-                    close(state, tx);
+                    if shown {
+                        close(state, tx);
+                    }
                     super::reread(state, &tile, source, &path, tx);
                     return;
                 }
-                Err(why) => open.problem = Some(why),
+                Ok(_) if shown => format!(
+                    "{path} changed since this edit opened, so nothing was written. Press esc, then i to edit it as it is now."
+                ),
+                Ok(_) => format!(
+                    "{path} changed since this edit opened, so nothing was written. Press i to edit it as it is now."
+                ),
+                Err(why) if shown => why,
+                Err(why) => format!("Could not save the edit to {path}: {why}"),
+            };
+            match state.readings.reviews.editing.as_mut().filter(|_| shown) {
+                Some(open) => {
+                    open.saving = None;
+                    open.problem = Some(problem);
+                    state.readings.revision += 1;
+                }
+                None => state.window.notify(problem, tx),
             }
-            state.readings.revision += 1;
         },
         tx,
     );

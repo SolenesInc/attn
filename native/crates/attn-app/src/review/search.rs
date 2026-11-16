@@ -227,7 +227,13 @@ fn pick(state: &mut State, at: usize, tx: &mut Tx) {
     super::open_found(state, &tile, source, found, tx);
 }
 
-/// The box's keys: ↑/↓ (and ⌃n/⌃p) pick a result, Enter opens it, Escape closes the search.
+const LIST: &str = "review.search.list";
+
+fn option_key(i: usize) -> String {
+    format!("review.search.option.{i}")
+}
+
+/// The box's keys: ↑/↓ (and ⌃n/⌃p) pick a result and bring it into view, Enter opens it, Escape closes the search.
 fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(search) = state.readings.reviews.search.as_ref() else {
         return false;
@@ -258,6 +264,7 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if let Some(search) = state.readings.reviews.search.as_mut() {
         let last = found.len().saturating_sub(1) as isize;
         search.selected = (search.selected as isize + step).clamp(0, last) as usize;
+        tx.scroll_into_view_in(LIST, option_key(search.selected));
         state.readings.revision += 1;
     }
     true
@@ -302,7 +309,7 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
             .color(t.text_tertiary)
     });
     let list = col()
-        .key("review.search.list")
+        .key(LIST)
         .role("listbox")
         .label(LABEL)
         .w_full()
@@ -314,7 +321,7 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
         .children(found.iter().enumerate().map(|(i, f)| {
             let on = i == search.selected;
             let el = row()
-                .key(format!("review.search.option.{i}"))
+                .key(option_key(i))
                 .role("option")
                 .label(f.label())
                 .w_full()
