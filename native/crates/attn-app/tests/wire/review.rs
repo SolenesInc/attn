@@ -484,13 +484,21 @@ fn shows_the_keys_in_a_key_line_and_a_sheet() {
         .collect();
     assert!(keys.iter().any(|k| k == "↑ ↓ line"), "{keys:?}");
     assert!(keys.iter().any(|k| k == "? all keys"), "{keys:?}");
+    assert!(keys.iter().any(|k| k == "← → stop"), "{keys:?}");
+    assert!(keys.iter().any(|k| k == "c note"), "{keys:?}");
 
     world.gesture(|app| app.type_text("?"));
+    let sheet: Vec<String> = world
+        .screen()
+        .descendants(Target::role("dialog").name("Review keys"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
     assert!(
-        world
-            .screen()
-            .find(Target::role("dialog").name("Review keys"))
-            .is_some()
+        sheet
+            .iter()
+            .any(|k| k.contains("Fill the tile with the file")),
+        "{sheet:?}"
     );
     press(&mut world, Key::Escape);
     assert!(
@@ -3154,4 +3162,318 @@ fn a_click_on_before_takes_the_keyboard_back_from_another_tile() {
     assert_eq!(side_tabs(&world), ["Before *", "After"]);
     type_key(&mut world, "b");
     assert_eq!(side_tabs(&world), ["Before", "After *"]);
+}
+
+/// Applies `review_edit` to the served calc.go as the daemon does: the lines now `from` to `to`
+/// take the text, unless the file's hash moved on since the edit read it.
+fn serve_edits(world: &World, calc: &Files) -> Marks {
+    let asked: Marks = Default::default();
+    let (held, seen) = (calc.clone(), asked.clone());
+    world.daemon.on("review_edit", move |r| {
+        seen.lock().unwrap().push(r.clone());
+        let mut rows = held.lock().unwrap();
+        let hash = if rows.len() == calc_file().len() && rows[3].text == calc_file()[3].text {
+            "h1".to_owned()
+        } else {
+            format!("h1-{}", rows.len())
+        };
+        if r["base_hash"] != json!(hash) {
+            return json!({"event": "review_edit_result", "success": true, "conflict": true, "current_hash": hash});
+        }
+        let (from, to) = (r["from"].as_i64().unwrap(), r["to"].as_i64().unwrap());
+        let text = r["text"].as_str().unwrap_or_default();
+        let at = rows.iter().position(|x| x.now == Some(from)).unwrap();
+        let end = rows.iter().position(|x| x.now == Some(to)).unwrap();
+        let taken: Vec<ReviewRow> = text
+            .split('\n')
+            .zip(from..)
+            .map(|(t, n)| line("+", None, Some(n), t))
+            .collect();
+        let grew = taken.len() as i64 - (to - from + 1);
+        let mut after: Vec<ReviewRow> = rows[end + 1..].to_vec();
+        for r in &mut after {
+            r.now = r.now.map(|n| n + grew);
+        }
+        rows.truncate(at);
+        rows.extend(taken);
+        rows.extend(after);
+        json!({"event": "review_edit_result", "success": true, "conflict": false, "hash": "edited"})
+    });
+    asked
+}
+
+fn edit_box(world: &World) -> Option<Vec<String>> {
+    world
+        .screen()
+        .find(Target::role("dialog").name("Edit the file"))?;
+    Some(
+        world
+            .screen()
+            .descendants(Target::key("review.edit"))
+            .into_iter()
+            .filter_map(|n| n.name.or(n.value))
+            .collect(),
+    )
+}
+
+fn open_editing() -> (World, Files, Marks, Marks) {
+    let mut world = start_with_session(Some("s-a"));
+    let calc = serve(&world);
+    let (kept, _, _) = keep_drafts(&world);
+    let edits = serve_edits(&world, &calc);
+    deliver(&mut world, DOCUMENT, Some(presented()));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+    (world, calc, kept, edits)
+}
+
+fn append(world: &mut World, text: &str) {
+    world.gesture(|app| app.type_text(text));
+}
+
+#[test]
+fn edits_the_line_at_the_cursor_saves_it_against_the_hash_it_read_and_lists_it_under_the_line() {
+    let (mut world, calc, kept, edits) = open_editing();
+    type_key(&mut world, "i");
+    let shown = edit_box(&world).expect("the edit box opens");
+    assert!(
+        shown.iter().any(|t| t == "Editing calc.go: line 4"),
+        "{shown:?}"
+    );
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+
+    let asked = edits.lock().unwrap().clone();
+    assert_eq!(asked.len(), 1);
+    assert_eq!(
+        (
+            asked[0]["base_hash"].clone(),
+            asked[0]["from"].clone(),
+            asked[0]["to"].clone(),
+            asked[0]["text"].clone()
+        ),
+        (
+            json!("h1"),
+            json!(4),
+            json!(4),
+            json!("\tsum := a + b // named")
+        )
+    );
+    assert_eq!(calc.lock().unwrap()[4].text, "\tsum := a + b // named");
+    assert!(edit_box(&world).is_none());
+    let mark = kept
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|m| m["type"] == "edit")
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        (mark["edit_was"].clone(), mark["edit_now"].clone()),
+        (json!("\tsum := a + b"), json!("\tsum := a + b // named"))
+    );
+    let view = file_view(&world).unwrap();
+    assert!(
+        view.iter()
+            .any(|t| t == "added line 4: \tsum := a + b // named"),
+        "{view:?}"
+    );
+    assert!(
+        marks_strip(&world)
+            .iter()
+            .any(|t| t == "you edited L4: it was \tsum := a + b"),
+        "{:?}",
+        marks_strip(&world)
+    );
+}
+
+#[test]
+fn refuses_an_edit_of_a_file_that_changed_underneath_shows_why_and_records_nothing() {
+    let (mut world, calc, kept, _) = open_editing();
+    type_key(&mut world, "i");
+    calc.lock().unwrap()[3].text = "func Add(x, y int) int {".into();
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    let shown = edit_box(&world).expect("the box stays open");
+    assert!(
+        shown
+            .iter()
+            .any(|t| t
+                .starts_with("calc.go changed since this edit opened, so nothing was written.")),
+        "{shown:?}"
+    );
+    assert!(kept.lock().unwrap().iter().all(|m| m["type"] != "edit"));
+    press(&mut world, Key::Escape);
+    assert!(edit_box(&world).is_none());
+}
+
+#[test]
+fn undoes_an_edit_with_u_writing_the_old_text_back_and_dropping_it_from_the_review() {
+    let (mut world, calc, kept, edits) = open_editing();
+    type_key(&mut world, "i");
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    assert_eq!(calc.lock().unwrap()[4].text, "\tsum := a + b // named");
+
+    type_key(&mut world, "u");
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    let asked = edits.lock().unwrap().clone();
+    assert_eq!(
+        (
+            asked[1]["from"].clone(),
+            asked[1]["to"].clone(),
+            asked[1]["text"].clone()
+        ),
+        (json!(4), json!(4), json!("\tsum := a + b"))
+    );
+    assert_eq!(calc.lock().unwrap()[4].text, "\tsum := a + b");
+    assert!(kept.lock().unwrap().iter().all(|m| m["type"] != "edit"));
+}
+
+#[test]
+fn says_why_i_does_nothing_on_a_removed_line() {
+    let (mut world, _, _, edits) = open_editing();
+    press(&mut world, Key::Up);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("removed line 4: \treturn a + b")
+    );
+    type_key(&mut world, "i");
+    assert!(edit_box(&world).is_none());
+    let notice = world
+        .screen()
+        .find(Target::role("status"))
+        .and_then(|n| n.name)
+        .unwrap_or_default();
+    let shown = shown(&world);
+    assert!(
+        notice.contains("This line was removed")
+            || shown.iter().any(|t| t.contains("This line was removed")),
+        "{shown:?}"
+    );
+    assert!(edits.lock().unwrap().is_empty());
+}
+
+#[test]
+fn lists_edits_apart_from_notes_in_the_send() {
+    let (mut world, _, _, _) = open_editing();
+    type_key(&mut world, "c");
+    write(&mut world, "Fine");
+    type_key(&mut world, "i");
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    send_key(&mut world);
+    let edits: Vec<String> = world
+        .screen()
+        .descendants(Target::role("list").name("Your edits, saved to the files"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        edits.iter().any(|t| t.starts_with("edit 1 ")
+            && t.ends_with("it was \tsum := a + b · it is now \tsum := a + b // named")),
+        "{edits:?}"
+    );
+    let marks: Vec<String> = world
+        .screen()
+        .descendants(Target::role("list").name("Marks"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(marks.iter().any(|t| t.starts_with("note ")), "{marks:?}");
+    assert!(
+        !marks
+            .iter()
+            .any(|t| t.starts_with("note ") && t.contains("named")),
+        "{marks:?}"
+    );
+}
+
+#[test]
+fn a_mark_and_an_edit_leave_the_review_from_their_remove_button_and_the_file_stays() {
+    let (mut world, calc, kept, edits) = open_editing();
+    type_key(&mut world, "c");
+    write(&mut world, "Fine");
+    type_key(&mut world, "i");
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    let ids: Vec<String> = kept
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|m| m["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(ids.len(), 2);
+    for id in &ids {
+        world.gesture(|app| app.click(Target::key(format!("review.mark.{id}.remove"))));
+    }
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    assert!(kept.lock().unwrap().is_empty());
+    assert_eq!(
+        edits.lock().unwrap().len(),
+        1,
+        "dropping an edit writes nothing"
+    );
+    assert_eq!(calc.lock().unwrap()[4].text, "\tsum := a + b // named");
+}
+
+#[test]
+fn a_wide_table_in_a_review_wraps_its_cells_inside_the_document() {
+    let cell = |n: usize| {
+        format!(
+            "cell {n} holds a sentence long enough that three of them cannot share one line of the page"
+        )
+    };
+    let table = format!(
+        "\n| One | Two | Three |\n| --- | --- | --- |\n| {} | {} | {} |\n",
+        cell(1),
+        cell(2),
+        cell(3)
+    );
+    let mut world = start();
+    deliver(&mut world, &format!("{DOCUMENT}{table}"), Some(bundle()));
+    let screen = world.screen();
+    let [x, _, w, _] = screen.bounds(Target::key("tile.m.document")).unwrap();
+    for n in 1..=3 {
+        let [cx, _, cw, ch] = screen
+            .bounds(Target::role("label").name(cell(n)))
+            .unwrap_or_else(|| panic!("cell {n} is shown"));
+        assert!(
+            cx + cw <= x + w,
+            "cell {n} ends at {} past the document's {}",
+            cx + cw,
+            x + w
+        );
+        assert!(ch > 30.0, "cell {n} wraps: {ch} high");
+    }
+}
+
+#[test]
+fn says_why_i_edits_nothing_on_prose() {
+    let (mut world, _, _) = open_marking(presented());
+    press(&mut world, Key::Down);
+    type_key(&mut world, "i");
+    assert!(edit_box(&world).is_none());
+    let screen = format!("{}", world.screen());
+    assert!(
+        screen.contains("Put the cursor on a line of code to edit it."),
+        "{screen}"
+    );
 }

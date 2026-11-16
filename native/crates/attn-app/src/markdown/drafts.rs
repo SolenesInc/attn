@@ -141,6 +141,20 @@ impl Drafts {
         self.revision += 1;
         self.drafts.get_mut(uri)
     }
+
+    /// Drops mark `id` from whichever draft holds it. True when one did.
+    pub(crate) fn remove(&mut self, id: &str, now: f64) -> bool {
+        for draft in self.drafts.values_mut() {
+            let before = draft.marks.len();
+            draft.marks.retain(|m| m.id != id);
+            if draft.marks.len() != before {
+                draft.changed(now);
+                self.revision += 1;
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl Draft {

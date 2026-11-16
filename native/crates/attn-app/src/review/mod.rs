@@ -4,6 +4,7 @@
 
 mod diagram;
 mod document;
+mod edits;
 mod file;
 mod frames;
 mod keys;
@@ -139,6 +140,9 @@ pub struct Reviews {
     /// an edit that lands after a box closed opens nothing.
     composer_text: rune::TextEdit,
     search_query: rune::TextEdit,
+    /// The edit being written in a review tile, and its box's text.
+    editing: Option<edits::Open>,
+    edit_text: rune::TextEdit,
 }
 
 impl Reviews {
@@ -689,6 +693,12 @@ pub(crate) fn body(
         })
         .padding(space::S3)
         .items_center()
+        .on_layout_tx({
+            let view = view.to_owned();
+            move |state: &mut State, [_, _, w, _], tx: &mut Tx| {
+                state.readings.measured(&view, w, tx)
+            }
+        })
         .child(card);
     if let Some(key) = cursor_key {
         document = document.active_descendant(key);
@@ -776,8 +786,31 @@ pub(crate) fn body(
         .grow(1.0)
         .min_h(0.0)
         .child(frame)
-        .child(keys::key_line(tile, reading.frame, &offered, sides, t))
+        .child(keys::key_line(
+            tile,
+            reading.frame,
+            &offered,
+            (
+                sides,
+                !review.files.is_empty() && reading.frame != Frame::Walkthrough,
+            ),
+            t,
+        ))
         .children(review.help.then(|| keys::sheet(&prefix, t)))
+        .children(
+            reviews
+                .editing
+                .as_ref()
+                .filter(|e| e.tile == tile)
+                .map(|e| {
+                    edits::view(e, &reviews.edit_text, t).pin(
+                        Some(0.0),
+                        Some(space::S6),
+                        Some(0.0),
+                        None,
+                    )
+                }),
+        )
         .children(
             reviews
                 .composer
@@ -1004,6 +1037,10 @@ pub(crate) fn open_sheet(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
         tx.focus(marks::FIELD, false);
         return true;
     }
+    if state.readings.reviews.editing.is_some() {
+        tx.focus(edits::FIELD, false);
+        return true;
+    }
     let Some((uri, to)) = crate::markdown::sending::destination_of(state, tile) else {
         return false;
     };
@@ -1205,6 +1242,8 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             }
         }
         (_, "/") => Some(Move::Search(String::new())),
+        (_, "i") => Some(Move::Edit),
+        (_, "u") => Some(Move::Undo),
         (_, "c" | "a") => Some(Move::Mark(if typed == "a" {
             marks::Kind::Question
         } else {
@@ -1315,6 +1354,34 @@ fn apply(
         }
         Some(Move::Open(target, fill)) => {
             open_file(state, tile, source_of(message), target, fill, tx);
+        }
+        Some(Move::Edit) => {
+            let Some(reading) = reading else { return };
+            let cursor = reading.cursor(review);
+            match edit_target(state, tile, bundle, reading, cursor) {
+                Ok(EditAt { path, at, doc_line }) => {
+                    let uri = drafts_uri(message);
+                    edits::begin(
+                        state,
+                        tile,
+                        source_of(message),
+                        &path,
+                        at,
+                        doc_line,
+                        uri,
+                        tx,
+                    );
+                }
+                Err(why) => state.window.notify(why.to_owned(), tx),
+            }
+        }
+        Some(Move::Undo) => {
+            let Some(reading) = reading else { return };
+            let cursor = reading.cursor(review);
+            if let Some(mark) = edit_under(state, tile, message, bundle, reading, cursor) {
+                let uri = drafts_uri(message);
+                edits::undo(state, (tile.to_owned(), source_of(message), uri), mark, tx);
+            }
         }
         Some(Move::Mark(kind)) => {
             let Some(reading) = reading else { return };
@@ -1576,6 +1643,10 @@ enum Move {
     Search(String),
     /// Write a note or a question on what the cursor stands on.
     Mark(marks::Kind),
+    /// Edit what the cursor stands on.
+    Edit,
+    /// Undo the newest edit on the cursor's line.
+    Undo,
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.
@@ -1838,7 +1909,7 @@ fn placements<'m>(
 ) -> Vec<(&'m attn_protocol::MarkdownAnnotation, String, marks::Placed)> {
     draft
         .iter()
-        .filter(|m| m.r#type == "comment" || m.r#type == "question")
+        .filter(|m| matches!(m.r#type.as_str(), "comment" | "question" | "edit"))
         .filter_map(|m| {
             let anchor = m.anchor.as_ref()?;
             let path = anchor.file.as_deref()?;
@@ -1859,10 +1930,131 @@ fn placements<'m>(
                         }),
                 )
                 .collect();
-            let placed = marks::place(anchor, &lists)?;
+            let placed = if m.r#type == "edit" {
+                let stands = (
+                    m.edit_after_head.unwrap_or(0),
+                    m.edit_before_head.unwrap_or(0),
+                );
+                let now = m.edit_now.as_deref().unwrap_or_default();
+                lists.iter().find_map(|r| {
+                    match edits::place(r.rows, stands, now, r.covers.is_none()) {
+                        edits::Stands::At(line) => Some(marks::Placed::Line(line)),
+                        edits::Stands::Moved => Some(marks::Placed::Moved),
+                        edits::Stands::Unknown => None,
+                    }
+                })?
+            } else {
+                marks::place(anchor, &lists)?
+            };
             Some((m, path.to_owned(), placed))
         })
         .collect()
+}
+
+/// Where `i` edits: a file, the line now the cursor stands on with the lines now selected, and
+/// the document line the edit is listed at.
+struct EditAt {
+    path: String,
+    at: (i64, Option<(i64, i64)>),
+    doc_line: i64,
+}
+
+/// What `i` edits: the file, the line now the cursor stands on with the lines now selected, and
+/// the document line the edit is listed at; or why the cursor's place takes no edit.
+fn edit_target(
+    state: &State,
+    tile: &str,
+    bundle: &ReviewBundle,
+    reading: &Reading,
+    cursor: Option<usize>,
+) -> Result<EditAt, &'static str> {
+    const REMOVED: &str = "This line was removed. i edits the code as it is now.";
+    const NOT_CODE: &str = "Put the cursor on a line of code to edit it.";
+    let review = state.readings.reviews.tiles.get(tile).ok_or(NOT_CODE)?;
+    let doc_line = |path: &str| {
+        bundle
+            .stops
+            .iter()
+            .find(|s| s.path == path)
+            .map_or(reading.source.lines().count() as i64 + 1, |s| {
+                s.heading_line
+            })
+    };
+    let viewing = !review.files.is_empty() && reading.frame != Frame::Walkthrough;
+    if viewing || reading.frame == Frame::Walkthrough {
+        let open = review.files.last().ok_or(NOT_CODE)?;
+        let rows = open
+            .rows
+            .as_deref()
+            .ok_or("The file is still being read.")?;
+        let line = rows.get(open.cursor).ok_or(NOT_CODE)?.now.ok_or(REMOVED)?;
+        let (a, b) = open.selected();
+        let lines: Vec<i64> = rows[a..=b.min(rows.len() - 1)]
+            .iter()
+            .filter_map(|r| r.now)
+            .collect();
+        let selection = (open.select_from.is_some() && !lines.is_empty())
+            .then(|| (lines[0], lines[lines.len() - 1]));
+        return Ok(EditAt {
+            path: open.target.path.clone(),
+            at: (line, selection),
+            doc_line: doc_line(&open.target.path),
+        });
+    }
+    let (stop, from, to) =
+        selected_rows(reading, review, cursor.ok_or(NOT_CODE)?).ok_or(NOT_CODE)?;
+    let rows = reading.rows_of(stop);
+    let s = &bundle.stops[stop];
+    let at = cursor.ok_or(NOT_CODE)?;
+    let line = match &reading.places[at].spot {
+        Spot::Row { now, .. } => now.ok_or(REMOVED)?,
+        _ => return Err(NOT_CODE),
+    };
+    let lines: Vec<i64> = rows[from..=to].iter().filter_map(|r| r.now).collect();
+    let selection = (review.select_from.is_some() && !lines.is_empty())
+        .then(|| (lines[0], lines[lines.len() - 1]));
+    Ok(EditAt {
+        path: s.path.clone(),
+        at: (line, selection),
+        doc_line: s.heading_line,
+    })
+}
+
+/// The newest of tile `tile`'s edits whose text holds the line now the cursor stands on.
+fn edit_under(
+    state: &State,
+    tile: &str,
+    message: &attn_protocol::DesktopTileContentMessage,
+    bundle: &ReviewBundle,
+    reading: &Reading,
+    cursor: Option<usize>,
+) -> Option<attn_protocol::MarkdownAnnotation> {
+    let review = state.readings.reviews.tiles.get(tile)?;
+    let (path, line) = match (review.files.last(), reading.frame) {
+        (Some(open), _) => (open.target.path.clone(), open.line()?),
+        (None, _) => match (&reading.places[cursor?].spot, reading.places[cursor?].stop) {
+            (Spot::Row { now: Some(now), .. }, Some(stop)) => {
+                (bundle.stops[stop].path.clone(), *now)
+            }
+            _ => return None,
+        },
+    };
+    let draft = state.drafts.get(&drafts_uri(message))?;
+    placements(review, bundle, &draft.marks)
+        .into_iter()
+        .filter(|(m, p, _)| m.r#type == "edit" && *p == path)
+        .filter(|(m, _, at)| {
+            let count = m
+                .edit_now
+                .as_deref()
+                .unwrap_or_default()
+                .split('\n')
+                .count() as i64;
+            matches!(at, marks::Placed::Line(last) if line <= *last && line > last - count)
+        })
+        .map(|(m, _, _)| m.clone())
+        .collect::<Vec<_>>()
+        .pop()
 }
 
 /// The ids of tile `tile`'s marks whose lines changed since they were written.
@@ -1893,6 +2085,37 @@ fn drafts_uri(message: &attn_protocol::DesktopTileContentMessage) -> String {
         host: message.host.clone().filter(|h| !h.is_empty()),
     }
     .uri()
+}
+
+/// Reads file `path` of tile `tile`'s review again into every view of it, after the reader
+/// wrote it.
+fn reread(
+    state: &mut State,
+    tile: &str,
+    source: (Option<String>, String),
+    path: &str,
+    tx: &mut Tx,
+) {
+    let Some(review) = state.readings.reviews.tiles.get(tile) else {
+        return;
+    };
+    let open: Vec<u64> = review
+        .files
+        .iter()
+        .filter(|f| f.target.path == path)
+        .map(|f| f.id)
+        .collect();
+    for id in open {
+        load(
+            state,
+            tile,
+            source.clone(),
+            (id, path.to_owned()),
+            Land::Refresh,
+            tx,
+        );
+    }
+    state.readings.revision += 1;
 }
 
 /// Where a read puts the file view's cursor.

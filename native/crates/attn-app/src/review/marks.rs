@@ -136,6 +136,9 @@ fn range(anchor: Option<&MarkdownAnnotationAnchor>) -> String {
 
 /// A mark under its line: who wrote it, its lines, its text and, for a question, the answer.
 pub(crate) fn mark_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
+    if mark.r#type == "edit" {
+        return edit_row(mark, t);
+    }
     let question = mark.r#type == "question";
     let who = if question { "you asked" } else { "you" };
     let text_ = mark.text.clone().unwrap_or_default();
@@ -173,9 +176,63 @@ pub(crate) fn mark_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
                         .color(t.text_primary)
                         .wrap()
                         .grow(1.0),
-                ),
+                )
+                .child(remove(&mark.id, "Remove", t)),
         )
         .children(answer)
+}
+
+fn remove(id: &str, help: &'static str, t: &Tokens) -> El {
+    let key = format!("review.mark.{id}.remove");
+    let id = id.to_owned();
+    attn_ui::GlyphButton::new(attn_ui::icon::CLOSE, help)
+        .help(help)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            if state.drafts.remove(&id, tx.clock()) {
+                state.readings.revision += 1;
+            }
+        })
+        .build(attn_ui::kit(t))
+        .key(key)
+}
+
+/// An edit under its last line: it was saved to the file, with its old text, and `u` undoes it.
+fn edit_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
+    let range = range(mark.anchor.as_ref());
+    let was = mark.edit_was.clone().unwrap_or_default();
+    col()
+        .key(format!("review.mark.{}", mark.id))
+        .role("note")
+        .label(format!("you edited {range}: it was {was}"))
+        .w_full()
+        .padding(space::S1)
+        .gap(2.0)
+        .radius(radius::SM)
+        .fill(t.accent.alpha(0.08))
+        .border_sides([0.0, 0.0, 0.0, 2.0], t.accent)
+        .child(
+            row()
+                .gap(space::S2)
+                .child(text("you edited").font(type_::LABEL).color(t.accent))
+                .child(text(range).font(type_::LABEL).color(t.text_secondary))
+                .child(
+                    text("Saved to the file. It was:")
+                        .font(type_::LABEL)
+                        .color(t.text_secondary),
+                )
+                .child(text("u undo").font(type_::LABEL).color(t.text_tertiary))
+                .child(remove(
+                    &mark.id,
+                    "Drop from the review; the file stays as it is",
+                    t,
+                )),
+        )
+        .child(
+            text(was)
+                .font(type_::MONO_CAPTION)
+                .color(t.text_primary)
+                .wrap(),
+        )
 }
 
 /// A note or question being written on `anchor`, in review tile `tile`.
@@ -354,7 +411,37 @@ pub(crate) fn sheet(
     sent: Option<&Sent>,
     t: &Tokens,
 ) -> El {
-    let entries = marks.iter().map(|m| {
+    let edited: Vec<El> = marks
+        .iter()
+        .filter(|m| m.r#type == "edit")
+        .enumerate()
+        .map(|(i, m)| {
+            text(format!(
+                "edit {} {}: it was {} · it is now {}",
+                i + 1,
+                sent_place(m),
+                m.edit_was.clone().unwrap_or_default(),
+                m.edit_now.clone().unwrap_or_default()
+            ))
+            .role("listitem")
+            .font(type_::BODY)
+            .color(t.text_primary)
+            .wrap()
+        })
+        .collect();
+    let edits = (!edited.is_empty()).then(|| {
+        col()
+            .role("list")
+            .label("Your edits, saved to the files")
+            .gap(space::S1)
+            .child(
+                text("Your edits, saved to the files")
+                    .font(type_::LABEL)
+                    .color(t.text_secondary),
+            )
+            .children(edited)
+    });
+    let entries = marks.iter().filter(|m| m.r#type != "edit").map(|m| {
         let kind = match m.r#type.as_str() {
             "question" => "question",
             "deletion" => "remove",
@@ -433,6 +520,7 @@ pub(crate) fn sheet(
                 .gap(space::S1)
                 .children(entries),
         )
+        .children(edits)
         .children(alone)
         .child(
             row()

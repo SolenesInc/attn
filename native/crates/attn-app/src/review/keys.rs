@@ -193,21 +193,82 @@ pub(super) fn not_shown(
 }
 
 /// The keys for what the review shows in `frame`, under the tile, after the frames it offers.
-pub(super) fn key_line(tile: &str, frame: Frame, offered: &[Frame], sides: bool, t: &Tokens) -> El {
+/// The send key as the default keymap binds it on this platform.
+pub(super) fn send_label() -> String {
+    let keymap = crate::Keymap::from_setting(None, rune::KeyPlatform::current());
+    keymap
+        .binding(&crate::Action::MarkdownSendAnnotations)
+        .map(|b| keymap.label(b))
+        .unwrap_or_default()
+}
+
+/// The keys for what the review shows in `frame` with a file open or not, as the Tauri key
+/// line lists them, with the marking keys after the moves.
+fn keys_for(frame: Frame, file_open: bool, sides: bool) -> Vec<(String, &'static str)> {
+    let list: &[(&str, &'static str)] = match (file_open, frame) {
+        (true, _) => &[
+            ("↑ ↓", "line"),
+            ("← →", "change"),
+            ("⇧← ⇧→", "sideways"),
+            ("z", "fill the tile"),
+            ("/", "search"),
+            ("⌃o", "back"),
+            ("esc", "close"),
+        ],
+        (false, Frame::Walkthrough) => &[
+            ("↑ ↓", "line"),
+            ("← →", "stop"),
+            ("⇧← ⇧→", "sideways"),
+            ("z", "hide the script"),
+            ("/", "search"),
+        ],
+        (false, Frame::Map) => &[
+            ("↑ ↓", "line"),
+            ("← →", "arrow"),
+            ("↵", "open the file"),
+            ("e", "more lines"),
+            ("/", "search"),
+        ],
+        (false, Frame::Brief) => &[
+            ("↑ ↓", "line"),
+            ("← →", "stop"),
+            ("↵", "open the file"),
+            ("e", "more lines"),
+            ("z", "fill the tile"),
+            ("/", "search"),
+        ],
+    };
+    let mut keys: Vec<(String, &'static str)> =
+        list.iter().map(|(k, w)| ((*k).to_owned(), *w)).collect();
+    if sides && !file_open {
+        let last = keys.pop();
+        keys.push(("b".into(), "before, after"));
+        keys.extend(last);
+    }
+    let marking = [
+        ("c".to_owned(), "note"),
+        ("a".to_owned(), "ask"),
+        ("i".to_owned(), "edit"),
+        (send_label(), "send"),
+    ];
+    keys.splice(2..2, marking);
+    keys
+}
+
+pub(super) fn key_line(
+    tile: &str,
+    frame: Frame,
+    offered: &[Frame],
+    (sides, file_open): (bool, bool),
+    t: &Tokens,
+) -> El {
     let prefix = &prefix(tile);
     let entry = |keys: &str, what: &str| {
         text(format!("{keys} {what}"))
             .font(type_::LABEL)
             .color(t.text_secondary)
     };
-    let mut keys = vec![("↑ ↓", "line")];
-    keys.push(match frame {
-        Frame::Map => ("← →", "arrow"),
-        _ => ("← →", "stop"),
-    });
-    if sides {
-        keys.push(("b", "before, after"));
-    }
+    let keys = keys_for(frame, file_open, sides);
     let tabs = (offered.len() > 1).then(|| {
         row()
             .role("tablist")
@@ -240,7 +301,7 @@ pub(super) fn key_line(tile: &str, frame: Frame, offered: &[Frame], sides: bool,
         .py(space::S1)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.5))
         .children(tabs)
-        .children(keys.into_iter().map(|(k, w)| entry(k, w)))
+        .children(keys.iter().map(|(k, w)| entry(k, w)))
         .child(col().grow(1.0))
         .child(entry("?", "all keys"))
 }
@@ -248,15 +309,43 @@ pub(super) fn key_line(tile: &str, frame: Frame, offered: &[Frame], sides: bool,
 const ALL_KEYS: &[(&str, &str)] = &[
     (
         "1 2 3",
-        "Brief: the document top to bottom. Map: the sequence diagram beside the step of the review that explains the current arrow. A frame the document cannot fill is left out.",
+        "Brief: the document top to bottom. Walkthrough: the stops as a script beside the file. Map: the sequence diagram beside the step of the review that explains the current arrow. A frame the document cannot fill is left out.",
     ),
     (
         "↑ ↓",
-        "Move by line in code, by block in prose, by arrow with a stop in a drawn diagram.",
+        "Move by line in code, by block in prose, by arrow with a stop in a drawn diagram. In the file view, by line; PageUp and PageDown move a page.",
+    ),
+    (
+        "⇧↑ ⇧↓",
+        "Select several lines of code, so a note or question covers them.",
+    ),
+    (
+        "c",
+        "Write a note on the line or the selected lines. It waits for the send.",
+    ),
+    (
+        "a",
+        "Ask the agent about the line or the selected lines. The question goes at once; the answer shows under the line.",
+    ),
+    (
+        "i",
+        "Edit what the cursor is on: the selected lines, else a whole string or comment of several lines, else the line. ⌥↑ and ⌥↓ take in a line. Saving writes the file and lists the edit in the review.",
+    ),
+    (
+        "u",
+        "Undo your edit where the cursor is: the file gets its old text back and the edit leaves the review.",
+    ),
+    (
+        "send",
+        "Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.",
     ),
     (
         "← →",
-        "The previous or next stop; in the Map, the previous or next arrow with a stop.",
+        "The previous or next stop; in the Map, the previous or next arrow with a stop. In the file view opened from Brief or Map, the previous or next change.",
+    ),
+    (
+        "⇧← ⇧→",
+        "Scroll the file sideways by half its width, in the file view and in the Walkthrough, to read the rest of a long line. A long line wraps in a stop.",
     ),
     (
         "b",
@@ -264,9 +353,28 @@ const ALL_KEYS: &[(&str, &str)] = &[
     ),
     (
         "↵",
-        "On the change's facts under the title, show or hide the changed files.",
+        "Open the file the cursor is on, at that line, with the stop's lines marked. On an arrow of a diagram, open its stop's file. On the change's facts under the title, show or hide the changed files.",
     ),
-    ("esc", "Close this sheet."),
+    (
+        "e",
+        "Show 10 more lines on each side of the stop. The stop's label names the lines it shows.",
+    ),
+    (
+        "z",
+        "Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.",
+    ),
+    (
+        "/",
+        "Search the repository: files by name, lines by text. The empty box lists the changed files with their added and removed lines.",
+    ),
+    (
+        "⌃o",
+        "Go back to the file you came from; from the first file, close the file view. The Walkthrough keeps its stop.",
+    ),
+    (
+        "esc",
+        "Close the edit box, the send, the search, this sheet, a selection, or the file view. In the Walkthrough, return to the stop.",
+    ),
     ("?", "Show or hide this sheet."),
 ];
 
@@ -285,11 +393,16 @@ pub(super) fn sheet(prefix: &str, t: &Tokens) -> El {
         .border(1.0, t.border)
         .child(text("Keys").font(type_::TITLE).color(t.text_primary))
         .children(ALL_KEYS.iter().map(|(keys, what)| {
+            let keys = if *keys == "send" {
+                send_label()
+            } else {
+                (*keys).to_owned()
+            };
             row()
                 .role("row")
                 .label(format!("{keys}: {what}"))
                 .gap(space::S3)
-                .child(text(*keys).font(type_::LABEL).color(t.text_primary).w(64.0))
+                .child(text(keys).font(type_::LABEL).color(t.text_primary).w(64.0))
                 .child(
                     text(*what)
                         .font(type_::BODY)
