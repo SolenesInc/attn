@@ -580,6 +580,15 @@ fn a_pasted_screenshot_shows_its_picture_in_the_draft() {
         .bounds(Target::role("image").name("Pasted screenshot"))
         .expect("the draft shows the screenshot's picture");
     assert_eq!((w, h), (84.0, 58.0));
+    press(&mut world, "escape");
+    open(&mut world);
+    assert!(
+        world
+            .capture_screen()
+            .find(Target::role("image").name("Pasted screenshot"))
+            .is_some(),
+        "the picture shows again when the panel does"
+    );
     world.capture_gesture(|d| d.click(Target::role("button").name("Remove Pasted screenshot")));
     assert!(
         world

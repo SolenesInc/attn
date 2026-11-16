@@ -67,10 +67,16 @@ pub(crate) fn open(panel: &mut Panel, tx: &mut Tx) {
 
 pub(crate) fn close(panel: &mut Panel, tx: &mut Tx) {
     panel.face = Face::Compose;
+    forget(panel);
+    tx.focus(view::MESSAGE, false);
+}
+
+/// Drops what the open history holds beyond its list: answers still on their way and the
+/// pictures of its images.
+pub(super) fn forget(panel: &mut Panel) {
     panel.history.generation += 1;
     panel.history.again = false;
     panel.history.images.clear();
-    tx.focus(view::MESSAGE, false);
 }
 
 /// Asks for the first page once the open history can.

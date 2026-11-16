@@ -513,6 +513,7 @@ fn hidden(panel: &mut Panel) {
     panel.shown = false;
     panel.face = Face::Compose;
     panel.picking = None;
+    history::forget(panel);
 }
 
 /// Sends the draft, or, when an earlier send's answer was lost, first asks whether the daemon

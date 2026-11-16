@@ -56,13 +56,14 @@ impl Panel {
     }
 }
 
-/// Reads each image file the draft holds and forgets those it no longer holds. Returns whether
-/// a picture finished decoding since the panel last drew.
+/// Reads each image file the draft holds while the panel shows, and forgets those it no longer
+/// holds or shows. Returns whether a picture finished decoding since the panel last drew.
 pub(super) fn follow(panel: &mut Panel) -> bool {
     let wanted: Vec<PathBuf> = panel
         .draft
         .files
         .iter()
+        .filter(|_| panel.shown)
         .filter_map(|f| f.image().map(PathBuf::from))
         .collect();
     let previews = &mut panel.previews;
