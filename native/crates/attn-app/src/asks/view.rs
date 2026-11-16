@@ -321,7 +321,12 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .items_center()
         .gap(space::S2)
         .children(item.holder.map(|s| {
-            crate::sidebar::state_mark("asks.from", &crate::sidebar::AgentRow::of(s, false), t)
+            crate::sidebar::lead(
+                "asks.from",
+                &crate::sidebar::AgentRow::of(s, false),
+                crate::sidebar::logos(state),
+                t,
+            )
         }))
         .child(
             text(item.from.clone())

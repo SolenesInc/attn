@@ -1346,3 +1346,17 @@ fn each_command_row_leads_with_the_icon_of_its_kind() {
         assert_eq!(icon(&world, command).as_deref(), Some(kind), "{command}");
     }
 }
+
+#[test]
+fn harness_logos_turn_off_from_the_palette() {
+    let mut world = World::start(daemon(one_agent(&[]), vec![]));
+    run_command(&mut world, "hide harness logos");
+    assert_eq!(
+        settings_sent(&world),
+        [(
+            "sidebar_harness_logos_enabled".to_owned(),
+            "false".to_owned()
+        )]
+    );
+    rest(&mut world);
+}

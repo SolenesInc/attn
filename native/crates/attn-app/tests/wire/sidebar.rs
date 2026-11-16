@@ -649,3 +649,30 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
             .is_some()
     );
 }
+
+#[test]
+fn an_agent_row_leads_with_its_harness_logo_until_the_user_turns_logos_off() {
+    let mut world = World::start(Daemon::scripted().state(state(
+        vec![session("s1", "working")],
+        vec![desktop("d1", "a", "One", vec![pane("d1", "p1", "s1")])],
+    )));
+    let lead = |world: &World| {
+        let screen = world.screen();
+        let node = screen.get(Target::key("sidebar.session.s1.state"));
+        let [_, _, w, h] = screen
+            .bounds(Target::key("sidebar.session.s1.state"))
+            .unwrap();
+        (node.name.unwrap_or_default(), w, h)
+    };
+    assert_eq!(lead(&world), ("Claude · working".into(), 14.0, 14.0));
+
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(BTreeMap::from([(
+            "sidebar_harness_logos_enabled".to_owned(),
+            "false".to_owned(),
+        )])),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(lead(&world), ("Claude · working".into(), 8.0, 8.0));
+}

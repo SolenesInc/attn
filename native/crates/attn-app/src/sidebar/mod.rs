@@ -2,6 +2,7 @@ mod actions;
 pub(crate) mod bar_peek;
 mod chrome;
 mod dock;
+mod harness_icon;
 pub(crate) mod model;
 pub(crate) mod queue;
 mod queue_view;
@@ -28,6 +29,7 @@ use crate::desktop::DesktopMark;
 use crate::shell::View;
 
 pub(crate) const ROW_HEIGHT: f32 = 28.0;
+pub(crate) const HARNESS_LOGOS: &str = "sidebar_harness_logos_enabled";
 
 thread_local! {
     static ROWS_BUILT: Cell<usize> = const { Cell::new(0) };
@@ -326,7 +328,8 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
         .drag
         .as_ref()
         .and_then(|d| d.desktop_mark(line.desktop()));
-    memo(key.clone(), (line, draining, seam, mark, *t), || {
+    let logos = logos(state);
+    memo(key.clone(), (line, draining, seam, mark, logos, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         let row = match line {
             Line::Desktop(desktop) => {
@@ -344,7 +347,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                     .key(format!("{key}.controls"))
                     .group_opacity(0.0, 1.0)
                     .child(actions_button(&key, row, t));
-                agent_row(key.clone(), row, t)
+                agent_row(key.clone(), row, logos, t)
                     .hover_group()
                     .child(more)
                     .children(bar)
@@ -464,7 +467,7 @@ fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
         )
 }
 
-fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
+fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
     let id = agent.id.clone();
     let name = agent.shown_name();
     row()
@@ -487,7 +490,7 @@ fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
         })
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
-        .child(state_mark(&key, agent, t))
+        .child(lead(&key, agent, logos, t))
         .child(
             text(name)
                 .font(type_::BODY)
@@ -628,6 +631,22 @@ pub(crate) fn settling_bar(
         Some(c) => bar.live_trim(&c.drain),
         None => bar,
     })
+}
+
+pub(crate) fn logos(state: &State) -> bool {
+    crate::setting::on(&state.facts.settings, HARNESS_LOGOS)
+}
+
+pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
+    if !logos || agent.state == AgentState::Launching {
+        return state_mark(row_key, agent, t);
+    }
+    rune::icon(harness_icon::of(&agent.harness), 14.0)
+        .key(format!("{row_key}.state"))
+        .role("img")
+        .label(agent.lead())
+        .a11y_value(agent.state.wire())
+        .color(state_color(agent.state, t))
 }
 
 /// The dot in each agent's colour of state, as the Tauri app's `.session-lead[data-state]`.

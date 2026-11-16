@@ -7,7 +7,7 @@ use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::model::{AgentRow, display_name, ordered_desktops};
 use super::queue::{self, Bands, QueueRow};
-use super::{ROW_HEIGHT, ROWS_BUILT, home_row, open_agent, state_mark};
+use super::{ROW_HEIGHT, ROWS_BUILT, home_row, lead, open_agent};
 use crate::State;
 use crate::action::Action;
 
@@ -389,9 +389,10 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
         QLine::AgentsToggle { .. } => keys_of(state, &Action::SidebarAgentList),
         _ => None,
     };
+    let logos = super::logos(state);
     memo(
         key.clone(),
-        (line, draining, cursor, keys.clone(), *t),
+        (line, draining, cursor, keys.clone(), logos, *t),
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             match line {
@@ -408,7 +409,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                     .color(t.text_muted),
                 QLine::Agent(agent) => {
                     let bar = super::settling_bar(state, &key, &agent.agent, t);
-                    queue_row(key, agent, cursor, t).children(bar)
+                    queue_row(key, agent, cursor, logos, t).children(bar)
                 }
                 QLine::Filter => unreachable!("the filter is built above"),
             }
@@ -566,7 +567,7 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
         )
 }
 
-fn queue_row(key: String, a: &QueueAgent, cursor: bool, t: &Tokens) -> El {
+fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens) -> El {
     let id = a.agent.id.clone();
     let name = a.agent.shown_name();
     let trailing = if !a.age.is_empty() {
@@ -593,7 +594,7 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, t: &Tokens) -> El {
         })
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
-        .child(state_mark(&key, &a.agent, t))
+        .child(lead(&key, &a.agent, logos, t))
         .child(
             text(name)
                 .font(type_::BODY)

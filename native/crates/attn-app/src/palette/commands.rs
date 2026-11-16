@@ -486,6 +486,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
     let queue_on = setting::on(settings, queue::QUEUE_MODE);
     let crew_on = setting::on(settings, queue::QUEUE_CREW);
     let auto_settle_on = setting::on(settings, AUTO_SETTLE);
+    let logos_on = setting::on(settings, crate::sidebar::HARNESS_LOGOS);
     commands.extend([
         Command::new(
             "toggle-queue-mode",
@@ -520,6 +521,17 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             set(AUTO_SETTLE, !auto_settle_on),
         )
         .describe("Settle a turn once you have steered the agent and it goes back to work"),
+        Command::new(
+            "toggle-harness-logos",
+            if logos_on {
+                "Hide harness logos in the sidebar"
+            } else {
+                "Show harness logos in the sidebar"
+            },
+            &["harness", "logo", "icon", "sidebar", "claude", "codex"],
+            set(crate::sidebar::HARNESS_LOGOS, !logos_on),
+        )
+        .describe("The Claude or Codex mark beside each agent"),
     ]);
     for feature in FEATURES {
         let on = setting::on(settings, feature.key);
