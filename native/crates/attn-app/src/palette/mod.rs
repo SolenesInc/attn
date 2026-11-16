@@ -1,5 +1,5 @@
 mod agents;
-mod commands;
+pub(crate) mod commands;
 mod view;
 
 pub(crate) use view::row_face;

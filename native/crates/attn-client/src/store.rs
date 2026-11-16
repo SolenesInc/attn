@@ -4,9 +4,16 @@ use std::sync::{Arc, Mutex, Weak};
 use attn_protocol::{
     Ask, AuthorState, CrewMember, Desktop, DesktopTileContentMessage, GardenReview, GitOperation,
     InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage, PluginInfo,
-    PluginIssue, Profile, RepoState, Seed, Session, SessionLedgerEntry, UpdateRun, Vent, Worktree,
-    WorktreeSweepEntry,
+    PluginIssue, Profile, RepoState, Seed, Session, SessionLedgerEntry, SharedCodexState,
+    UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
+
+/// The shared Codex app server's state, as the daemon said it of `profile_id`.
+#[derive(Clone, Debug, Default)]
+pub struct SharedCodex {
+    pub profile_id: String,
+    pub state: Option<SharedCodexState>,
+}
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
 /// so a slice that did not change keeps its pointer and a view's `memo` can key on it.
@@ -24,6 +31,9 @@ pub struct Facts {
     pub outposts: Arc<Vec<OutpostInfo>>,
     /// The build the home daemon runs, which an outpost on another build is offered.
     pub home_build: String,
+    /// The Codex app server a profile's Codex tiles share, by the profile the daemon last said
+    /// it of.
+    pub shared_codex: Arc<Option<SharedCodex>>,
     /// The phones' link to Attn Cloud, their pairings and the pairing codes shown; `None` until
     /// the daemon first lists them.
     pub phones: Arc<Option<PhonesUpdatedMessage>>,
@@ -367,7 +377,8 @@ impl Slices {
     pub const GARDEN_REVIEW: Slices = Slices(1 << 25);
     pub const CREW: Slices = Slices(1 << 26);
     pub const CAPTURE_READS: Slices = Slices(1 << 27);
-    pub const ALL: Slices = Slices((1 << 28) - 1);
+    pub const SHARED_CODEX: Slices = Slices(1 << 28);
+    pub const ALL: Slices = Slices((1 << 29) - 1);
 
     pub const fn union(self, other: Slices) -> Slices {
         Slices(self.0 | other.0)
@@ -476,6 +487,10 @@ impl Store {
             facts.connection = Connection::Connected;
             facts.daemon_instance = state.daemon_instance_id.unwrap_or_default();
             facts.sessions = Arc::new(state.sessions.unwrap_or_default());
+            facts.shared_codex = Arc::new(Some(SharedCodex {
+                profile_id: state.selected_profile_id.clone().unwrap_or_default(),
+                state: state.shared_codex,
+            }));
             facts.profiles = Arc::new(Profiles {
                 all: state.profiles.unwrap_or_default(),
                 selected: state.selected_profile_id.unwrap_or_default(),
@@ -577,6 +592,13 @@ impl Store {
         self.change(|facts| {
             facts.plugins = Arc::new(plugins);
             Slices::PLUGINS
+        });
+    }
+
+    pub(crate) fn set_shared_codex(&self, profile_id: String, state: Option<SharedCodexState>) {
+        self.change(|facts| {
+            facts.shared_codex = Arc::new(Some(SharedCodex { profile_id, state }));
+            Slices::SHARED_CODEX
         });
     }
 

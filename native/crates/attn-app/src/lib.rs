@@ -46,6 +46,7 @@ mod review;
 pub mod screen;
 mod setting;
 mod settings;
+mod shared_codex;
 mod shell;
 mod shortcut_editor;
 pub mod sidebar;
@@ -339,6 +340,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         settings::poll(state, now, tx) | crew::poll(state, now, tx) | chief::poll(state, tx);
     let updating = update_run::poll(state, now, tx)
         | outpost_updates::poll(state, now, tx)
+        | shared_codex::poll(state, tx)
         | attention::poll(state, now);
     let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);
     let greeted = whats_new::greet(state, tx);

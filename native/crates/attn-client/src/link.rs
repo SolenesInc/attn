@@ -6,16 +6,16 @@ use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage, ClientHelloMessage,
     CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage, GardenReviewUpdatedMessage,
     GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
-    GitOperationStartedMessage, InitialStateMessage, KittyImageResultMessage,
-    KittyPlacementsMessage, MigrationChangedMessage, NotificationListResultMessage,
-    NotificationsUpdatedMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage,
-    PluginsUpdatedMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
-    PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage, QuickCaptureUnreadMessage,
-    ReposUpdatedMessage, RuntimeRespawnedMessage, SendersUpdatedMessage, SessionClosedMessage,
-    SessionExitedMessage, SessionMessagesChangedMessage, SessionRegisteredMessage,
-    SessionUnregisteredMessage, SessionsUpdatedMessage, SettingsUpdatedMessage,
-    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
-    go_values,
+    GitOperationStartedMessage, InitialStateMessage, InstallCodexUpdateResultMessage,
+    KittyImageResultMessage, KittyPlacementsMessage, MigrationChangedMessage,
+    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
+    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
+    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
+    QuickCaptureUnreadMessage, ReposUpdatedMessage, RuntimeRespawnedMessage, SendersUpdatedMessage,
+    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
+    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
+    SettingsUpdatedMessage, SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
+    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -618,6 +618,20 @@ impl Task {
                     plugins: message.plugins,
                     issues: message.issues.unwrap_or_default(),
                 });
+                None
+            }
+            "shared_codex_changed" => {
+                let message: SharedCodexChangedMessage = parse(&header.event, text)?;
+                self.store
+                    .set_shared_codex(message.profile_id, message.shared_codex);
+                None
+            }
+            "install_codex_update_result" => {
+                let message: InstallCodexUpdateResultMessage = parse(&header.event, text)?;
+                if message.profile_id == self.store.facts().profiles.selected {
+                    self.store
+                        .set_shared_codex(message.profile_id, message.shared_codex);
+                }
                 None
             }
             "outposts_updated" => {

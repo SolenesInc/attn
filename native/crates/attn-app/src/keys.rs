@@ -350,7 +350,7 @@ fn modal(state: &State) -> bool {
     use crate::shell::Layer;
     matches!(
         state.window.layer,
-        Some(Layer::NewSession | Layer::CloseDesktop)
+        Some(Layer::NewSession | Layer::CloseDesktop | Layer::SharedCodex)
     )
 }
 

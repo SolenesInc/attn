@@ -30,7 +30,7 @@ pub(crate) struct Command {
 }
 
 impl Command {
-    fn new(id: &str, title: &str, keywords: &[&str], action: Action) -> Command {
+    pub(crate) fn new(id: &str, title: &str, keywords: &[&str], action: Action) -> Command {
         Command {
             id: id.into(),
             title: title.into(),
@@ -43,7 +43,7 @@ impl Command {
         }
     }
 
-    fn describe(mut self, description: &str) -> Command {
+    pub(crate) fn describe(mut self, description: &str) -> Command {
         self.description = Some(description.into());
         self
     }
@@ -58,7 +58,7 @@ impl Command {
         self
     }
 
-    fn pin(mut self) -> Command {
+    pub(crate) fn pin(mut self) -> Command {
         self.pinned = true;
         self
     }
@@ -90,6 +90,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .and_then(|id| facts.sessions.iter().find(|s| s.id == id));
     let turn_actions = on_screen.map(|s| queue::actions(facts, s, state.window.now_ms));
     let mut commands = chief_commands(state);
+    commands.extend(crate::shared_codex::commands(state));
     commands.extend([
         Command::new(
             "new-agent",

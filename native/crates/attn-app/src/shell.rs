@@ -75,6 +75,7 @@ pub struct Window {
     pub(crate) notifications: crate::notifications::Panel,
     pub(crate) update_run: crate::update_run::Banner,
     pub(crate) outpost_updates: crate::outpost_updates::Banner,
+    pub(crate) shared_codex: crate::shared_codex::SharedCodex,
     pub(crate) settings: crate::settings::Dialog,
     pub(crate) crew: crate::crew::Panel,
     pub(crate) crew_rows: crate::sidebar::crew::Rows,
@@ -129,6 +130,9 @@ pub enum Layer {
     Notebook,
     /// Manage crew; `Window::crew` holds it.
     Crew,
+    /// The confirm before restarting the shared Codex now or reloading its old tiles;
+    /// `Window::shared_codex` holds it.
+    SharedCodex,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -423,6 +427,9 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     let outpost_updates = bands
         .then(|| crate::outpost_updates::banner(state, &t))
         .flatten();
+    let shared_codex = bands
+        .then(|| crate::shared_codex::banner(state, &t))
+        .flatten();
     let root = col()
         .key("window")
         .w_full()
@@ -433,6 +440,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .children(banner)
         .children(outpost_updates)
         .children(update_run)
+        .children(shared_codex)
         .child(body);
     crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
         .children(layers(state, &t))
@@ -608,6 +616,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::DiagnosticReport) => crate::diagnostic_report::dialog(state, t, &mut layers),
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         Some(Layer::Crew) => crate::crew::panel(state, t, &mut layers),
+        Some(Layer::SharedCodex) => crate::shared_codex::confirm(state, t, &mut layers),
         None => {}
     }
     layers.extend(crate::attention::merge_confirmation(state, t));

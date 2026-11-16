@@ -83,6 +83,14 @@ macro_rules! actions {
             OpenQuickCapture,
             /// Ask the daemon to update attn.
             StartUpdate,
+            /// Install the newer Codex in a terminal tile.
+            InstallCodexUpdate,
+            /// Try starting the installed Codex again after it failed.
+            RetrySharedCodex,
+            /// Ask before restarting the shared Codex without waiting for idle agents.
+            ConfirmSharedCodexRestart,
+            /// Ask before reloading the Codex tiles on an older Codex.
+            ConfirmReloadCodexTiles,
             /// Open the attention drawer and take the keyboard into it.
             OpenAttention,
             /// Make a desktop and switch to it.
@@ -128,6 +136,10 @@ macro_rules! actions {
                     Action::OpenShortcutEditor => "shortcuts.edit",
                     Action::OpenQuickCapture => "quickCapture.open",
                     Action::StartUpdate => "update.start",
+                    Action::InstallCodexUpdate => "codex.installUpdate",
+                    Action::RetrySharedCodex => "codex.retryRestart",
+                    Action::ConfirmSharedCodexRestart => "codex.restartNow",
+                    Action::ConfirmReloadCodexTiles => "codex.reloadOldTiles",
                     Action::OpenAttention => "attention.open",
                     Action::CreateDesktop => "desktop.create",
                     Action::OpenWhatsNew => "whatsNew.open",
@@ -166,6 +178,10 @@ macro_rules! actions {
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
                     Action::OpenQuickCapture => "Quick Capture",
                     Action::StartUpdate => "Update attn",
+                    Action::InstallCodexUpdate => "Install Codex update",
+                    Action::RetrySharedCodex => "Retry shared Codex restart",
+                    Action::ConfirmSharedCodexRestart => "Restart shared Codex now",
+                    Action::ConfirmReloadCodexTiles => "Reload old Codex tiles",
                     Action::OpenAttention => "Open attention drawer",
                     Action::CreateDesktop => "New desktop",
                     Action::OpenWhatsNew => "What's new",
