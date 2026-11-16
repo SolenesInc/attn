@@ -1,4 +1,5 @@
 mod actions;
+pub(crate) mod bar_peek;
 mod chrome;
 pub(crate) mod model;
 pub(crate) mod queue;

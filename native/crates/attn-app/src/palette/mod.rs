@@ -2,6 +2,8 @@ mod agents;
 mod commands;
 mod view;
 
+pub(crate) use view::row_face;
+
 use attn_protocol::{
     CommandUsage, GetCommandUsageMessage, GetCommandUsageResultMessage, RecordCommandUsageMessage,
     RecordCommandUsageResultMessage, Session,
@@ -517,7 +519,57 @@ fn record(state: &mut State, command: String, tx: &mut Tx) {
 }
 
 /// The keys bound to `action`, as the user reads them.
-fn label_of(state: &State, action: &Action) -> Option<String> {
+/// The most agent rows the queue bar's peek lists.
+const PEEK_ROWS: usize = 16;
+
+/// The agents face with no query as the queue bar's peek lists it, as the Tauri app's
+/// `WaitingPeek`: no automation runs, at most `PEEK_ROWS` rows besides the dividers, and how
+/// many more there are.
+pub(crate) fn peek_rows(state: &State) -> (Vec<Row>, usize) {
+    let run = |row: &Row| {
+        row.key.strip_prefix("agent:").is_some_and(|id| {
+            state
+                .facts
+                .sessions
+                .iter()
+                .any(|s| s.id == id && s.automation.is_some())
+        })
+    };
+    let rows: Vec<Row> = agents::rows(state, "")
+        .into_iter()
+        .filter(|row| !run(row))
+        .collect();
+    let total = rows
+        .iter()
+        .filter(|r| !matches!(r.look, Look::Divider))
+        .count();
+    let mut shown = Vec::new();
+    let mut entries = 0;
+    for row in rows {
+        if !matches!(row.look, Look::Divider) {
+            if entries == PEEK_ROWS {
+                break;
+            }
+            entries += 1;
+        }
+        shown.push(row);
+    }
+    (shown, total - entries)
+}
+
+/// Opens what the peek's row `key` names.
+pub(crate) fn open_peeked(state: &mut State, key: &str, tx: &mut Tx) {
+    let picked = peek_rows(state)
+        .0
+        .into_iter()
+        .find(|r| r.key == key)
+        .and_then(|r| r.pick);
+    if let Some(Pick::Open(action)) = picked {
+        crate::dispatch(state, action, tx);
+    }
+}
+
+pub(crate) fn label_of(state: &State, action: &Action) -> Option<String> {
     state.keymap.binding(action).map(|b| state.keymap.label(b))
 }
 

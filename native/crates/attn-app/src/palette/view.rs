@@ -159,7 +159,23 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
 }
 
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
-    let key = format!("palette.row.{}", r.key);
+    let (pointing, pressing) = (r.key.clone(), r.key.clone());
+    let face = row_face(r, format!("palette.row.{}", r.key), t);
+    if let Look::Divider = r.look {
+        return face;
+    }
+    face.focus_selected(highlighted)
+        .fill(if highlighted {
+            t.bg_selected
+        } else {
+            t.bg_elevated
+        })
+        .on_pointer_move(move |state: &mut State, p| super::pointed(state, &pointing, (p.x, p.y)))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &pressing, tx))
+}
+
+/// A row as the palette and the queue bar's peek draw it, keyed `key`.
+pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
     if let Look::Divider = r.look {
         return el()
             .key(key)
@@ -169,7 +185,6 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
             .fill(t.border)
             .a11y_hidden();
     }
-    let (pointing, pressing) = (r.key.clone(), r.key.clone());
     let muted = |s: String| {
         text(s)
             .font(type_::BODY)
@@ -191,20 +206,12 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
         .key(key.clone())
         .role("option")
         .label(r.label.clone())
-        .focus_selected(highlighted)
         .w_full()
         .items_center()
         .gap(space::S2)
         .px(space::S2)
         .py(space::S1)
-        .radius(4.0)
-        .fill(if highlighted {
-            t.bg_selected
-        } else {
-            t.bg_elevated
-        })
-        .on_pointer_move(move |state: &mut State, p| super::pointed(state, &pointing, (p.x, p.y)))
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &pressing, tx));
+        .radius(4.0);
     match &r.look {
         Look::Command {
             description,

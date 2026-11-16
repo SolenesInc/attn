@@ -376,6 +376,46 @@ fn collapsing_the_queue_sidebar_moves_the_waiting_pill_and_the_desktops_into_the
 }
 
 #[test]
+fn hovering_the_waiting_pill_peeks_at_the_agents_and_a_row_opens_its_agent() {
+    let mut world = World::start(
+        Daemon::scripted().state(queue(one_desktop(vec![turn("a", 50), turn("b", 40)]))),
+    );
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    let centre = |world: &World, key: &str| {
+        let [x, y, w, h] = world.screen().bounds(Target::key(key)).expect("it shows");
+        (x + w / 2.0, y + h / 2.0)
+    };
+    let peek = |world: &World| world.screen().find(Target::key("queue-bar.peek"));
+    assert!(peek(&world).is_none());
+
+    let pill = centre(&world, "queue-bar.pill");
+    world.gesture(|app| app.move_to(pill));
+    assert!(peek(&world).is_some(), "hovering the pill peeks");
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("queue-bar.peek.agent:b"))
+            .and_then(|n| n.name),
+        Some("b".into())
+    );
+
+    let row = centre(&world, "queue-bar.peek.agent:b");
+    world.gesture(|app| app.move_to(row));
+    assert!(
+        peek(&world).is_some(),
+        "the peek stays open under the pointer"
+    );
+    world.gesture(|app| app.click(Target::key("queue-bar.peek.agent:b")));
+    assert_eq!(shown(&world), ["b"]);
+    assert!(peek(&world).is_none(), "picking a row closes the peek");
+
+    world.gesture(|app| app.move_to((1100.0, 700.0)));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    world.gesture(|app| app.move_to(pill));
+    assert!(peek(&world).is_none(), "the open palette silences the peek");
+}
+
+#[test]
 fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
     let mut message = one_desktop(vec![turn("t1", 5)]);
     message.desktops.as_mut().unwrap().extend([
