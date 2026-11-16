@@ -115,10 +115,10 @@ async function clickPanel(target) {
   await driver.runInputDriver(['click', '--window-title', PANEL_TITLE, '--relative-x', String(x), '--relative-y', String(y)]);
 }
 async function captureStack() {
-  const id = await driver.mainWindowId({ windowTitle: PANEL_TITLE });
+  const lookup = await driver.runInputDriverCapture(['windowid', '--window-title', PANEL_TITLE]).catch(error => error.message);
   const stack = JSON.parse(await driver.runInputDriverCapture(['windowstack']));
-  const index = stack.findIndex(window => window.id === id);
-  assert.ok(index >= 0, `Capture must be on screen: window ${id} is not in the stack ${JSON.stringify(stack.filter(window => window.pid === stack.find(w => w.id === id)?.pid || window.layer === 8))}`);
+  const index = stack.findIndex(window => String(window.id) === lookup);
+  assert.ok(index >= 0, `Capture must be on screen: the window lookup gave ${lookup}; the stack's layer-8 windows are ${JSON.stringify(stack.filter(window => window.layer === 8))}`);
   const capture = stack[index];
   const overlaps = window => window.alpha > 0 && window.x < capture.x + capture.width &&
     window.x + window.width > capture.x && window.y < capture.y + capture.height &&
