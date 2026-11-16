@@ -244,6 +244,12 @@ session or the re-land seed.
 
 ## Gotchas
 
+- When no runner picks up a macOS job of a push run, Acceptance passes with a
+  `macOS coverage missing` warning that names the job. That is not a failure
+  and needs no repair: the nightly run covers the gap. A macOS job that ran
+  and failed is a failure. On a full run, a macOS job that no runner picked
+  up turns `Full macOS run` red: escalate it, because the runner failed, not
+  a commit.
 - CI runs one push at a time and keeps only the newest push waiting. When a
   newer push arrives while another push is waiting, the waiting push's run
   concludes `cancelled` with no jobs. A red run therefore covers every commit

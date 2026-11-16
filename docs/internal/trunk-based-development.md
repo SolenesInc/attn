@@ -137,8 +137,9 @@ suite, the Playwright specs and the Linux scenario matrix run in CI on every
 push to `main` after landing, and so do the combinations of changes that
 landed together. Each macOS job runs on a push only when the push changes
 paths that can break it. Every macOS job runs nightly and on a release
-commit. When no runner picks up a macOS job, Acceptance passes with a warning
-that names the job, and the nightly run covers the gap.
+commit. When no runner picks up a macOS job of a push run, Acceptance passes
+with a warning that names the job, and the nightly run covers the gap. A
+macOS job that ran and failed still turns Acceptance red.
 
 Reviewers catch a defect before landing, while the author still remembers the
 work and before other slices build on the defect. The review automation on `main` still reads every commit afterwards, with the
