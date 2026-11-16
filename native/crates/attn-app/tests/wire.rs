@@ -6,6 +6,7 @@ mod wire {
     mod browser;
     mod callouts;
     mod chief;
+    mod colors;
     mod connection;
     mod covered;
     mod crew;

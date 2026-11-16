@@ -419,6 +419,9 @@ pub(super) fn lone(
     let unsent = state.window.desk.peeks.unsent();
     let sublines = sublines(desktop, &state.facts, &state.window.desk);
     let seeds = seed_reads(state);
+    let terminal_colors = crate::color_scheme(&state.facts.settings)
+        .colors(t.dark)
+        .terminal;
     let cx = TileCx {
         desktop,
         seeds: &seeds,
@@ -441,9 +444,7 @@ pub(super) fn lone(
         },
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
-        terminal_colors: &crate::color_scheme(&state.facts.settings)
-            .colors(t.dark)
-            .terminal,
+        terminal_colors: &terminal_colors,
         contents: &state.facts.tile_contents,
         outposts: &state.facts.outposts,
         pictures: &state.pictures,
@@ -506,6 +507,7 @@ fn screen(
                     &facts.desktops,
                     &desktop.id,
                 );
+                let terminal_colors = crate::color_scheme(&facts.settings).colors(t.dark).terminal;
                 let cx = TileCx {
                     desktop,
                     seeds,
@@ -531,7 +533,7 @@ fn screen(
                     },
                     holder,
                     terminals,
-                    terminal_colors: &crate::color_scheme(&facts.settings).colors(t.dark).terminal,
+                    terminal_colors: &terminal_colors,
                     contents: &facts.tile_contents,
                     outposts: &facts.outposts,
                     pictures,

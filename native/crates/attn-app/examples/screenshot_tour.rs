@@ -1,7 +1,7 @@
 //! The screenshot tour: a fixed set of the app's screens, each drawn offscreen on the GPU in
 //! dark and in light, one PNG each. `scripts/native-screenshot-tour` runs it.
 //!
-//!     screenshot_tour shoot OUT
+//!     screenshot_tour shoot OUT [SCHEME]   SCHEME sets the color_scheme setting
 //!     screenshot_tour compare BASE AFTER DIFF
 
 use std::collections::BTreeMap;
@@ -92,7 +92,11 @@ Add used to return its sum directly.
 
 fn settings(dark: bool) -> Option<BTreeMap<String, String>> {
     let theme = if dark { "dark" } else { "light" };
-    Some(BTreeMap::from([("theme".to_owned(), theme.to_owned())]))
+    let mut settings = BTreeMap::from([("theme".to_owned(), theme.to_owned())]);
+    if let Some(scheme) = SCHEME.with_borrow(Clone::clone) {
+        settings.insert("color_scheme".to_owned(), scheme);
+    }
+    Some(settings)
 }
 
 fn profile() -> Profile {
@@ -412,6 +416,7 @@ fn pixels(rt: &mut Runtime<State>) -> (u32, u32, Vec<u8>) {
 
 thread_local! {
     static OUT: std::cell::RefCell<PathBuf> = std::cell::RefCell::default();
+    static SCHEME: std::cell::RefCell<Option<String>> = std::cell::RefCell::default();
 }
 
 fn save(name: &str, dark: bool, (w, h, rgba): (u32, u32, Vec<u8>)) {
@@ -573,7 +578,13 @@ fn terminal_overlays(dark: bool) {
     });
     world.gesture(|app| app.type_text("apple"));
     let overlays = world.terminal_view("r-a").expect("terminal a is drawn")["overlays"].clone();
-    for color in ["#a78bfa", "#3b82f6", "#4d9de0", "#f5c542"] {
+    let scheme = SCHEME.with_borrow(Clone::clone);
+    let colors = attn_ui::colors::scheme_for(scheme.as_deref())
+        .colors(dark)
+        .terminal;
+    for color in
+        [colors.annotation, colors.seed, colors.block, colors.find].map(attn_ui::colors::to_hex)
+    {
         let shown = overlays
             .as_array()
             .is_some_and(|all| all.iter().any(|o| o["color"] == color));
@@ -723,8 +734,9 @@ fn launcher_empty_desktop(dark: bool) {
     snap(&mut world, "launcher-empty-desktop", dark);
 }
 
-fn shoot(out: PathBuf) {
+fn shoot(out: PathBuf, scheme: Option<String>) {
     OUT.set(out);
+    SCHEME.set(scheme);
     for dark in [true, false] {
         sidebar_and_terminal(dark);
         review_stop(dark);
@@ -810,14 +822,15 @@ fn main() -> std::process::ExitCode {
     let args: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
     let words: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
     match (words.first().copied(), &args[..]) {
-        (Some("shoot"), [_, out]) => shoot(out.clone()),
+        (Some("shoot"), [_, out]) => shoot(out.clone(), None),
+        (Some("shoot"), [_, out, scheme]) => shoot(out.clone(), scheme.to_str().map(str::to_owned)),
         (Some("compare"), [_, base, after, diff]) => {
             if !compare(base.clone(), after.clone(), diff.clone()) {
                 return std::process::ExitCode::FAILURE;
             }
         }
         _ => {
-            eprintln!("usage: screenshot_tour shoot OUT | compare BASE AFTER DIFF");
+            eprintln!("usage: screenshot_tour shoot OUT [SCHEME] | compare BASE AFTER DIFF");
             return std::process::ExitCode::from(2);
         }
     }

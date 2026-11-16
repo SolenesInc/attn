@@ -77,11 +77,28 @@ pub use review::places_built;
 pub use shell::{Drawer, Holder, Layer, View, Window};
 pub use terminal::{TerminalInbox, Terminals};
 
-/// The color scheme the `color_scheme` setting names.
+/// The color scheme the `color_scheme` setting names, under the `color_overrides` setting's
+/// colors. Each thread keeps the last one until either setting changes.
 pub(crate) fn color_scheme(
     settings: &std::collections::BTreeMap<String, String>,
-) -> &'static attn_ui::colors::ColorScheme {
-    attn_ui::colors::scheme_for(settings.get("color_scheme").map(String::as_str))
+) -> std::rc::Rc<attn_ui::colors::ColorScheme> {
+    thread_local! {
+        static KEPT: std::cell::RefCell<Option<(String, String, std::rc::Rc<attn_ui::colors::ColorScheme>)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    let setting = |key: &str| settings.get(key).map_or("", String::as_str);
+    let (id, overrides) = (setting("color_scheme"), setting("color_overrides"));
+    KEPT.with_borrow_mut(|kept| match kept {
+        Some((kept_id, kept_overrides, scheme)) if kept_id == id && kept_overrides == overrides => {
+            scheme.clone()
+        }
+        _ => {
+            let scheme =
+                std::rc::Rc::new(attn_ui::colors::scheme_for(Some(id)).with_overrides(overrides));
+            *kept = Some((id.to_owned(), overrides.to_owned(), scheme.clone()));
+            scheme
+        }
+    })
 }
 
 /// The colors a window draws in: the color scheme's, in the appearance the `theme` setting and
@@ -89,9 +106,9 @@ pub(crate) fn color_scheme(
 pub(crate) fn colors(
     settings: &std::collections::BTreeMap<String, String>,
     system_dark: bool,
-) -> &'static attn_ui::colors::Colors {
+) -> attn_ui::colors::Colors {
     let appearance = attn_ui::Appearance::from_setting(settings.get("theme").map(String::as_str));
-    color_scheme(settings).colors(appearance.is_dark(system_dark))
+    *color_scheme(settings).colors(appearance.is_dark(system_dark))
 }
 
 /// A change for a window's state, made on the link's thread and run on the UI thread.

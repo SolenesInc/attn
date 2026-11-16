@@ -1,0 +1,67 @@
+use std::collections::BTreeMap;
+
+use attn_protocol::SettingsUpdatedMessage;
+use attn_testkit::World;
+use serde_json::Value;
+
+use super::terminal::one_terminal;
+
+const CATPPUCCIN: &str = include_str!("../../../../../internal/colors/schemes/catppuccin.json");
+
+fn catppuccin(group: &str, name: &str) -> String {
+    let file: Value = serde_json::from_str(CATPPUCCIN).unwrap();
+    file["dark"][group][name].as_str().unwrap().to_owned()
+}
+
+fn update(world: &mut World, settings: &[(&str, &str)]) {
+    let settings: BTreeMap<String, String> = settings
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect();
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: Some(settings),
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
+}
+
+fn window_background(world: &World) -> String {
+    let [r, g, b, _] = world.runtime().clear_color();
+    let byte = |c: f32| (c * 255.0).round() as u8;
+    format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))
+}
+
+fn terminal_background(world: &World) -> String {
+    let themes = world.daemon.sent_of("set_terminal_theme");
+    let last = themes.last().expect("the daemon heard the terminal colors");
+    last["background"].as_str().unwrap().to_owned()
+}
+
+#[test]
+fn a_scheme_and_an_override_recolor_the_window_and_its_terminals_as_they_arrive() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    assert_eq!(window_background(&world), "#0d0d0f");
+    assert_eq!(terminal_background(&world), "#1e1e1e");
+
+    update(&mut world, &[("color_scheme", "catppuccin")]);
+    assert_eq!(window_background(&world), catppuccin("ui", "bg_app"));
+    assert_eq!(terminal_background(&world), catppuccin("terminal", "bg"));
+
+    update(
+        &mut world,
+        &[
+            ("color_scheme", "catppuccin"),
+            (
+                "color_overrides",
+                r##"{"dark":{"ui":{"bg_app":"#24273a"},"terminal":{"bg":"#303446"}},"light":{"ui":{"bg_app":"#ffffff"}}}"##,
+            ),
+        ],
+    );
+    assert_eq!(window_background(&world), "#24273a");
+    assert_eq!(terminal_background(&world), "#303446");
+
+    update(&mut world, &[]);
+    assert_eq!(window_background(&world), "#0d0d0f");
+    assert_eq!(terminal_background(&world), "#1e1e1e");
+}

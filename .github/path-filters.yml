@@ -119,6 +119,7 @@ tauri:
   - '.github/actions/setup-toolchains/**'
 native:
   - 'native/**'
+  - 'internal/colors/schemes/**'
   - 'scripts/native-parity'
   - 'cli/protocol/**'
   - 'internal/protocol/schema/**'

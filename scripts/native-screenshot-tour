@@ -2,7 +2,8 @@
 # The native app's screenshot tour: native/crates/attn-app/examples/screenshot_tour.rs draws a
 # fixed set of screens offscreen, in dark and in light, one PNG each.
 #
-#   scripts/native-screenshot-tour shoot OUT [REV]   the tour of this checkout, or of REV
+#   scripts/native-screenshot-tour shoot [--scheme ID] OUT [REV]
+#       the tour of this checkout, or of REV, with the color_scheme setting at ID
 #   scripts/native-screenshot-tour diff BASE AFTER DIFF
 #
 # shoot REV builds REV in a temporary worktree with this checkout's tour, so a revision from
@@ -15,7 +16,7 @@ tour="native/crates/attn-app/examples/screenshot_tour.rs"
 worktree=""
 
 usage() {
-  sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -49,6 +50,12 @@ run_tour() {
 }
 
 shoot() {
+  local scheme=()
+  if [ "${1:-}" = --scheme ]; then
+    scheme=("${2:?--scheme takes a color scheme id}")
+    shift 2
+  fi
+  [ $# -ge 1 ] || usage
   local out rev="${2:-}" checkout="$root"
   out="$(absolute "$1")"
   if [ -n "$rev" ]; then
@@ -65,7 +72,7 @@ shoot() {
   fi
   make -C "$checkout" -s "$(vt_archive)"
   find "$out" -name '*.png' -delete
-  run_tour "$checkout" shoot "$out"
+  run_tour "$checkout" shoot "$out" ${scheme[@]+"${scheme[@]}"}
   echo "native-screenshot-tour: wrote $(find "$out" -name '*.png' | wc -l | tr -d ' ') screens to $out"
 }
 
@@ -79,7 +86,7 @@ diff_runs() {
 }
 
 case "${1:-}" in
-shoot) [ $# -ge 2 ] && [ $# -le 3 ] || usage; shoot "${@:2}" ;;
+shoot) [ $# -ge 2 ] && [ $# -le 5 ] || usage; shoot "${@:2}" ;;
 diff) [ $# -eq 4 ] || usage; diff_runs "${@:2}" ;;
 *) usage ;;
 esac

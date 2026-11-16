@@ -62,11 +62,17 @@ those paths change, nightly, and on a release commit.
 
 Every color the native app draws comes from `attn_ui::colors`: a color scheme
 holds the interface's `Tokens` and the terminals' `TerminalColors`, once for
-dark and once for light. Tokens are named by what they mean, such as
-`state_waiting` or `find`, never by the view that uses them. Clippy rejects
-Rune's color constructors, such as `rune::color::hex`, everywhere else
-(`native/clippy.toml`). It cannot see `Color::BLACK` and `Color::WHITE`, so
-review catches those.
+dark and once for light. The schemes are the files in `internal/colors/schemes`,
+which the daemon checks settings against and the Tauri app reads too; the native
+app includes them when it builds, and a scheme missing a color fails to load.
+Tokens are named by what they mean, such as `state_waiting` or `find`, never by
+the view that uses them. Clippy rejects Rune's color constructors, such as
+`rune::color::hex`, everywhere else (`native/clippy.toml`). It cannot see
+`Color::BLACK` and `Color::WHITE`, so review catches those.
+
+A view in `attn-app` takes its colors from `crate::colors` or
+`crate::color_scheme`, never from a scheme in `attn_ui::colors` itself, so the
+`color_overrides` setting reaches it.
 
 ### Screenshot tour
 
@@ -85,9 +91,11 @@ pixel.
 scripts/native-screenshot-tour shoot /tmp/tour/base origin/main
 scripts/native-screenshot-tour shoot /tmp/tour/after
 scripts/native-screenshot-tour diff /tmp/tour/base /tmp/tour/after /tmp/tour/diff
+scripts/native-screenshot-tour shoot --scheme catppuccin /tmp/tour/catppuccin
 ```
 
-`shoot` with a revision builds it in a temporary worktree with this checkout's
+`--scheme` shoots the tour with the `color_scheme` setting at that id. `shoot`
+with a revision builds it in a temporary worktree with this checkout's
 tour, then removes the worktree and its build output. `diff` writes an image of
 each changed screen, with the changed pixels in red, and fails when any pixel
 differs.
