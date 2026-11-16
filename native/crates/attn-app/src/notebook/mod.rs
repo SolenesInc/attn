@@ -22,8 +22,8 @@ pub use model::Notebook;
 pub(crate) use root_picker::{overlay as root_picker_overlay, trigger as root_picker};
 pub(crate) use view::{fullscreen, tile_body};
 
-use io::{Target, write};
-use model::{Doc, Home, Surface, SurfaceId, shelf_key};
+use io::{Place, write};
+use model::{Doc, Home, Surface, SurfaceId};
 pub(crate) use params::Params;
 
 use crate::State;
@@ -242,6 +242,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let mut changed = follow_focus(state, tx);
     changed |= place_tiles(state, tx);
     changed |= hand_settled_to_main(state);
+    changed |= bring_forward(state, tx);
     changed |= follow_watches(state, tx);
     changed |= follow_notebook(state, tx);
     let ids: Vec<SurfaceId> = state
@@ -283,8 +284,12 @@ fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
         let Some(surface) = state.notebook.tiles.remove(&tile) else {
             continue;
         };
+        state
+            .notebook
+            .after_save
+            .remove(&SurfaceId::Tile(tile.clone()));
         if let Doc::Open(open) = surface.doc {
-            shelve(state, shelf_key(&tile, surface.root.as_deref()), *open, tx);
+            shelve(state, tile, surface.root, *open, tx);
         }
     }
     for (tile, params) in shown {
@@ -294,8 +299,10 @@ fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
         changed = true;
         let changes = changes_of(state, params.root.as_deref());
         let surface = Surface::new(params.root.clone(), notebook_root(state), changes);
-        let key = shelf_key(&tile, params.root.as_deref());
-        let returning = state.notebook.shelved.remove(&key);
+        let returning = state
+            .notebook
+            .shelf
+            .take_newest(&tile, params.root.as_deref());
         state.notebook.tiles.insert(tile.clone(), surface);
         let id = SurfaceId::Tile(tile.clone());
         io::list(state, &id, "", tx);
@@ -310,15 +317,15 @@ fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
 
 /// Keeps the edit of a tile that left the screen until it is on disk: it saves now unless a
 /// save is in flight or the person has a conflict to settle first.
-fn shelve(state: &mut State, key: String, open: model::Open, tx: &mut Tx) {
+fn shelve(state: &mut State, tile: String, root: Option<String>, open: model::Open, tx: &mut Tx) {
     let (writing, conflict) = (open.save.writing.is_some(), open.save.conflict.is_some());
     if !(open.dirty() || writing || conflict) {
         return;
     }
     let save = open.dirty() && !writing && !conflict;
-    state.notebook.shelved.insert(key.clone(), open);
+    let id = state.notebook.shelf.put(tile, root, open);
     if save {
-        write(state, Target::Shelved(key), None, tx);
+        write(state, Place::Shelf(id), None, tx);
     }
 }
 
@@ -347,58 +354,69 @@ fn hand_settled_to_main(state: &mut State) -> bool {
     if state.window.tile.is_none() {
         return false;
     }
-    let settled: Vec<String> = state
-        .notebook
-        .shelved
-        .iter()
-        .filter(|(_, open)| open.save.writing.is_none())
-        .map(|(key, _)| key.clone())
-        .collect();
-    for key in &settled {
-        if let Some(open) = state.notebook.shelved.remove(key) {
-            let (key, handed) = (key.clone(), open.hand());
+    let settled = state.notebook.shelf.settled();
+    for id in &settled {
+        if let Some(shelved) = state.notebook.shelf.remove(*id) {
+            let (tile, root, open) = shelved.into_parts();
+            let handed = open.hand();
             crate::desktop::to_main(
                 state,
-                Box::new(move |state: &mut State, tx: &mut Tx| take(state, key, handed.open(), tx)),
+                Box::new(move |state: &mut State, tx: &mut Tx| {
+                    take(state, tile, root, handed.open(), tx)
+                }),
             );
         }
     }
     !settled.is_empty()
 }
 
-/// The main window takes the edit a tile window settled: its tile shows it when the tile is on
-/// screen here without an edit of its own; otherwise it waits on the shelf, saving again if it
-/// can, and the window says why when it conflicts.
-fn take(state: &mut State, key: String, open: model::Open, tx: &mut Tx) {
-    let tile = key
-        .split_once('\0')
-        .map_or(key.as_str(), |(tile, _)| tile)
-        .to_owned();
-    let shows_disk = state.notebook.tiles.get(&tile).is_some_and(|surface| {
-        shelf_key(&tile, surface.root.as_deref()) == key
-            && surface
-                .open()
-                .is_none_or(|o| !o.dirty() && o.save.writing.is_none() && o.save.conflict.is_none())
-    });
-    if shows_disk {
-        let unsaved = open.dirty() && open.save.conflict.is_none();
-        show_returning(state, &tile, open, tx);
-        if unsaved {
-            edited(state, &SurfaceId::Tile(tile), tx);
-        }
-        state.notebook.revision += 1;
-        return;
-    }
+/// The main window takes the edit a tile window settled: it waits on the shelf, saving again
+/// if it can, and its tile shows it once the tile is on screen here showing what disk holds;
+/// the window says why when it conflicts and the tile cannot show it yet.
+fn take(state: &mut State, tile: String, root: Option<String>, open: model::Open, tx: &mut Tx) {
     let notice = open
         .save
         .conflict
         .is_some()
         .then(|| io::save_notice(&open))
         .flatten();
-    shelve(state, key, open, tx);
-    if let Some(notice) = notice {
+    shelve(state, tile.clone(), root, open, tx);
+    state.notebook.revision += 1;
+    if !show_settled(state, &tile, tx)
+        && let Some(notice) = notice
+    {
         state.window.notify(notice, tx);
     }
+}
+
+/// Each tile on screen showing what disk holds shows the edit of it that waits for the person.
+fn bring_forward(state: &mut State, tx: &mut Tx) -> bool {
+    let tiles: Vec<String> = state.notebook.tiles.keys().cloned().collect();
+    let mut changed = false;
+    for tile in tiles {
+        changed |= show_settled(state, &tile, tx);
+    }
+    changed
+}
+
+/// Shows on tile `tile` its oldest shelved edit with no save in flight, in place of what disk
+/// holds, when the tile shows nothing else.
+fn show_settled(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
+    let Some(surface) = state.notebook.tiles.get(tile) else {
+        return false;
+    };
+    let shows_disk = surface
+        .open()
+        .is_none_or(|o| !o.dirty() && o.save.writing.is_none() && o.save.conflict.is_none());
+    if !shows_disk {
+        return false;
+    }
+    let root = surface.root.clone();
+    let Some(open) = state.notebook.shelf.take_settled(tile, root.as_deref()) else {
+        return false;
+    };
+    show_returning(state, tile, open, tx);
+    true
 }
 
 /// Watches each folder an on-screen tile reads outside the notebook, and stops watching the
@@ -569,8 +587,7 @@ fn follow_save(state: &mut State, id: &SurfaceId, now: f64, tx: &mut Tx) -> bool
         return changed;
     }
     open.edited_at = None;
-    let path = open.path.clone();
-    write(state, Target::Surface(id.clone(), path), None, tx);
+    write(state, Place::Surface(id.clone()), None, tx);
     true
 }
 
@@ -590,8 +607,7 @@ pub(crate) fn overwrite(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
         return;
     };
     let base = open.save.conflict.clone().unwrap_or(None);
-    let path = open.path.clone();
-    write(state, Target::Surface(id.clone(), path), Some(base), tx);
+    write(state, Place::Surface(id.clone()), Some(base), tx);
 }
 
 /// Drops the edit and reads what disk holds now.

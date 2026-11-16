@@ -239,3 +239,95 @@ fn undoing_back_to_the_file_while_its_save_is_in_flight_saves_the_file_back() {
     world.advance(Duration::from_secs(3));
     assert!(world.runtime_is_at_rest());
 }
+
+/// Pops editor tile n out and holds the save of what it types there, brings the tile back,
+/// types in the main window's tile until that edit saves and then once more, and answers the
+/// held save with the conflict the main window's save made. Every later write is held.
+fn conflicted_pop_out_under_an_edited_tile(disk: &Disk) -> World {
+    let (mut world, window) = popped_out_editor(disk);
+    world
+        .daemon
+        .answer_in_turn("fs_write", std::iter::repeat_with(|| Answer::Hold).take(5));
+    type_in_tile_window(&mut world, &window, "Popped-out draft.");
+    world.advance(Duration::from_millis(700));
+    let popped = world.daemon.sent_of("fs_write").pop().unwrap();
+
+    arrange(
+        &mut world,
+        row(vec![pane("a"), editor_tile("n", "plan.md")]),
+        3,
+    );
+    world.gesture(|d| {
+        d.click(Target::key("notebook.tile.n.editor"));
+        d.press("mod+down");
+        d.type_text(" Main saved.");
+    });
+    world.advance(Duration::from_millis(700));
+    land_held_write(&mut world, disk);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.tile.n.editor"));
+        d.press("mod+down");
+        d.type_text(" Main unsaved.");
+    });
+    world.daemon.reply_to(
+        &popped,
+        json!({ "event": "fs_write_result", "success": true,
+            "result": { "path": "plan.md", "conflict": true,
+                "current_hash": hash(&disk.get("plan.md").unwrap()) } }),
+    );
+    world.settle();
+    assert!(main_tile_editor(&world).contains("Main unsaved."));
+    world
+}
+
+fn shows_conflict(world: &World) -> bool {
+    world
+        .screen()
+        .find(Target::key("notebook.tile.n.document.conflict"))
+        .is_some()
+}
+
+#[test]
+fn a_conflicted_pop_out_draft_waiting_under_an_edited_tile_survives_the_tile_leaving_and_shows_when_it_returns()
+ {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let mut world = conflicted_pop_out_under_an_edited_tile(&disk);
+
+    arrange(&mut world, row(vec![pane("a")]), 4);
+    assert!(land_held_write(&mut world, &disk).contains("Main unsaved."));
+    arrange(
+        &mut world,
+        row(vec![pane("a"), editor_tile("n", "plan.md")]),
+        5,
+    );
+
+    assert!(
+        main_tile_editor(&world).contains("Popped-out draft."),
+        "{}",
+        world.screen()
+    );
+    assert!(shows_conflict(&world));
+    world.gesture(|d| d.click(Target::role("button").name("Overwrite anyway")));
+    assert!(land_held_write(&mut world, &disk).contains("Popped-out draft."));
+    world.advance(Duration::from_secs(7));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn a_conflicted_pop_out_draft_waiting_under_an_edited_tile_shows_there_once_that_edit_saves() {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let mut world = conflicted_pop_out_under_an_edited_tile(&disk);
+    assert!(!shows_conflict(&world));
+
+    world.advance(Duration::from_millis(700));
+    assert!(land_held_write(&mut world, &disk).contains("Main unsaved."));
+
+    assert!(
+        main_tile_editor(&world).contains("Popped-out draft."),
+        "{}",
+        world.screen()
+    );
+    assert!(shows_conflict(&world));
+    world.advance(Duration::from_secs(7));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}

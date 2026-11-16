@@ -13,8 +13,8 @@ use super::file_kind::FileKind;
 pub struct Notebook {
     pub(crate) fullscreen: Option<Surface>,
     pub(crate) tiles: BTreeMap<String, Surface>,
-    /// Edits of tiles that left the screen, by `shelf_key`, kept until their save lands.
-    pub(crate) shelved: BTreeMap<String, Open>,
+    /// Edits of tiles off screen, or of tiles that showed another edit, until they reach disk.
+    pub(crate) shelf: Shelf,
     /// The file the fullscreen notebook showed last, which it opens again.
     pub(crate) last_path: Option<String>,
     /// The roots this window watches, as asked, with the root the daemon resolved.
@@ -275,9 +275,100 @@ impl Notebook {
     }
 }
 
-/// Where a tile's edit waits while the tile is off screen: the tile and the folder it read.
-pub(crate) fn shelf_key(tile: &str, root: Option<&str>) -> String {
-    format!("{tile}\0{}", root.unwrap_or(""))
+/// The edits waiting for their tile, each in a place of its own: putting an edit on the shelf
+/// never replaces another, so two edits of one tile both wait until each reaches disk or the
+/// person settles it.
+#[derive(Default)]
+pub(crate) struct Shelf {
+    edits: Vec<Shelved>,
+    next: u64,
+}
+
+pub(crate) struct Shelved {
+    id: u64,
+    tile: String,
+    root: Option<String>,
+    open: Open,
+}
+
+impl Shelved {
+    pub(crate) fn into_parts(self) -> (String, Option<String>, Open) {
+        (self.tile, self.root, self.open)
+    }
+
+    fn of(&self, tile: &str, root: Option<&str>) -> bool {
+        self.tile == tile && self.root.as_deref() == root
+    }
+}
+
+impl Shelf {
+    /// Puts the edit of tile `tile`, reading `root`, beside any other edit waiting there.
+    pub(crate) fn put(&mut self, tile: String, root: Option<String>, open: Open) -> u64 {
+        self.next += 1;
+        let id = self.next;
+        self.edits.push(Shelved {
+            id,
+            tile,
+            root,
+            open,
+        });
+        id
+    }
+
+    pub(crate) fn get(&self, id: u64) -> Option<&Open> {
+        self.edits.iter().find(|e| e.id == id).map(|e| &e.open)
+    }
+
+    pub(crate) fn get_mut(&mut self, id: u64) -> Option<&mut Open> {
+        self.edits
+            .iter_mut()
+            .find(|e| e.id == id)
+            .map(|e| &mut e.open)
+    }
+
+    pub(crate) fn remove(&mut self, id: u64) -> Option<Shelved> {
+        let at = self.edits.iter().position(|e| e.id == id)?;
+        Some(self.edits.remove(at))
+    }
+
+    /// The edit the tile showed last when it left the screen, taken off the shelf.
+    pub(crate) fn take_newest(&mut self, tile: &str, root: Option<&str>) -> Option<Open> {
+        let at = self.edits.iter().rposition(|e| e.of(tile, root))?;
+        Some(self.edits.remove(at).open)
+    }
+
+    /// The oldest edit of the tile with no save in flight, which waits for the person, taken
+    /// off the shelf.
+    pub(crate) fn take_settled(&mut self, tile: &str, root: Option<&str>) -> Option<Open> {
+        let at = self
+            .edits
+            .iter()
+            .position(|e| e.of(tile, root) && e.open.save.writing.is_none())?;
+        Some(self.edits.remove(at).open)
+    }
+
+    /// The edits with no save in flight.
+    pub(crate) fn settled(&self) -> Vec<u64> {
+        self.edits
+            .iter()
+            .filter(|e| e.open.save.writing.is_none())
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// The edit whose save in flight is write `write_id`.
+    pub(crate) fn writing(&self, write_id: u64) -> Option<u64> {
+        self.edits
+            .iter()
+            .find(|e| {
+                e.open
+                    .save
+                    .writing
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id == write_id)
+            })
+            .map(|e| e.id)
+    }
 }
 
 /// The edit of an open file: a note in the markdown editor, any other text in a plain field.

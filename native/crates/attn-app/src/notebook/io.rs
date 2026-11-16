@@ -9,7 +9,7 @@ use attn_protocol::{
 use rune::Tx;
 
 use super::file_kind::{FileKind, file_kind};
-use super::model::{Backlinks, Doc, Home, Listing, Open, Surface, SurfaceId, shelf_key};
+use super::model::{Backlinks, Doc, Home, Listing, Open, Surface, SurfaceId};
 use super::params::Params;
 use crate::State;
 use crate::requests::Refused;
@@ -125,10 +125,9 @@ pub(crate) fn leave_then(
         return then(state, tx);
     }
     let writing = open.save.writing.is_some();
-    let path = open.path.clone();
     state.notebook.after_save.insert(id.clone(), Box::new(then));
     if !writing {
-        write(state, Target::Surface(id.clone(), path), None, tx);
+        write(state, Place::Surface(id.clone()), None, tx);
     }
 }
 
@@ -274,72 +273,50 @@ pub(crate) fn backlinks(state: &mut State, id: &SurfaceId, path: String, tx: &mu
     );
 }
 
-/// Whose edit a write saves: a surface's open file, or a tile's edit waiting off screen.
+/// Where an edit is: open on a surface, or waiting on the shelf.
 #[derive(Clone)]
-pub(crate) enum Target {
-    Surface(SurfaceId, String),
-    Shelved(String),
+pub(crate) enum Place {
+    Surface(SurfaceId),
+    Shelf(u64),
 }
 
 pub(crate) type Then = Box<dyn FnOnce(&mut State, &mut Tx)>;
 
-/// Where the target's edit is now: open on a surface, or on the shelf by `shelf_key`.
-enum Place {
-    Surface(SurfaceId),
-    Shelf(String),
+fn open_at<'a>(state: &'a mut State, place: &Place) -> Option<&'a mut Open> {
+    match place {
+        Place::Surface(id) => state.notebook.surface_mut(id)?.open_mut(),
+        Place::Shelf(id) => state.notebook.shelf.get_mut(*id),
+    }
 }
 
-fn locate(state: &State, target: &Target) -> Option<Place> {
+/// Where the edit whose save in flight is write `write_id` is now, wherever it moved since.
+fn writing(state: &State, write_id: u64) -> Option<Place> {
     let notebook = &state.notebook;
-    match target {
-        Target::Surface(id, path) => {
-            if notebook
-                .surface(id)
-                .and_then(Surface::open)
-                .is_some_and(|o| o.path == *path)
-            {
-                return Some(Place::Surface(id.clone()));
-            }
-            let SurfaceId::Tile(tile) = id else {
-                return None;
-            };
-            let prefix = format!("{tile}\0");
-            notebook
-                .shelved
-                .iter()
-                .find(|(key, o)| key.starts_with(&prefix) && o.path == *path)
-                .map(|(key, _)| Place::Shelf(key.clone()))
-        }
-        Target::Shelved(key) => {
-            if let Some((tile, _)) = key.split_once('\0')
-                && notebook
-                    .tiles
-                    .get(tile)
-                    .is_some_and(|s| shelf_key(tile, s.root.as_deref()) == *key)
-            {
-                return Some(Place::Surface(SurfaceId::Tile(tile.to_owned())));
-            }
-            notebook
-                .shelved
-                .contains_key(key)
-                .then(|| Place::Shelf(key.clone()))
-        }
+    let sends = |surface: &Surface| {
+        surface
+            .open()
+            .and_then(|o| o.save.writing.as_ref())
+            .is_some_and(|(id, _)| *id == write_id)
+    };
+    if notebook.fullscreen.as_ref().is_some_and(sends) {
+        return Some(Place::Surface(SurfaceId::Fullscreen));
     }
+    if let Some(tile) = notebook
+        .tiles
+        .iter()
+        .find(|(_, s)| sends(s))
+        .map(|(t, _)| t)
+    {
+        return Some(Place::Surface(SurfaceId::Tile(tile.clone())));
+    }
+    notebook.shelf.writing(write_id).map(Place::Shelf)
 }
 
-/// The open file the target names, wherever it is now.
-pub(crate) fn target_open<'a>(state: &'a mut State, target: &Target) -> Option<&'a mut Open> {
-    match locate(state, target)? {
-        Place::Surface(id) => state.notebook.surface_mut(&id)?.open_mut(),
-        Place::Shelf(key) => state.notebook.shelved.get_mut(&key),
-    }
-}
-
-/// Saves the target's edit into the folder it was read from, against the version it read, or
-/// over `base` when the user chose to overwrite. A write still in flight is waited for.
-pub(crate) fn write(state: &mut State, target: Target, over: Option<Option<String>>, tx: &mut Tx) {
+/// Saves the edit at `place` into the folder it was read from, against the version it read,
+/// or over `base` when the user chose to overwrite. A write still in flight is waited for.
+pub(crate) fn write(state: &mut State, place: Place, over: Option<Option<String>>, tx: &mut Tx) {
     let write_id = state.notebook.next_write();
-    let Some(open) = target_open(state, &target) else {
+    let Some(open) = open_at(state, &place) else {
         return;
     };
     if open.save.writing.is_some() && over.is_none() {
@@ -374,30 +351,28 @@ pub(crate) fn write(state: &mut State, target: Target, over: Option<Option<Strin
                     .ok_or_else(|| "Could not save this file".to_owned())
             });
             let now = tx.clock();
-            let Some(open) = target_open(state, &target).filter(|o| {
-                o.save
-                    .writing
-                    .as_ref()
-                    .is_some_and(|(id, _)| *id == write_id)
-            }) else {
+            let Some(place) = writing(state, write_id) else {
+                return;
+            };
+            let Some(open) = open_at(state, &place) else {
                 return;
             };
             open.save.writing = None;
             match result {
                 Ok(result) if result.conflict => {
                     open.save.conflict = Some(result.current_hash.filter(|h| !h.is_empty()));
-                    failed(state, &target, tx);
+                    failed(state, &place, tx);
                 }
                 Ok(result) => {
                     open.disk = sent;
                     open.hash = result.hash.unwrap_or_default();
                     open.save.saved_at = Some(now);
-                    landed(state, &target, tx);
+                    landed(state, &place, tx);
                 }
                 Err(error) => {
                     open.save.error = Some(error);
                     open.edited_at = Some(now);
-                    failed(state, &target, tx);
+                    failed(state, &place, tx);
                 }
             }
         },
@@ -408,49 +383,45 @@ pub(crate) fn write(state: &mut State, target: Target, over: Option<Option<Strin
 /// A save reached disk: what waited for the surface's edit goes on, saving again first when
 /// the edit changed meanwhile, and an edit that changed with nothing waiting saves itself
 /// again; an edit on the shelf saves again or leaves it.
-fn landed(state: &mut State, target: &Target, tx: &mut Tx) {
-    match locate(state, target) {
-        Some(Place::Surface(id)) => {
-            if let Some(waiting) = state.notebook.after_save.remove(&id) {
-                leave_then(state, &id, tx, waiting);
+fn landed(state: &mut State, place: &Place, tx: &mut Tx) {
+    match place {
+        Place::Surface(id) => {
+            if let Some(waiting) = state.notebook.after_save.remove(id) {
+                leave_then(state, id, tx, waiting);
             } else if state
                 .notebook
-                .surface(&id)
+                .surface(id)
                 .and_then(Surface::open)
                 .is_some_and(|o| o.dirty() && o.edited_at.is_none())
             {
-                super::edited(state, &id, tx);
+                super::edited(state, id, tx);
             }
         }
-        Some(Place::Shelf(key)) => {
-            forget_waiting(state, &key);
-            if state.notebook.shelved.get(&key).is_some_and(Open::dirty) {
-                write(state, Target::Shelved(key), None, tx);
+        Place::Shelf(id) => {
+            if state.notebook.shelf.get(*id).is_some_and(Open::dirty) {
+                write(state, place.clone(), None, tx);
             } else {
-                state.notebook.shelved.remove(&key);
+                state.notebook.shelf.remove(*id);
             }
         }
-        None => {}
     }
 }
 
 /// A save conflicted or failed: a surface shows why and stays where it is; an edit on the shelf
-/// says so in the main window, and its tile shows why when it comes back.
-fn failed(state: &mut State, target: &Target, tx: &mut Tx) {
-    match locate(state, target) {
-        Some(Place::Surface(id)) => {
-            state.notebook.after_save.remove(&id);
+/// says so in the main window, and its tile shows why when it shows it.
+fn failed(state: &mut State, place: &Place, tx: &mut Tx) {
+    match place {
+        Place::Surface(id) => {
+            state.notebook.after_save.remove(id);
         }
-        Some(Place::Shelf(key)) => {
-            forget_waiting(state, &key);
-            let notice = state.notebook.shelved.get(&key).and_then(save_notice);
+        Place::Shelf(id) => {
+            let notice = state.notebook.shelf.get(*id).and_then(save_notice);
             if let Some(notice) = notice
                 && state.window.tile.is_none()
             {
                 state.window.notify(notice, tx);
             }
         }
-        None => {}
     }
 }
 
@@ -461,16 +432,6 @@ pub(crate) fn save_notice(open: &Open) -> Option<String> {
         (Some(_), _) => Some(format!("Could not save {path}: it changed on disk")),
         (None, Some(error)) => Some(format!("Could not save {path}: {error}")),
         (None, None) => None,
-    }
-}
-
-/// A move asked of a tile that then left the screen does not follow it back.
-fn forget_waiting(state: &mut State, key: &str) {
-    if let Some((tile, _)) = key.split_once('\0') {
-        state
-            .notebook
-            .after_save
-            .remove(&SurfaceId::Tile(tile.to_owned()));
     }
 }
 
