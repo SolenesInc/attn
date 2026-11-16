@@ -397,6 +397,18 @@ pub(crate) fn reload(state: &mut State, tx: &mut Tx) {
 }
 
 /// Back to the list, dropping what was typed.
+/// The Desktop select's choice, which goes to the daemon with the definition when it saves.
+pub(crate) fn choose_desktop(
+    state: &mut State,
+    _item_id: &str,
+    desktop: LaunchDesktopSetting,
+    _tx: &mut Tx,
+) {
+    if let Some(f) = form_mut(state) {
+        f.launch_desktop = Some(desktop);
+    }
+}
+
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
     if state.window.automations.form.take().is_some() {
         crate::settings::close_route_picker(state, tx);

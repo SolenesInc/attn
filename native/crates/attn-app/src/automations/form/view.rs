@@ -459,12 +459,27 @@ fn write_route(state: &mut State, _: &str, route: Route, _: &mut Tx) {
 }
 
 fn launch(state: &State, f: &Form, t: &Tokens) -> El {
-    let mut s = section("Runs as", t).child(crate::settings::route_chip(
-        state,
-        t,
-        route_target(),
-        "Automation model",
-    ));
+    let desktop = crate::launch_desktop::Field {
+        key: match f.id {
+            Some(id) => format!("{KEY}.{id}"),
+            None => format!("{KEY}.new"),
+        },
+        kind: "automation".into(),
+        item_id: f.id.map(|id| id.to_string()).unwrap_or_default(),
+        profile_id: f.profile.clone(),
+        default_name: f.name.text.clone(),
+        value: f.launch_desktop.clone(),
+        disabled: f.saving,
+        on_change: super::choose_desktop,
+    };
+    let mut s = section("Runs as", t)
+        .child(crate::launch_desktop::field(state, t, &desktop))
+        .child(crate::settings::route_chip(
+            state,
+            t,
+            route_target(),
+            "Automation model",
+        ));
     if overridden(f) {
         s = s.child(hint(
             "Use model and effort IDs accepted by the executable override.",
@@ -1064,6 +1079,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(f) = form(state) else { return };
     if state.window.layer.is_none() {
         crate::settings::route_overlay(state, t, layers);
+        crate::launch_desktop::overlay(state, t, layers);
     }
     let Some(open) = &f.open_select else { return };
     let Some(schedule) = f.schedule().1 else {

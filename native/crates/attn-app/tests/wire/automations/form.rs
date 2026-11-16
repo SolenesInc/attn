@@ -872,3 +872,81 @@ fn a_model_typed_by_hand_saves_when_the_harness_list_fails() {
         json!({"driver": "codex", "model": "custom-model"})
     );
 }
+
+fn serve_launch_desktops(daemon: &Daemon) {
+    daemon.on("launch_desktop_get", |r| {
+        message(attn_protocol::LaunchDesktopResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            action: "launch_desktop_get".into(),
+            success: true,
+            desktops: Some(vec![attn_protocol::Desktop {
+                id: "review".into(),
+                profile_id: "work".into(),
+                name: "Review".into(),
+                ..attn_protocol::Desktop::default()
+            }]),
+            ..attn_protocol::LaunchDesktopResultMessage::new()
+        })
+    });
+}
+
+fn choose_desktop(world: &mut World, select: &str, option: &str) {
+    click(world, &format!("{FORM}.{select}.desktop-trigger"));
+    world
+        .automate(
+            "press",
+            json!({"target": {"role": "option", "name": option}}),
+        )
+        .unwrap_or_else(|why| panic!("choose {option}: {why}"));
+}
+
+#[test]
+fn a_new_automation_offers_the_profile_s_desktops_and_saves_the_one_chosen() {
+    let mut world = open_new_with(serve_launch_desktops);
+    choose_desktop(&mut world, "new", "Review");
+    let read = &world.daemon.sent_of("launch_desktop_get")[0];
+    assert_eq!(
+        (read["kind"].as_str(), read["item_id"].as_str()),
+        (Some("automation"), Some(""))
+    );
+    fill_manual(&mut world);
+    press(&mut world, "save");
+    assert_eq!(
+        world.daemon.sent_of("automation_apply")[0]["launch_desktop_setting"],
+        json!({"desktop_id": "review"})
+    );
+}
+
+#[test]
+fn a_new_named_desktop_goes_beside_the_definition_and_never_into_its_spec() {
+    let stored = Stored::of(
+        AutomationDefinitionSummary {
+            profile_id: "work".into(),
+            ..definition(1, "PR reviewer")
+        },
+        manual_spec("PR reviewer"),
+    );
+    let mut world = open_edit_with(&stored, serve_launch_desktops);
+    choose_desktop(&mut world, "1", "A new desktop…");
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("launch-desktop.name"))
+            .value
+            .as_deref(),
+        Some("PR reviewer")
+    );
+    world.gesture(|app| {
+        app.press("mod+a");
+        app.type_text("Checks");
+        app.press("enter");
+    });
+    press(&mut world, "save");
+    let request = &world.daemon.sent_of("automation_apply")[0];
+    assert_eq!(
+        request["launch_desktop_setting"],
+        json!({"desktop_name": "Checks"})
+    );
+    assert_eq!(request["profile_id"], "work");
+    assert!(applied(&world)[0].0.get("launch_desktop").is_none());
+}
