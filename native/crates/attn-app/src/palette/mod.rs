@@ -80,6 +80,48 @@ impl Row {
     }
 }
 
+/// The kind of thing a command acts on, which its row's icon shows, as the Tauri app's
+/// command icons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Icon {
+    Context,
+    Attention,
+    Keys,
+    Desktops,
+    Notebook,
+    Notifications,
+    Garden,
+    Delegation,
+}
+
+impl Icon {
+    pub(crate) fn word(self) -> &'static str {
+        match self {
+            Icon::Context => "Context",
+            Icon::Attention => "Attention",
+            Icon::Keys => "Keys",
+            Icon::Desktops => "Desktops",
+            Icon::Notebook => "Notebook",
+            Icon::Notifications => "Notifications",
+            Icon::Garden => "Garden",
+            Icon::Delegation => "Delegation",
+        }
+    }
+
+    pub(crate) fn glyph(self) -> &'static str {
+        use attn_ui::icon;
+        match self {
+            Icon::Context => icon::FILE_TEXT,
+            Icon::Attention | Icon::Notifications => icon::BELL,
+            Icon::Keys => icon::KEYBOARD,
+            Icon::Desktops => icon::COLUMNS,
+            Icon::Notebook => icon::BOOK,
+            Icon::Garden => icon::SEEDLING,
+            Icon::Delegation => icon::SITEMAP,
+        }
+    }
+}
+
 /// Where an agent row's agent stands with the user, as the Tauri app's `agentStatus`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Status {
@@ -108,6 +150,7 @@ impl Status {
 
 pub(crate) enum Look {
     Command {
+        icon: Option<Icon>,
         description: Option<String>,
         shortcut: Option<String>,
     },

@@ -2,7 +2,7 @@ use attn_protocol::CommandUsage;
 
 use attn_protocol::go_values::FEATURES;
 
-use super::{Look, Pick, Row};
+use super::{Icon, Look, Pick, Row};
 use crate::setting;
 use crate::sidebar::{model, queue, width};
 use crate::{Action, State};
@@ -697,6 +697,7 @@ pub(crate) fn ranked(state: &State, query: &str, history: &[CommandUsage]) -> Ve
         .map(|(_, c)| Row {
             key: format!("command:{}", c.id),
             look: Look::Command {
+                icon: icon_of(&c.id),
                 description: c.description,
                 shortcut: super::label_of(state, c.shortcut.as_ref().unwrap_or(&c.action)),
             },
@@ -707,6 +708,54 @@ pub(crate) fn ranked(state: &State, query: &str, history: &[CommandUsage]) -> Ve
             }),
         })
         .collect()
+}
+
+/// The icon the Tauri app gives command `id`.
+fn icon_of(id: &str) -> Option<Icon> {
+    let desktops = ["desktop-", "move-with-delegates-"];
+    if desktops.iter().any(|p| id.starts_with(p)) {
+        return Some(Icon::Desktops);
+    }
+    if id.starts_with("feature-") {
+        return Some(Icon::Attention);
+    }
+    if id.starts_with("profile-") {
+        return Some(Icon::Context);
+    }
+    Some(match id {
+        "update-attn" => return None,
+        "close-desktop" | "new-desktop" | "sort-desktops" | "garden-frame" => Icon::Desktops,
+        "jump-to-waiting"
+        | "next-run-needing-you"
+        | "settle-active-session"
+        | "attention"
+        | "asks"
+        | "toggle-queue-mode"
+        | "toggle-crew-queue"
+        | "toggle-auto-settle"
+        | "toggle-session-priority"
+        | "unsnooze-active-session"
+        | "snooze-active-session" => Icon::Attention,
+        "keyboard-shortcuts"
+        | "whats-new"
+        | "sidebar-wider"
+        | "sidebar-narrower"
+        | "sidebar-reset-width"
+        | "shelf-fewer-tiles"
+        | "shelf-more-tiles"
+        | "shelf-carry-left"
+        | "shelf-carry-right"
+        | "shelf-send-to-shelf"
+        | "shelf-clear-dragged-widths"
+        | "settings"
+        | "customize-shortcuts"
+        | "create-diagnostic-report" => Icon::Keys,
+        "notebook" => Icon::Notebook,
+        "notifications" => Icon::Notifications,
+        "show-tended-seeds" => Icon::Garden,
+        "show-delegation-chain" => Icon::Delegation,
+        _ => Icon::Context,
+    })
 }
 
 fn score(command: &Command, terms: &[String]) -> u32 {

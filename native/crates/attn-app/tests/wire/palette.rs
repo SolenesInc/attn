@@ -1324,3 +1324,25 @@ fn the_agent_on_screen_can_be_reloaded_or_unsnoozed_from_the_palette() {
     assert_eq!(reloaded[0]["id"], "s1");
     rest_but_for_ages(&mut world);
 }
+
+#[test]
+fn each_command_row_leads_with_the_icon_of_its_kind() {
+    let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));
+    press_action(&mut world, Action::UiCommandPalette);
+    let icon = |world: &World, command: &str| {
+        world
+            .screen()
+            .find(Target::key(format!("palette.row.command:{command}.icon")))
+            .and_then(|n| n.name)
+    };
+
+    for (command, kind) in [
+        ("desktop-overview", "Desktops"),
+        ("jump-to-waiting", "Attention"),
+        ("keyboard-shortcuts", "Keys"),
+        ("notebook", "Notebook"),
+        ("new-agent", "Context"),
+    ] {
+        assert_eq!(icon(&world, command).as_deref(), Some(kind), "{command}");
+    }
+}

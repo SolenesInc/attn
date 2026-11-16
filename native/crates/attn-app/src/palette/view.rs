@@ -214,6 +214,7 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
         .radius(4.0);
     match &r.look {
         Look::Command {
+            icon,
             description,
             shortcut,
         } => {
@@ -223,6 +224,15 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
                 option = option.description(description.clone());
             }
             option
+                .children(icon.map(|icon| {
+                    text(icon.glyph())
+                        .key(format!("{key}.icon"))
+                        .role("img")
+                        .label(icon.word())
+                        .font(type_::BODY)
+                        .color(t.text_tertiary)
+                        .w(16.0)
+                }))
                 .child(name)
                 .children(shortcut.clone().map(|s| caption(s, "shortcut")))
         }
