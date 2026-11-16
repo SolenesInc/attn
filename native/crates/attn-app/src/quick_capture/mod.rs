@@ -108,7 +108,7 @@ impl Draft {
             files: self
                 .files
                 .iter()
-                .filter(|f| f.stored())
+                .filter(|f| f.ready())
                 .map(|f| StoredFile {
                     id: f.id.clone(),
                     name: f.name.clone(),
@@ -153,8 +153,8 @@ pub struct Panel {
     pub(crate) picking: Option<usize>,
     pub(crate) history: History,
     save: Option<Due>,
-    /// Files being copied into the draft's folder.
-    copying: usize,
+    /// Files being copied into a draft's folder, of any profile.
+    copies: Vec<attach::Copy>,
     /// What runs once the daemon holds every file of the draft: the send that waits on them.
     after_staging: Option<fn(&mut Panel, &mut Tx)>,
     /// A file is dragged over the panel.
@@ -227,7 +227,7 @@ pub(crate) fn hand(state: &State, replies: &[Reply]) {
 impl Panel {
     /// Whether files are still being copied into the draft's folder, off the UI thread.
     pub fn copying(&self) -> bool {
-        self.copying > 0
+        self.copies.iter().any(attach::Copy::running)
     }
 
     /// Puts `next` in the draft's place and returns the draft it replaced. The message field
@@ -465,18 +465,18 @@ fn restore(panel: &mut Panel, profile: &str, tx: &mut Tx) {
     panel.saved_for = None;
     panel.error = None;
     panel.history = History::default();
-    match panel.folder().and_then(|f| f.read().map(|d| (f, d))) {
+    let copying = attach::copying_into(panel, profile);
+    match panel
+        .folder()
+        .and_then(|f| f.read(&copying).map(|d| (f, d)))
+    {
         Ok((folder, Some(stored))) => {
             panel.draft.id = stored.id;
             panel.draft.text.replace_text(stored.text);
             panel.draft.mailbox = stored.mailbox;
             panel.draft.uncertain = stored.uncertain;
-            panel.draft.files = stored
-                .files
-                .into_iter()
-                .map(|f| Attachment::restored(&folder, f.id, f.name))
-                .collect();
             panel.draft.restored = true;
+            panel.draft.files = attach::restored(panel, &folder, stored.files);
         }
         Ok((_, None)) => panel.draft.restored = true,
         Err(why) => panel.error = Some(format!("Cannot restore draft: {why}")),

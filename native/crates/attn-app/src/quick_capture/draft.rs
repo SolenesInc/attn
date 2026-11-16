@@ -63,23 +63,37 @@ impl Folder {
     }
 
     /// The draft as last written, for a panel taking it up. Files it does not name, left by a
-    /// write that ended early, are removed: nothing copies into the folder before the panel
-    /// holds its draft.
-    pub fn read(&self) -> Result<Option<Stored>, String> {
+    /// write that ended early, are removed, apart from those of the files still `copying` in.
+    pub fn read(&self, copying: &[String]) -> Result<Option<Stored>, String> {
         let stored = self.load()?;
         let kept: Vec<PathBuf> = stored
             .iter()
             .flat_map(|d| &d.files)
             .map(|f| self.file(&f.id))
             .collect();
+        let arriving = |path: &Path| {
+            path.file_stem()
+                .is_some_and(|stem| copying.iter().any(|id| stem == id.as_str()))
+        };
         if let Ok(entries) = fs::read_dir(self.0.join(FILES)) {
             for entry in entries.flatten() {
-                if !kept.contains(&entry.path()) {
+                if !kept.contains(&entry.path()) && !arriving(&entry.path()) {
                     let _ = fs::remove_file(entry.path());
                 }
             }
         }
         Ok(stored)
+    }
+
+    /// Names a file whose bytes are in the folder in draft `id`, unless another draft replaced it.
+    pub fn name(&self, id: &str, file: StoredFile) -> Result<(), String> {
+        match self.load()? {
+            Some(mut draft) if draft.id == id => {
+                draft.files.push(file);
+                self.write(&draft)
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Replaces the draft, durably, then removes the files the earlier draft kept and this one

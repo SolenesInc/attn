@@ -767,6 +767,13 @@ impl World {
         self.capture.shown()
     }
 
+    /// Lets the world settle while Quick Capture copies a file whose source the test holds, such
+    /// as a FIFO no one has written yet. Releasing the hold settles until the copies finish.
+    pub fn hold_capture_copies(&mut self, held: bool) {
+        self.capture.copies_held = held;
+        self.settle();
+    }
+
     /// The clipboard the Quick Capture panel pastes from.
     pub fn capture_clipboard(&self) -> &rune::clipboard::MemoryClipboard {
         &self.capture.clipboard

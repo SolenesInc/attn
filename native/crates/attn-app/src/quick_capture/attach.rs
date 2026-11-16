@@ -10,7 +10,7 @@ use attn_protocol::{
 use base64::Engine;
 use rune::Tx;
 
-use super::draft::{Folder, commit};
+use super::draft::{Folder, StoredFile, commit};
 use super::{Busy, Draft, Message, Panel, Window, result};
 
 /// The bytes one upload request carries, as the Tauri app sends them.
@@ -34,6 +34,24 @@ pub(crate) enum Phase {
     },
 }
 
+/// A file being copied into the folder of the draft it was attached to, whichever profile the
+/// panel shows when the copy ends. The draft on disk names the file only once its bytes are
+/// there, as the Tauri app reads it.
+pub(super) struct Copy {
+    profile: String,
+    draft: String,
+    id: String,
+    name: String,
+    /// Why the copy failed while another profile's draft was showing, for the draft's return.
+    failed: Option<String>,
+}
+
+impl Copy {
+    pub(super) fn running(&self) -> bool {
+        self.failed.is_none()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Upload {
     #[default]
@@ -51,27 +69,8 @@ pub(crate) struct Attachment {
 }
 
 impl Attachment {
-    pub(super) fn restored(folder: &Folder, id: String, name: String) -> Attachment {
-        let path = folder.file(&id);
-        let size = std::fs::metadata(&path).map_or(0, |m| m.len());
-        Attachment {
-            phase: Phase::Stored {
-                size,
-                media_type: media_type(&path, &name),
-                path,
-            },
-            id,
-            name,
-            upload: Upload::No,
-        }
-    }
-
     pub(crate) fn ready(&self) -> bool {
         matches!(self.phase, Phase::Stored { .. })
-    }
-
-    pub(super) fn stored(&self) -> bool {
-        self.ready()
     }
 
     pub(crate) fn size(&self) -> u64 {
@@ -89,6 +88,61 @@ impl Attachment {
             _ => None,
         }
     }
+}
+
+/// The draft's files as the disk names them, then those still copying into it. A copy that
+/// failed while another profile's draft showed says so now.
+pub(super) fn restored(
+    panel: &mut Panel,
+    folder: &Folder,
+    files: Vec<StoredFile>,
+) -> Vec<Attachment> {
+    let mut kept: Vec<Attachment> = files
+        .into_iter()
+        .map(|StoredFile { id, name }| {
+            let path = folder.file(&id);
+            Attachment {
+                phase: Phase::Stored {
+                    size: std::fs::metadata(&path).map_or(0, |m| m.len()),
+                    media_type: media_type(&path, &name),
+                    path,
+                },
+                id,
+                name,
+                upload: Upload::No,
+            }
+        })
+        .collect();
+    let (profile, draft) = (&panel.draft.profile, &panel.draft.id);
+    let (ours, others): (Vec<Copy>, Vec<Copy>) = std::mem::take(&mut panel.copies)
+        .into_iter()
+        .partition(|c| &c.profile == profile && &c.draft == draft);
+    panel.copies = others;
+    for copy in ours {
+        match copy.failed {
+            None => {
+                kept.push(Attachment {
+                    id: copy.id.clone(),
+                    name: copy.name.clone(),
+                    phase: Phase::Copying,
+                    upload: Upload::No,
+                });
+                panel.copies.push(copy);
+            }
+            Some(why) => panel.error = Some(format!("Cannot attach {}: {why}", copy.name)),
+        }
+    }
+    kept
+}
+
+/// The ids of the files still copying into `profile`'s draft folder.
+pub(super) fn copying_into(panel: &Panel, profile: &str) -> Vec<String> {
+    panel
+        .copies
+        .iter()
+        .filter(|c| c.profile == profile && c.running())
+        .map(|c| c.id.clone())
+        .collect()
 }
 
 /// Attaches `files` to the draft: each shows at once and becomes ready once its bytes are in
@@ -115,13 +169,27 @@ pub(crate) fn add(panel: &mut Panel, files: Vec<(String, Source)>, tx: &mut Tx) 
             phase: Phase::Copying,
             upload: Upload::No,
         });
-        panel.copying += 1;
-        copy_off_thread(window.clone(), id, name, source, target);
+        panel.copies.push(Copy {
+            profile: panel.draft.profile.clone(),
+            draft: panel.draft.id.clone(),
+            id: id.clone(),
+            name: name.clone(),
+            failed: None,
+        });
+        let profile = panel.draft.profile.clone();
+        copy_off_thread(window.clone(), profile, id, name, source, target);
     }
     panel.edited(tx);
 }
 
-fn copy_off_thread(window: Arc<dyn Window>, id: String, name: String, from: Source, to: PathBuf) {
+fn copy_off_thread(
+    window: Arc<dyn Window>,
+    profile: String,
+    id: String,
+    name: String,
+    from: Source,
+    to: PathBuf,
+) {
     std::thread::spawn(move || {
         let copied = match &from {
             Source::Path(path) => std::fs::read(path)
@@ -134,12 +202,42 @@ fn copy_off_thread(window: Arc<dyn Window>, id: String, name: String, from: Sour
             media_type: media_type(&to, &name),
             path: to,
         });
-        window.update(Box::new(move |panel, tx| arrived(panel, &id, copied, tx)));
+        window.update(Box::new(move |panel, tx| {
+            arrived(panel, &profile, &id, copied, tx);
+        }));
     });
 }
 
-fn arrived(panel: &mut Panel, id: &str, copied: Result<Phase, String>, tx: &mut Tx) {
-    panel.copying -= 1;
+/// A copy ended. When another profile's draft shows, the draft the file was attached to names
+/// it on disk now, and a failure waits for that draft's return.
+fn arrived(panel: &mut Panel, profile: &str, id: &str, copied: Result<Phase, String>, tx: &mut Tx) {
+    let Some(copy) = panel
+        .copies
+        .iter()
+        .position(|c| c.profile == profile && c.id == id)
+    else {
+        return;
+    };
+    if panel.draft.profile != profile {
+        let named = copied.and_then(|_| {
+            let Copy {
+                draft, id, name, ..
+            } = &panel.copies[copy];
+            Folder::of(&panel.data_dir, profile)?.name(
+                draft,
+                StoredFile {
+                    id: id.clone(),
+                    name: name.clone(),
+                },
+            )
+        });
+        match named {
+            Ok(()) => drop(panel.copies.remove(copy)),
+            Err(why) => panel.copies[copy].failed = Some(why),
+        }
+        return;
+    }
+    panel.copies.remove(copy);
     let Some(at) = panel.draft.files.iter().position(|f| f.id == id) else {
         return;
     };

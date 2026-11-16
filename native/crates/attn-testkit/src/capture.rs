@@ -52,6 +52,7 @@ pub(crate) struct CaptureRuntime {
     pub window: Arc<HeadlessPanel>,
     pub data_dir: PathBuf,
     pub clipboard: rune::clipboard::MemoryClipboard,
+    pub copies_held: bool,
     _bound: Subscription,
 }
 
@@ -92,6 +93,7 @@ impl CaptureRuntime {
             window,
             data_dir: data_dir.to_owned(),
             clipboard,
+            copies_held: false,
             _bound: bound,
         }
     }
@@ -129,7 +131,8 @@ impl CaptureRuntime {
     }
 
     pub(crate) fn idle(&self) -> bool {
-        self.window.inbox.lock().unwrap().is_empty() && !self.runtime.state().copying()
+        self.window.inbox.lock().unwrap().is_empty()
+            && (self.copies_held || !self.runtime.state().copying())
     }
 
     pub(crate) fn at_rest(&self) -> bool {

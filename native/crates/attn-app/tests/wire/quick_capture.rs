@@ -1841,3 +1841,113 @@ fn cmd_w_hides_the_panel_keeping_the_draft() {
     assert_eq!(message_text(&world), "Half a thought");
     rest(&mut world);
 }
+
+/// A file whose bytes arrive only when the test writes them, so its copy into the draft's
+/// folder waits until then.
+fn held_source(world: &mut World, name: &str) -> std::path::PathBuf {
+    let path = world.data_dir().with_file_name(name);
+    let made = std::process::Command::new("mkfifo")
+        .arg(&path)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    world.hold_capture_copies(true);
+    path
+}
+
+fn release(world: &mut World, source: &std::path::Path, bytes: &[u8]) {
+    std::fs::write(source, bytes).unwrap();
+    world.hold_capture_copies(false);
+}
+
+#[test]
+fn a_file_copying_when_the_profile_changes_finishes_into_its_own_draft() {
+    let (daemon, kept) = home();
+    let mut world = World::start(daemon);
+    let source = held_source(&mut world, "held.png");
+    open(&mut world);
+    type_text(&mut world, "A draft");
+    world.capture_gesture(|d| {
+        d.runtime
+            .drop_files(vec![source.clone()], Some((200.0, 200.0)))
+    });
+
+    switch_to(&mut world, OTHER, "Home");
+    type_text(&mut world, "B draft");
+    let a = draft_on_disk(&world, PROFILE).unwrap();
+    assert_eq!(
+        (a["text"].as_str(), &a["files"]),
+        (Some("A draft"), &json!([])),
+        "the disk names a file only once its bytes are there, as the Tauri app reads it"
+    );
+    release(&mut world, &source, &png());
+    assert_eq!(message_text(&world), "B draft");
+    assert!(alert(&world).is_none());
+    let a = draft_on_disk(&world, PROFILE).unwrap();
+    assert_eq!(
+        (a["text"].as_str(), a["files"][0]["name"].as_str()),
+        (Some("A draft"), Some("held.png")),
+        "the copy finishes into the draft it was attached to"
+    );
+    world.advance(Duration::from_secs(2));
+    assert_eq!(draft_on_disk(&world, OTHER).unwrap()["files"], json!([]));
+
+    switch_to(&mut world, PROFILE, "Work");
+    assert_eq!(message_text(&world), "A draft");
+    let id = a["files"][0]["id"].as_str().unwrap().to_owned();
+    assert!(
+        world
+            .capture_screen()
+            .find(Target::role("list-item").name("held.png"))
+            .is_some()
+    );
+    assert_eq!(
+        std::fs::read(
+            folder(&world)
+                .join("capture-draft-files")
+                .join(format!("{id}.file"))
+        )
+        .unwrap(),
+        png()
+    );
+    assert_eq!(kept.lock().unwrap().bytes[&id], png());
+    assert!(alert(&world).is_none());
+    rest(&mut world);
+}
+
+#[test]
+fn a_copy_failing_after_the_profile_changes_shows_in_its_draft_on_return() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    let source = held_source(&mut world, "held.png");
+    open(&mut world);
+    type_text(&mut world, "A draft");
+    world.capture_gesture(|d| {
+        d.runtime
+            .drop_files(vec![source.clone()], Some((200.0, 200.0)))
+    });
+    switch_to(&mut world, OTHER, "Home");
+    let files = folder(&world).join("capture-draft-files");
+    std::fs::create_dir_all(&files).unwrap();
+    let refusing = ReadOnly::on(files);
+    release(&mut world, &source, &png());
+    assert!(
+        alert(&world).is_none(),
+        "another profile's failure stays with it"
+    );
+    drop(refusing);
+
+    switch_to(&mut world, PROFILE, "Work");
+    assert_eq!(message_text(&world), "A draft");
+    assert!(
+        world
+            .capture_screen()
+            .find(Target::role("list-item").name("held.png"))
+            .is_none()
+    );
+    let said = alert(&world).unwrap_or_default();
+    assert!(said.starts_with("Cannot attach held.png"), "{said}");
+    world.advance(Duration::from_secs(2));
+    assert_eq!(draft_on_disk(&world, PROFILE).unwrap()["files"], json!([]));
+    rest(&mut world);
+}
