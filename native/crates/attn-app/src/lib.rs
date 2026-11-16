@@ -232,6 +232,7 @@ pub fn bind(
             desktop::follow_windows(state);
             desktop::follow_window_title(state, tx);
             let _ = picker::follow(state, tx);
+            launcher::follow(state, tx);
             deep_link::settle(state, tx);
             state.tick(tx);
             sidebar::snooze::follow(state);
@@ -319,7 +320,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let answered = requests::drain(state, tx);
     annotations::draft::follow(state, tx);
     let expired = annotations::draft::expire(state, now) | annotations::draft::due(state, now, tx);
-    let browsed = picker::browse_due(state, tx);
+    let browsed = picker::browse_due(state, tx) | launcher::tick(state, tx);
     let launched = picker::follow(state, tx) | launch_desktop::poll(state, tx);
     let browsed = browsed | opener::browse_due(state, tx);
     let pictured = markdown::follow_images(state, now, tx);

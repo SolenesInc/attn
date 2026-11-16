@@ -19,6 +19,7 @@ mod wire {
     mod home;
     mod keys;
     mod launcher;
+    mod launcher_outposts;
     mod ledger;
     mod markdown;
     mod markdown_annotations;

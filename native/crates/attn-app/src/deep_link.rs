@@ -53,6 +53,7 @@ fn follow(state: &mut State, link: Link, tx: &mut Tx) {
                 anchor: None,
                 direction: Direction::Vertical,
                 label: link.label,
+                host: None,
             },
             tx,
         ),

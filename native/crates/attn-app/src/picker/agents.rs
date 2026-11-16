@@ -42,6 +42,31 @@ impl Agents {
         Agents(agents)
     }
 
+    /// These agents with the harnesses another machine has installed offered too, except
+    /// those this machine is still checking for.
+    pub(crate) fn with_installed(mut self, installed: impl IntoIterator<Item = String>) -> Agents {
+        for agent in installed {
+            if self.of(&agent) != Availability::Checking {
+                self.0.insert(agent, Availability::Available);
+            }
+        }
+        self
+    }
+
+    /// Every harness these agents know of, Terminal among them.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = &String> {
+        self.0.keys()
+    }
+
+    /// The harnesses that are there or still being checked for.
+    pub(crate) fn installed(&self) -> std::collections::BTreeSet<String> {
+        self.0
+            .keys()
+            .filter(|id| self.selectable(id))
+            .cloned()
+            .collect()
+    }
+
     pub(crate) fn of(&self, agent: &str) -> Availability {
         self.0
             .get(agent)

@@ -173,6 +173,7 @@ fn add_worktree(state: &mut State, checkout: Checkout, branch: String, tx: &mut 
                     anchor: None,
                     direction: Direction::Vertical,
                     label: Some(checkout.subject),
+                    host: None,
                 },
                 tx,
             );

@@ -18,7 +18,7 @@ use rune::{Chord, Key, KeyEvent, KeyPlatform, TextEdit, Tx};
 use crate::State;
 pub(crate) use agents::{Agents, TERMINAL};
 pub(crate) use paths::display as display_path;
-pub(crate) use repo::memory_key;
+pub(crate) use repo::{Memory, remember, remembered};
 pub(crate) use view::{controls, desktop_label, dialog, footer, inline, section, worktree_setup};
 
 /// How long typing settles before the picker browses the typed folder, as in the Tauri app.
@@ -134,8 +134,41 @@ impl Opened {
         }
     }
 
+    /// The harnesses this opening offers: this machine's, and for Launcher 2.0 also those its
+    /// outposts have.
+    pub(crate) fn offered(&self, state: &State) -> Agents {
+        match self {
+            Opened::Classic(_) => Agents::from_settings(&state.facts.settings),
+            Opened::Launcher(l) => l.agents(state),
+        }
+    }
+
+    fn agent(&self, state: &State) -> String {
+        self.choice().agent_among(&self.offered(state))
+    }
+
     fn is_launcher(&self) -> bool {
         matches!(self, Opened::Launcher(_))
+    }
+}
+
+/// The harnesses a launcher offers for the machine it would start on.
+pub(crate) struct Offer {
+    pub(crate) agents: Agents,
+    /// The name of the machine a start would go to, and the harnesses it lacks.
+    pub(crate) missing: Option<(String, std::collections::BTreeSet<String>)>,
+    /// A start would go to an outpost, so this machine's checks do not apply.
+    pub(crate) outpost: bool,
+}
+
+impl Offer {
+    /// This machine's harnesses.
+    pub(crate) fn here(state: &State) -> Offer {
+        Offer {
+            agents: Agents::from_settings(&state.facts.settings),
+            missing: None,
+            outpost: false,
+        }
     }
 }
 
@@ -163,12 +196,22 @@ impl Choice {
     /// The agent a launch starts: the wanted one while this machine has it, else the first
     /// that is there.
     pub(crate) fn agent(&self, state: &State) -> String {
-        Agents::from_settings(&state.facts.settings).resolve(&self.wanted)
+        self.agent_among(&Agents::from_settings(&state.facts.settings))
+    }
+
+    /// The agent a launch starts among the harnesses `agents` offers.
+    pub(crate) fn agent_among(&self, agents: &Agents) -> String {
+        agents.resolve(&self.wanted)
+    }
+
+    /// Whether a launch of `agent` starts in YOLO mode: chosen, and the agent supports it.
+    pub(crate) fn yolo_for(&self, state: &State, agent: &str) -> bool {
+        self.yolo && agents::supports_yolo(&state.facts.settings, agent)
     }
 
     /// Whether a launch starts in YOLO mode: chosen, and the agent supports it.
     pub(crate) fn yolo_on(&self, state: &State) -> bool {
-        self.yolo && agents::supports_yolo(&state.facts.settings, &self.agent(state))
+        self.yolo_for(state, &self.agent(state))
     }
 }
 
@@ -829,10 +872,9 @@ pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut
             .expect("a picker chord parses")
             .matches_tx_on(ev, tx, platform)
     };
-    if state.window.launching.slot(which).is_none() {
+    let Some(agents) = state.window.launching.slot(which).map(|p| p.offered(state)) else {
         return false;
-    }
-    let agents = Agents::from_settings(&state.facts.settings);
+    };
     if pressed("alt+q") {
         toggle_yolo(state, which);
         return true;
@@ -875,12 +917,15 @@ pub(crate) fn listed(agents: &Agents, catalog: &Catalog) -> Vec<String> {
 }
 
 pub(crate) fn choose_agent(state: &mut State, which: Which, agent: &str) {
+    let Some(agents) = state.window.launching.slot(which).map(|p| p.offered(state)) else {
+        return;
+    };
+    if !agents.selectable(agent) {
+        return;
+    }
     let Some(picker) = state.window.launching.slot_mut(which) else {
         return;
     };
-    if !Agents::from_settings(&state.facts.settings).selectable(agent) {
-        return;
-    }
     picker.choice_mut().wanted = agent.to_owned();
     if agent != TERMINAL {
         set_setting(state, SAVED_AGENT, agent);
@@ -888,10 +933,11 @@ pub(crate) fn choose_agent(state: &mut State, which: Which, agent: &str) {
 }
 
 pub(crate) fn toggle_yolo(state: &mut State, which: Which) {
-    let supported =
-        state.window.launching.slot(which).is_some_and(|p| {
-            agents::supports_yolo(&state.facts.settings, &p.choice().agent(state))
-        });
+    let supported = state
+        .window
+        .launching
+        .slot(which)
+        .is_some_and(|p| agents::supports_yolo(&state.facts.settings, &p.agent(state)));
     let Some(choice) = state
         .window
         .launching
@@ -1091,6 +1137,7 @@ pub(crate) fn launch(state: &mut State, which: Which, path: &str, tx: &mut Tx) {
             anchor,
             direction,
             label: None,
+            host: None,
         },
         tx,
     );
@@ -1120,6 +1167,8 @@ pub(crate) struct Spawn {
     pub(crate) direction: Direction,
     /// The session's name; the folder's name when left out, none for a shell.
     pub(crate) label: Option<String>,
+    /// The outpost the session runs on; this machine when left out.
+    pub(crate) host: Option<String>,
 }
 
 pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
@@ -1170,6 +1219,7 @@ pub(crate) fn spawn_then(
         label,
         yolo_mode: spawn.yolo.then_some(true),
         spawned_from: target.spawned_from,
+        host: spawn.host,
         ..SpawnSessionMessage::new()
     };
     state.ask_as(
@@ -1360,6 +1410,7 @@ pub(crate) fn create_worktree(
                     anchor,
                     direction,
                     label: None,
+                    host: None,
                 },
                 tx,
             );

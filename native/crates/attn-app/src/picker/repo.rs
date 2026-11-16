@@ -125,12 +125,15 @@ pub(crate) fn root_key(which: Which) -> String {
     format!("{}.repo", which.key())
 }
 
-pub(crate) fn memory_key(root: &str) -> String {
-    format!("new_session_destination_local_{root}")
+/// The setting that remembers where starts in the repository at `root` went, on `host` or on
+/// this machine.
+pub(crate) fn memory_key(root: &str, host: Option<&str>) -> String {
+    format!("new_session_destination_{}_{root}", host.unwrap_or("local"))
 }
 
+/// Where a repository's last start went: its main checkout or a new worktree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Memory {
+pub(crate) enum Memory {
     MainRepo,
     NewWorktree,
 }
@@ -144,8 +147,8 @@ impl Memory {
     }
 }
 
-fn remembered(state: &State, root: &str) -> Option<Memory> {
-    match state.facts.settings.get(&memory_key(root))?.trim() {
+pub(crate) fn remembered(state: &State, root: &str, host: Option<&str>) -> Option<Memory> {
+    match state.facts.settings.get(&memory_key(root, host))?.trim() {
         "main_repo" => Some(Memory::MainRepo),
         "new_worktree" => Some(Memory::NewWorktree),
         _ => None,
@@ -153,12 +156,12 @@ fn remembered(state: &State, root: &str) -> Option<Memory> {
 }
 
 /// Writes where the user started in this repository, when that changed.
-fn remember(state: &State, root: &str, memory: Memory) {
-    if remembered(state, root) == Some(memory) {
+pub(crate) fn remember(state: &State, root: &str, host: Option<&str>, memory: Memory) {
+    if remembered(state, root, host) == Some(memory) {
         return;
     }
     let _ = state.daemon.send(&SetSettingMessage {
-        key: memory_key(root),
+        key: memory_key(root, host),
         value: memory.value().into(),
         ..SetSettingMessage::new()
     });
@@ -174,7 +177,7 @@ pub(crate) fn show(
     info: RepoInfo,
     tx: &mut Tx,
 ) {
-    let memory = remembered(state, &root);
+    let memory = remembered(state, &root, None);
     let mut chooser = Chooser {
         root,
         info,
@@ -376,7 +379,7 @@ pub(crate) fn activate(state: &mut State, which: Which, row: usize, tx: &mut Tx)
     };
     let root = chooser.root.clone();
     if destination.main {
-        remember(state, &root, Memory::MainRepo);
+        remember(state, &root, None, Memory::MainRepo);
     }
     launch(state, which, &destination.path, tx);
 }
@@ -394,7 +397,7 @@ pub(crate) fn create(state: &mut State, which: Which, tx: &mut Tx) {
         Start::Current => chooser.current_branch(),
     };
     let root = chooser.root.clone();
-    remember(state, &root, Memory::NewWorktree);
+    remember(state, &root, None, Memory::NewWorktree);
     super::create_worktree(state, which, root, branch, from, tx);
 }
 

@@ -115,7 +115,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) has the picker on ⌘N and ⌘⇧N with its harness choice and YOLO, the launcher on an empty desktop, "New agent" in the palette, the title bar and home, the spawn link on macOS, reload from the palette and the row menu, and Launcher 2.0 on this machine. Launcher 2.0's machines and addresses ([outposts.md](outposts.md) `launcher-machines` and `launcher-addresses`), Settings' launch switches and the stopped tile's Resume drive only in the Tauri app. Closing an agent from the row menu is driven in [queue-flow.md](queue-flow.md). On Linux the scheme handler starts a second native app with the link instead of handing it to the running one (`deliver-attn-links-running-native-app`, `s-vmre0j`). `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) has the picker on ⌘N and ⌘⇧N with its harness choice and YOLO, the launcher on an empty desktop, "New agent" in the palette, the title bar and home, the spawn link on macOS, reload from the palette and the row menu, and Launcher 2.0, whose machines and addresses [outposts.md](outposts.md) drives. Settings' launch switches and the stopped tile's Resume drive only in the Tauri app. Closing an agent from the row menu is driven in [queue-flow.md](queue-flow.md). On Linux the scheme handler starts a second native app with the link instead of handing it to the running one (`deliver-attn-links-running-native-app`, `s-vmre0j`). `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 

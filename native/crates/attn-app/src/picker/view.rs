@@ -4,7 +4,7 @@ use rune::{El, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Dialog, TextInput};
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
-use super::{Catalog, Choice, Opened, Picker, Which, agents, listed, numbered, paths};
+use super::{Catalog, Choice, Offer, Opened, Picker, Which, agents, listed, numbered, paths};
 use crate::State;
 
 /// The New Session dialog over the app.
@@ -113,87 +113,108 @@ fn frame(state: &State, picker: &Picker, t: &Tokens) -> El {
         .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
             super::on_key(state, which, ev, tx)
         })
-        .child(controls(state, which, &picker.choice, t))
+        .child(controls(
+            state,
+            which,
+            &picker.choice,
+            &Offer::here(state),
+            t,
+        ))
         .children(body)
 }
 
 /// The harness toggle and the YOLO switch a launcher starts with.
-pub(crate) fn controls(state: &State, which: Which, choice: &Choice, t: &Tokens) -> El {
+pub(crate) fn controls(
+    state: &State,
+    which: Which,
+    choice: &Choice,
+    offer: &Offer,
+    t: &Tokens,
+) -> El {
     let w = which.key();
     let launching = &state.window.launching;
-    let agents = agents::Agents::from_settings(&state.facts.settings);
-    let current = choice.agent(state);
-    let numbered = numbered(&agents, &launching.catalog);
-    let options = listed(&agents, &launching.catalog)
-        .into_iter()
-        .map(|agent| {
-            let label = state
-                .facts
-                .settings
-                .get(&format!("{agent}_display_name"))
-                .filter(|name| !name.trim().is_empty())
-                .cloned()
-                .unwrap_or_else(|| agents::label(&agent));
-            let availability = agents.of(&agent);
-            let selectable = availability != agents::Availability::Unavailable;
-            let keys = if !selectable {
-                None
-            } else if agent == agents::TERMINAL {
-                Some("alt+t".to_owned())
-            } else {
-                numbered
-                    .iter()
-                    .position(|a| *a == agent)
-                    .filter(|n| *n < 9)
-                    .map(|n| format!("alt+{}", n + 1))
-            };
-            let title = match availability {
-                agents::Availability::Unavailable => {
-                    Some(format!("{label} is not available on this machine"))
-                }
-                agents::Availability::Checking => {
-                    Some(format!("Checking for {label} on this machine"))
-                }
-                agents::Availability::Available => None,
-            };
-            let chosen = current == agent;
-            let picked = agent.clone();
-            let mut option = row()
-                .key(format!("{w}.agent.{agent}"))
-                .role("radio")
-                .label(label.clone())
-                .checked(chosen)
-                .disabled(!selectable)
-                .items_center()
-                .gap(space::S2)
-                .px(12.0)
-                .py(6.0)
-                .radius(999.0)
-                .fill(if chosen { t.brand } else { t.bg_input })
-                .on_press_tx(move |state: &mut State, _: &mut Tx| {
-                    super::choose_agent(state, which, &picked)
-                })
-                .child(text(label).font(OPTION_TYPE).color(if chosen {
+    let agents = &offer.agents;
+    let current = choice.agent_among(agents);
+    let numbered = numbered(agents, &launching.catalog);
+    let options = listed(agents, &launching.catalog).into_iter().map(|agent| {
+        let label = state
+            .facts
+            .settings
+            .get(&format!("{agent}_display_name"))
+            .filter(|name| !name.trim().is_empty())
+            .cloned()
+            .unwrap_or_else(|| agents::label(&agent));
+        let availability = agents.of(&agent);
+        let selectable = availability != agents::Availability::Unavailable;
+        let keys = if !selectable {
+            None
+        } else if agent == agents::TERMINAL {
+            Some("alt+t".to_owned())
+        } else {
+            numbered
+                .iter()
+                .position(|a| *a == agent)
+                .filter(|n| *n < 9)
+                .map(|n| format!("alt+{}", n + 1))
+        };
+        let absent = offer
+            .missing
+            .as_ref()
+            .filter(|(_, lacking)| lacking.contains(&agent))
+            .map(|(machine, _)| machine);
+        let checking =
+            availability == agents::Availability::Checking && !offer.outpost && absent.is_none();
+        let title = if !selectable {
+            Some(format!("{label} is not available on this machine"))
+        } else if let Some(machine) = absent {
+            Some(format!("{label} is not installed on {machine}"))
+        } else {
+            checking.then(|| format!("Checking for {label} on this machine"))
+        };
+        let chosen = current == agent;
+        let picked = agent.clone();
+        let mut option = row()
+            .key(format!("{w}.agent.{agent}"))
+            .role("radio")
+            .label(label.clone())
+            .checked(chosen)
+            .disabled(!selectable)
+            .items_center()
+            .gap(space::S2)
+            .px(12.0)
+            .py(6.0)
+            .radius(999.0)
+            .fill(if chosen { t.brand } else { t.bg_input })
+            .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                super::choose_agent(state, which, &picked)
+            })
+            .child({
+                let name = text(label.clone()).font(OPTION_TYPE).color(if chosen {
                     t.bg_app
                 } else if selectable {
                     t.text_tertiary
                 } else {
                     t.text_muted
-                }));
-            if let Some(title) = title {
-                option = option.description(title.clone()).help(title);
-            }
-            if availability == agents::Availability::Checking {
-                option = option.child(
-                    text("…")
-                        .key(format!("{w}.agent.{agent}.checking"))
-                        .role("img")
-                        .label("checking")
-                        .color(t.text_tertiary),
-                );
-            }
-            option.children(keys.map(|k| keycaps(format!("{w}.agent.{agent}.keys"), &k, chosen, t)))
-        });
+                });
+                match absent {
+                    Some(_) => name.strike(0, label.len(), None),
+                    None => name,
+                }
+            });
+        if let Some(title) = title {
+            option = option.description(title.clone()).help(title);
+        }
+        if checking {
+            option = option.child(
+                text("…")
+                    .key(format!("{w}.agent.{agent}.checking"))
+                    .role("img")
+                    .label("checking")
+                    .color(t.text_tertiary),
+            );
+        }
+        option.children(keys.map(|k| keycaps(format!("{w}.agent.{agent}.keys"), &k, chosen, t)))
+    });
     let catalog_note = match &launching.catalog {
         Catalog::Unasked | Catalog::Loading => Some(
             text("Loading harnesses…")
@@ -222,7 +243,7 @@ pub(crate) fn controls(state: &State, which: Which, choice: &Choice, t: &Tokens)
         Catalog::Loaded(_) => None,
     };
     let supported = agents::supports_yolo(&state.facts.settings, &current);
-    let yolo = choice.yolo_on(state);
+    let yolo = choice.yolo_for(state, &current);
     let yolo_title = if supported {
         "Run the agent without asking for permission".to_owned()
     } else {
