@@ -404,8 +404,9 @@ fn drop_mark(line: El, mark: Option<DesktopMark>, heading: bool, t: &Tokens) -> 
             .border(1.0, t.accent.alpha(0.32)),
         Some(DesktopMark::Accepts) => line,
         Some(DesktopMark::Target) => line
+            .radius(0.0)
             .fill(t.accent.alpha(0.14))
-            .border_sides([3.0, 0.0, 0.0, 0.0], t.accent),
+            .border_sides([0.0, 0.0, 0.0, 3.0], t.accent),
     }
 }
 

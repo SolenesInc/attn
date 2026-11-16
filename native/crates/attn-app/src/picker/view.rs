@@ -177,7 +177,7 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                         .color(t.text_tertiary),
                 );
             }
-            option.children(keys.map(|k| keycaps(format!("{w}.agent.{agent}.keys"), &k, t)))
+            option.children(keys.map(|k| keycaps(format!("{w}.agent.{agent}.keys"), &k, chosen, t)))
         });
     let catalog_note = match &launching.catalog {
         Catalog::Unasked | Catalog::Loading => Some(
@@ -263,7 +263,9 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                                     t.text_muted
                                 }),
                         )
-                        .children(supported.then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", t))),
+                        .children(
+                            supported.then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", yolo, t)),
+                        ),
                 ),
         )
 }
@@ -282,14 +284,42 @@ fn toggle(options: impl IntoIterator<Item = El>, t: &Tokens) -> El {
         .children(options)
 }
 
-/// The chord `spec` that picks an option, as this platform's keycaps.
-fn keycaps(key: String, spec: &str, t: &Tokens) -> El {
+/// The chord `spec` that picks an option, as this platform's keycaps: light on the chosen
+/// orange pill, as Tauri's active `.agent-shortcut`.
+fn keycaps(key: String, spec: &str, chosen: bool, t: &Tokens) -> El {
     let caps = rune::Chord::parse(spec)
         .expect("a picker chord parses")
         .keycaps_on(rune::KeyPlatform::current());
-    rune_kit::Keybind::new(&caps)
-        .build(attn_ui::kit(t))
+    if !chosen {
+        return rune_kit::Keybind::new(&caps)
+            .build(attn_ui::kit(t))
+            .key(key);
+    }
+    row()
         .key(key)
+        .role("group")
+        .label(caps.join(" "))
+        .gap(2.0)
+        .items_center()
+        .children(caps.into_iter().map(|cap| {
+            row()
+                .min_w(14.0)
+                .h(14.0)
+                .px(4.0)
+                .center()
+                .radius(2.0)
+                .fill(t.text_primary.alpha(0.45))
+                .child(
+                    text(if cap.chars().count() == 1 {
+                        cap.to_uppercase()
+                    } else {
+                        cap
+                    })
+                    .font(CAP_TYPE)
+                    .color(t.bg_app),
+                )
+                .a11y_hidden()
+        }))
 }
 
 fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
@@ -337,9 +367,13 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
         text(title.clone())
             .key(format!("{w}.title"))
             .role("heading")
-            .label(title)
+            .label(title.clone())
             .font(type_::TITLE)
-            .color(t.text_primary),
+            .color(t.text_primary)
+            .single_line()
+            .truncate()
+            .w_full()
+            .help_when_truncated(title),
         field,
     ];
     if let Some(dir) = &picker.browsing {
@@ -886,3 +920,5 @@ const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();
 
 /// Tauri's `.location-picker` width.
 const DIALOG_W: f32 = 760.0;
+
+const CAP_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 500.0);
