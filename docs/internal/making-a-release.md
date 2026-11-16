@@ -33,14 +33,16 @@ not yet contain the previous release commit. Then run the
 `review-main` skill, or wait for the review automation to move `reviewed`.
 
 The script compiles the commits since the last release into `CHANGELOG.md`,
-bumps every version, and opens a PR to `main`. Merge the PR once `PR gate` and
-`App acceptance` are green. The merged commit is the release commit. CI on `main` runs one push at a
-time and drops a waiting push when a newer one arrives, but the release commit
-gets a run of its own that later landings cannot drop. That run runs every
+bumps every version, and opens a PR to `main`. Merge the PR once `PR gate`,
+`macOS PR gate` and `App acceptance` are green. The merged commit is the release
+commit. CI and CI macOS on `main` each run one push at a time and drop a waiting
+push when a newer one arrives, but the release commit gets a run of its own in
+each workflow that later landings cannot drop. Its CI macOS run runs every
 macOS job, and its `Full macOS run` job passes only when all of them passed.
 CI tags and publishes the release commit once both hold: its Acceptance and
-its `Full macOS run` are green, and `reviewed` contains it. Whichever happens last triggers the publish: CI finishing on the release
-commit, or a review moving `reviewed` to contain it.
+its `Full macOS run` are green, and `reviewed` contains it. Whichever happens
+last triggers the publish: either workflow finishing on the release commit, or
+a review moving `reviewed` to contain it.
 
 `main` may have moved past that commit, and may keep moving while the release
 PR is open. Commits after that commit ship in the release, but this release's
@@ -53,8 +55,8 @@ printed in the release PR, then rerun the CI for that commit.
 
 If Acceptance or `Full macOS run` fails on the release commit, fix the failure
 on `main` and prepare the release again with the same version. When a macOS
-job failed only because no runner picked it up, re-run that run's failed jobs
-instead.
+job failed only because no runner picked it up, re-run the failed jobs of the
+release commit's CI macOS run instead.
 
 ## Hotfix
 

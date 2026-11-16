@@ -4,15 +4,15 @@ set -euo pipefail
 run_limit=20
 
 newest_red() {
-  local kind="$1" runs run verdict
+  local workflow="$1" kind="$2" runs run verdict
   if [ "$kind" = push ]; then
     runs="$(
-      gh run list --workflow ci.yml --branch main --event push --status completed \
+      gh run list --workflow "$workflow" --branch main --event push --status completed \
         --limit "$run_limit" --json databaseId --jq '.[].databaseId'
     )"
   else
     runs="$(
-      gh run list --workflow ci.yml --branch main --status completed \
+      gh run list --workflow "$workflow" --branch main --status completed \
         --limit 100 --json databaseId,event \
         --jq "[.[] | select(.event | IN(\"schedule\", \"workflow_dispatch\"))][:$run_limit][].databaseId"
     )"
@@ -31,9 +31,10 @@ newest_red() {
     esac
   done
   [ -z "$runs" ] && return 0
-  echo "ci-main-red: none of main's last $run_limit completed $kind CI runs passed or failed a job; raise run_limit in scripts/ci-main-red.sh" >&2
+  echo "ci-main-red: none of main's last $run_limit completed $kind $workflow runs passed or failed a job; raise run_limit in scripts/ci-main-red.sh" >&2
   return 1
 }
 
-newest_red push
-newest_red full
+newest_red ci.yml push
+newest_red ci-macos.yml push
+newest_red ci-macos.yml full

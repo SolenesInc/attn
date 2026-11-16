@@ -58,21 +58,32 @@ if [ "$validated_tag" != "$tag" ]; then
   exit 1
 fi
 
-ci_run_row="$({
-  gh api --paginate \
-    "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&per_page=100&head_sha=$sha&branch=main" \
-    --jq '.workflow_runs[] | select(.head_sha == "'"$sha"'" and .event == "push") | [.created_at, .id, .head_sha, .status, (.conclusion // "none"), .html_url] | @tsv' |
-    sort -t $'\t' -k1,1 | tail -n 1 | cut -f 2-
-} || true)"
-if [ -z "$ci_run_row" ]; then
-  echo "release after acceptance: release commit $sha has no CI push run on main; refusing release" >&2
-  exit 1
-fi
-IFS=$'\t' read -r ci_run_id _ ci_run_status _ ci_run_url <<<"$ci_run_row"
-if [ "$ci_run_status" != completed ]; then
-  echo "release after acceptance: CI run $ci_run_id is $ci_run_status; release commit stays untagged until it completes ($ci_run_url)"
-  exit 0
-fi
+push_run_row() {
+  local workflow="$1"
+  {
+    gh api --paginate \
+      "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?event=push&per_page=100&head_sha=$sha&branch=main" \
+      --jq '.workflow_runs[] | select(.head_sha == "'"$sha"'" and .event == "push") | [.created_at, .id, .head_sha, .status, (.conclusion // "none"), .html_url] | @tsv' |
+      sort -t $'\t' -k1,1 | tail -n 1 | cut -f 2-
+  } || true
+}
+
+for workflow in ci.yml ci-macos.yml; do
+  run_row="$(push_run_row "$workflow")"
+  if [ -z "$run_row" ]; then
+    echo "release after acceptance: release commit $sha has no $workflow push run on main; refusing release" >&2
+    exit 1
+  fi
+  IFS=$'\t' read -r run_id _ run_status _ run_url <<<"$run_row"
+  if [ "$run_status" != completed ]; then
+    echo "release after acceptance: $workflow run $run_id is $run_status; release commit stays untagged until it completes ($run_url)"
+    exit 0
+  fi
+  if [ "$workflow" = ci.yml ]; then
+    ci_run_id="$run_id"
+    ci_run_url="$run_url"
+  fi
+done
 
 acceptance_rows="$({
   gh api --paginate \
@@ -97,7 +108,7 @@ else
     app-acceptance.yml "$sha" workflow_dispatch main 'App acceptance'
   echo "release after acceptance: manual App acceptance receipt is green for $sha"
 fi
-"$script_root/workflow-job-gate.sh" ci.yml "$sha" push main 'Full macOS run'
+"$script_root/workflow-job-gate.sh" ci-macos.yml "$sha" push main 'Full macOS run'
 echo "release after acceptance: every macOS job is green for main $sha"
 
 if create_error="$({

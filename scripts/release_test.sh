@@ -223,7 +223,8 @@ if grep -Fq -- '--draft' "$FAKE_GH_LOG"; then
 fi
 for value in "$main_sha" "$candidate_sha" \
   'https://github.com/example/attn/actions/runs/42/job/7' \
-  'compiled the commits since the last release' '--ref main' 'candidate_sha='; do
+  'compiled the commits since the last release' '--ref main' 'candidate_sha=' \
+  '`PR gate`, `macOS PR gate` and `App acceptance` are green'; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
 if grep -Fq 'add candidate fixture' "$FAKE_PR_BODY"; then

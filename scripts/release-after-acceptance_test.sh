@@ -43,11 +43,21 @@ if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?event=push'*
     "$FAKE_CI_STATUS" "$ci_conclusion" 'https://github.com/example/attn/actions/runs/42'
   exit 0
 fi
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]] && \
+if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci-macos.yml/runs?event=push'* ]]; then
+  if [[ "$FAKE_MACOS_STATUS" == completed ]]; then
+    macos_conclusion=success
+  else
+    macos_conclusion=none
+  fi
+  printf '2026-08-29T10:00:00Z\t44\t%s\t%s\t%s\t%s\n' "$FAKE_EXPECTED_SHA" \
+    "$FAKE_MACOS_STATUS" "$macos_conclusion" 'https://github.com/example/attn/actions/runs/44'
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/44/jobs?'* ]] && \
   [[ "$*" == *'Full macOS run'* ]]; then
   if [[ "${FAKE_FULL_MACOS_MODE:-success}" == success ]]; then
     printf '%s\t%s\t%s\n' completed success \
-      'https://github.com/example/attn/actions/runs/42/job/11'
+      'https://github.com/example/attn/actions/runs/44/job/11'
   fi
   exit 0
 fi
@@ -120,6 +130,7 @@ export FAKE_RELEASE_RUN_STATUS=completed
 export FAKE_RELEASE_RUN_CONCLUSION=success
 export FAKE_CREATE_RACE_TAG=0
 export FAKE_CI_STATUS=completed
+export FAKE_MACOS_STATUS=completed
 
 template="$work/template"
 init_release_fixture "$root" "$template"
@@ -154,6 +165,7 @@ setup_fixture() {
   export FAKE_RELEASE_RUN_CONCLUSION=success
   export FAKE_CREATE_RACE_TAG=0
   export FAKE_CI_STATUS=completed
+  export FAKE_MACOS_STATUS=completed
   export FAKE_FULL_MACOS_MODE=success
 
   git clone -q --bare "$template" "$fixture_origin"
@@ -227,7 +239,7 @@ fi
 
 setup_fixture skipped-full-macos
 export FAKE_FULL_MACOS_MODE=missing
-expect_failure "has 0 'Full macOS run' jobs" run_release_after_acceptance
+expect_failure "ci-macos.yml run 44 has 0 'Full macOS run' jobs" run_release_after_acceptance
 expect_untagged 'a release commit whose macOS jobs did not all run'
 
 setup_fixture automated-app
@@ -326,12 +338,21 @@ grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release 
 setup_fixture reviewed-before-ci
 export FAKE_CI_STATUS=in_progress
 run_release_after_acceptance >"$work/reviewed-before-ci.out"
-grep -Fq 'CI run 42 is in_progress; release commit stays untagged until it completes' "$work/reviewed-before-ci.out"
+grep -Fq 'ci.yml run 42 is in_progress; release commit stays untagged until it completes' "$work/reviewed-before-ci.out"
 expect_untagged 'a release commit whose CI is running'
 export FAKE_CI_STATUS=completed
 run_release_after_acceptance >"$work/ci-after-review.out"
 [[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
 grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
+
+setup_fixture macos-running
+export FAKE_MACOS_STATUS=in_progress
+run_release_after_acceptance >"$work/macos-running.out"
+grep -Fq 'ci-macos.yml run 44 is in_progress; release commit stays untagged until it completes' "$work/macos-running.out"
+expect_untagged 'a release commit whose macOS CI is running'
+export FAKE_MACOS_STATUS=completed
+run_release_after_acceptance >"$work/macos-after-review.out"
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
 
 setup_fixture existing-tag-elsewhere
 git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$baseline_sha"
@@ -352,7 +373,7 @@ expect_failure 'expected 99.98.97' run_release_after_acceptance
 expect_untagged 'a forged release manifest'
 
 for value in \
-  'workflows: [CI]' \
+  'workflows: [CI, CI macOS]' \
   'branches: [main]' \
   'branches: [reviewed]' \
   'checks: read' \

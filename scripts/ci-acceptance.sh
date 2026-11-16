@@ -7,9 +7,10 @@ set -euo pipefail
 : "${GITHUB_RUN_ATTEMPT:?ci acceptance: GITHUB_RUN_ATTEMPT is required}"
 : "${GITHUB_SHA:?ci acceptance: GITHUB_SHA is required}"
 
-unmet="$(jq -c '[to_entries[]
+may_skip="$(jq -nc '$ARGS.positional' --args "$@")"
+unmet="$(jq -c --argjson may_skip "$may_skip" '[to_entries[]
   | select(.value.result != "success")
-  | select((.key | IN("full-macos", "app-acceptance-macos")) and .value.result == "skipped" | not)
+  | select((.key | IN($may_skip[])) and .value.result == "skipped" | not)
   | {job: .key, result: .value.result}]' <<<"$NEEDS_JSON")"
 if [ "$unmet" = '[]' ]; then
   echo "ci acceptance: every job $GITHUB_SHA needs is green"

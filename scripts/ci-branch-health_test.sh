@@ -17,8 +17,8 @@ case "$1 $2" in
     jq -c '.[] | {number,state,title}' "$FAKE_ISSUES"
     ;;
   'issue create')
-    title="$(sed -n 's/.*--title \(Branch health: main [a-z ]*\) --body-file.*/\1/p' <<<"$*")"
-    jq --arg title "$title" '. + [{number: 99, state: "open", title: $title}]' "$FAKE_ISSUES" >"$FAKE_ISSUES.new"
+    title="$(sed -n 's/.*--title \(Branch health: main [A-Za-z ]*\) --body-file.*/\1/p' <<<"$*")"
+    jq --arg title "$title" '. + [{number: (99 + length), state: "open", title: $title}]' "$FAKE_ISSUES" >"$FAKE_ISSUES.new"
     mv "$FAKE_ISSUES.new" "$FAKE_ISSUES"
     ;;
   'issue close')
@@ -65,6 +65,33 @@ fi
 "$script" success main "$head_sha" "$run_url" 'full run' >/dev/null
 if [ "$(issue_state 'Branch health: main full run')" != closed ]; then
   echo "a green full run left its issue open" >&2
+  exit 1
+fi
+
+"$script" failure main "$head_sha" "$run_url" macOS >/dev/null
+if [ "$(issue_state 'Branch health: main macOS')" != open ]; then
+  echo "a red macOS run did not open its issue" >&2
+  cat "$FAKE_ISSUES" >&2
+  exit 1
+fi
+
+"$script" success main "$head_sha" "$run_url" acceptance >/dev/null
+if [ "$(issue_state 'Branch health: main macOS')" != open ]; then
+  echo "a green Linux push closed the macOS issue" >&2
+  exit 1
+fi
+
+export FAKE_MAIN_SHA="$nightly_sha"
+"$script" success main "$head_sha" "$run_url" macOS >/dev/null
+if [ "$(issue_state 'Branch health: main macOS')" != open ]; then
+  echo "a green macOS run on a commit main moved past closed the macOS issue" >&2
+  exit 1
+fi
+export FAKE_MAIN_SHA="$head_sha"
+
+"$script" success main "$head_sha" "$run_url" macOS >/dev/null
+if [ "$(issue_state 'Branch health: main macOS')" != closed ]; then
+  echo "a green macOS run left its issue open" >&2
   exit 1
 fi
 

@@ -54,9 +54,9 @@ moves it.
 runner. A landing that changes `native/`, the protocol schema or `cli/protocol`
 runs `make check-native` and every test of the workspace, as
 [Trunk-based development](trunk-based-development.md#what-landsh-does) says.
-CI's `Native (ubuntu-24.04)` job runs the same checks when those paths change,
-and on every push to `main`. `Native (macos-15)` runs them when those paths
-change, nightly, and on a release commit.
+CI's `Native / ubuntu-24.04` job runs the same checks when those paths change,
+and on every push to `main`. CI macOS's `Native / macos-15` runs them when
+those paths change, nightly, and on a release commit.
 
 ## Colors
 
@@ -137,7 +137,7 @@ Hosts run the protocol on the app's `Runtime`:
   `ready port=<port>`. Go stack tests start it with `Stack.StartNativeApp`,
   which builds the workspace's debug `attn-app` unless `ATTN_NATIVE_APP_BIN`
   names one. CI's Daemon jobs have no native toolchain and skip these tests;
-  `Native (ubuntu-24.04)` runs them.
+  `Native / ubuntu-24.04` runs them.
 - The installed app serves it on a named instance, or with `ATTN_AUTOMATION=1`
   (`0` turns it off), and writes its manifest where the Tauri app does:
   `debug/ui-automation.json` in the bundle id's application data directory.

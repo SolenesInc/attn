@@ -1,0 +1,290 @@
+name: CI macOS
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  ATTN_TEST_HISTORY_DIR: /tmp/attn-test-history
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: >-
+    ci-macos-${{ github.event.pull_request.number
+    || ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    && format('full-{0}', github.run_id))
+    || (github.ref == 'refs/heads/main'
+    && (startsWith(github.event.head_commit.message, 'chore(release): prepare v')
+    || (startsWith(github.event.head_commit.message, 'Merge pull request ')
+    && contains(github.event.head_commit.message, '/release/v')))
+    && github.sha)
+    || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  changes:
+    name: Changes
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    outputs:
+      full: ${{ steps.full.outputs.macos }}
+      cli: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.cli == 'true' }}
+      pty_upgrade: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.pty_upgrade == 'true' }}
+      tauri: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.tauri == 'true' }}
+      native: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native == 'true' }}
+      app_acceptance: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.app_acceptance == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find the commit main's last green run tested
+        id: base
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci-macos.yml/runs?branch=main&event=push&status=completed&per_page=50" \
+            --jq "[.workflow_runs[] | select(.id < $GITHUB_RUN_ID and .conclusion == \"success\")][0].head_sha // empty")" || sha=""
+          if [ -n "$sha" ] && git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$BEFORE" >> "$GITHUB_OUTPUT"
+          fi
+          echo "paths changed since $(sed -n 's/^sha=//p' "$GITHUB_OUTPUT")"
+
+      - name: Classify changed paths
+        id: filter
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ steps.base.outputs.sha }}
+          # PR API quota is shared by the installation. Full history lets the
+          # action use git instead, so an unrelated busy repo cannot break CI.
+          token: ''
+          filters: .github/path-filters.yml
+
+      - name: Decide whether every macOS job runs
+        id: full
+        env:
+          BEFORE: ${{ github.event.before }}
+          FULL_EVENT: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
+          MAIN_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          macos="$FULL_EVENT"
+          if [ "$MAIN_PUSH" = true ] && [ -n "$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- .github/release-candidate.yml)" ]; then
+            macos=true
+          fi
+          echo "macos=$macos" >> "$GITHUB_OUTPUT"
+
+  pty-compatibility:
+    name: PTY upgrade
+    needs: changes
+    if: needs.changes.outputs.pty_upgrade == 'true'
+    uses: ./.github/workflows/pty-upgrade.yml
+    with:
+      os: macos-15
+
+  rust:
+    name: Tauri
+    needs: changes
+    if: needs.changes.outputs.tauri == 'true'
+    uses: ./.github/workflows/tauri.yml
+    with:
+      os: macos-15
+
+  native:
+    name: Native
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native.yml
+    with:
+      os: macos-15
+
+  attn-cli:
+    name: CLI
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/attn-cli.yml
+    with:
+      os: macos-15
+
+  app-acceptance-macos:
+    name: App acceptance macOS
+    needs: changes
+    if: needs.changes.outputs.app_acceptance == 'true'
+    permissions:
+      contents: read
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      ATTN_INSTANCE: app-acceptance
+      ATTN_HARNESS_INSTANCE: app-acceptance
+      ATTN_HARNESS_PARK_VISIBLE_PX: '0'
+      SCENARIOS: terminal-block-copy terminal-input quick-capture
+    steps:
+      - name: Configure artifact directory
+        run: echo "ATTN_REAL_APP_ARTIFACTS_DIR=$RUNNER_TEMP/attn-real-app-harness" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Build the App acceptance tree
+        id: build-app
+        uses: ./.github/actions/build-app-acceptance
+        with:
+          instance: ${{ env.ATTN_INSTANCE }}
+
+      - name: Install the App acceptance tree
+        uses: ./.github/actions/install-app-acceptance
+        with:
+          instance: ${{ env.ATTN_INSTANCE }}
+          archive: ${{ steps.build-app.outputs.archive }}
+
+      - name: Run native clipboard, keyboard and Quick Capture scenarios
+        run: |
+          scenario_args=(); for scenario in $SCENARIOS; do scenario_args+=(--scenario "$scenario"); done
+          pnpm --dir app run real-app:serial-matrix -- "${scenario_args[@]}"
+
+      - name: Upload test receipts
+        if: always()
+        uses: ./.github/actions/upload-test-receipts
+        with:
+          name: app-acceptance-macos
+
+      - name: Require executed macOS coverage
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const { results } = JSON.parse(fs.readFileSync(`${process.env.ATTN_REAL_APP_ARTIFACTS_DIR}/last-matrix.json`, 'utf8'));
+          assert.deepEqual(
+            results.map(({ id, code, skipped = false }) => ({ id, code, skipped })),
+            process.env.SCENARIOS.split(' ').map((id) => ({ id, code: 0, skipped: false })),
+          );
+          NODE
+
+      - name: Collect daemon and worker logs
+        if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
+        run: |
+          data_dir="$(./attn instance resolve --field dataDir 2>/dev/null || true)"
+          mkdir -p "$EVIDENCE_DIR/daemon"
+          if [ -d "$data_dir" ]; then
+            find "$data_dir" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+          fi
+          app_debug_dir="$(./attn instance resolve --field appLocalDataDir 2>/dev/null || true)/debug"
+          mkdir -p "$EVIDENCE_DIR/app"
+          for file in ui-automation-server.log ui-diagnostics.jsonl; do
+            if [ -f "$app_debug_dir/$file" ]; then
+              cp "$app_debug_dir/$file" "$EVIDENCE_DIR/app/"
+            fi
+          done
+
+      - name: Upload macOS acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-acceptance-macos-evidence-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/attn-real-app-harness/**/*.txt
+            ${{ runner.temp }}/attn-real-app-harness/**/*.png
+            ${{ runner.temp }}/attn-real-app-harness/**/*.mp4
+            ${{ runner.temp }}/attn-real-app-harness/**/*.json
+            ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
+            ${{ runner.temp }}/attn-real-app-harness/**/native-*.log
+            ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
+            ${{ runner.temp }}/attn-real-app-harness/app/*
+
+      - name: Clean instance
+        if: always()
+        run: ./attn instance clean "$ATTN_INSTANCE"
+
+  full-macos:
+    name: Full macOS run
+    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos]
+    if: always() && needs.changes.outputs.full == 'true'
+    permissions: {}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every macOS job
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success")' <<< "$NEEDS_JSON"
+
+  pr-gate:
+    name: macOS PR gate
+    if: always() && github.event_name == 'pull_request'
+    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos, full-macos]
+    permissions: {}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Aggregate checks
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success" or .result == "skipped")' <<< "$NEEDS_JSON"
+
+  acceptance:
+    name: macOS acceptance
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos, full-macos]
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aggregate exact-SHA macOS acceptance
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: ./scripts/ci-acceptance.sh pty-compatibility rust native attn-cli app-acceptance-macos full-macos
+
+  branch-health:
+    name: Report branch health
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [changes, acceptance]
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: branch-health-${{ github.ref_name }}-${{ needs.changes.outputs.full == 'true' && 'full-run' || 'macos' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update branch-health issue
+        id: branch-health-issue
+        continue-on-error: true
+        env:
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          BRANCH_HEALTH_ASSIGNEE: victorarias
+          RECORD: ${{ needs.changes.outputs.full == 'true' && 'full run' || 'macOS' }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          ./scripts/ci-branch-health.sh "$ACCEPTANCE_RESULT"
+          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL" "$RECORD"
+
+      - name: Report issue-update failure
+        if: steps.branch-health-issue.outcome == 'failure'
+        run: >-
+          echo "::warning title=Branch health reporting failed::macOS acceptance is
+          authoritative; the branch-health issue could not be updated."

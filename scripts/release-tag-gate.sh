@@ -56,7 +56,7 @@ else
   echo "release tag gate: manual App acceptance receipt is green for $tag_sha"
 fi
 "$script_root/workflow-job-gate.sh" ci.yml "$tag_sha" push main Acceptance
-"$script_root/workflow-job-gate.sh" ci.yml "$tag_sha" push main 'Full macOS run'
+"$script_root/workflow-job-gate.sh" ci-macos.yml "$tag_sha" push main 'Full macOS run'
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "release_sha=$tag_sha" >>"$GITHUB_OUTPUT"

@@ -135,11 +135,14 @@ Checks before landing are fast and local: targeted tests, the change on the
 surface it touches, and a review scaled to the change's risk. The full Go
 suite, the Playwright specs and the Linux scenario matrix run in CI on every
 push to `main` after landing, and so do the combinations of changes that
-landed together. Each macOS job runs on a push only when the push changes
-paths that can break it. Every macOS job runs nightly and on a release
-commit. When no runner picks up a macOS job of a push run, Acceptance passes
-with a warning that names the job, and the nightly run covers the gap. A
-macOS job that ran and failed still turns Acceptance red.
+landed together. The macOS jobs run in their own workflow, `CI macOS`, so
+waiting for a macOS runner never holds up Linux's Acceptance. `CI macOS` runs
+each macOS job on a push only when the commits since its last green push run
+change paths that can break it, so a failed job runs again on every push until
+it passes. It runs every macOS job nightly and on a release commit. When no runner picks up
+a macOS job of a push run, `macOS acceptance` passes with a warning that names
+the job, and the nightly run covers the gap. A macOS job that ran and failed
+still turns `macOS acceptance` red.
 
 Reviewers catch a defect before landing, while the author still remembers the
 work and before other slices build on the defect. The review automation on `main` still reads every commit afterwards, with the
@@ -171,12 +174,13 @@ delegation watch, even after harvest. Corrections are new landings.
 
 ## When main is red
 
-CI runs on `main` after every landing, and it batches pushes that arrive during
-a run into the next run. When Acceptance fails, CI opens the
-`Branch health: main acceptance` issue. Every night CI also runs every job,
-macOS included, on `main`'s head. A red nightly run opens
-`Branch health: main full run`, which only the next green full run closes. The sheriff automation watches `main`'s
-CI and counts a run as red when any job in it failed, even when the run itself
+CI and CI macOS run on `main` after every landing, and each batches pushes that
+arrive during its run into its next run. When Acceptance fails, CI opens the
+`Branch health: main acceptance` issue. When `macOS acceptance` fails, CI macOS
+opens `Branch health: main macOS`. Every night CI macOS also runs every macOS
+job on `main`'s head. A red nightly run opens `Branch health: main full run`,
+which only the next green full run closes. The sheriff automation watches both
+workflows on `main` and counts a run as red when any job in it failed, even when the run itself
 concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
 sheriff reads it, finds the commit that broke it, and delegates an agent
 to fix forward when the fix is small and clear, or to revert the commit when the
@@ -192,7 +196,7 @@ release waits for green.
 ## Releases
 
 A release is cut on demand from a `main` commit that has green Acceptance and
-that `reviewed` contains. CI runs every macOS job on the release commit, and
-the release ships only when that commit's `Full macOS run` is green. Its notes are written from the commits since the last
+that `reviewed` contains. CI macOS runs every macOS job on the release commit,
+and the release ships only when that commit's `Full macOS run` is green. Its notes are written from the commits since the last
 release, grouped by their `Attn-Seed:` trailers, so landings add no changelog
 fragment. See [Making a release](making-a-release.md).

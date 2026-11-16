@@ -30,11 +30,16 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/43/jobs?'* ]]
     'https://github.com/example/attn/actions/runs/43/job/8'
   exit 0
 fi
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]] && \
+if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci-macos.yml/runs?'* ]]; then
+  printf '2026-08-29T10:00:00Z\t44\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
+    'https://github.com/example/attn/actions/runs/44'
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/44/jobs?'* ]] && \
   [[ "$*" == *'Full macOS run'* ]]; then
   if [[ "${FAKE_FULL_MACOS_MODE:-success}" == success ]]; then
     printf '%s\t%s\t%s\n' completed success \
-      'https://github.com/example/attn/actions/runs/42/job/11'
+      'https://github.com/example/attn/actions/runs/44/job/11'
   fi
   exit 0
 fi
@@ -127,7 +132,7 @@ expect_failure 'Acceptance is completed/failure' run_gate v99.98.97
 export FAKE_ACCEPTANCE_CONCLUSION=success
 
 export FAKE_FULL_MACOS_MODE=missing
-expect_failure "has 0 'Full macOS run' jobs" run_gate v99.98.97
+expect_failure "ci-macos.yml run 44 has 0 'Full macOS run' jobs" run_gate v99.98.97
 export FAKE_FULL_MACOS_MODE=success
 
 printf '%s\n' 'work after the release' >"$repo/later.txt"

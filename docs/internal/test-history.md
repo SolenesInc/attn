@@ -16,7 +16,7 @@ These commands record a receipt:
 - `scripts/landing-tests.sh`, which also names the tests it requested, so a
   test that reported nothing shows as `MISSING`. It runs groups of
   `scripts/landing-tests`, or single tests with `--unit '<unit>'`.
-- CI's `Native (<os>)` jobs, which run `cargo test` for the Rust workspace in
+- CI's `Native / <os>` jobs, which run `cargo test` for the Rust workspace in
   `native/` as the `cargo` runner. They are not the `native` runner's
   scenarios.
 
@@ -383,8 +383,8 @@ in one lane:
 
 `report` reads the spool, so after `sync` the report covers every machine and
 CI, or every receipt under `--receipts`. `scripts/ci-flake-report.sh` reports
-CI alone. The script downloads the receipt artifacts of recent `ci.yml` runs
-with the GitHub token, reads those artifacts, and names how many artifacts it
+CI alone. The script downloads the receipt artifacts of recent `ci.yml` and
+`ci-macos.yml` runs with the GitHub token, reads those artifacts, and names how many artifacts it
 read, found expired or could not read, and how many runs uploaded none. The daily `Flake ledger` workflow
 publishes its markdown to the `CI flake ledger` issue. An expired or missing
 artifact is a gap in the window, never a pass.

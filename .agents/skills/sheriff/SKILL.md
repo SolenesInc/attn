@@ -77,13 +77,17 @@ Correction seed you plant moves the class to a stronger fix.
 scripts/ci-main-red.sh
 gh run list --workflow ci.yml --branch main --event push --limit 5 \
   --json databaseId,headSha,status,conclusion
+gh run list --workflow ci-macos.yml --branch main --event push --limit 5 \
+  --json databaseId,headSha,status,conclusion
 git fetch origin main && git rev-parse origin/main
 ```
 
-`ci-main-red.sh` prints `<run-id> <attempt>` for main's newest completed CI
-push run with a failed job, unless a newer completed push run passed. It
-prints a second line the same way for main's nightly and dispatched full
-runs. A run can conclude `cancelled` while jobs inside it failed, so the
+Main has two workflows: `CI` (`ci.yml`) holds the Linux jobs and their
+`Acceptance`, and `CI macOS` (`ci-macos.yml`) holds the macOS jobs, their
+`macOS acceptance` and the full runs. `ci-main-red.sh` prints
+`<run-id> <attempt>` for main's newest completed CI push run with a failed
+job, unless a newer completed push run passed. It prints a line the same way
+for CI macOS's push runs, and one for its nightly and dispatched full runs. A run can conclude `cancelled` while jobs inside it failed, so the
 script reads the jobs, not the run's conclusion. The script reads only completed runs, so read
 the run list beside the script's output:
 
@@ -94,26 +98,30 @@ the run list beside the script's output:
 - While a newer run is in progress, the script can print an older red run.
   The older run's failure still stands unless a landed repair covers it, as
   [Before you diagnose](#before-you-diagnose) says.
-- When the script prints nothing, the newest completed push run and the
-  newest nightly run passed. `main` is green only when that push run's
-  `headSha` is `origin/main`. Otherwise report the last green SHA and that
+- When the script prints nothing, the newest completed push run of each
+  workflow and the newest nightly run passed. `main` is green only when both
+  push runs' `headSha` is `origin/main`. Otherwise report the last green SHA and that
   `main`'s head is still in CI, and end. Never call `main` green from the
   script's empty output alone.
 
-A push run skips the macOS jobs that the push's paths cannot break. The
-nightly run, and the run on a release commit, run every job, macOS included,
+A CI macOS push run skips the macOS jobs that the commits since its last
+green push run cannot break, so a failed macOS job runs again on every push
+until it passes.
+CI macOS's nightly run, and its run on a release commit, run every macOS job,
 and their `Full macOS run` job requires every macOS job to pass. A green push
 run after a red nightly run does not clear it: only the next green nightly run
 does, so treat a red nightly run like a red push run, and find its culprit
 among the commits since the last green nightly run.
-`gh run list --workflow ci.yml --branch main --event schedule` lists the
+`gh run list --workflow ci-macos.yml --branch main --event schedule` lists the
 nightly runs.
 
 ## Before you diagnose
 
-The `Branch health: main acceptance` issue is the record of push runs, and
-`Branch health: main full run` is the record of full runs: nightly,
-dispatched and release-commit runs. CI opens each only when a run's `Acceptance` finishes red, so when you act on a run still in
+The `Branch health: main acceptance` issue is the record of CI's push runs,
+`Branch health: main macOS` the record of CI macOS's push runs, and
+`Branch health: main full run` the record of CI macOS's full runs: nightly,
+dispatched and release-commit runs. CI opens each only when a run's
+`Acceptance` or `macOS acceptance` finishes red, so when you act on a run still in
 progress and the issue is closed, reopen it (`gh issue reopen <number>`). Read
 the comments on the issue first and comment each step. Keep one record per
 failure, with the job, the test and its error, the failing SHA, the owner (a
@@ -146,8 +154,8 @@ error, not by its run: the same failure in a newer run is the same failure.
   completes, so read a failed job's log from the API:
   `gh api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/<job-id>/logs`.
   Once the run completes, `gh run view <id> --log-failed` also works.
-  `Acceptance` and `App acceptance` only aggregate: find the job and test
-  under them.
+  `Acceptance`, `macOS acceptance`, `Full macOS run` and `App acceptance`
+  only aggregate: find the job and test under them.
 - Look the test up in the `CI flake ledger` issue, built from CI's test
   receipts. A known flake still needs a cause. The ledger says how often the
   test fails and on how many commits it passed since. After
@@ -244,17 +252,17 @@ session or the re-land seed.
 
 ## Gotchas
 
-- When no runner picks up a macOS job of a push run, Acceptance passes with a
+- When no runner picks up a macOS job of a push run, `macOS acceptance` passes with a
   `macOS coverage missing` warning that names the job. That is not a failure
   and needs no repair: the nightly run covers the gap. A macOS job that ran
   and failed is a failure. On a full run, a macOS job that no runner picked
   up turns `Full macOS run` red: escalate it, because the runner failed, not
   a commit.
-- CI runs one push at a time and keeps only the newest push waiting. When a
+- Each workflow runs one push at a time and keeps only the newest push waiting. When a
   newer push arrives while another push is waiting, the waiting push's run
   concludes `cancelled` with no jobs. A red run therefore covers every commit
   since the last green run. A release commit is the exception: its run starts
-  at once, beside the run in progress, and is never dropped.
+  at once in each workflow, beside the run in progress, and is never dropped.
 - You own a test that is still red on `main`. The
   [land-on-main skill](../land-on-main/SKILL.md) says how a landing treats it.
 - "no session or crew member matches" or "is not on this daemon" from

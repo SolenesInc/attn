@@ -2,7 +2,7 @@ name: Release accepted main
 
 on:
   workflow_run:
-    workflows: [CI]
+    workflows: [CI, CI macOS]
     types: [completed]
     branches: [main]
   push:

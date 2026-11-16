@@ -55,7 +55,9 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]
         {name: "Acceptance", status: $status, conclusion: $conclusion,
          html_url: "https://github.com/example/attn/actions/runs/42/job/7"},
         {name: "App acceptance", status: $status, conclusion: $conclusion,
-         html_url: "https://github.com/example/attn/actions/runs/42/job/8"}
+         html_url: "https://github.com/example/attn/actions/runs/42/job/8"},
+        {name: "Full macOS run", status: $status, conclusion: $conclusion,
+         html_url: "https://github.com/example/attn/actions/runs/42/job/9"}
       ] end)}' | jq -r "$filter"
   exit 0
 fi
@@ -96,6 +98,17 @@ grep -Fq 'api --paginate repos/example/attn/actions/workflows/ci.yml/runs?event=
 grep -Fq 'head_sha=' "$FAKE_GH_LOG"
 grep -Fq 'event=push' "$FAKE_GH_LOG"
 grep -Fq 'branch=main' "$FAKE_GH_LOG"
+
+: >"$FAKE_GH_LOG"
+"$gate" ci-macos.yml "$sha" push main 'Full macOS run' >"$work/full-macos-success.out"
+grep -Fq 'ci-macos.yml run 42 and Full macOS run are green' "$work/full-macos-success.out"
+grep -Fq 'api --paginate repos/example/attn/actions/workflows/ci-macos.yml/runs?event=push' "$FAKE_GH_LOG"
+status=0
+"$gate" ci.yml "$sha" push main 'Full macOS run' >"$work/full-macos-linux.out" 2>&1 || status=$?
+if [ "$status" -ne 2 ] || ! grep -Fq 'unsupported receipt ci.yml/push/main/Full macOS run' "$work/full-macos-linux.out"; then
+  echo "the gate accepted Full macOS run from ci.yml, which no longer runs macOS jobs" >&2
+  exit 1
+fi
 
 : >"$FAKE_GH_LOG"
 "$gate" ci.yml "$sha" pull_request - 'App acceptance' >"$work/pr-success.out"

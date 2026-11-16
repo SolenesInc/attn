@@ -8,7 +8,7 @@ branch="${4:?workflow branch or - is required}"
 job="${5:?workflow job is required}"
 
 case "$workflow|$event|$branch|$job" in
-  'ci.yml|push|main|Acceptance'|'ci.yml|push|next|Acceptance'|'ci.yml|push|main|Full macOS run'|\
+  'ci.yml|push|main|Acceptance'|'ci.yml|push|next|Acceptance'|'ci-macos.yml|push|main|Full macOS run'|\
   'ci.yml|pull_request|-|App acceptance'|'ci.yml|push|main|App acceptance'|\
   'app-acceptance.yml|workflow_dispatch|main|App acceptance') ;;
   *)

@@ -8,15 +8,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: '17 3 * * *'
-  workflow_dispatch:
 
 concurrency:
   group: >-
     ci-${{ github.event.pull_request.number
-    || ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    && format('full-{0}', github.run_id))
     || (github.ref == 'refs/heads/main'
     && (startsWith(github.event.head_commit.message, 'chore(release): prepare v')
     || (startsWith(github.event.head_commit.message, 'Merge pull request ')
@@ -29,18 +24,11 @@ jobs:
   changes:
     name: Changes
     permissions:
-      actions: read
       contents: read
       pull-requests: read
     runs-on: ubuntu-24.04
     outputs:
-      force_all: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
-      full_macos: ${{ steps.full.outputs.macos }}
-      macos_cli: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.cli == 'true' }}
-      macos_pty_upgrade: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.pty_upgrade == 'true' }}
-      macos_tauri: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.tauri == 'true' }}
-      macos_native: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native == 'true' }}
-      macos_app_acceptance: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.app_acceptance == 'true' }}
+      force_all: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
       daemon: ${{ steps.filter.outputs.daemon }}
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -60,207 +48,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Find the commit main's last run that ran tested
-        id: base
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          BEFORE: ${{ github.event.before }}
-        run: |
-          sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=50" \
-            --jq "[.workflow_runs[] | select(.id < $GITHUB_RUN_ID and (.conclusion | IN(\"success\", \"failure\")))][0].head_sha // empty")" || sha=""
-          if [ -n "$sha" ] && git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
-            echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=$BEFORE" >> "$GITHUB_OUTPUT"
-          fi
-          echo "paths changed since $(sed -n 's/^sha=//p' "$GITHUB_OUTPUT")"
-
       - name: Classify changed paths
         id: filter
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
-          base: ${{ steps.base.outputs.sha }}
           # PR API quota is shared by the installation. Full history lets the
           # action use git instead, so an unrelated busy repo cannot break CI.
           token: ''
-          filters: |
-            cli:
-              - 'cli/**'
-              - 'rust-toolchain.toml'
-              - '.github/actions/cache-attn-cli/**'
-              - '.github/workflows/ci.yml'
-            pty_upgrade:
-              - 'pty-host/**'
-              - 'internal/pty*/**'
-              - 'scripts/test-pty-upgrade.sh'
-              - 'ghostty-vt.pin'
-              - 'ghostty-vt-native.lock'
-              - 'go.mod'
-              - 'go.sum'
-              - 'go-cgo-cflags'
-              - 'Makefile'
-              - 'rust-toolchain.toml'
-              - '.tool-versions'
-              - '.github/actions/**'
-              - '.github/workflows/ci.yml'
-            daemon:
-              - '**/*.go'
-              - 'docs/guide/tutorials/**'
-              - 'docs/guide/reference/**'
-              - 'docs/guide/diagrams/*.txt'
-              - 'pty-host/**'
-              - 'cmd/**'
-              - 'internal/**'
-              - 'test/**'
-              - 'go.mod'
-              - 'go.sum'
-              - 'go-cgo-cflags'
-              - 'Makefile'
-              - 'scripts/**'
-              - '.github/workflows/app-acceptance.yml'
-              - '.github/workflows/ci.yml'
-              - '.tool-versions'
-              - '.github/actions/setup-toolchains/**'
-            frontend:
-              - 'internal/prompts/**'
-              - 'cmd/promptgen/**'
-              - 'cmd/prompt-editor/**'
-              - 'app/src/**'
-              - 'app/e2e/**'
-              - 'app/scripts/**'
-              - 'app/test-harness/**'
-              - 'app/public/**'
-              - 'app/index.html'
-              - 'app/package.json'
-              - 'app/pnpm-lock.yaml'
-              - 'app/playwright.config.ts'
-              - 'app/tsconfig*.json'
-              - 'app/vite.config.ts'
-              - 'app/vite.browser-runtime.config.ts'
-              - 'app/src-tauri/generated/**'
-              - 'app/lint/**'
-              - '.oxlintrc.json'
-              - 'app/pnpm-workspace.yaml'
-              - 'internal/protocol/schema/**'
-              - 'ghostty-vt.pin'
-              - 'ghostty-vt-wasm.lock'
-              - '.github/workflows/ci.yml'
-              - '.tool-versions'
-              - '.github/actions/setup-toolchains/**'
-            mobile:
-              - 'mobile/**'
-              - 'ghostty-vt.pin'
-              - 'ghostty-vt-wasm.lock'
-              - 'scripts/ensure-ghostty-vt-wasm.sh'
-              - 'internal/cloudlink/testdata/**'
-              - '.github/workflows/ci.yml'
-              - '.tool-versions'
-              - '.github/actions/setup-toolchains/**'
-            # Every input to the type pipeline plus its generated outputs. The
-            # outputs are listed so a hand-edit is gated even when no schema
-            # moved — that edit is exactly what this catches.
-            generated:
-              - 'cmd/db-migrations/**'
-              - 'internal/store/**'
-              - 'scripts/generate-schema/**'
-              - 'internal/protocol/schema/**'
-              - 'internal/protocol/generated.go'
-              - 'internal/protocol/placement_generated.go'
-              - 'internal/protocol/protocol_version.go'
-              - 'app/src/types/generated.ts'
-              - 'app/src/types/protocolVersion.ts'
-              - 'internal/setting/**'
-              - 'cmd/settingsgen/**'
-              - 'app/src/types/settings.generated.ts'
-              - 'scripts/generate-protocol-version.mjs'
-              - 'scripts/generate-rust-protocol.mjs'
-              - 'cmd/cligen/**'
-              - 'cli/**'
-              - 'internal/protocol/constants.go'
-              - 'internal/garden/**'
-              - 'internal/prompts/**'
-              - 'internal/ask/**'
-              - 'internal/inbox/**'
-              - 'go.mod'
-              - 'Makefile'
-              - '.github/workflows/ci.yml'
-              - '.tool-versions'
-              - '.github/actions/setup-toolchains/**'
-            tauri:
-              - 'app/src-tauri/**'
-              - 'pty-host/**'
-              - 'internal/ptyhost/**'
-              - 'scripts/rust-zig-linker.sh'
-              - 'scripts/rust-zig-ar.sh'
-              - 'ghostty-vt.pin'
-              - 'ghostty-vt-native.lock'
-              - 'Makefile'
-              - '.github/workflows/ci.yml'
-              - '.github/actions/setup-toolchains/**'
-            native:
-              - 'native/**'
-              - 'scripts/native-parity'
-              - 'cli/protocol/**'
-              - 'internal/protocol/schema/**'
-              - 'internal/testhistory/**'
-              - 'scripts/test-history/**'
-              - '.github/workflows/ci.yml'
-            app_acceptance:
-              - 'app/**'
-              - 'cli/**'
-              - 'rust-toolchain.toml'
-              - 'cmd/**'
-              - 'internal/**'
-              - 'pty-host/**'
-              - 'sdk/**'
-              - 'test/**'
-              - 'scripts/**'
-              - 'go.mod'
-              - 'go.sum'
-              - 'go-cgo-cflags'
-              - 'Makefile'
-              - '.tool-versions'
-              - 'ghostty-vt.pin'
-              - 'ghostty-vt-native.lock'
-              - 'ghostty-vt-wasm.lock'
-              - '.github/actions/**'
-              - '.github/workflows/app-acceptance.yml'
-              - '.github/workflows/acceptance-soak.yml'
-              - '.github/workflows/ci.yml'
-            release_preflight:
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/release.yml'
-              - '.github/workflows/release-after-acceptance.yml'
-              - '.github/workflows/release-health.yml'
-              - '.github/workflows/release-preflight.yml'
-              - 'Makefile'
-              - 'go.mod'
-              - 'go.sum'
-              - 'go-cgo-cflags'
-              - 'cmd/**'
-              - 'internal/**'
-              - 'pty-host/**'
-              - 'ghostty-vt.pin'
-              - 'ghostty-vt-native.lock'
-              - 'scripts/rust-zig-linker.sh'
-              - 'scripts/rust-zig-ar.sh'
-              - 'scripts/check-binary-glibc.sh'
-              - '.tool-versions'
-              - '.github/actions/setup-toolchains/**'
-
-      - name: Decide whether every macOS job runs
-        id: full
-        env:
-          BEFORE: ${{ github.event.before }}
-          FULL_EVENT: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
-          MAIN_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        run: |
-          macos="$FULL_EVENT"
-          if [ "$MAIN_PUSH" = true ] && [ -n "$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- .github/release-candidate.yml)" ]; then
-            macos=true
-          fi
-          echo "macos=$macos" >> "$GITHUB_OUTPUT"
+          filters: .github/path-filters.yml
 
   release-candidate:
     name: Release candidate
@@ -334,7 +130,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check migration history
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
         env:
           MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: make check-migrations
@@ -503,83 +298,12 @@ jobs:
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   pty-compatibility:
-    name: PTY upgrade (${{ matrix.os }})
+    name: PTY upgrade
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.changes.outputs.macos_pty_upgrade == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Report runner class
-        run: ./scripts/ci-runner-class.sh
-      - uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          go-cache: 'false'
-      - name: Resolve Go cache paths
-        id: go-cache-paths
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-      - name: Restore Go build cache
-        id: go-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'go-cgo-cflags') }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-      - name: Ensure the attn CLI
-        uses: ./.github/actions/cache-attn-cli
-        with:
-          out: ${{ runner.temp }}/attn-cli-out/attn
-
-      - name: Build host and native terminal library
-        run: make build-pty-host
-      - name: Install listener discovery tool
-        if: runner.os == 'Linux'
-        run: command -v lsof >/dev/null || (sudo apt-get update && sudo apt-get install -y lsof)
-      - name: Install fish for the login shell check
-        run: |
-          if [ "$RUNNER_OS" = Linux ]; then
-            sudo apt-get update && sudo apt-get install -y fish
-          else
-            brew install fish
-          fi
-      - name: Allow the private PID namespace that shared host tests create
-        if: runner.os == 'Linux'
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Verify old daemon and mixed host generations
-        run: bash scripts/test-pty-upgrade.sh
-      - name: Verify shared host protocol and lifecycle
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
-      - name: Verify shared host output and resize order on the daemon wire
-        run: ATTN_TEST_WIRE_ON_PTY_HOST=1 ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test ./internal/daemon -run '^(TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat|TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusable|TestAProgramReadsThePixelGeometryOfItsLastResize|TestAPasteAProgramIsNotReadingLeavesOtherPanesResponsiveAndArrivesWhole|TestInputBeyondTheQueueLimitIsRefusedNamingTheLimit|TestEmptyInputLeavesTheTerminalTakingInput|TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft|TestADeliveryAProgramIsNotReadingFailsAndNeverArrivesLater|TestAQuickCaptureTheAgentsTerminalWillNotTakeStaysUnread|TestInputDuringADeliveryIsAnsweredWhileTheDeliveryWaitsForItsTerminal)$' -count=1
-      - name: Verify shared host stack tests on macOS
-        if: runner.os == 'macOS'
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attnd -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestShellProgramTitleInsideHeavyOutputIsKept|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart|TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning)' -count=1
-      - name: Save Go build cache
-        if: >-
-          always() && steps.go-cache.outcome == 'success' &&
-          steps.go-cache.outputs.cache-hit != 'true' &&
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
-          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+    uses: ./.github/workflows/pty-upgrade.yml
+    with:
+      os: ubuntu-24.04
 
   frontend:
     name: Frontend
@@ -762,271 +486,30 @@ jobs:
           node cmd/prompt-editor/test/collaboration.mjs
 
   rust:
-    name: Tauri (${{ matrix.os }})
+    name: Tauri
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.changes.outputs.macos_tauri == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
-    defaults:
-      run:
-        working-directory: app/src-tauri
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Report runner class
-        working-directory: .
-        run: ./scripts/ci-runner-class.sh
-
-      - name: Install Linux webview deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            librsvg2-dev libgtk-3-dev libxdo-dev libssl-dev patchelf
-
-      - name: Set up Go
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          go-cache: 'false'
-
-      - name: Resolve Go cache paths
-        id: go-cache-paths
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Go build cache
-        id: go-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'go-cgo-cflags') }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.95.0'
-          components: clippy, rustfmt
-
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            app/src-tauri
-            pty-host
-          # Saving on PRs too would copy this cache into every branch scope and
-          # evict the rest of the repo's entries.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-
-      - name: Build attn binary
-        run: |
-          cd ../..
-          ./scripts/build-libghostty-vt.sh
-          go build -o /tmp/attnd ./cmd/attnd
-          scripts/rust-cli.sh build --out /tmp/attn
-          make build-pty-host
-          target_triple="$(rustc -vV | awk '/host:/ {print $2}')"
-          mkdir -p app/src-tauri/binaries
-          cp /tmp/attnd "app/src-tauri/binaries/attnd-${target_triple}"
-          cp /tmp/attn "app/src-tauri/binaries/attn-${target_triple}"
-          cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
-          cd app/src-tauri
-
-      - name: PTY host fmt, clippy, and test
-        run: |
-          cd ../..
-          cargo fmt --manifest-path pty-host/Cargo.toml -- --check
-          cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
-          cargo test --manifest-path pty-host/Cargo.toml
-
-      - name: Cargo fmt
-        run: cargo fmt -- --check
-
-      # The pre-commit hook has always run clippy; CI never did, so a lint that
-      # only the hook rejects reached main and blocked every local commit. Same
-      # pinned toolchain on both sides, so they cannot disagree.
-      - name: Cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Cargo test
-        run: cargo test
+    uses: ./.github/workflows/tauri.yml
+    with:
+      os: ubuntu-24.04
 
   native:
-    name: Native (${{ matrix.os }})
+    name: Native
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.native == 'true'
     permissions:
       contents: read
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.changes.outputs.macos_native == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
-    env:
-      CARGO_BUILD_BUILD_DIR: ${{ github.workspace }}/native/target
-      RUSTUP_TOOLCHAIN: 1.99.1
-    defaults:
-      run:
-        working-directory: native
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Report runner class
-        working-directory: .
-        run: ./scripts/ci-runner-class.sh
-
-      - name: Install Linux window and Vulkan libraries
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libfontconfig1-dev libxkbcommon-dev libwayland-dev mesa-vulkan-drivers
-
-      - name: Set up Go
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.99.1'
-          components: clippy, rustfmt
-
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-
-      - name: Ensure native VT library
-        working-directory: .
-        run: ./scripts/build-libghostty-vt.sh
-
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: native
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Native parity
-        run: ../scripts/native-parity
-
-      - name: Cargo fmt
-        run: cargo fmt --all --check
-
-      - name: Cargo clippy
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
-
-      - name: Cargo test
-        run: go tool test-history capture cargo -- --locked --no-fail-fast --workspace
-
-      - name: Ensure ghostty-vt artifacts
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/cache-ghostty-vt
-
-      - name: Ensure native VT library
-        if: runner.os == 'Linux'
-        working-directory: .
-        run: ./scripts/build-libghostty-vt.sh
-
-      - name: Read the repository's Rust pin
-        if: runner.os == 'Linux'
-        id: root-rust
-        working-directory: .
-        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      # The attn CLI builds with the repository's pin, not the native workspace's.
-      - name: Ensure the attn CLI
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/cache-attn-cli
-        env:
-          RUSTUP_TOOLCHAIN: ${{ steps.root-rust.outputs.channel }}
-        with:
-          out: ${{ runner.temp }}/attn-cli-out/attn
-
-      - name: Build the native app for stack tests
-        if: runner.os == 'Linux'
-        run: cargo build --locked -p attn-app
-
-      - name: Native app stack tests
-        if: runner.os == 'Linux'
-        working-directory: .
-        env:
-          RUSTUP_TOOLCHAIN: ${{ steps.root-rust.outputs.channel }}
-          ATTN_NATIVE_APP_BIN: ${{ github.workspace }}/native/target/debug/attn-app
-        run: ./scripts/test-go.sh --packages -run '^TestTheNativeApp' -v ./cmd/attnd
-
-      - name: Upload test receipts
-        if: always()
-        uses: ./.github/actions/upload-test-receipts
-        with:
-          name: native-${{ matrix.os }}
+    uses: ./.github/workflows/native.yml
+    with:
+      os: ubuntu-24.04
 
   attn-cli:
-    name: CLI (${{ matrix.os }})
-    needs: changes
+    name: CLI
     permissions:
       contents: read
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.changes.outputs.macos_cli == 'true' && '["macos-15","ubuntu-24.04"]' || '["ubuntu-24.04"]') }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Report runner class
-        run: ./scripts/ci-runner-class.sh
-
-      - name: Ensure CLI binary
-        id: cli
-        uses: ./.github/actions/cache-attn-cli
-        with:
-          out: ${{ runner.temp }}/attn-cli-out/attn
-
-      - name: Look up CLI verification
-        id: verified
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/attn-cli-verified
-          key: attn-cli-verified-${{ steps.cli.outputs.key }}
-          lookup-only: true
-
-      - name: Set up Rust for CLI verification
-        if: steps.verified.outputs.cache-hit != 'true'
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ steps.cli.outputs.channel }}
-          components: clippy, rustfmt
-
-      - name: Cache CLI test builds
-        if: steps.verified.outputs.cache-hit != 'true'
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cli
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: CLI fmt, clippy, and test
-        if: steps.verified.outputs.cache-hit != 'true'
-        run: |
-          cargo fmt --manifest-path cli/Cargo.toml --all -- --check
-          cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
-          cargo test --manifest-path cli/Cargo.toml --locked
-          mkdir -p "$RUNNER_TEMP/attn-cli-verified"
-          echo "${{ steps.cli.outputs.key }}" > "$RUNNER_TEMP/attn-cli-verified/key"
-
-      - name: Save CLI verification
-        if: steps.verified.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/attn-cli-verified
-          key: attn-cli-verified-${{ steps.cli.outputs.key }}
+    uses: ./.github/workflows/attn-cli.yml
+    with:
+      os: ubuntu-24.04
 
   app-acceptance-build:
     name: App acceptance build
@@ -1268,103 +751,6 @@ jobs:
           fi
           exit 1
 
-  app-acceptance-macos:
-    name: App acceptance macOS
-    needs: changes
-    if: needs.changes.outputs.macos_app_acceptance == 'true'
-    permissions:
-      contents: read
-    runs-on: macos-15
-    timeout-minutes: 40
-    env:
-      ATTN_INSTANCE: app-acceptance
-      ATTN_HARNESS_INSTANCE: app-acceptance
-      ATTN_HARNESS_PARK_VISIBLE_PX: '0'
-      SCENARIOS: terminal-block-copy terminal-input quick-capture
-    steps:
-      - name: Configure artifact directory
-        run: echo "ATTN_REAL_APP_ARTIFACTS_DIR=$RUNNER_TEMP/attn-real-app-harness" >> "$GITHUB_ENV"
-
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Report runner class
-        run: ./scripts/ci-runner-class.sh
-
-      - name: Build the App acceptance tree
-        id: build-app
-        uses: ./.github/actions/build-app-acceptance
-        with:
-          instance: ${{ env.ATTN_INSTANCE }}
-
-      - name: Install the App acceptance tree
-        uses: ./.github/actions/install-app-acceptance
-        with:
-          instance: ${{ env.ATTN_INSTANCE }}
-          archive: ${{ steps.build-app.outputs.archive }}
-
-      - name: Run native clipboard, keyboard and Quick Capture scenarios
-        run: |
-          scenario_args=(); for scenario in $SCENARIOS; do scenario_args+=(--scenario "$scenario"); done
-          pnpm --dir app run real-app:serial-matrix -- "${scenario_args[@]}"
-
-      - name: Upload test receipts
-        if: always()
-        uses: ./.github/actions/upload-test-receipts
-        with:
-          name: app-acceptance-macos
-
-      - name: Require executed macOS coverage
-        run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import fs from 'node:fs';
-          const { results } = JSON.parse(fs.readFileSync(`${process.env.ATTN_REAL_APP_ARTIFACTS_DIR}/last-matrix.json`, 'utf8'));
-          assert.deepEqual(
-            results.map(({ id, code, skipped = false }) => ({ id, code, skipped })),
-            process.env.SCENARIOS.split(' ').map((id) => ({ id, code: 0, skipped: false })),
-          );
-          NODE
-
-      - name: Collect daemon and worker logs
-        if: always()
-        env:
-          EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
-        run: |
-          data_dir="$(./attn instance resolve --field dataDir 2>/dev/null || true)"
-          mkdir -p "$EVIDENCE_DIR/daemon"
-          if [ -d "$data_dir" ]; then
-            find "$data_dir" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
-          fi
-          app_debug_dir="$(./attn instance resolve --field appLocalDataDir 2>/dev/null || true)/debug"
-          mkdir -p "$EVIDENCE_DIR/app"
-          for file in ui-automation-server.log ui-diagnostics.jsonl; do
-            if [ -f "$app_debug_dir/$file" ]; then
-              cp "$app_debug_dir/$file" "$EVIDENCE_DIR/app/"
-            fi
-          done
-
-      - name: Upload macOS acceptance evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-acceptance-macos-evidence-${{ github.run_attempt }}
-          if-no-files-found: warn
-          path: |
-            ${{ runner.temp }}/attn-real-app-harness/**/*.txt
-            ${{ runner.temp }}/attn-real-app-harness/**/*.png
-            ${{ runner.temp }}/attn-real-app-harness/**/*.mp4
-            ${{ runner.temp }}/attn-real-app-harness/**/*.json
-            ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
-            ${{ runner.temp }}/attn-real-app-harness/**/native-*.log
-            ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
-            ${{ runner.temp }}/attn-real-app-harness/app/*
-
-      - name: Clean instance
-        if: always()
-        run: ./attn instance clean "$ATTN_INSTANCE"
-
   release-preflight:
     name: Release preflight
     needs: changes
@@ -1372,18 +758,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/release-preflight.yml
-
-  full-macos:
-    name: Full macOS run
-    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos]
-    if: always() && needs.changes.outputs.full_macos == 'true'
-    permissions: {}
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Require every macOS job
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: jq -e 'all(.[]; .result == "success")' <<< "$NEEDS_JSON"
 
   pr-gate:
     name: PR gate
@@ -1404,7 +778,6 @@ jobs:
       - attn-cli
       - app-acceptance-build
       - app-acceptance-shard
-      - app-acceptance-macos
       - app-acceptance
       - release-preflight
     permissions:
@@ -1440,10 +813,8 @@ jobs:
       - attn-cli
       - app-acceptance-build
       - app-acceptance-shard
-      - app-acceptance-macos
       - app-acceptance
       - release-preflight
-      - full-macos
     permissions:
       actions: read
       contents: read
@@ -1459,12 +830,12 @@ jobs:
   branch-health:
     name: Report branch health
     if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [changes, acceptance]
+    needs: acceptance
     permissions:
       contents: read
       issues: write
     concurrency:
-      group: branch-health-${{ github.ref_name }}-${{ needs.changes.outputs.full_macos == 'true' && 'full-run' || 'acceptance' }}
+      group: branch-health-${{ github.ref_name }}-acceptance
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     steps:
@@ -1476,11 +847,10 @@ jobs:
         env:
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
           BRANCH_HEALTH_ASSIGNEE: victorarias
-          RECORD: ${{ needs.changes.outputs.full_macos == 'true' && 'full run' || 'acceptance' }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
           ./scripts/ci-branch-health.sh "$ACCEPTANCE_RESULT"
-          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL" "$RECORD"
+          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL" acceptance
 
       - name: Report issue-update failure
         if: steps.branch-health-issue.outcome == 'failure'

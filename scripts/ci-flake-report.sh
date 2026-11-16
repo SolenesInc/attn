@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Rank the tests that failed in GitHub Actions CI, separating flakes from
+# Rank the tests that failed in GitHub Actions CI (ci.yml and ci-macos.yml), separating flakes from
 # breakage, from the test receipts CI's jobs upload as artifacts. The ranking
 # is `go tool test-history report`'s; run that to rank this machine's spool,
 # which sync fills with every machine's receipts.
@@ -52,10 +52,13 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/receipts"
 go -C "$root" build -o "$work/test-history" ./scripts/test-history
 
-gh run list --workflow ci.yml --repo "$repo" --limit "$limit" --json databaseId,status \
-  | jq -r '.[] | select(.status == "completed") | .databaseId' >"$work/runs"
+workflows="ci.yml and ci-macos.yml"
+for workflow in ci.yml ci-macos.yml; do
+  gh run list --workflow "$workflow" --repo "$repo" --limit "$limit" --json databaseId,status \
+    | jq -r '.[] | select(.status == "completed") | .databaseId'
+done >"$work/runs"
 runs="$(grep -c . "$work/runs" || true)"
-[ "$runs" -gt 0 ] || { echo "ci-flake-report: no completed ci.yml runs in $repo" >&2; exit 1; }
+[ "$runs" -gt 0 ] || { echo "ci-flake-report: no completed $workflows runs in $repo" >&2; exit 1; }
 
 read_artifacts=0 expired=0 unreadable=0 without=0
 while read -r run; do
@@ -81,7 +84,7 @@ while read -r run; do
   done <"$work/artifacts"
 done <"$work/runs"
 
-source="the receipt artifacts of the last $runs completed ci.yml runs of $repo"
+source="the receipt artifacts of the last $runs completed $workflows runs of $repo"
 source+=" ($read_artifacts read, $expired expired, $unreadable unreadable; $without runs uploaded none)"
 "$work/test-history" report --receipts "$work/receipts" --source "$source" \
   --main "$main" --dormant-after "$dormant_after" --format "$format"

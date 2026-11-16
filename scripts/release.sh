@@ -230,7 +230,7 @@ gh workflow run app-acceptance.yml \\
 A manual dispatch does not restart this candidate's CI run. Rerun CI after
 recording the override.
 
-Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate_sha}\`.
+Do not merge until \`PR gate\`, \`macOS PR gate\` and \`App acceptance\` are green on \`${candidate_sha}\`.
 If App acceptance cannot cover the merged release commit on \`main\` either, record
 the same receipt with \`candidate_sha\` set to that commit and rerun its CI.
 EOF
@@ -241,5 +241,5 @@ pr_url="$(gh pr create --base main --head "$release_branch" \
   --title "chore(release): prepare ${version_tag}" --body-file "$body")"
 
 echo "Opened release candidate ${pr_url}"
-echo "Next: review the changelog and merge once PR gate and App acceptance are green."
+echo "Next: review the changelog and merge once PR gate, macOS PR gate and App acceptance are green."
 echo "This command did not merge, tag, or start a release."

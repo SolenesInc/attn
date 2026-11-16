@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url> <acceptance|full run>"
+usage="usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url> <acceptance|macOS|full run>"
 conclusion="${1:?$usage}"
 branch="${2:?$usage}"
 sha="${3:?$usage}"
@@ -18,8 +18,12 @@ case "$record" in
     record_summary="The exact-SHA \`Acceptance\` gate is not green for \`$branch\`."
     record_recovered="Acceptance recovered"
     ;;
+  macOS)
+    record_summary="The exact-SHA \`macOS acceptance\` gate is not green for \`$branch\`."
+    record_recovered="macOS acceptance recovered"
+    ;;
   'full run')
-    record_summary="The full run of every job, macOS included, is not green for \`$branch\`. Push runs skip the macOS jobs a push cannot break, so only the next full run closes this issue."
+    record_summary="The full run of every macOS job is not green for \`$branch\`. Push runs skip the macOS jobs a push cannot break, so only the next full run closes this issue."
     record_recovered="The full run recovered"
     ;;
   *) echo "branch health: unsupported record '$record'" >&2; exit 2 ;;
@@ -35,7 +39,7 @@ for tool in gh jq; do
   command -v "$tool" >/dev/null || { echo "branch health: missing $tool" >&2; exit 2; }
 done
 
-if [ "$record" = acceptance ]; then
+if [ "$record" != 'full run' ]; then
   remote_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --jq .commit.sha)"
   if [ "$remote_sha" != "$sha" ]; then
     echo "branch health: $branch moved to $remote_sha; ignoring stale result for $sha"

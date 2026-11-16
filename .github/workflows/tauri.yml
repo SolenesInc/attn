@@ -1,0 +1,106 @@
+name: Tauri
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  ATTN_TEST_HISTORY_DIR: /tmp/attn-test-history
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+
+jobs:
+  tauri:
+    name: ${{ inputs.os }}
+    runs-on: ${{ inputs.os }}
+    defaults:
+      run:
+        working-directory: app/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report runner class
+        working-directory: .
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Install Linux webview deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libgtk-3-dev libxdo-dev libssl-dev patchelf
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
+          go-cache: 'false'
+
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'go-cgo-cflags') }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+          components: clippy, rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            pty-host
+          # Saving on PRs too would copy this cache into every branch scope and
+          # evict the rest of the repo's entries.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+
+      - name: Build attn binary
+        run: |
+          cd ../..
+          ./scripts/build-libghostty-vt.sh
+          go build -o /tmp/attnd ./cmd/attnd
+          scripts/rust-cli.sh build --out /tmp/attn
+          make build-pty-host
+          target_triple="$(rustc -vV | awk '/host:/ {print $2}')"
+          mkdir -p app/src-tauri/binaries
+          cp /tmp/attnd "app/src-tauri/binaries/attnd-${target_triple}"
+          cp /tmp/attn "app/src-tauri/binaries/attn-${target_triple}"
+          cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
+          cd app/src-tauri
+
+      - name: PTY host fmt, clippy, and test
+        run: |
+          cd ../..
+          cargo fmt --manifest-path pty-host/Cargo.toml -- --check
+          cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path pty-host/Cargo.toml
+
+      - name: Cargo fmt
+        run: cargo fmt -- --check
+
+      # The pre-commit hook has always run clippy; CI never did, so a lint that
+      # only the hook rejects reached main and blocked every local commit. Same
+      # pinned toolchain on both sides, so they cannot disagree.
+      - name: Cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Cargo test
+        run: cargo test

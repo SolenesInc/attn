@@ -1,0 +1,66 @@
+name: CLI
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  ATTN_TEST_HISTORY_DIR: /tmp/attn-test-history
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+
+jobs:
+  attn-cli:
+    name: ${{ inputs.os }}
+    runs-on: ${{ inputs.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Ensure CLI binary
+        id: cli
+        uses: ./.github/actions/cache-attn-cli
+        with:
+          out: ${{ runner.temp }}/attn-cli-out/attn
+
+      - name: Look up CLI verification
+        id: verified
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/attn-cli-verified
+          key: attn-cli-verified-${{ steps.cli.outputs.key }}
+          lookup-only: true
+
+      - name: Set up Rust for CLI verification
+        if: steps.verified.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.cli.outputs.channel }}
+          components: clippy, rustfmt
+
+      - name: Cache CLI test builds
+        if: steps.verified.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: CLI fmt, clippy, and test
+        if: steps.verified.outputs.cache-hit != 'true'
+        run: |
+          cargo fmt --manifest-path cli/Cargo.toml --all -- --check
+          cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path cli/Cargo.toml --locked
+          mkdir -p "$RUNNER_TEMP/attn-cli-verified"
+          echo "${{ steps.cli.outputs.key }}" > "$RUNNER_TEMP/attn-cli-verified/key"
+
+      - name: Save CLI verification
+        if: steps.verified.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/attn-cli-verified
+          key: attn-cli-verified-${{ steps.cli.outputs.key }}
