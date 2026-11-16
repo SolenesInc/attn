@@ -568,6 +568,21 @@ func postKeyCode(_ keyCode: CGKeyCode, modifiers: [String], targetPid: pid_t? = 
         keyUp.postToPid(targetPid)
     } else {
         keyUp.post(tap: .cghidEventTap)
+        try releaseModifiers(flags)
+    }
+}
+
+func releaseModifiers(_ held: CGEventFlags) throws {
+    let keys: [(CGEventFlags, CGKeyCode)] = [(.maskCommand, 55), (.maskShift, 56), (.maskAlternate, 58), (.maskControl, 59)]
+    var remaining = held
+    for (flag, keyCode) in keys where remaining.contains(flag) {
+        remaining.remove(flag)
+        guard let release = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
+            throw DriverError.eventCreationFailed("Failed to create a modifier release for keycode \(keyCode)")
+        }
+        release.type = .flagsChanged
+        release.flags = remaining
+        release.post(tap: .cghidEventTap)
     }
 }
 
