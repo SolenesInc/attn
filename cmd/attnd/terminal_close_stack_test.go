@@ -35,7 +35,7 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 				if err := syscall.Mkfifo(fifo, 0o600); err != nil {
 					t.Fatal(err)
 				}
-				script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = -l ] && { [ \"$#\" = 1 ] || [ \"$2\" = -C ]; }; then exec 3>%q; trap '' HUP; fi\nexec %q \"$@\"\n", fifo, realShell)
+				script := fmt.Sprintf("#!/bin/sh\ncase \" $* \" in *\" -c \"*) ;; *) exec 3>%q; trap '' HUP ;; esac\nexec %q \"$@\"\n", fifo, realShell)
 				if err := os.WriteFile(shell, []byte(script), 0o700); err != nil {
 					t.Fatal(err)
 				}

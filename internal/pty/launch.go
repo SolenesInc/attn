@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/victorarias/attn/internal/launchenv"
@@ -49,7 +50,7 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 			cleanupDir string
 		)
 		if agent == "shell" && len(opts.AgentArgv) == 0 {
-			launch, err := prepareShellPaneLaunch(shellPath, cmdEnv)
+			launch, err := prepareShellPaneLaunch(shellPath, cmdEnv, attnDirOf(attnPath))
 			if err != nil {
 				preparationFailures = append(preparationFailures, fmt.Sprintf("%s: %v", shellPath, err))
 				logf("pty launch: could not prepare shell=%s: %v; trying fallback shell", shellPath, err)
@@ -98,4 +99,11 @@ func commandFromPrepared(attempt PreparedLaunchAttempt) *exec.Cmd {
 	cmd.Dir = attempt.CWD
 	cmd.Env = attempt.Env
 	return cmd
+}
+
+func attnDirOf(attnPath string) string {
+	if dir := filepath.Dir(attnPath); dir != "." {
+		return dir
+	}
+	return ""
 }

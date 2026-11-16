@@ -38,7 +38,7 @@ func TestTerminalRunWaitsForTheFirstPromptAfterReload(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _, _ = unblock.WriteString("go\n"); _ = unblock.Close() })
-			script := fmt.Sprintf("#!/bin/sh\nif [ \"$#\" = 1 ] && [ \"$1\" = -l ] && [ -f %q ]; then printf ready >%q; read hold <%q; fi\nexec /bin/bash \"$@\"\n", gate, ready, release)
+			script := fmt.Sprintf("#!/bin/sh\ncase \" $* \" in *\" -c \"*) ;; *) if [ -f %q ]; then printf ready >%q; read hold <%q; fi ;; esac\nexec /bin/bash \"$@\"\n", gate, ready, release)
 			if err := os.WriteFile(shell, []byte(script), 0o700); err != nil {
 				t.Fatal(err)
 			}
