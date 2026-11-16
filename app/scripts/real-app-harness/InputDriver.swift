@@ -44,6 +44,7 @@ struct Options {
     var visiblePx: Int?
     var windowTitle: String?
     var steps: Int = 1
+    var centre: CGPoint?
 }
 
 func parseOptions() throws -> Options {
@@ -54,8 +55,15 @@ func parseOptions() throws -> Options {
     while index < args.count {
         let arg = args[index]
         switch arg {
-        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
+        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "wait_window_centre", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
             options.command = arg
+        case "--centre":
+            index += 1
+            let parts = index < args.count ? args[index].split(separator: ",").compactMap { Double($0) } : []
+            guard parts.count == 2 else {
+                throw DriverError.invalidArgument("Missing or invalid value for --centre; give x,y in top-left global points")
+            }
+            options.centre = CGPoint(x: parts[0], y: parts[1])
         case "--window-title":
             index += 1
             guard index < args.count else {
@@ -455,7 +463,7 @@ func windowStack() throws -> [[String: Any]] {
         let pid = entry[kCGWindowOwnerPID as String] as? pid_t ?? -1
         let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
         let systemOwner = entry[kCGWindowOwnerName as String] as? String == "WindowServer" ||
-            ["com.apple.dock", "com.apple.systemuiserver", "com.apple.controlcenter"].contains(bundle)
+            ["com.apple.dock", "com.apple.systemuiserver", "com.apple.controlcenter", "com.apple.notificationcenterui"].contains(bundle)
         return ["id": number, "pid": entry[kCGWindowOwnerPID as String] ?? -1,
                 "layer": entry[kCGWindowLayer as String] ?? 0, "alpha": entry[kCGWindowAlpha as String] ?? 1,
                 "systemUI": systemOwner && ((entry[kCGWindowLayer as String] as? Int) ?? 0) >= CGWindowLevelForKey(.dockWindow),
@@ -831,9 +839,72 @@ func pinPointerToTopEdgeOfMainDisplay() throws -> String {
     }
     let pointer = NSEvent.mouseLocation
     let screens = NSScreen.screens.map { screen in
-        "{\"x\":\(screen.frame.minX),\"y\":\(screen.frame.minY),\"width\":\(screen.frame.width),\"height\":\(screen.frame.height)}"
+        let visible = screen.visibleFrame
+        return "{\"x\":\(screen.frame.minX),\"y\":\(screen.frame.minY),\"width\":\(screen.frame.width),\"height\":\(screen.frame.height)," +
+            "\"visible\":{\"x\":\(visible.minX),\"y\":\(visible.minY),\"width\":\(visible.width),\"height\":\(visible.height)}}"
     }
     return "{\"pointer\":{\"x\":\(pointer.x),\"y\":\(pointer.y)},\"screens\":[\(screens.joined(separator: ","))]}"
+}
+
+func axFrame(_ window: AXUIElement) -> CGRect {
+    var origin = CGPoint.zero, size = CGSize.zero
+    if let value = axCopyAttribute(window, kAXPositionAttribute as String) { AXValueGetValue(value as! AXValue, .cgPoint, &origin) }
+    if let value = axCopyAttribute(window, kAXSizeAttribute as String) { AXValueGetValue(value as! AXValue, .cgSize, &size) }
+    return CGRect(origin: origin, size: size)
+}
+
+final class FrameWatch {
+    let window: AXUIElement
+    let centre: CGPoint
+    var frame: CGRect
+    init(window: AXUIElement, centre: CGPoint) {
+        self.window = window
+        self.centre = centre
+        frame = axFrame(window)
+    }
+    var centred: Bool { abs(frame.midX - centre.x) <= 1 && abs(frame.midY - centre.y) <= 1 }
+}
+
+// Measured on 2026-11-16 in the macOS VM: the native Quick Capture panel was in its place
+// when its opening was reported, so the wait took 0 ms. The limit stays under the 5 s a
+// driver capture may run, so a window that has not arrived reports where it is.
+let WINDOW_CENTRE_LIMIT_SECONDS = 3.0
+
+func waitForWindowCentre(bundleId: String, titleSubstring: String, centre: CGPoint) throws -> String {
+    let (pid, app) = try axApplication(bundleId: bundleId)
+    let needle = titleSubstring.lowercased()
+    guard let window = (axCopyAttribute(app, kAXWindowsAttribute as String) as? [AXUIElement])?
+        .first(where: { (axTitle($0) ?? "").lowercased().contains(needle) }) else {
+        throw DriverError.eventCreationFailed("No AX window for \(bundleId) matching title \(titleSubstring.debugDescription)")
+    }
+    let watch = FrameWatch(window: window, centre: centre)
+    let started = Date()
+    var observer: AXObserver?
+    let changed: AXObserverCallback = { _, _, _, refcon in
+        let watch = Unmanaged<FrameWatch>.fromOpaque(refcon!).takeUnretainedValue()
+        watch.frame = axFrame(watch.window)
+        if watch.centred { CFRunLoopStop(CFRunLoopGetCurrent()) }
+    }
+    guard AXObserverCreate(pid, changed, &observer) == .success, let observer else {
+        throw DriverError.eventCreationFailed("Could not observe \(bundleId)'s windows")
+    }
+    let refcon = Unmanaged.passUnretained(watch).toOpaque()
+    for notification in [kAXMovedNotification, kAXResizedNotification] {
+        AXObserverAddNotification(observer, window, notification as CFString, refcon)
+    }
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(observer), .defaultMode)
+    watch.frame = axFrame(window)
+    let deadline = started.addingTimeInterval(WINDOW_CENTRE_LIMIT_SECONDS)
+    while !watch.centred && Date() < deadline {
+        _ = CFRunLoopRunInMode(.defaultMode, deadline.timeIntervalSinceNow, false)
+    }
+    withExtendedLifetime(watch) {}
+    let frame = watch.frame
+    let report = "{\"frame\":{\"x\":\(frame.minX),\"y\":\(frame.minY),\"width\":\(frame.width),\"height\":\(frame.height)},\"waitedMs\":\(Int(Date().timeIntervalSince(started) * 1000))}"
+    guard watch.centred else {
+        throw DriverError.eventCreationFailed("The window \(titleSubstring.debugDescription) did not centre on \(centre.x),\(centre.y) within \(WINDOW_CENTRE_LIMIT_SECONDS) s: \(report)")
+    }
+    return report
 }
 
 func movePointerInWindow(bundleId: String, relativeX: Double, relativeY: Double, titleSubstring: String? = nil) throws {
@@ -983,6 +1054,12 @@ do {
     case "pointer_top_edge":
         try ensureAccessibility(prompt: options.promptAccessibility)
         print(try pinPointerToTopEdgeOfMainDisplay())
+    case "wait_window_centre":
+        try ensureAccessibility(prompt: options.promptAccessibility)
+        guard let centre = options.centre, let title = options.windowTitle else {
+            throw DriverError.invalidArgument("wait_window_centre needs --window-title and --centre")
+        }
+        print(try waitForWindowCentre(bundleId: options.bundleId, titleSubstring: title, centre: centre))
     case "drag_between":
         try ensureAccessibility(prompt: options.promptAccessibility)
         try dragWindow(bundleId: options.bundleId, relativeX: options.relativeX ?? 0.5, relativeY: options.relativeY ?? 0.5, toRelativeX: 0.5, toRelativeY: 0.5, steps: 30, targetBundleId: options.text)

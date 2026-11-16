@@ -652,6 +652,25 @@ try {
     await dismiss();
     assert.equal(await otherFixture.frontmostBundleId(), otherFixtureId);
   });
+  await runner.step('first_open_with_pointer_on_top_edge_centres_panel', async () => {
+    await client.launchFreshApp();
+    await client.waitForReady(20_000);
+    await panel.waitForManifest(20_000);
+    await panel.waitForReady(20_000);
+    await fixture.activateApp();
+    await fixture.runInputDriver(['wait_frontmost']);
+    await client.request('state', { of: 'capture-shortcut', expect: { binding: testBinding }, timeout_ms: 10_000 });
+    const edge = JSON.parse(await driver.runInputDriverCapture(['pointer_top_edge']));
+    const primary = edge.screens[0];
+    assert.equal(edge.pointer.y, primary.y + primary.height, 'macOS reports a pointer pinned to the top row at the screen\'s top edge');
+    await openCapture();
+    const { visible } = primary;
+    const visibleCentre = { x: visible.x + visible.width / 2, y: primary.y + primary.height - visible.y - visible.height / 2 };
+    const centred = await driver.runInputDriverCapture(['wait_window_centre', '--window-title', PANEL_TITLE, '--centre', `${visibleCentre.x},${visibleCentre.y}`])
+      .then(JSON.parse, error => { throw new Error(`The first opening with the pointer on the top row centres the panel on the main display's visible frame, whose centre is ${JSON.stringify(visibleCentre)}: ${error.message}`); });
+    runner.writeJson('pointer-top-edge.json', { edge, visibleCentre, centred });
+    await key('escape'); await hidden();
+  });
   try {
     await runner.step('fullscreen_foreground_app', async () => {
       await fixture.activateApp();
