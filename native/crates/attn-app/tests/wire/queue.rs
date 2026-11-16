@@ -2,12 +2,13 @@ use std::collections::BTreeMap;
 
 use std::time::Duration;
 
-use attn_app::Action;
+use attn_app::{Action, Keymap};
 use attn_protocol::{
     AutomationProvenance, Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
     Session, SessionStateChangedMessage, SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
+use rune::KeyPlatform;
 
 use super::sidebar::{chord, desktop, pane, session, state};
 
@@ -144,6 +145,33 @@ fn the_queue_sidebar_anchors_the_chief_above_the_owed_turns_oldest_first_and_kee
     assert_eq!(name(&world, "queue-turn.t-old.slot"), "1");
     assert_eq!(name(&world, "queue.agents-toggle"), "2 more agents");
     assert_eq!(name(&world, "queue.agents-counts"), "1 working  1 snoozed");
+}
+
+#[test]
+fn the_waiting_head_and_the_agent_list_toggle_say_what_they_do_and_their_keys() {
+    let world = World::start(Daemon::scripted().state(the_queue()));
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keys =
+        |action: &Action| keymap.label(keymap.binding(action).expect("the action has a key"));
+    let screen = world.screen();
+
+    for (rule, action, says) in [
+        (
+            "queue.waiting-head",
+            Action::SessionJumpToWaiting,
+            "Open the oldest turn",
+        ),
+        (
+            "queue.agents-toggle",
+            Action::SidebarAgentList,
+            "Show every agent in this profile",
+        ),
+    ] {
+        assert_eq!(
+            screen.get(Target::key(rule)).description,
+            Some(format!("{says} ({})", keys(&action)))
+        );
+    }
 }
 
 #[test]

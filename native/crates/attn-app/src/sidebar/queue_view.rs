@@ -9,6 +9,7 @@ use super::model::{AgentRow, display_name, ordered_desktops};
 use super::queue::{self, Bands, QueueRow};
 use super::{ROW_HEIGHT, ROWS_BUILT, home_row, open_agent, state_mark};
 use crate::State;
+use crate::action::Action;
 
 pub(crate) const FILTER_FIELD: &str = "queue.filter.field";
 pub(crate) const LIST: &str = "sidebar.queue";
@@ -379,27 +380,36 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
         QLine::Agent(a) => state.window.countdowns.contains_key(&a.agent.id),
         _ => false,
     };
-    memo(key.clone(), (line, draining, cursor, *t), || {
-        ROWS_BUILT.with(|n| n.set(n.get() + 1));
-        match line {
-            QLine::Rule { text: label, .. } => rule(key, label, t),
-            QLine::WaitingHead { waiting } => waiting_head(key, *waiting, t),
-            QLine::AgentsToggle { open, more } => agents_toggle(key, *open, *more, t),
-            QLine::Counts(counts) => text(counts.clone())
-                .key(key)
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-            QLine::Empty(_) => text("Nobody else.")
-                .key(key)
-                .font(type_::LABEL)
-                .color(t.text_muted),
-            QLine::Agent(agent) => {
-                let bar = super::settling_bar(state, &key, &agent.agent, t);
-                queue_row(key, agent, cursor, t).children(bar)
+    let keys = match line {
+        QLine::WaitingHead { .. } => keys_of(state, &Action::SessionJumpToWaiting),
+        QLine::AgentsToggle { .. } => keys_of(state, &Action::SidebarAgentList),
+        _ => None,
+    };
+    memo(
+        key.clone(),
+        (line, draining, cursor, keys.clone(), *t),
+        || {
+            ROWS_BUILT.with(|n| n.set(n.get() + 1));
+            match line {
+                QLine::Rule { text: label, .. } => rule(key, label, t),
+                QLine::WaitingHead { waiting } => waiting_head(key, *waiting, keys, t),
+                QLine::AgentsToggle { open, more } => agents_toggle(key, *open, *more, keys, t),
+                QLine::Counts(counts) => text(counts.clone())
+                    .key(key)
+                    .font(type_::LABEL)
+                    .color(t.text_tertiary),
+                QLine::Empty(_) => text("Nobody else.")
+                    .key(key)
+                    .font(type_::LABEL)
+                    .color(t.text_muted),
+                QLine::Agent(agent) => {
+                    let bar = super::settling_bar(state, &key, &agent.agent, t);
+                    queue_row(key, agent, cursor, t).children(bar)
+                }
+                QLine::Filter => unreachable!("the filter is built above"),
             }
-            QLine::Filter => unreachable!("the filter is built above"),
-        }
-    })
+        },
+    )
 }
 
 fn rule(key: String, label: &str, t: &Tokens) -> El {
@@ -417,7 +427,38 @@ fn rule(key: String, label: &str, t: &Tokens) -> El {
         )
 }
 
-fn waiting_head(key: String, waiting: usize, t: &Tokens) -> El {
+fn keys_of(state: &State, action: &Action) -> Option<String> {
+    state
+        .keymap
+        .binding(action)
+        .map(|binding| state.keymap.label(binding))
+}
+
+/// What a section rule does, with its key when it has one.
+fn says(does: &str, keys: Option<&String>) -> String {
+    match keys {
+        Some(keys) => format!("{does} ({keys})"),
+        None => does.to_owned(),
+    }
+}
+
+/// A section rule's line out to its key, as the Tauri app's `queue-rule-line` and `kbd`.
+fn rule_tail(keys: Option<String>, t: &Tokens) -> [El; 2] {
+    [
+        rune::el().grow(1.0).h(1.0).fill(t.border_subtle),
+        match keys {
+            Some(keys) => text(keys)
+                .font(KEYS_TYPE)
+                .color(t.text_tertiary)
+                .single_line(),
+            None => rune::el(),
+        },
+    ]
+}
+
+const KEYS_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
+
+fn waiting_head(key: String, waiting: usize, keys: Option<String>, t: &Tokens) -> El {
     let label = if waiting == 0 {
         "Nothing owed".to_owned()
     } else {
@@ -428,13 +469,23 @@ fn waiting_head(key: String, waiting: usize, t: &Tokens) -> El {
     } else {
         t.warning
     };
+    let description = says("Open the oldest turn", keys.as_ref());
+    let tokens = *t;
     Button::new(label.clone())
         .disabled(waiting == 0)
         .variant(ButtonVariant::Ghost)
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::jump_to_waiting(state, tx))
-        .label_with(move |_, _| text(label).font(type_::SECTION).color(ink))
+        .label_with(move |_, _| {
+            row()
+                .w_full()
+                .items_center()
+                .gap(space::S1)
+                .child(text(label).font(type_::SECTION).color(ink))
+                .children(rule_tail(keys, &tokens))
+        })
         .build(attn_ui::kit(t))
         .key(key)
+        .description(description)
         .w_full()
         .h(ROW_HEIGHT)
         .px(0.0)
@@ -443,18 +494,20 @@ fn waiting_head(key: String, waiting: usize, t: &Tokens) -> El {
         .hover(t.bg_elevated)
 }
 
-fn agents_toggle(key: String, open: bool, more: usize, t: &Tokens) -> El {
+fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: &Tokens) -> El {
     let label = match more {
         0 => "No more agents".to_owned(),
         1 => "1 more agent".to_owned(),
         n => format!("{n} more agents"),
     };
     let tokens = *t;
+    let description = says("Show every agent in this profile", keys.as_ref());
     Button::new(label.clone())
         .variant(ButtonVariant::Ghost)
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
         .label_with(move |_, _| {
             row()
+                .w_full()
                 .items_center()
                 .gap(space::S1)
                 .child(
@@ -467,10 +520,12 @@ fn agents_toggle(key: String, open: bool, more: usize, t: &Tokens) -> El {
                     .color(tokens.text_tertiary),
                 )
                 .child(text(label).font(type_::SECTION).color(tokens.text_tertiary))
+                .children(rule_tail(keys, &tokens))
         })
         .build(attn_ui::kit(t))
         .expanded(open)
         .key(key)
+        .description(description)
         .w_full()
         .h(ROW_HEIGHT)
         .px(0.0)
