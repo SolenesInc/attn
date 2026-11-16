@@ -1,0 +1,141 @@
+Every way a file can differ from base reaches the files list and coverage: an
+edit, a deletion, a new directory, a file added after review start, and an
+untracked file inside a tracked directory. Ignored files stay out.
+-- base/.gitignore --
+build/
+-- base/a.go --
+package a
+-- base/old.go --
+package a
+
+func Old() {}
+-- base/lib/keep.go --
+package lib
+-- head/.gitignore --
+build/
+-- head/a.go --
+package a
+
+func A() {}
+-- head/lib/keep.go --
+package lib
+-- head/lib/extra.go --
+package lib
+-- head/pkg/c.go --
+package pkg
+
+func C() {}
+-- head/build/out.txt --
+ignored
+-- now/pkg/sub/d.go --
+package sub
+-- review.md --
+# Many kinds of change
+
+## A
+
+### a.go:1-3
+
+## Not shown
+
+- old.go: deleted
+- lib/extra.go: empty
+- pkg/: new package
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "a.go",
+      "removed": 0,
+      "status": "modified"
+    },
+    {
+      "added": 1,
+      "binary": false,
+      "path": "lib/extra.go",
+      "removed": 0,
+      "status": "added"
+    },
+    {
+      "added": 0,
+      "binary": false,
+      "path": "old.go",
+      "removed": 3,
+      "status": "deleted"
+    },
+    {
+      "added": 3,
+      "binary": false,
+      "path": "pkg/c.go",
+      "removed": 0,
+      "status": "added"
+    },
+    {
+      "added": 1,
+      "binary": false,
+      "path": "pkg/sub/d.go",
+      "removed": 0,
+      "status": "added"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [
+    {
+      "line": 16,
+      "path": "old.go",
+      "reason": "deleted"
+    },
+    {
+      "line": 17,
+      "path": "lib/extra.go",
+      "reason": "empty"
+    },
+    {
+      "line": 18,
+      "path": "pkg/",
+      "reason": "new package"
+    }
+  ],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "04425de7870bb11be56958f228b7209a66925eb30528718126b23452f6363352",
+      "from": 1,
+      "heading_line": 12,
+      "notes": [],
+      "now_from": 1,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "head": 1,
+          "kind": " ",
+          "now": 1,
+          "old": 1,
+          "text": "package a"
+        },
+        {
+          "head": 2,
+          "kind": "+",
+          "now": 2,
+          "text": ""
+        },
+        {
+          "head": 3,
+          "kind": "+",
+          "now": 3,
+          "text": "func A() {}"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

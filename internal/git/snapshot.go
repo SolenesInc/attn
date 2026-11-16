@@ -82,15 +82,11 @@ func (c *Client) UpdateRef(ctx context.Context, root, ref, commit string) error 
 // user's index never changes, and points ref at it. Untracked directories and
 // files past limits stay out of the commit and come back as LeftOut.
 func (c *Client) SnapshotWorktree(ctx context.Context, root, ref, message string, limits UntrackedLimits) (string, []LeftOut, error) {
-	env, done, err := c.privateIndex(ctx, root)
+	env, leftOut, done, err := c.stageWorktree(ctx, root, limits)
 	if err != nil {
 		return "", nil, err
 	}
 	defer done()
-	leftOut, err := c.addWorkingTree(ctx, root, env, []string{"add", "-A"}, limits)
-	if err != nil {
-		return "", nil, err
-	}
 	tree, err := c.outputWithEnv(ctx, OpDiff, root, env, nil, "write-tree")
 	if err != nil {
 		return "", nil, err
@@ -151,25 +147,58 @@ func copyIndex(from, to string) error {
 	return os.Chtimes(to, info.ModTime(), info.ModTime())
 }
 
-func (c *Client) addWorkingTree(ctx context.Context, root string, env map[string]string, add []string, limits UntrackedLimits) ([]LeftOut, error) {
-	leftOut, err := c.oversizedUntracked(ctx, root, limits)
+// stageWorktree copies the index and stages into the copy every path whose
+// working tree differs from the index, so the copy holds the working tree. Status runs in the default
+// untracked mode because only that mode uses the untracked cache; the others
+// read every directory of the repository.
+func (c *Client) stageWorktree(ctx context.Context, root string, limits UntrackedLimits) (map[string]string, []LeftOut, func(), error) {
+	status, err := c.outputWithEnv(ctx, OpStatus, root, nil, nil, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal")
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	args := append(append([]string{}, add...), "--", ".")
+	var changed, untracked []string
+	for _, entry := range splitNUL(status) {
+		if len(entry) <= 3 {
+			continue
+		}
+		switch path, worktree := entry[3:], entry[1]; {
+		case entry[:2] == "??":
+			untracked = append(untracked, path)
+		case worktree != ' ':
+			changed = append(changed, path)
+		}
+	}
+	leftOut, err := c.oversizedUntracked(ctx, root, untracked, limits)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	excluded := make(map[string]bool, len(leftOut))
 	for _, left := range leftOut {
-		args = append(args, ":(exclude,literal)"+left.Path)
+		excluded[left.Path] = true
 	}
-	_, err = c.outputWithEnv(ctx, OpDiff, root, env, nil, args...)
-	return leftOut, err
+	for _, path := range untracked {
+		if !excluded[path] {
+			changed = append(changed, path)
+		}
+	}
+	env, done, err := c.privateIndex(ctx, root)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if len(changed) > 0 {
+		pathspec := strings.NewReader(strings.Join(changed, "\x00"))
+		_, err = c.outputWithEnv(ctx, OpDiff, root, env, pathspec, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul")
+	}
+	if err != nil {
+		done()
+		return nil, nil, nil, err
+	}
+	return env, leftOut, done, nil
 }
 
-func (c *Client) oversizedUntracked(ctx context.Context, root string, limits UntrackedLimits) ([]LeftOut, error) {
-	entries, err := c.outputWithEnv(ctx, OpStatus, root, nil, nil, "ls-files", "-o", "--exclude-standard", "--directory", "-z")
-	if err != nil {
-		return nil, err
-	}
-	tops := splitNUL(entries)
+// oversizedUntracked names the untracked tops, as status lists them, that
+// hold more than limits allow.
+func (c *Client) oversizedUntracked(ctx context.Context, root string, tops []string, limits UntrackedLimits) ([]LeftOut, error) {
 	if len(tops) == 0 {
 		return nil, nil
 	}
@@ -182,7 +211,8 @@ func (c *Client) oversizedUntracked(ctx context.Context, root string, limits Unt
 	for _, top := range tops {
 		sums[top] = &sum{}
 	}
-	files, err := c.outputWithEnv(ctx, OpStatus, root, nil, nil, "ls-files", "-o", "--exclude-standard", "-z")
+	args := append([]string{"--literal-pathspecs", "ls-files", "-o", "--exclude-standard", "-z", "--"}, tops...)
+	files, err := c.outputWithEnv(ctx, OpStatus, root, nil, nil, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -295,15 +325,12 @@ func (c *Client) TreeChanges(ctx context.Context, root, from, to string) ([]File
 // WorktreeChanges lists what changed from a commit to the working tree, with
 // renames, untracked files included as added and those past limits left out.
 func (c *Client) WorktreeChanges(ctx context.Context, root, from string, limits UntrackedLimits) ([]FileChange, error) {
-	env, done, err := c.privateIndex(ctx, root)
+	env, _, done, err := c.stageWorktree(ctx, root, limits)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
-	if _, err := c.addWorkingTree(ctx, root, env, []string{"add", "--intent-to-add"}, limits); err != nil {
-		return nil, err
-	}
-	out, err := c.outputWithEnv(ctx, OpDiff, root, env, nil, "diff", "-z", "-M", "--no-ext-diff", "--raw", "--numstat", from, "--")
+	out, err := c.outputWithEnv(ctx, OpDiff, root, env, nil, "diff", "--cached", "-z", "-M", "--no-ext-diff", "--raw", "--numstat", from, "--")
 	if err != nil {
 		return nil, err
 	}
