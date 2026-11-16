@@ -446,6 +446,82 @@ fn theme(world: &World, name: &str) -> Node {
 }
 
 #[test]
+fn a_color_scheme_click_saves_it_and_the_list_marks_it_chosen() {
+    let (daemon, stored) = accepting(&[]);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    click(&mut world, "settings.nav.general");
+    assert!(scheme(&world, "attn").is("checked"));
+
+    world
+        .automate(
+            "press",
+            json!({"target": {"role": "radio", "name": "Catppuccin Frappé"}}),
+        )
+        .unwrap();
+
+    assert_eq!(
+        writes(&world),
+        [("color_scheme".to_owned(), "catppuccin-frappe".to_owned())]
+    );
+    assert_eq!(stored.lock().unwrap()["color_scheme"], "catppuccin-frappe");
+    assert!(scheme(&world, "Catppuccin Frappé").is("checked"));
+    assert!(!scheme(&world, "attn").is("checked"));
+    rest(&mut world);
+}
+
+fn scheme(world: &World, name: &str) -> Node {
+    world
+        .screen()
+        .descendants(Target::key("settings.color-schemes"))
+        .into_iter()
+        .find(|node| node.role == "radio-button" && node.name.as_deref() == Some(name))
+        .unwrap_or_else(|| panic!("no {name} color scheme"))
+}
+
+#[test]
+fn custom_colors_shows_only_while_an_override_names_a_color_and_reset_clears_it() {
+    for none in ["{}", "null", r#"{"dark":{"ui":{}}}"#] {
+        let (daemon, _) = accepting(&[("color_overrides", none)]);
+        let mut world = World::start(daemon);
+        open(&mut world);
+        click(&mut world, "settings.nav.general");
+        world.screen().get(Target::key("settings.color-schemes"));
+        assert!(
+            world
+                .screen()
+                .find(Target::key("settings.color-overrides"))
+                .is_none(),
+            "{none} shows Custom colors"
+        );
+    }
+
+    let (daemon, stored) = accepting(&[(
+        "color_overrides",
+        r##"{"light":{"terminal":{"bg":"#ffffff"}}}"##,
+    )]);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    click(&mut world, "settings.nav.general");
+    world.screen().get(Target::key("settings.color-overrides"));
+
+    click(&mut world, "settings.color-overrides.reset");
+
+    assert_eq!(
+        writes(&world),
+        [("color_overrides".to_owned(), String::new())]
+    );
+    assert!(!stored.lock().unwrap().contains_key("color_overrides"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("settings.color-overrides"))
+            .is_none()
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn the_text_size_keys_step_the_scale_by_tenths_within_its_range_and_the_view_zooms_by_it() {
     let (daemon, _) = accepting(&[]);
     let mut world = World::start(daemon);

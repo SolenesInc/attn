@@ -116,7 +116,7 @@ Steps:
 
 ## Tests
 
-- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/settings.rs` and `native/crates/attn-app/tests/wire/settings/*.rs` (the native dialog and each section), `native/crates/attn-app/tests/wire/update_run.rs` (the native app's update band and Update attn).
+- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/settings.rs` and `native/crates/attn-app/tests/wire/settings/*.rs` (the native dialog and each section, including the scheme list and Reset), `native/crates/attn-app/tests/wire/colors.rs` (the native window and terminals repaint on a scheme or override), `native/crates/attn-app/tests/wire/update_run.rs` (the native app's update band and Update attn).
 - Stack: `cmd/attnd/update_run_stack_test.go`, `cmd/attnd/update_release_stack_test.go`, `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
 - Scenario: `focusless-native` (parked macOS native input), `agent-settings`, `self-update`, `native-settings`, `native-agent-settings`, `native-self-update`.
 - App: `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`, `app/src/App.colorScheme.test.tsx` (scheme, overrides and theme from the daemon, the scheme list and Reset).

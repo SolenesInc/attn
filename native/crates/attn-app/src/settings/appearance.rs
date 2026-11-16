@@ -2,8 +2,10 @@ use std::collections::BTreeMap;
 
 use attn_protocol::SetSettingMessage;
 use attn_ui::Tokens;
+use attn_ui::colors::{SCHEMES, has_overrides};
 use rune::tok::{space, type_};
-use rune::{El, Tx, row, text};
+use rune::{El, Tx, col, el, row, text};
+use rune_kit::RadioItem;
 
 use super::pages::{NUMBER_FIELD, block, button, named_button, row_card, segmented, setting_field};
 use crate::State;
@@ -12,6 +14,8 @@ use crate::sidebar::width;
 
 pub(super) const NARROWEST_TILE_COLS: &str = "narrowest_tile_cols";
 const THEME: &str = "theme";
+const COLOR_SCHEME: &str = "color_scheme";
+const COLOR_OVERRIDES: &str = "color_overrides";
 const UI_SCALE: &str = "uiScale";
 const GARDEN_SCALE: &str = "gardenScale";
 const MIN_SCALE: f32 = 0.7;
@@ -100,6 +104,80 @@ fn percent(scale: f32) -> String {
 
 fn choose_theme(state: &mut State, theme: &'static str, _: &mut Tx) {
     store(state, THEME, theme.into());
+}
+
+const SWATCHES: usize = 7;
+
+fn swatches(t: &Tokens) -> [rune::Color; SWATCHES] {
+    [
+        t.bg_app,
+        t.bg_panel,
+        t.text_primary,
+        t.accent,
+        t.brand,
+        t.state_working,
+        t.state_waiting,
+    ]
+}
+
+/// The color schemes, each with a few of its colors in the current appearance, and while the
+/// `color_overrides` setting names a color, a mark that says so with Reset.
+fn color_schemes(state: &State, t: &Tokens) -> El {
+    let settings = &state.facts.settings;
+    let chosen = crate::color_scheme(settings).id;
+    let kit = attn_ui::kit(t);
+    let n = SCHEMES.len();
+    let list = col()
+        .key("settings.color-schemes")
+        .role("radiogroup")
+        .label("Color scheme")
+        .focus_group()
+        .gap(space::S2)
+        .children(SCHEMES.iter().enumerate().map(|(i, scheme)| {
+            let id = scheme.id;
+            let strip = row()
+                .radius(4.0)
+                .clip_rounded(4.0)
+                .border(1.0, t.border)
+                .children(
+                    swatches(&scheme.colors(t.dark).ui)
+                        .map(|color| el().size(14.0, 14.0).fill(color)),
+                )
+                .a11y_hidden();
+            RadioItem::new(scheme.name.clone(), id == chosen)
+                .on_select_tx(move |state: &mut State, _: &mut Tx| {
+                    store(state, COLOR_SCHEME, id.to_owned())
+                })
+                .build(kit)
+                .key(format!("settings.color-scheme.{id}"))
+                .position_in_set(i + 1, n)
+                .w_full()
+                .items_center()
+                .child(el().grow(1.0).min_w(space::S6))
+                .child(strip)
+        }));
+    let overrides = settings.get(COLOR_OVERRIDES).map_or("", String::as_str);
+    let custom = has_overrides(overrides).then(|| {
+        row()
+            .key("settings.color-overrides")
+            .gap(space::S2)
+            .items_center()
+            .child(
+                text("Custom colors")
+                    .font(type_::LABEL)
+                    .color(t.text_secondary),
+            )
+            .child(button(
+                "settings.color-overrides.reset".into(),
+                "Reset",
+                t,
+                |state, _| store(state, COLOR_OVERRIDES, String::new()),
+            ))
+    });
+    col()
+        .gap(space::S3)
+        .child(row().child(list))
+        .children(custom)
 }
 
 fn scale_control(
@@ -196,16 +274,12 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
         block(
             "theme",
             "Theme",
-            "Choose how attn renders the application chrome.",
+            "Choose the appearance and the color scheme of attn and its terminals.",
             t,
-            vec![segmented(
-                THEME,
-                "Theme preference",
-                THEMES,
-                theme,
-                t,
-                choose_theme,
-            )],
+            vec![
+                segmented(THEME, "Theme preference", THEMES, theme, t, choose_theme),
+                color_schemes(state, t),
+            ],
         ),
         block(
             "font-size",

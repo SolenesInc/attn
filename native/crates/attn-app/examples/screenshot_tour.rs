@@ -735,6 +735,13 @@ fn launcher_empty_desktop(dark: bool) {
 }
 
 fn shoot(out: PathBuf, scheme: Option<String>) {
+    if let Some(id) = &scheme {
+        let ids: Vec<&str> = attn_ui::colors::SCHEMES.iter().map(|s| s.id).collect();
+        assert!(
+            ids.contains(&id.as_str()),
+            "{id} is not a color scheme; schemes: {ids:?}"
+        );
+    }
     OUT.set(out);
     SCHEME.set(scheme);
     for dark in [true, false] {
