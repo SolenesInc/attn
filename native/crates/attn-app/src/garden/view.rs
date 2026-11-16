@@ -505,7 +505,12 @@ fn trail_nav(state: &State, place: &Place, t: &Tokens) -> El {
     };
     let folded = ancestors.len() - shown.len();
     let step = |key: String, label: String, depth: usize| {
-        button(key, label, t)
+        let words = label.clone();
+        kit_button(label)
+            .label_with(move |font, ink| text(words).font(font).color(ink).truncate())
+            .build(attn_ui::kit(t))
+            .key(key)
+            .shrink()
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::climb_to(state, depth, tx))
     };
     let sep = || {
@@ -538,7 +543,8 @@ fn trail_nav(state: &State, place: &Place, t: &Tokens) -> El {
             text(here.title.clone())
                 .key("garden.trail.here")
                 .font(type_::LABEL)
-                .color(t.text_primary),
+                .color(t.text_primary)
+                .truncate(),
         );
     }
     nav
