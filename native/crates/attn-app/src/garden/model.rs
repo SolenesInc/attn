@@ -281,6 +281,87 @@ pub(crate) fn pull_request_ref(id: &str) -> (String, String) {
     (pull_request, number)
 }
 
+/// What a seed on standby waits on, as its marker shows it: the note, each watched pull
+/// request by its number and the word for where it stands, when the reminder rings, and why
+/// the agent cannot resume.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Standby {
+    pub(crate) note: String,
+    pub(crate) pull_requests: Vec<WatchedPullRequest>,
+    pub(crate) reminder_at: String,
+    pub(crate) resume_blocked: String,
+}
+
+/// A pull request a standby seed watches: its number, the word for where it stands, and its
+/// name with the repository.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct WatchedPullRequest {
+    pub(crate) number: String,
+    pub(crate) word: String,
+    pub(crate) title: String,
+}
+
+pub(crate) fn standby_of(seed: &Seed, now_ms: i64) -> Option<Standby> {
+    let standby = seed.standby.as_ref()?;
+    Some(Standby {
+        note: standby.note.clone(),
+        pull_requests: standby
+            .pull_requests
+            .iter()
+            .map(|pr| {
+                let (pull_request, number) = pull_request_ref(&pr.pr_id);
+                let word = if pr.state == "open" && !pr.readiness_state.is_empty() {
+                    &pr.readiness_state
+                } else {
+                    &pr.state
+                };
+                WatchedPullRequest {
+                    title: format!("{pull_request} {word}"),
+                    number,
+                    word: word.clone(),
+                }
+            })
+            .collect(),
+        reminder_at: crate::sidebar::queue::wake_time_short(
+            seed.reminder.as_ref().map(|r| r.at.as_str()),
+            now_ms,
+        ),
+        resume_blocked: standby.resume_blocked.clone().unwrap_or_default(),
+    })
+}
+
+impl Standby {
+    /// The marker's one word, and whether the agent cannot resume.
+    pub(crate) fn word(&self) -> &'static str {
+        if self.resume_blocked.is_empty() {
+            "standby"
+        } else {
+            "standby · resume blocked"
+        }
+    }
+
+    pub(crate) fn reminder_words(&self) -> Option<String> {
+        (!self.reminder_at.is_empty()).then(|| format!("reminder {}", self.reminder_at))
+    }
+
+    pub(crate) fn blocked_words(&self) -> Option<String> {
+        (!self.resume_blocked.is_empty())
+            .then(|| format!("resume blocked: {}", self.resume_blocked))
+    }
+
+    /// Everything the marker stands for, one line each, for its tooltip.
+    pub(crate) fn details(&self) -> String {
+        (!self.note.is_empty())
+            .then(|| self.note.clone())
+            .into_iter()
+            .chain(self.pull_requests.iter().map(|pr| pr.title.clone()))
+            .chain(self.reminder_words())
+            .chain(self.blocked_words())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
 /// What an armed seed waits on: the whole sentence, and the word a row has room for.
 pub(crate) fn harvest_when(seed: &Seed) -> Option<(String, String)> {
     let id = seed.harvest_when.as_ref()?.pull_request.trim();

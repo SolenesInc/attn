@@ -264,6 +264,49 @@ fn slot(column: Column) -> usize {
     COLUMNS.iter().position(|c| *c == column).unwrap_or(0)
 }
 
+fn standby_marker(standby: &model::Standby, t: &Tokens) -> El {
+    let quiet = |words: String| text(words).font(type_::LABEL).color(t.text_secondary);
+    let line = row()
+        .items_center()
+        .gap(space::S2)
+        .wrap()
+        .child(text("standby").font(type_::LABEL).color(t.warning))
+        .children(standby.pull_requests.iter().map(|pr| {
+            let ready = pr.word == "ready";
+            text(format!("{} {}", pr.number, pr.word))
+                .help(pr.title.clone())
+                .font(if ready {
+                    rune::TextStyle {
+                        weight: 600.0,
+                        ..type_::LABEL
+                    }
+                } else {
+                    type_::LABEL
+                })
+                .color(if ready { t.success } else { t.text_secondary })
+        }))
+        .children(standby.reminder_words().map(quiet));
+    col()
+        .gap(2.0)
+        .child(line)
+        .children((!standby.note.is_empty()).then(|| {
+            text(standby.note.clone())
+                .help(standby.note.clone())
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .single_line()
+                .truncate()
+        }))
+        .children(standby.blocked_words().map(|words| {
+            text(words)
+                .help(standby.resume_blocked.clone())
+                .font(type_::LABEL)
+                .color(t.warning)
+                .single_line()
+                .truncate()
+        }))
+}
+
 fn card_key(id: &str) -> String {
     format!("{CARD_PREFIX}{id}")
 }
@@ -1074,6 +1117,7 @@ fn card(
             },
             state.window.now_ms,
         ),
+        standby: model::standby_of(seed, state.window.now_ms),
     };
     memo(
         format!("garden.board.slot.{}", seed.id),
@@ -1095,6 +1139,7 @@ struct CardLook {
     blockers: usize,
     tender: String,
     age: String,
+    standby: Option<model::Standby>,
 }
 
 fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
@@ -1144,16 +1189,8 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
                 .font(type_::BODY)
                 .color(t.text_primary),
         );
-    if let Some(standby) = &seed.standby {
-        face = face.child(
-            text(if standby.resume_blocked.is_some() {
-                "standby · resume blocked"
-            } else {
-                "standby"
-            })
-            .font(type_::LABEL)
-            .color(t.warning),
-        );
+    if let Some(standby) = &look.standby {
+        face = face.child(standby_marker(standby, t));
     }
     face = face.child(meta);
     let mut card = col().w_full().gap(space::S1).child(face);

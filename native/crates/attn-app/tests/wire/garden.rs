@@ -19,6 +19,7 @@ mod drafts;
 mod handover;
 mod scale;
 mod seed_chip;
+mod standby;
 mod tile;
 
 const PROFILE: &str = "work";

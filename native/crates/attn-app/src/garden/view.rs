@@ -72,6 +72,7 @@ struct Place {
     /// Matches in the plot while the search stands wide.
     in_plot: usize,
     hidden_closed: usize,
+    now_ms: i64,
 }
 
 impl Place {
@@ -129,6 +130,7 @@ impl Place {
             outside,
             in_plot,
             hidden_closed,
+            now_ms: state.window.now_ms,
         }
     }
 
@@ -631,6 +633,7 @@ struct RowLook {
     id_hit: bool,
     home: Option<String>,
     tender: String,
+    standby: Option<model::Standby>,
 }
 
 struct RowSpec {
@@ -668,6 +671,7 @@ fn row_specs(
                     id_hit: hit.is_some_and(|h| h.id_hit),
                     home,
                     tender: model::tender_of(seed, &place.names),
+                    standby: model::standby_of(seed, place.now_ms),
                 },
             }
         })
@@ -717,13 +721,18 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
             )
             .grow(1.0),
         );
-        if let Some(standby) = &seed.standby {
-            let words = if standby.resume_blocked.is_some() {
-                "standby · resume blocked"
-            } else {
-                "standby"
-            };
-            primary = primary.child(text(words).font(type_::LABEL).color(t.warning));
+        if let Some(standby) = &look.standby {
+            primary = primary.child(
+                text(standby.word())
+                    .key(format!("{key}.standby"))
+                    .help(standby.details())
+                    .font(type_::LABEL)
+                    .color(if standby.resume_blocked.is_empty() {
+                        t.accent
+                    } else {
+                        t.warning
+                    }),
+            );
         } else if let Some((signal, tone)) = model::signal(seed, look.blockers)
             && !(armed.is_some() && signal == "parked")
         {
