@@ -1550,6 +1550,164 @@ fn opens_the_whole_file_at_the_cursor_moves_between_its_changes_and_closes() {
     assert!(world.runtime_is_at_rest());
 }
 
+fn press_shifted(world: &mut World, key: Key) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key,
+            mods: Mods {
+                shift: true,
+                ..Mods::default()
+            },
+        })
+    });
+}
+
+/// The review in `frame`, its tile holding the keyboard, with every read of calc.go answered
+/// by `calc` and the other files served as usual.
+fn open_with_calc(
+    frame: &str,
+    calc: impl Fn() -> Option<serde_json::Value> + Send + 'static,
+) -> World {
+    let mut world = start();
+    world
+        .daemon
+        .on("review_file", move |r| match r["path"].as_str() {
+            Some("calc.go") => calc(),
+            Some(path) => Some(file_answer(
+                path,
+                vec![line(" ", Some(1), Some(1), "//")],
+                "h",
+            )),
+            None => None,
+        });
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(ReviewBundle {
+            frame: frame.into(),
+            ..bundle()
+        }),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    if frame == "brief" {
+        press(&mut world, Key::Right);
+        press(&mut world, Key::Down);
+        press(&mut world, Key::Down);
+        press(&mut world, Key::Enter);
+    }
+    world
+}
+
+#[test]
+fn the_file_views_keys_leave_an_empty_a_loading_and_an_unreadable_file_open_with_no_cursor() {
+    let unreadable = || {
+        Some(
+            serde_json::to_value(ReviewFileResultMessage {
+                success: false,
+                error: Some("open calc.go: permission denied".into()),
+                ..ReviewFileResultMessage::new()
+            })
+            .unwrap(),
+        )
+    };
+    type Answer = fn() -> Option<serde_json::Value>;
+    let files: [(&str, Answer, &str); 3] = [
+        (
+            "empty",
+            || Some(file_answer("calc.go", vec![], "h0")),
+            "0 lines",
+        ),
+        ("loading", || None, "Reading calc.go…"),
+        ("unreadable", unreadable, "open calc.go: permission denied"),
+    ];
+    for frame in ["brief", "walkthrough"] {
+        for (file, answer, shows) in files {
+            let mut world = open_with_calc(frame, answer);
+            let keys = [Key::Up, Key::Down, Key::PageUp, Key::PageDown];
+            for key in keys {
+                press(&mut world, key.clone());
+                press_shifted(&mut world, key);
+            }
+            if frame == "brief" {
+                press(&mut world, Key::Left);
+                press(&mut world, Key::Right);
+            }
+            press_shifted(&mut world, Key::Left);
+            press_shifted(&mut world, Key::Right);
+            let view = file_view(&world).unwrap_or_else(|| panic!("{frame}, {file}: no file view"));
+            assert!(view.iter().any(|t| t == shows), "{frame}, {file}: {view:?}");
+            assert_eq!(file_cursor(&world), None, "{frame}, {file}");
+            if frame == "walkthrough" {
+                assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"), "{file}");
+            }
+        }
+    }
+}
+
+fn calc_with_a_long_line() -> Vec<ReviewRow> {
+    let mut rows = calc_file();
+    rows.push(line(
+        " ",
+        Some(10),
+        Some(11),
+        &format!("// {}", "x".repeat(400)),
+    ));
+    rows
+}
+
+const FILE_BODY: &str = "tile.m.review.view.body";
+
+fn sideways(world: &World) -> f32 {
+    world
+        .screen()
+        .scrolled_sideways(Target::key(FILE_BODY))
+        .unwrap_or(0.0)
+}
+
+#[test]
+fn shift_left_and_right_scroll_a_long_line_sideways_by_half_the_view_in_the_file_view_and_the_walkthrough()
+ {
+    for frame in ["brief", "walkthrough"] {
+        let mut world = open_with_calc(frame, || {
+            Some(file_answer("calc.go", calc_with_a_long_line(), "h"))
+        });
+        let cursor = file_cursor(&world);
+        assert_eq!(
+            cursor.as_deref(),
+            Some("added line 4: \tsum := a + b"),
+            "{frame}"
+        );
+        let half = world.screen().bounds(Target::key(FILE_BODY)).unwrap()[2] / 2.0;
+        assert_eq!(sideways(&world), 0.0, "{frame}");
+
+        press_shifted(&mut world, Key::Right);
+        assert!(
+            (sideways(&world) - half).abs() < 1.0,
+            "{frame}: {} for {half}",
+            sideways(&world)
+        );
+        press_shifted(&mut world, Key::Right);
+        assert!((sideways(&world) - 2.0 * half).abs() < 1.0, "{frame}");
+        assert_eq!(
+            file_cursor(&world),
+            cursor,
+            "{frame}: the cursor stays on its row"
+        );
+        if frame == "walkthrough" {
+            assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+        }
+
+        press_shifted(&mut world, Key::Left);
+        assert!((sideways(&world) - half).abs() < 1.0, "{frame}");
+        press_shifted(&mut world, Key::Left);
+        press_shifted(&mut world, Key::Left);
+        assert_eq!(sideways(&world), 0.0, "{frame}");
+        assert_eq!(file_cursor(&world), cursor, "{frame}");
+        world.advance(std::time::Duration::from_secs(5));
+        assert!(world.runtime_is_at_rest(), "{frame}");
+    }
+}
+
 #[test]
 fn shows_the_notes_of_every_stop_in_the_file_under_it_on_the_cursors_line() {
     let document = DOCUMENT.replace(

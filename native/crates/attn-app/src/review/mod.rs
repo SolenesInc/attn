@@ -109,6 +109,7 @@ pub(crate) struct Review {
     /// The files the running warm-up still means to color, and its round: a warm-up whose
     /// round has passed stops.
     warming: (u64, Vec<(String, String)>),
+    sideways: file::Sideways,
 }
 
 /// A stop's rows widened by `extra` lines on each side, from its whole file.
@@ -678,12 +679,14 @@ pub(crate) fn body(
                         &prefix,
                         tile,
                         open,
+                        &review.sideways,
                         (review.files.len(), true),
                         (&notes, marks_at(open)),
                         colors,
                         t,
                     )
                     .grow(1.0)
+                    .min_w(0.0)
                 }
                 None => col().grow(1.0),
             };
@@ -714,6 +717,7 @@ pub(crate) fn body(
                 &prefix,
                 tile,
                 open,
+                &review.sideways,
                 (review.files.len(), false),
                 (&notes, marks_at(open)),
                 colors,
@@ -1074,7 +1078,13 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             Key::Escape if review.files.last().is_none_or(|f| f.select_from.is_none()) => {
                 return false;
             }
-            Key::Up | Key::Down | Key::PageUp | Key::PageDown | Key::Escape => {
+            Key::Up
+            | Key::Down
+            | Key::PageUp
+            | Key::PageDown
+            | Key::Escape
+            | Key::Right
+            | Key::Left => {
                 let handled = file_key(review, &prefix(&tile), ev, tx);
                 state.readings.revision += 1;
                 return handled;
@@ -2065,16 +2075,22 @@ fn target_of(reading: &Reading, at: usize) -> Option<file::Target> {
 }
 
 /// The file view's keys: ↑/↓ by row, with ⇧ to select, PageUp/PageDown by a page, ←/→ by
-/// change, `z` fills the tile, ⌃o goes back and Escape drops the selection, then closes.
+/// change, ⇧←/⇧→ sideways by half the view, `z` fills the tile, ⌃o goes back and Escape drops
+/// the selection, then closes.
 fn file_key(review: &mut Review, prefix: &str, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(open) = review.files.last_mut() else {
         return false;
     };
     let rows = open.rows.clone();
     let count = rows.as_ref().map_or(0, |r| r.len());
-    let to = |n: isize| n.clamp(0, count as isize - 1) as usize;
+    let to = |n: isize| n.clamp(0, count.saturating_sub(1) as isize) as usize;
     let cursor = open.cursor as isize;
     let next = match &ev.key {
+        Key::Right | Key::Left if ev.mods.shift => {
+            let half = review.sideways.half_view() * if ev.key == Key::Right { 1.0 } else { -1.0 };
+            tx.scroll_to_x(file::body_key(prefix), review.sideways.offset() + half);
+            return true;
+        }
         Key::Down => Some(to(cursor + 1)),
         Key::Up => Some(to(cursor - 1)),
         Key::PageDown => Some(to(cursor + file::PAGE_ROWS as isize)),

@@ -7,7 +7,7 @@ use std::rc::Rc;
 use attn_protocol::{ReviewFileMessage, ReviewFileResultMessage, ReviewNote, ReviewRow};
 use attn_ui::Tokens;
 use rune::tok::{radius, space, type_};
-use rune::{Color, El, GrowthSpec, ScrollSpec, Tx, col, row, text};
+use rune::{Color, El, GrowthSpec, Live, ScrollPos, ScrollSpec, Tx, col, row, text};
 
 use super::stop::{Colors, code_row};
 use crate::State;
@@ -49,6 +49,26 @@ impl OpenFile {
     pub(crate) fn selected(&self) -> (usize, usize) {
         let from = self.select_from.unwrap_or(self.cursor);
         (from.min(self.cursor), from.max(self.cursor))
+    }
+}
+
+/// How far the file view's lines are scrolled sideways and how wide their viewport is, as the
+/// viewport last reported, for ⇧←/⇧→ to scroll from.
+pub(crate) struct Sideways(Live<[f32; 2]>);
+
+impl Default for Sideways {
+    fn default() -> Self {
+        Sideways(Live::new([0.0, 0.0]))
+    }
+}
+
+impl Sideways {
+    pub(super) fn offset(&self) -> f32 {
+        self.0.get()[0]
+    }
+
+    pub(super) fn half_view(&self) -> f32 {
+        self.0.get()[1] / 2.0
     }
 }
 
@@ -152,6 +172,10 @@ fn columns(text: &str) -> usize {
         .fold(0, |at, c| if c == '\t' { at + 8 - at % 8 } else { at + 1 })
 }
 
+pub(super) fn body_key(prefix: &str) -> String {
+    format!("{prefix}.view.body")
+}
+
 pub(super) fn row_key(prefix: &str, row: usize) -> String {
     format!("{prefix}.view.row.{row}")
 }
@@ -191,6 +215,7 @@ pub(super) fn view(
     prefix: &str,
     tile: &str,
     file: &OpenFile,
+    sideways: &Sideways,
     (depth, stage): (usize, bool),
     (notes, marks): (&[&ReviewNote], Vec<El>),
     colors: Option<Rc<Colors>>,
@@ -240,7 +265,14 @@ pub(super) fn view(
             t.text_tertiary,
             t,
         ),
-        (Some(rows), None) => rows_view(prefix, tile, rows, (file, stage), notes, colors, t),
+        (Some(rows), None) => rows_view(prefix, tile, rows, (file, stage), notes, colors, t)
+            .key(body_key(prefix))
+            .on_scroll_offset({
+                let reported = sideways.0.clone();
+                move |at: ScrollPos| {
+                    reported.set([at.offset[0], at.viewport[0]]);
+                }
+            }),
     };
     let line = file.line();
     let strip: Vec<El> = notes

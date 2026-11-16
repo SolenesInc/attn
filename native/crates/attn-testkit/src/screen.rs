@@ -131,6 +131,15 @@ impl Screen {
         value.get("scroll")?.get(1)?.as_f64().map(|y| y as f32)
     }
 
+    /// How far the scroll view `target` has scrolled right, in points.
+    pub fn scrolled_sideways(&self, target: Target) -> Option<f32> {
+        let value = self
+            .values()
+            .into_iter()
+            .find(|v| target.matches(&node(v)))?;
+        value.get("scroll")?.get(0)?.as_f64().map(|x| x as f32)
+    }
+
     /// The element that has the keyboard, if any.
     pub fn focused(&self) -> Option<Node> {
         self.nodes().into_iter().find(|node| node.is("focused"))
