@@ -263,9 +263,6 @@ type Daemon struct {
 	removePlugin   func(pluginDir, name string) error
 	pluginActionMu sync.Mutex
 
-	worktreePluginCallTimeout         time.Duration
-	worktreeCreateProviderCallTimeout time.Duration
-
 	loginEnv         *loginEnv
 	pluginStartEnded chan struct{}
 

@@ -240,42 +240,61 @@ func TestADelegationReportsTheProviderWorktreeWhenItsAfterCreateHookFails(t *tes
 	}
 }
 
-func TestAWorktreeProviderGetsTwoMinutesToCreateAndThirtySecondsToDelete(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		repo := newRepo(t, "shop")
-		deleter := connectPlugin(t, w, "slow-delete-provider", "worktree.delete")
-		doomed := createWorktree(t, app, repo, "feat-doomed")
-		creator := connectPlugin(t, w, "slow-create-provider", "worktree.create")
+func TestAWorktreeProviderGetsTheTimeoutItDeclaresOrTwoMinutesToCreateAndThirtySecondsToDelete(t *testing.T) {
+	for _, row := range []struct {
+		name                 string
+		declared             map[string]time.Duration
+		createFor, deleteFor time.Duration
+	}{
+		{name: "undeclared", createFor: 2 * time.Minute, deleteFor: 30 * time.Second},
+		{name: "declared",
+			declared:  map[string]time.Duration{"worktree.create": 10 * time.Minute, "worktree.delete": 5 * time.Minute},
+			createFor: 10 * time.Minute, deleteFor: 5 * time.Minute},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			inBubble(t, func(t *testing.T, w *world) {
+				app := w.App()
+				repo := newRepo(t, "shop")
+				deleterHello := pluginHelloParams("slow-delete-provider", pluginWireAPIVersion, 1, "worktree.delete")
+				creatorHello := pluginHelloParams("slow-create-provider", pluginWireAPIVersion, 1, "worktree.create")
+				if row.declared != nil {
+					deleterHello = declaringSurfaceTimeouts(deleterHello, map[string]time.Duration{"worktree.delete": row.declared["worktree.delete"]})
+					creatorHello = declaringSurfaceTimeouts(creatorHello, map[string]time.Duration{"worktree.create": row.declared["worktree.create"]})
+				}
+				deleter := connectPluginWith(t, w, "slow-delete-provider", deleterHello)
+				doomed := createWorktree(t, app, repo, "feat-doomed")
+				creator := connectPluginWith(t, w, "slow-create-provider", creatorHello)
 
-		answered := automationEventCount(app, protocol.EventCreateWorktreeResult)
-		app.Send(protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: "feat/slow"})
-		creator.expect("worktree.create", nil)
-		w.advance(2*time.Minute - time.Second)
-		if automationEventCount(app, protocol.EventCreateWorktreeResult) != answered {
-			t.Fatal("create gave up on the provider before its two minutes ran out")
-		}
-		w.advance(time.Second)
-		created := testworld.Await(app, protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
-		if created.Success || !strings.Contains(protocol.Deref(created.Error), "slow-create-provider") {
-			t.Errorf("create answered %+v, want it failed on the silent provider", created)
-		}
+				answered := automationEventCount(app, protocol.EventCreateWorktreeResult)
+				app.Send(protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: "feat/slow"})
+				creator.expect("worktree.create", nil)
+				w.advance(row.createFor - time.Second)
+				if automationEventCount(app, protocol.EventCreateWorktreeResult) != answered {
+					t.Fatalf("create gave up on the provider before its %s ran out", row.createFor)
+				}
+				w.advance(time.Second)
+				created := testworld.Await(app, protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
+				if created.Success || !strings.Contains(protocol.Deref(created.Error), "slow-create-provider") {
+					t.Errorf("create answered %+v, want it failed on the silent provider", created)
+				}
 
-		app.Send(protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: doomed})
-		deleter.expect("worktree.delete", nil)
-		w.advance(30*time.Second - time.Second)
-		if automationEventCount(app, protocol.EventDeleteWorktreeResult) != 0 {
-			t.Fatal("delete gave up on the provider before its thirty seconds ran out")
-		}
-		w.advance(time.Second)
-		deleted := testworld.Await(app, protocol.EventDeleteWorktreeResult, func(protocol.DeleteWorktreeResultMessage) bool { return true })
-		if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "slow-delete-provider") {
-			t.Errorf("delete answered %+v, want it failed on the silent provider", deleted)
-		}
-		if _, listed := pluginWorktreeListedOn(app, repo, doomed); !listed {
-			t.Error("the worktree the silent provider never deleted is no longer listed")
-		}
-	})
+				app.Send(protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: doomed})
+				deleter.expect("worktree.delete", nil)
+				w.advance(row.deleteFor - time.Second)
+				if automationEventCount(app, protocol.EventDeleteWorktreeResult) != 0 {
+					t.Fatalf("delete gave up on the provider before its %s ran out", row.deleteFor)
+				}
+				w.advance(time.Second)
+				deleted := testworld.Await(app, protocol.EventDeleteWorktreeResult, func(protocol.DeleteWorktreeResultMessage) bool { return true })
+				if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "slow-delete-provider") {
+					t.Errorf("delete answered %+v, want it failed on the silent provider", deleted)
+				}
+				if _, listed := pluginWorktreeListedOn(app, repo, doomed); !listed {
+					t.Error("the worktree the silent provider never deleted is no longer listed")
+				}
+			})
+		})
+	}
 }
 
 func TestAWorktreeDeleteProviderDecidesHowAWorktreeIsRemoved(t *testing.T) {

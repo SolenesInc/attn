@@ -65,11 +65,25 @@ func dialPlugin(t *testing.T, w *world, name string, answersHealth bool) *plugin
 
 func connectPlugin(t *testing.T, w *world, name string, surfaces ...string) *pluginPeer {
 	t.Helper()
+	return connectPluginWith(t, w, name, pluginHelloParams(name, pluginWireAPIVersion, 1, surfaces...))
+}
+
+func connectPluginWith(t *testing.T, w *world, name string, hello map[string]any) *pluginPeer {
+	t.Helper()
 	p := dialPlugin(t, w, name, true)
-	if answer := p.hello(pluginHelloParams(name, pluginWireAPIVersion, 1, surfaces...)); answer.Error != nil {
+	if answer := p.hello(hello); answer.Error != nil {
 		t.Fatalf("the daemon refused plugin %s: %s", name, answer.Error.Message)
 	}
 	return p
+}
+
+func declaringSurfaceTimeouts(hello map[string]any, timeouts map[string]time.Duration) map[string]any {
+	declared := make(map[string]int64, len(timeouts))
+	for surface, timeout := range timeouts {
+		declared[surface] = timeout.Milliseconds()
+	}
+	hello["surface_timeouts_ms"] = declared
+	return hello
 }
 
 func pluginHelloParams(name string, apiVersion int, generation uint64, surfaces ...string) map[string]any {
@@ -255,7 +269,7 @@ func pluginUpdatesShowing(app *testworld.Peer, name string) int {
 func TestAPluginHelloConnectsItUntilItHangsUp(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
-		for _, name := range []string{"worktree-provider", "old-provider", "unnumbered-provider", "typo-provider"} {
+		for _, name := range []string{"worktree-provider", "old-provider", "unnumbered-provider", "typo-provider", "patient-provider", "impatient-provider", "unhandled-provider"} {
 			installPluginTheTestPlays(t, w, name)
 		}
 
@@ -269,6 +283,15 @@ func TestAPluginHelloConnectsItUntilItHangsUp(t *testing.T) {
 				hello: pluginHelloParams("unnumbered-provider", pluginWireAPIVersion, 0)},
 			{name: "typo-provider", refusal: `unsupported plugin surface "worktree.cretae"`,
 				hello: pluginHelloParams("typo-provider", pluginWireAPIVersion, 1, "worktree.cretae")},
+			{name: "patient-provider", refusal: `surface_timeouts_ms for "worktree.create" is 1800001ms, want more than 0 and at most 30m0s`,
+				hello: declaringSurfaceTimeouts(pluginHelloParams("patient-provider", pluginWireAPIVersion, 1, "worktree.create"),
+					map[string]time.Duration{"worktree.create": 30*time.Minute + time.Millisecond})},
+			{name: "impatient-provider", refusal: `surface_timeouts_ms for "worktree.delete" is 0ms, want more than 0 and at most 30m0s`,
+				hello: declaringSurfaceTimeouts(pluginHelloParams("impatient-provider", pluginWireAPIVersion, 1, "worktree.delete"),
+					map[string]time.Duration{"worktree.delete": 0})},
+			{name: "unhandled-provider", refusal: `surface_timeouts_ms names "worktree.delete", which the plugin does not handle`,
+				hello: declaringSurfaceTimeouts(pluginHelloParams("unhandled-provider", pluginWireAPIVersion, 1, "worktree.create"),
+					map[string]time.Duration{"worktree.delete": time.Minute})},
 		} {
 			refused := dialPlugin(t, w, row.name, true)
 			if answer := refused.hello(row.hello); answer.Error == nil || !strings.Contains(answer.Error.Message, row.refusal) {

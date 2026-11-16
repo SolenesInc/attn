@@ -144,6 +144,18 @@ puts every registered surface in the `hello` handshake. A plugin can use
 `client.handle` and `client.driver` together; they register independently.
 `examples/plugins/worktree-deps-hook` is a complete worktree plugin.
 
+attn waits 2 minutes for a `worktree.create` answer and 30 seconds for the other
+worktree surfaces, then reports the operation as failed. A handler that takes
+longer declares its own limit, from SDK 0.4.0:
+
+```ts
+client.handle("worktree.create", createWorktree, { timeoutMs: 10 * 60_000 });
+```
+
+The limit must be more than 0 and at most 30 minutes, or attn refuses the
+plugin's `hello`. An attn daemon released before this option ignores it and
+keeps the defaults.
+
 ## Connection
 
 Managed plugins get `ATTN_SOCKET_PATH` and `ATTN_PLUGIN_NAME` from attn, plus an

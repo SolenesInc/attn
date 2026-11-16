@@ -30,11 +30,12 @@ const (
 )
 
 type pluginHelloParams struct {
-	Name           string   `json:"name"`
-	Version        string   `json:"version"`
-	AttnAPIVersion int      `json:"attn_api_version"`
-	Generation     uint64   `json:"generation"`
-	Surfaces       []string `json:"surfaces,omitempty"`
+	Name              string           `json:"name"`
+	Version           string           `json:"version"`
+	AttnAPIVersion    int              `json:"attn_api_version"`
+	Generation        uint64           `json:"generation"`
+	Surfaces          []string         `json:"surfaces,omitempty"`
+	SurfaceTimeoutsMS map[string]int64 `json:"surface_timeouts_ms,omitempty"`
 }
 
 type pluginHelloResult struct {
@@ -122,14 +123,19 @@ func (r *pluginRegistry) get(name string) *pluginConnection {
 
 type pluginSurfaceHandler struct {
 	PluginName string
+	Timeout    time.Duration
 }
 
-func (r *pluginRegistry) registerSurfaces(plugin *pluginConnection, values []string) error {
+func (r *pluginRegistry) registerSurfaces(plugin *pluginConnection, values []string, timeoutsMS map[string]int64) error {
 	if plugin == nil || plugin.name == "" {
 		return errors.New("plugin name is required")
 	}
 
 	surfaces, err := validatePluginSurfaces(values)
+	if err != nil {
+		return err
+	}
+	timeouts, err := parseSurfaceTimeouts(surfaces, timeoutsMS)
 	if err != nil {
 		return err
 	}
@@ -146,6 +152,7 @@ func (r *pluginRegistry) registerSurfaces(plugin *pluginConnection, values []str
 	for _, surface := range surfaces {
 		r.surfaces[surface] = append(r.surfaces[surface], pluginSurfaceHandler{
 			PluginName: plugin.name,
+			Timeout:    timeouts[surface],
 		})
 		r.sortSurfaceHandlersLocked(surface)
 	}
@@ -250,6 +257,23 @@ func validatePluginSurfaces(values []string) ([]string, error) {
 		}
 	}
 	return surfaces, nil
+}
+
+func parseSurfaceTimeouts(surfaces []string, timeoutsMS map[string]int64) (map[string]time.Duration, error) {
+	timeouts := make(map[string]time.Duration, len(surfaces))
+	for _, surface := range surfaces {
+		timeouts[surface] = defaultWorktreeSurfaceTimeout(surface)
+	}
+	for surface, ms := range timeoutsMS {
+		if _, registered := timeouts[surface]; !registered {
+			return nil, fmt.Errorf("surface_timeouts_ms names %q, which the plugin does not handle", surface)
+		}
+		if ms <= 0 || ms > maxWorktreePluginCallTimeout.Milliseconds() {
+			return nil, fmt.Errorf("surface_timeouts_ms for %q is %dms, want more than 0 and at most %s", surface, ms, maxWorktreePluginCallTimeout)
+		}
+		timeouts[surface] = time.Duration(ms) * time.Millisecond
+	}
+	return timeouts, nil
 }
 
 type pluginConnection struct {
@@ -534,7 +558,7 @@ func (d *Daemon) connectPlugin(plugin *pluginConnection, registry *pluginRegistr
 		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, err.Error()))
 		return false
 	}
-	if err := registry.registerSurfaces(plugin, params.Surfaces); err != nil {
+	if err := registry.registerSurfaces(plugin, params.Surfaces, params.SurfaceTimeoutsMS); err != nil {
 		registry.unregister(plugin)
 		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInvalidRequest, err.Error()))
 		return false

@@ -61,6 +61,37 @@ describe("AttnPluginClient", () => {
       generation: 1,
       surfaces: ["worktree.after_create", "worktree.create"],
     });
+    expect(server.requests[0]?.params).not.toHaveProperty("surface_timeouts_ms");
+
+    client.close();
+    await server.close();
+  });
+
+  test("declares each handler's timeout in hello", async () => {
+    const server = await startServer(async (socket, request) => {
+      if (request.method === "hello") {
+        socket.write(`${JSON.stringify(response(request.id, { ok: true }))}\n`);
+      }
+    });
+
+    const client = new AttnPluginClient({
+      socketPath: server.socketPath,
+      name: "sdk-provider",
+      version: "0.1.0",
+    });
+    client.handle("worktree.create", async () => decline(), { timeoutMs: 10 * 60_000 });
+    client.handle("worktree.delete", async () => decline(), { timeoutMs: 5 * 60_000 });
+    client.handle("worktree.after_create", async () => {});
+
+    await client.connect();
+
+    expect(server.requests[0]?.params).toMatchObject({
+      surfaces: ["worktree.after_create", "worktree.create", "worktree.delete"],
+    });
+    expect((server.requests[0]?.params as Record<string, unknown>).surface_timeouts_ms).toEqual({
+      "worktree.create": 600_000,
+      "worktree.delete": 300_000,
+    });
 
     client.close();
     await server.close();

@@ -104,6 +104,10 @@ export type PluginHandler<TParams = unknown, TResult = unknown> = (
   params: TParams,
 ) => Promise<TResult> | TResult;
 
+export type HandleOptions = {
+  timeoutMs?: number;
+};
+
 type JsonRpcID = string | number;
 
 type JsonRpcRequest = {
@@ -149,6 +153,7 @@ export class AttnPluginClient {
   private nextID = 1;
   private readBuffer = "";
   private readonly handlers = new Map<PluginSurface, PluginHandler>();
+  private readonly surfaceTimeoutsMs = new Map<PluginSurface, number>();
   private readonly pending = new Map<string, PendingRequest>();
   private definition?: DriverDefinition;
   private readonly runs = new Map<string, ClientRun>();
@@ -199,6 +204,9 @@ export class AttnPluginClient {
         attn_api_version: pluginAPIVersion,
         generation: this.options.generation,
         surfaces: [...this.handlers.keys()].sort(),
+        ...(this.surfaceTimeoutsMs.size > 0 && {
+          surface_timeouts_ms: Object.fromEntries(this.surfaceTimeoutsMs),
+        }),
       });
       if (!result.ok) {
         throw new Error("attn rejected plugin hello");
@@ -220,11 +228,17 @@ export class AttnPluginClient {
   handle<TSurface extends PluginSurface>(
     surface: TSurface,
     handler: PluginHandler<PluginSurfaceParams[TSurface], PluginSurfaceResult[TSurface]>,
+    options: HandleOptions = {},
   ): void {
     if (this.socket) {
       throw new Error("attn plugin surfaces must be registered before connect");
     }
     this.handlers.set(surface, handler as PluginHandler);
+    if (options.timeoutMs === undefined) {
+      this.surfaceTimeoutsMs.delete(surface);
+    } else {
+      this.surfaceTimeoutsMs.set(surface, options.timeoutMs);
+    }
   }
 
   driver(definition: DriverDefinition): void {
