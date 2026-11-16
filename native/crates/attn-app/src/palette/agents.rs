@@ -147,7 +147,7 @@ impl List<'_> {
             key: format!("agent:{}", session.id),
             label: name,
             look: Look::Agent {
-                agent: AgentRow::of(session, false),
+                agent: Box::new(AgentRow::of(session, false)),
                 crew: !crew.is_empty() && session.chief_of_staff != Some(true),
                 status: status(
                     session,

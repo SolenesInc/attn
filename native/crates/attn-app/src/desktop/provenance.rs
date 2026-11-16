@@ -174,6 +174,54 @@ pub(crate) fn badge_view(row_key: &str, badge: &Badge, t: &Tokens) -> El {
         )
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Run {
+    shown: String,
+    said: String,
+}
+
+pub(crate) fn run(session: &Session) -> Option<Run> {
+    let automation = session.automation.as_ref()?;
+    let mut said = vec![format!("Automation: {}", automation.definition_name)];
+    if automation.superseded == Some(true) {
+        said.push("Superseded session".into());
+    }
+    let mut shown = short_definition(&automation.definition_name);
+    if let Some(pr) = &automation.pull_request {
+        said.push(format!("{}#{}", pr.repository, pr.number));
+        said.extend(pr.title.clone().filter(|t| !t.is_empty()));
+        shown = format!("{shown} #{}", pr.number);
+    }
+    Some(Run {
+        shown,
+        said: said.join(" · "),
+    })
+}
+
+pub(crate) fn run_view(row_key: &str, run: &Run, t: &Tokens) -> El {
+    row()
+        .key(format!("{row_key}.run"))
+        .role("img")
+        .label(run.said.clone())
+        .a11y_value(run.shown.clone())
+        .items_center()
+        .gap(4.0)
+        .shrink()
+        .child(
+            text(attn_ui::icon::BOLT)
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary),
+        )
+        .child(
+            text(run.shown.clone())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary)
+                .single_line()
+                .truncate()
+                .shrink(),
+        )
+}
+
 /// The pull request the header names: the best one, unless even that one is closed.
 pub(crate) fn pull_request(session: &Session) -> Option<&SessionPullRequest> {
     pull_requests(session)

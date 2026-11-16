@@ -113,6 +113,7 @@ fn rows(world: &World) -> Vec<String> {
                     && !k.ends_with(".actions")
                     && !k.ends_with(".close")
                     && !k.ends_with(".rename")
+                    && !k.ends_with(".settle")
             })
         })
         .filter_map(|n| n.name)
@@ -907,4 +908,90 @@ fn an_agent_row_says_its_harness_on_hover_and_explains_an_unknown_state_the_daem
             Some(said.replace(" · unknown", "").as_str())
         );
     }
+}
+
+#[test]
+fn an_automation_run_row_names_its_definition_and_pull_request_and_settles_when_it_needs_the_user()
+{
+    use attn_protocol::{AutomationProvenance, PullRequestProvenance};
+    let review = |run: &str| AutomationProvenance {
+        run_id: run.into(),
+        definition_id: 1,
+        definition_name: "Requested PR review - GPT Sol medium".into(),
+        trigger_type: "github_review_requested".into(),
+        pull_request: Some(PullRequestProvenance {
+            repository: "ghe.example.net/audiobook/feed-nexus-web".into(),
+            number: 101,
+            url: "https://ghe.example.net/audiobook/feed-nexus-web/pull/101".into(),
+            title: Some("Fix validation race".into()),
+            ..PullRequestProvenance::default()
+        }),
+        ..AutomationProvenance::default()
+    };
+    let mut world = World::start(Daemon::scripted().state(state(
+        vec![
+            session("manual", "idle"),
+            Session {
+                automation: Some(review("run-1")),
+                ..session("run-a", "idle")
+            },
+            Session {
+                automation: Some(review("run-2")),
+                turn_owed: Some(true),
+                ..session("run-b", "waiting_input")
+            },
+        ],
+        vec![desktop(
+            "testing",
+            "a",
+            "Testing automations",
+            vec![
+                pane("testing", "p1", "manual"),
+                pane("testing", "p2", "run-a"),
+                pane("testing", "p3", "run-b"),
+            ],
+        )],
+    )));
+    assert_eq!(
+        rows(&world),
+        [
+            "Open Testing automations",
+            "Open manual",
+            "Open run-a",
+            "Open run-b"
+        ]
+    );
+    let run = world.screen().get(Target::key("sidebar.session.run-a.run"));
+    assert_eq!(
+        run.name.as_deref(),
+        Some(
+            "Automation: Requested PR review - GPT Sol medium · ghe.example.net/audiobook/feed-nexus-web#101 · Fix validation race"
+        )
+    );
+    assert_eq!(run.value.as_deref(), Some("GPT Sol medium #101"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.manual.run"))
+            .is_none()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.run-a.settle"))
+            .is_none()
+    );
+    world.gesture(|app| app.click(Target::key("sidebar.session.run-b.settle")));
+    let settled = world.daemon.sent_of("settle_turn");
+    assert_eq!(settled.len(), 1);
+    assert_eq!(settled[0]["session_id"], "run-b");
+
+    world.gesture(|app| app.key(chord(Action::UiActionMenu)));
+    let agents: Vec<String> = world
+        .screen()
+        .all(Target::role("list-box-option"))
+        .into_iter()
+        .filter_map(|n| n.key?.strip_prefix("palette.row.agent:").map(str::to_owned))
+        .collect();
+    assert_eq!(agents, ["manual", "run-a", "run-b"]);
 }

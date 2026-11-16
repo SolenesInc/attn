@@ -155,7 +155,7 @@ pub(crate) enum Look {
         shortcut: Option<String>,
     },
     Agent {
-        agent: AgentRow,
+        agent: Box<AgentRow>,
         crew: bool,
         status: Status,
         slot: String,

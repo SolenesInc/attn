@@ -74,6 +74,8 @@ pub struct AgentRow {
     pub chief: bool,
     pub delegated: bool,
     pub unknown_because: Option<&'static str>,
+    pub run: Option<crate::desktop::provenance::Run>,
+    pub settle_run: bool,
 }
 
 /// The daemon's auto-settle countdown, as a row whose tile is not on screen shows it.
@@ -121,6 +123,8 @@ impl AgentRow {
             pr: crate::desktop::provenance::badge(session),
             chief: session.chief_of_staff == Some(true),
             delegated: session.delegated_from_chief == Some(true),
+            run: crate::desktop::provenance::run(session),
+            settle_run: session.automation.is_some() && session.turn_owed == Some(true),
             unknown_because: (session.state == "unknown")
                 .then(|| unknown_reason(session.state_reason.as_deref()))
                 .flatten(),

@@ -364,6 +364,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                                 .as_ref()
                                 .map(|pr| crate::desktop::provenance::badge_view(&key, pr, t)),
                         )
+                        .children(row.settle_run.then(|| settle_button(&key, row, t)))
                         .child(actions_button(&key, row, t));
                     agent_row(key.clone(), row, logos, t)
                         .hover_group()
@@ -528,6 +529,12 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+        .children(
+            agent
+                .run
+                .as_ref()
+                .map(|run| crate::desktop::provenance::run_view(&key, run, t)),
+        )
         .children((agent.state == AgentState::Recoverable).then(|| {
             text("recoverable")
                 .key(format!("{key}.recoverable"))
@@ -569,6 +576,18 @@ fn mark(row_key: &str, name: &str, glyph: &str, label: &str, t: &Tokens) -> El {
         .px(5.0)
         .radius(9.0)
         .fill(t.accent.alpha(0.14))
+}
+
+fn settle_button(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
+    let id = agent.id.clone();
+    queue_view::control(
+        row_key,
+        "settle",
+        format!("Settle {}", agent.name),
+        "✓",
+        t,
+        move |state, _| actions::settle(state, &id),
+    )
 }
 
 /// The × button that closes a desktop, asking first when it holds tiles.
