@@ -2,8 +2,11 @@
 //! agent retrieved it from its inbox.
 
 use attn_protocol::{QuickCaptureListMessage, QuickCaptureRecord};
+use std::collections::HashMap;
+
 use rune::Tx;
 
+use super::previews::{self, Sent};
 use super::{Face, Message, Panel, result, view};
 
 /// Captures a page of history lists, as the Tauri app asks for.
@@ -18,11 +21,13 @@ pub(crate) struct History {
     pub error: Option<String>,
     pub selected: Option<String>,
     /// Moves when the history opens or closes, so an answer to an earlier opening is dropped.
-    generation: u64,
+    pub(super) generation: u64,
     /// The history opened and has not asked for its first page yet.
     unread: bool,
     /// A refresh was asked for while one ran.
     again: bool,
+    /// The pictures of the images the listed messages sent, by capture and attachment.
+    pub images: HashMap<(String, String), Sent>,
 }
 
 impl History {
@@ -64,6 +69,7 @@ pub(crate) fn close(panel: &mut Panel, tx: &mut Tx) {
     panel.face = Face::Compose;
     panel.history.generation += 1;
     panel.history.again = false;
+    panel.history.images.clear();
     tx.focus(view::MESSAGE, false);
 }
 
@@ -174,6 +180,7 @@ fn page(
                 if history.selected.is_none() {
                     history.selected = history.ordered().last().map(|r| r.id.clone());
                 }
+                previews::fetch(panel, tx);
             }
             if std::mem::take(&mut panel.history.again) && panel.face == Face::Recent {
                 refresh(panel, None, tx);

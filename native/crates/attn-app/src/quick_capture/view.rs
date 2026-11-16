@@ -1,8 +1,9 @@
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{ClipboardContent, Cx, El, Tx, col, el, row, text, text_input};
+use rune::{ClipboardContent, Cx, El, Image, SurfaceFit, Tx, col, el, row, text, text_input};
 
-use super::attach::{self, Source};
+use super::attach::{self, Attachment, Source};
+use super::previews::{self, Sent};
 use super::{Busy, Face, Panel, history};
 use attn_ui::Appearance;
 
@@ -160,6 +161,13 @@ fn files(panel: &Panel, t: &Tokens) -> El {
         .gap(space::S2)
         .wrap()
         .children(panel.draft.files.iter().map(|file| {
+            let preview = file
+                .image()
+                .and_then(|path| panel.previews.drafted(path))
+                .filter(|image| image.error().is_none());
+            if let Some(image) = preview {
+                return thumbnail(panel, file, image, t);
+            }
             let id = file.id.clone();
             let ready = file.ready();
             let detail = if ready {
@@ -204,6 +212,52 @@ fn files(panel: &Panel, t: &Tokens) -> El {
                     .disabled(!panel.editable()),
                 )
         }))
+}
+
+/// An image file of the draft as the picture it holds, which the Tauri panel draws 84 by 58
+/// points, cropped to fill.
+fn thumbnail(panel: &Panel, file: &Attachment, image: &Image, t: &Tokens) -> El {
+    let id = file.id.clone();
+    el().key(format!("capture.file.{}", file.id))
+        .role("listitem")
+        .label(file.name.clone())
+        .a11y_value("ready")
+        .size(84.0, 58.0)
+        .radius(7.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .child(picture(&file.name, image, 84.0, 58.0, 7.0))
+        .child(
+            row()
+                .absolute(0.0, 0.0)
+                .w_full()
+                .justify_end()
+                .padding(4.0)
+                .child(
+                    button(
+                        &format!("capture.file.{}.remove", file.id),
+                        &format!("Remove {}", file.name),
+                        "×",
+                        t,
+                        move |panel, tx| attach::remove(panel, &id, tx),
+                    )
+                    .disabled(!panel.editable()),
+                ),
+        )
+}
+
+/// `image` cropped to fill `w` by `h` points, named `name` once it has decoded.
+fn picture(name: &str, image: &Image, w: f32, h: f32, radius: f32) -> El {
+    let label = if image.is_ready() {
+        name.to_owned()
+    } else {
+        format!("{name} (loading)")
+    };
+    el().role("image")
+        .label(label)
+        .size(w, h)
+        .radius(radius)
+        .pixels_fit(image.pixels(), SurfaceFit::Fill)
 }
 
 fn alert(panel: &Panel, t: &Tokens) -> Option<El> {
@@ -423,7 +477,27 @@ fn recent(panel: &Panel, t: &Tokens) -> El {
         )
         .disabled(panel.history.loading)
     });
-    let rows = ordered.iter().map(|record| item(panel, record, t));
+    let mut shown_day = None;
+    let mut rows = Vec::new();
+    for record in &ordered {
+        let ms = crate::calendar::ms_of_rfc3339(&record.created_at);
+        let day = ms.map(crate::calendar::local_day);
+        if let Some(ms) = ms.filter(|_| day != shown_day) {
+            rows.push(
+                row()
+                    .key(format!("capture.history.day.{}", record.id))
+                    .w_full()
+                    .justify_center()
+                    .child(
+                        text(day_label(ms, panel.today))
+                            .font(type_::LABEL)
+                            .color(t.text_tertiary),
+                    ),
+            );
+        }
+        shown_day = day;
+        rows.push(item(panel, record, t));
+    }
     col()
         .key("capture.history")
         .role("region")
@@ -468,6 +542,9 @@ fn item(panel: &Panel, record: &attn_protocol::QuickCaptureRecord, t: &Tokens) -
     let status = format!("{} {when}", if read.is_some() { "Read" } else { "Sent" });
     let picked = record.id.clone();
     let files = record.attachments.iter().map(|file| {
+        if file.media_type.starts_with("image/") {
+            return sent_image(panel, record, file, t);
+        }
         text(format!(
             "{} · {}",
             file.name,
@@ -521,6 +598,89 @@ fn item(panel: &Panel, record: &attn_protocol::QuickCaptureRecord, t: &Tokens) -
                     t.text_tertiary
                 }),
         )
+}
+
+/// An image a message sent, as the Tauri panel draws it: a 132 by 84 point picture cropped to
+/// fill, its name and size under it, and why it could not be read with a way to read it again.
+fn sent_image(
+    panel: &Panel,
+    record: &attn_protocol::QuickCaptureRecord,
+    file: &attn_protocol::QuickCaptureAttachment,
+    t: &Tokens,
+) -> El {
+    let key = (record.id.clone(), file.id.clone());
+    let sent = panel.history.images.get(&key);
+    let frame = el()
+        .size(132.0, 84.0)
+        .radius(8.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .children(match sent {
+            Some(Sent::Shown(image)) if image.error().is_none() => {
+                Some(picture(&file.name, image, 132.0, 84.0, 8.0))
+            }
+            _ => None,
+        });
+    let failed = match sent {
+        Some(Sent::Failed(why)) => Some(why.clone()),
+        _ => None,
+    };
+    col()
+        .key(format!("capture.history.file.{}.{}", record.id, file.id))
+        .w(132.0)
+        .gap(space::S1)
+        .child(frame)
+        .child(
+            text(file.name.clone())
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .wrap(),
+        )
+        .child(
+            text(size(file.bytes.max(0) as u64))
+                .font(type_::LABEL)
+                .color(t.text_tertiary),
+        )
+        .children(failed.map(|why| {
+            text(why)
+                .role("alert")
+                .font(type_::LABEL)
+                .color(t.error)
+                .wrap()
+        }))
+        .children(matches!(sent, Some(Sent::Failed(_))).then(|| {
+            button(
+                &format!("capture.history.file.{}.{}.retry", record.id, file.id),
+                &format!("Retry {}", file.name),
+                "Retry image",
+                t,
+                move |panel, tx| previews::retry(panel, key.clone(), tx),
+            )
+        }))
+}
+
+/// The day a Recent message was sent, as the Tauri panel heads each day: "Today",
+/// "Yesterday", or the month and day, with the year when it is not this year's.
+fn day_label(ms: i64, today: i64) -> String {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let day = crate::calendar::local_day(ms);
+    if day == today {
+        return "Today".to_owned();
+    }
+    if day == today - 1 {
+        return "Yesterday".to_owned();
+    }
+    let local = rune::time::LocalTime::at(ms);
+    let this_year =
+        rune::time::LocalTime::at(crate::calendar::local_instant(today, 12 * 3600)).year;
+    let month = MONTHS[(local.month as usize).saturating_sub(1) % 12];
+    if local.year == this_year {
+        format!("{month} {}", local.day)
+    } else {
+        format!("{month} {}, {}", local.day, local.year)
+    }
 }
 
 fn button(

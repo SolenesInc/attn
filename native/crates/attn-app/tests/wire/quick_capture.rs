@@ -6,9 +6,10 @@ use attn_app::Action;
 use attn_app::quick_capture::DEFAULT_SHORTCUT;
 use attn_protocol::{
     CrewMember, CrewUpdatedMessage, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
-    QuickCaptureAttachment, QuickCaptureAttachmentPutResult, QuickCaptureDraftAsset,
-    QuickCaptureListResult, QuickCaptureReadMessage, QuickCaptureRecord, QuickCaptureResult,
-    QuickCaptureResultMessage, QuickCaptureUnreadMessage, SettingsUpdatedMessage,
+    QuickCaptureAttachment, QuickCaptureAttachmentGetResult, QuickCaptureAttachmentPutResult,
+    QuickCaptureDraftAsset, QuickCaptureListResult, QuickCaptureReadMessage, QuickCaptureRecord,
+    QuickCaptureResult, QuickCaptureResultMessage, QuickCaptureUnreadMessage,
+    SettingsUpdatedMessage,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message};
 use base64::Engine;
@@ -180,6 +181,22 @@ fn kept_put(kept: &Kept, request: &Request) -> Value {
     })
 }
 
+/// Hands back a sent file's bytes a byte at a time, so a download takes several chunks.
+fn kept_download(kept: &Kept, request: &Request) -> Value {
+    let kept = kept.lock().unwrap();
+    let bytes = &kept.bytes[request["attachment_id"].as_str().unwrap()];
+    let offset = request["offset"].as_u64().unwrap() as usize;
+    let end = (offset + 1).min(bytes.len());
+    answer(QuickCaptureResult {
+        download: Some(QuickCaptureAttachmentGetResult {
+            data_base64: base64::engine::general_purpose::STANDARD.encode(&bytes[offset..end]),
+            next_offset: end as i64,
+            eof: end == bytes.len(),
+        }),
+        ..QuickCaptureResult::default()
+    })
+}
+
 fn kept_discard(kept: &Kept, request: &Request) -> Value {
     let mut kept = kept.lock().unwrap();
     kept.assets
@@ -202,6 +219,10 @@ fn home() -> (Daemon, Kept) {
     daemon.on("quick_capture_list", move |r| kept_list(&k, r));
     let k = kept.clone();
     daemon.on("quick_capture_attachment_put", move |r| kept_put(&k, r));
+    let k = kept.clone();
+    daemon.on("quick_capture_attachment_get", move |r| {
+        kept_download(&k, r)
+    });
     let k = kept.clone();
     daemon.on("quick_capture_attachment_discard", move |r| {
         kept_discard(&k, r)
@@ -489,13 +510,12 @@ fn a_send_the_daemon_never_kept_is_the_persons_to_send_again() {
     rest(&mut world);
 }
 
-/// A 1 by 1 pixel PNG.
+/// A 4 by 3 pixel PNG.
 fn png() -> Vec<u8> {
-    const PIXEL: &str = "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c63000100000500010d0a2db40000000049454e44ae426082";
-    (0..PIXEL.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&PIXEL[i..i + 2], 16).unwrap())
-        .collect()
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAEklEQVR4nGP4z8DwHxkzEBQAAGHtF+mRbBMEAAAAAElFTkSuQmCC";
+    base64::engine::general_purpose::STANDARD
+        .decode(PNG)
+        .unwrap()
 }
 
 #[test]
@@ -538,6 +558,103 @@ fn pastes_a_screenshot_through_the_draft_folder_and_uploads_its_bytes_before_sen
         1
     );
     assert!(!stored.exists(), "a kept send forgets the draft's files");
+    rest(&mut world);
+}
+
+fn paste_screenshot(world: &mut World) {
+    let image = ClipboardImage::from_png(png()).unwrap();
+    world.capture_gesture(|d| {
+        d.runtime
+            .paste_content(ClipboardContent::new("").with_image(image));
+    });
+}
+
+#[test]
+fn a_pasted_screenshot_shows_its_picture_in_the_draft() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    paste_screenshot(&mut world);
+    let [_, _, w, h] = world
+        .capture_screen()
+        .bounds(Target::role("image").name("Pasted screenshot"))
+        .expect("the draft shows the screenshot's picture");
+    assert_eq!((w, h), (84.0, 58.0));
+    world.capture_gesture(|d| d.click(Target::role("button").name("Remove Pasted screenshot")));
+    assert!(
+        world
+            .capture_screen()
+            .find(Target::role("image").name("Pasted screenshot"))
+            .is_none()
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn recent_shows_the_picture_of_a_sent_image_read_in_chunks_from_the_daemon() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    paste_screenshot(&mut world);
+    press(&mut world, "enter");
+    open(&mut world);
+    world.capture_gesture(|d| d.click(Target::role("button").name("Recent messages")));
+    let [_, _, w, h] = world
+        .capture_screen()
+        .bounds(Target::role("image").name("Pasted screenshot"))
+        .expect("Recent shows the sent screenshot's picture");
+    assert_eq!((w, h), (132.0, 84.0));
+    assert_eq!(
+        world.daemon.sent_of("quick_capture_attachment_get").len(),
+        png().len(),
+        "the picture is read a chunk at a time until the daemon says it ended"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn recent_heads_each_day_with_its_date() {
+    let (daemon, kept) = home();
+    let record = |id: &str, at: &str| QuickCaptureRecord {
+        id: id.into(),
+        mailbox: serde_json::from_value(json!({"kind": "crew_member", "member_id": "ada"}))
+            .unwrap(),
+        content: id.into(),
+        created_at: at.into(),
+        attachments: vec![],
+        read_at: None,
+    };
+    kept.lock().unwrap().records = vec![
+        record("last-year", "2025-03-03T12:00:00Z"),
+        record("two-days-ago", "2026-11-10T12:00:00Z"),
+        record("yesterday-noon", "2026-11-11T12:00:00Z"),
+        record("yesterday-later", "2026-11-11T13:00:00Z"),
+        record("today", "2026-11-12T08:30:00Z"),
+    ];
+    let mut world = World::start(daemon);
+    open(&mut world);
+    world.capture_gesture(|d| d.click(Target::role("button").name("Recent messages")));
+    world.capture_gesture(|d| {
+        let (x, y) = d.runtime.find("capture.history.list").unwrap();
+        d.runtime.wheel(x, y, 2000.0);
+    });
+    world.capture_gesture(|d| d.click(Target::role("button").name("Show older messages")));
+    let screen = world.capture_screen();
+    let day = |id: &str| {
+        screen
+            .find(Target::key(format!("capture.history.day.{id}")))
+            .map(|_| ())
+    };
+    assert!(day("yesterday-later").is_none(), "a day is headed once");
+    for (id, label) in [
+        ("last-year", "Mar 3, 2025"),
+        ("two-days-ago", "Nov 10"),
+        ("yesterday-noon", "Yesterday"),
+        ("today", "Today"),
+    ] {
+        assert!(day(id).is_some(), "{id} starts a day");
+        assert!(shows(&world, label), "{label} heads its day");
+    }
     rest(&mut world);
 }
 

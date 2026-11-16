@@ -84,10 +84,17 @@ pub fn open(
         automation: Mutex::default(),
     });
     let window: Arc<dyn Window> = panel.clone();
-    let bound = super::bind(store, daemon, window.clone(), data_dir, {
-        let handle = handle.clone();
-        move |update| handle.update(update)
-    });
+    let bound = super::bind(
+        store,
+        daemon,
+        window.clone(),
+        data_dir,
+        crate::wall_clock_ms(),
+        {
+            let handle = handle.clone();
+            move |update| handle.update(update)
+        },
+    );
     *panel.bound.lock().unwrap() = Some(bound);
     if let Some(manifest) = automation {
         let host = Arc::new(PanelHost { handle, frames });

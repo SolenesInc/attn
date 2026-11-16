@@ -9,6 +9,7 @@ mod draft;
 mod history;
 #[cfg(target_os = "macos")]
 pub mod mac;
+mod previews;
 pub(crate) mod shortcut;
 pub use shortcut::{DEFAULT as DEFAULT_SHORTCUT, stored as stored_shortcut};
 mod view;
@@ -161,6 +162,11 @@ pub struct Panel {
     pub(crate) dropping: bool,
     /// The panel's window holds the keyboard.
     pub(crate) key_window: bool,
+    pub(crate) previews: previews::Previews,
+    /// Wall-clock milliseconds when the panel's clock read zero.
+    epoch_ms: i64,
+    /// The user's calendar day when the panel last drew.
+    pub(crate) today: i64,
 }
 
 const READS: Slices = Slices::CONNECTION
@@ -170,15 +176,22 @@ const READS: Slices = Slices::CONNECTION
     .union(Slices::CAPTURE_READS);
 
 /// Binds the panel to the store: it sends on `daemon`, keeps drafts under `data_dir`, hides
-/// through `window`, and hears every change to what it reads through `deliver`.
+/// through `window`, reads the wall clock as `epoch_ms` when its clock reads zero, and hears
+/// every change to what it reads through `deliver`.
 pub fn bind(
     store: &Store,
     daemon: Commands,
     window: Arc<dyn Window>,
     data_dir: PathBuf,
+    epoch_ms: i64,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> Subscription {
+    let deliver = Arc::new(deliver);
+    let woken = deliver.clone();
+    let wake: rune::Waker = Arc::new(move || woken(Box::new(|_, _| {})));
     deliver(Box::new(move |panel, _| {
+        panel.previews.start(wake);
+        panel.epoch_ms = epoch_ms;
         panel.daemon = daemon;
         panel.window = Some(window);
         panel.data_dir = data_dir;
@@ -319,6 +332,7 @@ impl Panel {
             Message::List(m) => self.daemon.send(m),
             Message::Put(m) => self.daemon.send(m),
             Message::Discard(m) => self.daemon.send(m),
+            Message::Download(m) => self.daemon.send(m),
         };
         match sent {
             Ok(()) => self.requests.wait(id, &message, Box::new(then)),
@@ -373,6 +387,7 @@ enum Message {
     List(attn_protocol::QuickCaptureListMessage),
     Put(attn_protocol::QuickCaptureAttachmentPutMessage),
     Discard(attn_protocol::QuickCaptureAttachmentDiscardMessage),
+    Download(attn_protocol::QuickCaptureAttachmentGetMessage),
 }
 
 impl Message {
@@ -383,6 +398,7 @@ impl Message {
             Message::List(m) => &mut m.profile_id,
             Message::Put(m) => &mut m.profile_id,
             Message::Discard(m) => &mut m.profile_id,
+            Message::Download(m) => &mut m.profile_id,
         };
         *field = Some(profile.to_owned());
     }
@@ -838,7 +854,9 @@ fn answer(panel: &mut Panel, tx: &mut Tx) -> bool {
 }
 
 fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
-    let mut changed = answer(panel, tx);
+    let today = crate::calendar::local_day(panel.epoch_ms + (now * 1000.0) as i64);
+    let mut changed = std::mem::replace(&mut panel.today, today) != today;
+    changed |= answer(panel, tx);
     if panel.save.is_some_and(|due| now >= due.at) {
         panel.flush();
         changed = true;
@@ -846,5 +864,5 @@ fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
     if let Some(due) = panel.save {
         tx.wake_at(due.at);
     }
-    changed
+    changed | previews::follow(panel)
 }

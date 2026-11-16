@@ -83,6 +83,7 @@ impl CaptureRuntime {
                 daemon,
                 window.clone(),
                 data_dir.to_owned(),
+                crate::world::WALL_START_MS,
                 move |u| {
                     quick_capture::Window::update(&*window, u);
                 },
@@ -133,6 +134,7 @@ impl CaptureRuntime {
     pub(crate) fn idle(&self) -> bool {
         self.window.inbox.lock().unwrap().is_empty()
             && (self.copies_held || !self.runtime.state().copying())
+            && !self.runtime.state().decoding()
     }
 
     pub(crate) fn at_rest(&self) -> bool {
