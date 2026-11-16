@@ -3,7 +3,7 @@ package testworld
 import (
 	"crypto/sha256"
 	"fmt"
-	"net"
+	"net/http"
 	"path/filepath"
 	"testing"
 )
@@ -28,9 +28,11 @@ func (s *Stack) FreeWSPort() {
 	_ = s.wsListener.Close()
 }
 
-// WSPort names the port the CLI reads the daemon's /health from.
-func (s *Stack) WSPort() int {
-	return s.wsListener.Addr().(*net.TCPAddr).Port
+// ServeWS answers the CLI's requests to the daemon's port with handler, in place of a daemon.
+func (s *Stack) ServeWS(handler http.Handler) {
+	server := &http.Server{Handler: handler}
+	go func() { _ = server.Serve(s.wsListener) }()
+	s.T.Cleanup(func() { _ = server.Close() })
 }
 
 // AwaitDaemonReplaced waits for the daemon the harness started to exit after attn replaced it.
