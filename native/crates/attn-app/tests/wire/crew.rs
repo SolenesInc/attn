@@ -2543,3 +2543,63 @@ fn the_inner_escape_commits_a_launch_field_and_the_next_closes_manage_crew() {
     press(&mut world, Key::Escape);
     assert!(!is_open(&world));
 }
+
+fn letter_opens_its_seed_link(fern: CrewMember) -> Value {
+    let d = daemon(vec![fern], vec![session("s-fern", "claude")], Vec::new());
+    d.on("crew_handoffs_get", |_| {
+        message(CrewHandoffsGetResultMessage {
+            success: true,
+            member: Some("fern".into()),
+            handoffs: vec![letter("2026-09-01T21-37Z-fern.md", "2026-09-01T21:37:00Z")],
+            ..CrewHandoffsGetResultMessage::new()
+        })
+    });
+    d.on("crew_handoff_get", |_| {
+        letter_read(
+            "2026-09-01T21-37Z-fern.md",
+            "# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-w0rk11)\n",
+        )
+    });
+    d.on("open_seed", |r: &Request| {
+        message(OpenSeedResultMessage {
+            success: true,
+            seed_id: r["seed_id"].as_str().unwrap_or_default().to_owned(),
+            desktop_id: Some("d1".into()),
+            tile_id: Some("tile-seed".into()),
+            ..OpenSeedResultMessage::new()
+        })
+    });
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, "crew.tab.handoffs");
+    let reader = world
+        .screen()
+        .descendants(Target::key("crew.handoff.letter"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        reader.contains("A paragraph at the end that must not be truncated."),
+        "{reader}"
+    );
+    world.gesture(|app| app.click(Target::role("link").name("Open the seed")));
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], "s-w0rk11");
+    opened[0].clone()
+}
+
+#[test]
+fn a_seed_link_in_a_letter_opens_the_seed_as_a_standalone_reader_for_a_member_between_sessions() {
+    let opened = letter_opens_its_seed_link(member("fern", 1));
+    assert_eq!(opened["standalone"], true);
+    assert!(opened.get("session_id").is_none_or(Value::is_null));
+}
+
+#[test]
+fn a_seed_link_in_a_letter_opens_the_seed_beside_the_session_of_a_member_in_session() {
+    let opened = letter_opens_its_seed_link(in_session(member("fern", 1), "s-fern"));
+    assert_eq!(opened["session_id"], "s-fern");
+    assert!(opened.get("standalone").is_none_or(Value::is_null));
+}

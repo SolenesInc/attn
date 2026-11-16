@@ -1850,3 +1850,4 @@ app/src/components/CrewPanel.test.tsx	CrewPanel > keeps a retained offline chart
 app/src/components/CrewPanel.test.tsx	CrewPanel > rereads a saved charter when the tab is entered again	attn-app/tests/wire/crew.rs::entering_the_charter_tab_again_reads_the_saved_charter_again	
 app/src/components/CrewPanel.test.tsx	CrewPanel > commits a launch field on the inner Escape, then closes Crew on the next Escape	attn-app/tests/wire/crew.rs::the_inner_escape_commits_a_launch_field_and_the_next_closes_manage_crew	
 app/src/components/CrewPanel.test.tsx	CrewPanel > renders no roster or member content while closed	attn-app/tests/wire/crew.rs::the_palette_opens_manage_crew_on_the_profiles_first_member_and_escape_closes_it	
+app/src/components/CrewPanel.test.tsx	CrewPanel > renders complete dated handoffs and %s	attn-app/tests/wire/crew.rs::a_seed_link_in_a_letter_opens_the_seed_as_a_standalone_reader_for_a_member_between_sessions	

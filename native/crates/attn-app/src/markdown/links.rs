@@ -106,6 +106,7 @@ pub(crate) struct Document {
     pub(crate) session: Option<String>,
     pub(crate) outpost: Option<Outpost>,
     pub(crate) view: String,
+    pub(crate) opens_seed: Option<fn(&mut State, &str, &mut Tx)>,
 }
 
 #[derive(Clone)]
@@ -117,15 +118,42 @@ pub(crate) struct Outpost {
 impl Document {
     /// How the reader treats the link `href` in this document.
     pub(crate) fn verdict(&self, href: &str) -> Verdict {
+        if let Some(seed) = self.seed(href) {
+            return Verdict {
+                help: Some(format!("Open {seed}")),
+                follows: true,
+            };
+        }
         verdict(
             resolve(&self.path, href).as_ref(),
             self.outpost.as_ref().map(|o| o.name.as_str()),
         )
     }
+
+    fn seed(&self, href: &str) -> Option<String> {
+        self.opens_seed?;
+        let id = decoded(href.trim());
+        is_seed_id(&id).then_some(id)
+    }
+}
+
+fn is_seed_id(text: &str) -> bool {
+    text.strip_prefix("s-").is_some_and(|body| {
+        body.len() == 6
+            && body
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b.is_ascii_lowercase() && !b"ilou".contains(&b)))
+    })
 }
 
 /// Follows the link `href` pressed in `document`.
 pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mut Tx) {
+    if let Some(seed) = document.seed(href)
+        && let Some(open) = document.opens_seed
+    {
+        open(state, &seed, tx);
+        return;
+    }
     if !document.verdict(href).follows {
         return;
     }

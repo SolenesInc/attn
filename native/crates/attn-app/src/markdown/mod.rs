@@ -136,6 +136,7 @@ pub(crate) fn body(
         session: session.map(str::to_owned),
         outpost: outpost.clone(),
         view: view.clone(),
+        opens_seed: None,
     };
     let read_source = |source: &str, marking: Option<Marking>| {
         let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));

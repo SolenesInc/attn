@@ -283,6 +283,7 @@ impl<'a> Prose<'a> {
             session: None,
             outpost: None,
             view: "asks.ask".into(),
+            opens_seed: None,
         };
         let path = self.document.clone();
         let pictures = self.pictures.clone();
