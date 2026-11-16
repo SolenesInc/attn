@@ -37,7 +37,7 @@ vt_archive() {
 remove_worktree() {
   [ -n "$worktree" ] || return 0
   local build
-  build="${CARGO_HOME:-$HOME/.cargo}/attn-native-build$(cd "$worktree/native" && pwd -P)"
+  build="${CARGO_HOME:-$HOME/.cargo}/attn-native-build$(cd "$worktree" && pwd -P)"
   git -C "$root" worktree remove --force "$worktree"
   rm -rf "$build"
 }
