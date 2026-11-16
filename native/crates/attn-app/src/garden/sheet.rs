@@ -98,7 +98,7 @@ impl Sheet<'_> {
             .gap(space::S2)
             .child(meta_word(here.status.clone(), t));
         if let Some((sentence, _)) = model::harvest_when(here) {
-            meta = meta.child(meta_word(sentence, t));
+            meta = meta.child(self.harvest_when(here, sentence));
         }
         let tender = model::tender_of(here, self.names);
         if !tender.is_empty() {
@@ -127,6 +127,31 @@ impl Sheet<'_> {
             head = head.child(self.note("head.progress", model::progress_words(here)));
         }
         head
+    }
+
+    /// What the seed harvests on, a link to its pull request when the daemon knows where it is.
+    fn harvest_when(&self, here: &Seed, sentence: String) -> El {
+        let url = here
+            .harvest_when
+            .as_ref()
+            .map(|h| h.url.trim().to_owned())
+            .unwrap_or_default();
+        if url.is_empty() {
+            return meta_word(sentence, self.t);
+        }
+        super::view::kit_button(format!("{sentence} ↗"))
+            .help(url.clone())
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                if let Err(why) = tx.open_url(&url) {
+                    state
+                        .window
+                        .notify(format!("Could not open {url}: {why}"), tx);
+                }
+            })
+            .build(attn_ui::kit(self.t))
+            .key(self.key("head.harvest-when"))
+            .role("link")
+            .label(sentence)
     }
 
     /// The seed's body, read where the sheet scrolls.

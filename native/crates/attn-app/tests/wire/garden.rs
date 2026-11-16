@@ -1257,7 +1257,7 @@ fn says_what_an_armed_row_waits_on_where_a_parked_row_says_parked() {
 }
 
 #[test]
-fn says_the_whole_condition_on_the_seed_it_opens() {
+fn says_the_whole_condition_on_the_seed_it_opens_and_opens_the_pull_request() {
     let armed = with(seed("s-arm001", "armed work"), |s| {
         s.status = "parked".into();
         s.harvest_when = Some(SeedHarvestCondition {
@@ -1270,14 +1270,40 @@ fn says_the_whole_condition_on_the_seed_it_opens() {
 
     open_row(&mut world, "armed work");
 
-    assert!(
-        world
-            .screen()
-            .descendants(Target::key("garden.head.meta"))
-            .iter()
-            .any(|n| n.name.as_deref() == Some("harvests when northwind/atlas#412 merges"))
+    let link = Target::role("link").name("harvests when northwind/atlas#412 merges");
+    assert!(world.screen().find(link.clone()).is_some());
+    world.gesture(|app| app.click(link));
+    assert_eq!(
+        world.opened_links(),
+        ["https://github.com/northwind/atlas/pull/412"]
     );
     assert!(rests(&mut world));
+}
+
+#[test]
+fn keeps_a_pull_request_it_cannot_take_apart_rather_than_showing_nothing() {
+    let elsewhere = with(seed("s-arm002", "waiting elsewhere"), |s| {
+        s.harvest_when = Some(SeedHarvestCondition {
+            pull_request: "somewhere-else".into(),
+            ..SeedHarvestCondition::default()
+        });
+    });
+    let mut world = open_garden(vec![elsewhere]);
+    assert!(row_says(&world, "s-arm002", "harvests on somewhere-else"));
+
+    open_row(&mut world, "waiting elsewhere");
+
+    assert!(shows_in_head(&world, "harvests when somewhere-else merges"));
+    assert!(world.screen().find(Target::role("link")).is_none());
+    assert!(rests(&mut world));
+}
+
+fn shows_in_head(world: &World, words: &str) -> bool {
+    world
+        .screen()
+        .descendants(Target::key("garden.head.meta"))
+        .iter()
+        .any(|n| n.name.as_deref() == Some(words))
 }
 
 #[test]
