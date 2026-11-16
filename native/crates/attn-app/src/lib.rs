@@ -6,6 +6,7 @@ pub mod automation;
 pub mod browser;
 mod calendar;
 mod callouts;
+mod cheat_sheet;
 mod connection;
 pub mod daemon;
 mod deep_link;

@@ -6,7 +6,7 @@ use rune::{Chord, Cx, El, Tx, col, el, row, text};
 use rune_kit::popover::raised;
 use rune_kit::{Button, ButtonVariant, Dialog};
 
-use crate::action::{Action, Category};
+use crate::action::Action;
 use crate::keymap::Keymap;
 use crate::{State, connection};
 
@@ -649,44 +649,7 @@ fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
         .on_press_tx(crate::shortcut_editor::open)
         .build(attn_ui::kit(t))
         .key("shortcuts.edit");
-    let categories = [
-        Category::Sessions,
-        Category::Panes,
-        Category::Markdown,
-        Category::Review,
-        Category::App,
-    ];
-    let sections = categories.into_iter().map(|category| {
-        let rows = Action::ALL
-            .iter()
-            .filter(|a| a.category() == category)
-            .filter_map(|action| {
-                let keys = keymap.label(keymap.binding(action)?);
-                Some(
-                    row()
-                        .key(format!("shortcut.{}", action.id()))
-                        .role("listitem")
-                        .label(format!("{}, {keys}", action.label()))
-                        .w_full()
-                        .gap(space::S2)
-                        .child(
-                            text(action.label())
-                                .font(type_::BODY)
-                                .color(t.text_primary)
-                                .grow(1.0),
-                        )
-                        .child(text(keys).font(type_::MONO_CAPTION).color(t.text_secondary)),
-                )
-            });
-        col()
-            .key(format!("shortcuts.{category:?}"))
-            .role("list")
-            .label(category.label())
-            .w_full()
-            .gap(space::S1)
-            .child(section_title(category.label(), t))
-            .children(rows)
-    });
+    let sections = crate::cheat_sheet::sections(keymap, t);
     std::iter::once(edit).chain(sections).collect()
 }
 
@@ -825,6 +788,6 @@ fn floating(key: &str, surface: El) -> El {
     )
 }
 
-fn section_title(title: &str, t: &Tokens) -> El {
+pub(crate) fn section_title(title: &str, t: &Tokens) -> El {
     text(title).font(type_::SECTION).color(t.text_tertiary)
 }

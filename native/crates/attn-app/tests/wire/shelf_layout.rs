@@ -588,22 +588,27 @@ fn the_palette_steps_the_width_and_moves_tiles_as_the_keys_do_and_the_shortcut_h
     assert_eq!(send["activate"], false);
 
     press(&mut world, Action::UiShowShortcuts);
-    for action in [
-        Action::ShelfCarryLeft,
-        Action::ShelfCarryRight,
-        Action::ShelfSendToShelf,
-    ] {
-        let listed = world
+    let listed = |key: &str| {
+        world
             .screen()
-            .find(Target::key(format!("shortcut.{}", action.id())))
-            .and_then(|n| n.name);
-        assert!(
-            listed
-                .as_deref()
-                .is_some_and(|l| l.starts_with(action.label())),
-            "{listed:?}"
-        );
-    }
+            .find(Target::key(key))
+            .and_then(|n| n.name)
+            .unwrap_or_default()
+    };
+    let keymap = attn_app::Keymap::from_setting(None, rune::KeyPlatform::current());
+    let keys = |action: Action| keymap.label(keymap.binding(&action).expect("bound"));
+    assert_eq!(
+        listed("shortcut.shelf.carryLeft"),
+        format!(
+            "Carry tile along the row, {} / {}",
+            keys(Action::ShelfCarryLeft),
+            keys(Action::ShelfCarryRight)
+        )
+    );
+    assert_eq!(
+        listed("shortcut.shelf.sendToShelf"),
+        format!("Send tile to the shelf, {}", keys(Action::ShelfSendToShelf))
+    );
     rest(&mut world);
 }
 

@@ -840,3 +840,52 @@ fn the_last_shortcut_scrolls_into_the_cheat_sheet_by_wheel_and_by_end() {
     assert!(in_view(&world, last));
     rest(&mut world);
 }
+
+#[test]
+fn the_cheat_sheet_lists_the_tauri_rows_with_paired_keys_and_notes() {
+    let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
+    world.gesture(|app| app.key(chord(&Action::UiShowShortcuts)));
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keys = |action: Action| keymap.label(keymap.binding(&action).expect("bound"));
+    let item = |world: &World, key: &str| world.screen().get(Target::key(key));
+
+    let step = item(&world, "shortcut.session.prev");
+    assert_eq!(
+        step.name,
+        Some(format!(
+            "Previous / next desktop (queue mode: agent in the queue), {} / {}",
+            keys(Action::SessionPrev),
+            keys(Action::SessionNext)
+        ))
+    );
+
+    let digits = item(&world, "shortcut.desktop.select1");
+    assert!(
+        digits
+            .name
+            .as_deref()
+            .is_some_and(|n| n.starts_with("Switch to desktop 1–9, ") && n.ends_with("1–9")),
+        "{:?}",
+        digits.name
+    );
+    assert_eq!(
+        digits.description.as_deref(),
+        Some("The digit of the current desktop goes back to the previous one.")
+    );
+
+    let shelf = item(&world, "shortcut.shelf.sendToShelf");
+    assert_eq!(
+        shelf.description,
+        Some(format!(
+            "A held tile returns with a chip, {} or a restart.",
+            keys(Action::SessionJumpToWaiting)
+        ))
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shortcut.terminal.focusRight"))
+            .is_none(),
+        "the four focus keys share one row"
+    );
+}

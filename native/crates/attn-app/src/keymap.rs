@@ -235,6 +235,18 @@ impl Keymap {
         chord.matches_tx_on(ev, tx, self.platform)
     }
 
+    /// One label per key, modifiers first, for drawing each as a keycap.
+    pub fn keycaps(&self, binding: Binding) -> Vec<String> {
+        match binding {
+            Binding::Chord(chord) => chord.keycaps_on(self.platform),
+            Binding::Sequence { leader, then } => {
+                let mut caps = leader.keycaps_on(self.platform);
+                caps.extend(then.keycaps_on(self.platform));
+                caps
+            }
+        }
+    }
+
     pub fn label(&self, binding: Binding) -> String {
         match binding {
             Binding::Chord(chord) => chord.label_on(self.platform),
