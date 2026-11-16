@@ -41,38 +41,50 @@ pub(crate) enum Source {
         leaf: String,
         label: String,
     },
+    /// An agent's row in the sidebar: `leaf` is its pane. It drops only on the sidebar.
+    Row {
+        desktop: String,
+        leaf: String,
+        label: String,
+    },
 }
 
 impl Source {
     fn desktop(&self) -> &str {
         match self {
-            Source::Header { desktop, .. } | Source::Chip { desktop, .. } => desktop,
+            Source::Header { desktop, .. }
+            | Source::Chip { desktop, .. }
+            | Source::Row { desktop, .. } => desktop,
         }
     }
 
     fn leaf(&self) -> &str {
         match self {
-            Source::Header { leaf, .. } | Source::Chip { leaf, .. } => leaf,
+            Source::Header { leaf, .. } | Source::Chip { leaf, .. } | Source::Row { leaf, .. } => {
+                leaf
+            }
         }
     }
 
     fn label(&self) -> &str {
         match self {
-            Source::Header { label, .. } | Source::Chip { label, .. } => label,
+            Source::Header { label, .. }
+            | Source::Chip { label, .. }
+            | Source::Row { label, .. } => label,
         }
     }
 
     fn movable(&self) -> bool {
         match self {
             Source::Header { movable, .. } => *movable,
-            Source::Chip { .. } => true,
+            Source::Chip { .. } | Source::Row { .. } => true,
         }
     }
 
     fn chip(&self) -> Option<&str> {
         match self {
             Source::Chip { column, .. } => Some(column),
-            Source::Header { .. } => None,
+            Source::Header { .. } | Source::Row { .. } => None,
         }
     }
 }
@@ -87,6 +99,8 @@ pub(crate) enum Owner {
     Shelf,
     /// An open cap's menu: the chips it holds.
     Menu,
+    /// The sidebar: its agent rows.
+    Sidebar,
 }
 
 impl Owner {
@@ -95,6 +109,7 @@ impl Owner {
             Owner::Tiles => "tiles",
             Owner::Shelf => "shelf",
             Owner::Menu => "shelf.menu.layer",
+            Owner::Sidebar => "sidebar",
         }
     }
 
@@ -108,6 +123,9 @@ impl Owner {
             Owner::Shelf | Owner::Menu => segment
                 .strip_prefix("shelf.chip.")
                 .and_then(|column| Shelf::of(state)?.chip_source(column)),
+            Owner::Sidebar => segment
+                .strip_prefix("sidebar.session.")
+                .and_then(|session| crate::sidebar::row_source(state, session)),
         })
     }
 }
@@ -368,6 +386,7 @@ fn click(state: &mut State, source: &Source, tx: &mut Tx) {
             state.window.desk.cap_open = None;
             super::shelf::bring(state, desktop, leaf, tx);
         }
+        Source::Row { .. } => {}
     }
 }
 
@@ -376,6 +395,9 @@ fn inside(rect: [f32; 4], [x, y]: [f32; 2]) -> bool {
 }
 
 fn target(state: &State, drag: &LeafDrag) -> Option<Target> {
+    if matches!(drag.source, Source::Row { .. }) {
+        return None;
+    }
     match shelf_target(state, drag) {
         Some(shelf) => shelf,
         None => dock_target(state, drag).map(Target::Tile),

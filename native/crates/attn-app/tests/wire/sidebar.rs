@@ -995,3 +995,87 @@ fn an_automation_run_row_names_its_definition_and_pull_request_and_settles_when_
         .collect();
     assert_eq!(agents, ["manual", "run-a", "run-b"]);
 }
+
+fn source_and_target() -> World {
+    let world = World::start(Daemon::scripted().state(state(
+        vec![
+            session("s1", "idle"),
+            session("s2", "idle"),
+            session("t1", "idle"),
+        ],
+        vec![
+            desktop(
+                "source",
+                "a",
+                "Source",
+                vec![
+                    pane("source", "pane-s1", "s1"),
+                    pane("source", "pane-s2", "s2"),
+                ],
+            ),
+            desktop(
+                "target",
+                "b",
+                "Target",
+                vec![pane("target", "pane-t1", "t1")],
+            ),
+        ],
+    )));
+    world
+        .daemon
+        .on("desktop_move_leaf", |r: &attn_testkit::Request| {
+            serde_json::json!({
+                "event": "profile_action_result",
+                "request_id": r["request_id"],
+                "action": "desktop_move_leaf",
+                "success": true,
+            })
+        });
+    world
+}
+
+fn centre_of(world: &World, key: &str) -> (f32, f32) {
+    let [x, y, w, h] = world.screen().bounds(Target::key(key)).expect("it shows");
+    (x + w / 2.0, y + h / 2.0)
+}
+
+#[test]
+fn an_agent_row_dragged_onto_another_desktop_moves_there_and_its_own_desktop_takes_no_drop() {
+    let mut world = source_and_target();
+
+    let own = centre_of(&world, "sidebar.desktop.source");
+    world.gesture(|app| app.drag_over(Target::key("sidebar.session.s2"), own));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("drag.ghost"))
+            .name
+            .as_deref(),
+        Some("s2")
+    );
+    world.gesture(|app| app.release(own));
+    assert!(world.daemon.sent_of("desktop_move_leaf").is_empty());
+    assert!(world.screen().find(Target::key("drag.ghost")).is_none());
+
+    let other = centre_of(&world, "sidebar.desktop.target");
+    world.gesture(|app| app.drag(Target::key("sidebar.session.s2"), other));
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0]["source_desktop_id"], "source");
+    assert_eq!(moved[0]["leaf_id"], "pane-s2");
+    assert_eq!(moved[0]["target_desktop_id"], "target");
+}
+
+#[test]
+fn a_press_on_an_agent_row_that_barely_moves_opens_the_agent() {
+    let mut world = source_and_target();
+    let (x, y) = centre_of(&world, "sidebar.session.t1");
+    world.gesture(|app| {
+        app.drag_from((x, y), (x + 1.0, y + 2.0));
+        app.release((x + 1.0, y + 2.0));
+    });
+    assert!(world.daemon.sent_of("desktop_move_leaf").is_empty());
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(shown.len(), 1, "{shown:?}");
+    assert_eq!(shown[0]["session_id"], "t1");
+}

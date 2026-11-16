@@ -7,7 +7,7 @@ pub(crate) mod arrival;
 mod chain;
 mod close;
 mod divider;
-mod drag;
+pub(crate) mod drag;
 mod filter_panel;
 mod find_bar;
 mod fit;

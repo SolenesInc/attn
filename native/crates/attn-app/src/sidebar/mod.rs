@@ -520,6 +520,9 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
         })
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
+        .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
+            crate::desktop::drag::gesture(state, d, tx, crate::desktop::drag::Owner::Sidebar)
+        })
         .child(lead(&key, agent, logos, t))
         .child(
             text(name)
@@ -890,6 +893,17 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
         },
         tx,
     );
+}
+
+/// What dragging agent `session`'s row picks up: its pane, on the desktop it shows on.
+pub(crate) fn row_source(state: &State, session: &str) -> Option<crate::desktop::drag::Source> {
+    let (desktop, leaf) = pane_of(state, session)?;
+    let found = state.facts.sessions.iter().find(|s| s.id == session)?;
+    Some(crate::desktop::drag::Source::Row {
+        desktop,
+        leaf,
+        label: model::display_name(found),
+    })
 }
 
 fn pane_of(state: &State, session: &str) -> Option<(String, String)> {
