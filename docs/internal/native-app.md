@@ -110,8 +110,9 @@ Hosts run the protocol on the app's `Runtime`:
   On macOS the Quick Capture panel serves its own, with the manifest
   `debug/ui-automation-capture.json` beside the app's. Its `run` takes
   `dismiss`, which hides the panel, and its `state` one slice, `capture`: the
-  draft's text, mailbox and files, whether the panel shows, holds the
-  keyboard and has the message field focused, its view and its recent rows.
+  draft's id (`captureId`, which Recent lists it by once sent), text, mailbox
+  and files, whether the panel shows, holds the keyboard and has the message
+  field focused, its view and its recent rows.
   Requests run on the window's runtime between frames, so they work while the
   window is parked or in the background. A covered window holds its motion
   until it shows, so a request waiting for an element to stop moving waits

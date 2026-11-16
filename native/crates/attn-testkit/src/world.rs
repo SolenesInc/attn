@@ -775,6 +775,12 @@ impl World {
         self.settle();
     }
 
+    /// Whether the Quick Capture panel's last hide handed the keyboard back to the app it opened
+    /// over; none before it first hides.
+    pub fn capture_handed_keys_back(&self) -> Option<bool> {
+        self.capture.handed_back()
+    }
+
     /// The clipboard the Quick Capture panel pastes from.
     pub fn capture_clipboard(&self) -> &rune::clipboard::MemoryClipboard {
         &self.capture.clipboard

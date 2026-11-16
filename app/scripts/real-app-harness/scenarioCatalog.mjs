@@ -480,6 +480,15 @@ export const scenarioCatalog = [
     skipOn: { darwin: 'The recorder hears physical keys, which only xdotool sends; the automation server sends logical keys' },
   },
   {
+    id: 'native-quick-capture',
+    runnerId: 'NATIVE-QUICK-CAPTURE',
+    label: 'Native Quick Capture: system-wide shortcut, keys without activating attn, paste and drop, delivery, Recent and a draft across a restart',
+    command: ['node', 'scripts/real-app-harness/scenario-native-quick-capture.mjs'],
+    app: 'native',
+    skipOn: { linux: 'Quick Capture uses a macOS nonactivating panel' },
+    timeoutMs: 600_000,
+  },
+  {
     id: 'native-profile-lifecycle',
     runnerId: 'NATIVE-PROFILE-LIFECYCLE',
     label: 'Native profiles are created, renamed and deleted from the switcher, an agent keeps its profile, and the last profile stays',

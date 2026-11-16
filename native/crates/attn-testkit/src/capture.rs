@@ -14,6 +14,8 @@ use crate::screen::Screen;
 /// The panel's window as the platform would hold it.
 pub(crate) struct HeadlessPanel {
     shown: AtomicBool,
+    /// Whether the last hide handed the keyboard back to the app the panel opened over.
+    handed_back: Mutex<Option<bool>>,
     inbox: Mutex<Vec<Update>>,
     pulse: Pulse,
     /// The shortcut the system would open the panel on.
@@ -26,7 +28,8 @@ impl quick_capture::Window for HeadlessPanel {
         self.pulse.beat();
     }
 
-    fn hide(&self) {
+    fn hide(&self, holding_keys: bool) {
+        *self.handed_back.lock().unwrap() = Some(holding_keys);
         self.shown.store(false, Ordering::Release);
         self.pulse.beat();
     }
@@ -72,6 +75,7 @@ impl CaptureRuntime {
         runtime.use_clipboard(&clipboard);
         let window = Arc::new(HeadlessPanel {
             shown: AtomicBool::new(false),
+            handed_back: Mutex::default(),
             inbox: Mutex::default(),
             pulse: pulse.clone(),
             bound: Mutex::default(),
@@ -101,6 +105,10 @@ impl CaptureRuntime {
 
     pub(crate) fn shown(&self) -> bool {
         self.window.shown.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn handed_back(&self) -> Option<bool> {
+        *self.window.handed_back.lock().unwrap()
     }
 
     pub(crate) fn screen(&self) -> Screen {

@@ -52,20 +52,38 @@ struct Front {
 }
 
 /// Opens the panel's window, hidden until `Window::show`, bound to `store`, with an
-/// automation server that writes `automation` as its manifest when given one. Call it on the
-/// UI thread, as `rune::open_window` needs.
+/// automation server that writes `automation` as its manifest when given one, and hands the
+/// window to `running` once the system can bind its shortcut. Call it on the UI thread, as
+/// `rune::open_window` needs.
 pub fn open(
     store: &Store,
     daemon: Commands,
     data_dir: PathBuf,
     automation: Option<PathBuf>,
-) -> Arc<dyn Window> {
+    running: impl FnOnce(Arc<dyn Window>) + 'static,
+) {
     let frames = Pulse::default();
     let app = super::app().on_frame_encoded({
         let frames = frames.clone();
         move |_| frames.beat()
     });
     let handle = app.handle();
+    let panel = Arc::new(MacPanel {
+        handle: handle.clone(),
+        front: Mutex::default(),
+        shortcut: Mutex::default(),
+        bound: Mutex::default(),
+        automation: Mutex::default(),
+    });
+    let window: Arc<dyn Window> = panel.clone();
+    let app = app.on_ready({
+        let mut running = Some((running, window.clone()));
+        move |_| {
+            if let Some((running, window)) = running.take() {
+                running(window);
+            }
+        }
+    });
     let options = WindowOptions::launcher_panel().macos(|native| {
         native
             .level(MODAL_PANEL_LEVEL)
@@ -76,25 +94,10 @@ pub fn open(
             .corner_radius(12.0)
     });
     rune::open_window(rune::WindowSpec::from_app("quick-capture", app).configured_options(options));
-    let panel = Arc::new(MacPanel {
-        handle: handle.clone(),
-        front: Mutex::default(),
-        shortcut: Mutex::default(),
-        bound: Mutex::default(),
-        automation: Mutex::default(),
+    let bound = super::bind(store, daemon, window, data_dir, crate::wall_clock_ms(), {
+        let handle = handle.clone();
+        move |update| handle.update(update)
     });
-    let window: Arc<dyn Window> = panel.clone();
-    let bound = super::bind(
-        store,
-        daemon,
-        window.clone(),
-        data_dir,
-        crate::wall_clock_ms(),
-        {
-            let handle = handle.clone();
-            move |update| handle.update(update)
-        },
-    );
     *panel.bound.lock().unwrap() = Some(bound);
     if let Some(manifest) = automation {
         let host = Arc::new(PanelHost { handle, frames });
@@ -103,7 +106,6 @@ pub fn open(
             Err(why) => eprintln!("attn-app: Quick Capture automation is off: {why}"),
         }
     }
-    window
 }
 
 impl Window for MacPanel {
@@ -123,15 +125,19 @@ impl Window for MacPanel {
         self.handle.open();
     }
 
-    fn hide(&self) {
+    fn hide(&self, holding_keys: bool) {
         self.handle.hide();
         let Some(front) = self.front.lock().unwrap().take() else {
             return;
         };
+        let attn_in_front = frontmost_pid() == Some(std::process::id() as i32);
+        if attn_in_front && !holding_keys {
+            return;
+        }
         if front.app_hidden {
             hide_app();
         } else if let Some(pid) = front.pid
-            && frontmost_pid() == Some(std::process::id() as i32)
+            && attn_in_front
         {
             activate(pid);
         }
@@ -145,6 +151,12 @@ impl Window for MacPanel {
         let mut held = self.shortcut.lock().unwrap();
         let next = match shortcut {
             Some(shortcut) => {
+                if let Some(owner) = self.handle.shortcut_owner(shortcut) {
+                    return Err(format!(
+                        "{} ({owner} uses it)",
+                        rune::ShortcutError::Conflict
+                    ));
+                }
                 let id = self
                     .handle
                     .register_shortcut(shortcut.clone(), |panel, tx| {

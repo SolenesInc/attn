@@ -280,12 +280,14 @@ pub fn act<S: 'static>(
     }
 }
 
-/// Whether each field `expect` names has its value in `value`, objects field by field.
+/// Whether each field `expect` names has its value in `value`, objects field by field and
+/// numbers by value, as a JSON client that writes `1` for `1.0` means them.
 fn agrees(value: &Value, expect: &Value) -> bool {
     match (value, expect) {
         (Value::Object(have), Value::Object(want)) => want
             .iter()
             .all(|(k, w)| have.get(k).is_some_and(|h| agrees(h, w))),
+        (Value::Number(have), Value::Number(want)) => have.as_f64() == want.as_f64(),
         _ => value == expect,
     }
 }

@@ -74,6 +74,7 @@ fn capture(panel: &Panel) -> Value {
         "visible": panel.shown,
         "nativeFocused": panel.shown && panel.key_window,
         "focused": panel.shown && panel.key_window && panel.draft.text.focused,
+        "captureId": panel.draft.id,
         "text": panel.draft.text.text,
         "composing": panel.draft.text.is_composing(),
         "mailbox": panel.mailbox(),
@@ -85,7 +86,7 @@ fn capture(panel: &Panel) -> Value {
         "attachmentCount": panel.draft.files.len(),
         "imageCount": images,
         "settled": settled,
-        "fontScale": crate::settings::text_scale(&panel.facts.settings),
+        "fontScale": (f64::from(crate::settings::text_scale(&panel.facts.settings)) * 10.0).round() / 10.0,
         "error": panel.error,
         "recentRows": recent,
     })

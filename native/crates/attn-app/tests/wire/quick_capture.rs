@@ -1859,6 +1859,21 @@ fn capture_state(world: &mut World, expect: Value) -> Result<Value, String> {
 }
 
 #[test]
+fn the_panels_automation_waits_for_a_text_size_written_as_a_client_writes_it() {
+    let (daemon, _) = home();
+    keeping_settings(&daemon, &[]);
+    let mut world = World::start(daemon);
+    open(&mut world);
+
+    capture_state(&mut world, json!({"fontScale": 1})).unwrap();
+    press_action(&mut world, Action::UiIncreaseFontSize);
+    capture_state(&mut world, json!({"fontScale": 1.1})).unwrap();
+    press_action(&mut world, Action::UiResetFontSize);
+    capture_state(&mut world, json!({"fontScale": 1})).unwrap();
+    rest(&mut world);
+}
+
+#[test]
 fn the_panels_automation_reads_the_draft_waits_for_what_it_expects_and_dismisses_it() {
     let (daemon, _) = home();
     let mut world = World::start(daemon);
@@ -1888,6 +1903,14 @@ fn the_panels_automation_reads_the_draft_waits_for_what_it_expects_and_dismisses
         .unwrap();
     assert!(!world.capture_shown());
     capture_state(&mut world, json!({"visible": false})).unwrap();
+
+    open(&mut world);
+    press(&mut world, "enter");
+    let sent = world.daemon.sent_of("quick_capture_send");
+    assert_eq!(
+        state["captureId"], sent[0]["capture_id"],
+        "automation names the draft as Recent will list it once sent"
+    );
     rest(&mut world);
 }
 
@@ -1986,6 +2009,30 @@ fn a_choice_holds_while_a_change_carrying_the_earlier_setting_arrives_before_its
     });
     world.settle();
     assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));
+    rest(&mut world);
+}
+
+#[test]
+fn hiding_gives_the_keyboard_back_only_while_the_panel_holds_it() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    world.capture_gesture(|d| d.runtime.window_focus(true));
+    press(&mut world, "escape");
+    assert_eq!(world.capture_handed_keys_back(), Some(true));
+
+    open(&mut world);
+    world.capture_gesture(|d| d.runtime.window_focus(true));
+    world.capture_gesture(|d| d.runtime.window_focus(false));
+    world
+        .capture_automate("run", json!({"name": "dismiss"}))
+        .unwrap();
+    assert!(!world.capture_shown());
+    assert_eq!(
+        world.capture_handed_keys_back(),
+        Some(false),
+        "the window the person moved to keeps the keyboard"
+    );
     rest(&mut world);
 }
 

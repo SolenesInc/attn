@@ -47,8 +47,9 @@ pub type Update = Box<dyn FnOnce(&mut Panel, &mut Tx) + Send>;
 pub trait Window: Send + Sync {
     /// Brings the panel over the app in front, with the keyboard, leaving that app in front.
     fn show(&self);
-    /// Hides the panel and gives the keyboard back to the app that had it.
-    fn hide(&self);
+    /// Hides the panel and, when it holds the keyboard, gives the keyboard back to the app that
+    /// had it. Once the person has moved to another window, that window keeps it.
+    fn hide(&self, holding_keys: bool);
     /// Runs `update` on the panel's state.
     fn update(&self, update: Update);
     /// Has the system open the panel on `shortcut` from any app, in place of the shortcut it
@@ -373,7 +374,7 @@ impl Panel {
     pub(crate) fn hide(&mut self) {
         self.flush();
         if let Some(window) = &self.window {
-            window.hide();
+            window.hide(self.key_window);
         }
         hidden(self);
     }

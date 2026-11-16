@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { captureManifestPathForInstance } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 function printHelp() {
@@ -9,6 +10,7 @@ Options:
   --launch         Launch the selected packaged app before connecting
   --fresh-launch   Quit and relaunch the selected packaged app before connecting
   --wait-ready     Wait for the frontend automation hook before sending the action
+  --capture        Drive the native app's Quick Capture panel, which serves its own automation
   --run-against-prod
                    Explicitly allow targeting the production app
 
@@ -28,12 +30,14 @@ async function main() {
   let launch = false;
   let freshLaunch = false;
   let waitReady = false;
+  let capture = false;
 
   while (args[0]?.startsWith('--')) {
     const flag = args.shift();
     if (flag === '--launch') launch = true;
     else if (flag === '--fresh-launch') freshLaunch = true;
     else if (flag === '--wait-ready') waitReady = true;
+    else if (flag === '--capture') capture = true;
     else if (flag === '--run-against-prod') {
       // The shared UiAutomationClient guard reads this explicit acknowledgement.
     }
@@ -55,7 +59,7 @@ async function main() {
   const payloadArg = args.shift();
   const payload = payloadArg ? JSON.parse(payloadArg) : {};
 
-  const client = new UiAutomationClient();
+  const client = new UiAutomationClient(capture ? { manifestPath: captureManifestPathForInstance() } : {});
   if (freshLaunch) {
     await client.launchFreshApp();
   } else if (launch) {

@@ -248,6 +248,10 @@ export function manifestPathForInstance(instance = currentHarnessInstance()) {
   return path.join(appLocalDataDirForInstance(instance), 'debug', 'ui-automation.json');
 }
 
+export function captureManifestPathForInstance(instance = currentHarnessInstance()) {
+  return path.join(appLocalDataDirForInstance(instance), 'debug', 'ui-automation-capture.json');
+}
+
 export function deepLinkSchemeForInstance(instance = currentHarnessInstance()) {
   return resolveHarnessResources(instance).deepLinkScheme;
 }

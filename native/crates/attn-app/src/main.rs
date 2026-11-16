@@ -97,15 +97,27 @@ fn main() -> ExitCode {
             .flatten(),
     );
     let menus = main.clone();
+    #[cfg(target_os = "macos")]
+    let capture_owner = main.clone();
     main.update(Box::new(
         move |state: &mut attn_app::State, _: &mut rune::Tx| {
             state.open_tile_windows(opener, deliver);
             #[cfg(target_os = "macos")]
             {
                 let (store, daemon, data_dir, manifest) = capture;
-                let window =
-                    attn_app::quick_capture::mac::open(&store, daemon, data_dir.clone(), manifest);
-                state.use_quick_capture(window, &data_dir);
+                attn_app::quick_capture::mac::open(
+                    &store,
+                    daemon,
+                    data_dir.clone(),
+                    manifest,
+                    move |window| {
+                        capture_owner.update(Box::new(
+                            move |state: &mut attn_app::State, _: &mut rune::Tx| {
+                                state.use_quick_capture(window, &data_dir);
+                            },
+                        ));
+                    },
+                );
             }
             if cfg!(target_os = "macos") {
                 state.follow_menus(Arc::new(move |keymap| {
