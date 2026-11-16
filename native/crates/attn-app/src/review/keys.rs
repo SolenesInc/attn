@@ -9,7 +9,7 @@ use rune::tok::{radius, space, type_};
 use rune::{El, col, row, text};
 
 use super::frames::Frame;
-use super::{Review, Spot, cursor_frame};
+use super::{Review, Spot, cursor_frame, frame_press, place_press, prefix};
 
 fn short(commit: &str) -> &str {
     &commit[..commit.len().min(9)]
@@ -37,12 +37,13 @@ fn shown_changed_lines(bundle: &ReviewBundle) -> usize {
 /// The change's facts: base and head, the files, the lines added and removed and how many of
 /// them the stops show, which Enter opens into the list of changed files.
 pub(super) fn summary(
-    prefix: &str,
+    tile: &str,
     bundle: &ReviewBundle,
     review: &Review,
     cursor: Option<&Spot>,
     t: &Tokens,
 ) -> El {
+    let prefix = &prefix(tile);
     let added: i64 = bundle.files.iter().map(|f| f.added).sum();
     let removed: i64 = bundle.files.iter().map(|f| f.removed).sum();
     let commits = match bundle.base.as_deref().filter(|b| !b.is_empty()) {
@@ -77,7 +78,8 @@ pub(super) fn summary(
     let files = review.files_shown.then(|| {
         bundle.files.iter().zip(0..).map(|(file, i)| {
             let current = cursor == Some(&Spot::File(file.path.clone()));
-            cursor_frame(file_row(prefix, i, file, t), current, t)
+            let el = cursor_frame(file_row(prefix, i, file, t), current, t);
+            place_press(el, tile, format!("{prefix}.file.{i}"))
         })
     });
     let problems = (!bundle.problems.is_empty()).then(|| {
@@ -102,7 +104,11 @@ pub(super) fn summary(
         .label("The change")
         .w_full()
         .gap(space::S1)
-        .child(cursor_frame(meta, cursor == Some(&Spot::Facts), t))
+        .child(place_press(
+            cursor_frame(meta, cursor == Some(&Spot::Facts), t),
+            tile,
+            format!("{prefix}.facts"),
+        ))
         .children(files.into_iter().flatten())
         .children(problems)
 }
@@ -145,8 +151,14 @@ fn file_row(prefix: &str, i: usize, file: &ReviewFile, t: &Tokens) -> El {
         .child(text(stat).font(type_::LABEL).color(t.text_secondary))
 }
 
-/// The files the review leaves out, each with why.
-pub(super) fn not_shown(key: &str, bundle: &ReviewBundle, cursor: Option<&Spot>, t: &Tokens) -> El {
+/// The files the review leaves out, each with why, keyed `key`; places of the document of
+/// review tile `tile` when it names one.
+pub(super) fn not_shown(
+    (tile, key): (Option<&str>, &str),
+    bundle: &ReviewBundle,
+    cursor: Option<&Spot>,
+    t: &Tokens,
+) -> El {
     col()
         .key(key.to_owned())
         .role("list")
@@ -172,18 +184,17 @@ pub(super) fn not_shown(key: &str, bundle: &ReviewBundle, cursor: Option<&Spot>,
                         .color(t.text_secondary)
                         .wrap(),
                 );
-            cursor_frame(el, current, t)
+            let el = cursor_frame(el, current, t);
+            match tile {
+                Some(tile) => place_press(el, tile, format!("{key}.entry.{j}")),
+                None => el,
+            }
         }))
 }
 
 /// The keys for what the review shows in `frame`, under the tile, after the frames it offers.
-pub(super) fn key_line(
-    prefix: &str,
-    frame: Frame,
-    offered: &[Frame],
-    sides: bool,
-    t: &Tokens,
-) -> El {
+pub(super) fn key_line(tile: &str, frame: Frame, offered: &[Frame], sides: bool, t: &Tokens) -> El {
+    let prefix = &prefix(tile);
     let entry = |keys: &str, what: &str| {
         text(format!("{keys} {what}"))
             .font(type_::LABEL)
@@ -208,12 +219,14 @@ pub(super) fn key_line(
                     .filter(|(f, _, _)| offered.contains(f))
                     .map(|(f, key, name)| {
                         let on = *f == frame;
-                        text(format!("{key} {name}"))
+                        let tab = text(format!("{key} {name}"))
                             .font(type_::LABEL)
                             .color(if on { t.text_primary } else { t.text_tertiary })
                             .role("tab")
                             .label(format!("{key} {name}"))
-                            .checked(on)
+                            .key(format!("{prefix}.frame.{key}"))
+                            .checked(on);
+                        frame_press(tab, tile, *f)
                     }),
             )
     });

@@ -548,10 +548,11 @@ pub(crate) fn body(
                 let text = &reading.source[range.clone()];
                 let at = (text, range.start, read_version, *t);
                 let block = memo(format!("{key}.text"), at, || read(range.clone()));
-                cursor_frame(col().key(key).w_full().child(block), current.is_some(), t)
+                let el = place_press(col().key(key.clone()).w_full().child(block), tile, key);
+                cursor_frame(el, current.is_some(), t)
             }
             Part::Summary => keys::summary(
-                &prefix,
+                tile,
                 bundle,
                 review,
                 current.map(|i| &reading.places[i].spot),
@@ -562,7 +563,27 @@ pub(crate) fn body(
                     .stage
                     .filter(|(s, _)| s == index)
                     .map(|(_, line)| line);
-                stop::script(&key, &bundle.stops[*index], stage, t)
+                let script = stop::script(&key, &bundle.stops[*index], stage, t);
+                if stage.is_some() {
+                    script
+                } else {
+                    let stop = *index;
+                    script.on_press_tx(pressed(tile, move |state, tile, message, tx| {
+                        let Some(bundle) = message.review.as_ref() else {
+                            return;
+                        };
+                        let parts = document::parts(&message.content, bundle);
+                        apply(
+                            state,
+                            tile,
+                            message,
+                            &parts,
+                            None,
+                            Some(Move::Stage(stop, None)),
+                            tx,
+                        );
+                    }))
+                }
             }
             Part::Stop(index) => {
                 let first = reading.places.iter().position(on).unwrap_or(0);
@@ -589,12 +610,23 @@ pub(crate) fn body(
                     *t,
                 );
                 memo(key.clone(), version, || {
-                    stop::stop(&key, s, rows, (row, selected), &on, colors.as_deref(), t)
+                    stop::stop(
+                        (tile, &key),
+                        s,
+                        rows,
+                        (row, selected),
+                        &on,
+                        colors.as_deref(),
+                        t,
+                    )
                 })
             }
-            Part::NotShown => {
-                keys::not_shown(&key, bundle, current.map(|i| &reading.places[i].spot), t)
-            }
+            Part::NotShown => keys::not_shown(
+                (Some(tile), &key),
+                bundle,
+                current.map(|i| &reading.places[i].spot),
+                t,
+            ),
             Part::Diagram(index) => {
                 let flow = &bundle.flows[*index];
                 let current = current.map(|i| reading.places[i].key.clone());
@@ -606,7 +638,7 @@ pub(crate) fn body(
                             let place = m.stop_line.map(|_| arrow_key(&key, m.line));
                             diagram::Mark {
                                 current: place.is_some() && place == current,
-                                key: place,
+                                place: place.map(|key| (tile.to_owned(), key)),
                             }
                         },
                         t,
@@ -744,7 +776,7 @@ pub(crate) fn body(
         .grow(1.0)
         .min_h(0.0)
         .child(frame)
-        .child(keys::key_line(&prefix, reading.frame, &offered, sides, t))
+        .child(keys::key_line(tile, reading.frame, &offered, sides, t))
         .children(review.help.then(|| keys::sheet(&prefix, t)))
         .children(
             reviews
@@ -762,7 +794,7 @@ pub(crate) fn body(
         )
         .children(review.sending.as_ref().map(|(verdict, destination)| {
             let carried: Vec<&attn_protocol::MarkdownAnnotation> = draft.iter().collect();
-            marks::sheet(&carried, *verdict, destination.as_ref(), sent, t).pin(
+            marks::sheet(tile, &carried, *verdict, destination.as_ref(), sent, t).pin(
                 Some(0.0),
                 Some(space::S6),
                 Some(0.0),
@@ -783,7 +815,6 @@ pub(crate) fn body(
 fn side_switch(key: &str, tile: &str, side: Side, t: &Tokens) -> El {
     let tab = |s: Side, name: &str| {
         let on = s == side;
-        let tile = tile.to_owned();
         text(name.to_owned())
             .key(format!("{key}.{}", s.name()))
             .font(type_::LABEL)
@@ -791,7 +822,9 @@ fn side_switch(key: &str, tile: &str, side: Side, t: &Tokens) -> El {
             .role("tab")
             .label(name.to_owned())
             .focus_selected(on)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| pick_side(state, &tile, s, tx))
+            .on_press_tx(pressed(tile, move |state, tile, _, tx| {
+                pick_side(state, tile, s, tx)
+            }))
     };
     row()
         .role("tablist")
@@ -826,7 +859,7 @@ fn map(tile: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -
                     &key,
                     flow,
                     &|m| diagram::Mark {
-                        key: None,
+                        place: None,
                         current: Some(m.line) == at,
                     },
                     t,
@@ -868,7 +901,7 @@ fn map(tile: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -
             .color(t.text_tertiary),
     };
     let not_shown = (!bundle.not_shown.is_empty())
-        .then(|| keys::not_shown(&format!("{prefix}.map.not-shown"), bundle, None, t));
+        .then(|| keys::not_shown((None, &format!("{prefix}.map.not-shown")), bundle, None, t));
     let sides = frames::has_sides(bundle)
         .then(|| side_switch(&format!("{prefix}.map.side"), tile, reading.side, t));
     let diagrams = col()
@@ -1058,20 +1091,14 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                     marks::send(state, (&tile, &uri), to, verdict, moved, tx);
                 }
             }
-            _ if let Some(picked) = picked => {
-                review.sending = Some((picked, to));
-                review.verdict = Some(picked);
-            }
+            _ if let Some(picked) = picked => pick_verdict(review, picked),
             _ => {}
         }
         state.readings.revision += 1;
         return true;
     }
     if back_key {
-        if reading.frame == Frame::Walkthrough && review.files.len() <= 1 {
-            return false;
-        }
-        let went = back(review);
+        let went = go_back(review, reading.frame == Frame::Walkthrough);
         state.readings.revision += 1;
         return went;
     }
@@ -1085,13 +1112,8 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 } else {
                     at.saturating_sub(1)
                 };
-                if next != at {
-                    show_stage(state, &tile, source_of(&message), bundle, next, None, tx);
-                    if let Some(part) = reading.parts.iter().position(|p| *p == Part::Stop(next)) {
-                        tx.scroll_into_view(format!("{}.part.{part}", prefix(&tile)));
-                    }
-                }
-                state.readings.revision += 1;
+                let to = (next != at).then_some(Move::Stage(next, None));
+                apply(state, &tile, &message, &reading.parts, None, to, tx);
                 return true;
             }
             Key::Text(t) if t == "z" => {
@@ -1143,20 +1165,17 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             let Some((frame, _, _)) = Frame::ALL.iter().find(|(_, key, _)| *key == typed) else {
                 return false;
             };
-            if *frame == reading.frame || !frames::offered(bundle, &BUILT).contains(frame) {
-                return true;
-            }
-            match switch_frame(review, &reading, cursor, *frame) {
-                Some((stop, line)) => Some(Move::Stage(stop, line)),
-                None => Some(Move::Shown),
-            }
+            to_frame(review, &reading, cursor, *frame)
         }
         (_, "b") if frames::has_sides(bundle) => {
             switch_side(review, &reading, cursor);
             Some(Move::Shown)
         }
-        (Key::Down, _) => Some(Move::Line(cursor.map_or(0, |i| i + 1))),
-        (Key::Up, _) => Some(Move::Line(cursor.map_or(0, |i| i.saturating_sub(1)))),
+        (Key::Down, _) => Some(Move::Line(cursor.map_or(0, |i| i + 1), ev.mods.shift)),
+        (Key::Up, _) => Some(Move::Line(
+            cursor.map_or(0, |i| i.saturating_sub(1)),
+            ev.mods.shift,
+        )),
         (Key::Right | Key::Left, _) if reading.frame == Frame::Map => {
             let (index, count) = reading.map.unwrap_or((0, 0));
             let next = if ev.key == Key::Right {
@@ -1172,25 +1191,18 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         (Key::Right, _) => Some(Move::Stop(next_stop(&reading, cursor, true))),
         (Key::Left, _) => Some(Move::Stop(next_stop(&reading, cursor, false))),
         (Key::Enter, _) if cursor.is_some_and(|i| reading.places[i].spot == Spot::Facts) => {
-            review.files_shown = !review.files_shown;
-            None
+            cursor.and_then(|i| open_place(review, &reading, i, false))
         }
         (Key::Enter, _) | (_, "z") if !viewing => {
-            if let Some(Spot::NotShown(dir)) = cursor.map(|i| &reading.places[i].spot)
-                && dir.ends_with('/')
-            {
-                return match ev.key {
-                    Key::Enter => {
-                        search::open(state, &tile, source_of(&message), dir, tx);
-                        true
-                    }
-                    _ => true,
-                };
+            let fill = typed == "z";
+            let folder = cursor.is_some_and(
+                |i| matches!(&reading.places[i].spot, Spot::NotShown(p) if p.ends_with('/')),
+            );
+            match cursor.and_then(|i| open_place(review, &reading, i, fill)) {
+                Some(to) => Some(to),
+                None if ev.key == Key::Enter || folder => None,
+                None => return false,
             }
-            let Some(target) = cursor.and_then(|i| target_of(&reading, i)) else {
-                return ev.key == Key::Enter;
-            };
-            Some(Move::Open(target, typed == "z"))
         }
         (_, "/") => Some(Move::Search(String::new())),
         (_, "c" | "a") => Some(Move::Mark(if typed == "a" {
@@ -1211,10 +1223,76 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         _ => return false,
     };
+    apply(
+        state,
+        &tile,
+        &message,
+        &reading.parts,
+        Some(&reading),
+        to,
+        tx,
+    );
+    true
+}
+
+/// What Enter, or `z` with `fill`, does on place `at`: the facts show or hide the changed
+/// files, a Not shown folder is searched, and a place with a file opens it.
+fn open_place(review: &mut Review, reading: &Reading, at: usize, fill: bool) -> Option<Move> {
+    match &reading.places[at].spot {
+        Spot::Facts if !fill => {
+            review.files_shown = !review.files_shown;
+            None
+        }
+        Spot::NotShown(folder) if folder.ends_with('/') => {
+            (!fill).then(|| Move::Search(folder.clone()))
+        }
+        _ => target_of(reading, at).map(|target| Move::Open(target, fill)),
+    }
+}
+
+/// Switches to `frame`, when the review offers it and does not show it already.
+fn to_frame(
+    review: &mut Review,
+    reading: &Reading,
+    cursor: Option<usize>,
+    frame: Frame,
+) -> Option<Move> {
+    if frame == reading.frame || !frames::offered(reading.bundle, &BUILT).contains(&frame) {
+        return None;
+    }
+    Some(match switch_frame(review, reading, cursor, frame) {
+        Some((stop, line)) => Move::Stage(stop, line),
+        None => Move::Shown,
+    })
+}
+
+/// Makes move `to` in review tile `tile`, whose `parts` were read in `reading` before the move.
+fn apply(
+    state: &mut State,
+    tile: &str,
+    message: &std::sync::Arc<attn_protocol::DesktopTileContentMessage>,
+    parts: &[Part],
+    reading: Option<&Reading>,
+    to: Option<Move>,
+    tx: &mut Tx,
+) {
+    let Some(bundle) = message.review.as_ref() else {
+        return;
+    };
+    let review = state
+        .readings
+        .reviews
+        .tiles
+        .entry(tile.to_owned())
+        .or_default();
     match to {
-        Some(Move::Line(i)) if !reading.places.is_empty() => {
+        Some(Move::Line(i, selecting)) => {
+            let Some(reading) = reading.filter(|r| !r.places.is_empty()) else {
+                return;
+            };
             let i = i.min(reading.places.len() - 1);
-            review.select_from = match (ev.mods.shift, review.select_from.take()) {
+            let cursor = reading.cursor(review);
+            review.select_from = match (selecting, review.select_from.take()) {
                 (false, _) => None,
                 (true, Some(from)) => Some(from),
                 (true, None) => cursor.map(|c| reading.places[c].spot.clone()),
@@ -1225,21 +1303,24 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             tx.scroll_into_view(place.key.clone());
         }
         Some(Move::Stop(Some(i))) => {
+            let Some(reading) = reading else { return };
             let place = &reading.places[i];
             review.cursor = Some(place.spot.clone());
             review.at = i;
-            show_lead_in(&tile, &reading, place, tx);
+            show_lead_in(tile, reading, place, tx);
         }
         Some(Move::Arrow | Move::Shown) => {
             let arrow = matches!(to, Some(Move::Arrow));
-            show_moved(review, &tile, &message.content, bundle, arrow, tx);
+            show_moved(review, tile, &message.content, bundle, arrow, tx);
         }
         Some(Move::Open(target, fill)) => {
-            open_file(state, &tile, source_of(&message), target, fill, tx);
+            open_file(state, tile, source_of(message), target, fill, tx);
         }
         Some(Move::Mark(kind)) => {
-            if let Some(anchor) = mark_target(state, &tile, bundle, &reading, cursor)
-                && let Some((uri, to)) = crate::markdown::sending::destination_of(state, &tile)
+            let Some(reading) = reading else { return };
+            let cursor = reading.cursor(review);
+            if let Some(anchor) = mark_target(state, tile, bundle, reading, cursor)
+                && let Some((uri, to)) = crate::markdown::sending::destination_of(state, tile)
             {
                 if kind == marks::Kind::Question && to.is_none() {
                     state.window.notify(
@@ -1248,12 +1329,12 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                         tx,
                     );
                     state.readings.revision += 1;
-                    return true;
+                    return;
                 }
                 marks::compose(
                     state,
                     marks::Composer {
-                        tile: tile.clone(),
+                        tile: tile.to_owned(),
                         kind,
                         anchor,
                         uri,
@@ -1264,19 +1345,19 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             }
         }
         Some(Move::Search(query)) => {
-            search::open(state, &tile, source_of(&message), &query, tx);
+            search::open(state, tile, source_of(message), &query, tx);
         }
         Some(Move::Stage(stop, line)) => {
-            show_stage(state, &tile, source_of(&message), bundle, stop, line, tx);
-            if let Some(at) = reading.parts.iter().position(|p| *p == Part::Stop(stop)) {
-                tx.scroll_into_view(format!("{}.part.{at}", prefix(&tile)));
+            show_stage(state, tile, source_of(message), bundle, stop, line, tx);
+            if let Some(at) = parts.iter().position(|p| *p == Part::Stop(stop)) {
+                tx.scroll_into_view(format!("{}.part.{at}", prefix(tile)));
             }
         }
         Some(Move::Expand(stop, extra)) => {
             expand(
                 state,
-                &tile,
-                source_of(&message),
+                tile,
+                source_of(message),
                 &bundle.stops[stop],
                 extra,
                 tx,
@@ -1285,6 +1366,138 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         _ => {}
     }
     state.readings.revision += 1;
+}
+
+/// A press on a control inside review tile `tile`: the tile takes the keyboard, as a press on
+/// it does, then `act` runs with what the daemon last sent the tile.
+fn pressed(
+    tile: &str,
+    act: impl Fn(&mut State, &str, &std::sync::Arc<attn_protocol::DesktopTileContentMessage>, &mut Tx)
+    + 'static,
+) -> impl Fn(&mut State, &mut Tx) + 'static {
+    let tile = tile.to_owned();
+    move |state: &mut State, tx: &mut Tx| {
+        crate::desktop::press_inside(state, &tile, tx);
+        let Some((held, message)) = held(state).filter(|(held, _)| *held == tile) else {
+            return;
+        };
+        act(state, &held, &message, tx);
+    }
+}
+
+/// `el`, place `key` of review tile `tile`, where a press puts the cursor, then acts as Enter
+/// does on the facts, a changed file and a Not shown entry.
+pub(crate) fn place_press(el: El, tile: &str, key: String) -> El {
+    el.on_press_tx(pressed(tile, move |state, tile, message, tx| {
+        let Some(bundle) = message.review.as_ref() else {
+            return;
+        };
+        let review = state
+            .readings
+            .reviews
+            .tiles
+            .entry(tile.to_owned())
+            .or_default();
+        let reading = Reading::new(tile, &message.content, bundle, review);
+        let Some(at) = reading.places.iter().position(|p| p.key == key) else {
+            return;
+        };
+        let acts = matches!(
+            reading.places[at].spot,
+            Spot::Facts | Spot::File(_) | Spot::NotShown(_)
+        );
+        let to = acts
+            .then(|| open_place(review, &reading, at, false))
+            .flatten();
+        let parts = &reading.parts;
+        let to_line = Some(Move::Line(at, false));
+        apply(state, tile, message, parts, Some(&reading), to_line, tx);
+        apply(state, tile, message, parts, Some(&reading), to, tx);
+    }))
+}
+
+/// `el`, frame `frame`'s tab in review tile `tile`, where a press switches to the frame as its
+/// key does.
+pub(crate) fn frame_press(el: El, tile: &str, frame: Frame) -> El {
+    el.on_press_tx(pressed(tile, move |state, tile, message, tx| {
+        let Some(bundle) = message.review.as_ref() else {
+            return;
+        };
+        let review = state
+            .readings
+            .reviews
+            .tiles
+            .entry(tile.to_owned())
+            .or_default();
+        let reading = Reading::new(tile, &message.content, bundle, review);
+        let cursor = reading.cursor(review);
+        let to = to_frame(review, &reading, cursor, frame);
+        apply(state, tile, message, &reading.parts, Some(&reading), to, tx);
+    }))
+}
+
+/// `el`, row `row` of open file `id` in review tile `tile`, where a press puts the file's
+/// cursor.
+pub(crate) fn file_row_press(el: El, tile: &str, id: u64, row: usize) -> El {
+    el.on_press_tx(pressed(tile, move |state, tile, _, tx| {
+        let Some(review) = state.readings.reviews.tiles.get_mut(tile) else {
+            return;
+        };
+        let Some(open) = review.files.iter_mut().find(|f| f.id == id) else {
+            return;
+        };
+        open.put_cursor(row, false, &prefix(tile), tx);
+        state.readings.revision += 1;
+    }))
+}
+
+/// `el`, verdict `verdict` in review tile `tile`'s send sheet, where a press picks it as its
+/// key does.
+pub(crate) fn verdict_press(el: El, tile: &str, verdict: marks::Verdict) -> El {
+    el.on_press_tx(pressed(tile, move |state, tile, _, _| {
+        if let Some(review) = state.readings.reviews.tiles.get_mut(tile) {
+            pick_verdict(review, verdict);
+        }
+        state.readings.revision += 1;
+    }))
+}
+
+/// Picks `verdict` in the send sheet, when it shows.
+fn pick_verdict(review: &mut Review, verdict: marks::Verdict) {
+    if let Some((picked, _)) = review.sending.as_mut() {
+        *picked = verdict;
+        review.verdict = Some(verdict);
+    }
+}
+
+/// `el`, a control of review tile `tile`'s file view, where a press goes back as ⌃o does, or
+/// closes the file view as Escape does. On the Walkthrough's `stage`, back stops at the stage.
+pub(crate) fn file_view_press(el: El, tile: &str, stage: bool, close: bool) -> El {
+    el.on_press_tx(pressed(tile, move |state, tile, _, _| {
+        let Some(review) = state.readings.reviews.tiles.get_mut(tile) else {
+            return;
+        };
+        if close {
+            close_files(review);
+        } else {
+            go_back(review, stage);
+        }
+        state.readings.revision += 1;
+    }))
+}
+
+/// ⌃o: back to the file opened before, or out of the file view from the first; on the
+/// Walkthrough's `stage`, never past the stage itself.
+fn go_back(review: &mut Review, stage: bool) -> bool {
+    if stage && review.files.len() <= 1 {
+        return false;
+    }
+    if review.files.pop().is_none() {
+        return false;
+    }
+    if review.files.is_empty() {
+        review.filled = false;
+    }
     true
 }
 
@@ -1346,7 +1559,8 @@ fn pick_side(state: &mut State, tile: &str, side: Side, tx: &mut Tx) {
 }
 
 enum Move {
-    Line(usize),
+    /// The cursor goes to this place, extending the selection when true.
+    Line(usize, bool),
     Stop(Option<usize>),
     /// The Map moved to another arrow: the cursor goes to its stop.
     Arrow,
@@ -2142,32 +2356,20 @@ fn file_key(review: &mut Review, prefix: &str, ev: &KeyEvent, tx: &mut Tx) -> bo
             return true;
         }
         Key::Escape => {
-            review.files.clear();
-            review.filled = false;
+            close_files(review);
             return true;
         }
         _ => return false,
     };
     if let Some(next) = next.filter(|_| count > 0) {
         let selecting = ev.mods.shift && matches!(ev.key, Key::Up | Key::Down);
-        open.select_from = if selecting {
-            Some(open.select_from.unwrap_or(open.cursor))
-        } else {
-            None
-        };
-        open.cursor = next;
-        tx.scroll_into_view(file::row_key(prefix, next));
+        open.put_cursor(next, selecting, prefix, tx);
     }
     true
 }
 
-/// ⌃o: back to the file opened before, or out of the file view from the first.
-fn back(review: &mut Review) -> bool {
-    if review.files.pop().is_none() {
-        return false;
-    }
-    if review.files.is_empty() {
-        review.filled = false;
-    }
-    true
+/// Escape with nothing selected: the file view closes.
+fn close_files(review: &mut Review) {
+    review.files.clear();
+    review.filled = false;
 }

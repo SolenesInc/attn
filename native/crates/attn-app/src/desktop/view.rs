@@ -1726,6 +1726,26 @@ fn press_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
     take_tile(state, tile, tx);
 }
 
+/// A press that a control inside tile `pane` handles itself, which takes the tile as a press
+/// on the tile does.
+pub(crate) fn press_inside(state: &mut State, pane: &str, tx: &mut Tx) {
+    let Some(desktop) = state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .find(|(key, _)| key.tile == pane)
+        .map(|(key, _)| key.desktop.clone())
+    else {
+        return;
+    };
+    let tile = Holder {
+        desktop,
+        pane: pane.to_owned(),
+    };
+    press_tile(state, &tile, tx);
+}
+
 pub(crate) fn take_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
     super::actions::activate(state, &tile.desktop, &tile.pane, tx);
 }

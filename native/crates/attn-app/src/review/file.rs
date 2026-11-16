@@ -46,6 +46,18 @@ impl OpenFile {
         self.rows.as_ref()?.get(self.cursor)?.now
     }
 
+    /// Puts the cursor on row `row`, keeping the other end of the selection when `selecting`,
+    /// and shows it in the view keyed under `prefix`.
+    pub(crate) fn put_cursor(&mut self, row: usize, selecting: bool, prefix: &str, tx: &mut Tx) {
+        self.select_from = if selecting {
+            Some(self.select_from.unwrap_or(self.cursor))
+        } else {
+            None
+        };
+        self.cursor = row;
+        tx.scroll_into_view(row_key(prefix, row));
+    }
+
     pub(crate) fn selected(&self) -> (usize, usize) {
         let from = self.select_from.unwrap_or(self.cursor);
         (from.min(self.cursor), from.max(self.cursor))
@@ -231,7 +243,10 @@ pub(super) fn view(
         t.text_secondary
     } else {
         t.text_tertiary
-    });
+    })
+    .role("button")
+    .key(format!("{prefix}.view.back"));
+    let back = super::file_view_press(back, tile, stage, false);
     let lines = file
         .rows
         .as_ref()
@@ -250,7 +265,14 @@ pub(super) fn view(
         )
         .children(lines.map(|l| text(l).font(type_::LABEL).color(t.text_tertiary)))
         .child(col().grow(1.0))
-        .children((!stage).then(|| text("close esc").font(type_::LABEL).color(t.text_secondary)));
+        .children((!stage).then(|| {
+            let close = text("close esc")
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .role("button")
+                .key(format!("{prefix}.view.close"));
+            super::file_view_press(close, tile, stage, true)
+        }));
     let problem = file.problem.clone().map(|p| {
         text(p)
             .font(type_::LABEL)
@@ -341,6 +363,7 @@ fn rows_view(
     let notes: Vec<ReviewNote> = notes.iter().map(|n| (*n).clone()).collect();
     let tokens = *t;
     let prefix_ = prefix.to_owned();
+    let (tile_, id) = (tile.to_owned(), file.id);
     let rows_ = rows.clone();
     let widest = rows.iter().map(|r| columns(&r.text)).max().unwrap_or(0);
     let char_w = 0.6 * 13.0;
@@ -380,7 +403,8 @@ fn rows_view(
                 } else {
                     line
                 };
-                super::cursor_frame(line, i == cursor, &tokens)
+                let line = super::cursor_frame(line, i == cursor, &tokens);
+                super::file_row_press(line, &tile_, id, i)
             },
         )
         .virtual_rows_version((tile.to_owned(), file.id, rows.len()));

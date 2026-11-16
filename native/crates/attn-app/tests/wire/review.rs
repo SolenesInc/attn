@@ -2936,3 +2936,222 @@ fn the_send_sheet_lists_prose_comments_and_overall_notes_and_requests_changes_fo
         "the sheet closes once the review went"
     );
 }
+
+/// The key of the row named `name` among those of the element keyed `within`.
+fn row_in(world: &World, within: &str, name: &str) -> Target {
+    let key = world
+        .screen()
+        .descendants(Target::key(within))
+        .into_iter()
+        .find(|n| n.role == "row" && n.name.as_deref() == Some(name))
+        .and_then(|n| n.key)
+        .unwrap_or_else(|| panic!("no row {name:?} in {within}:\n{}", world.screen()));
+    Target::key(key)
+}
+
+fn click(world: &mut World, target: Target) {
+    world.gesture(|app| app.click(target));
+}
+
+/// Another tile takes the keyboard, so a click in the review has to take it back.
+fn keyboard_elsewhere(world: &mut World) {
+    click(world, Target::key("tile.a"));
+}
+
+#[test]
+fn a_click_on_a_file_view_row_puts_the_cursor_there_and_the_keys_go_on_from_it() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+    keyboard_elsewhere(&mut world);
+
+    let row = row_in(&world, "tile.m.review.view", "added line 9: \treturn b - a");
+    click(&mut world, row);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 9: \treturn b - a")
+    );
+    press(&mut world, Key::Down);
+    assert_eq!(file_cursor(&world).as_deref(), Some("unchanged line 10: }"));
+}
+
+#[test]
+fn a_click_on_a_row_of_the_walkthroughs_stage_moves_its_cursor_and_the_notes_under_it() {
+    let (mut world, _) = open_served(
+        DOCUMENT,
+        ReviewBundle {
+            frame: "walkthrough".into(),
+            ..bundle()
+        },
+    );
+    assert!(
+        marks_strip(&world)
+            .iter()
+            .any(|t| t == "look here L4: The sum gets a name.")
+    );
+    keyboard_elsewhere(&mut world);
+
+    let row = row_in(&world, "tile.m.review.view", "added line 5: \treturn sum");
+    click(&mut world, row);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+    assert!(
+        marks_strip(&world)
+            .iter()
+            .any(|t| t == "agent L5: Then it is returned.")
+    );
+    press(&mut world, Key::Up);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+}
+
+#[test]
+fn a_click_on_a_stop_in_the_walkthroughs_script_puts_its_file_on_the_stage() {
+    let (mut world, _) = open_served(
+        DOCUMENT,
+        ReviewBundle {
+            frame: "walkthrough".into(),
+            ..bundle()
+        },
+    );
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+    keyboard_elsewhere(&mut world);
+
+    click(&mut world, Target::role("list-item").name("util.go L1–2"));
+    assert_eq!(stage_stop(&world).as_deref(), Some("util.go"));
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 2: func helper() {}")
+    );
+    press(&mut world, Key::Left);
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+}
+
+#[test]
+fn a_click_on_a_search_result_opens_it_as_enter_does() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    serve_search(&world);
+    type_key(&mut world, "/");
+    search(&mut world, "calc");
+    assert_eq!(options(&world), ["calc.go file", "return b - a calc.go:9"]);
+
+    click(&mut world, Target::key("review.search.option.1"));
+    assert!(world.screen().find(Target::key("review.search")).is_none());
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 9: \treturn b - a")
+    );
+}
+
+#[test]
+fn a_click_in_the_brief_moves_the_cursor_and_acts_on_the_facts_a_changed_file_and_a_frame_tab() {
+    let mut world = open();
+    let (_, warmed) = (serve(&world), file_reads(&world).len());
+    keyboard_elsewhere(&mut world);
+
+    let stop = stop_key(&world, "calc.go");
+    let row = row_in(&world, &stop, "added line 5: \treturn sum");
+    click(&mut world, row);
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+    press(&mut world, Key::Up);
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+
+    click(&mut world, Target::key("tile.m.review.facts"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.m.review.file.1"))
+            .is_some()
+    );
+    click(&mut world, Target::key("tile.m.review.file.1"));
+    assert_eq!(file_reads(&world)[warmed..], ["util.go"]);
+    let view = file_view(&world).expect("the file view shows");
+    assert!(view.iter().any(|t| t == "util.go"), "{view:?}");
+    click(&mut world, Target::role("button").name("close esc"));
+    assert!(file_view(&world).is_none());
+    click(&mut world, Target::key("tile.m.review.file.1"));
+    assert!(file_view(&world).is_some());
+    click(&mut world, Target::key("tile.m.review.view.back"));
+    assert!(
+        file_view(&world).is_none(),
+        "back from the first file leaves the file view"
+    );
+
+    click(&mut world, Target::role("tab").name("2 Walkthrough"));
+    assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
+}
+
+#[test]
+fn a_drag_across_a_file_view_row_selects_its_text_and_leaves_the_cursor() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    let row = row_in(&world, "tile.m.review.view", "added line 9: \treturn b - a");
+    let [x, y, w, h] = world.screen().bounds(row).expect("the row is laid out");
+    let (from, to) = ((x + w * 0.3, y + h / 2.0), (x + w * 0.6, y + h / 2.0));
+    world.gesture(|app| {
+        app.drag_from(from, to);
+        app.release(to);
+    });
+    world.settle();
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+    assert!(
+        world
+            .runtime()
+            .selected_text()
+            .is_some_and(|s| !s.is_empty()),
+        "the drag selected text"
+    );
+}
+
+#[test]
+fn a_click_on_a_verdict_in_the_send_sheet_picks_it_as_its_key_does() {
+    let (mut world, _, sends) = open_marking(presented());
+    press(&mut world, Key::Down);
+    send_key(&mut world);
+    click(&mut world, Target::key("review.send.verdict.c"));
+    let picked = world
+        .screen()
+        .all(Target::role("radio-button"))
+        .into_iter()
+        .find(|n| n.is("checked"))
+        .and_then(|n| n.name);
+    assert_eq!(picked.as_deref(), Some("comment"));
+    press(&mut world, Key::Enter);
+    let sent = sends.lock().unwrap().clone();
+    assert_eq!(
+        sent.last().map(|s| s["verdict"].clone()),
+        Some(json!("comment"))
+    );
+}
+
+#[test]
+fn a_click_on_before_takes_the_keyboard_back_from_another_tile() {
+    let mut world = open_map(map_bundle("map"));
+    keyboard_elsewhere(&mut world);
+    click(&mut world, Target::role("tab").name("Before"));
+    assert_eq!(side_tabs(&world), ["Before *", "After"]);
+    type_key(&mut world, "b");
+    assert_eq!(side_tabs(&world), ["Before", "After *"]);
+}

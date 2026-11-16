@@ -334,10 +334,10 @@ fn layout(flow: &ReviewFlow) -> Layout<'_> {
     }
 }
 
-/// How a message is drawn: the place key it takes the cursor under, if any, and whether the
-/// cursor or the Map stands on it.
+/// How a message is drawn: the review tile and the place key it takes the cursor under, if
+/// any, and whether the cursor or the Map stands on it.
 pub(super) struct Mark {
-    pub(super) key: Option<String>,
+    pub(super) place: Option<(String, String)>,
     pub(super) current: bool,
 }
 
@@ -460,7 +460,7 @@ pub(super) fn diagram(
     for row in &geometry.rows {
         let m = row.message;
         let Mark {
-            key: place_key,
+            place: placed,
             current,
         } = mark(m);
         let x1 = geometry.x.get(m.from.as_str()).copied().unwrap_or(0.0);
@@ -552,8 +552,8 @@ pub(super) fn diagram(
         if current {
             hit = hit.fill(t.accent.alpha(0.14)).focus_selected(true);
         }
-        if let Some(k) = place_key {
-            hit = hit.key(k);
+        if let Some((tile, k)) = placed {
+            hit = super::place_press(hit.key(k.clone()), &tile, k);
         } else {
             hit = hit.key(format!("{key}.message.{}", m.line));
         }

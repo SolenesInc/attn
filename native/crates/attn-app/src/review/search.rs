@@ -205,6 +205,27 @@ fn changed(state: &mut State, tx: &mut Tx) {
     state.readings.revision += 1;
 }
 
+/// Opens result `at` of the open search over the files open in its tile, and closes it.
+fn pick(state: &mut State, at: usize, tx: &mut Tx) {
+    let Some(search) = state.readings.reviews.search.as_ref() else {
+        return;
+    };
+    let tile = search.tile.clone();
+    let files = super::bundle_of(state, &tile)
+        .map(|b| b.files.clone())
+        .unwrap_or_default();
+    let Some(found) = search
+        .found(&state.readings.reviews.search_query, &files)
+        .get(at)
+        .map(Found::target)
+    else {
+        return;
+    };
+    let source = search.source.clone();
+    close(state, tx);
+    super::open_found(state, &tile, source, found, tx);
+}
+
 /// The box's keys: ↑/↓ (and ⌃n/⌃p) pick a result, Enter opens it, Escape closes the search.
 fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(search) = state.readings.reviews.search.as_ref() else {
@@ -223,12 +244,8 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         _ if ctrl('n') => 1,
         _ if ctrl('p') => -1,
         Key::Enter => {
-            let Some(pick) = found.get(search.selected) else {
-                return true;
-            };
-            let (source, target) = (search.source.clone(), pick.target());
-            close(state, tx);
-            super::open_found(state, &tile, source, target, tx);
+            let selected = search.selected;
+            pick(state, selected, tx);
             return true;
         }
         Key::Escape => {
@@ -307,7 +324,8 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
                         .font(type_::BODY)
                         .color(t.text_primary)
                         .a11y_hidden(),
-                );
+                )
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, i, tx));
             if on {
                 el.fill(t.bg_selected).focus_selected(true)
             } else {

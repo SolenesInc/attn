@@ -44,7 +44,7 @@ fn note_range(note: &ReviewNote) -> String {
 /// The stop keyed `key`, with the cursor on its row `cursor`, its rows `rows` (more than its own
 /// when `e` showed more), in its file's colors when `file` holds them.
 pub(super) fn stop(
-    key: &str,
+    (tile, key): (&str, &str),
     stop: &ReviewStop,
     rows: &[ReviewRow],
     (cursor, selected): (Option<usize>, Option<(usize, usize)>),
@@ -96,7 +96,8 @@ pub(super) fn stop(
             .filter(|(at, _)| r.now == Some(*at))
             .map(|(_, m)| super::marks::mark_row(m, t))
             .collect();
-        std::iter::once(super::cursor_frame(line, cursor == Some(j), t))
+        let line = super::cursor_frame(line, cursor == Some(j), t);
+        std::iter::once(super::place_press(line, tile, row_key(key, j)))
             .chain(notes)
             .chain(marked)
     });
@@ -204,6 +205,7 @@ pub(super) fn note(note: &ReviewNote, t: &Tokens) -> El {
             text(note.text.clone())
                 .font(type_::BODY)
                 .color(t.text_primary)
+                .selectable(true)
                 .wrap()
                 .grow(1.0),
         )
@@ -260,6 +262,7 @@ pub(super) fn code_row(
             let code = rich(r.text.clone(), spans.to_vec())
                 .font(font)
                 .color(t.text_primary)
+                .selectable(true)
                 .a11y_hidden();
             if wrap {
                 code.wrap().grow(1.0)

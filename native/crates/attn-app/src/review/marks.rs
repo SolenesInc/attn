@@ -347,6 +347,7 @@ fn unsent(sent: Option<&Sent>) -> Option<String> {
 /// The send: every mark it carries in reading order with its place, the verdict picked, and
 /// how the last send went when it did not.
 pub(crate) fn sheet(
+    tile: &str,
     marks: &[&MarkdownAnnotation],
     verdict: Verdict,
     to: Option<&To>,
@@ -393,16 +394,18 @@ pub(crate) fn sheet(
             Verdict::RequestChanges => "r",
             Verdict::Comment => "c",
         };
-        text(format!("{key} {}", v.name()))
+        let choice = text(format!("{key} {}", v.name()))
             .role("radio")
             .label(v.name())
+            .key(format!("review.send.verdict.{key}"))
             .checked(v == verdict)
             .font(type_::LABEL)
             .color(if v == verdict {
                 t.text_primary
             } else {
                 t.text_tertiary
-            })
+            });
+        super::verdict_press(choice, tile, v)
     });
     let to = match to {
         Some(To::Session(s)) => format!("Goes to {s}."),
