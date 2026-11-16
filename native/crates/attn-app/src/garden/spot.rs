@@ -192,6 +192,28 @@ impl Spot {
         garden.revision += 1;
     }
 
+    /// Puts away the words being written on seed `seed` of sheet `at`, as Escape in their field
+    /// does, and gives the keyboard to `home`. Says whether any were being written.
+    pub(super) fn put_away_written(
+        state: &mut State,
+        (at, seed): (&str, &str),
+        home: &str,
+        tx: &mut Tx,
+    ) -> bool {
+        let written: Vec<Spot> = state
+            .window
+            .garden
+            .edits
+            .iter()
+            .filter(|(spot, edit)| spot.at == at && spot.seed == seed && edit.writing && !edit.busy)
+            .map(|(spot, _)| spot.clone())
+            .collect();
+        for spot in &written {
+            spot.close(state, home, true, tx);
+        }
+        !written.is_empty()
+    }
+
     fn close(&self, state: &mut State, home: &str, ring: bool, tx: &mut Tx) {
         self.forget(state);
         tx.focus(home.to_owned(), ring);

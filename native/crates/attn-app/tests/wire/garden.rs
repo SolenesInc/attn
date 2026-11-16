@@ -16,6 +16,7 @@ mod board;
 mod checks;
 mod continuation;
 mod drafts;
+mod frame;
 mod handover;
 mod kept_conversation;
 mod review;
@@ -731,6 +732,24 @@ fn draws_the_trailing_levels_the_width_holds_and_names_only_the_ancestors_no_col
     assert!(!has_row(&world, "unrelated work"));
     assert!(has_row(&world, "its header"));
     assert_eq!(trail(&world), ["Garden", "the migration"]);
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn keeps_the_closed_lens_across_a_walk_that_leaves_the_column_behind() {
+    let mut world = open_garden_sized(daemon(deep(), Vec::new()), TWO_COLUMNS);
+    click(&mut world, "Expand the garden");
+    open_row(&mut world, "the migration");
+    click(&mut world, "1 closed");
+    assert!(has_row(&world, "already shipped"));
+
+    open_row(&mut world, "one panel");
+    open_row(&mut world, "its header");
+    assert!(!has_row(&world, "already shipped"));
+
+    click(&mut world, "the migration");
+
+    assert!(has_row(&world, "already shipped"));
     assert!(rests(&mut world));
 }
 

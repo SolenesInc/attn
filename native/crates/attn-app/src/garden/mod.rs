@@ -136,12 +136,12 @@ struct Reading {
 }
 
 pub(crate) fn mode(state: &State) -> Mode {
-    if state.window.garden.full {
-        Mode::Full
-    } else if state.window.shows(Drawer::Garden) {
-        Mode::Dock
-    } else {
+    if !state.window.shows(Drawer::Garden) {
         Mode::Closed
+    } else if state.window.garden.full {
+        Mode::Full
+    } else {
+        Mode::Dock
     }
 }
 
@@ -188,13 +188,8 @@ fn focus_frame(state: &State, tx: &mut Tx) {
 fn show(state: &mut State, frame: Mode, tx: &mut Tx) {
     let was = mode(state);
     let window = &mut state.window;
-    if frame == Mode::Full {
-        window.garden.full = true;
-        window.close_drawer(Drawer::Garden);
-    } else {
-        window.garden.full = false;
-        window.open_drawer(Drawer::Garden);
-    }
+    window.garden.full = frame == Mode::Full;
+    window.open_drawer(Drawer::Garden);
     if was == Mode::Closed {
         review::opened(state);
     }
@@ -619,6 +614,15 @@ pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
 }
 
+/// Escape in the garden puts away words being written on the seed it shows before it closes
+/// anything, as they were opened last.
+fn put_away_written(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(here) = state.window.garden.trail.last().cloned() else {
+        return false;
+    };
+    spot::Spot::put_away_written(state, ("garden", &here), BODY, tx)
+}
+
 /// The garden's keys while focus is inside it: `/` or ⌘F goes to the search field, the arrows
 /// walk the rows of the place it stands in, → drills into the focused row in columns, ← climbs
 /// out, and Escape closes the garden.
@@ -635,7 +639,7 @@ pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     if ev.key == Key::Escape {
-        return crate::shell::escape_drawers(state, tx);
+        return put_away_written(state, tx) || crate::shell::escape_drawers(state, tx);
     }
     if tx.in_text_field() || ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;

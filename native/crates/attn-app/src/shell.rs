@@ -525,13 +525,14 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
             View::Home => crate::home::view(state, t),
             View::Desktop => crate::desktop::area(state, t, scale),
         })
-        .children(window.drawers.iter().map(|drawer| match drawer {
+        .children(window.drawers.iter().filter_map(|drawer| match drawer {
+            Drawer::Garden if crate::garden::mode(state) == crate::garden::Mode::Full => None,
             Drawer::Garden if window.shows(Drawer::Asks) => {
-                crate::garden::panel(state, t).focus_return(crate::asks::DRAWER)
+                Some(crate::garden::panel(state, t).focus_return(crate::asks::DRAWER))
             }
-            Drawer::Garden => crate::garden::panel(state, t),
-            Drawer::Asks => crate::asks::drawer(state, t),
-            Drawer::Attention => crate::attention::drawer(state, t),
+            Drawer::Garden => Some(crate::garden::panel(state, t)),
+            Drawer::Asks => Some(crate::asks::drawer(state, t)),
+            Drawer::Attention => Some(crate::attention::drawer(state, t)),
         }))
 }
 

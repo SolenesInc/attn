@@ -314,3 +314,35 @@ fn waits_for_the_seeds_current_revision_before_offering_handover() {
             .is_none()
     );
 }
+
+#[test]
+fn dismisses_a_composer_before_the_dock_after_returning_from_fullscreen() {
+    let mut world = opened(vec![continued(placed())], |_| None);
+    let attention_open = |world: &World| world.screen().find(Target::key("attention")).is_some();
+    let garden_shown = |world: &World| {
+        world
+            .screen()
+            .find(Target::role("button").name("Hide the garden"))
+            .is_some()
+    };
+    world.gesture(|app| app.key(super::super::sidebar::chord(Action::DockAttention)));
+    click(&mut world, "Expand the garden");
+    click(&mut world, "Handover");
+    world.gesture(|app| app.type_text("Continue from the parser tests."));
+    click(&mut world, "Return the garden to the dock");
+
+    key(&mut world, Key::Escape);
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.handover.form"))
+            .is_none()
+    );
+    assert!(attention_open(&world));
+    assert!(garden_shown(&world));
+    key(&mut world, Key::Escape);
+    assert!(!attention_open(&world));
+    assert!(garden_shown(&world));
+    assert!(rests(&mut world));
+}
