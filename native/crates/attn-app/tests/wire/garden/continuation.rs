@@ -1,7 +1,7 @@
 use attn_protocol::{
-    Desktop, DesktopPane, InitialStateMessage, OpenSeedResultMessage, Profile,
-    ProfileArrangementChangedMessage, SeedContinuation, SeedResumeResultMessage,
-    SeedSendToChiefResultMessage,
+    Desktop, DesktopPane, InitialStateMessage, OpenSeedResultMessage, OutpostInfo,
+    OutpostsUpdatedMessage, Profile, ProfileArrangementChangedMessage, SeedContinuation,
+    SeedResumeResultMessage, SeedSendToChiefResultMessage,
 };
 use attn_testkit::{Request, Target, World, tree};
 use serde_json::json;
@@ -303,4 +303,67 @@ fn opens_a_seed_from_a_session_bound_seed_tile_beside_the_session_that_tile_is_b
     let opened = world.daemon.sent_of("open_seed");
     assert_eq!(opened.len(), 1);
     assert_eq!(opened[0]["session_id"], "tender");
+}
+
+#[test]
+fn offers_resume_of_an_outpost_session_and_reads_the_seed_again_when_the_outposts_reach_changes() {
+    let on_studio = |continuation: SeedContinuation| {
+        continued(SeedContinuation {
+            outpost: Some("studio".into()),
+            handover_placement: "placement_required".into(),
+            ..continuation
+        })
+    };
+    let reason = "outpost \"studio\" is unreachable; Resume returns when it is back";
+    let unreachable = on_studio(SeedContinuation {
+        directory_state: "unreachable".into(),
+        resume_available: false,
+        resume_reason: Some(reason.into()),
+        ..resumable()
+    });
+    let world_daemon = daemon(vec![continued(resumable())], Vec::new());
+    let document = std::sync::Arc::new(std::sync::Mutex::new(unreachable));
+    let read = document.clone();
+    world_daemon.on("seed_document_get", move |r: &Request| {
+        document_reply(r, Some(read.lock().unwrap().clone()))
+    });
+    world_daemon.on("seed_resume", resume_reply(None));
+    let mut world = open_garden_with(world_daemon);
+    open_row(&mut world, "Cache store migration");
+
+    let resume = world
+        .screen()
+        .get(Target::role("button").name("Resume on studio"));
+    assert!(resume.is("disabled"), "{resume:?}");
+    assert_eq!(resume.description.as_deref(), Some(reason));
+    click(&mut world, "Resume on studio");
+    assert!(world.daemon.sent_of("seed_resume").is_empty());
+
+    *document.lock().unwrap() = on_studio(SeedContinuation {
+        directory_state: "unchecked".into(),
+        ..resumable()
+    });
+    world.daemon.emit(OutpostsUpdatedMessage {
+        outposts: vec![OutpostInfo {
+            id: "studio-id".into(),
+            name: "studio".into(),
+            destination: "studio:2200".into(),
+            state: "connected".into(),
+            reach: "reachable".into(),
+            state_since: "2026-10-27T10:00:00Z".into(),
+            ..OutpostInfo::default()
+        }],
+        ..OutpostsUpdatedMessage::new()
+    });
+    world.settle();
+
+    let returned = world
+        .screen()
+        .get(Target::role("button").name("Resume on studio"));
+    assert!(!returned.is("disabled"), "{returned:?}");
+    assert!(!shows(&world, "is unreachable"));
+    click(&mut world, "Resume on studio");
+    let resumed = world.daemon.sent_of("seed_resume");
+    assert_eq!(resumed.len(), 1);
+    assert_eq!(resumed[0]["seed_id"], "s-cont11");
 }

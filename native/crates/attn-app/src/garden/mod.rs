@@ -71,6 +71,8 @@ pub(crate) struct Garden {
     /// The garden the terminals last marked seed ids from, by its address, and the profile it
     /// was read for.
     marked: (usize, String),
+    /// Each outpost's reach as the reads last followed it, and how often it has changed.
+    reach: (Vec<(String, String)>, usize),
     /// The garden holds the window, over the dock.
     full: bool,
     /// The frame the garden opens in, as the user last chose it; read from prefs at first use.
@@ -106,13 +108,17 @@ impl Garden {
     }
 }
 
+/// A garden push, by its address, and the count of outpost reach changes, which a seed's
+/// document reads again on.
+type Followed = (usize, usize);
+
 /// A seed's document as the daemon last answered it.
 #[derive(Default)]
 struct Reading {
-    /// The garden push the latest read followed, and its request.
-    asked: Option<(usize, String)>,
+    /// The garden push and outpost reach the latest read followed, and its request.
+    asked: Option<(Followed, String)>,
     document: Option<Arc<SeedDocument>>,
-    /// The latest read's document arrived, so it describes the garden as last pushed.
+    /// A read since the latest garden push answered, so the document describes that garden.
     answered: bool,
     error: Option<String>,
     /// The linked files asked about, and those the daemon says are not on disk.
@@ -259,13 +265,26 @@ fn shown_seeds(state: &State) -> HashSet<String> {
     shown
 }
 
-/// Reads each shown seed's document whenever the seed or the garden around it changes, as
-/// the Tauri app reads it on every garden push. Only a seed's latest read counts.
+/// Reads each shown seed's document whenever the seed or the garden around it changes, or an
+/// outpost's reach does, as the Tauri app reads it. Only a seed's latest read counts.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     review::follow(state, tx);
     mark_in_terminals(state);
     let shown = shown_seeds(state);
-    let push = Arc::as_ptr(&state.facts.garden) as usize;
+    let reach: Vec<_> = state
+        .facts
+        .outposts
+        .iter()
+        .map(|o| (o.id.clone(), o.reach.clone()))
+        .collect();
+    let followed = &mut state.window.garden.reach;
+    if followed.0 != reach {
+        *followed = (reach, followed.1 + 1);
+    }
+    let push = (
+        Arc::as_ptr(&state.facts.garden) as usize,
+        state.window.garden.reach.1,
+    );
     let readings = &mut state.window.garden.readings;
     let before = readings.len();
     readings.retain(|id, _| shown.contains(id));
@@ -305,11 +324,12 @@ fn mark_in_terminals(state: &mut State) {
     state.terminals.know_seeds(known);
 }
 
-fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {
+fn read(state: &mut State, id: String, push: Followed, tx: &mut Tx) {
     let request_id = state.next_request_id();
     let reading = state.window.garden.readings.entry(id.clone()).or_default();
+    let new_push = reading.asked.as_ref().is_none_or(|(at, _)| at.0 != push.0);
     reading.asked = Some((push, request_id.clone()));
-    if std::mem::take(&mut reading.answered) {
+    if new_push && std::mem::take(&mut reading.answered) {
         state.window.garden.revision += 1;
     }
     let command = SeedDocumentGetMessage {
