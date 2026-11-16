@@ -65,7 +65,7 @@ impl Sheet<'_> {
             return None;
         }
         let t = self.t;
-        let mut list = super::sheet::section(&self.key("checks"), "Checks", t);
+        let mut list = super::sheet::section_gone_to(&self.key("checks"), "Checks", t);
         if let Some(tally) = model::tally_of(checks.iter().copied()) {
             list = list.child(
                 text(model::tally_words(&tally))

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedDocument};
+use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, memo, row, text};
@@ -110,7 +110,7 @@ impl Sheet<'_> {
         if !model::is_plot(here)
             && let Some(tally) = model::check_tally(here)
         {
-            meta = meta.child(meta_word(model::tally_words(&tally), t));
+            meta = meta.child(self.tally(here, &tally));
         }
         meta = meta
             .child(meta_word(model::ago(&here.created_at, self.now_ms), t))
@@ -124,9 +124,36 @@ impl Sheet<'_> {
             head = head.child(self.note("head.reason", reason.clone()));
         }
         if model::is_plot(here) {
-            head = head.child(self.note("head.progress", model::progress_words(here)));
+            head = head.child(
+                row()
+                    .key(self.key("head.progress"))
+                    .items_center()
+                    .gap(space::S2)
+                    .child(self.note("head.progress.words", model::progress_words(here)))
+                    .children(model::check_tally(here).map(|tally| self.tally(here, &tally))),
+            );
         }
         head
+    }
+
+    /// The seed's check tally, which goes to its checks when it has checks of its own.
+    fn tally(&self, here: &Seed, tally: &SeedCheckTally) -> El {
+        let (words, sentence) = (model::tally_words(tally), model::tally_sentence(tally));
+        let own = here.checks.as_ref().is_some_and(|c| !c.is_empty())
+            || here.shared_checks.as_ref().is_some_and(|c| !c.is_empty());
+        if !own {
+            return meta_word(words, self.t).help(format!("checks: {sentence}"));
+        }
+        let (checks, heading) = (self.key("checks"), self.key("checks.heading"));
+        meta_word(words, self.t)
+            .key(self.key("head.tally"))
+            .role("button")
+            .focusable(true)
+            .on_press_tx(move |_: &mut State, tx: &mut Tx| {
+                tx.scroll_into_view(checks.clone());
+                tx.focus(&heading, false);
+            })
+            .label(format!("Checks: {sentence}"))
     }
 
     /// What the seed harvests on, a link to its pull request when the daemon knows where it is.
@@ -314,6 +341,21 @@ pub(super) fn note(key: &str, words: impl Into<String>, t: &Tokens) -> El {
 }
 
 pub(super) fn section(key: &str, title: &str, t: &Tokens) -> El {
+    region(key, title).child(heading(title, t))
+}
+
+/// A section that a control elsewhere on the sheet goes to: its heading takes the keyboard
+/// without being a stop on Tab.
+pub(super) fn section_gone_to(key: &str, title: &str, t: &Tokens) -> El {
+    region(key, title).child(
+        heading(title, t)
+            .key(format!("{key}.heading"))
+            .focusable(true)
+            .tab_index(-1),
+    )
+}
+
+fn region(key: &str, title: &str) -> El {
     col()
         .key(key.to_owned())
         .role("region")
@@ -321,13 +363,14 @@ pub(super) fn section(key: &str, title: &str, t: &Tokens) -> El {
         .w_full()
         .gap(space::S1)
         .pt(space::S3)
-        .child(
-            text(title.to_owned())
-                .role("heading")
-                .label(title.to_owned())
-                .font(type_::SECTION)
-                .color(t.text_tertiary),
-        )
+}
+
+fn heading(title: &str, t: &Tokens) -> El {
+    text(title.to_owned())
+        .role("heading")
+        .label(title.to_owned())
+        .font(type_::SECTION)
+        .color(t.text_tertiary)
 }
 
 pub(super) fn meta_word(words: impl Into<String>, t: &Tokens) -> El {

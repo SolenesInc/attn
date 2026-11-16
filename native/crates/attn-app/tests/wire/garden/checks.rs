@@ -1,6 +1,6 @@
 use attn_protocol::{
     SeedCheck, SeedCheckEvidence, SeedCheckReport, SeedCheckResultMessage, SeedCheckRollupEntry,
-    SeedCheckVerdict, SeedSharedCheck,
+    SeedCheckTally, SeedCheckVerdict, SeedPlotProgress, SeedSharedCheck,
 };
 use attn_testkit::{Request, Target, World};
 use serde_json::json;
@@ -339,6 +339,134 @@ fn opens_each_piece_of_evidence_where_the_seeds_artifacts_open_it_and_leaves_unk
             .screen()
             .find(Target::key("garden.check.C2.evidence.4"))
             .is_none()
+    );
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn scrolls_from_the_header_tally_to_the_checks_section() {
+    let long = (1..=80)
+        .map(|n| format!("Step {n} of the plan."))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mut world = open_garden(vec![with(judged(), |s| s.body = long)]);
+    open_row(&mut world, "Cache store migration");
+    let tally = Target::role("button").name("Checks: 0 of 3 confirmed · 1 to judge · 1 rejected");
+    let reader = world
+        .screen()
+        .bounds(Target::key("garden.viewport"))
+        .unwrap();
+    let below = |world: &World| {
+        world.screen().bounds(Target::key("garden.checks")).unwrap()[1] >= reader[1] + reader[3]
+    };
+    assert!(below(&world));
+
+    world.gesture(|app| app.click(tally));
+    assert!(rests(&mut world));
+
+    assert!(!below(&world));
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("garden.checks.heading")
+    );
+}
+
+#[test]
+fn counts_a_fresh_report_as_to_judge_on_child_rows_plot_progress_and_board_cards() {
+    let tally = |reported| SeedCheckTally {
+        total: 5,
+        reported,
+        confirmed: 2,
+        rejected: 1,
+    };
+    let crown = |reported| {
+        with(plot("s-plot11", "The monitor plot", ""), |s| {
+            s.plot_progress = Some(SeedPlotProgress {
+                total: 3,
+                done: 1,
+                growing: 1,
+                ready: 1,
+                checks: Some(tally(reported)),
+                ..SeedPlotProgress::default()
+            });
+            s.checks = Some(vec![check(
+                "C6",
+                "The plot glossary entry is written.",
+                "open",
+            )]);
+        })
+    };
+    let leaf = |c1: &str| {
+        with(
+            part_of("s-plot11", "s-leaf11", "View and home reactions"),
+            |s| {
+                s.status = "growing".into();
+                s.checks = Some(vec![
+                    check("C8", "opens intact", "confirmed"),
+                    check("C4", "CI is green", "rejected"),
+                    check("C1", "a wire test guards it", c1),
+                    check("C5", "a manual run", "open"),
+                    check("C2", "the glossary says it", "confirmed"),
+                    SeedCheck {
+                        removed: true,
+                        ..check("C9", "an old statement", "open")
+                    },
+                ]);
+            },
+        )
+    };
+    let table = part_of("s-plot11", "s-tbl111", "Policy and table");
+    let mut world = open_garden_sized(
+        daemon(vec![leaf("open"), crown(0), table.clone()], Vec::new()),
+        THREE_COLUMNS,
+    );
+    assert!(row_says(&world, "s-plot11", "✓2/5 · 1 rejected"));
+
+    open_row(&mut world, "The monitor plot");
+    assert!(row_says(&world, "s-leaf11", "✓2/5 · 1 rejected"));
+    assert!(!row_says(
+        &world,
+        "s-leaf11",
+        "✓2/5 · 1 to judge · 1 rejected"
+    ));
+
+    push(&mut world, vec![leaf("reported"), crown(1), table]);
+    assert!(row_says(
+        &world,
+        "s-leaf11",
+        "✓2/5 · 1 to judge · 1 rejected"
+    ));
+    let progress: Vec<_> = world
+        .screen()
+        .descendants(Target::key("garden.head.progress"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        progress.iter().any(|w| w.starts_with("1/3 done")),
+        "{progress:?}"
+    );
+    assert!(
+        progress
+            .iter()
+            .any(|w| w == "Checks: 2 of 5 confirmed · 1 to judge · 1 rejected"),
+        "{progress:?}"
+    );
+
+    world.gesture(|app| app.key(board()));
+    click(&mut world, "board");
+    let card = world
+        .screen()
+        .all(Target::role("button").name("The monitor plot"))
+        .into_iter()
+        .find_map(|n| n.key.filter(|k| k.starts_with("garden.board.card.")))
+        .unwrap();
+    assert!(
+        world
+            .screen()
+            .descendants(Target::key(card))
+            .iter()
+            .any(|n| n.name.as_deref() == Some("✓2/5 · 1 to judge · 1 rejected"))
     );
     assert!(rests(&mut world));
 }
