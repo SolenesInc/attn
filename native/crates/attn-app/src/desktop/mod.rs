@@ -19,6 +19,7 @@ mod peek;
 mod provenance;
 pub(crate) mod refusal;
 mod role_icon;
+mod seed_card;
 pub(crate) mod seed_chip;
 mod shared_conversation;
 mod shelf;
@@ -223,7 +224,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
 /// and the header popover, and the peek's reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
     let now = tx.clock();
-    let popped = header_pop::expire(state, now);
+    let popped = header_pop::expire(state, now) | state.terminals.expire_seed_card(now);
     if popped {
         crate::garden::follow(state, tx);
     }

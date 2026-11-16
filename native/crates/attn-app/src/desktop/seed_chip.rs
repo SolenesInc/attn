@@ -124,7 +124,7 @@ fn state_meaning(status: &str) -> &'static str {
     }
 }
 
-fn state_color(status: &str, t: &Tokens) -> Color {
+pub(crate) fn state_color(status: &str, t: &Tokens) -> Color {
     match status {
         "growing" => t.accent,
         "parked" => t.warning,
@@ -437,7 +437,7 @@ fn open(state: &mut State, seed: &str, session: &str, tx: &mut Tx) {
 }
 
 /// Plain words from markdown `body`, cut at a word near `max` characters.
-fn excerpt(body: &str, max: usize) -> String {
+pub(crate) fn excerpt(body: &str, max: usize) -> String {
     let mut prose = String::new();
     let mut fenced = false;
     for line in body.lines() {

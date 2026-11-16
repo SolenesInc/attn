@@ -385,6 +385,24 @@ pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut T
 /// As `show_leaf`, ringing the tile when it lands only if `announced`.
 fn show_leaf_as(state: &mut State, desktop: &str, leaf: &str, announced: bool, tx: &mut Tx) {
     give_keyboard(state, desktop, leaf, tx);
+    show_leaf_only(state, desktop, leaf, announced, tx);
+}
+
+/// Shows the leaf, and puts the keyboard in it when `keyboard`.
+pub(crate) fn reveal_leaf(
+    state: &mut State,
+    desktop: &str,
+    leaf: &str,
+    keyboard: bool,
+    tx: &mut Tx,
+) {
+    if keyboard {
+        give_keyboard(state, desktop, leaf, tx);
+    }
+    show_leaf_only(state, desktop, leaf, true, tx);
+}
+
+fn show_leaf_only(state: &mut State, desktop: &str, leaf: &str, announced: bool, tx: &mut Tx) {
     if state.window.desk.pick(desktop, leaf) {
         tx.instant();
     }

@@ -25,6 +25,8 @@ pub(super) struct View {
     /// The cell under the pointer and the link over it, until output or a scroll moves the
     /// text under it.
     pub(super) hover: Option<super::links::Hover>,
+    /// The seed ids the garden knows on the rows the view shows, until the text moves.
+    pub(super) seeds: Option<Vec<super::seeds::SeedMark>>,
 }
 
 impl View {

@@ -19,6 +19,7 @@ mod filter;
 mod find;
 mod kitty;
 mod links;
+mod seeds;
 mod selection;
 
 pub(crate) use annotating::{
@@ -28,6 +29,7 @@ pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
 pub(crate) use links::accelerator;
+pub(crate) use seeds::SeedCard;
 pub(crate) use selection::Release;
 
 /// How often a terminal tells the daemon its new size while its tile is being resized, as in
@@ -108,6 +110,13 @@ pub struct Terminals {
     unshown_comment: rune::TextEdit,
     /// What the terminals have to tell the person, until the window shows it.
     said: Option<String>,
+    /// The seed ids the garden knows, which the terminals mark.
+    seeds: Arc<std::collections::HashSet<String>>,
+    /// The card of the seed id the pointer rests on, and when it opens or closes.
+    card: Option<seeds::SeedCard>,
+    card_timer: Option<seeds::CardTimer>,
+    /// The pointer is over the seed card, which keeps it open.
+    over_card: bool,
 }
 
 struct Term {
@@ -1006,8 +1015,9 @@ impl Terminals {
         let theme = self.theme;
         let finds = &self.finds;
         let images = &mut self.images;
+        let seeds = (&*self.seeds, self.card.as_ref());
         self.panes.iter_mut().map(move |(id, term)| {
-            Terminals::bring_up_to_date(images, finds, &theme, id, term);
+            Terminals::bring_up_to_date(images, finds, seeds, &theme, id, term);
             (mark(id), &mut term.grid)
         })
     }
@@ -1017,6 +1027,7 @@ impl Terminals {
     fn bring_up_to_date(
         images: &mut kitty::Images,
         finds: &HashMap<String, find::Finding>,
+        (seeds, card): (&std::collections::HashSet<String>, Option<&seeds::SeedCard>),
         theme: &Theme,
         id: &str,
         term: &mut Term,
@@ -1027,7 +1038,9 @@ impl Terminals {
         let placed = Terminals::kitty_images(images, id, term);
         let top = term.vt.view_top();
         term.grid.set_images(placed, top);
-        let overlays = Terminals::overlays(term, theme, finds.get(id));
+        let mut overlays = Terminals::overlays(term, theme, finds.get(id));
+        let previewing = card.filter(|c| c.runtime == id).map(|c| c.seed.as_str());
+        overlays.extend(Terminals::seed_overlays(term, seeds, previewing));
         term.grid.set_overlays(overlays);
         term.scrolled_back = term.vt.scrolled_back();
     }
@@ -1035,7 +1048,8 @@ impl Terminals {
     /// Terminal `id` brought up to what its screen holds now, whether or not a frame drew it.
     fn current(&mut self, id: &str) -> Option<&Term> {
         let term = self.panes.get_mut(id)?;
-        Terminals::bring_up_to_date(&mut self.images, &self.finds, &self.theme, id, term);
+        let seeds = (&*self.seeds, self.card.as_ref());
+        Terminals::bring_up_to_date(&mut self.images, &self.finds, seeds, &self.theme, id, term);
         Some(term)
     }
 

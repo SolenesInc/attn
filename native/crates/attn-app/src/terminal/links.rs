@@ -25,7 +25,7 @@ pub(super) struct Place {
 /// it. A stale hover reads the link again where the pointer rests before it next draws.
 pub(super) struct Hover {
     at: (f32, f32),
-    cell: (u32, u16),
+    pub(super) cell: (u32, u16),
     link: Option<Found>,
     stale: bool,
 }
@@ -135,11 +135,13 @@ impl Terminals {
         find(term, cell, home.as_deref()).map(|f| f.target)
     }
 
-    /// Output, a scroll or a resize moved the text under the pointer.
+    /// Output, a scroll or a resize moved the text: the hover reads the link under the pointer
+    /// again, and the seed ids on screen are found again.
     pub(super) fn hover_moved(term: &mut Term) {
         if let Some(hover) = &mut term.view.hover {
             hover.stale = true;
         }
+        term.view.seeds = None;
     }
 
     /// Reads each stale hover's link again where its pointer rests, as the Tauri terminal does

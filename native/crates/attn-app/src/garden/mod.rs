@@ -68,6 +68,8 @@ pub(crate) enum Mode {
 /// The window's garden: its frame and the walk through it. The seeds are the daemon's.
 #[derive(Default)]
 pub(crate) struct Garden {
+    /// The garden the terminals last marked seed ids from, by its address.
+    marked: usize,
     /// The garden holds the window, over the dock.
     full: bool,
     /// The frame the garden opens in, as the user last chose it; read from prefs at first use.
@@ -258,6 +260,7 @@ fn shown_seeds(state: &State) -> HashSet<String> {
 /// the Tauri app reads it on every garden push. Only a seed's latest read counts.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     review::follow(state, tx);
+    mark_in_terminals(state);
     let shown = shown_seeds(state);
     let push = Arc::as_ptr(&state.facts.garden) as usize;
     let readings = &mut state.window.garden.readings;
@@ -278,6 +281,22 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         }
         read(state, id, push, tx);
     }
+}
+
+fn mark_in_terminals(state: &mut State) {
+    let push = Arc::as_ptr(&state.facts.garden) as usize;
+    if state.window.garden.marked == push {
+        return;
+    }
+    state.window.garden.marked = push;
+    let known = state
+        .facts
+        .garden
+        .of(&state.facts.profiles.selected)
+        .iter()
+        .map(|seed| seed.id.clone())
+        .collect();
+    state.terminals.know_seeds(known);
 }
 
 fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {

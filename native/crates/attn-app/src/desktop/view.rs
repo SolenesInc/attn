@@ -128,7 +128,11 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     .then_some(state.window.now_ms / 60_000),
                 crate::garden::model::has_chief(&facts.sessions, &facts.profiles.selected),
             ),
-            (state.drafts.revision, state.readings.revision),
+            (
+                state.drafts.revision,
+                state.readings.revision,
+                state.terminals.seed_card_key(),
+            ),
             (state.notebook.revision, state.browser.revision()),
         ),
     );
@@ -746,7 +750,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             let pointing_link = cx.terminals.pointing_link() == Some(pane.runtime_id.as_str())
                 || cx.terminals.pointing_mark(&pane.runtime_id);
             let slot = terminal_slot(
-                &pane.runtime_id,
+                (&pane.runtime_id, &pane.session_id),
                 holder.clone(),
                 caret,
                 pointing_link,
@@ -796,6 +800,15 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 )),
                 None => slot,
             };
+            let slot = slot.children(cx.terminals.seed_card(&pane.runtime_id).and_then(|card| {
+                super::seed_card::card(
+                    card,
+                    cx.facts,
+                    cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default(),
+                    cx.now_ms,
+                    t,
+                )
+            }));
             let slot = slot.children(cx.refusals.flash(&pane.runtime_id, t));
             let unsent = cx
                 .unsent
@@ -1599,7 +1612,7 @@ fn ime_caret(terminals: &Terminals, runtime_id: &str, dark: bool) -> Option<El> 
 /// size the terminal asks its PTY for. While it holds the keyboard it holds the input method's
 /// `caret`.
 fn terminal_slot(
-    runtime_id: &str,
+    (runtime_id, session): (&str, &str),
     tile: Holder,
     caret: Option<El>,
     pointing_link: bool,
@@ -1607,6 +1620,7 @@ fn terminal_slot(
 ) -> El {
     let id = runtime_id.to_owned();
     let (pointing, pressing, wheeling, leaving) = (id.clone(), id.clone(), id.clone(), id.clone());
+    let (moved_over, left) = (session.to_owned(), session.to_owned());
     let bg = attn_term::Theme::hex(attn_term::Theme::of(dark).bg);
     let slot = el()
         .key(format!("terminal.{runtime_id}"))
@@ -1635,11 +1649,15 @@ fn terminal_slot(
             );
             let over_mark = (tx.mods().alt && !held).then_some((p.x, p.y));
             let mark_changed = state.terminals.hover_mark(&pointing, over_mark);
+            super::seed_card::pointer(state, &pointing, &moved_over, !held, tx);
             if !pointing_changed && !mark_changed {
                 tx.live_only();
             }
         })
         .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
+            if !inside {
+                super::seed_card::pointer(state, &leaving, &left, false, tx);
+            }
             let mark_changed = !inside && state.terminals.hover_mark(&leaving, None);
             if (inside || !state.terminals.pointer_left(&leaving)) && !mark_changed {
                 tx.live_only();
