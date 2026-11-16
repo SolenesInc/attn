@@ -403,7 +403,7 @@ fn follow_disk(state: &mut State, id: &SurfaceId, tx: &mut Tx) -> bool {
         }) = surface.open_mut()
         {
             editor.links_generation += 1;
-            editor.checked.retain(|p| !editor.missing.contains(p));
+            editor.checked.clone_from(&editor.found);
             editor.links_revision = None;
         }
     }
@@ -711,9 +711,11 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
                     && editor.links_generation == generation
                 {
                     if missing {
+                        editor.found.remove(&path);
                         editor.missing.insert(path);
                     } else {
                         editor.missing.remove(&path);
+                        editor.found.insert(path);
                     }
                 }
             },

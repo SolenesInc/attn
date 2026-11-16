@@ -20,12 +20,24 @@ pub(crate) struct Table {
     pub(crate) lines: Range<usize>,
 }
 
-/// The cells of a table line: its text between pipes, trimmed, the outer pipes optional.
+/// The cells of a table line: its text between pipes, trimmed, the outer pipes optional. A
+/// pipe right after a backslash is text in its cell, as pulldown-cmark reads it.
 fn cells(line: &str) -> Vec<String> {
     let line = line.trim();
     let line = line.strip_prefix('|').unwrap_or(line);
-    let line = line.strip_suffix('|').unwrap_or(line);
-    line.split('|').map(|c| c.trim().to_owned()).collect()
+    let mut cells = Vec::new();
+    let mut start = 0;
+    for (i, _) in line.match_indices('|') {
+        if !line[..i].ends_with('\\') {
+            cells.push(line[start..i].trim().to_owned());
+            start = i + 1;
+        }
+    }
+    let last = line[start..].trim();
+    if cells.is_empty() || !last.is_empty() {
+        cells.push(last.to_owned());
+    }
+    cells
 }
 
 fn delimiter(line: &str) -> Option<Vec<Align>> {
@@ -97,6 +109,21 @@ mod tests {
         let t = table_at(&lines("| a |\n| --- |\n| **x** |\n\nafter"), 0).unwrap();
         assert_eq!(t.rows, [["**x**"]]);
         assert_eq!(t.lines, 0..3);
+    }
+
+    #[test]
+    fn a_pipe_after_a_backslash_stays_in_its_cell_as_pulldown_cmark_reads_it() {
+        for (row, want) in [
+            (r"| a\|b | important |", vec![r"a\|b", "important"]),
+            (r"a\|b | important", vec![r"a\|b", "important"]),
+            (r"| x\\|y | z |", vec![r"x\\|y", "z"]),
+            (r"| `x|y` | z |", vec!["`x", "y`", "z"]),
+            (r"| a | b\|", vec!["a", r"b\|"]),
+            ("| a | |", vec!["a", ""]),
+        ] {
+            let t = table_at(&lines(&format!("| h | i |\n| --- | --- |\n{row}")), 0).unwrap();
+            assert_eq!(t.rows, [want], "{row:?}");
+        }
     }
 
     #[test]

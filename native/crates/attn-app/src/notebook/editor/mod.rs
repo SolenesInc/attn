@@ -37,14 +37,15 @@ pub(crate) struct Editor {
     pub(crate) preedit: Option<String>,
     /// A press that toggled a task box: the rest of its gesture moves nothing.
     pub(crate) toggling: bool,
-    /// The notes the links point at that the daemon said are missing, and every note asked
-    /// about, by path from the root.
+    /// The notes the links point at that the daemon said are missing, the ones it said exist,
+    /// and every note asked about since files last changed, by path from the root.
     pub(crate) missing: std::collections::BTreeSet<String>,
+    pub(crate) found: std::collections::BTreeSet<String>,
     pub(crate) checked: std::collections::BTreeSet<String>,
     /// The document revision whose links were last looked at.
     pub(crate) links_revision: Option<u64>,
-    /// Rises when files on disk change, which asks about the missing notes again while their
-    /// marks stay; an answer asked before the latest change is dropped.
+    /// Rises when files on disk change, which asks again about every note not found, while
+    /// the missing ones keep their marks; an answer asked before the latest change is dropped.
     pub(crate) links_generation: u64,
     /// The find bar's query, while it is open.
     pub(crate) find: Option<find::Find>,
@@ -63,6 +64,7 @@ impl Editor {
             preedit: None,
             toggling: false,
             missing: Default::default(),
+            found: Default::default(),
             checked: Default::default(),
             links_revision: None,
             links_generation: 0,

@@ -1569,6 +1569,25 @@ fn a_table_shows_as_a_grid_until_the_caret_enters_it_and_only_that_table_shows_i
 }
 
 #[test]
+fn a_table_cell_with_an_escaped_pipe_keeps_every_cell_of_its_row() {
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        "| Name | Value |\n| --- | --- |\n| a\\|b | important |\n",
+    )]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    let cells: Vec<String> = world
+        .screen()
+        .descendants(Target::key("notebook.editor.table.2"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(cells, ["a\\|b", "important"]);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_narrow_editor_tile_folds_its_rail_until_the_user_unfolds_it() {
     let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
     let mut world = start_with(
@@ -1654,6 +1673,44 @@ fn a_broken_mark_stays_while_a_disk_change_asks_again_and_clears_when_the_note_a
     );
     world.settle();
     assert!(!broken(&world), "the note now exists");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_link_asked_about_when_files_change_is_asked_again_and_marked_missing() {
+    let disk = Disk::with(&[("knowledge/index.md", "[gone](gone.md)\n")]);
+    let mut world = start(&disk);
+    world
+        .daemon
+        .answer_in_turn("fs_exists", [Answer::Hold, Answer::Hold]);
+    open_fullscreen(&mut world);
+    world.daemon.emit(FsChangedMessage {
+        paths: vec!["knowledge/other.md".into()],
+        origin: "agent".into(),
+        root: NOTEBOOK.into(),
+        ..FsChangedMessage::new()
+    });
+    world.settle();
+    let asked = world.daemon.sent_of("fs_exists");
+    assert_eq!(
+        asked.len(),
+        2,
+        "an answer asked before the change is not trusted, so the note is asked about again"
+    );
+    let missing = json!({ "event": "fs_exists_result", "success": true,
+        "result": { "path": "knowledge/gone.md", "exists": false } });
+    world.daemon.reply_to(&asked[0], missing.clone());
+    world.daemon.reply_to(&asked[1], missing);
+    world.settle();
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notebook.editor.line.0"))
+            .description
+            .as_deref(),
+        Some("Link target not found in the notebook")
+    );
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
