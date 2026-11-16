@@ -617,7 +617,7 @@ pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 /// Escape in the garden puts away words being written on the seed it shows before it closes
 /// anything, as they were opened last.
 fn put_away_written(state: &mut State, tx: &mut Tx) -> bool {
-    let Some(here) = state.window.garden.trail.last().cloned() else {
+    let Some(here) = living_trail(state).pop() else {
         return false;
     };
     spot::Spot::put_away_written(state, ("garden", &here), BODY, tx)
