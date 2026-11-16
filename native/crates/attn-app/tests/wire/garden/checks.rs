@@ -470,3 +470,193 @@ fn counts_a_fresh_report_as_to_judge_on_child_rows_plot_progress_and_board_cards
     );
     assert!(rests(&mut world));
 }
+
+fn report_of(world: &World, check: &str) -> String {
+    says(world, &format!("garden.check.{check}.report")).unwrap_or_default()
+}
+
+#[test]
+fn marks_artifact_evidence_the_daemon_says_changed_since_its_report_and_clears_it_after_a_new_report()
+ {
+    let reported = |changed: Option<bool>, rev: i64| {
+        with(seed("s-evid11", "Evidence work"), |s| {
+            s.rev = rev;
+            s.checks = Some(vec![SeedCheck {
+                report: Some(SeedCheckReport {
+                    summary: "opens intact".into(),
+                    evidence: vec![SeedCheckEvidence {
+                        artifact: Some("verify-migration.tar.gz".into()),
+                        changed_since_report: changed,
+                        ..SeedCheckEvidence::default()
+                    }],
+                    commit: Some("da2b3b9c0ffee".into()),
+                    by: builder(),
+                    at: "2026-10-19T21:10:00Z".into(),
+                    ..SeedCheckReport::default()
+                }),
+                ..check("C8", "opens with its sessions intact", "reported")
+            }]);
+        })
+    };
+    let world_daemon = Daemon::scripted().state(initial(vec![reported(None, 1)], Vec::new()));
+    let document = std::sync::Arc::new(std::sync::Mutex::new(reported(Some(true), 1)));
+    let read = document.clone();
+    world_daemon.on("seed_document_get", move |r: &Request| {
+        document_reply(r, Some(read.lock().unwrap().clone()))
+    });
+    let mut world = open_garden_with(world_daemon);
+    open_row(&mut world, "Evidence work");
+    assert!(
+        report_of(&world, "C8").contains("verify-migration.tar.gz (changed since this report)"),
+        "{}",
+        report_of(&world, "C8")
+    );
+
+    *document.lock().unwrap() = reported(None, 2);
+    push(&mut world, vec![reported(None, 2)]);
+    let report = report_of(&world, "C8");
+    assert!(
+        report.contains("verify-migration.tar.gz · @da2b3b9"),
+        "{report}"
+    );
+    assert!(!report.contains("changed since this report"), "{report}");
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn logs_check_notes_as_ordinary_entries_outside_the_attachment_bookkeeping() {
+    let leaf = seed("s-logs11", "Logged work");
+    let world_daemon = Daemon::scripted().state(initial(vec![leaf.clone()], Vec::new()));
+    world_daemon.on("seed_document_get", move |r: &Request| {
+        let note = |id: &str, kind: &str, body: &str, author: ActorView| SeedNote {
+            id: id.into(),
+            seed_id: "s-logs11".into(),
+            kind: kind.into(),
+            body: body.into(),
+            author,
+            created_at: "2026-10-19T21:10:00Z".into(),
+            ..SeedNote::default()
+        };
+        message(SeedDocumentGetResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            document: Some(SeedDocument {
+                seed: leaf.clone(),
+                notes: vec![
+                    note(
+                        "n-check",
+                        "check",
+                        "C4 rejected: That run is on 869dc03.",
+                        ActorView {
+                            name: "Trellis".into(),
+                            r#ref: "member:trellis".into(),
+                        },
+                    ),
+                    note(
+                        "n-attach",
+                        "attach",
+                        "attached run.log",
+                        ActorView {
+                            name: "the user".into(),
+                            r#ref: "user".into(),
+                        },
+                    ),
+                ],
+                notes_total: 2,
+                ..SeedDocument::default()
+            }),
+            ..SeedDocumentGetResultMessage::new()
+        })
+    });
+    let mut world = open_garden_with(world_daemon);
+    open_row(&mut world, "Logged work");
+
+    let entry: Vec<_> = world
+        .screen()
+        .descendants(Target::key("garden.log.n-check"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(entry.iter().any(|w| w == "Trellis"), "{entry:?}");
+    assert!(entry.iter().any(|w| w == "check"), "{entry:?}");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.log.n-attach"))
+            .is_none()
+    );
+    assert!(!shows(&world, "attached run.log"));
+    assert!(rests(&mut world));
+}
+
+fn no_checks_on_the_page(world: &World) {
+    assert!(
+        world
+            .screen()
+            .find(Target::role("heading").name("Checks"))
+            .is_none()
+    );
+    assert!(
+        world
+            .screen()
+            .all(Target::role("button"))
+            .iter()
+            .all(|n| !n.name.as_deref().is_some_and(|w| w.starts_with("Checks:")))
+    );
+}
+
+#[test]
+fn counts_a_plots_descendants_without_a_link_when_the_plot_has_no_checks_section_of_its_own() {
+    let bare = with(plot("s-plot11", "The monitor plot", ""), |s| {
+        s.plot_progress = Some(SeedPlotProgress {
+            total: 3,
+            done: 1,
+            growing: 1,
+            ready: 1,
+            checks: Some(SeedCheckTally {
+                total: 5,
+                reported: 1,
+                confirmed: 2,
+                rejected: 1,
+            }),
+            ..SeedPlotProgress::default()
+        })
+    });
+    let mut world = open_garden(vec![
+        bare,
+        part_of("s-plot11", "s-tbl111", "Policy and table"),
+    ]);
+    open_row(&mut world, "The monitor plot");
+
+    no_checks_on_the_page(&world);
+    let progress: Vec<_> = world
+        .screen()
+        .descendants(Target::key("garden.head.progress"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        progress
+            .iter()
+            .any(|w| w == "✓2/5 · 1 to judge · 1 rejected"),
+        "{progress:?}"
+    );
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn renders_no_checks_section_and_no_tally_for_a_seed_without_checks() {
+    let mut world = open_garden(vec![with(seed("s-plain1", "A plain seed"), |s| {
+        s.status = "growing".into()
+    })]);
+    assert!(
+        row_words(&world, "s-plain1")
+            .iter()
+            .all(|w| !w.contains('✓'))
+    );
+
+    open_row(&mut world, "A plain seed");
+
+    no_checks_on_the_page(&world);
+    assert!(rests(&mut world));
+}

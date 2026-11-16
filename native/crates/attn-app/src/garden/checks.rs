@@ -56,9 +56,14 @@ fn evidence_label(evidence: &attn_protocol::SeedCheckEvidence) -> String {
 }
 
 impl Sheet<'_> {
-    /// The seed's checks, each with the moves that judge it, then the checks it shares with
-    /// every child, then the removed ones while shown.
+    /// The seed's checks, as the daemon's reading of the seed the garden holds has them, each
+    /// with the moves that judge it, then the checks it shares with every child, then the
+    /// removed ones while shown.
     pub(super) fn checks(&self, here: &Seed, document: Option<&SeedDocument>) -> Option<El> {
+        let here = document
+            .map(|d| &d.seed)
+            .filter(|s| s.id == here.id && s.rev == here.rev)
+            .unwrap_or(here);
         let checks: Vec<&SeedCheck> = here.checks.iter().flatten().collect();
         let shared: Vec<&SeedSharedCheck> = here.shared_checks.iter().flatten().collect();
         if checks.is_empty() && shared.is_empty() {
