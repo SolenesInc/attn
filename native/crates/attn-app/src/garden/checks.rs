@@ -5,6 +5,7 @@ use attn_ui::GlyphButton;
 use rune::tok::{space, type_};
 use rune::{El, KeyEvent, Tx, col, row, text, text_input};
 
+use super::CheckFocus;
 use super::model::{self, SessionNames};
 use super::sheet::{Sheet, meta_word};
 use super::spot::{Sends, Spot};
@@ -308,7 +309,7 @@ impl Sheet<'_> {
                 ));
             }
         }
-        let line = row()
+        row()
             .key(self.key(&format!("check.{}", check.id)))
             .role("listitem")
             .label(format!("{} {} · {}", check.id, check.text, check.state))
@@ -316,22 +317,7 @@ impl Sheet<'_> {
             .gap(space::S2)
             .child(mark)
             .child(main)
-            .child(actions);
-        let box_key = spot.key("box");
-        let gone_to = self
-            .garden
-            .check_focus
-            .as_ref()
-            .is_some_and(|(seed, key)| *seed == here.id && *key == box_key);
-        if !gone_to {
-            return line;
-        }
-        line.on_layout_tx(move |state: &mut State, _, tx: &mut Tx| {
-            if state.window.garden.check_focus.take().is_some() {
-                tx.scroll_center(box_key.clone());
-                tx.focus(&box_key, false);
-            }
-        })
+            .child(actions)
     }
 
     fn shared_row(&self, check: &SeedSharedCheck) -> El {
@@ -361,9 +347,11 @@ impl Sheet<'_> {
                 let title = held.map_or(entry.seed_id.as_str(), |s| s.title.as_str());
                 let status = held.map_or(entry.seed_id.as_str(), |s| s.status.as_str());
                 let (go, id) = (self.go.clone(), entry.seed_id.clone());
-                let box_key =
+                let focus = (
+                    self.prefix.clone(),
                     Spot::new(&self.prefix, &entry.seed_id, &format!("check.{}", check.id))
-                        .key("box");
+                        .key("box"),
+                );
                 let mark = box_glyph(&entry.state);
                 seeds = seeds.child(
                     kit_button(format!("{title} · {status} · {}", entry.state))
@@ -372,7 +360,11 @@ impl Sheet<'_> {
                             move |font, ink| text(words).font(font).color(ink)
                         })
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            state.window.garden.check_focus = Some((id.clone(), box_key.clone()));
+                            state.window.garden.check_focus = Some(CheckFocus {
+                                sheet: focus.0.clone(),
+                                seed: id.clone(),
+                                check_box: focus.1.clone(),
+                            });
                             go.to(state, &id, tx)
                         })
                         .build(kit)

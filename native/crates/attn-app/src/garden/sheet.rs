@@ -7,7 +7,6 @@ use rune::{El, Tx, col, memo, row, text};
 
 use super::model::{self, Relation, SessionNames};
 use crate::State;
-use crate::requests::Refused;
 
 /// Where a seed's page shows: the keys its parts take, the scroll its body reads in, and where
 /// pressing another seed goes.
@@ -41,7 +40,7 @@ impl Go {
             Go::Tile { desktop, tile } => {
                 let (desktop_id, tile_id) = (desktop.clone(), tile.clone());
                 let params = id.to_owned();
-                state.act(
+                state.ask(
                     |request_id| DesktopUpdateTileMessage {
                         request_id,
                         desktop_id,
@@ -49,8 +48,14 @@ impl Go {
                         tile_params: Some(params),
                         ..DesktopUpdateTileMessage::new()
                     },
-                    Refused::Prefixed("Could not open the seed"),
-                    |_, _, _| {},
+                    |state, answer, tx| {
+                        if let Err(reason) = answer.outcome() {
+                            state.window.garden.check_focus = None;
+                            state
+                                .window
+                                .notify(format!("Could not open the seed: {reason}"), tx);
+                        }
+                    },
                     tx,
                 );
             }
@@ -133,7 +138,20 @@ impl Sheet<'_> {
                     .children(model::check_tally(here).map(|tally| self.tally(here, &tally))),
             );
         }
-        head
+        let gone_to = self
+            .garden
+            .check_focus
+            .as_ref()
+            .is_some_and(|f| f.sheet == self.prefix && f.seed == here.id);
+        if !gone_to {
+            return head;
+        }
+        head.on_layout_tx(|state: &mut State, _, tx: &mut Tx| {
+            if let Some(focus) = state.window.garden.check_focus.take() {
+                tx.scroll_center(focus.check_box.clone());
+                tx.focus(&focus.check_box, false);
+            }
+        })
     }
 
     /// The seed's check tally, which goes to its checks when it has checks of its own.

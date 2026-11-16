@@ -502,12 +502,16 @@ fn lists_a_seed_tiles_checks_under_its_plan_with_the_header_tally_and_moves_one_
         .find(|n| n.name.as_deref() == Some("Checks: 0 of 2 confirmed · 1 to judge"));
     assert!(tally.is_some(), "{:?}", shown(&world));
     let seen = shown(&world);
-    let at = |words: &str| seen.iter().position(|w| w.contains(words));
+    let at = |words: &str| {
+        seen.iter()
+            .position(|w| w.contains(words))
+            .unwrap_or_else(|| panic!("no {words:?} in {seen:?}"))
+    };
     assert!(
         at("Rendered plan") < at("Wire tests cover the reader."),
         "{seen:?}"
     );
-    assert!(at("Reader wire tests pass").is_some(), "{seen:?}");
+    at("Reader wire tests pass");
 
     world.gesture(|app| app.click(Target::role("button").name("Confirm C1")));
     let sent = world.daemon.sent_of("seed_check");
@@ -516,10 +520,10 @@ fn lists_a_seed_tiles_checks_under_its_plan_with_the_header_tally_and_moves_one_
         (&sent[0]["seed_id"], &sent[0]["check_id"], &sent[0]["verb"]),
         (&json!("s-plan11"), &json!("C1"), &json!("confirm"))
     );
+    assert!(rests(&mut world));
 }
 
-#[test]
-fn opens_an_inheriting_seeds_check_from_a_plot_tiles_shared_check_row() {
+fn press_a_shared_checks_seed(update_tile: impl Fn(&Request) -> Value + Send + 'static) -> World {
     let leaf = with(part_of("s-plot11", "s-leaf11", "The view"), |s| {
         s.checks = Some(vec![attn_protocol::SeedCheck {
             id: "C4".into(),
@@ -558,38 +562,68 @@ fn opens_an_inheriting_seeds_check_from_a_plot_tiles_shared_check_row() {
         ..attn_protocol::GardenSeedsChangedMessage::new()
     });
     world.settle();
-    world.daemon.on("desktop_update_tile", |_: &Request| ());
+    world.daemon.on("desktop_update_tile", update_tile);
 
     world.gesture(|app| {
         app.click(Target::role("button").name("C4 CI is green on the head. · 0 of 1 confirmed"))
     });
     world.gesture(|app| app.click(Target::role("button").name("The view · planted · open")));
-
     let updated = world.daemon.sent_of("desktop_update_tile");
     assert_eq!(updated.len(), 1);
     assert_eq!(updated[0]["tile_params"], "s-leaf11");
+    world
+}
+
+fn walk_the_tile_to_the_leaf(world: &mut World) {
     world.daemon.emit(ProfileArrangementChangedMessage {
         profile: profile(),
         desktops: vec![desktop(row(vec![pane("a"), seed_tile("s-leaf11")]), 2)],
         ..ProfileArrangementChangedMessage::new()
     });
     world.settle();
-    assert_eq!(
-        world.screen().focused().and_then(|n| n.name).as_deref(),
-        Some("Confirm C4")
+}
+
+fn focused_name(world: &World) -> Option<String> {
+    world.screen().focused().and_then(|n| n.name)
+}
+
+#[test]
+fn opens_an_inheriting_seeds_check_from_a_plot_tiles_shared_check_row() {
+    let mut world = press_a_shared_checks_seed(|_| Value::Null);
+
+    walk_the_tile_to_the_leaf(&mut world);
+
+    assert_eq!(focused_name(&world).as_deref(), Some("Confirm C4"));
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn leaves_the_keyboard_alone_on_a_later_visit_when_the_tile_refused_to_go_to_the_check() {
+    let mut world = press_a_shared_checks_seed(
+        |r| json!({"event": "desktop_update_tile_result", "request_id": r["request_id"], "success": false, "error": "no"}),
     );
+    assert!(shows(&world, "Could not open the seed: no"));
+
+    walk_the_tile_to_the_leaf(&mut world);
+
+    assert!(
+        world
+            .screen()
+            .find(Target::role("button").name("Confirm C4"))
+            .is_some()
+    );
+    assert_ne!(focused_name(&world).as_deref(), Some("Confirm C4"));
+    world.advance(std::time::Duration::from_secs(6));
+    assert!(rests(&mut world));
 }
 
 #[test]
 fn refreshes_a_seed_tile_on_garden_changes_that_carry_no_seed_on_reconnect_and_ignores_obsolete_responses()
  {
-    let notes = std::sync::Arc::new(std::sync::Mutex::new(Some(vec!["before the keep pass"])));
+    let notes = std::sync::Arc::new(std::sync::Mutex::new(vec!["before the keep pass"]));
     let said = notes.clone();
     let mut world = start("s-plan11", vec![plan()], move |r| {
-        match said.lock().unwrap().as_ref() {
-            Some(notes) => document(r, plan(), Vec::new(), notes),
-            None => Value::Null,
-        }
+        document(r, plan(), Vec::new(), &said.lock().unwrap())
     });
     let changed = |world: &mut World| {
         world.daemon.emit(attn_protocol::GardenSeedsChangedMessage {
@@ -615,15 +649,10 @@ fn refreshes_a_seed_tile_on_garden_changes_that_carry_no_seed_on_reconnect_and_i
     changed(&mut world);
     let older = reads(&world)[1].clone();
 
-    *notes.lock().unwrap() = Some(vec!["after the keep pass"]);
+    *notes.lock().unwrap() = vec!["after the keep pass"];
     let said = notes.clone();
     world.daemon.on("seed_document_get", move |r: &Request| {
-        document(
-            r,
-            plan(),
-            Vec::new(),
-            said.lock().unwrap().as_ref().unwrap(),
-        )
+        document(r, plan(), Vec::new(), &said.lock().unwrap())
     });
     kept_changed(&mut world);
     assert_eq!(reads(&world).len(), 2);
@@ -645,7 +674,7 @@ fn refreshes_a_seed_tile_on_garden_changes_that_carry_no_seed_on_reconnect_and_i
     assert_eq!(reads(&world).len(), 3);
     assert!(reads(&world).iter().all(|r| r["seed_id"] == "s-plan11"));
 
-    *notes.lock().unwrap() = Some(vec!["after reconnect"]);
+    *notes.lock().unwrap() = vec!["after reconnect"];
     world.reconnect();
     let seen = shown(&world);
     assert!(
@@ -653,6 +682,7 @@ fn refreshes_a_seed_tile_on_garden_changes_that_carry_no_seed_on_reconnect_and_i
         "{seen:?}"
     );
     assert_eq!(reads(&world).len(), 4);
+    assert!(rests(&mut world));
 }
 
 #[test]

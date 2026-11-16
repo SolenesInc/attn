@@ -20,6 +20,7 @@ mod handover;
 mod kept_conversation;
 mod review;
 mod scale;
+mod search;
 mod seed_chip;
 mod standby;
 mod terminal_seeds;
