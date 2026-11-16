@@ -4412,7 +4412,7 @@ fn guide_bundle(rows: Vec<ReviewRow>, lines_above: i64) -> ReviewBundle {
 type Guide = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 
 /// The guide's review open in its tile, with the file and its edits served from `guide` and
-/// the user's marks kept.
+/// the user's marks kept. The stop shows `rows_of` the guide; the file reads whole.
 fn open_guide() -> (World, Guide, Marks) {
     open_guide_with(guide_rows)
 }
@@ -4425,7 +4425,7 @@ fn open_guide_with(rows_of: fn(&[String]) -> Vec<ReviewRow>) -> (World, Guide, M
     world.daemon.on("review_file", move |r| {
         let hash = format!("h{}", v.load(std::sync::atomic::Ordering::SeqCst));
         json!({"event": "review_file_result", "success": true, "path": r["path"],
-            "rows": rows_of(&read.lock().unwrap()), "hash": hash})
+            "rows": guide_rows(&read.lock().unwrap()), "hash": hash})
     });
     let (written, v) = (guide.clone(), version.clone());
     world.daemon.on("review_edit", move |r| {
@@ -4796,5 +4796,40 @@ fn offers_no_editor_tile_for_a_document_on_an_outpost_and_reads_and_saves_its_ed
             edit[0]["to"].clone()
         ),
         (json!("outpost-1"), json!(5), json!(5))
+    );
+}
+
+#[test]
+fn shows_an_edit_and_a_note_under_a_block_at_the_first_row_of_its_stop() {
+    let (mut world, guide, _) = open_guide_with(|now| guide_rows(now)[2..5].to_vec());
+    to_block(&mut world, "line 3");
+    type_key(&mut world, "i");
+    append(&mut world, " Then send.");
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        })
+    });
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    let rows = guide_rows(&guide.lock().unwrap())[2..5].to_vec();
+    deliver(&mut world, GUIDE_DOCUMENT, Some(guide_bundle(rows, 0)));
+    type_key(&mut world, "c");
+    write(&mut world, "Why now?");
+
+    let read = shown(&world);
+    let at = |t: &str| read.iter().position(|s| s.contains(t));
+    assert!(at("you edited").is_some(), "{read:?}");
+    assert!(at("Why now?").is_some(), "{read:?}");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.m.review.moved"))
+            .is_none(),
+        "{read:?}"
     );
 }

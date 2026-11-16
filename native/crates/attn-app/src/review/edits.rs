@@ -157,8 +157,9 @@ pub(crate) fn where_it_stands(heads: &[Option<i64>], from: usize, to: usize) -> 
 
 /// Where an edit's text `now` starts now, between the lines at head that hold it in: after the
 /// line it followed (`after`) and before the one it preceded (`before`). Moved when the text is
-/// not there exactly once; unknown when `rows` do not reach that span and are not the whole
-/// file.
+/// not there exactly once. Rows that are not the whole file and hold only part of that span,
+/// such as a stop whose first row is the edit's first line, place it when the text is in them
+/// exactly once; unknown when it is not, or when they do not reach the span at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Stands {
     At(i64),
@@ -178,27 +179,35 @@ pub(crate) fn start(
         Stands::Unknown
     };
     let mut text_at = std::collections::HashMap::new();
-    let (mut low, mut high, mut last) = (0, i64::MAX, 0);
+    let (mut low, mut high, mut first, mut last) = (None, None, i64::MAX, 0);
+    let (mut lowest_head, mut highest_head) = (i64::MAX, 0);
     for r in rows {
         let Some(n) = r.now else { continue };
         text_at.insert(n, r.text.trim_end_matches('\r'));
-        last = last.max(n);
+        (first, last) = (first.min(n), last.max(n));
         let Some(h) = r.head else { continue };
+        (lowest_head, highest_head) = (lowest_head.min(h), highest_head.max(h));
         if h <= after {
-            low = low.max(n);
+            low = Some(low.unwrap_or(0).max(n));
         }
         if before > 0 && h >= before {
-            high = high.min(n);
+            high = Some(high.unwrap_or(i64::MAX).min(n));
         }
     }
-    let end = if high == i64::MAX {
-        if whole { last + 1 } else { return unseen }
-    } else {
-        high
+    let reaches_before = after < lowest_head;
+    let reaches_after = before == 0 || before > highest_head;
+    let (low, inferred_low) = match low {
+        Some(low) => (low, false),
+        None if after == 0 || whole => (0, false),
+        None if reaches_before && first != i64::MAX => (first - 1, true),
+        None => return unseen,
     };
-    if !whole && after > 0 && low == 0 {
-        return unseen;
-    }
+    let (end, inferred_high) = match high {
+        Some(high) => (high, false),
+        None if whole => (last + 1, false),
+        None if reaches_after && last > 0 => (last + 1, true),
+        None => return unseen,
+    };
     let wanted: Vec<&str> = now.split('\n').collect();
     let mut found = Vec::new();
     let mut s = low + 1;
@@ -218,10 +227,10 @@ pub(crate) fn start(
         }
         s += 1;
     }
-    if found.len() == 1 {
-        Stands::At(found[0])
-    } else {
-        Stands::Moved
+    match found[..] {
+        [at] => Stands::At(at),
+        [] if inferred_low || inferred_high => unseen,
+        _ => Stands::Moved,
     }
 }
 
