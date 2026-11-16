@@ -558,6 +558,53 @@ func virtualKeyCode(for key: String) throws -> CGKeyCode {
     return code
 }
 
+let hidTag = Int64(0x5143_4452) << 32 | Int64(UInt32(bitPattern: getpid()))
+var hidPosted: Int64 = 0
+var hidDelivered: Int64 = 0
+var hidWatch: CFMachPort?
+let hidDeliveryTripwire: TimeInterval = 10
+
+func postHID(_ event: CGEvent) {
+    if hidWatch == nil { hidWatch = watchHIDDelivery() }
+    hidPosted += 1
+    event.setIntegerValueField(.eventSourceUserData, value: hidTag &+ hidPosted)
+    event.post(tap: .cghidEventTap)
+    _ = CFRunLoopRunInMode(.defaultMode, 0, true)
+}
+
+func watchHIDDelivery() -> CFMachPort? {
+    let mask = CGEventMask.max
+    let callback: CGEventTapCallBack = { _, type, event, _ in
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let hidWatch { CGEvent.tapEnable(tap: hidWatch, enable: true) }
+        } else {
+            let seq = event.getIntegerValueField(.eventSourceUserData) &- hidTag
+            if seq > 0 && seq <= hidPosted { hidDelivered = max(hidDelivered, seq) }
+        }
+        return Unmanaged.passUnretained(event)
+    }
+    guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .tailAppendEventTap, options: .listenOnly, eventsOfInterest: mask, callback: callback, userInfo: nil) else {
+        return nil
+    }
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), CFMachPortCreateRunLoopSource(nil, tap, 0), .defaultMode)
+    CGEvent.tapEnable(tap: tap, enable: true)
+    return tap
+}
+
+func awaitHIDDelivery() throws {
+    guard hidPosted > 0 else { return }
+    guard hidWatch != nil else {
+        throw DriverError.eventCreationFailed("Could not watch the session's events, so posted input may be dropped when the driver exits.")
+    }
+    let deadline = Date().addingTimeInterval(hidDeliveryTripwire)
+    while hidDelivered < hidPosted {
+        if Date() >= deadline {
+            throw DriverError.eventCreationFailed("The window server delivered \(hidDelivered) of \(hidPosted) posted events within \(Int(hidDeliveryTripwire)) s.")
+        }
+        _ = CFRunLoopRunInMode(.defaultMode, 0.05, true)
+    }
+}
+
 func postKeyCode(_ keyCode: CGKeyCode, modifiers: [String], targetPid: pid_t? = nil) throws {
     let flags = modifierFlags(modifiers)
     guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
@@ -569,13 +616,13 @@ func postKeyCode(_ keyCode: CGKeyCode, modifiers: [String], targetPid: pid_t? = 
     if let targetPid {
         keyDown.postToPid(targetPid)
     } else {
-        keyDown.post(tap: .cghidEventTap)
+        postHID(keyDown)
     }
     Thread.sleep(forTimeInterval: 0.02)
     if let targetPid {
         keyUp.postToPid(targetPid)
     } else {
-        keyUp.post(tap: .cghidEventTap)
+        postHID(keyUp)
         try releaseModifiers(flags)
     }
 }
@@ -590,7 +637,7 @@ func releaseModifiers(_ held: CGEventFlags) throws {
         }
         release.type = .flagsChanged
         release.flags = remaining
-        release.post(tap: .cghidEventTap)
+        postHID(release)
     }
 }
 
@@ -715,6 +762,7 @@ func postText(_ text: String) throws {
 
     do {
         try postKeyCode(try virtualKeyCode(for: "v"), modifiers: ["command"])
+        try awaitHIDDelivery()
         // AppKit paste dispatch is asynchronous; keep the staged contents alive
         // long enough for the target terminal to consume the paste payload.
         Thread.sleep(forTimeInterval: pasteRestoreDelay)
@@ -823,11 +871,11 @@ func clickWindow(bundleId: String, relativeX: Double, relativeY: Double, right: 
     down.flags = flags
     up.flags = flags
 
-    move.post(tap: .cghidEventTap)
+    postHID(move)
     Thread.sleep(forTimeInterval: 0.02)
-    down.post(tap: .cghidEventTap)
+    postHID(down)
     Thread.sleep(forTimeInterval: 0.02)
-    up.post(tap: .cghidEventTap)
+    postHID(up)
 }
 
 func pinPointerToTopEdgeOfMainDisplay() throws -> String {
@@ -926,7 +974,7 @@ func movePointerInWindow(bundleId: String, relativeX: Double, relativeY: Double,
         guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) else {
             throw DriverError.eventCreationFailed("Failed to create mouse move event.")
         }
-        move.post(tap: .cghidEventTap)
+        postHID(move)
         Thread.sleep(forTimeInterval: 0.016)
     }
 }
@@ -964,9 +1012,9 @@ func dragWindow(
     }
     down.setIntegerValueField(.mouseEventClickState, value: 1)
     up.setIntegerValueField(.mouseEventClickState, value: 1)
-    move.post(tap: .cghidEventTap)
+    postHID(move)
     Thread.sleep(forTimeInterval: 0.02)
-    down.post(tap: .cghidEventTap)
+    postHID(down)
     Thread.sleep(forTimeInterval: 0.05)
     for i in 1...stepCount {
         let t = Double(i) / Double(stepCount)
@@ -975,11 +1023,11 @@ func dragWindow(
             throw DriverError.eventCreationFailed("Failed to create drag event.")
         }
         dragEvent.setIntegerValueField(.mouseEventClickState, value: 1)
-        dragEvent.post(tap: .cghidEventTap)
+        postHID(dragEvent)
         Thread.sleep(forTimeInterval: 0.016)
     }
     Thread.sleep(forTimeInterval: 0.05)
-    up.post(tap: .cghidEventTap)
+    postHID(up)
 }
 
 do {
@@ -1125,6 +1173,7 @@ do {
     default:
         throw DriverError.invalidArgument("Unsupported command")
     }
+    try awaitHIDDelivery()
 } catch let error as DriverError {
     fputs("[RealAppHarness] \(error.description)\n", stderr)
     exit(1)
