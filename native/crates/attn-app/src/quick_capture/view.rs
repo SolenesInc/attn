@@ -5,16 +5,13 @@ use rune::{ClipboardContent, Cx, El, Image, SurfaceFit, Tx, col, el, row, text, 
 use super::attach::{self, Attachment, Source};
 use super::previews::{self, Sent};
 use super::{Busy, Face, Panel, history};
-use attn_ui::Appearance;
 
 /// The key of the message field, which holds the keyboard while the draft shows.
 pub(crate) const MESSAGE: &str = "capture.message";
 
 pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
     cx.controls_keep_focus();
-    let appearance =
-        Appearance::from_setting(panel.facts.settings.get("theme").map(String::as_str));
-    let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));
+    let t = crate::colors(&panel.facts.settings, cx.system_dark()).ui;
     cx.zoom(crate::settings::text_scale(&panel.facts.settings));
     let body = match panel.face {
         Face::Compose => compose(panel, &t),

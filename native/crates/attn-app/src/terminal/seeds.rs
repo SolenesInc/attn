@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use attn_term::links::{Line, Span};
-use attn_term::{Overlay, OverlayKind, Rgb};
+use attn_term::{Overlay, OverlayKind};
+use attn_ui::colors::TerminalColors;
 
 use super::{Term, Terminals};
 
 /// The app's accent, which a seed id the garden knows is washed and underlined in.
-const ACCENT: Rgb = [0x3b, 0x82, 0xf6];
 const WASH: u8 = 26;
 const WASH_PREVIEWING: u8 = 46;
 const LINE: u8 = 184;
@@ -234,6 +234,7 @@ impl Terminals {
         term: &mut Term,
         known: &HashSet<String>,
         previewing: Option<&str>,
+        theme: &TerminalColors,
     ) -> Vec<Overlay> {
         if known.is_empty() {
             return Vec::new();
@@ -251,14 +252,14 @@ impl Terminals {
                 overlays.push(Overlay {
                     row,
                     cols: (start, end),
-                    color: ACCENT,
+                    color: theme.seed,
                     alpha: if bright { WASH_PREVIEWING } else { WASH },
                     kind: OverlayKind::Wash,
                 });
                 overlays.push(Overlay {
                     row,
                     cols: (start, end),
-                    color: ACCENT,
+                    color: theme.seed,
                     alpha: if bright { LINE_PREVIEWING } else { LINE },
                     kind: OverlayKind::Underline,
                 });

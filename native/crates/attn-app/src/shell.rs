@@ -1,6 +1,6 @@
 use attn_client::{Connection, Facts, Refusal};
 use attn_protocol::Desktop;
-use attn_ui::{Appearance, Tokens};
+use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
 use rune_kit::popover::raised;
@@ -384,9 +384,7 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
 
 pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     cx.controls_keep_focus();
-    let appearance =
-        Appearance::from_setting(state.facts.settings.get("theme").map(String::as_str));
-    let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));
+    let t = crate::colors(&state.facts.settings, cx.system_dark()).ui;
     cx.zoom(crate::settings::text_scale(&state.facts.settings));
     let connection = &state.facts.connection;
     let body = match connection {
@@ -572,7 +570,8 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
 /// a dialog, the palette, a menu, a popover, a callout or a drag. A notice and a sequence's
 /// hint sit at the window's foot and leave the page showing.
 pub(crate) fn covers_tiles(state: &State) -> bool {
-    state.window.callout.is_some() || !over_tiles(state, &attn_ui::tokens(true)).is_empty()
+    state.window.callout.is_some()
+        || !over_tiles(state, &crate::color_scheme(&state.facts.settings).dark.ui).is_empty()
 }
 
 fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {

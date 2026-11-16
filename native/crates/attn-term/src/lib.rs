@@ -12,7 +12,6 @@ mod render;
 pub mod responses;
 pub mod selection;
 mod sprites;
-mod theme;
 mod vt;
 
 pub use font::{FONT_SIZE, Fonts, Metrics};
@@ -20,7 +19,6 @@ pub use grid::{
     Cell, Cursor, CursorStyle, Grapheme, Grid, Image, Overlay, OverlayKind, Rgb, Width,
 };
 pub use render::Cells;
-pub use theme::Theme;
 pub use vt::{
     Found, KeyInput, LinkRow, Mark, OptionAsAlt, PromptEvent, PromptStep, SNAPSHOT_FORMAT, Vt, mods,
 };

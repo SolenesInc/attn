@@ -1,11 +1,12 @@
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
-use rune::color::hex;
 use rune::{Color, Shadow};
 
-/// attn's colors, from the Tauri app's CSS variables (`app/src/App.css`). Each field names
-/// the variable it carries: `bg_app` is `--color-bg-app`.
-#[derive(Clone, Copy, Debug, Hash)]
+pub mod colors;
+
+/// The interface's colors in one appearance, named by meaning. The surfaces, borders, text and
+/// status colors name the Tauri app's CSS variables they carry: `bg_app` is `--color-bg-app`.
+#[derive(Clone, Copy, Debug, Hash, PartialEq)]
 pub struct Tokens {
     pub dark: bool,
     pub bg_app: Color,
@@ -31,6 +32,31 @@ pub struct Tokens {
     pub warning: Color,
     pub success: Color,
     pub merged: Color,
+    /// Text and icons on an `accent` fill.
+    pub on_accent: Color,
+    /// Text on a `brand` fill.
+    pub on_brand: Color,
+    /// Shadows and scrims, at the opacity each draws with.
+    pub shadow: Color,
+    /// A light edge over a raised surface.
+    pub highlight: Color,
+    pub state_idle: Color,
+    pub state_working: Color,
+    pub state_waiting: Color,
+    pub state_approval: Color,
+    pub state_scheduled: Color,
+    pub state_unknown: Color,
+    /// Something that is not running, such as a palette row's idle agent.
+    pub inactive: Color,
+    /// The wash over what a find or filter matched.
+    pub find: Color,
+    /// What the person marked to comment on.
+    pub annotation: Color,
+    /// A turn that settles on its own: its mark, and the chip's ink while it counts down and
+    /// once it paused or was kept.
+    pub settle: Color,
+    pub settle_ink: Color,
+    pub settle_ink_quiet: Color,
 }
 
 /// How the user chose the window's look: the daemon setting `theme`.
@@ -61,78 +87,25 @@ impl Appearance {
     }
 }
 
-fn c(value: &str) -> Color {
-    hex(value).unwrap_or_else(|| panic!("token {value:?} is not a hex color"))
-}
-
-pub fn tokens(dark: bool) -> Tokens {
-    let (accent, brand) = (c("#5b8cff"), c("#ff6b35"));
-    let (error, warning, success, merged) =
-        (c("#ef4444"), c("#f59e0b"), c("#3fb950"), c("#a371f7"));
-    if dark {
-        Tokens {
-            dark,
-            bg_app: c("#0d0d0f"),
-            bg_panel: c("#111113"),
-            bg_elevated: c("#1a1a1d"),
-            bg_selected: c("#38383f"),
-            bg_input: c("#0d0d0e"),
-            bg_tile: c("#1e1e1e"),
-            bg_button: c("#252528"),
-            bg_overlay: Color::BLACK.alpha(0.6),
-            border: c("#2a2a2d"),
-            border_hover: c("#3a3a3d"),
-            border_focus: c("#4a4a4d"),
-            border_subtle: c("#1f1f22"),
-            text_primary: c("#e8e8e8"),
-            text_secondary: c("#bbb"),
-            text_tertiary: c("#888"),
-            text_muted: c("#666"),
-            text_dimmed: c("#555"),
-            accent,
-            brand,
-            error,
-            warning,
-            success,
-            merged,
-        }
-    } else {
-        Tokens {
-            dark,
-            bg_app: c("#f5f5f7"),
-            bg_panel: c("#ffffff"),
-            bg_elevated: c("#f0f0f2"),
-            bg_selected: c("#c9c9d4"),
-            bg_input: c("#ffffff"),
-            bg_tile: c("#ffffff"),
-            bg_button: c("#e4e4e7"),
-            bg_overlay: Color::BLACK.alpha(0.3),
-            border: c("#d4d4d8"),
-            border_hover: c("#a1a1aa"),
-            border_focus: c("#71717a"),
-            border_subtle: c("#e4e4e7"),
-            text_primary: c("#18181b"),
-            text_secondary: c("#52525b"),
-            text_tertiary: c("#71717a"),
-            text_muted: c("#a1a1aa"),
-            text_dimmed: c("#c4c4ca"),
-            accent,
-            brand,
-            error,
-            warning,
-            success,
-            merged,
-        }
-    }
-}
-
-/// rune-kit's tokens, painted with attn's colors, for the kit's components. Each appearance's
-/// kit is made once: every button of every view reads it.
+/// rune-kit's tokens, painted with `t`, for the kit's components. Each set of tokens' kit is
+/// made once, so there are at most two per color scheme: every button of every view reads it.
 pub fn kit(t: &Tokens) -> &'static rune_kit::Kit {
-    static DARK: OnceLock<rune_kit::Kit> = OnceLock::new();
-    static LIGHT: OnceLock<rune_kit::Kit> = OnceLock::new();
-    let once = if t.dark { &DARK } else { &LIGHT };
-    once.get_or_init(|| painted(t))
+    static KITS: RwLock<Vec<(Tokens, &'static rune_kit::Kit)>> = RwLock::new(Vec::new());
+    let made = |kits: &[(Tokens, &'static rune_kit::Kit)]| {
+        kits.iter()
+            .find(|(tokens, _)| tokens == t)
+            .map(|&(_, kit)| kit)
+    };
+    if let Some(kit) = made(&KITS.read().unwrap_or_else(|e| e.into_inner())) {
+        return kit;
+    }
+    let mut kits = KITS.write().unwrap_or_else(|e| e.into_inner());
+    if let Some(kit) = made(&kits) {
+        return kit;
+    }
+    let kit: &'static rune_kit::Kit = Box::leak(Box::new(painted(t)));
+    kits.push((*t, kit));
+    kit
 }
 
 fn painted(t: &Tokens) -> rune_kit::Kit {
@@ -148,9 +121,8 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.layer_04 = t.border_hover;
     p.bg_accent = t.accent;
     p.bg_icon_button_contrast = t.accent;
-    let on_accent = c("#0d0d0f");
-    p.submit_fg = on_accent;
-    p.submit_icon = on_accent;
+    p.submit_fg = t.on_accent;
+    p.submit_icon = t.on_accent;
     p.text_base = t.text_primary;
     p.text_muted = t.text_secondary;
     p.text_faint = t.text_tertiary;
@@ -168,9 +140,9 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.scrim = t.bg_overlay;
     kit.elevation.button_neutral = Vec::new();
     kit.elevation = std::mem::take(&mut kit.elevation).with_input(vec![input_ring(t)]);
-    kit.elevation.floating = vec![popover_shadow()];
-    kit.elevation.md = vec![popover_shadow()];
-    kit.elevation.overlay = vec![popover_shadow()];
+    kit.elevation.floating = vec![popover_shadow(t)];
+    kit.elevation.md = vec![popover_shadow(t)];
+    kit.elevation.overlay = vec![popover_shadow(t)];
     kit
 }
 
@@ -184,11 +156,11 @@ fn input_ring(t: &Tokens) -> Shadow {
 }
 
 /// The Tauri app's popover shadow, `0 16px 36px rgba(0, 0, 0, 0.42)` in both appearances.
-fn popover_shadow() -> Shadow {
+fn popover_shadow(t: &Tokens) -> Shadow {
     Shadow {
         y: 16.0,
         blur: 36.0,
-        color: Color::BLACK.alpha(0.42),
+        color: t.shadow.alpha(0.42),
         ..Shadow::default()
     }
 }

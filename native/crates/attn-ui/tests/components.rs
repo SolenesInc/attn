@@ -64,7 +64,7 @@ fn contrast(a: rune::Color, b: rune::Color) -> f32 {
 #[test]
 fn primary_button_text_reads_at_aa_contrast_on_every_enabled_fill_in_dark_and_light() {
     for dark in [true, false] {
-        let kit = attn_ui::kit(&attn_ui::tokens(dark));
+        let kit = attn_ui::kit(&attn_ui::colors::scheme_for(None).colors(dark).ui);
         let c = &kit.c;
         let fill = c.bg_icon_button_contrast;
         let fills = [

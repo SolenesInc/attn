@@ -1,14 +1,14 @@
 use attn_protocol::AttachBlock;
 use attn_term::blocks::{Block, Blocks};
 use attn_term::selection::{Point, Selection};
-use attn_term::{Mark, Overlay, OverlayKind, Rgb, Vt};
+use attn_term::{Mark, Overlay, OverlayKind, Vt};
+use attn_ui::colors::TerminalColors;
 
 use super::{Term, Terminals};
 
 pub(super) type TermBlocks = Blocks<Mark>;
 
 /// The blue the Tauri terminal washes and outlines the selected block in.
-const BLOCK: Rgb = [0x4d, 0x9d, 0xe0];
 /// The selected block's wash, 0.08 of the blue, drawn only while its edges show.
 const BLOCK_WASH: u8 = 20;
 /// The selected block's outline, 0.9 of the blue.
@@ -201,7 +201,7 @@ impl Terminals {
     }
 
     /// The selected block's wash and outline over the rows of it the view shows.
-    pub(super) fn block_overlays(term: &mut Term) -> Vec<Overlay> {
+    pub(super) fn block_overlays(term: &mut Term, theme: &TerminalColors) -> Vec<Overlay> {
         if term.vt.mouse_modes().alternate_screen {
             return Vec::new();
         }
@@ -227,14 +227,14 @@ impl Terminals {
                 let wash = (!spans).then_some(Overlay {
                     row: at,
                     cols: (0, cols),
-                    color: BLOCK,
+                    color: theme.block,
                     alpha: BLOCK_WASH,
                     kind: OverlayKind::Wash,
                 });
                 let outline = Overlay {
                     row: at,
                     cols: (0, cols),
-                    color: BLOCK,
+                    color: theme.block,
                     alpha: BLOCK_OUTLINE,
                     kind: OverlayKind::Outline {
                         top: row == first,

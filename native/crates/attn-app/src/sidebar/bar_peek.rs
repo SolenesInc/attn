@@ -3,7 +3,7 @@
 
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{Align, Color, El, Shadow, Side, Tx, col, text};
+use rune::{Align, El, Shadow, Side, Tx, col, text};
 
 use crate::State;
 
@@ -88,7 +88,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         .box_shadow(Shadow {
             y: 18.0,
             blur: 50.0,
-            color: Color::BLACK.alpha(0.55),
+            color: t.shadow.alpha(0.55),
             ..Shadow::default()
         })
         .child(

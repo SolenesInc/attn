@@ -146,7 +146,7 @@ impl Paint<'_> {
 
     fn chip(&mut self, x: f32, y: f32, number: u8, current: bool) {
         let (fill, ink) = if current {
-            (self.t.brand, Color::WHITE)
+            (self.t.brand, self.t.on_brand)
         } else {
             (self.t.bg_button, self.t.text_tertiary)
         };
@@ -251,7 +251,7 @@ impl Paint<'_> {
 
     fn palette(&mut self, query: &str, rows: &[(&str, Option<Agent>, Option<&str>)], footer: &str) {
         let top = 50.0;
-        self.rect(9.0, 9.0, 502.0, 232.0, 9.0, Color::BLACK.alpha(0.45), None);
+        self.rect(9.0, 9.0, 502.0, 232.0, 9.0, self.t.shadow.alpha(0.45), None);
         self.rect(
             110.0,
             top,

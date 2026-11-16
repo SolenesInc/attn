@@ -66,6 +66,23 @@ pub use review::places_built;
 pub use shell::{Drawer, Holder, Layer, View, Window};
 pub use terminal::{TerminalInbox, Terminals};
 
+/// The color scheme the `color_scheme` setting names.
+pub(crate) fn color_scheme(
+    settings: &std::collections::BTreeMap<String, String>,
+) -> &'static attn_ui::colors::ColorScheme {
+    attn_ui::colors::scheme_for(settings.get("color_scheme").map(String::as_str))
+}
+
+/// The colors a window draws in: the color scheme's, in the appearance the `theme` setting and
+/// the system choose.
+pub(crate) fn colors(
+    settings: &std::collections::BTreeMap<String, String>,
+    system_dark: bool,
+) -> &'static attn_ui::colors::Colors {
+    let appearance = attn_ui::Appearance::from_setting(settings.get("theme").map(String::as_str));
+    color_scheme(settings).colors(appearance.is_dark(system_dark))
+}
+
 /// A change for a window's state, made on the link's thread and run on the UI thread.
 pub type Update = Box<dyn FnOnce(&mut State, &mut Tx) + Send>;
 

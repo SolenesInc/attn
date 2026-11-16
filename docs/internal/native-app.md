@@ -12,7 +12,7 @@ Tauri app, until it replaces it. No release contains it yet.
 | --- | --- |
 | `attn-client` | the daemon link and the store; depends on `cli/protocol`, not on Rune |
 | `attn-term` | terminals: the libghostty-vt bridge, input encoding, the cell renderer |
-| `attn-ui` | theme tokens, fonts and shared components |
+| `attn-ui` | color schemes, fonts and shared components |
 | `attn-app` | the `attn-app` binary: windows, features, actions and keymap |
 | `attn-automation` | the automation server that drives a running app |
 | `attn-testkit` | the scripted daemon and the world wire tests run in |
@@ -56,6 +56,38 @@ runs `make check-native` and every test of the workspace, as
 [Trunk-based development](trunk-based-development.md#what-landsh-does) says.
 CI's `Native (macos-15)` and `Native (ubuntu-24.04)` jobs run the same checks
 when those paths change, and on every push to `main`.
+
+## Colors
+
+Every color the native app draws comes from `attn_ui::colors`: a color scheme
+holds the interface's `Tokens` and the terminals' `TerminalColors`, once for
+dark and once for light. Tokens are named by what they mean, such as
+`state_waiting` or `find`, never by the view that uses them. Clippy rejects
+Rune's color constructors, such as `rune::color::hex`, everywhere else
+(`native/clippy.toml`). It cannot see `Color::BLACK` and `Color::WHITE`, so
+review catches those.
+
+### Screenshot tour
+
+`scripts/native-screenshot-tour` draws a fixed set of screens in dark and in
+light, one PNG each: the sidebar with an agent in every state, a terminal with
+the 16 ANSI colors and a selection, a Markdown file with code and a Mermaid
+diagram, a review stop, the Garden, Settings, the command palette and a
+popped-out tile window. The `screenshot_tour` example of `attn-app` sets each
+one up on the wire-test world and draws it on Rune's offscreen GPU renderer, so
+it needs no window and no VM, and two runs of the same source match pixel for
+pixel.
+
+```sh
+scripts/native-screenshot-tour shoot /tmp/tour/base origin/main
+scripts/native-screenshot-tour shoot /tmp/tour/after
+scripts/native-screenshot-tour diff /tmp/tour/base /tmp/tour/after /tmp/tour/diff
+```
+
+`shoot` with a revision builds it in a temporary worktree with this checkout's
+tour, then removes the worktree and its build output. `diff` writes an image of
+each changed screen, with the changed pixels in red, and fails when any pixel
+differs.
 
 ## Automation
 

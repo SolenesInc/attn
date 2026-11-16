@@ -387,9 +387,7 @@ fn run_from(state: &mut State, desktop: &str, leaf: &str, action: Action, tx: &m
 
 /// The tile window's content: its leaf, with its header, filling the window.
 pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
-    let appearance =
-        attn_ui::Appearance::from_setting(state.facts.settings.get("theme").map(String::as_str));
-    let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));
+    let t = crate::colors(&state.facts.settings, cx.system_dark()).ui;
     cx.zoom(crate::settings::text_scale(&state.facts.settings));
     let shown = state.window.tile.as_ref().and_then(|tile| {
         let desktop = state.facts.desktops.iter().find(|d| d.id == tile.desktop)?;
