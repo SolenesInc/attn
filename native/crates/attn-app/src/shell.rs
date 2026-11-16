@@ -539,7 +539,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     }
     if let Some(notice) = &window.notice {
         layers.push(match &notice.offer {
-            None => floating_status("notice", notice.text.clone(), t),
+            None => told(notice, t),
             Some(offer) => offering(notice, offer, t),
         });
     }
@@ -668,6 +668,20 @@ fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
     std::iter::once(edit).chain(sections).collect()
 }
 
+/// A notice that only tells: a card at the window's bottom right, as the Tauri app's toast.
+fn told(notice: &Notice, t: &Tokens) -> El {
+    let said = text(notice.text.clone())
+        .key("notice.text")
+        .role("status")
+        .label(notice.text.clone())
+        .font(type_::BODY)
+        .color(t.text_primary)
+        .wrap()
+        .grow(1.0)
+        .min_w(0.0);
+    docked_bottom_right(toast_card(toast_glyph("!", t.error, t), said, t)).inert()
+}
+
 /// A notice with its offer: one button, as the Tauri app's toast row is, that runs the offer
 /// and then says it is done. The pointer resting on it keeps it.
 fn offering(notice: &Notice, offer: &Offer, t: &Tokens) -> El {
@@ -675,7 +689,7 @@ fn offering(notice: &Notice, offer: &Offer, t: &Tokens) -> El {
     let face = notice.text.clone();
     let (ink, said_ink) = (
         t.text_primary,
-        if offer.done { t.text_muted } else { t.accent },
+        if offer.done { t.text_muted } else { t.brand },
     );
     let button = Button::new(format!("{} {said}", notice.text))
         .variant(ButtonVariant::Ghost)
@@ -683,18 +697,64 @@ fn offering(notice: &Notice, offer: &Offer, t: &Tokens) -> El {
         .on_press_tx(|state: &mut State, tx: &mut Tx| take_offer(state, tx))
         .label_with(move |_, _| {
             row()
+                .w_full()
                 .items_center()
                 .gap(space::S3)
-                .child(text(face).font(type_::BODY).color(ink))
+                .child(text(face).font(type_::BODY).color(ink).grow(1.0).min_w(0.0))
                 .child(text(said).font(type_::LABEL).color(said_ink))
         })
         .build(attn_ui::kit(t))
         .key("notice.offer")
-        .h(type_::BODY.line_px() + 2.0 * space::S2)
-        .px(space::S2);
-    let surface = raised(attn_ui::kit(t), button, 6.0)
-        .on_hover_change(|state: &mut State, inside, tx: &mut Tx| hold_notice(state, inside, tx));
-    floating("notice", surface)
+        .grow(1.0)
+        .min_w(0.0);
+    docked_bottom_right(
+        toast_card(toast_glyph("✓", t.text_secondary, t), button, t).on_hover_change(
+            |state: &mut State, inside, tx: &mut Tx| hold_notice(state, inside, tx),
+        ),
+    )
+}
+
+fn toast_glyph(glyph: &str, ink: rune::Color, t: &Tokens) -> El {
+    el().w(22.0)
+        .h(22.0)
+        .radius(5.0)
+        .border(1.0, t.border)
+        .center()
+        .a11y_hidden()
+        .child(text(glyph.to_owned()).font(type_::MONO_CAPTION).color(ink))
+}
+
+/// The toast card, 360 points wide.
+fn toast_card(glyph: El, body: El, t: &Tokens) -> El {
+    raised(
+        attn_ui::kit(t),
+        row()
+            .key("notice.card")
+            .w(360.0)
+            .gap(10.0)
+            .items_center()
+            .px(12.0)
+            .py(10.0)
+            .child(glyph)
+            .child(body),
+        10.0,
+    )
+}
+
+fn docked_bottom_right(card: El) -> El {
+    el().key("notice")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .child(
+            col()
+                .w_full()
+                .h_full()
+                .items_end()
+                .justify_end()
+                .padding(18.0)
+                .child(card),
+        )
 }
 
 fn hold_notice(state: &mut State, inside: bool, tx: &mut Tx) {

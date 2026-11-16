@@ -757,6 +757,41 @@ fn the_palette_offers_the_desktop_overview_a_new_desktop_the_notebook_and_the_ma
 }
 
 #[test]
+fn a_refusal_shows_as_a_card_at_the_window_s_bottom_right() {
+    let daemon = daemon(initial(two_desktops(), vec![]), vec![]);
+    daemon.on("desktop_create", |r| {
+        json!({
+            "event": "profile_action_result",
+            "request_id": r["request_id"],
+            "action": "desktop_create",
+            "success": false,
+            "error": "no room",
+        })
+    });
+    let mut world = World::start(daemon);
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("new desktop"));
+    press(&mut world, Key::Enter);
+
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Could not create a desktop: no room")
+    );
+    let rect = |world: &mut World, key: &str| -> [f64; 4] {
+        let found = world
+            .automate("find", json!({"target": {"key": key}}))
+            .unwrap();
+        serde_json::from_value(found["rect"].clone()).unwrap()
+    };
+    let [wx, wy, ww, wh] = rect(&mut world, "notice");
+    let [cx, cy, cw, ch] = rect(&mut world, "notice.card");
+    assert_eq!(cw, 360.0);
+    assert!(((wx + ww) - (cx + cw) - 18.0).abs() <= 1.0, "right inset");
+    assert!(((wy + wh) - (cy + ch) - 18.0).abs() <= 1.0, "bottom inset");
+    rest(&mut world);
+}
+
+#[test]
 fn the_agents_face_lists_the_crew_then_turns_agents_runs_snoozed_agents_and_tiles() {
     let mut world = World::start(daemon(crew_and_queue(), vec![]));
     open_agents(&mut world);

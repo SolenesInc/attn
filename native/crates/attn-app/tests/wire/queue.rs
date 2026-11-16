@@ -392,6 +392,26 @@ fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
 }
 
 #[test]
+fn in_desktop_flow_the_rail_marks_a_desktop_whose_agent_waits_for_the_user() {
+    let mut message = one_desktop(vec![session("asking", "waiting_input")]);
+    message.desktops.as_mut().unwrap().push(slotted(
+        desktop("d2", "b", "Busy", vec![pane("d2", "p-busy", "busy")]),
+        2,
+    ));
+    message
+        .sessions
+        .as_mut()
+        .unwrap()
+        .push(session("busy", "working"));
+    let mut world = World::start(Daemon::scripted().state(message));
+
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+
+    assert!(name(&world, "rail.desktop.1").ends_with(", has turns waiting"));
+    assert_eq!(name(&world, "rail.desktop.2"), "Busy");
+}
+
+#[test]
 fn the_title_bar_switches_flow_through_the_daemon_setting() {
     let mut world = World::start(Daemon::scripted().state(one_desktop(vec![])));
 

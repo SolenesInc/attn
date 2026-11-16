@@ -32,17 +32,17 @@ pub struct Extras {
 }
 
 /// The chips of the desktops that have a shortcut slot, in slot order, and the desktops
-/// that have none.
-pub fn chips(state: &State, bands: Option<&Bands<'_>>) -> (Vec<Chip>, Extras) {
+/// that have none. `waiting_on` names a desktop once for each turn waiting on it.
+pub fn chips<'a>(
+    state: &'a State,
+    waiting_on: impl IntoIterator<Item = &'a str>,
+) -> (Vec<Chip>, Extras) {
     let facts = &state.facts;
     let current = (state.window.view == View::Desktop)
         .then(|| facts.current_desktop().map(|d| d.id.clone()))
         .flatten();
     let mut waiting: HashMap<&str, usize> = HashMap::new();
-    for desktop in bands
-        .iter()
-        .flat_map(|b| b.turns.iter().filter_map(|r| r.desktop))
-    {
+    for desktop in waiting_on {
         *waiting.entry(desktop).or_default() += 1;
     }
     let mut chips: Vec<Chip> = ordered_desktops(&facts.desktops)
@@ -201,7 +201,7 @@ fn extras_chip(key: &str, extras: Extras, mark: Mark, t: &Tokens) -> Option<El> 
 
 /// The queue sidebar's foot: a chip per slotted desktop.
 pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
-    let (chips, extras) = chips(state, Some(bands));
+    let (chips, extras) = chips(state, turns_on(bands));
     row()
         .key("queue.desktops")
         .role("group")
@@ -216,9 +216,32 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
         .children(extras_chip("queue.desktop-extras", extras, Mark::Dot, t))
 }
 
+fn turns_on<'a>(bands: &Bands<'a>) -> Vec<&'a str> {
+    bands.turns.iter().filter_map(|r| r.desktop).collect()
+}
+
+/// The desktops of the agents that want the user, one entry per agent.
+fn wanting_on(state: &State) -> Vec<&str> {
+    let wanting: HashSet<&str> = super::queue::wanting(&state.facts)
+        .iter()
+        .map(|s| s.id.as_str())
+        .collect();
+    state
+        .facts
+        .desktops
+        .iter()
+        .flat_map(|d| {
+            d.panes
+                .iter()
+                .filter(|p| wanting.contains(p.session_id.as_str()))
+                .map(|_| d.id.as_str())
+        })
+        .collect()
+}
+
 /// The desktop sidebar collapsed: Home, the way back out, and the desktops' chips.
 pub(crate) fn rail(state: &State, t: &Tokens) -> El {
-    let (chips, extras) = chips(state, None);
+    let (chips, extras) = chips(state, wanting_on(state));
     let home = state.window.view == View::Home;
     col()
         .key("rail")
@@ -388,7 +411,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
     } else {
         t.text_primary
     };
-    let (chips, extras) = chips(state, Some(bands));
+    let (chips, extras) = chips(state, turns_on(bands));
     row()
         .key("queue-bar")
         .role("group")

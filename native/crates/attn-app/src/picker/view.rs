@@ -39,7 +39,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
                     .absolute(0.0, 0.0)
                     .w_full()
                     .h_full()
-                    .fill(t.bg_overlay)
+                    .backdrop_blur(2.0)
+                    .fill(rune::Color::BLACK.alpha(0.5))
                     .a11y_hidden()
                     .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx)),
             )
