@@ -48,6 +48,10 @@ impl Spot {
         self.key("field")
     }
 
+    pub(super) fn at(&self) -> &str {
+        &self.at
+    }
+
     pub(super) fn seed(&self) -> &str {
         &self.seed
     }

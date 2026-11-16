@@ -264,7 +264,7 @@ pub(crate) fn frame_layer(state: &State, t: &Tokens) -> Option<El> {
     if super::mode(state) != Mode::Full {
         return None;
     }
-    let content = if super::shows_board(state) {
+    let content = if super::shows_board(state) && !super::review::is_open(state) {
         super::board::view(state, t)
     } else {
         body(state, t)
@@ -314,6 +314,28 @@ pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {
 
 fn body(state: &State, t: &Tokens) -> El {
     let place = Place::of(state);
+    if super::review::is_open(state) {
+        let sheet = Sheet {
+            prefix: super::review::AT.into(),
+            view: "garden.review.viewport".into(),
+            go: Go::Review,
+            names: &place.names,
+            garden: &state.window.garden,
+            seeds: super::seeds(state),
+            chief: model::has_chief(&state.facts.sessions, &state.facts.profiles.selected),
+            readings: &state.readings,
+            drafts: None,
+            now_ms: state.window.now_ms,
+            t,
+        };
+        let full = super::mode(state) == Mode::Full;
+        return super::review::view(state, &sheet, full, t);
+    }
+    let prompt = if place.trail.is_empty() && !place.query.searches {
+        super::review::prompt(state, t)
+    } else {
+        Vec::new()
+    };
     let content = if columns(state) {
         columns_view(state, &place, t)
     } else {
@@ -330,6 +352,7 @@ fn body(state: &State, t: &Tokens) -> El {
         .on_key(super::key)
         .child(chrome(state, &place, t))
         .child(search_line(state, &place, t))
+        .children(prompt)
         .child(content)
 }
 

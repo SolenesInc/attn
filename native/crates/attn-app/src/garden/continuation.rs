@@ -177,16 +177,25 @@ impl Sheet<'_> {
 
 fn send_to_chief(spot: &Spot, state: &mut State, expected_rev: i64, words: String, tx: &mut Tx) {
     let seed_id = spot.seed().to_owned();
-    spot.send(
+    let review = super::review::receipt(spot, state);
+    let source_session_id = super::handover::source_session(state);
+    spot.send_as(
         state,
+        None,
         |request_id| SeedSendToChiefMessage {
             seed_id,
             expected_rev,
             guidance: (!words.is_empty()).then_some(words),
             request_id: Some(request_id),
+            review,
+            source_session_id,
             ..SeedSendToChiefMessage::new()
         },
         spot.key("open"),
+        {
+            let spot = spot.clone();
+            move |state, _, tx| super::review::settled(&spot, state, tx)
+        },
         tx,
     );
 }

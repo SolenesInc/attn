@@ -30,12 +30,14 @@ pub(super) struct Sheet<'a> {
 pub(super) enum Go {
     Garden,
     Tile { desktop: String, tile: String },
+    Review,
 }
 
 impl Go {
     pub(super) fn to(&self, state: &mut State, id: &str, tx: &mut Tx) {
         match self {
             Go::Garden => super::drill(state, id, tx),
+            Go::Review => super::review::browse(state, id, tx),
             Go::Tile { desktop, tile } => {
                 let (desktop_id, tile_id) = (desktop.clone(), tile.clone());
                 let params = id.to_owned();

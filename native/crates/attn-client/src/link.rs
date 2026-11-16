@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage, ClientHelloMessage,
-    CommandErrorMessage, FsChangedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
-    GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
-    KittyImageResultMessage, KittyPlacementsMessage, MigrationChangedMessage,
+    CommandErrorMessage, FsChangedMessage, GardenReviewUpdatedMessage, GardenSeedsChangedMessage,
+    GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage, GitOperationStartedMessage,
+    InitialStateMessage, KittyImageResultMessage, KittyPlacementsMessage, MigrationChangedMessage,
     NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
     PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
     ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, ReposUpdatedMessage,
@@ -565,6 +565,11 @@ impl Task {
                     message.seeds,
                     message.total,
                 );
+                None
+            }
+            "garden_review_updated" => {
+                let message: GardenReviewUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_garden_review(message.review);
                 None
             }
             "github_hosts_updated" => {

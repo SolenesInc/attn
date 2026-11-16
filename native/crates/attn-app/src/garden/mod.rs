@@ -5,6 +5,7 @@ mod checks;
 mod continuation;
 mod handover;
 pub(crate) mod model;
+mod review;
 pub(crate) mod search;
 mod sheet;
 mod spot;
@@ -92,6 +93,14 @@ pub(crate) struct Garden {
     /// The folds open on seed pages, by the key of the control that opens each.
     folds: HashSet<String>,
     pub(crate) board_walk: board::Board,
+    pub(crate) review: review::Review,
+}
+
+impl Garden {
+    /// The parts of the open review that hold an edit.
+    fn review_spots(&self) -> impl Iterator<Item = &spot::Spot> {
+        self.edits.keys().filter(|s| s.at() == review::AT)
+    }
 }
 
 /// A seed's document as the daemon last answered it.
@@ -238,12 +247,14 @@ fn shown_seeds(state: &State) -> HashSet<String> {
         shown.extend(living_trail(state).pop());
     }
     shown.extend(crate::desktop::seed_chip::told(state));
+    shown.extend(review::browsed(state));
     shown
 }
 
 /// Reads each shown seed's document whenever the seed or the garden around it changes, as
 /// the Tauri app reads it on every garden push. Only a seed's latest read counts.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
+    review::follow(state, tx);
     let shown = shown_seeds(state);
     let push = Arc::as_ptr(&state.facts.garden) as usize;
     let readings = &mut state.window.garden.readings;

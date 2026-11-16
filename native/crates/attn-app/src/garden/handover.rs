@@ -69,7 +69,7 @@ impl Checkout {
 impl Handover {
     /// The draft the seed's last agent suggests: the branch it worked on recreated in its
     /// repository, or its folder reused, under the agent it ran.
-    fn suggested(continuation: Option<&SeedContinuation>) -> Handover {
+    pub(super) fn suggested(continuation: Option<&SeedContinuation>) -> Handover {
         let Some(c) = continuation else {
             return Handover::default();
         };
@@ -322,7 +322,7 @@ fn keyed(spot: &Spot, state: &mut State, ev: &KeyEvent, sends: Sends, tx: &mut T
 }
 
 /// The session the user works in, which the new agent is handed over from.
-fn source_session(state: &State) -> Option<String> {
+pub(super) fn source_session(state: &State) -> Option<String> {
     let holder = state.window.keyboard.as_ref()?;
     let desktop = state
         .facts
@@ -363,6 +363,7 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
     let request = draft.request.clone();
     let note = Some(spot.words(state)).filter(|n| !n.is_empty());
     let source_session_id = source_session(state);
+    let review = super::review::receipt(spot, state);
     let seed_id = spot.seed().to_owned();
     let id = request.unwrap_or_else(|| state.next_request_id());
     if let Some(draft) = spot.handover_mut(state) {
@@ -384,6 +385,7 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
             checkout,
             allow_worktree_reuse: share,
             agent,
+            review,
             ..DelegateMessage::new()
         },
         spot.key("open"),
@@ -398,6 +400,7 @@ fn hand_over(spot: &Spot, state: &mut State, tx: &mut Tx) {
 /// Goes to the agent a handover started. A refusal takes a new request for the next try; a
 /// handover the daemon never answered keeps its request, so it can tell a retry from another.
 fn settled(spot: &Spot, state: &mut State, answer: &Answer, tx: &mut Tx) {
+    super::review::settled(spot, state, tx);
     match answer {
         Answer::Reply(reply) if reply.body["success"] == true => {
             spot.forget(state);
