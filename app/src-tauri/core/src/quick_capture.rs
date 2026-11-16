@@ -6,7 +6,7 @@ mod mac {
         NSApplication, NSApplicationActivationOptions, NSEvent, NSRunningApplication, NSScreen,
         NSWindow, NSWindowCollectionBehavior, NSWorkspace,
     };
-    use objc2_foundation::{MainThreadMarker, NSPoint};
+    use objc2_foundation::{MainThreadMarker, NSMouseInRect, NSPoint};
     use panel::QuickCapturePanel;
     use std::sync::Mutex;
     use tauri::{Emitter, Manager};
@@ -60,22 +60,17 @@ mod mac {
         let mouse = NSEvent::mouseLocation();
         let screens =
             NSScreen::screens(MainThreadMarker::new().expect("capture opens on the main thread"));
-        let screen = screens
+        if let Some(screen) = screens
             .iter()
-            .find(|screen| {
-                let frame = screen.frame();
-                mouse.x >= frame.origin.x
-                    && mouse.x < frame.origin.x + frame.size.width
-                    && mouse.y >= frame.origin.y
-                    && mouse.y < frame.origin.y + frame.size.height
-            })
-            .expect("mouse is on a screen");
-        let frame = screen.visibleFrame();
-        let size = native.frame().size;
-        native.setFrameOrigin(NSPoint::new(
-            frame.origin.x + (frame.size.width - size.width) / 2.0,
-            frame.origin.y + (frame.size.height - size.height) / 2.0,
-        ));
+            .find(|screen| NSMouseInRect(mouse, screen.frame(), false))
+        {
+            let frame = screen.visibleFrame();
+            let size = native.frame().size;
+            native.setFrameOrigin(NSPoint::new(
+                frame.origin.x + (frame.size.width - size.width) / 2.0,
+                frame.origin.y + (frame.size.height - size.height) / 2.0,
+            ));
+        }
         focus_panel(app);
         log_focus(app, "after open");
         let _ = window.emit("capture-open", opened_at);
