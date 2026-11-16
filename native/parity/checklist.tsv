@@ -12,7 +12,8 @@ item	statement	native_test	reason
 44	A Private Use Area icon (Nerd Font) draws from the fonts the native app bundles	live:s-916dgb/live-shot2.png	
 44	It draws on the first frame, with no fallback glyph before the fonts load		gap: s-916dgb
 45	Kitty image placements draw where the worker placed them, from pixels pulled once per image, and no client parses kitty escapes	attn-app/tests/wire/terminal_kitty.rs::a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive	
-46	Terminal input latency is measured natively		gap: s-c6b9zk
+46	Terminal input latency is measured natively: a slow PTY round trip logs an incident naming the terminal and its latency	attn-app/tests/wire/terminal_input_latency.rs::a_slow_pty_round_trip_logs_an_incident_naming_the_terminal_and_its_latency	
+46	A terminal key that waited after its native event time logs an incident with how long	attn-app/tests/wire/terminal_input_latency.rs::a_key_that_waited_after_it_arrived_logs_an_incident_with_how_long_from_its_native_time	
 92	On Linux the native app gives a lone shell tile the same 9x21 cell, rows and cols as on macOS for the same window	live:s-rzb1xd/grid-linux.tgz	
 92	On macOS the native app gives a lone shell tile the same Menlo 9x21 cell, rows and cols as on Linux for the same window	live:s-rzb1xd/grid-mac-measure.tgz	
 30	⌘C, from the keyboard or the native Edit menu, copies the terminal's selection	attn-app/tests/wire/terminal_view.rs::a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again	

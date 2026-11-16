@@ -319,6 +319,7 @@ impl World {
             runtime.update(move |state, _| {
                 state.use_quick_capture(window, &data_dir);
                 state.quick_capture_runs();
+                state.log_incidents_to(&data_dir.join("debug"));
             });
         }
         let mut world = World {
@@ -812,6 +813,16 @@ impl World {
     /// The instance data folder, where Quick Capture keeps each profile's draft.
     pub fn data_dir(&self) -> &std::path::Path {
         &self.capture.data_dir
+    }
+
+    /// The terminal incidents the app logged, in order, as `attn debug incidents` reads them.
+    pub fn incidents(&self) -> Vec<Value> {
+        let log = self.data_dir().join("debug/terminal-incidents.jsonl");
+        std::fs::read_to_string(log)
+            .unwrap_or_default()
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("an incident is one JSON line"))
+            .collect()
     }
 
     /// Quits and relaunches the Quick Capture panel, as an app restart does: it keeps only what

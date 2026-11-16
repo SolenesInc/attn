@@ -103,11 +103,5 @@ pub fn capture_manifest_path(bundle_id: &str) -> Option<PathBuf> {
 /// Where the Tauri app writes its manifest for this bundle id, so the runner finds either
 /// shell's server in one place.
 pub fn manifest_path(bundle_id: &str) -> Option<PathBuf> {
-    let home = std::env::home_dir()?;
-    let local = if cfg!(target_os = "macos") {
-        home.join("Library/Application Support")
-    } else {
-        std::env::var_os("XDG_DATA_HOME").map_or_else(|| home.join(".local/share"), PathBuf::from)
-    };
-    Some(local.join(bundle_id).join("debug/ui-automation.json"))
+    crate::instance::debug_dir(bundle_id).map(|dir| dir.join("ui-automation.json"))
 }

@@ -120,6 +120,12 @@ pub struct State {
 pub type Menus = Arc<dyn Fn(&Keymap) + Send + Sync>;
 
 impl State {
+    /// Writes the terminals' input incidents into `debug_dir`, the app's debug folder, where
+    /// `attn debug incidents` reads them.
+    pub fn log_incidents_to(&mut self, debug_dir: &std::path::Path) {
+        self.terminals.latency.log_to(debug_dir);
+    }
+
     pub(crate) fn wall_ms(&self, tx: &Tx) -> i64 {
         self.epoch_ms + (tx.clock() * 1000.0) as i64
     }

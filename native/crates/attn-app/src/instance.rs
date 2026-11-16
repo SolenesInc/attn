@@ -118,6 +118,18 @@ impl Instance {
     }
 }
 
+/// The debug folder of the app this bundle id names, the Tauri app's too: the automation
+/// manifest and the terminal incident log `attn debug incidents` reads.
+pub fn debug_dir(bundle_id: &str) -> Option<PathBuf> {
+    let home = std::env::home_dir()?;
+    let local = if cfg!(target_os = "macos") {
+        home.join("Library/Application Support")
+    } else {
+        std::env::var_os("XDG_DATA_HOME").map_or_else(|| home.join(".local/share"), PathBuf::from)
+    };
+    Some(local.join(bundle_id).join("debug"))
+}
+
 /// The app's own credential in `data_dir`, made on first use: the daemon trusts a `native-app`
 /// hello that carries it.
 pub fn ensure_host_token(data_dir: &Path) -> Result<String, String> {

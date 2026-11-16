@@ -245,7 +245,7 @@ fn send_to_terminal(
 }
 
 fn type_into(state: &mut State, terminal: &str, bytes: &[u8], tx: &mut Tx) -> bool {
-    match state.terminals.input(terminal, bytes, &state.daemon) {
+    match crate::terminal::type_into(state, terminal, bytes, tx) {
         Typed::Taken => state.window.desk.refusals.sent(terminal),
         Typed::Refused => crate::desktop::refusal::flash(state, terminal, tx),
         Typed::Nowhere => return false,

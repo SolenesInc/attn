@@ -45,6 +45,7 @@ state ([agent-state.md](agent-state.md)).
 - The daemon writes a backup when it starts and every 6 hours (`internal/daemon/backup.go`).
 - The daemon raises a warning notification when an enabled consumer pins the log past `ATTN_BUS_PIN_ALARM_AGE`.
 - The daemon raises a notification when a background task exhausts its retries.
+- The native app logs a terminal input incident to `terminal-incidents.jsonl`, which `attn debug incidents` reads, when a key waits 250 ms or more between its native event and its handler, when a typed write's probed round trip to the daemon takes 250 ms or more, fails, or goes unanswered for 5 s; once per terminal and reason every 30 s (`native/crates/attn-app/src/terminal/latency.rs`).
 - When a data migration fails at startup, the daemon leaves `migration-failure.json` in the data folder (`internal/daemon/migration_failure.go`) and the app opens on the migration failure screen (`app/src-tauri/core/src/migration_failure.rs`).
 
 ## Driving it

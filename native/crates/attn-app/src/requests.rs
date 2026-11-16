@@ -129,8 +129,13 @@ impl<S> Requests<S> {
     }
 
     /// What waits for `reply`: the request it names, or for a `command_error`, the oldest
-    /// request with its command.
+    /// request with its command. A terminal's refusal of input or a resize, a `command_error`
+    /// that names the terminal, answers none: the daemon answers a probed input with its probe
+    /// result after the refusal.
     pub(crate) fn answered_by(&mut self, reply: &Reply) -> Option<Then<S>> {
+        if reply.event == "command_error" && reply.body["terminal_id"].is_string() {
+            return None;
+        }
         let id = if reply.event == "command_error" {
             oldest_waiting(self, reply.body["cmd"].as_str().unwrap_or_default())
         } else {

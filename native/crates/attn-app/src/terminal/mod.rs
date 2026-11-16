@@ -19,6 +19,7 @@ mod blocks;
 mod filter;
 mod find;
 mod kitty;
+mod latency;
 mod links;
 mod seeds;
 mod selection;
@@ -29,6 +30,7 @@ pub(crate) use annotating::{
 pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
+pub(crate) use latency::type_into;
 pub(crate) use links::accelerator;
 pub(crate) use seeds::SeedCard;
 pub(crate) use selection::Release;
@@ -131,6 +133,7 @@ pub struct Terminals {
     card_timer: Option<seeds::CardTimer>,
     /// The pointer is over the seed card, which keeps it open.
     over_card: bool,
+    pub(crate) latency: latency::InputLatency,
 }
 
 struct Term {
@@ -313,6 +316,7 @@ impl Terminals {
             self.finds.remove(&id);
             self.filters.remove(&id);
             self.images.forget(&id);
+            self.latency.forget(&id);
             self.seed_card_left(&id);
             save_leaving_note(term.marking.as_ref(), daemon);
             release(&id, &mut term, None, 0, daemon);
@@ -865,6 +869,12 @@ impl Terminals {
             Phase::Stopped => {}
         }
         Typed::Taken
+    }
+
+    pub(crate) fn live(&self, id: &str) -> bool {
+        self.panes
+            .get(id)
+            .is_some_and(|term| matches!(term.phase, Phase::Live))
     }
 
     pub(crate) fn encode_key(&mut self, id: &str, key: &KeyInput) -> Option<Vec<u8>> {
