@@ -329,10 +329,12 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     };
     let k = attn_ui::kit(t);
     let empty = naming.name.text.trim().is_empty();
-    let hint = if naming.slot > 0 {
-        format!("On ⌘{}.", naming.slot)
-    } else {
-        "No ⌘ number.".to_owned()
+    let shortcut = crate::Action::desktop_select(naming.slot)
+        .and_then(|action| state.keymap.binding(&action))
+        .map(|binding| state.keymap.label(binding));
+    let hint = match shortcut {
+        Some(keys) => format!("On {keys}."),
+        None => "No shortcut.".to_owned(),
     };
     Dialog::new("launch-desktop.naming", "A new desktop")
         .open(true)

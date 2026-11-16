@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use attn_app::Action;
+use attn_app::{Action, Keymap};
 use attn_protocol::{
     ActorView, CrewApplyResult, CrewApplyResultMessage, CrewCharterDocument,
     CrewCharterGetResultMessage, CrewCharterSetResultMessage, CrewCloseResultMessage,
@@ -16,7 +16,7 @@ use attn_protocol::{
     PartyView, Profile, ProfileArrangementChangedMessage, Seed, Session, SettingsUpdatedMessage,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message, tree};
-use rune::{Key, KeyEvent, Mods};
+use rune::{Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::{Value, json};
 
 use super::settings::Settings;
@@ -1404,6 +1404,12 @@ fn the_model_picker_closes_when_another_layer_replaces_manage_crew() {
     assert!(world.daemon.sent_of("crew_set").is_empty());
 }
 
+fn slot_keys(slot: i64) -> String {
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let action = Action::desktop_select(slot).expect("a desktop slot");
+    keymap.label(keymap.binding(&action).expect("the slot has a key"))
+}
+
 fn choose_option(world: &mut World, name: &str) {
     world
         .automate("press", json!({"target": {"role": "option", "name": name}}))
@@ -1514,7 +1520,7 @@ fn the_desktop_select_offers_the_profiles_desktops_and_empty_slots_as_the_daemon
     choose_option(&mut world, "Empty slot 3…");
     assert_eq!(
         named(&world, "launch-desktop.naming.hint").as_deref(),
-        Some("On ⌘3.")
+        Some(format!("On {}.", slot_keys(3)).as_str())
     );
     assert_eq!(
         world
@@ -1570,18 +1576,17 @@ fn a_new_desktop_named_while_a_save_is_out_is_kept_when_another_launch_field_cha
     let mut world = World::start(d);
     open(&mut world);
     click(&mut world, DESKTOP_SELECT);
-    choose_option(&mut world, "A new desktop…");
-    assert_eq!(
-        named(&world, "launch-desktop.naming.hint").as_deref(),
-        Some("No ⌘ number.")
-    );
+    choose_option(&mut world, "Empty slot 2…");
     world.gesture(|app| app.type_text("Review"));
     click(&mut world, "launch-desktop.naming.use");
-    assert_eq!(launch_desktops(&world), [json!({"desktop_name": "Review"})]);
+    assert_eq!(
+        launch_desktops(&world),
+        [json!({"desktop_id": "work/desktop_2", "desktop_name": "Review"})]
+    );
     pick_opus(&mut world);
     let launch_desktop = LaunchDesktopSetting {
-        desktop_id: Some("desktop-review".into()),
-        label: Some("Review (no ⌘ number)".into()),
+        desktop_id: Some("work/desktop_2".into()),
+        label: Some("2 · Review".into()),
         ..LaunchDesktopSetting::default()
     };
     let first = world.daemon.sent_of("crew_set").remove(0);
@@ -1614,6 +1619,10 @@ fn cancelling_the_new_desktops_name_writes_nothing() {
     open(&mut world);
     click(&mut world, DESKTOP_SELECT);
     choose_option(&mut world, "A new desktop…");
+    assert_eq!(
+        named(&world, "launch-desktop.naming.hint").as_deref(),
+        Some("No shortcut.")
+    );
     press(&mut world, Key::Escape);
     assert!(!shows(&world, "launch-desktop.naming.hint"));
     assert!(is_open(&world), "Escape closes only the name dialog");
