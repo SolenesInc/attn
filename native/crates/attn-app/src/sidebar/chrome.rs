@@ -19,6 +19,10 @@ pub struct Chip {
     pub slot: i64,
     pub title: String,
     pub current: bool,
+    /// Nothing on the desktop, neither agents nor documents.
+    pub empty: bool,
+    /// The keys that select the desktop.
+    pub keys: Option<String>,
     /// The turns waiting on agents of this desktop.
     pub waiting: usize,
     /// An agent of this desktop has an open ask.
@@ -54,6 +58,9 @@ pub fn chips<'a>(
                 slot,
                 title: desktop_title(d, &facts.desktops),
                 current: current.as_deref() == Some(d.id.as_str()),
+                empty: crate::desktop::holds_nothing(d),
+                keys: crate::Action::desktop_select(slot)
+                    .and_then(|a| crate::palette::label_of(state, &a)),
                 waiting: waiting.get(d.id.as_str()).copied().unwrap_or(0),
                 asks: d.panes.iter().any(|p| {
                     facts
@@ -101,10 +108,19 @@ pub(crate) fn chip(
 ) -> El {
     let desktop = chip.desktop.clone();
     let asks = if chip.asks { ", has open asks" } else { "" };
-    let label = format!("{}{}{asks}", chip.title, waiting_words(chip.waiting, mark));
+    let named = match &chip.keys {
+        Some(keys) => format!("{} ({keys})", chip.title),
+        None => chip.title.clone(),
+    };
+    let label = format!("{named}{}{asks}", waiting_words(chip.waiting, mark));
     let slot = chip.slot;
     let waiting = chip.waiting;
     let asks_mark = chip.asks;
+    let number = if chip.empty {
+        t.text_tertiary
+    } else {
+        t.text_secondary
+    };
     let tokens = *t;
     let el = Button::new(label)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
@@ -114,7 +130,7 @@ pub(crate) fn chip(
                 .child(
                     text(slot.to_string())
                         .font(type_::MONO_CAPTION)
-                        .color(tokens.text_secondary),
+                        .color(number),
                 )
                 .children(waiting_mark(waiting, mark, &tokens))
                 .children(asks_mark.then(|| {
@@ -126,7 +142,13 @@ pub(crate) fn chip(
         })
         .build(attn_ui::kit(t))
         .key(format!("{prefix}.{}", chip.slot))
-        .a11y_value(if chip.current { "current" } else { "" })
+        .help(named)
+        .a11y_value(match (chip.current, chip.empty) {
+            (true, true) => "current, Empty desktop",
+            (true, false) => "current",
+            (false, true) => "Empty desktop",
+            (false, false) => "",
+        })
         .h(22.0)
         .min_w(22.0)
         .px(4.0)

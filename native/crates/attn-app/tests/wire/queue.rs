@@ -105,6 +105,11 @@ fn lines(world: &World) -> Vec<String> {
         .collect()
 }
 
+fn keys_of(action: Action) -> String {
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    keymap.label(keymap.binding(&action).unwrap())
+}
+
 fn name(world: &World, key: &str) -> String {
     world
         .screen()
@@ -362,7 +367,10 @@ fn collapsing_the_queue_sidebar_moves_the_waiting_pill_and_the_desktops_into_the
     assert_eq!(name(&world, "queue-bar.pill"), "4 waiting · a › b › c +1");
     assert_eq!(
         name(&world, "queue-bar.desktop.1"),
-        "Desktop 1, 4 turns waiting"
+        format!(
+            "Desktop 1 ({}), 4 turns waiting",
+            keys_of(Action::DesktopSelect1)
+        )
     );
 
     world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
@@ -438,7 +446,10 @@ fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
         screen.get(Target::key("rail.home")).value.as_deref(),
         Some("current")
     );
-    assert_eq!(name(&world, "rail.desktop.2"), "Review");
+    assert_eq!(
+        name(&world, "rail.desktop.2"),
+        format!("Review ({})", keys_of(Action::DesktopSelect2))
+    );
     assert_eq!(
         name(&world, "rail.desktop-extras"),
         "1 more desktop without a shortcut"
@@ -498,7 +509,77 @@ fn in_desktop_flow_the_rail_marks_a_desktop_whose_agent_waits_for_the_user() {
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
 
     assert!(name(&world, "rail.desktop.1").ends_with(", has turns waiting"));
-    assert_eq!(name(&world, "rail.desktop.2"), "Busy");
+    assert_eq!(
+        name(&world, "rail.desktop.2"),
+        format!("Busy ({})", keys_of(Action::DesktopSelect2))
+    );
+}
+
+#[test]
+fn the_rail_names_each_desktop_by_title_and_keys_marks_an_empty_one_and_selects_through_the_daemon()
+{
+    let mut message = one_desktop(vec![session("s1", "idle")]);
+    message.desktops.as_mut().unwrap()[0].name = "Sidebar refinement".into();
+    message.desktops.as_mut().unwrap().extend([
+        slotted(
+            desktop("d2", "b", "Queue work", vec![pane("d2", "p-s2", "s2")]),
+            2,
+        ),
+        slotted(desktop("d3", "c", "Sketches", vec![]), 3),
+    ]);
+    message
+        .sessions
+        .as_mut()
+        .unwrap()
+        .push(session("s2", "waiting_input"));
+    let arranged = message.clone();
+    let mut world = World::start(Daemon::scripted().state(message));
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+
+    let keys = keys_of;
+    let chip = |world: &World, slot: i64| {
+        world
+            .screen()
+            .get(Target::key(format!("rail.desktop.{slot}")))
+    };
+    for (slot, title, action) in [
+        (1, "Sidebar refinement", Action::DesktopSelect1),
+        (2, "Queue work", Action::DesktopSelect2),
+        (3, "Sketches", Action::DesktopSelect3),
+    ] {
+        let named = chip(&world, slot).name.unwrap_or_default();
+        assert!(
+            named.starts_with(&format!("{title} ({})", keys(action))),
+            "{named}"
+        );
+    }
+    assert_eq!(chip(&world, 1).value.as_deref(), Some(""));
+    assert_eq!(chip(&world, 3).value.as_deref(), Some("Empty desktop"));
+    assert!(name(&world, "rail.desktop.2").ends_with(", has turns waiting"));
+    assert!(!name(&world, "rail.desktop.1").contains("waiting"));
+    assert!(!name(&world, "rail.desktop.3").contains("waiting"));
+
+    world.gesture(|app| app.click(Target::key("rail.desktop.1")));
+    assert_eq!(chip(&world, 1).value.as_deref(), Some("current"));
+    world.gesture(|app| app.click(Target::key("rail.desktop.2")));
+    let set: Vec<_> = world
+        .daemon
+        .sent_of("desktop_set_current")
+        .iter()
+        .map(|m| m["desktop_id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(set.last().map(String::as_str), Some("d2"));
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            current_desktop_id: "d2".into(),
+            ..arranged.profiles.unwrap().remove(0)
+        },
+        desktops: arranged.desktops.unwrap(),
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+    assert_eq!(chip(&world, 2).value.as_deref(), Some("current"));
+    assert_eq!(chip(&world, 1).value.as_deref(), Some(""));
 }
 
 #[test]
@@ -575,9 +656,12 @@ fn the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them()
             .filter_map(|n| n.name)
             .collect::<Vec<_>>(),
         [
-            "Desktop 1, has turns waiting",
-            "Review",
-            "1 more desktop without a shortcut, has turns waiting"
+            format!(
+                "Desktop 1 ({}), has turns waiting",
+                keys_of(Action::DesktopSelect1)
+            ),
+            format!("Review ({})", keys_of(Action::DesktopSelect2)),
+            "1 more desktop without a shortcut, has turns waiting".to_owned(),
         ]
     );
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
@@ -593,9 +677,12 @@ fn the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them()
             .filter_map(|n| n.name)
             .collect::<Vec<_>>(),
         [
-            "Desktop 1, 2 turns waiting",
-            "Review",
-            "1 more desktop without a shortcut, 1 turn waiting"
+            format!(
+                "Desktop 1 ({}), 2 turns waiting",
+                keys_of(Action::DesktopSelect1)
+            ),
+            format!("Review ({})", keys_of(Action::DesktopSelect2)),
+            "1 more desktop without a shortcut, 1 turn waiting".to_owned(),
         ]
     );
     world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
