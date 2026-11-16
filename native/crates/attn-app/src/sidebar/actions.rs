@@ -30,7 +30,7 @@ pub(crate) fn jump_to_waiting(state: &mut State, tx: &mut Tx) {
     if crate::desktop::show_unseen(state, tx) {
         return;
     }
-    let head = queue::oldest_wanted(&state.facts).map(|s| s.id.clone());
+    let head = queue::oldest_wanted(&state.facts, None).map(|s| s.id.clone());
     if let Some(id) = head {
         open_agent(state, &id, tx);
     }
@@ -330,11 +330,7 @@ fn move_on_from(state: &mut State, leaving: &str, tx: &mut Tx) {
     if !queue_flow(state) {
         return;
     }
-    let next = queue::bands(&state.facts, state.window.now_ms)
-        .turns
-        .iter()
-        .map(|row| row.session.id.clone())
-        .find(|id| id != leaving);
+    let next = queue::oldest_wanted(&state.facts, Some(leaving)).map(|s| s.id.clone());
     if let Some(id) = next {
         open_agent(state, &id, tx);
     }

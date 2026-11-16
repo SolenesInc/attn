@@ -444,3 +444,18 @@ fn an_offline_snoozed_agent_offers_no_unsnooze() {
     assert!(offline(&world, "queue-snoozed.remote"));
     assert!(!has(&world, "queue-snoozed.remote.unsnooze"));
 }
+
+#[test]
+fn closing_the_agent_on_screen_opens_no_turn_on_an_unreachable_outpost() {
+    let mut world = start(lost());
+    world.gesture(|app| app.click(Target::key("queue-turn.local")));
+    world.gesture(|app| app.click(Target::key("queue-turn.local.actions")));
+    world.gesture(|app| app.click(Target::key("session.menu.close")));
+
+    assert_eq!(world.daemon.sent_of("unregister").len(), 1);
+    assert_eq!(
+        shown(&world),
+        ["local"],
+        "nothing reachable is owed, so the window stays"
+    );
+}

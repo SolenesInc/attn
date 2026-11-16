@@ -157,10 +157,12 @@ pub fn wanting(facts: &Facts) -> Vec<&Session> {
         .collect()
 }
 
-/// The turn ⌘J opens: the oldest of the agents that want the user, as `oldestWantedTurn`.
-pub fn oldest_wanted(facts: &Facts) -> Option<&Session> {
+/// The turn ⌘J opens: the oldest of the agents that want the user, other than `except`, as
+/// `oldestWantedTurn`.
+pub fn oldest_wanted<'a>(facts: &'a Facts, except: Option<&str>) -> Option<&'a Session> {
     wanting(facts)
         .into_iter()
+        .filter(|s| Some(s.id.as_str()) != except)
         .min_by(|a, b| compare_turn_order(a, b))
 }
 
