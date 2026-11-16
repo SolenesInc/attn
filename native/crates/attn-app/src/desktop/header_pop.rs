@@ -65,11 +65,18 @@ impl What {
     }
 }
 
-/// A tile header's popover: the piece it hangs from, and whether a click or the Action menu
-/// pinned it, which keeps it until Escape or a press outside it.
+/// Where a popover hangs: a piece of a tile's header, or a sidebar row's delegation chain.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum Host {
+    Tile(String),
+    Row(String),
+}
+
+/// A tile header's popover, or a sidebar row's chain: the piece it hangs from, and whether a
+/// click or the Action menu pinned it, which keeps it until Escape or a press outside it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Pop {
-    pub(crate) leaf: String,
+    pub(crate) host: Host,
     pub(crate) session: String,
     pub(crate) what: What,
     pub(crate) pinned: bool,
@@ -77,7 +84,14 @@ pub(crate) struct Pop {
 
 impl Pop {
     pub(crate) fn anchor(&self) -> String {
-        anchor(&self.leaf, self.what)
+        match &self.host {
+            Host::Tile(leaf) => anchor(leaf, self.what),
+            Host::Row(row) => row_anchor(row),
+        }
+    }
+
+    pub(crate) fn on(&self, host: &Host, what: What) -> bool {
+        self.host == *host && self.what == what
     }
 
     /// The popover's own key.
@@ -88,6 +102,11 @@ impl Pop {
 
 pub(crate) fn anchor(leaf: &str, what: What) -> String {
     format!("tile.{leaf}.{}", what.part())
+}
+
+/// The key of the delegation chain's trigger on the sidebar row keyed `row`.
+pub(crate) fn row_anchor(row: &str) -> String {
+    format!("{row}.chain")
 }
 
 enum Timer {
@@ -127,10 +146,14 @@ pub(crate) fn link(
 }
 
 pub(crate) fn hovers(piece: El, leaf: &str, session: &str, what: What) -> El {
-    let (leaf, session) = (leaf.to_owned(), session.to_owned());
+    hovers_on(piece, Host::Tile(leaf.to_owned()), session, what)
+}
+
+pub(crate) fn hovers_on(piece: El, host: Host, session: &str, what: What) -> El {
+    let session = session.to_owned();
     piece
         .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
-            rest(state, &leaf, &session, what, tx)
+            rest(state, &host, &session, what, tx)
         })
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             if !inside {
@@ -139,10 +162,10 @@ pub(crate) fn hovers(piece: El, leaf: &str, session: &str, what: What) -> El {
         })
 }
 
-fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
+fn rest(state: &mut State, host: &Host, session: &str, what: What, tx: &mut Tx) {
     let first = what.first_pick(session, &state.facts);
     let pop = &mut state.window.desk.header_pop;
-    let here = |p: &Pop| p.leaf == leaf && p.what == what;
+    let here = |p: &Pop| p.on(host, what);
     if pop.open.as_ref().is_some_and(here) {
         if matches!(pop.timer, Some(Timer::Close(_))) {
             pop.timer = None;
@@ -158,7 +181,7 @@ fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
         return;
     }
     let opening = Pop {
-        leaf: leaf.to_owned(),
+        host: host.clone(),
         session: session.to_owned(),
         what,
         pinned: false,
@@ -201,27 +224,35 @@ fn close_soon(pop: &mut HeaderPop, tx: &mut Tx) {
 /// A press on the piece pins its popover, which takes the keyboard, and a second press closes
 /// it.
 pub(crate) fn press(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
-    let pinned_here = state
+    press_on(state, Host::Tile(leaf.to_owned()), session, what, tx);
+}
+
+pub(crate) fn press_on(state: &mut State, host: Host, session: &str, what: What, tx: &mut Tx) {
+    if pinned_on(state, &host, what) {
+        close(state);
+    } else {
+        pinned(state, host, session, what, tx);
+    }
+}
+
+/// Whether the popover of `what` is pinned on `host`.
+pub(crate) fn pinned_on(state: &State, host: &Host, what: What) -> bool {
+    state
         .window
         .desk
         .header_pop
         .open
         .as_ref()
-        .is_some_and(|p| p.pinned && p.leaf == leaf && p.what == what);
-    if pinned_here {
-        close(state);
-    } else {
-        pinned(state, leaf, session, what, tx);
-    }
+        .is_some_and(|p| p.pinned && p.on(host, what))
 }
 
-fn pinned(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
+fn pinned(state: &mut State, host: Host, session: &str, what: What, tx: &mut Tx) {
     let first = what.first_pick(session, &state.facts);
     let pop = &mut state.window.desk.header_pop;
     pop.timer = None;
     pop.picked = first;
     let open = Pop {
-        leaf: leaf.to_owned(),
+        host,
         session: session.to_owned(),
         what,
         pinned: true,
@@ -240,7 +271,7 @@ pub(crate) fn pin(state: &mut State, session: &str, what: What, tx: &mut Tx) {
         .and_then(|d| d.panes.iter().find(|p| p.session_id == session))
         .map(|p| p.pane_id.clone());
     if let Some(leaf) = leaf {
-        pinned(state, &leaf, session, what, tx);
+        pinned(state, Host::Tile(leaf), session, what, tx);
     }
 }
 
@@ -255,9 +286,13 @@ impl HeaderPop {
     /// desktop or its agent stops having what it shows.
     pub(crate) fn follow(&mut self, facts: &attn_client::Facts) {
         let stands = |pop: &Pop| {
-            facts
-                .current_desktop()
-                .is_some_and(|d| d.panes.iter().any(|p| p.pane_id == pop.leaf))
+            let hosted = match &pop.host {
+                Host::Tile(leaf) => facts
+                    .current_desktop()
+                    .is_some_and(|d| d.panes.iter().any(|p| &p.pane_id == leaf)),
+                Host::Row(_) => true,
+            };
+            hosted
                 && facts
                     .sessions
                     .iter()
@@ -271,6 +306,27 @@ impl HeaderPop {
             self.timer = None;
         }
     }
+}
+
+/// Lets a sidebar row's popover go, and any it was about to open, once the sidebar stops
+/// drawing its row. Returns whether it did.
+pub(crate) fn follow_rows(state: &mut State) -> bool {
+    let gone = |state: &State, pop: &Pop| match &pop.host {
+        Host::Row(row) => !crate::sidebar::draws_row(state, row),
+        Host::Tile(_) => false,
+    };
+    let pop = &state.window.desk.header_pop;
+    let open_gone = pop.open.as_ref().is_some_and(|p| gone(state, p));
+    let timer_gone = matches!(&pop.timer, Some(Timer::Open(p, ..)) if gone(state, p));
+    let pop = &mut state.window.desk.header_pop;
+    if open_gone {
+        pop.open = None;
+        pop.timer = None;
+    }
+    if timer_gone {
+        pop.timer = None;
+    }
+    open_gone || timer_gone
 }
 
 /// Opens or closes the popover whose moment came. Returns whether it did.

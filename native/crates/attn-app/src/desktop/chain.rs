@@ -15,7 +15,7 @@ use crate::sidebar::model::{AgentState, display_name, harness_label};
 /// The header's way into the delegation chain: the session's role, or a plain mark when it
 /// has none.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct Trigger {
+pub struct Trigger {
     text: String,
     label: String,
     mark: Mark,
@@ -137,7 +137,7 @@ pub(crate) fn current_row(session: &str, sessions: &[Session]) -> usize {
 
 /// The role in the header of `leaf`, which shows the delegation chain on hover and pins it on a
 /// press.
-pub(crate) fn piece(
+pub(super) fn piece(
     leaf: &str,
     session: &str,
     trigger: &Trigger,
@@ -174,6 +174,7 @@ pub(crate) fn piece(
         })
         .build(attn_ui::kit(t))
         .key(header_pop::anchor(leaf, What::Chain))
+        .keeps_press_from_within()
         .h(font.line_px().max(MARK_PX))
         .px(TRIGGER_PAD);
     header_pop::hovers(role, leaf, session, What::Chain)
@@ -189,7 +190,41 @@ pub(super) fn widths(trigger: &Trigger, font: TextStyle) -> Widths {
     }
 }
 
-/// The open delegation chain, under its role.
+/// The role chip of the sidebar row keyed `row`, which pins the delegation chain beside the
+/// sidebar.
+pub(crate) fn chip(row: &str, session: &str, trigger: &Trigger, t: &Tokens) -> El {
+    let host = header_pop::Host::Row(row.to_owned());
+    let pressed = (host.clone(), session.to_owned());
+    let color = if trigger.leads {
+        t.accent
+    } else {
+        t.text_tertiary
+    };
+    let mark = trigger.mark.clone();
+    Button::new(trigger.label.clone())
+        .variant(ButtonVariant::GhostMuted)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            header_pop::press_on(state, pressed.0.clone(), &pressed.1, What::Chain, tx)
+        })
+        .label_with(move |_, _| mark.el(MARK_PX, type_::LABEL, color))
+        .build(attn_ui::kit(t))
+        .key(header_pop::row_anchor(row))
+        .h(MARK_PX + 4.0)
+        .px(2.0)
+}
+
+/// A sidebar row of an agent in a delegation chain, which shows the chain while the pointer
+/// rests on it.
+pub(crate) fn row_hovers(row_el: El, row: &str, session: &str) -> El {
+    header_pop::hovers_on(
+        row_el,
+        header_pop::Host::Row(row.to_owned()),
+        session,
+        What::Chain,
+    )
+}
+
+/// The open delegation chain, under its role, or beside the sidebar for a sidebar row.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let sessions = &state.facts.sessions;
     let current = sessions.iter().find(|s| s.id == pop.session)?;
@@ -271,11 +306,15 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     } else {
         surface
     };
+    let (anchor, placement) = match &pop.host {
+        header_pop::Host::Tile(_) => (pop.anchor(), Placement::BottomStart),
+        header_pop::Host::Row(row) => (row.clone(), Placement::RightStart),
+    };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
         rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
-        &pop.anchor(),
-        Placement::BottomStart,
+        &anchor,
+        placement,
         4.0,
     ))
 }

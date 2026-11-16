@@ -78,6 +78,8 @@ pub struct AgentRow {
     pub settle_run: bool,
     /// Its machine is unreachable.
     pub offline: bool,
+    /// Its way into the delegation chain it sits in.
+    pub chain: Option<Box<crate::desktop::chain::Trigger>>,
 }
 
 /// The daemon's auto-settle countdown, as a row whose tile is not on screen shows it.
@@ -128,6 +130,7 @@ impl AgentRow {
             run: crate::desktop::provenance::run(session),
             settle_run: session.automation.is_some() && session.turn_owed == Some(true),
             offline: crate::outpost::offline(session, outposts),
+            chain: None,
             unknown_because: (session.state == "unknown")
                 .then(|| unknown_reason(session.state_reason.as_deref()))
                 .flatten(),
@@ -137,6 +140,12 @@ impl AgentRow {
     /// The row with the agent's open asks counted.
     pub fn asking(mut self, facts: &Facts, session: &Session) -> AgentRow {
         self.asks = crate::asks::of_session(facts, session).len();
+        self
+    }
+
+    /// The row with its way into the delegation chain it sits in.
+    pub fn chained(mut self, session: &Session, sessions: &[Session]) -> AgentRow {
+        self.chain = crate::desktop::chain::trigger(session, sessions).map(Box::new);
         self
     }
 
@@ -638,7 +647,9 @@ fn agent_line(
     on_screen: &[String],
 ) -> Line {
     let selected = shown && active == Some(session.id.as_str());
-    let row = AgentRow::of(session, &facts.outposts, selected).asking(facts, session);
+    let row = AgentRow::of(session, &facts.outposts, selected)
+        .asking(facts, session)
+        .chained(session, &facts.sessions);
     Line::Agent {
         desktop: desktop.id.clone(),
         row: if on_screen.contains(&session.id) {

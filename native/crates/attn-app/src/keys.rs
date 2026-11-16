@@ -32,6 +32,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         crate::chief::dismiss(state, true, tx);
         return true;
     }
+    if ev.key == Key::Escape && state.window.desk.header_pop.open.is_some() {
+        crate::desktop::header_pop::close(state);
+    }
     if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
         if let Some(action) = second {
             run_shortcut(state, action, tx);

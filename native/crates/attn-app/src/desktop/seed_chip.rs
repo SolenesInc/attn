@@ -418,13 +418,8 @@ pub(super) fn widths(chip: &Chip, font: TextStyle) -> Widths {
 }
 
 fn press(state: &mut State, leaf: &str, session: &str, opens: Option<&str>, tx: &mut Tx) {
-    let pinned_here = state
-        .window
-        .desk
-        .header_pop
-        .open
-        .as_ref()
-        .is_some_and(|p| p.pinned && p.leaf == leaf && p.what == What::Seed);
+    let pinned_here =
+        header_pop::pinned_on(state, &header_pop::Host::Tile(leaf.to_owned()), What::Seed);
     match opens {
         Some(seed) if !pinned_here => open(state, seed, session, tx),
         _ => header_pop::press(state, leaf, session, What::Seed, tx),

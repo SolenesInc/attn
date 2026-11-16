@@ -324,7 +324,9 @@ fn sublines(
                     .header_pop
                     .open
                     .as_ref()
-                    .filter(|pop| pop.leaf == p.pane_id)
+                    .filter(|pop| {
+                        pop.host == crate::desktop::header_pop::Host::Tile(p.pane_id.clone())
+                    })
                     .map(|pop| match pop.what {
                         What::Usage => Piece::Usage,
                         What::Details => Piece::Provenance,

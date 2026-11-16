@@ -4,7 +4,7 @@
 mod actions;
 pub(crate) mod annotating;
 pub(crate) mod arrival;
-mod chain;
+pub(crate) mod chain;
 mod close;
 mod divider;
 pub(crate) mod drag;

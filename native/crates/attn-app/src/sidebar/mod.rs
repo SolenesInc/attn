@@ -169,6 +169,18 @@ pub(crate) fn desktop_at(state: &State, path: &str) -> Option<String> {
         .map(|l| l.desktop().to_owned())
 }
 
+/// Whether the sidebar draws the agent row keyed `key` now.
+pub(crate) fn draws_row(state: &State, key: &str) -> bool {
+    if state.window.sidebar_hidden {
+        return false;
+    }
+    if actions::queue_flow(state) {
+        queue_view::agent_rows(state).iter().any(|r| r.key == key)
+    } else {
+        lines(state).iter().any(|l| l.key() == key)
+    }
+}
+
 /// The desktop sidebar's lines, in the order it shows them.
 pub(crate) fn lines(state: &State) -> Vec<Line> {
     let home = state.window.view == View::Home;
@@ -536,7 +548,7 @@ const NAME_MIN_W: f32 = 64.0;
 fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
     let id = agent.id.clone();
     let name = agent.shown_name();
-    row()
+    let row = row()
         .key(key.clone())
         .role("button")
         .focusable(true)
@@ -590,7 +602,17 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
                 .delegated
                 .then(|| mark(&key, "delegated", "↳", "Delegated from chief of staff", t)),
         )
-        .children(crate::asks::marker(&key, agent.asks, t))
+        .children(
+            agent
+                .chain
+                .as_ref()
+                .map(|c| crate::desktop::chain::chip(&key, &agent.id, c, t)),
+        )
+        .children(crate::asks::marker(&key, agent.asks, t));
+    match &agent.chain {
+        Some(_) => crate::desktop::chain::row_hovers(row, &key, &agent.id),
+        None => row,
+    }
 }
 
 fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> El {

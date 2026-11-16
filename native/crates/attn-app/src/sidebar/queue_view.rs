@@ -153,7 +153,8 @@ fn agent(
                 &state.facts.outposts,
                 state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
             )
-            .asking(&state.facts, session);
+            .asking(&state.facts, session)
+            .chained(session, &state.facts.sessions);
             if on_screen.contains(&session.id) {
                 row
             } else {
@@ -728,6 +729,12 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
                 .truncate()
                 .grow(1.0),
         )
+        .children(
+            a.agent
+                .chain
+                .as_ref()
+                .map(|c| crate::desktop::chain::chip(&key, &a.agent.id, c, t)),
+        )
         .children(crate::asks::marker(&key, a.agent.asks, t))
         .children((!a.slot.is_empty()).then(|| {
             text(a.slot.clone())
@@ -743,6 +750,10 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
         }))
         .hover_group()
         .children(row_controls(&key, a, t));
+    let row = match &a.agent.chain {
+        Some(_) => crate::desktop::chain::row_hovers(row, &key, &a.agent.id),
+        None => row,
+    };
     if cursor {
         row.focus_ring(2.0, 0.0, t.border_focus)
     } else {

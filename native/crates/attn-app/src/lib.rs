@@ -339,7 +339,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let updating = update_run::poll(state, now, tx)
         | outpost_updates::poll(state, now, tx)
         | attention::poll(state, now);
-    let pointed = callouts::poll(state, tx);
+    let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);
     let greeted = whats_new::greet(state, tx);
     let reported = diagnostic_report::poll(state, now, tx);
     let expired = shell::expire(state, now, tx) || expired;

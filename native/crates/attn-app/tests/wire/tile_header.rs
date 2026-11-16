@@ -1599,3 +1599,176 @@ fn a_press_on_a_control_in_an_inactive_agents_tile_gives_its_terminal_the_keyboa
     let focused = world.daemon.sent_of("terminal_focus");
     assert_eq!(focused.last().map(|r| r["id"].clone()), Some("r-b".into()));
 }
+
+fn with_role(name: &str, builtin: &str, session: Session) -> Session {
+    Session {
+        delegation_role: Some(SessionDelegationRole {
+            name: name.into(),
+            builtin: Some(builtin.into()),
+            ..SessionDelegationRole::default()
+        }),
+        ..session
+    }
+}
+
+fn chip(world: &World, row: &str) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key(format!("{row}.chain")))?
+        .name
+}
+
+#[test]
+fn the_sidebar_marks_an_agent_with_a_role_and_leaves_an_unrelated_roleless_agent_unmarked() {
+    let world = start_with(vec![
+        with_role(
+            "Orchestrator",
+            "orchestrator",
+            session("a", "Coordinate identity", None),
+        ),
+        session("b", "plain", None),
+    ]);
+    assert_eq!(
+        chip(&world, "sidebar.session.s-a").as_deref(),
+        Some("Orchestrator · Show delegation chain for Coordinate identity")
+    );
+    assert_eq!(chip(&world, "sidebar.session.s-b"), None);
+}
+
+#[test]
+fn the_queue_offers_the_chain_on_a_dispatcher_because_of_the_delegates_it_sent() {
+    let mut world = World::start_sized(
+        Daemon::scripted().state(InitialStateMessage {
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![profile()]),
+            settings: Some([("queue_mode_enabled".to_owned(), "true".to_owned())].into()),
+            desktops: Some(vec![desktop("a")]),
+            sessions: Some(vec![
+                session("a", "root session", None),
+                delegate_of("b", "child", "a"),
+                session("alone", "alone", None),
+            ]),
+            ..InitialStateMessage::new()
+        }),
+        SIZE,
+    );
+    world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
+    assert_eq!(
+        chip(&world, "queue-settled.s-a").as_deref(),
+        Some("Show delegation chain for root session")
+    );
+    assert_eq!(chip(&world, "queue-settled.s-alone"), None);
+}
+
+#[test]
+fn a_sidebar_rows_chain_opens_beside_it_on_hover_stays_shut_under_a_still_pointer_and_pins_on_its_chip()
+ {
+    let mut world = start_with(vec![
+        session("a", "root session", None),
+        with_role(
+            "Builder",
+            "builder",
+            delegate_of("b", "Build navigator", "a"),
+        ),
+    ]);
+    rest_on(&mut world, "sidebar.session.s-b");
+    assert_eq!(
+        chain(&world).map(|rows| rows.len()),
+        Some(2),
+        "resting on the row shows its chain"
+    );
+    key(&mut world, Key::Escape);
+    world.advance(Duration::from_millis(500));
+    assert_eq!(
+        chain(&world),
+        None,
+        "Escape under a still pointer keeps it shut"
+    );
+
+    rest_on(&mut world, "sidebar.session.s-b.chain");
+    assert!(chain(&world).is_some(), "a moved pointer opens it again");
+    rest_on(&mut world, "sidebar.session.s-b.chain.popover");
+    world.advance(Duration::from_secs(1));
+    assert!(
+        chain(&world).is_some(),
+        "the chain stays while the pointer is on it"
+    );
+    rest_on(&mut world, "tile.a");
+    world.advance(Duration::from_secs(1));
+    assert_eq!(chain(&world), None, "and goes once the pointer leaves it");
+
+    let shown = world.daemon.sent_of("desktop_show_session").len();
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-b.chain")));
+    assert!(chain(&world).is_some());
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("sidebar.session.s-b.chain.popover")
+    );
+    assert_eq!(
+        world.daemon.sent_of("desktop_show_session").len(),
+        shown,
+        "a press on the chip opens no agent"
+    );
+    let pane = middle(&world, "tile.a");
+    world.gesture(|app| app.click_at(pane));
+    assert_eq!(chain(&world), None, "a press in a terminal pane closes it");
+    rest(&mut world);
+}
+
+#[test]
+fn a_press_on_a_headers_chain_opens_it_without_selecting_its_pane() {
+    let mut world = start_with(vec![
+        with_role(
+            "Orchestrator",
+            "orchestrator",
+            session("a", "Coordinate identity", None),
+        ),
+        with_role(
+            "Builder",
+            "builder",
+            delegate_of("b", "Build navigator", "a"),
+        ),
+    ]);
+    let selected = world.daemon.sent_of("desktop_show_leaf").len();
+    world.gesture(|app| app.click(Target::key("tile.b.role")));
+    assert!(chain(&world).is_some());
+    assert_eq!(
+        world.daemon.sent_of("desktop_show_leaf").len(),
+        selected,
+        "the press opened the chain and left the pane unselected"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn escape_closes_a_shown_chain_and_still_reaches_the_terminal_and_a_hidden_row_takes_its_chain_away()
+ {
+    let mut world = start_with(vec![
+        session("a", "root session", None),
+        delegate_of("b", "child", "a"),
+    ]);
+    let pane = middle(&world, "tile.a");
+    world.gesture(|app| app.click_at(pane));
+    rest_on(&mut world, "sidebar.session.s-b");
+    assert!(chain(&world).is_some());
+    key(&mut world, Key::Escape);
+    assert_eq!(chain(&world), None);
+    let escapes: Vec<_> = world
+        .daemon
+        .sent_of("pty_input")
+        .into_iter()
+        .filter(|r| r["id"] == "r-a" && r["data"] == "\u{1b}")
+        .collect();
+    assert_eq!(escapes.len(), 1, "the agent got its Escape");
+
+    world.advance(Duration::from_millis(500));
+    rest_on(&mut world, "sidebar.session.s-a");
+    assert!(chain(&world).is_some());
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(state, Action::SessionToggleSidebar, tx);
+        })
+    });
+    assert_eq!(chain(&world), None, "the chain goes with its row");
+    rest(&mut world);
+}
