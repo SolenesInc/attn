@@ -14,6 +14,9 @@ pub trait BrowserHost {
     fn open(&mut self, page: &TileKey, url: &str);
     fn navigate(&mut self, page: &TileKey, url: &str);
     fn reload(&mut self, page: &TileKey);
+    /// Goes back one page in the page's history, if it has one.
+    fn back(&mut self, page: &TileKey);
+    fn forward(&mut self, page: &TileKey);
     /// Frees the page, so its web content process ends.
     fn close(&mut self, page: &TileKey);
     /// Shows the page over `at` in window points, clipped to `at`'s visible part, or hides it.
@@ -166,8 +169,8 @@ pub fn page_edit(ev: &KeyEvent) -> Option<PageEdit> {
     }
 }
 
-/// Whether the window takes `ev` from a focused page: a key attn binds, other than the edit
-/// keys the page keeps.
+/// Whether the window takes `ev` from a focused page: a key attn binds to an action the page
+/// does not keep, other than the page's edit keys.
 pub fn claims_key(ev: &KeyEvent) -> bool {
     page_edit(ev).is_none()
         && CLAIMED.with_borrow(|claimed| {

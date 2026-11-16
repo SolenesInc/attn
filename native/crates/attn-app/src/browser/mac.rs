@@ -269,6 +269,18 @@ impl BrowserHost for WebKitHost {
         }
     }
 
+    fn back(&mut self, page: &TileKey) {
+        if let Some(web) = self.web(page) {
+            unsafe { web.goBack() };
+        }
+    }
+
+    fn forward(&mut self, page: &TileKey) {
+        if let Some(web) = self.web(page) {
+            unsafe { web.goForward() };
+        }
+    }
+
     fn close(&mut self, page: &TileKey) {
         let Some(shown) = self.pages.remove(page) else {
             return;

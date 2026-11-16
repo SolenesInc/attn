@@ -26,6 +26,7 @@ pub(crate) use view::{address_field, page_area, reload_button};
 
 use crate::State;
 use crate::desktop::layout::{LeafKind, Node};
+use crate::keymap::PageKey;
 
 pub(crate) const KIND: &str = "browser";
 
@@ -622,10 +623,28 @@ fn handle(page: &TileKey) -> String {
     format!("browser-{}-{}", safe(&page.desktop), safe(&page.tile))
 }
 
-/// Tells the pages which keys the window takes from them: every chord `keymap` binds, and the
-/// first chord of every sequence.
+/// Tells the pages which keys the window takes from them.
 pub(crate) fn claim_keys(keymap: &crate::keymap::Keymap) {
-    host::claim_keys(keymap.chords().collect());
+    host::claim_keys(keymap.claimed_from_pages().collect());
+}
+
+/// Whether a page holds the window's keyboard.
+pub(crate) fn holds_keys(state: &State) -> bool {
+    state.browser.focused.is_some()
+}
+
+/// Runs `action`'s browser key on the page that holds the keyboard: false when no page holds
+/// it or `action` is no browser key.
+pub(crate) fn press_page_key(state: &State, action: &crate::action::Action) -> bool {
+    let (Some(page), Some(key)) = (&state.browser.focused, crate::keymap::page_key(action)) else {
+        return false;
+    };
+    host::with_host(|h| match key {
+        PageKey::Reload => h.reload(page),
+        PageKey::Back => h.back(page),
+        PageKey::Forward => h.forward(page),
+    });
+    true
 }
 
 fn answer(state: &State, request_id: String, result: Result<String, String>) {

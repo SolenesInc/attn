@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -11,6 +12,8 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Target, World, key_event};
+
+use super::keys::shortcut_records;
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::{Value, json};
 
@@ -24,6 +27,8 @@ enum Asked {
     Open(String),
     Navigate(String),
     Reload,
+    Back,
+    Forward,
     Close,
     Place(Option<Placement>),
     Focus(bool),
@@ -74,6 +79,12 @@ impl BrowserHost for Scripted {
     }
     fn reload(&mut self, _: &TileKey) {
         self.0.0.borrow_mut().push(Asked::Reload);
+    }
+    fn back(&mut self, _: &TileKey) {
+        self.0.0.borrow_mut().push(Asked::Back);
+    }
+    fn forward(&mut self, _: &TileKey) {
+        self.0.0.borrow_mut().push(Asked::Forward);
     }
     fn close(&mut self, _: &TileKey) {
         self.0.0.borrow_mut().push(Asked::Close);
@@ -152,6 +163,10 @@ fn daemon(tree: Value) -> Daemon {
             ..Session::default()
         }]),
         desktops: Some(vec![desktop(tree, 1)]),
+        settings: Some(BTreeMap::from([(
+            "analytics.enabled".to_owned(),
+            "true".to_owned(),
+        )])),
         ..InitialStateMessage::new()
     });
     daemon.on("desktop_update_tile", |r| {
@@ -817,6 +832,9 @@ fn a_click_in_the_page_gives_it_the_keyboard_and_the_window_takes_back_only_the_
 
     assert!(browser::claims_key(&chord_of(Action::SessionClose)));
     assert!(browser::claims_key(&chord_of(Action::UiCommandPalette)));
+    assert!(browser::claims_key(&chord_of(Action::SessionRefreshPrs)));
+    assert!(!browser::claims_key(&chord_of(Action::TerminalFind)));
+    assert!(!browser::claims_key(&chord_of(Action::UiActionMenu)));
     for edit in ["mod+c", "mod+v", "mod+x", "mod+a", "mod+z", "mod+shift+z"] {
         let ev = key_event(&rune::Chord::parse(edit).unwrap());
         assert!(!browser::claims_key(&ev), "the page keeps {edit}");
@@ -831,6 +849,54 @@ fn a_click_in_the_page_gives_it_the_keyboard_and_the_window_takes_back_only_the_
         engine.take().contains(&Asked::Focus(false)),
         "a click elsewhere takes the keyboard back"
     );
+    rest(&mut world);
+}
+
+#[test]
+fn the_browser_keys_reload_the_focused_page_and_walk_its_history_instead_of_their_attn_actions() {
+    let (mut world, engine) = start(START);
+    page_says(&mut world, Heard::Focused { page: page() });
+    engine.take();
+
+    for (action, asked) in [
+        (Action::SessionRefreshPrs, Asked::Reload),
+        (Action::SessionHistoryBack, Asked::Back),
+        (Action::SessionHistoryForward, Asked::Forward),
+    ] {
+        press(&mut world, action.clone());
+        assert_eq!(engine.take(), vec![asked], "{}", action.id());
+    }
+    assert!(world.daemon.sent_of("refresh_prs").is_empty());
+    assert_eq!(shortcut_records(&world), Vec::<String>::new());
+
+    world.gesture(|app| app.click(Target::key("tile.a")));
+    engine.take();
+    press(&mut world, Action::SessionHistoryBack);
+    assert!(
+        !engine.take().contains(&Asked::Back),
+        "without a focused page the key is attn's again"
+    );
+    assert_eq!(shortcut_records(&world), vec!["session.historyBack"]);
+    rest(&mut world);
+}
+
+#[test]
+fn a_key_the_page_keeps_runs_nothing_of_attn_when_the_page_passes_it_on() {
+    let (mut world, _engine) = start(START);
+    page_says(&mut world, Heard::Focused { page: page() });
+
+    for action in [
+        Action::TerminalFind,
+        Action::UiActionMenu,
+        Action::TerminalSplitVertical,
+        Action::SessionNext,
+    ] {
+        press(&mut world, action);
+    }
+    assert_eq!(shortcut_records(&world), Vec::<String>::new());
+
+    press(&mut world, Action::UiCommandPalette);
+    assert_eq!(shortcut_records(&world), vec!["ui.commandPalette"]);
     rest(&mut world);
 }
 

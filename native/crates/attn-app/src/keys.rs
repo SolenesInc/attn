@@ -93,10 +93,13 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let focus = Focus {
         field: false,
         terminal: terminal.is_some(),
+        page: crate::browser::holds_keys(state),
     };
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => {
-            run_shortcut(state, action, tx) || send_to_terminal(state, terminal, ev, tx)
+            crate::browser::press_page_key(state, &action)
+                || run_shortcut(state, action, tx)
+                || send_to_terminal(state, terminal, ev, tx)
         }
         Press::Unbound => send_to_terminal(state, terminal, ev, tx),
         Press::Leader { chord, sequences } => {
@@ -297,7 +300,7 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
     }
     let focus = Focus {
         field: true,
-        terminal: false,
+        ..Focus::default()
     };
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => run_shortcut(state, action, tx),
@@ -316,7 +319,7 @@ fn modal(state: &State) -> bool {
 fn bound(state: &State, ev: &KeyEvent, tx: &Tx) -> bool {
     let focus = Focus {
         field: tx.in_text_field(),
-        terminal: false,
+        ..Focus::default()
     };
     state.keymap.press(ev, tx, focus) != Press::Unbound
 }

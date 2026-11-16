@@ -40,9 +40,18 @@ impl Binding {
 struct Entry {
     action: Action,
     binding: Binding,
-    /// A focused text field keeps these keys for itself: ⌘F searches the field, ⌘↑ moves
-    /// its caret.
-    field_keeps: bool,
+    kept: Kept,
+}
+
+/// Which focused targets keep an action's keys for themselves, as they act on what the target
+/// shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kept {
+    Not,
+    /// A web page in a browser tile, as a browser leaves the key to the page.
+    ByPages,
+    /// A text field and a web page: ⌘F searches either, ⌘↑ moves the caret.
+    ByFieldsAndPages,
 }
 
 /// Who holds the keyboard when a key arrives.
@@ -50,6 +59,16 @@ struct Entry {
 pub struct Focus {
     pub field: bool,
     pub terminal: bool,
+    /// A web page in a browser tile.
+    pub page: bool,
+}
+
+/// What a browser key does on the page that holds the keyboard, as a browser's own keys do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageKey {
+    Reload,
+    Back,
+    Forward,
 }
 
 /// What a key press means to the keymap.
@@ -113,7 +132,7 @@ impl Keymap {
                     Entry {
                         action: action.clone(),
                         binding,
-                        field_keeps: field_keeps(action, platform),
+                        kept: kept(action, platform),
                     }
                 }
             };
@@ -172,9 +191,13 @@ impl Keymap {
         }
     }
 
-    /// The chord of every binding, and the first chord of every sequence.
-    pub fn chords(&self) -> impl Iterator<Item = Chord> + '_ {
-        self.entries.iter().map(|entry| entry.binding.first())
+    /// The chords the window takes from a focused page: every binding's first chord but the
+    /// keys the page keeps.
+    pub fn claimed_from_pages(&self) -> impl Iterator<Item = Chord> + '_ {
+        self.entries
+            .iter()
+            .filter(|entry| entry.kept == Kept::Not)
+            .map(|entry| entry.binding.first())
     }
 
     pub fn binding(&self, action: &Action) -> Option<Binding> {
@@ -188,7 +211,7 @@ impl Keymap {
     pub fn kept_by_fields(&self, action: &Action) -> bool {
         self.entries
             .iter()
-            .any(|entry| entry.action == *action && entry.field_keeps)
+            .any(|entry| entry.action == *action && entry.kept == Kept::ByFieldsAndPages)
     }
 
     /// The action a key runs where `focus` holds the keyboard, or the sequences it starts.
@@ -280,7 +303,12 @@ fn may_share_keys(a: &Action, b: &Action) -> bool {
 }
 
 fn applies(entry: &Entry, focus: Focus) -> bool {
-    if focus.field && entry.field_keeps {
+    let kept = match entry.kept {
+        Kept::Not => false,
+        Kept::ByPages => focus.page,
+        Kept::ByFieldsAndPages => focus.page || focus.field,
+    };
+    if kept {
         return false;
     }
     match entry.action {
@@ -290,18 +318,32 @@ fn applies(entry: &Entry, focus: Focus) -> bool {
     }
 }
 
-/// The defaults a focused text field keeps. ⌘B stays the field's on macOS only: its Linux
-/// keys type nothing a field takes.
-fn field_keeps(action: &Action, platform: KeyPlatform) -> bool {
+/// The focused targets that keep `action`'s keys, wherever the user binds it. ⌘B stays a
+/// field's on macOS only: its Linux keys type nothing a field takes. A field leaves ⌘K and ⌘D
+/// to attn, so ⌘K turns the palette from its own field.
+fn kept(action: &Action, platform: KeyPlatform) -> Kept {
     match action {
         Action::TerminalToggleZoom
         | Action::TerminalFind
         | Action::SessionPrev
         | Action::SessionNext
         | Action::MarkdownSendAnnotations
-        | Action::TerminalSendAnnotations => true,
-        Action::SessionToggleSidebar => platform == KeyPlatform::Mac,
-        _ => false,
+        | Action::TerminalSendAnnotations => Kept::ByFieldsAndPages,
+        Action::SessionToggleSidebar if platform == KeyPlatform::Mac => Kept::ByFieldsAndPages,
+        Action::SessionToggleSidebar | Action::UiActionMenu | Action::TerminalSplitVertical => {
+            Kept::ByPages
+        }
+        _ => Kept::Not,
+    }
+}
+
+/// The browser key `action` is on a focused page, wherever the user binds it.
+pub fn page_key(action: &Action) -> Option<PageKey> {
+    match action {
+        Action::SessionRefreshPrs => Some(PageKey::Reload),
+        Action::SessionHistoryBack => Some(PageKey::Back),
+        Action::SessionHistoryForward => Some(PageKey::Forward),
+        _ => None,
     }
 }
 
@@ -353,13 +395,13 @@ fn overrides(raw: &str, platform: KeyPlatform) -> BTreeMap<Action, Option<Entry>
         }
         if value.is_null() {
             out.insert(action, None);
-        } else if let Some((binding, field_keeps)) = stored_binding(value, platform) {
+        } else if let Some(binding) = parse_binding(value, platform) {
             out.insert(
                 action.clone(),
                 Some(Entry {
+                    kept: kept(&action, platform),
                     action,
                     binding,
-                    field_keeps,
                 }),
             );
         }
@@ -374,24 +416,18 @@ fn renamed(id: &str) -> String {
     }
 }
 
-/// The keys a binding stored in `keybindings_config` runs on, as dispatch reads it.
+/// The keys a binding stored in `keybindings_config` runs on, as the Tauri app stores it:
+/// `{key, code?, meta?, shift?, ctrl?, alt?}`, or `{leader, then}` with one of those each.
 pub(crate) fn parse_binding(value: &Value, platform: KeyPlatform) -> Option<Binding> {
-    stored_binding(value, platform).map(|(binding, _)| binding)
-}
-
-/// A binding as the Tauri app stores it: `{key, code?, meta?, shift?, ctrl?, alt?,
-/// editableTarget?}`, or `{leader, then}` with one of those each.
-fn stored_binding(value: &Value, platform: KeyPlatform) -> Option<(Binding, bool)> {
     if let (Some(leader), Some(then)) = (value.get("leader"), value.get("then")) {
-        let (leader, keeps) = stored_chord(leader, platform)?;
-        let (then, _) = stored_chord(then, platform)?;
-        return Some((Binding::Sequence { leader, then }, keeps));
+        let leader = stored_chord(leader, platform)?;
+        let then = stored_chord(then, platform)?;
+        return Some(Binding::Sequence { leader, then });
     }
-    let (chord, keeps) = stored_chord(value, platform)?;
-    Some((Binding::Chord(chord), keeps))
+    stored_chord(value, platform).map(Binding::Chord)
 }
 
-fn stored_chord(value: &Value, platform: KeyPlatform) -> Option<(Chord, bool)> {
+fn stored_chord(value: &Value, platform: KeyPlatform) -> Option<Chord> {
     let key = value.get("key")?.as_str().filter(|key| !key.is_empty())?;
     let code = value.get("code").and_then(Value::as_str);
     let flag = |name: &str| value.get(name).and_then(Value::as_bool) == Some(true);
@@ -414,9 +450,7 @@ fn stored_chord(value: &Value, platform: KeyPlatform) -> Option<(Chord, bool)> {
         spec.push("shift");
     }
     spec.push(&key_name);
-    let chord = Chord::parse(&spec.join("+")).ok()?;
-    let keeps = value.get("editableTarget").and_then(Value::as_str) == Some("native");
-    Some((chord, keeps))
+    Chord::parse(&spec.join("+")).ok()
 }
 
 /// A DOM `KeyboardEvent.key` as a chord key name.

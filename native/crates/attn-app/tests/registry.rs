@@ -74,7 +74,7 @@ fn same_as_tauri(name: &str, platform: KeyPlatform) {
         );
         assert_eq!(
             native.kept_by_fields(action),
-            tauri.kept_by_fields(action),
+            table[action.id()].contains("editableTarget"),
             "whether a field keeps {}'s keys",
             action.id()
         );
