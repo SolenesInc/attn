@@ -129,7 +129,7 @@ impl Keymap {
                     Entry {
                         action: action.clone(),
                         binding,
-                        kept: kept(action, platform),
+                        kept: kept(action, binding, platform),
                     }
                 }
             };
@@ -316,7 +316,10 @@ fn applies(entry: &Entry, focus: Focus) -> bool {
 }
 
 /// ⌘B stays a field's on macOS only: its Linux keys type nothing a field takes.
-fn kept(action: &Action, platform: KeyPlatform) -> Kept {
+fn kept(action: &Action, binding: Binding, platform: KeyPlatform) -> Kept {
+    if let Binding::Sequence { .. } = binding {
+        return Kept::Not;
+    }
     match action {
         Action::TerminalToggleZoom
         | Action::TerminalFind
@@ -394,7 +397,7 @@ fn overrides(raw: &str, platform: KeyPlatform) -> BTreeMap<Action, Option<Entry>
             out.insert(
                 action.clone(),
                 Some(Entry {
-                    kept: kept(&action, platform),
+                    kept: kept(&action, binding, platform),
                     action,
                     binding,
                 }),

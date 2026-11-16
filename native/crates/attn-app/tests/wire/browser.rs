@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -152,6 +151,10 @@ fn profile() -> Profile {
 }
 
 fn daemon(tree: Value) -> Daemon {
+    daemon_with(tree, &[])
+}
+
+fn daemon_with(tree: Value, settings: &[(&str, &str)]) -> Daemon {
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile()]),
@@ -163,10 +166,13 @@ fn daemon(tree: Value) -> Daemon {
             ..Session::default()
         }]),
         desktops: Some(vec![desktop(tree, 1)]),
-        settings: Some(BTreeMap::from([(
-            "analytics.enabled".to_owned(),
-            "true".to_owned(),
-        )])),
+        settings: Some(
+            [("analytics.enabled", "true")]
+                .iter()
+                .chain(settings)
+                .map(|&(name, value)| (name.to_owned(), value.to_owned()))
+                .collect(),
+        ),
         ..InitialStateMessage::new()
     });
     daemon.on("desktop_update_tile", |r| {
@@ -893,6 +899,24 @@ fn a_key_the_page_keeps_runs_nothing_of_attn_when_the_page_passes_it_on() {
 
     press(&mut world, Action::UiCommandPalette);
     assert_eq!(shortcut_records(&world), vec!["ui.commandPalette"]);
+    rest(&mut world);
+}
+
+#[test]
+fn a_leader_sequence_reaches_attn_from_a_focused_page_even_for_a_key_the_page_keeps() {
+    let rebound = r#"{"version":1,"overrides":{"ui.actionMenu":{"leader":{"key":"y","meta":true,"shift":true},"then":{"key":"j"}}}}"#;
+    let (mut world, _engine) = start_on(daemon_with(
+        with_browser(START),
+        &[("keybindings_config", rebound)],
+    ));
+    page_says(&mut world, Heard::Focused { page: page() });
+
+    let leader = key_event(&rune::Chord::parse("mod+shift+y").unwrap());
+    assert!(browser::claims_key(&leader), "the window takes the leader");
+    world.gesture(|app| app.key(leader));
+    world.gesture(|app| app.type_text("j"));
+
+    assert_eq!(shortcut_records(&world), vec!["ui.actionMenu"]);
     rest(&mut world);
 }
 

@@ -122,3 +122,26 @@ fn a_rebound_key_follows_its_action_between_attn_and_the_page() {
     assert!(claims("mod+alt+l"), "reload's new key reloads the page");
     assert!(claims("mod+y"), "jump to waiting's new key is attn's");
 }
+
+#[test]
+fn a_leader_sequence_goes_to_attn_whatever_its_action() {
+    let setting = r#"{"version":1,"overrides":{
+        "ui.actionMenu":{"leader":{"key":"y","meta":true,"shift":true},"then":{"key":"j"}},
+        "terminal.find":{"key":"e","meta":true}
+    }}"#;
+    let keymap = Keymap::from_setting(Some(setting), KeyPlatform::Mac);
+    assert!(matches!(
+        keymap.binding(&Action::UiActionMenu),
+        Some(Binding::Sequence { .. })
+    ));
+    assert_eq!(
+        owner(&keymap, &Action::UiActionMenu),
+        Owner::Attn,
+        "the page keeps the action menu's single key, not a sequence bound to it"
+    );
+    assert_eq!(
+        owner(&keymap, &Action::TerminalFind),
+        Owner::Page,
+        "the page keeps find on its single key"
+    );
+}
