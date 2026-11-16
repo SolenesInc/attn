@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -98,6 +98,7 @@ try {
 
   await runner.step('build_a_row', async () => {
     await launchFreshAppAndConnect(client, observer);
+    queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const cwd = path.join(runner.sessionDir, 'row');
     fs.mkdirSync(cwd, { recursive: true });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { waitForSessionDesktop } from './scenarioAssertions.mjs';
@@ -99,6 +99,7 @@ try {
   await runner.step('build_a_row', async () => {
     await launchFreshAppAndConnect(client, observer);
     await request('set_setting', { key: 'asks_enabled', value: 'true' });
+    queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const cwd = path.join(runner.sessionDir, 'row');
     fs.mkdirSync(cwd, { recursive: true });

@@ -42,7 +42,9 @@ repository root.
   `go tool test-history sync && node app/scripts/real-app-harness/measure-scenario-durations.mjs`.
 - A scenario shares its instance with the scenarios before it in the shard, and
   which ones those are changes with the recorded durations. Leave no tile behind,
-  and do not drive onto a desktop the scenario did not make.
+  and do not drive onto a desktop the scenario did not make. Before changing a
+  setting, directly or through a key such as `shelf.fewerTiles`, queue its
+  restore with `queueDaemonSettingRestore`.
 - `runShellCommandInPane` requires a shell. For a mock agent, submit a prompt
   matched by its fixture and wait for the resulting reply.
 - `profileCommand` awaits `profile_action_result`; CLI commands such as

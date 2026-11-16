@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, openHarnessDesktop, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, openHarnessDesktop, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appLocalDataDirForInstance, currentHarnessInstance } from './harnessInstance.mjs';
 import { captureWebKitPids, delay, readProcessTable, collectDescendantPids, classify } from './perfMeasure.mjs';
@@ -194,6 +194,7 @@ try {
   await runner.step('launch', async () => {
     otherWebKitPids = await captureWebKitPids();
     await launchFreshAppAndConnect(client, observer);
+    queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const { logicalBounds } = await request('get_window_bounds');
     await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });

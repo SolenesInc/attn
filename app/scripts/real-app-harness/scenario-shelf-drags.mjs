@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { waitForPaneInputFocus, waitForSessionDesktop } from './scenarioAssertions.mjs';
@@ -96,6 +96,7 @@ registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ shel
 try {
   await runner.step('launch', async () => {
     await launchFreshAppAndConnect(client, observer);
+    queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const { logicalBounds } = await request('get_window_bounds');
     await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1600, height: 900 } });

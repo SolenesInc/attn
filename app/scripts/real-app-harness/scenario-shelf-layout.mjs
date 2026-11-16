@@ -232,6 +232,7 @@ try {
     await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'queue_mode_enabled');
     await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
   });
 
