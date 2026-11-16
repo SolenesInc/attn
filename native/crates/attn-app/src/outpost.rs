@@ -88,3 +88,49 @@ pub(crate) fn refuse_unless_recoverable(state: &mut State, session: &str, tx: &m
     state.window.notify(why, tx);
     true
 }
+
+/// Whether the outpost runs another build than home, or lacks the shared terminal host.
+pub(crate) fn needs_update(row: &OutpostInfo, home_build: &str) -> bool {
+    !home_build.is_empty()
+        && (row.host_missing == Some(true)
+            || match row.build.as_deref().filter(|b| !b.is_empty()) {
+                Some(build) => build != home_build,
+                None => row.state == "refused",
+            })
+}
+
+pub(crate) fn updating(row: &OutpostInfo) -> bool {
+    row.update
+        .as_ref()
+        .is_some_and(|u| u.phase != "done" && u.phase != "failed")
+}
+
+pub(crate) fn update_text(row: &OutpostInfo) -> Option<String> {
+    let update = row.update.as_ref()?;
+    if let Some(outcome) = update.outcome.as_ref().filter(|o| !o.is_empty()) {
+        return Some(outcome.clone());
+    }
+    Some(
+        match update.phase.as_str() {
+            "connecting" => "Connecting.",
+            "building" => "Building attn for Linux. The first build takes about a minute.",
+            "downloading" => "Downloading attn for Linux.",
+            "sending" => "Copying it over.",
+            "verifying" => "Checking it runs.",
+            "restarting" => "Restarting.",
+            "done" => "Up to date.",
+            "failed" => "Update failed.",
+            other => other,
+        }
+        .to_owned(),
+    )
+}
+
+/// Outposts by name as a band says them: one, two joined by "and", or a count past two.
+pub(crate) fn names(names: &[&str]) -> String {
+    match names {
+        [a, b] => format!("{a} and {b}"),
+        [_, _, _, ..] => format!("{} outposts", names.len()),
+        _ => names.concat(),
+    }
+}

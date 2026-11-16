@@ -10,40 +10,16 @@ use rune::{El, Tx, row, text};
 use rune_kit::{Button, ControlSize};
 
 use crate::State;
+use crate::closing::{Closing, Tick};
 use crate::requests::Refused;
 use attn_client::Connection;
 
 const CLOSED_PREF: &str = "update_run.closed";
-const CLOSE_AFTER_SECONDS: f64 = 5.0;
-
 #[derive(Default)]
 pub(crate) struct Banner {
     /// The run dismissed in this window; before one is, the run dismissed at the last launch.
     closed: Option<String>,
-    countdown: Option<Countdown>,
-    /// Whether the pointer rests on the band, which holds a countdown that starts under it.
-    pointed: bool,
-}
-
-/// The seconds left before a run that ended well closes. `since` is the clock reading the
-/// count last resumed at, and is `None` while the pointer holds it.
-struct Countdown {
-    run: String,
-    left: f64,
-    since: Option<f64>,
-    shown: u32,
-}
-
-impl Countdown {
-    fn remaining(&self, now: f64) -> f64 {
-        self.left - self.since.map_or(0.0, |since| now - since)
-    }
-
-    fn wake(&self, tx: &mut Tx) {
-        if let Some(since) = self.since {
-            tx.wake_at(since + self.left - f64::from(self.shown.saturating_sub(1)));
-        }
-    }
+    closing: Closing,
 }
 
 pub(crate) fn is_open(run: &UpdateRun) -> bool {
@@ -110,12 +86,11 @@ fn outpost_notes(outposts: &[UpdateOutpostProgress]) -> Vec<(&str, String)> {
     groups
         .into_iter()
         .map(|(step, group)| {
-            let names = match group.as_slice() {
-                [one] => one.name.clone(),
-                [a, b] => format!("{} and {}", a.name, b.name),
-                many => format!("{} outposts", many.len()),
-            };
-            (group[0].id.as_str(), format!("{names}: {step}"))
+            let names: Vec<&str> = group.iter().map(|o| o.name.as_str()).collect();
+            (
+                group[0].id.as_str(),
+                format!("{}: {step}", crate::outpost::names(&names)),
+            )
         })
         .collect()
 }
@@ -131,67 +106,28 @@ fn shown(state: &State) -> Option<&UpdateRun> {
     (closed.as_deref() != Some(run.id.as_str())).then_some(run)
 }
 
-/// Starts the countdown when the shown run ends well, and drops it when the run changes.
+/// Counts down while the shown run has ended well.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     let due = shown(state)
         .filter(|run| closes_by_itself(run))
         .map(|run| run.id.clone());
-    let banner = &mut state.window.update_run;
-    match due {
-        Some(run) if banner.countdown.as_ref().is_some_and(|c| c.run == run) => {}
-        Some(run) => {
-            let countdown = Countdown {
-                run,
-                left: CLOSE_AFTER_SECONDS,
-                since: (!banner.pointed).then(|| tx.clock()),
-                shown: CLOSE_AFTER_SECONDS as u32,
-            };
-            countdown.wake(tx);
-            banner.countdown = Some(countdown);
-        }
-        None => banner.countdown = None,
-    }
+    state.window.update_run.closing.follow(due, tx);
 }
 
 /// Moves the countdown on, and closes the band when it runs out.
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
-    let Some(countdown) = &mut state.window.update_run.countdown else {
-        return false;
-    };
-    if countdown.since.is_none() {
-        return false;
+    match state.window.update_run.closing.poll(now, tx) {
+        Tick::Same => false,
+        Tick::Changed => true,
+        Tick::RanOut => {
+            close(state);
+            true
+        }
     }
-    let left = countdown.remaining(now);
-    if left <= 0.0 {
-        close(state);
-        return true;
-    }
-    let shown = left.ceil() as u32;
-    let changed = shown != countdown.shown;
-    countdown.shown = shown;
-    countdown.wake(tx);
-    changed
 }
 
 fn hold(state: &mut State, inside: bool, tx: &mut Tx) {
-    let banner = &mut state.window.update_run;
-    banner.pointed = inside;
-    let Some(countdown) = &mut banner.countdown else {
-        tx.live_only();
-        return;
-    };
-    let now = tx.clock();
-    match (inside, countdown.since) {
-        (true, Some(_)) => {
-            countdown.left = countdown.remaining(now);
-            countdown.since = None;
-        }
-        (false, None) => {
-            countdown.since = Some(now);
-            countdown.wake(tx);
-        }
-        _ => tx.live_only(),
-    }
+    state.window.update_run.closing.hold(inside, tx);
 }
 
 fn close(state: &mut State) {
@@ -199,8 +135,7 @@ fn close(state: &mut State) {
     let Some(run) = state.facts.update_run.as_ref().as_ref() else {
         return;
     };
-    banner.countdown = None;
-    banner.pointed = false;
+    banner.closing.stop();
     banner.closed = Some(run.id.clone());
     crate::frame::set_pref_string(CLOSED_PREF, &run.id);
 }
@@ -263,11 +198,10 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
     let countdown = state
         .window
         .update_run
-        .countdown
-        .as_ref()
-        .filter(|c| c.run == run.id)
-        .map(|c| {
-            text(format!("Closing in {}s", c.shown))
+        .closing
+        .seconds(&run.id)
+        .map(|seconds| {
+            text(format!("Closing in {seconds}s"))
                 .key("update-run.countdown")
                 .font(type_::BODY)
                 .color(t.text_tertiary)

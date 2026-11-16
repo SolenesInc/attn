@@ -96,6 +96,11 @@ pub(crate) fn refused(state: &mut State, reply: &Reply) -> bool {
     true
 }
 
+/// Why the daemon refused the last outpost command, or that it could not be sent.
+pub(crate) fn command_error(state: &State) -> Option<&str> {
+    state.window.settings.outposts.command_error.as_deref()
+}
+
 fn connected(state: &State) -> bool {
     state.facts.connection == Connection::Connected
 }
@@ -154,7 +159,7 @@ fn repair(state: &mut State, id: &str) {
     );
 }
 
-fn update(state: &mut State, id: &str) {
+pub(crate) fn update(state: &mut State, id: &str) {
     send(
         state,
         &UpdateOutpostMessage {
@@ -216,43 +221,6 @@ fn connect_in_terminal(state: &mut State, id: &str, tx: &mut Tx) {
         },
         tx,
     );
-}
-
-/// Whether the outpost runs another build than home, or lacks the shared terminal host.
-fn needs_update(row: &OutpostInfo, home_build: &str) -> bool {
-    !home_build.is_empty()
-        && (row.host_missing == Some(true)
-            || match row.build.as_deref().filter(|b| !b.is_empty()) {
-                Some(build) => build != home_build,
-                None => row.state == "refused",
-            })
-}
-
-fn updating(row: &OutpostInfo) -> bool {
-    row.update
-        .as_ref()
-        .is_some_and(|u| u.phase != "done" && u.phase != "failed")
-}
-
-fn update_text(row: &OutpostInfo) -> Option<String> {
-    let update = row.update.as_ref()?;
-    if let Some(outcome) = update.outcome.as_ref().filter(|o| !o.is_empty()) {
-        return Some(outcome.clone());
-    }
-    Some(
-        match update.phase.as_str() {
-            "connecting" => "Connecting.",
-            "building" => "Building attn for Linux. The first build takes about a minute.",
-            "downloading" => "Downloading attn for Linux.",
-            "sending" => "Copying it over.",
-            "verifying" => "Checking it runs.",
-            "restarting" => "Restarting.",
-            "done" => "Up to date.",
-            "failed" => "Update failed.",
-            other => other,
-        }
-        .to_owned(),
-    )
 }
 
 fn state_tone(state: &str) -> Tone {
@@ -442,7 +410,7 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
     if let Some(nb) = &outpost.notebook {
         details.push(notebook(&key, nb, t));
     }
-    if let Some(said) = update_text(outpost) {
+    if let Some(said) = crate::outpost::update_text(outpost) {
         details.push(status(part("update"), said, t));
     }
     let run = state.facts.update_run.as_ref().as_ref();
@@ -485,8 +453,8 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
             move |state, tx| crate::update_run::start(state, Some(vec![id.clone()]), tx),
         ));
     }
-    if needs_update(outpost, &state.facts.home_build) {
-        let busy = updating(outpost);
+    if crate::outpost::needs_update(outpost, &state.facts.home_build) {
+        let busy = crate::outpost::updating(outpost);
         let label = if busy {
             "Updating…"
         } else if outpost.host_missing == Some(true) {

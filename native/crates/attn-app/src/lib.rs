@@ -7,6 +7,7 @@ pub mod browser;
 mod calendar;
 mod callouts;
 mod cheat_sheet;
+mod closing;
 mod connection;
 pub mod daemon;
 mod deep_link;
@@ -29,6 +30,7 @@ mod notebook;
 mod notifications;
 mod opener;
 mod outpost;
+mod outpost_updates;
 mod palette;
 mod picker;
 mod profile_switcher;
@@ -228,6 +230,7 @@ pub fn bind(
             ledger::follow(state, was, tx);
             notifications::follow(state, was, tx);
             update_run::follow(state, tx);
+            outpost_updates::follow(state, tx);
             settings::follow(state, changed, tx);
             shortcut_editor::follow(state);
             quick_capture::shortcut::follow(state);
@@ -312,7 +315,9 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
     let settings = settings::poll(state, now, tx);
-    let updating = update_run::poll(state, now, tx) | attention::poll(state, now);
+    let updating = update_run::poll(state, now, tx)
+        | outpost_updates::poll(state, now, tx)
+        | attention::poll(state, now);
     let pointed = callouts::poll(state, tx);
     let greeted = whats_new::greet(state, tx);
     let reported = diagnostic_report::poll(state, now, tx);

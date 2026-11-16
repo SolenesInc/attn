@@ -23,6 +23,7 @@ mod wire {
     mod notebook;
     mod notifications;
     mod opener;
+    mod outpost_updates;
     mod palette;
     mod picker;
     mod profile;
