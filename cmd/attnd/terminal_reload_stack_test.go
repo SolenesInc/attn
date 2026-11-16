@@ -3,7 +3,9 @@ package main_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -22,6 +24,10 @@ func TestTerminalRunWaitsForTheFirstPromptAfterReload(t *testing.T) {
 			if placement == "outpost" {
 				machine = testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 			}
+			realBash, err := exec.LookPath("bash")
+			if err != nil || runtime.GOOS == "darwin" && realBash == "/bin/bash" {
+				t.Skip("the wrapper needs a bash that reads ENV in POSIX mode, and macOS /bin/bash 3.2 does not")
+			}
 			waiting := machine.PauseEvery(pausepoint.PtyWaitBlock)
 			gate, release, ready := machine.Path("hold"), machine.Path("release"), machine.Path("ready")
 			shell := machine.Path("bin", "bash")
@@ -38,7 +44,7 @@ func TestTerminalRunWaitsForTheFirstPromptAfterReload(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _, _ = unblock.WriteString("go\n"); _ = unblock.Close() })
-			script := fmt.Sprintf("#!/bin/sh\nif [ \"$#\" = 1 ] && [ \"$1\" = -l ] && [ -f %q ]; then printf ready >%q; read hold <%q; fi\nexec /bin/bash \"$@\"\n", gate, ready, release)
+			script := fmt.Sprintf("#!/bin/sh\ncase \" $* \" in *\" -c \"*) ;; *) if [ -f %q ]; then printf ready >%q; read hold <%q; fi ;; esac\nexec %q \"$@\"\n", gate, ready, release, realBash)
 			if err := os.WriteFile(shell, []byte(script), 0o700); err != nil {
 				t.Fatal(err)
 			}

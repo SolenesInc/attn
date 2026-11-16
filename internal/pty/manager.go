@@ -571,10 +571,7 @@ func normalizeAgent(agent string, external bool) string {
 	return "codex"
 }
 
-func buildSpawnCommand(opts SpawnOptions, agent, shellPath string, env []string) *exec.Cmd {
-	if agent == "shell" && len(opts.AgentArgv) == 0 {
-		return exec.Command(shellPath, "-l")
-	}
+func buildSpawnCommand(opts SpawnOptions, shellPath string, env []string) *exec.Cmd {
 	if opts.AgentLoginShell {
 		overlay := MergeEnvironment(pathOverlay(env), opts.AgentEnv)
 		return loginShellCommand(shellPath, opts.AgentArgv, overlay)

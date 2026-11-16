@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -22,16 +23,12 @@ func removeShellOverlay(dir string) {
 	_ = os.RemoveAll(dir)
 }
 
-type shellStartupStrategy func(shellPath string, env []string) (shellPaneLaunch, error)
+type shellStartupStrategy func(shellPath string, env []string, attnDir string) (shellPaneLaunch, error)
 
 var shellStartupStrategies = map[string]shellStartupStrategy{
-	"zsh": prepareZshShellPaneLaunch,
-	"bash": func(shellPath string, env []string) (shellPaneLaunch, error) {
-		return preparePOSIXShellPaneLaunch(shellPath, env, true)
-	},
-	"sh": func(shellPath string, env []string) (shellPaneLaunch, error) {
-		return preparePOSIXShellPaneLaunch(shellPath, env, false)
-	},
+	"zsh":  prepareZshShellPaneLaunch,
+	"bash": prepareBashShellPaneLaunch,
+	"sh":   prepareShShellPaneLaunch,
 	"fish": prepareFishShellPaneLaunch,
 }
 
@@ -46,9 +43,9 @@ func shellKind(shellPath string) string {
 	return ""
 }
 
-func prepareShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
+func prepareShellPaneLaunch(shellPath string, env []string, attnDir string) (shellPaneLaunch, error) {
 	if strategy, ok := shellStartupStrategies[shellKind(shellPath)]; ok {
-		return strategy(shellPath, env)
+		return strategy(shellPath, env, attnDir)
 	}
 	return shellPaneLaunch{
 		command: exec.Command(shellPath, "-l"),
@@ -67,18 +64,18 @@ func shellNames(shellPath string) []string {
 	return names
 }
 
-func prepareFishShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
-	path, ok := LookupEnv(env, "PATH")
-	if !ok {
-		return shellPaneLaunch{}, fmt.Errorf("launch environment is missing PATH")
+func prepareFishShellPaneLaunch(shellPath string, env []string, attnDir string) (shellPaneLaunch, error) {
+	if attnDir == "" {
+		return shellPaneLaunch{command: exec.Command(shellPath, "-l"), env: env}, nil
 	}
+	dir := shellQuote(attnDir)
 	return shellPaneLaunch{
-		command: exec.Command(shellPath, "-l", "-C", "set -gx PATH "+shellQuote(path)),
+		command: exec.Command(shellPath, "-l", "-C", "set -gx PATH "+dir+" (string match -v -- "+dir+" $PATH)"),
 		env:     env,
 	}, nil
 }
 
-func prepareZshShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
+func prepareZshShellPaneLaunch(shellPath string, env []string, _ string) (shellPaneLaunch, error) {
 	overlay, err := os.MkdirTemp("", "attn-zsh-startup-")
 	if err != nil {
 		return shellPaneLaunch{}, fmt.Errorf("create zsh startup overlay: %w", err)
@@ -318,89 +315,130 @@ unset ATTN_SHELL_INIT_DIR ATTN_SHELL_LAUNCH_PATH ATTN_SHELL_USER_ZDOTDIR ATTN_SH
 `
 }
 
-func preparePOSIXShellPaneLaunch(shellPath string, env []string, isBash bool) (shellPaneLaunch, error) {
-	overlay, err := os.MkdirTemp("", "attn-shell-startup-")
-	if err != nil {
-		return shellPaneLaunch{}, fmt.Errorf("create shell startup overlay: %w", err)
-	}
-	cleanup := func() { _ = os.RemoveAll(overlay) }
-	path, ok := LookupEnv(env, "PATH")
-	if !ok {
-		cleanup()
-		return shellPaneLaunch{}, errors.New("launch environment is missing PATH")
-	}
-	userHome, ok := LookupEnv(env, "HOME")
-	if !ok || userHome == "" {
-		cleanup()
-		return shellPaneLaunch{}, errors.New("launch environment is missing HOME")
-	}
+const attnDirFirstOnPath = `if [ -n "${ATTN_SHELL_ATTN_DIR-}" ]; then
+  attn_rest="$PATH:"
+  attn_path="$ATTN_SHELL_ATTN_DIR"
+  while [ -n "$attn_rest" ]; do
+    attn_entry="${attn_rest%%:*}"
+    attn_rest="${attn_rest#*:}"
+    if [ "$attn_entry" != "$ATTN_SHELL_ATTN_DIR" ]; then
+      attn_path="$attn_path:$attn_entry"
+    fi
+  done
+  PATH="$attn_path"
+  export PATH
+  unset attn_rest attn_path attn_entry
+fi
+`
 
-	profile := posixStartupOverlay(isBash)
-	if err := os.WriteFile(filepath.Join(overlay, ".bash_profile"), []byte(profile), 0o600); err != nil {
-		cleanup()
-		return shellPaneLaunch{}, fmt.Errorf("write bash startup overlay: %w", err)
+const restoreUserENV = `case "${ATTN_SHELL_USER_ENV_IS_SET-}" in
+1)
+  ENV="$ATTN_SHELL_USER_ENV"
+  export ENV
+  ;;
+0) unset ENV ;;
+esac
+`
+
+const (
+	bashStartupFile = "attn-startup.bash"
+	shStartupFile   = "attn-startup.sh"
+)
+
+func startupENV(env []string, file string) []string {
+	userEnv, userEnvSet := LookupEnv(env, "ENV")
+	return []string{
+		"ENV=" + file,
+		"ATTN_SHELL_USER_ENV=" + userEnv,
+		"ATTN_SHELL_USER_ENV_IS_SET=" + boolEnvValue(userEnvSet),
 	}
-	if err := os.WriteFile(filepath.Join(overlay, ".profile"), []byte(profile), 0o600); err != nil {
-		cleanup()
-		return shellPaneLaunch{}, fmt.Errorf("write sh startup overlay: %w", err)
+}
+
+func isMacOSSystemBash(shellPath string) bool {
+	return runtime.GOOS == "darwin" && shellPath == "/bin/bash"
+}
+
+func prepareBashShellPaneLaunch(shellPath string, env []string, attnDir string) (shellPaneLaunch, error) {
+	overlay, err := os.MkdirTemp("", "attn-bash-startup-")
+	if err != nil {
+		return shellPaneLaunch{}, fmt.Errorf("create bash startup overlay: %w", err)
 	}
-	if isBash {
-		if err := os.WriteFile(filepath.Join(overlay, bashIntegrationFile), []byte(bashOSC133Integration), 0o600); err != nil {
-			cleanup()
-			return shellPaneLaunch{}, fmt.Errorf("write bash shell integration: %w", err)
+	for file, content := range map[string]string{bashStartupFile: bashLoginStartup, bashIntegrationFile: bashOSC133Integration} {
+		if err := os.WriteFile(filepath.Join(overlay, file), []byte(content), 0o600); err != nil {
+			_ = os.RemoveAll(overlay)
+			return shellPaneLaunch{}, fmt.Errorf("write bash startup overlay %s: %w", file, err)
 		}
 	}
-
-	launchEnv := MergeEnvironment(env, []string{
-		"HOME=" + overlay,
-		"ATTN_SHELL_USER_HOME=" + userHome,
-		"ATTN_SHELL_LAUNCH_PATH=" + path,
-		"ATTN_SHELL_INIT_DIR=" + overlay,
-	})
+	rc := filepath.Join(overlay, bashStartupFile)
+	startEnv := []string{"ATTN_SHELL_INIT_DIR=" + overlay, "ATTN_SHELL_ATTN_DIR=" + attnDir}
+	if isMacOSSystemBash(shellPath) {
+		return shellPaneLaunch{
+			command:    exec.Command(shellPath, "--rcfile", rc, "-i"),
+			env:        MergeEnvironment(env, startEnv),
+			overlayDir: overlay,
+		}, nil
+	}
 	return shellPaneLaunch{
-		command:    exec.Command(shellPath, "-l"),
-		env:        launchEnv,
+		command:    exec.Command(shellPath, "--posix", "-l"),
+		env:        MergeEnvironment(env, append(startEnv, startupENV(env, rc)...)),
 		overlayDir: overlay,
 	}, nil
 }
 
-func posixStartupOverlay(bash bool) string {
-	const warmup = `if [ -x /usr/bin/true ]; then
-  /usr/bin/true
+const bashLoginStartup = `# Generated by attn. Run bash's login startup, as bash -l would, then
+# put the active attn first on the PATH that startup built.
+set +o posix
+shopt -u inherit_errexit 2>/dev/null
+case "$(declare -p HISTFILE 2>/dev/null)" in
+"declare -x"*) ;;
+*) HISTFILE="$HOME/.bash_history" ;;
+esac
+` + restoreUserENV + `if [ -r /etc/profile ]; then
+  . /etc/profile
 fi
-`
-	if bash {
-		return `# Generated by attn. Preserve the user's login startup order, then
-# restore the launch PATH after that startup has completed.
-HOME="$ATTN_SHELL_USER_HOME"
-export HOME
-` + warmup + `if [ -r "$HOME/.bash_profile" ]; then
+if [ -r "$HOME/.bash_profile" ]; then
   . "$HOME/.bash_profile"
 elif [ -r "$HOME/.bash_login" ]; then
   . "$HOME/.bash_login"
 elif [ -r "$HOME/.profile" ]; then
   . "$HOME/.profile"
 fi
-PATH="$ATTN_SHELL_LAUNCH_PATH"
-export PATH
-if [ -n "${BASH_VERSION-}" ] && [ -z "${ATTN_NO_SHELL_INTEGRATION-}" ] && [ -r "$ATTN_SHELL_INIT_DIR/` + bashIntegrationFile + `" ]; then
+` + attnDirFirstOnPath + `if [ -z "${ATTN_NO_SHELL_INTEGRATION-}" ] && [ -r "$ATTN_SHELL_INIT_DIR/` + bashIntegrationFile + `" ]; then
   . "$ATTN_SHELL_INIT_DIR/` + bashIntegrationFile + `"
 fi
-unset ATTN_SHELL_USER_HOME ATTN_SHELL_LAUNCH_PATH ATTN_SHELL_INIT_DIR
+unset ATTN_SHELL_INIT_DIR ATTN_SHELL_ATTN_DIR ATTN_SHELL_USER_ENV ATTN_SHELL_USER_ENV_IS_SET
 `
+
+func prepareShShellPaneLaunch(shellPath string, env []string, attnDir string) (shellPaneLaunch, error) {
+	overlay, err := os.MkdirTemp("", "attn-sh-startup-")
+	if err != nil {
+		return shellPaneLaunch{}, fmt.Errorf("create sh startup overlay: %w", err)
 	}
-	return `# Generated by attn. Preserve the user's login startup order, then
-# restore the launch PATH after that startup has completed.
-HOME="$ATTN_SHELL_USER_HOME"
-export HOME
-` + warmup + `if [ -r "$HOME/.profile" ]; then
+	startup := filepath.Join(overlay, shStartupFile)
+	if err := os.WriteFile(startup, []byte(shStartupEnv), 0o600); err != nil {
+		_ = os.RemoveAll(overlay)
+		return shellPaneLaunch{}, fmt.Errorf("write sh startup overlay: %w", err)
+	}
+	return shellPaneLaunch{
+		command:    exec.Command(shellPath, "-i"),
+		env:        MergeEnvironment(env, append(startupENV(env, startup), "ATTN_SHELL_ATTN_DIR="+attnDir)),
+		overlayDir: overlay,
+	}, nil
+}
+
+const shStartupEnv = `# Generated by attn. Run sh's login startup and the user's $ENV, as
+# sh -l would, then put the active attn first on the PATH they built.
+` + restoreUserENV + `if [ -r /etc/profile ]; then
+  . /etc/profile
+fi
+if [ -r "$HOME/.profile" ]; then
   . "$HOME/.profile"
 fi
-PATH="$ATTN_SHELL_LAUNCH_PATH"
-export PATH
-unset ATTN_SHELL_USER_HOME ATTN_SHELL_LAUNCH_PATH ATTN_SHELL_INIT_DIR
+if [ -n "${ENV-}" ] && [ -r "$ENV" ]; then
+  . "$ENV"
+fi
+` + attnDirFirstOnPath + `unset ATTN_SHELL_ATTN_DIR ATTN_SHELL_USER_ENV ATTN_SHELL_USER_ENV_IS_SET
 `
-}
 
 func LookupEnv(env []string, key string) (string, bool) {
 	prefix := key + "="
