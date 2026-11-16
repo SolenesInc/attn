@@ -207,14 +207,9 @@ pub fn tile_title(
             .filter(|host| !host.is_empty())
             .unwrap_or(params)
             .to_owned(),
-        "notebook" => {
-            let path = path_in(params);
-            if path.is_empty() {
-                "Editor".into()
-            } else {
-                basename(&path)
-            }
-        }
+        "notebook" => crate::notebook::Params::parse(params)
+            .path
+            .map_or_else(|| "Editor".into(), |path| basename(&path)),
         _ => {
             let path = if kind == "markdown" {
                 content

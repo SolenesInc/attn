@@ -24,7 +24,7 @@ pub(crate) use view::{fullscreen, tile_body};
 
 use io::{Target, write};
 use model::{Doc, Home, Surface, SurfaceId, shelf_key};
-use params::Params;
+pub(crate) use params::Params;
 
 use crate::State;
 use crate::opener::NOTEBOOK_ROOT;
@@ -155,6 +155,7 @@ pub(crate) fn open_tile(state: &mut State, tx: &mut Tx) {
     };
     let root = tile_root(state);
     let tile_id = format!("notebook-tile-{}", uuid::Uuid::new_v4());
+    let docked = (desktop.clone(), tile_id.clone());
     state.act(
         move |request_id| DesktopDockTileMessage {
             request_id,
@@ -173,7 +174,11 @@ pub(crate) fn open_tile(state: &mut State, tx: &mut Tx) {
             ..DesktopDockTileMessage::new()
         },
         Refused::Prefixed("Could not open the notebook"),
-        |_, _, _| {},
+        move |state, _, tx| {
+            let (desktop, tile) = docked;
+            state.window.show_desktop(tx);
+            crate::desktop::show_leaf(state, &desktop, &tile, tx);
+        },
         tx,
     );
 }

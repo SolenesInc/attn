@@ -473,6 +473,92 @@ fn an_editor_tile_docks_beside_the_agent_on_its_folder_unless_that_is_the_notebo
 }
 
 #[test]
+fn an_editor_tile_opened_from_home_brings_its_desktop_and_the_tile_on_screen() {
+    let disk = Disk::default();
+    let mut world = start_with(&disk, Some(row(vec![pane("a")])));
+    world.daemon.on(
+        "desktop_show_leaf",
+        |_| json!({ "event": "profile_action_result", "success": true }),
+    );
+    world.gesture(|d| d.click(Target::key("sidebar.home")));
+    assert!(world.screen().find(Target::key("home")).is_some());
+
+    world
+        .automate("run", json!({ "name": "notebook.openTile" }))
+        .unwrap();
+    world.settle();
+
+    let dock = world.daemon.sent_of("desktop_dock_tile").pop().unwrap();
+    let shown = world.daemon.sent_of("desktop_show_leaf").pop().unwrap();
+    assert_eq!(shown["desktop_id"], dock["desktop_id"]);
+    assert_eq!(shown["leaf_id"], dock["tile_id"]);
+    assert!(world.screen().find(Target::key("home")).is_none());
+}
+
+#[test]
+fn an_editor_tile_opened_from_home_types_into_its_finder_whichever_reaches_the_app_first() {
+    for arrangement_first in [false, true] {
+        let disk = Disk::default();
+        let mut world = start_with(&disk, Some(row(vec![pane("a")])));
+        world.daemon.on(
+            "desktop_show_leaf",
+            |_| json!({ "event": "profile_action_result", "success": true }),
+        );
+        world.gesture(|d| d.click(Target::key("sidebar.home")));
+        world
+            .daemon
+            .answer_in_turn("desktop_dock_tile", [Answer::Hold]);
+        world
+            .automate("run", json!({ "name": "notebook.openTile" }))
+            .unwrap();
+        world.settle();
+        let dock = world.daemon.sent_of("desktop_dock_tile").pop().unwrap();
+        let tile = dock["tile_id"].as_str().unwrap().to_owned();
+        let params = dock["tile_params"].as_str().unwrap_or("").to_owned();
+        let docked = || row(vec![pane("a"), editor_tile(&tile, &params)]);
+        let reply = json!({ "event": "profile_action_result", "success": true });
+        if arrangement_first {
+            arrange(&mut world, docked(), 2);
+            world.daemon.reply_to(&dock, reply);
+        } else {
+            world.daemon.reply_to(&dock, reply);
+            world.settle();
+            arrange(&mut world, docked(), 2);
+        }
+        world.settle();
+        assert_eq!(
+            world.screen().focused().and_then(|n| n.key).as_deref(),
+            Some("notebook.finder.field"),
+            "arrangement first: {arrangement_first}"
+        );
+    }
+}
+
+#[test]
+fn an_editor_tile_is_named_by_its_open_file_else_editor_on_its_frame_and_in_the_sidebar() {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    for (params, title) in [
+        (r#"{"root":"/work/a"}"#, "Editor"),
+        (r#"{"root":"/work/a","path":"notes/plan.md"}"#, "plan.md"),
+        ("plan.md", "plan.md"),
+        ("", "Editor"),
+    ] {
+        let world = start_with(&disk, Some(row(vec![pane("a"), editor_tile("n", params)])));
+        let screen = world.screen();
+        assert_eq!(
+            screen.get(Target::key("tile.n")).name.as_deref(),
+            Some(title),
+            "{params}"
+        );
+        let row_name = screen
+            .get(Target::key(format!("sidebar.tile.{DESKTOP}.n")))
+            .name
+            .unwrap_or_default();
+        assert_eq!(row_name, format!("Open {title}"), "{params}");
+    }
+}
+
+#[test]
 fn an_editor_tile_on_a_folder_watches_it_reads_through_it_and_shows_no_notebook_rail() {
     let disk = Disk::with(&[("plan.md", PLAN), ("notes.md", "# Notes\n")]);
     let params = r#"{"root":"/work/a","path":"plan.md"}"#;

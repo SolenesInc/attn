@@ -37,7 +37,9 @@ use rune::Tx;
 
 use crate::State;
 
-pub(crate) use actions::{activate, activate_started, escape, give_keyboard, run, show_unseen};
+pub(crate) use actions::{
+    activate, activate_started, escape, give_keyboard, run, show_leaf, show_unseen,
+};
 pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
 pub(crate) use fit::{Widths, text_w};
