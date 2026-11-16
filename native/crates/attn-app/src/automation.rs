@@ -48,6 +48,7 @@ impl Hooks<State> for AppHooks {
             "connection" => json!(format!("{:?}", facts.connection)),
             "sessions" => json!(*facts.sessions),
             "desktops" => json!(*facts.desktops),
+            "outposts" => json!(*facts.outposts),
             "profiles" => json!({"selected": facts.profiles.selected, "all": facts.profiles.all}),
             "window" => json!({
                 "view": format!("{:?}", window.view),
@@ -65,7 +66,7 @@ impl Hooks<State> for AppHooks {
             }),
             "build" => build_identity()?,
             _ => {
-                return Err("slices: connection, sessions, desktops, profiles, window, settings, capture-shortcut, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
+                return Err("slices: connection, sessions, desktops, outposts, profiles, window, settings, capture-shortcut, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
             }
         }))
     }

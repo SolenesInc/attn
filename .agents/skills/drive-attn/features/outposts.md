@@ -129,6 +129,29 @@ Preconditions:
 
   Name each file for its way in, such as `outposts-settings-add.txt`.
 
+### In the native app
+
+The native app (`native/`) has the Outposts page with its switch, the add form, each row's state, build, identity, last error and Notebook sync, Connect in a terminal, Update to home build, Re-pair and Remove with its confirmation; the Outpost updates band under the title bar (`outpost-updates`, a region named "Outpost updates"); and remote tiles that name their outpost, say when it is not responding, connecting or unreachable, refuse typing while it cannot take it and mark an unreachable agent offline in the tile header, sidebar, queue, Home and palette. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key, and `bridge state '{"of":"outposts"}'` returns the outposts the app holds, so a step can wait on a state before reading the screen.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`. The chords below are Linux's; on macOS, Settings is `mod+,`.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make `P` and `A` as above.
+
+Steps:
+
+- **Off by default.** `wsctl outposts` exits 1 with `error: outposts_enabled is off`.
+- **Turn Outposts on in Settings.** `bridge key '{"chord":"mod+shift+,"}'` opens `settings-dialog`, where `settings.nav-off.outposts` reads `off`. Press `settings.nav.experimental`, then `settings.feature.outposts_enabled`: `bridge wait '{"target":{"key":"settings.nav-off.outposts"},"gone":true}'` answers, `./attn settings get outposts_enabled` prints `true` and `wsctl outposts` prints an empty `outposts_updated`.
+- **Enrollment on the home.** As above.
+- **Add an outpost in Settings.** Press `settings.nav.outposts`. `bridge type '{"target":{"key":"settings.outposts.name"},"text":"drive-op"}'`, type `unreachable.invalid` into `settings.outposts.destination` and press `Enter`. `bridge state '{"of":"outposts","includes":"lost"}'` answers with the row and its `id`. `bridge find` of `settings.outpost.<id>.state` reads `lost`, and `settings.outpost.<id>.error.text` reads ssh's stderr. An ssh refusal offers `settings.outpost.<id>.connect`, Connect in a terminal.
+- **The name home is reserved.** Type `home` into the name and any destination, and press `Enter`: `settings.outposts.error` reads `outpost name "home" is reserved for the home`.
+- **An agent reaches for the outpost.** As above, with the agent's terminal from `wsctl list`.
+- **Re-pair.** Press `settings.outpost.<id>.repair`: the state reads `lost` again.
+- **Remove.** Press `settings.outpost.<id>.remove`: with no terminals, `bridge wait '{"target":{"key":"settings.outpost.<id>"},"gone":true}'` answers and `wsctl outposts` lists none. With terminals, the button reads "Remove and close N terminals", or "Remove and forget N terminals" with `settings.outpost.<id>.remove-note` while the outpost is unreachable, beside `settings.outpost.<id>.cancel`; press it again to remove.
+- **Turn Outposts off.** `./attn settings set outposts_enabled false`: `settings.nav-off.outposts` comes back and `wsctl outposts` refuses again.
+- **Remote tiles, offline agents and updates.** The baseline cannot reach an outpost, so the scenarios drive these through a fake ssh and a second daemon: `native-outposts-settings` (Connect in a terminal, a remote shell, its split and a remote agent, stalled, unreachable and connecting tiles, refused typing never replayed, the offline queue, Home and palette, Re-pair and Remove), `native-outpost-update` (the band and the row's update) and `native-notebook-sync`. On a tile, `tile.<runtime id>.status` is the strip; `tile.<runtime id>.reach` reads `<name> not responding`, `Connecting to <name> · typing is not sent` or `<name> unreachable · typing is not sent`, `tile.<runtime id>.screen-on` reads `The screen is on <name>.` on a tile that never showed the screen, and `tile.<leaf>.state` reads `offline`.
+- **Proof.** In `$P`, keep each `wsctl outposts`, `./attn` and `bridge` answer with its exit code, `./attn agent peek op-agent` after each turn, and `bridge shot '{"path":"<P>/outposts-settings.png"}'` with the row showing.
+
 ## Contexts
 
 - **Durability across restarts**: the outpost list, its pins and an outpost's enrollment are kept by each daemon, and the home redials after any restart. A shell on an outpost keeps running through a lost bridge and a restart of either daemon, and the shell's screen comes back on reconnect. If the shell's process is gone, the home marks the shell recoverable, and Resume starts a new shell in its place. A home restart resumes an accepted delegation onto an outpost on the same machine and path.
@@ -142,9 +165,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/bridge/*_test.go`, `internal/daemon/outposts_wire_test.go`, `internal/daemon/outpost_forward_transcript_wire_test.go`.
+- Wire: `internal/bridge/*_test.go`, `internal/daemon/outposts_wire_test.go`, `internal/daemon/outpost_forward_transcript_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/settings/outposts.rs`, `outpost_updates.rs`, `remote_shell.rs`, `remote_agents.rs` and the outpost tests in `tile_header.rs`, `terminal_annotations.rs`, `keys.rs` and `ledger.rs`.
 - Stack: `cmd/attnd/outposts_stack_test.go`, `cmd/attnd/outpost_connect_terminal_stack_test.go`, `cmd/attnd/outpost_*_stack_test.go`, `cmd/attnd/remote_*_stack_test.go`, `cmd/attnd/enrollment_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `cmd/attnd/delegate_outpost_stack_test.go`, `cmd/attnd/session_reopen_outpost_stack_test.go`, `cmd/attnd/garden_resume_outpost_stack_test.go`, `cmd/attnd/launcher_reads_stack_test.go`, `cmd/attnd/remote_worktree_delete_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
-- Scenario: `outposts-settings`, `outpost-update`, `notebook-sync`.
+- Scenario: in the native app `native-outposts-settings`, `native-outpost-update` and `native-notebook-sync`; in the Tauri app `outposts-settings`, `outpost-update`, `notebook-sync`.
 - Kernel: `internal/enrollment/*_test.go`, `internal/outpostbuild/*_test.go`.
 - App: `app/src/App.outpostsSettings.test.tsx`, `app/src/App.outpostUpdates.test.tsx`, `app/src/App.remoteAgents.test.tsx`, `app/src/App.remoteShell.test.tsx`, `app/src/App.outpostPaths.test.tsx`, `app/src/App.outpostsNotebook.test.tsx`, `app/src/App.newSessionLauncher.outposts.test.tsx`, `app/src/components/ledger/SessionsTab.outposts.test.tsx`.
 

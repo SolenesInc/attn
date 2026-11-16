@@ -226,6 +226,9 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
             .key(key)
             .font(type_::BODY)
             .color(t.text_secondary)
+            .wrap()
+            .min_w(0.0)
+            .shrink()
     };
     let notes = (!updates.done)
         .then(|| notes(&updates))

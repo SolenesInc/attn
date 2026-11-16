@@ -670,6 +670,27 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-notebook-sync.mjs'],
   },
   {
+    id: 'native-notebook-sync',
+    runnerId: 'NATIVE-NOTEBOOK-SYNC',
+    label: 'Native Notebook sync on the outpost row: first sync, previous folder rescue, conflict copies and a sync error',
+    command: ['node', 'scripts/real-app-harness/scenario-native-notebook-sync.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-outpost-update',
+    runnerId: 'NATIVE-OUTPOST-UPDATE',
+    label: 'Native Outpost updates band and row: a failed Add offers the update, the band installs and counts down, a missing build offers the row',
+    command: ['node', 'scripts/real-app-harness/scenario-native-outpost-update.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-outposts-settings',
+    runnerId: 'NATIVE-OUTPOSTS-SETTINGS',
+    label: 'Native outposts: opt in, add and answer ssh, remote shell, split and agent, stalled, unreachable and connecting tiles, offline queue, Home and palette, Re-pair and Remove',
+    command: ['node', 'scripts/real-app-harness/scenario-native-outposts-settings.mjs'],
+    app: 'native',
+  },
+  {
     id: 'outposts-settings',
     runnerId: 'OutpostsSettings',
     label: 'Outposts: pairing, remote shells and Claude, native splits, offline queue skips, typing and screen recovery, re-pair and Remove confirmation',
