@@ -9,6 +9,23 @@ use rune_kit::syntax::{Highlight, SyntaxTheme, highlight, lang_for_path};
 
 use std::collections::HashMap;
 
+/// What code navigation draws on a review's rows: the labels on the row a name is being picked
+/// on, and the row a question waits on.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct Asking {
+    pub(crate) labels: Option<(String, Vec<super::nav::Labeled>)>,
+    pub(crate) asked: Option<String>,
+}
+
+impl Asking {
+    pub(crate) fn labels_at(&self, row: &str) -> &[super::nav::Labeled] {
+        match &self.labels {
+            Some((r, labels)) if r == row => labels,
+            _ => &[],
+        }
+    }
+}
+
 pub(super) fn row_key(stop: &str, row: usize) -> String {
     format!("{stop}.row.{row}")
 }
@@ -48,7 +65,7 @@ pub(super) fn stop(
     stop: &ReviewStop,
     rows: &[ReviewRow],
     (cursor, selected): (Option<usize>, Option<(usize, usize)>),
-    marks: &[(i64, &attn_protocol::MarkdownAnnotation)],
+    (marks, nav): (&[(i64, &attn_protocol::MarkdownAnnotation)], &Asking),
     file: Option<&Colors>,
     t: &Tokens,
 ) -> El {
@@ -86,7 +103,18 @@ pub(super) fn stop(
         let in_range = r
             .now
             .is_some_and(|n| n >= stop.now_from && n <= stop.now_to);
-        let line = code_row(r, &spans(j, r), digits, in_range, true, t).key(row_key(key, j));
+        let keyed = row_key(key, j);
+        let labels = nav.labels_at(&keyed);
+        let line = code_row(
+            r,
+            &spans(j, r),
+            digits,
+            in_range,
+            true,
+            (labels, nav.asked.as_deref() == Some(keyed.as_str())),
+            t,
+        )
+        .key(keyed);
         let line = match selected {
             Some((a, b)) if j >= a && j <= b && cursor != Some(j) => line.fill(t.accent.alpha(0.1)),
             _ => line,
@@ -226,9 +254,11 @@ pub(super) fn code_row(
     digits: usize,
     in_range: bool,
     wrap: bool,
+    (labels, asked): (&[super::nav::Labeled], bool),
     t: &Tokens,
 ) -> El {
     let font = code_font(t);
+    let (shown, spans) = labelled(&r.text, spans, labels, t);
     let number_w = (digits as f32 * 0.6 * font.size + 12.0).ceil();
     let (sign, tint, kind) = match r.kind.as_str() {
         "+" => ("+", Some(t.success), "added"),
@@ -259,7 +289,7 @@ pub(super) fn code_row(
                 .a11y_hidden(),
         )
         .child({
-            let code = rich(r.text.clone(), spans.to_vec())
+            let code = rich(shown, spans)
                 .font(font)
                 .color(t.text_primary)
                 .selectable(true)
@@ -270,10 +300,69 @@ pub(super) fn code_row(
                 code.grow(1.0)
             }
         });
+    if !labels.is_empty() {
+        let names: Vec<String> = labels
+            .iter()
+            .map(|l| format!("{} {}", l.label, l.name))
+            .collect();
+        el = el.description(format!("labels: {}", names.join(", ")));
+    }
+    if asked {
+        el = el
+            .description("asked, waiting for the answer")
+            .child(text("…").font(font).color(t.accent).a11y_hidden());
+    }
     if !in_range {
         el = el.group_opacity(0.75, 0.75);
     }
     el
+}
+
+/// `text` with each label drawn before its name, and `spans` moved to the text they color.
+fn labelled(
+    text_: &str,
+    spans: &[Span],
+    labels: &[super::nav::Labeled],
+    t: &Tokens,
+) -> (String, Vec<Span>) {
+    if labels.is_empty() {
+        return (text_.to_owned(), spans.to_vec());
+    }
+    let mut shown = String::with_capacity(text_.len() + labels.len() * 4);
+    let mut inserted: Vec<(usize, usize)> = Vec::new();
+    let mut from = 0;
+    let mut chips = Vec::new();
+    for l in labels {
+        shown.push_str(&text_[from..l.byte]);
+        let at = shown.len();
+        shown.push_str(&l.label);
+        shown.push('\u{2009}');
+        inserted.push((l.byte, shown.len() - at));
+        chips.push(
+            Span::new(at, at + l.label.len())
+                .color(t.accent)
+                .weight(700.0),
+        );
+        from = l.byte;
+    }
+    shown.push_str(&text_[from..]);
+    let shift = |b: u32| {
+        b + inserted
+            .iter()
+            .filter(|(at, _)| *at as u32 <= b)
+            .map(|(_, n)| *n as u32)
+            .sum::<u32>()
+    };
+    let mut moved: Vec<Span> = spans
+        .iter()
+        .map(|s| {
+            let mut s = s.clone();
+            (s.start, s.end) = (shift(s.start), shift(s.end));
+            s
+        })
+        .collect();
+    moved.extend(chips);
+    (shown, moved)
 }
 
 /// The colors of a file's lines, read from its text as one piece of its language, by row.

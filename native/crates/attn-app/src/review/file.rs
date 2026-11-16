@@ -23,6 +23,8 @@ pub(crate) struct Target {
     pub(crate) path: String,
     pub(crate) line: Option<i64>,
     pub(crate) range: Option<(i64, i64)>,
+    /// A definition outside the review's repository, shown read-only.
+    pub(crate) outside: bool,
 }
 
 /// A file open in the view, as the daemon last read it.
@@ -230,7 +232,7 @@ pub(super) fn view(
     sideways: &Sideways,
     (depth, stage): (usize, bool),
     (notes, marks): (&[&ReviewNote], Vec<El>),
-    colors: Option<Rc<Colors>>,
+    (colors, asking): (Option<Rc<Colors>>, &super::stop::Asking),
     t: &Tokens,
 ) -> El {
     let back = text(if depth > 1 {
@@ -263,6 +265,11 @@ pub(super) fn view(
                 .font(type_::LABEL)
                 .color(t.text_primary),
         )
+        .children(file.target.outside.then(|| {
+            text("outside the repository · read-only")
+                .font(type_::LABEL)
+                .color(t.warning)
+        }))
         .children(lines.map(|l| text(l).font(type_::LABEL).color(t.text_tertiary)))
         .child(col().grow(1.0))
         .children((!stage).then(|| {
@@ -287,14 +294,22 @@ pub(super) fn view(
             t.text_tertiary,
             t,
         ),
-        (Some(rows), None) => rows_view(prefix, tile, rows, (file, stage), notes, colors, t)
-            .key(body_key(prefix))
-            .on_scroll_offset({
-                let reported = sideways.0.clone();
-                move |at: ScrollPos| {
-                    reported.set([at.offset[0], at.viewport[0]]);
-                }
-            }),
+        (Some(rows), None) => rows_view(
+            prefix,
+            tile,
+            rows,
+            (file, stage),
+            notes,
+            (colors, asking),
+            t,
+        )
+        .key(body_key(prefix))
+        .on_scroll_offset({
+            let reported = sideways.0.clone();
+            move |at: ScrollPos| {
+                reported.set([at.offset[0], at.viewport[0]]);
+            }
+        }),
     };
     let line = file.line();
     let strip: Vec<El> = notes
@@ -342,9 +357,10 @@ fn rows_view(
     rows: &Rc<[ReviewRow]>,
     (file, stage): (&OpenFile, bool),
     notes: &[&ReviewNote],
-    colors: Option<Rc<Colors>>,
+    (colors, asking): (Option<Rc<Colors>>, &super::stop::Asking),
     t: &Tokens,
 ) -> El {
+    let asking = asking.clone();
     let digits = rows
         .iter()
         .flat_map(|r| [r.old, r.now])
@@ -387,8 +403,12 @@ fn rows_view(
                     .map(|c| c.spans(i, &tokens))
                     .unwrap_or_default();
                 let in_range = range.is_some_and(|(a, b)| r.now.is_some_and(|n| n >= a && n <= b));
-                let line =
-                    code_row(r, &spans, digits, in_range, false, &tokens).key(row_key(&prefix_, i));
+                let keyed = row_key(&prefix_, i);
+                let marked = (
+                    asking.labels_at(&keyed),
+                    asking.asked.as_deref() == Some(keyed.as_str()),
+                );
+                let line = code_row(r, &spans, digits, in_range, false, marked, &tokens).key(keyed);
                 let line = match noted(&notes.iter().collect::<Vec<_>>(), r.now) {
                     Some(true) => line.border_sides([0.0, 0.0, 0.0, 3.0], tokens.warning),
                     Some(false) => line.border_sides([0.0, 0.0, 0.0, 3.0], tokens.text_tertiary),

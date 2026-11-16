@@ -9,6 +9,7 @@ mod file;
 mod frames;
 mod keys;
 mod marks;
+mod nav;
 mod search;
 mod stop;
 
@@ -102,6 +103,8 @@ pub(crate) struct Review {
     select_from: Option<Spot>,
     /// The send sheet, open with the verdict picked and where the review goes.
     sending: Option<(marks::Verdict, Option<crate::markdown::drafts::To>)>,
+    /// Code navigation: a question being picked, asked, listed or offered.
+    nav: nav::Nav,
     /// The verdict picked in the send sheet, kept until the review goes.
     verdict: Option<marks::Verdict>,
     /// Counts the reads the tile asks for, so an answer to an older read of a file or a stop
@@ -146,6 +149,18 @@ pub struct Reviews {
 }
 
 impl Reviews {
+    fn nav_mut(&mut self, tile: &str) -> Option<&mut nav::Nav> {
+        self.tiles.get_mut(tile).map(|r| &mut r.nav)
+    }
+
+    /// Whether a box over a review takes the keys: an edit, a note, the search or the send.
+    fn boxed(&self) -> bool {
+        self.editing.is_some()
+            || self.composer.is_some()
+            || self.search.is_some()
+            || self.tiles.values().any(|r| r.sending.is_some() || r.help)
+    }
+
     fn colors(&self, path: &str, hash: &str) -> Option<Rc<stop::Colors>> {
         self.colors
             .iter()
@@ -514,6 +529,17 @@ pub(crate) fn body(
     let review = reviews.tiles.get(tile).unwrap_or(&fresh);
     let reading = Reading::new(tile, source, bundle, review);
     let placed = placements(review, bundle, draft);
+    let asking = stop::Asking {
+        labels: review.nav.picking.as_ref().map(|(_, line, names, typed)| {
+            let shown = names
+                .iter()
+                .filter(|n| n.label.starts_with(typed.as_str()))
+                .cloned()
+                .collect();
+            (line.row.clone(), shown)
+        }),
+        asked: review.nav.asking.as_ref().map(|(_, row, _, _)| row.clone()),
+    };
     let marks_on = |path: &str| -> Vec<(i64, &attn_protocol::MarkdownAnnotation)> {
         placed
             .iter()
@@ -611,6 +637,7 @@ pub(crate) fn body(
                     colors.is_some(),
                     rows.len(),
                     marked,
+                    asking.clone(),
                     *t,
                 );
                 memo(key.clone(), version, || {
@@ -619,7 +646,7 @@ pub(crate) fn body(
                         s,
                         rows,
                         (row, selected),
-                        &on,
+                        (&on, &asking),
                         colors.as_deref(),
                         t,
                     )
@@ -728,7 +755,7 @@ pub(crate) fn body(
                         &review.sideways,
                         (review.files.len(), true),
                         (&notes, marks_at(open)),
-                        colors,
+                        (colors, &asking),
                         t,
                     )
                     .grow(1.0)
@@ -766,7 +793,7 @@ pub(crate) fn body(
                 &review.sideways,
                 (review.files.len(), false),
                 (&notes, marks_at(open)),
-                colors,
+                (colors, &asking),
                 t,
             );
             let width = rune::memo::layout(&prefix).map_or(0.0, |r| r[2]);
@@ -786,6 +813,12 @@ pub(crate) fn body(
         .grow(1.0)
         .min_h(0.0)
         .child(frame)
+        .children(nav::note_line(tile, &review.nav, t).map(|n| n.px(space::S3)))
+        .children(
+            review.nav.panel.as_ref().map(|p| {
+                nav::panel_view(tile, p, t).pin(Some(0.0), Some(space::S6), Some(0.0), None)
+            }),
+        )
         .child(keys::key_line(
             tile,
             reading.frame,
@@ -1134,6 +1167,16 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         state.readings.revision += 1;
         return true;
     }
+    if let Some(done) = nav_key(state, &tile, &message, &reading, ev, typed, tx) {
+        state.readings.revision += 1;
+        return done;
+    }
+    let review = state
+        .readings
+        .reviews
+        .tiles
+        .entry(tile.clone())
+        .or_default();
     if back_key {
         let went = go_back(review, reading.frame == Frame::Walkthrough);
         state.readings.revision += 1;
@@ -1242,6 +1285,20 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             }
         }
         (_, "/") => Some(Move::Search(String::new())),
+        (_, "i" | "c" | "a")
+            if viewing && review.files.last().is_some_and(|f| f.target.outside) =>
+        {
+            let path = review
+                .files
+                .last()
+                .map(|f| f.target.path.clone())
+                .unwrap_or_default();
+            state.window.notify(
+                format!("{path} is outside the repository, so it takes no edits or notes."),
+                tx,
+            );
+            return true;
+        }
         (_, "i") => Some(Move::Edit),
         (_, "u") => Some(Move::Undo),
         (_, "c" | "a") => Some(Move::Mark(if typed == "a" {
@@ -2128,6 +2185,211 @@ enum Land {
 }
 
 /// What the daemon needs to read a review's files: the machine and the document.
+/// The keys of code navigation, before the review's own: while labels show, a letter picks and
+/// any other key drops them; while a list of places shows, it takes the keys; Enter takes an
+/// offered answer and Escape drops it; Escape drops a question on its way; `f`, `r` and `h`
+/// ask about a name on the cursor's line. None when navigation leaves the key alone.
+fn nav_of<'a>(state: &'a mut State, tile: &str) -> Option<&'a mut nav::Nav> {
+    state.readings.revision += 1;
+    state.readings.reviews.nav_mut(tile)
+}
+
+pub(crate) fn open_answer_place(state: &mut State, tile: &str, i: usize, tx: &mut Tx) {
+    let Some(location) = nav_of(state, tile)
+        .and_then(|nav| nav.panel.take())
+        .and_then(|panel| panel.locations.get(i).cloned())
+    else {
+        return;
+    };
+    follow_location(state, tile, &location, tx);
+}
+
+pub(crate) fn close_panel(state: &mut State, tile: &str) {
+    if let Some(nav) = nav_of(state, tile) {
+        nav.panel = None;
+    }
+}
+
+pub(crate) fn take_offer(state: &mut State, tile: &str, tx: &mut Tx) {
+    let Some((answer, _)) = nav_of(state, tile).and_then(|nav| nav.offer.take()) else {
+        return;
+    };
+    if answer.kind == nav::Kind::Definition && answer.locations.len() == 1 {
+        follow_location(state, tile, &answer.locations[0], tx);
+    } else if let Some(nav) = nav_of(state, tile) {
+        nav.panel = Some(answer);
+    }
+}
+
+pub(crate) fn drop_offer(state: &mut State, tile: &str) {
+    if let Some(nav) = nav_of(state, tile) {
+        nav.offer = None;
+    }
+}
+
+fn nav_key(
+    state: &mut State,
+    tile: &str,
+    message: &std::sync::Arc<attn_protocol::DesktopTileContentMessage>,
+    reading: &Reading,
+    ev: &KeyEvent,
+    typed: &str,
+    tx: &mut Tx,
+) -> Option<bool> {
+    let source = source_of(message);
+    let review = state.readings.reviews.tiles.get_mut(tile)?;
+    let printable = typed.chars().count() == 1 && !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.alt;
+    if review.nav.picking.is_some() {
+        if ev.key == Key::Escape {
+            review.nav.picking = None;
+            return Some(true);
+        }
+        if !printable {
+            review.nav.picking = None;
+            return Some(true);
+        }
+        if let Some(asked) = nav::pick(&mut review.nav, typed) {
+            let place = place_of(state, tile).unwrap_or_default();
+            nav::ask(state, tile, source, asked, place, tx);
+        }
+        return Some(true);
+    }
+    if let Some(panel) = review.nav.panel.as_mut() {
+        if ev.key == Key::Escape {
+            close_panel(state, tile);
+            return Some(true);
+        }
+        if nav::panel_key(panel, ev) {
+            let i = panel.cursor;
+            open_answer_place(state, tile, i, tx);
+        }
+        return Some(true);
+    }
+    if review.nav.offer.is_some() {
+        match ev.key {
+            Key::Enter => {
+                take_offer(state, tile, tx);
+                return Some(true);
+            }
+            Key::Escape => {
+                drop_offer(state, tile);
+                return Some(true);
+            }
+            _ => {}
+        }
+    }
+    if ev.key == Key::Escape && review.nav.asking.is_some() {
+        review.nav.asking = None;
+        review.nav.note = None;
+        return Some(true);
+    }
+    if let Some(Some(nav::Note::Status(_) | nav::Note::Alert(_))) = Some(&review.nav.note) {
+        review.nav.note = None;
+    }
+    let kind = nav::Kind::of_key(typed).filter(|_| printable)?;
+    let line = nav_line(review, reading, tile);
+    let review = state.readings.reviews.tiles.get_mut(tile)?;
+    if let Some(asked) = nav::start(&mut review.nav, kind, line) {
+        let place = place_of(state, tile).unwrap_or_default();
+        nav::ask(state, tile, source, asked, place, tx);
+    }
+    Some(true)
+}
+
+/// The line of code the cursor stands on, to ask about: a row of the file view or the stage, or
+/// of a stop; or why there is none.
+fn nav_line(review: &Review, reading: &Reading, tile: &str) -> Result<nav::Line, &'static str> {
+    const REMOVED: &str = "This line was removed; ask about the code as it is now.";
+    const NOT_CODE: &str = "Put the cursor on a line of code to ask about it.";
+    let prefix = prefix(tile);
+    let viewing = !review.files.is_empty() && reading.frame != Frame::Walkthrough;
+    if viewing || reading.frame == Frame::Walkthrough {
+        let open = review.files.last().ok_or(NOT_CODE)?;
+        let row = open
+            .rows
+            .as_deref()
+            .and_then(|r| r.get(open.cursor))
+            .ok_or(NOT_CODE)?;
+        return Ok(nav::Line {
+            path: open.target.path.clone(),
+            line: row.now.ok_or(REMOVED)?,
+            text: row.text.clone(),
+            row: file::row_key(&prefix, open.cursor),
+        });
+    }
+    let at = reading.cursor(review).ok_or(NOT_CODE)?;
+    let place = &reading.places[at];
+    let stop = place.stop.ok_or(NOT_CODE)?;
+    let Spot::Row { old, now, .. } = &place.spot else {
+        return Err(NOT_CODE);
+    };
+    let line = now.ok_or(REMOVED)?;
+    let text = reading
+        .rows_of(stop)
+        .iter()
+        .find(|r| r.old == *old && r.now == Some(line))
+        .map(|r| r.text.clone())
+        .unwrap_or_default();
+    Ok(nav::Line {
+        path: reading.bundle.stops[stop].path.clone(),
+        line,
+        text,
+        row: place.key.clone(),
+    })
+}
+
+/// Where tile `tile`'s cursor stands, to tell whether it moved while a question was on its way.
+fn place_of(state: &State, tile: &str) -> Option<String> {
+    let review = state.readings.reviews.tiles.get(tile)?;
+    let file = review
+        .files
+        .last()
+        .map(|f| format!("{}:{}", f.target.path, f.cursor));
+    Some(format!(
+        "{:?}|{:?}|{:?}|{}",
+        review.frame,
+        review.cursor,
+        file,
+        review.files.len()
+    ))
+}
+
+/// What the daemon needs to read tile `tile`'s review.
+fn source_of_tile(state: &State, tile: &str) -> Option<(Option<String>, String)> {
+    let content = state
+        .facts
+        .tile_contents
+        .tiles
+        .iter()
+        .find(|(k, c)| k.tile == tile && c.message.review.is_some())?
+        .1;
+    Some(source_of(&content.message))
+}
+
+/// Opens where an answer points: a file of the review's repository at its line, or a file
+/// outside it read-only.
+fn follow_location(
+    state: &mut State,
+    tile: &str,
+    location: &attn_protocol::CodeNavLocation,
+    tx: &mut Tx,
+) {
+    let Some(source) = source_of_tile(state, tile) else {
+        return;
+    };
+    if let Some(review) = state.readings.reviews.tiles.get_mut(tile) {
+        review.nav.panel = None;
+    }
+    let target = file::Target {
+        path: location.path.clone(),
+        line: Some(location.line),
+        range: None,
+        outside: location.outside,
+    };
+    open_file(state, tile, source, target, false, tx);
+    state.readings.revision += 1;
+}
+
 fn source_of(message: &attn_protocol::DesktopTileContentMessage) -> (Option<String>, String) {
     (
         message.host.clone().filter(|h| !h.is_empty()),
@@ -2247,6 +2509,7 @@ fn show_stage(
         path: s.path.clone(),
         line: line.or_else(|| stage_line(s)),
         range,
+        outside: false,
     };
     let review = state
         .readings
@@ -2336,7 +2599,23 @@ const MORE_LINES: usize = 10;
 /// Keeps each shown review current: when its content changed, the open files are read again
 /// with the cursor on its row, and the widened stops are widened again; a stop's file that has
 /// no colors yet is read once to color it, one file at a time.
-pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
+pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
+    let now = tx.clock();
+    let mut expired = false;
+    for review in state.readings.reviews.tiles.values_mut() {
+        if review
+            .nav
+            .offer
+            .as_ref()
+            .is_some_and(|(_, until)| *until <= now)
+        {
+            review.nav.offer = None;
+            expired = true;
+        }
+    }
+    if expired {
+        state.readings.revision += 1;
+    }
     let shown: Vec<(
         String,
         u64,
@@ -2426,6 +2705,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         }
         warm(state, &tile, &message, bundle, tx);
     }
+    expired
 }
 
 /// Reads the stops' files the reader has no colors for, one after another, to color them.
@@ -2523,6 +2803,7 @@ fn target_of(reading: &Reading, at: usize) -> Option<file::Target> {
             path: s.path.clone(),
             line: line.or(range.map(|r| r.0)),
             range,
+            outside: false,
         }
     };
     match &place.spot {

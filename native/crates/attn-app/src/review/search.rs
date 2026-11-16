@@ -43,6 +43,7 @@ impl Found {
                 path: path.clone(),
                 line: Some(*line),
                 range: None,
+                outside: false,
             },
         }
     }

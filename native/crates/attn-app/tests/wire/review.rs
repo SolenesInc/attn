@@ -3477,3 +3477,405 @@ fn says_why_i_edits_nothing_on_prose() {
         "{screen}"
     );
 }
+
+fn place(path: &str, line: i64, character: i64, text: &str) -> serde_json::Value {
+    json!({
+        "path": path, "outside": path.starts_with('/'), "line": line, "character": character,
+        "end_line": line, "end_character": character + 3, "text": text,
+    })
+}
+
+fn nav_answer(locations: Vec<serde_json::Value>) -> serde_json::Value {
+    json!({"event": "code_nav_result", "success": true, "language": "go", "locations": locations})
+}
+
+/// The labels a row draws while a name is being picked on it.
+fn labels_on(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::key("tile.m"))
+        .into_iter()
+        .filter_map(|n| n.description)
+        .find_map(|d| d.strip_prefix("labels: ").map(str::to_owned))
+        .map(|d| {
+            d.split(", ")
+                .map(|l| l.split(' ').next().unwrap().to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn asked_rows(world: &World) -> usize {
+    world
+        .screen()
+        .descendants(Target::key("tile.m"))
+        .into_iter()
+        .filter(|n| n.description.as_deref() == Some("asked, waiting for the answer"))
+        .count()
+}
+
+fn nav_note(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("review.nav.note"))
+        .and_then(|n| n.name)
+}
+
+fn offer(world: &World) -> Option<String> {
+    world.screen().find(Target::key("review.nav.offer"))?;
+    world
+        .screen()
+        .descendants(Target::key("review.nav.offer"))
+        .into_iter()
+        .find_map(|n| n.name)
+}
+
+fn to_return_sum(world: &mut World) {
+    press(world, Key::Right);
+    press(world, Key::Down);
+    press(world, Key::Down);
+    press(world, Key::Down);
+    assert_eq!(
+        cursor(world).name.as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+}
+
+#[test]
+fn labels_the_names_on_the_line_with_f_and_goes_to_the_definition_of_the_one_whose_label_is_typed()
+{
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |_| {
+        nav_answer(vec![place("util.go", 2, 5, "func helper() {}")])
+    });
+    press(&mut world, Key::Right);
+    type_key(&mut world, "f");
+    assert_eq!(labels_on(&world), ["a", "s", "d", "f", "g", "h"]);
+    assert!(world.daemon.sent_of("code_nav").is_empty());
+
+    type_key(&mut world, "s");
+    let asked = world.daemon.sent_of("code_nav");
+    assert_eq!(
+        (
+            asked[0]["document"].clone(),
+            asked[0]["path"].clone(),
+            asked[0]["line"].clone(),
+            asked[0]["character"].clone(),
+            asked[0]["kind"].clone()
+        ),
+        (
+            json!(DOC),
+            json!("calc.go"),
+            json!(3),
+            json!(5),
+            json!("definition")
+        )
+    );
+    assert!(labels_on(&world).is_empty());
+    assert!(file_view(&world).unwrap().iter().any(|t| t == "util.go"));
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 2: func helper() {}")
+    );
+}
+
+#[test]
+fn lists_the_uses_of_a_name_with_f_on_its_own_definition_and_opens_the_one_picked() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |r| {
+        if r["kind"] == "definition" {
+            nav_answer(vec![place("calc.go", 3, 5, "func Add(a, b int) int {")])
+        } else {
+            nav_answer(
+                (0..30)
+                    .map(|i| place(&format!("pkg{i}.go"), i + 1, 2, "\tAdd(1, 2)"))
+                    .collect(),
+            )
+        }
+    });
+    press(&mut world, Key::Right);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    let kinds: Vec<_> = world
+        .daemon
+        .sent_of("code_nav")
+        .iter()
+        .map(|r| r["kind"].clone())
+        .collect();
+    assert_eq!(kinds, [json!("definition"), json!("references")]);
+    let list = world
+        .screen()
+        .get(Target::role("dialog").name("Uses of Add"));
+    let said: Vec<String> = world
+        .screen()
+        .descendants(Target::key(list.key.unwrap()))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(said.iter().any(|t| t == "30"), "{said:?}");
+    assert!(file_view(&world).is_none());
+
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Uses of Add"))
+            .is_none()
+    );
+    assert_eq!(
+        file_reads(&world).last().map(String::as_str),
+        Some("pkg1.go")
+    );
+}
+
+#[test]
+fn follows_an_answer_that_arrives_in_time_with_the_asked_line_marked_until_it_does() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |_| ());
+    to_return_sum(&mut world);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    assert_eq!(asked_rows(&world), 1);
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("Finding the definition of sum…")
+    );
+    world.advance(std::time::Duration::from_secs(2));
+    let asked = world.daemon.sent_of("code_nav")[0].clone();
+    world.daemon.reply_to(
+        &asked,
+        nav_answer(vec![place("calc.go", 4, 1, "\tsum := a + b")]),
+    );
+    world.settle();
+    assert!(offer(&world).is_none());
+    assert_eq!(asked_rows(&world), 0);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+}
+
+#[test]
+fn offers_an_answer_that_arrived_late_once_the_cursor_moved_and_enter_opens_it() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |_| ());
+    to_return_sum(&mut world);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    press(&mut world, Key::Up);
+    world.advance(std::time::Duration::from_secs(2));
+    let asked = world.daemon.sent_of("code_nav")[0].clone();
+    world.daemon.reply_to(
+        &asked,
+        nav_answer(vec![place("calc.go", 4, 1, "\tsum := a + b")]),
+    );
+    world.settle();
+    assert!(file_view(&world).is_none());
+    assert_eq!(asked_rows(&world), 0);
+    assert_eq!(
+        offer(&world).as_deref(),
+        Some("sum is in calc.go:4 · ↵ open")
+    );
+
+    press(&mut world, Key::Down);
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("added line 5: \treturn sum")
+    );
+    assert!(offer(&world).is_some());
+    press(&mut world, Key::Enter);
+    assert!(offer(&world).is_none());
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+}
+
+#[test]
+fn drops_an_offer_on_escape_and_twenty_seconds_after_it_shows() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |_| ());
+    let late = |world: &mut World| {
+        type_key(world, "f");
+        type_key(world, "s");
+        press(world, Key::Up);
+        world.advance(std::time::Duration::from_secs(2));
+        let asked = world.daemon.sent_of("code_nav").last().cloned().unwrap();
+        world.daemon.reply_to(
+            &asked,
+            nav_answer(vec![place("calc.go", 4, 1, "\tsum := a + b")]),
+        );
+        world.settle();
+        press(world, Key::Down);
+        assert!(offer(world).is_some());
+    };
+    to_return_sum(&mut world);
+    late(&mut world);
+    press(&mut world, Key::Escape);
+    assert!(offer(&world).is_none());
+
+    late(&mut world);
+    world.advance(std::time::Duration::from_secs(21));
+    assert!(offer(&world).is_none());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn an_answer_to_an_older_question_leaves_the_newer_one_waiting() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |_| ());
+    to_return_sum(&mut world);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    let asked = world.daemon.sent_of("code_nav");
+    assert_eq!(asked.len(), 2);
+    world.daemon.reply_to(
+        &asked[0],
+        nav_answer(vec![place("calc.go", 4, 1, "\tsum := a + b")]),
+    );
+    world.settle();
+    assert!(file_view(&world).is_none());
+    assert_eq!(asked_rows(&world), 1);
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("Finding the definition of sum…")
+    );
+
+    world.daemon.reply_to(
+        &asked[1],
+        nav_answer(vec![place("calc.go", 4, 1, "\tsum := a + b")]),
+    );
+    world.settle();
+    assert_eq!(asked_rows(&world), 0);
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("added line 4: \tsum := a + b")
+    );
+}
+
+#[test]
+fn a_click_takes_or_drops_an_offer_and_opens_or_closes_a_list_of_places() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |_| ());
+    let late = |world: &mut World, answer: serde_json::Value| {
+        type_key(world, "f");
+        type_key(world, "s");
+        press(world, Key::Up);
+        world.advance(std::time::Duration::from_secs(2));
+        let asked = world.daemon.sent_of("code_nav").last().cloned().unwrap();
+        world.daemon.reply_to(&asked, answer);
+        world.settle();
+        press(world, Key::Down);
+        assert!(offer(world).is_some());
+    };
+    let uses = || {
+        nav_answer(vec![
+            place("pkg0.go", 1, 2, "\tsum++"),
+            place("pkg1.go", 2, 2, "\tsum--"),
+        ])
+    };
+    let list = || Target::role("dialog").name("Definition of sum");
+    to_return_sum(&mut world);
+
+    late(&mut world, uses());
+    click(&mut world, Target::key("review.nav.offer.drop"));
+    assert!(offer(&world).is_none());
+
+    late(&mut world, uses());
+    click(&mut world, Target::key("review.nav.offer"));
+    assert!(offer(&world).is_none());
+    assert!(world.screen().find(list()).is_some());
+    click(&mut world, Target::key("review.nav.panel.close"));
+    assert!(world.screen().find(list()).is_none());
+
+    late(&mut world, uses());
+    click(&mut world, Target::key("review.nav.offer"));
+    click(&mut world, Target::key("review.nav.place.1"));
+    assert!(world.screen().find(list()).is_none());
+    assert_eq!(
+        file_reads(&world).last().map(String::as_str),
+        Some("pkg1.go")
+    );
+}
+
+#[test]
+fn shows_the_type_with_h_and_opens_a_definition_outside_the_repository_read_only() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |r| {
+        if r["kind"] == "hover" {
+            json!({"event": "code_nav_result", "success": true, "text": "var sum int"})
+        } else {
+            nav_answer(vec![place(
+                "/usr/lib/go/src/fmt/print.go",
+                12,
+                5,
+                "func Sum() {}",
+            )])
+        }
+    });
+    to_return_sum(&mut world);
+    type_key(&mut world, "h");
+    type_key(&mut world, "s");
+    let shown = world
+        .screen()
+        .get(Target::role("dialog").name("Type of sum"));
+    let said: Vec<String> = world
+        .screen()
+        .descendants(Target::key(shown.key.unwrap()))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(said.iter().any(|t| t == "var sum int"), "{said:?}");
+    press(&mut world, Key::Escape);
+
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    let view = file_view(&world).unwrap();
+    assert!(
+        view.iter()
+            .any(|t| t == "outside the repository · read-only"),
+        "{view:?}"
+    );
+    type_key(&mut world, "c");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Write a note"))
+            .is_none()
+    );
+}
+
+#[test]
+fn says_why_a_question_got_no_answer_and_asks_nothing_about_a_removed_line_or_prose() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on(
+        "code_nav",
+        |_| json!({"event": "code_nav_result", "success": true, "locations": []}),
+    );
+    press(&mut world, Key::Down);
+    type_key(&mut world, "f");
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("Put the cursor on a line of code to ask about it.")
+    );
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    type_key(&mut world, "f");
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("This line was removed; ask about the code as it is now.")
+    );
+    assert!(world.daemon.sent_of("code_nav").is_empty());
+
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    assert_eq!(
+        nav_note(&world).as_deref(),
+        Some("The language server knows no definition of sum.")
+    );
+}
