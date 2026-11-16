@@ -1042,6 +1042,7 @@ fn the_home_screen_lists_the_open_asks_and_opens_the_one_picked() {
         .descendants(Target::key("home.group.asks"))
         .into_iter()
         .filter_map(|n| n.key?.strip_prefix("home.ask.").map(str::to_owned))
+        .filter(|id| !id.contains('.'))
         .collect();
     assert_eq!(listed, ["a-release", "a-cache1"]);
 
@@ -1395,4 +1396,26 @@ fn an_asks_images_show_from_the_copy_the_home_keeps() {
             .is_none()
     );
     assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+}
+
+#[test]
+fn a_long_asker_name_on_home_ends_in_an_ellipsis_and_leaves_room_for_the_subject() {
+    let asker = Session {
+        label:
+            "waiting for the next tender of Teach the user how the durable kernel works in depth"
+                .into(),
+        ..api_working()
+    };
+    let world = start(vec![cache_store()], vec![asker]);
+    let screen = world.screen();
+    let bounds = |key: &str| screen.bounds(Target::key(key)).unwrap();
+    let row = bounds("home.ask.a-cache1");
+    let from = bounds("home.ask.a-cache1.from");
+    let subject = bounds("home.ask.a-cache1.subject");
+    assert!(from[0] + from[2] <= subject[0], "{from:?} {subject:?}");
+    assert!(subject[2] > 0.0, "the subject keeps room: {subject:?}");
+    assert!(
+        subject[0] + subject[2] <= row[0] + row[2],
+        "{subject:?} in {row:?}"
+    );
 }

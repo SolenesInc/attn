@@ -348,12 +348,17 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
         .child(text("?").font(type_::BODY).color(t.accent))
         .child(
             text(item.from.clone())
+                .key(format!("home.ask.{}.from", item.ask.id))
                 .font(type_::BODY)
                 .color(t.text_primary)
-                .single_line(),
+                .grow(1.0)
+                .min_w(0.0)
+                .single_line()
+                .truncate(),
         )
         .child(
             text(item.ask.subject.clone())
+                .key(format!("home.ask.{}.subject", item.ask.id))
                 .font(type_::BODY)
                 .color(t.text_secondary)
                 .grow(1.0)
