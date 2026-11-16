@@ -79,6 +79,9 @@ Two more tools are needed only in some cases:
 
 ### Build from source
 
+First install what your platform needs, as [Mac](#mac-apple-silicon) or
+[Linux](#linux) lists. Then:
+
 ```bash
 git clone https://github.com/SolenesInc/attn.git && cd attn
 make
