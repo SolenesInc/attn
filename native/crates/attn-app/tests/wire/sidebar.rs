@@ -565,14 +565,12 @@ fn keys_of(action: Action) -> String {
 
 fn dock_chips(world: &World) -> Vec<String> {
     let screen = world.screen();
-    ["button", "list-item"]
-        .iter()
-        .flat_map(|role| screen.all(Target::role(*role)))
-        .filter(|n| {
-            n.key
-                .as_deref()
-                .is_some_and(|k| k.starts_with("sidebar.dock.chip."))
-        })
+    if screen.find(Target::key("sidebar.dock.chips")).is_none() {
+        return Vec::new();
+    }
+    screen
+        .children(Target::key("sidebar.dock.chips"))
+        .into_iter()
         .filter_map(|n| n.name)
         .collect()
 }
@@ -592,20 +590,16 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
     assert_eq!(overview.name.as_deref(), Some("Desktop overview"));
     assert_eq!(overview.description, Some(keys_of(Action::DesktopOverview)));
 
-    let mut chips = dock_chips(&world);
-    chips.sort();
     assert_eq!(
-        chips,
+        dock_chips(&world),
         [
-            format!("{} sidebar", keys_of(Action::SessionToggleSidebar)),
             format!("{} PRs", keys_of(Action::DockAttention)),
+            format!("{} sidebar", keys_of(Action::SessionToggleSidebar)),
         ],
         "a chip for an agent's keys waits for an agent on screen"
     );
     world.gesture(|app| app.key(chord(Action::DesktopSelect1)));
-    let mut chips = dock_chips(&world);
-    chips.sort();
-    let mut docked = vec![
+    let docked = [
         format!("{} PRs", keys_of(Action::DockAttention)),
         format!("{} split v", keys_of(Action::TerminalSplitVertical)),
         format!("{} split h", keys_of(Action::TerminalSplitHorizontal)),
@@ -613,8 +607,7 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
         format!("{} zoom", keys_of(Action::TerminalToggleZoom)),
         format!("{} sidebar", keys_of(Action::SessionToggleSidebar)),
     ];
-    docked.sort();
-    assert_eq!(chips, docked, "{}", world.screen());
+    assert_eq!(dock_chips(&world), docked, "{}", world.screen());
 
     world
         .automate(
