@@ -3793,7 +3793,7 @@ func (d *Daemon) pollPRs() {
 const prPollTimer stepclock.Name = "daemon-pr-poll"
 
 func (d *Daemon) doPRPoll() {
-	if !d.githubAvailable() {
+	if !d.githubAvailable() || !d.enrollmentStatus().IsHome() {
 		return
 	}
 	d.prRefreshMu.Lock()

@@ -105,6 +105,9 @@ func (d *Daemon) fetchPRDetailsOnConnect() {
 	case <-d.life.Done():
 		return
 	}
+	if !d.enrollmentStatus().IsHome() {
+		return
+	}
 	if !d.launchFetch.begin(time.Now()) {
 		return
 	}
