@@ -1419,3 +1419,26 @@ fn a_long_asker_name_on_home_ends_in_an_ellipsis_and_leaves_room_for_the_subject
         "{subject:?} in {row:?}"
     );
 }
+
+#[test]
+fn an_ask_from_a_member_between_sessions_names_the_member_and_leaves_attn_lowercase() {
+    for (member, from) in [
+        ("trellis", "Trellis"),
+        ("mary-jane", "Mary-jane"),
+        ("a", "A"),
+        ("Trellis", "Trellis"),
+        ("ólafur", "Ólafur"),
+        ("attn", "attn"),
+    ] {
+        let from_member = Ask {
+            crew_member: Some(member.into()),
+            ..cache_store()
+        };
+        let mut world = start(vec![from_member], vec![session("s1", "working")]);
+        open_drawer(&mut world);
+        assert_eq!(
+            name(&world, "asks.from"),
+            format!("{from} (between sessions)")
+        );
+    }
+}
