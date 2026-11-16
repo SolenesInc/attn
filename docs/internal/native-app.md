@@ -71,7 +71,8 @@ review catches those.
 
 `scripts/native-screenshot-tour` draws a fixed set of screens in dark and in
 light, one PNG each: the sidebar with an agent in every state, a terminal with
-the 16 ANSI colors and a selection, a Markdown file with code and a Mermaid
+the 16 ANSI colors and a selection, a terminal with a comment mark, a seed id, a
+selected command block and find matches, a Markdown file with code and a Mermaid
 diagram, a review stop, the Garden, Settings, the command palette and a
 popped-out tile window. The `screenshot_tour` example of `attn-app` sets each
 one up on the wire-test world and draws it on Rune's offscreen GPU renderer, so

@@ -13,6 +13,8 @@ use attn_protocol::{
     ActorView, Desktop, DesktopPane, DesktopTileContentMessage, GetCommandUsageResultMessage,
     InitialStateMessage, Profile, ReviewBundle, ReviewFile, ReviewNote, ReviewRow, ReviewStop,
     Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedPlotProgress, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionMessage,
+    SessionMessagesGetResultMessage,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -220,6 +222,11 @@ fn print_colors(world: &mut World) {
     }
     text.push_str("\x1b[1mbold\x1b[0m \x1b[2mdim\x1b[0m \x1b[4munderline\x1b[0m \x1b[7minverse\x1b[0m plain\r\n");
     text.push_str("a line to select across the terminal\r\n$ ");
+    write(world, &text);
+}
+
+/// `text` as terminal `a`'s first output.
+fn write(world: &mut World, text: &str) {
     let id = b"r-a";
     let mut frame = vec![0x01, id.len() as u8];
     frame.extend_from_slice(id);
@@ -496,6 +503,102 @@ fn palette(dark: bool) {
     snap(&mut world, "palette", dark);
 }
 
+const MESSAGE: &str = "The cache keeps every row it reads until the window closes.";
+const KNOWN_SEED: &str = "s-7k3f9m";
+
+/// Terminal `a` with every overlay its colors paint: a comment mark on the agent's message, a
+/// seed id the garden knows, a selected command block, and a find's matches.
+fn terminal_overlays(dark: bool) {
+    let mut state = initial(
+        dark,
+        document_tile("m", "/repo/plan.md"),
+        vec![seed(
+            KNOWN_SEED,
+            "A seed the terminal names",
+            "planted",
+            None,
+        )],
+    );
+    if let Some(sessions) = state.sessions.as_mut() {
+        sessions[0].id = "s0".into();
+    }
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("session_messages_get", |_: &Request| {
+            message(SessionMessagesGetResultMessage {
+                session_id: "s0".into(),
+                success: true,
+                status: "ready".into(),
+                messages: vec![SessionMessage {
+                    key: "m1".into(),
+                    markdown: MESSAGE.into(),
+                }],
+                ..SessionMessagesGetResultMessage::new()
+            })
+        })
+        .on("session_annotations_get", |_: &Request| {
+            message(SessionAnnotationsGetResultMessage {
+                session_id: "s0".into(),
+                success: true,
+                note: Some(String::new()),
+                ..SessionAnnotationsGetResultMessage::new()
+            })
+        })
+        .on("session_annotations_save", |_: &Request| {
+            message(SessionAnnotationsSaveResultMessage {
+                session_id: "s0".into(),
+                success: true,
+                ..SessionAnnotationsSaveResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    write(
+        &mut world,
+        &format!(
+            "{MESSAGE}\r\nsee {KNOWN_SEED} for the plan\r\n\x1b]133;A\x07$ \x1b]133;B\x07make test\r\n\x1b]133;C\x07ok apple pie\r\nall apple tests pass\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ "
+        ),
+    );
+    drag(&mut world, None, (5, 4), (5, 4));
+    drag(&mut world, Some(alt()), (4, 0), (20, 0));
+    world.gesture(|app| {
+        app.press(if cfg!(target_os = "macos") {
+            "mod+f"
+        } else {
+            "mod+shift+f"
+        })
+    });
+    world.gesture(|app| app.type_text("apple"));
+    let overlays = world.terminal_view("r-a").expect("terminal a is drawn")["overlays"].clone();
+    for color in ["#a78bfa", "#3b82f6", "#4d9de0", "#f5c542"] {
+        let shown = overlays
+            .as_array()
+            .is_some_and(|all| all.iter().any(|o| o["color"] == color));
+        assert!(shown, "terminal a shows no {color} overlay: {overlays}");
+    }
+    snap(&mut world, "terminal-overlays", dark);
+}
+
+fn alt() -> rune::Mods {
+    rune::Mods {
+        alt: true,
+        ..rune::Mods::default()
+    }
+}
+
+fn drag(world: &mut World, mods: Option<rune::Mods>, from: (u16, u16), to: (u16, u16)) {
+    let (a, b) = (cell(world, from.0, from.1), cell(world, to.0, to.1));
+    if let Some(mods) = mods {
+        world.gesture(|app| app.hold(mods));
+    }
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_move(b.0, b.1);
+        app.runtime.pointer_up(b.0, b.1);
+    });
+    world.gesture(|app| app.hold(rune::Mods::default()));
+}
+
 fn tile_window(dark: bool) {
     let mut popped = document_tile("m", "/repo/plan.md");
     popped["window"] = json!({"x": 10.0, "y": 20.0, "width": 900.0, "height": 700.0});
@@ -513,6 +616,7 @@ fn shoot(out: PathBuf) {
         garden(dark);
         settings_page(dark);
         palette(dark);
+        terminal_overlays(dark);
         tile_window(dark);
     }
 }
