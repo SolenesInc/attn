@@ -1656,3 +1656,35 @@ fn the_reached_row_follows_its_agent_when_a_settle_moves_it_to_another_band() {
     world.gesture(|app| app.key(plain(rune::Key::Up)));
     assert_eq!(reached(&world).as_deref(), Some("queue-turn.c"));
 }
+
+#[test]
+fn the_snooze_key_opens_its_menu_centred_across_the_tile_of_the_agent_on_screen() {
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        turn("t-old", 120),
+        turn("t-new", 5),
+    ]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.t-old")));
+    let [tx, ty, tw, th] = world
+        .screen()
+        .bounds(Target::key("tile.p0"))
+        .expect("its tile shows");
+
+    world.gesture(|app| app.key(chord(Action::SessionSnooze)));
+
+    let [mx, my, mw, mh] = world
+        .screen()
+        .bounds(Target::role("menu").name("Snooze t-old"))
+        .expect("the menu is open");
+    assert!(
+        (mx + mw / 2.0 - (tx + tw / 2.0)).abs() < 1.0,
+        "menu {:?} centres across tile {:?}",
+        [mx, my, mw, mh],
+        [tx, ty, tw, th]
+    );
+    assert!(
+        my >= ty && my + mh <= ty + th,
+        "menu {:?} opens inside tile {:?}",
+        [mx, my, mw, mh],
+        [tx, ty, tw, th]
+    );
+}

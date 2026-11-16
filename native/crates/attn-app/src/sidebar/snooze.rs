@@ -120,7 +120,8 @@ fn next_weekday(now_ms: i64, target: i64) -> i64 {
 pub struct Menu {
     pub session: String,
     pub name: String,
-    /// The key of what it opened under; none opens it in the middle of the window.
+    /// The key of what it opened under; none opens it a third of the way down its agent's
+    /// tile, centred across it, or of the window when no tile shows the agent.
     pub under: Option<String>,
     pub standby: bool,
     pub opened_ms: i64,
@@ -233,18 +234,17 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
             let spot = kit_menu
                 .placement(Placement::Bottom)
                 .build(attn_ui::kit(t), &mut layer);
-            layer.insert(
-                0,
-                col()
-                    .key(format!("{MENU}.center"))
-                    .absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .items_center()
-                    .child(rune::el().grow(1.0))
-                    .child(spot)
-                    .child(rune::el().grow(2.0)),
-            );
+            let centre = col()
+                .key(format!("{MENU}.center"))
+                .items_center()
+                .child(rune::el().grow(1.0))
+                .child(spot)
+                .child(rune::el().grow(2.0));
+            let centre = match crate::desktop::on_screen_tile(state, &menu.session) {
+                Some([x, y, w, h]) => centre.absolute(x, y).w(w).h(h),
+                None => centre.absolute(0.0, 0.0).w_full().h_full(),
+            };
+            layer.insert(0, centre);
         }
     }
     layer
