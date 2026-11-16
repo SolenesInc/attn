@@ -745,6 +745,8 @@ fn pr_card(state: &State, t: &Tokens) -> El {
             .role("status")
             .font(type_::BODY)
             .color(t.text_muted)
+            .wrap()
+            .w_full()
     };
     if let Some(reason) = &facts.github.polling_off_reason {
         body = body.child(empty(reason.clone()));
@@ -823,14 +825,14 @@ fn pr_card(state: &State, t: &Tokens) -> El {
                         .build(k)
                         .key("home.prs.refresh"),
                 )
-                .child(
+                .children(facts.github.polling_off_reason.is_none().then(|| {
                     text(needing.to_string())
                         .key("home.prs.count")
                         .role("status")
                         .label(format!("{needing} need attention"))
                         .font(type_::LABEL)
-                        .color(t.text_secondary),
-                ),
+                        .color(t.text_secondary)
+                })),
         )
         .child(body)
 }

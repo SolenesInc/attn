@@ -575,14 +575,33 @@ fn home_leaves_out_an_empty_section_and_says_when_no_pr_needs_the_user_or_github
         name(&world, "home.prs.empty").as_deref(),
         Some("No PRs need attention")
     );
+    let one_line = world
+        .screen()
+        .bounds(Target::key("home.prs.empty"))
+        .unwrap()[3];
+    world.daemon.emit(PRsUpdatedMessage {
+        prs: Some(vec![pr("r1", 1, "reviewer", "review this")]),
+        ..PRsUpdatedMessage::new()
+    });
+    let reason = "GitHub polling is off for instance vm-mac-check-b8e4. Start its daemon with \
+                  ATTN_GITHUB_POLLING=on to poll with your gh credentials.";
     world.daemon.emit(GitHubHostsUpdatedMessage {
-        github_polling_off_reason: Some("GitHub polling is off for instance dev.".into()),
+        github_polling_off_reason: Some(reason.into()),
         ..GitHubHostsUpdatedMessage::new()
     });
     world.settle();
-    assert_eq!(
-        name(&world, "home.prs.empty").as_deref(),
-        Some("GitHub polling is off for instance dev.")
+    assert_eq!(name(&world, "home.prs.empty").as_deref(), Some(reason));
+    assert!(
+        !has(&world, "home.prs.count"),
+        "no count beside a list it does not show"
+    );
+    let said = world
+        .screen()
+        .bounds(Target::key("home.prs.empty"))
+        .unwrap();
+    assert!(
+        said[3] > one_line,
+        "the reason wraps onto more lines inside the card: {said:?}"
     );
 }
 
