@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { daemonSeed, daemonSession, memberActor, sessionClaim, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
-import { renderGarden } from './test/garden';
+import { openRow, renderGarden } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -113,6 +113,25 @@ const decision = () => screen.queryByRole('heading', { name: 'What should happen
 const handoff = () => screen.getByLabelText(/What should the new agent know/);
 
 describe('App garden review', () => {
+  it('reads the review overview on open and on a row change, never on a push that changes no row', async () => {
+    const daemon = await openGarden(undefined, { candidates: 1 });
+    await openRow(daemon, 'Review this seed');
+    expect(daemon.sentOf('seed_review_show')).toHaveLength(1);
+    const reads = daemon.sentOf('seed_document_get').length;
+
+    await gesture(daemon, () => daemon.emit({
+      event: 'garden_seeds_changed', profile_id: 'profile-default', order: [reviewedSeed.id], seeds: [], total: 1,
+    }));
+    expect(daemon.sentOf('seed_review_show')).toHaveLength(1);
+    expect(daemon.sentOf('seed_document_get').slice(reads)).toEqual([expect.objectContaining({ seed_id: reviewedSeed.id })]);
+
+    await gesture(daemon, () => daemon.emit({
+      event: 'garden_seeds_changed', profile_id: 'profile-default', order: [reviewedSeed.id],
+      seeds: [{ ...reviewedSeed, title: 'Review this seed again', rev: 5 }], total: 1,
+    }));
+    expect(daemon.sentOf('seed_review_show')).toHaveLength(2);
+  });
+
   it('shows a failed Resume after its review decision has settled', async () => {
     const daemon = await openReview({ actions: ['resume'], recommendation: 'resume' }, withSavedContext());
     let held: CommandMessage<'seed_resume'> | undefined;

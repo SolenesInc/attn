@@ -10,6 +10,7 @@ import type {
   SeedReviewActionContext,
 } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed } from '../store/gardenWalk';
 import { SeedDocumentView } from './SeedDocumentView';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
@@ -597,6 +598,7 @@ export function GardenReviewPanel({
   const [actionError, setActionError] = useState('');
   const [retrying, setRetrying] = useState(false);
   const connectionGeneration = useOptionalDaemonApi()?.connectionGeneration ?? 0;
+  const gardenPings = useDaemonStore((state) => state.gardenPings);
   const [browsedSeedId, setBrowsedSeedId] = useState('');
   const [browsedDocument, setBrowsedDocument] = useState<SeedDocument | null>(null);
   const [seedReadError, setSeedReadError] = useState('');
@@ -635,7 +637,7 @@ export function GardenReviewPanel({
     return () => {
       ignore = true;
     };
-  }, [browsedSeedId, fetchSeedDocument, seeds, connectionGeneration]);
+  }, [browsedSeedId, fetchSeedDocument, seeds, gardenPings, connectionGeneration]);
 
   useEffect(() => {
     if (complete) return;

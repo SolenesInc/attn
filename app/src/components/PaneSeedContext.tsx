@@ -22,6 +22,7 @@ function useSeedContextDocument(seedId: string, seed?: Seed) {
   const [failed, setFailed] = useState(false);
   const revision = seed?.rev;
   const gardenSeeds = useDaemonStore((state) => state.seeds);
+  const gardenPings = useDaemonStore((state) => state.gardenPings);
 
   useEffect(() => {
     if (!fetchDocument) return;
@@ -38,8 +39,7 @@ function useSeedContextDocument(seedId: string, seed?: Seed) {
       if (!cancelled) setFailed(true);
     });
     return () => { cancelled = true; };
-  // Notes arrive through Garden snapshots without advancing the seed revision.
-  }, [fetchDocument, seedId, revision, gardenSeeds]);
+  }, [fetchDocument, seedId, revision, gardenSeeds, gardenPings]);
 
   return { document, unavailable: failed || !fetchDocument };
 }

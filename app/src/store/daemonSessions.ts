@@ -9,6 +9,7 @@ interface DaemonStore {
   // Newest first. `seedsTotal` exceeds seeds.length only when the garden outgrew one push.
   seeds: Seed[];
   seedsTotal: number;
+  gardenPings: number;
   setSeeds: (seeds: Seed[], total: number) => void;
   applySeedChanges: (order: string[], changed: Seed[], total: number) => void;
 
@@ -32,6 +33,10 @@ interface DaemonStore {
   setConnected: (connected: boolean) => void;
 }
 
+function sameOrder(seeds: Seed[], order: string[]) {
+  return seeds.length === order.length && seeds.every((seed, i) => seed.id === order[i]);
+}
+
 export const useDaemonStore = create<DaemonStore>((set, get) => ({
   daemonSessions: [],
   setDaemonSessions: (sessions) => set({ daemonSessions: sessions }),
@@ -39,13 +44,19 @@ export const useDaemonStore = create<DaemonStore>((set, get) => ({
 
   seeds: [],
   seedsTotal: 0,
+  gardenPings: 0,
   setSeeds: (seeds, total) => set({ seeds, seedsTotal: total }),
   applySeedChanges: (order, changed, total) => {
-    const snapshot = new Map(get().seeds.map((seed) => [seed.id, seed]));
+    const { seeds, seedsTotal, gardenPings } = get();
+    if (changed.length === 0 && total === seedsTotal && sameOrder(seeds, order)) {
+      set({ gardenPings: gardenPings + 1 });
+      return;
+    }
+    const snapshot = new Map(seeds.map((seed) => [seed.id, seed]));
     for (const seed of changed) snapshot.set(seed.id, seed);
     const missing = order.filter((id) => !snapshot.has(id));
     if (missing.length > 0) console.error(`[Garden] change lists seeds this app never received: ${missing.join(', ')}`);
-    set({ seeds: order.flatMap((id) => snapshot.get(id) ?? []), seedsTotal: total });
+    set({ seeds: order.flatMap((id) => snapshot.get(id) ?? []), seedsTotal: total, gardenPings: gardenPings + 1 });
   },
 
   crew: [],

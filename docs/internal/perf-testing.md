@@ -207,6 +207,15 @@ pnpm --dir app exec vite preview --outDir <dir> --port <port>
 node scripts/gardenpushperf/app-push.mjs http://localhost:<port>/ <id> 20
 ```
 
+`app-review-pull.mjs` takes the same bundle. It opens the Garden on the seed
+with the given title, posts notes to it, and counts the `seed_review_show`
+requests in the daemon's log, once for the opening and once for the notes. The
+notes should cost none, while the open seed's document still refetches on each:
+
+```bash
+node scripts/gardenpushperf/app-review-pull.mjs http://localhost:<port>/ <id> "<title>" 20
+```
+
 ## Garden reads
 
 `scripts/gardenreadperf` measures what reading the garden costs on a copy. It

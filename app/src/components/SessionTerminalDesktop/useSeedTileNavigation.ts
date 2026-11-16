@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import type { Seed } from '../../hooks/useDaemonSocket';
+import { useDaemonStore } from '../../store/daemonSessions';
 import { gardenPathToSeed, seedParentID } from '../../store/gardenWalk';
 import { type SeedDocument } from '../SeedDocumentView';
 
@@ -107,8 +108,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
   const [error, setError] = useState<string | null>(null);
   const [reloadRequest, setReloadRequest] = useState(0);
   const reload = useCallback(() => setReloadRequest((request) => request + 1), []);
-  // Every garden fact replaces the seeds array, and notes or child changes need not
-  // touch this seed's own revision, so the array identity is the live invalidation signal.
+  const gardenPings = useDaemonStore((state) => state.gardenPings);
   useEffect(() => {
     if (!enabled) return;
     if (!seedId) {
@@ -135,7 +135,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     return () => {
       ignore = true;
     };
-  }, [enabled, gardenSeeds, seedId, sendSeedDocumentGet, connectionGeneration, reloadRequest]);
+  }, [enabled, gardenSeeds, gardenPings, seedId, sendSeedDocumentGet, connectionGeneration, reloadRequest]);
 
   return { document: document?.seed.id === seedId ? document : null, error, reload };
 }

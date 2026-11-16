@@ -1,5 +1,6 @@
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
@@ -626,7 +627,8 @@ export function GardenPanel({
   const daemonApi = useOptionalDaemonApi();
   const connectionGeneration = daemonApi?.connectionGeneration ?? 0;
   const outpostReach = daemonApi?.outposts?.map((outpost) => `${outpost.id}:${outpost.reach}`).join() ?? '';
-  const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[]; connectionGeneration: number } | null>(null);
+  const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[]; pings: number; connectionGeneration: number } | null>(null);
+  const gardenPings = useDaemonStore((state) => state.gardenPings);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [continuationDraft, setContinuationDraft] = useState<ContinuationDraft | null>(null);
   const [titlePinned, setTitlePinned] = useState(false);
@@ -788,7 +790,7 @@ export function GardenPanel({
     setDocumentError(null);
     fetchSeedDocument(hereId)
       .then((document) => {
-        if (!ignore) setSeedDocument({ document, snapshot: seeds, connectionGeneration });
+        if (!ignore) setSeedDocument({ document, snapshot: seeds, pings: gardenPings, connectionGeneration });
       })
       .catch((error) => {
         if (!ignore) setDocumentError(error instanceof Error ? error.message : `Could not read ${hereId}`);
@@ -796,7 +798,7 @@ export function GardenPanel({
     return () => {
       ignore = true;
     };
-  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds, connectionGeneration, outpostReach]);
+  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds, gardenPings, connectionGeneration, outpostReach]);
 
   const onPageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft') return;
@@ -935,7 +937,7 @@ export function GardenPanel({
 
   const seedDoc = seedDocument && here && seedDocument.document.seed.id === here.id ? seedDocument.document : null;
   const documentIsCurrent = seedDocumentIsCurrent(seedDoc, here, seedDocument, connectionGeneration);
-  const continuationNotesAreCurrent = documentIsCurrent && seedDocument?.snapshot === seeds;
+  const continuationNotesAreCurrent = documentIsCurrent && seedDocument?.snapshot === seeds && seedDocument.pings === gardenPings;
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
   const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
