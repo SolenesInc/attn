@@ -61,6 +61,7 @@ pub use dispatch::dispatch;
 pub use frame::{Folders, use_folders, use_prefs};
 pub use keymap::{Binding, Keymap};
 pub use requests::ReplyInbox;
+pub use review::places_built;
 pub use shell::{Drawer, Holder, Layer, View, Window};
 pub use terminal::{TerminalInbox, Terminals};
 

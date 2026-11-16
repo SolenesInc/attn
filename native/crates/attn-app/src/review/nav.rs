@@ -457,42 +457,57 @@ pub(crate) fn note_line(tile: &str, nav: &Nav, t: &Tokens) -> Option<El> {
     )
 }
 
+/// A row of the list of places is about this tall.
+const PLACE_HEIGHT: f32 = 15.0;
+
+thread_local! {
+    static PLACES_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many places of answers' lists this thread has built.
+pub fn places_built() -> usize {
+    PLACES_BUILT.with(std::cell::Cell::get)
+}
+
+/// Place `i` of a list, `l`, which a press opens.
+fn place_row(tile: &str, l: &CodeNavLocation, i: usize, picked: bool, t: &Tokens) -> El {
+    PLACES_BUILT.with(|n| n.set(n.get() + 1));
+    let outside = if l.outside { " outside" } else { "" };
+    let el = row()
+        .key(place_key(i))
+        .role("option")
+        .label(format!("{}:{}{outside} {}", l.path, l.line, l.text.trim()))
+        .w_full()
+        .gap(space::S2)
+        .px(space::S2)
+        .child(
+            text(format!("{}:{}", l.path, l.line))
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
+        .children(
+            l.outside
+                .then(|| text("outside").font(type_::LABEL).color(t.warning)),
+        )
+        .child(
+            text(l.text.trim().to_owned())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_primary),
+        )
+        .on_press_tx({
+            let tile = tile.to_owned();
+            move |state: &mut State, tx: &mut Tx| super::open_answer_place(state, &tile, i, tx)
+        });
+    if picked {
+        el.fill(t.bg_selected).focus_selected(true)
+    } else {
+        el
+    }
+}
+
 /// The list of places an answer gives, or the type it reads.
 pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
     let title = answer.kind.title(&answer.name);
-    let rows = answer.locations.iter().enumerate().map(|(i, l)| {
-        let outside = if l.outside { " outside" } else { "" };
-        let el = row()
-            .key(place_key(i))
-            .role("option")
-            .label(format!("{}:{}{outside} {}", l.path, l.line, l.text.trim()))
-            .w_full()
-            .gap(space::S2)
-            .px(space::S2)
-            .child(
-                text(format!("{}:{}", l.path, l.line))
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
-            .children(
-                l.outside
-                    .then(|| text("outside").font(type_::LABEL).color(t.warning)),
-            )
-            .child(
-                text(l.text.trim().to_owned())
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_primary),
-            )
-            .on_press_tx({
-                let tile = tile.to_owned();
-                move |state: &mut State, tx: &mut Tx| super::open_answer_place(state, &tile, i, tx)
-            });
-        if i == answer.cursor {
-            el.fill(t.bg_selected).focus_selected(true)
-        } else {
-            el
-        }
-    });
     let panel = col()
         .key("review.nav.panel")
         .role("dialog")
@@ -536,6 +551,30 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
                 .wrap()
         }))
         .children((!answer.locations.is_empty()).then(|| {
+            let shown = tile.to_owned();
+            let tokens = *t;
+            let places = col()
+                .w_full()
+                .growth(rune::GrowthSpec::default())
+                .virtual_rows(
+                    answer.locations.len(),
+                    PLACE_HEIGHT,
+                    |_: &State, i| place_key(i).into(),
+                    move |state: &State, i| {
+                        let answer = state
+                            .readings
+                            .reviews
+                            .tiles
+                            .get(&shown)
+                            .and_then(|r| r.nav.panel.as_ref());
+                        match answer.and_then(|a| Some((a, a.locations.get(i)?))) {
+                            Some((answer, l)) => {
+                                place_row(&shown, l, i, i == answer.cursor, &tokens)
+                            }
+                            None => col().key(place_key(i)),
+                        }
+                    },
+                );
             col()
                 .key(list_key(tile))
                 .role("listbox")
@@ -545,7 +584,7 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .children(rows)
+                .child(places)
         }));
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
 }

@@ -393,6 +393,9 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 let taken = format!("{}\n{}", text.text, open.lines[open.unit.to]);
                 *text = TextEdit::new(taken);
             }
+            if open.unit.kind != UnitKind::Block {
+                open.unit.kind = UnitKind::Selection;
+            }
             state.readings.revision += 1;
             true
         }
@@ -420,6 +423,7 @@ fn save(state: &mut State, tx: &mut Tx) {
         }
         return;
     }
+    let changed = first_changed_line(&was, &text);
     let (after, before) = where_it_stands(&open.heads, open.unit.from, open.unit.to);
     let mut mark = MarkdownAnnotation {
         id: format!("review-edit-{}", uuid::Uuid::new_v4()),
@@ -449,6 +453,7 @@ fn save(state: &mut State, tx: &mut Tx) {
         open.unit.to,
     );
     let (uri, tile, source) = (open.uri.clone(), open.tile.clone(), open.source.clone());
+    let edited = from as i64 + 1 + changed;
     state.readings.revision += 1;
     let asked_path = path.clone();
     state.ask(
@@ -484,6 +489,7 @@ fn save(state: &mut State, tx: &mut Tx) {
                     if shown {
                         close(state, tx);
                     }
+                    super::land_edit(state, &tile, &path, edited);
                     super::reread(state, &tile, source, &path, tx);
                     return;
                 }
@@ -507,6 +513,18 @@ fn save(state: &mut State, tx: &mut Tx) {
         },
         tx,
     );
+}
+
+/// The first line of `now`, 0-based, that differs from `was`; the last line when all before
+/// it are the same.
+fn first_changed_line(was: &str, now: &str) -> i64 {
+    let before: Vec<&str> = was.split('\n').collect();
+    let after: Vec<&str> = now.split('\n').collect();
+    let mut line = 0;
+    while line + 1 < after.len() && before.get(line) == Some(&after[line]) {
+        line += 1;
+    }
+    line as i64
 }
 
 /// The edit box over its tile.

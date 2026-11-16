@@ -203,8 +203,13 @@ pub(super) fn send_label() -> String {
 }
 
 /// The keys for what the review shows in `frame` with a file open or not, as the Tauri key
-/// line lists them, with the marking keys after the moves.
-fn keys_for(frame: Frame, file_open: bool, sides: bool) -> Vec<(String, &'static str)> {
+/// line lists them, with the marking keys after the moves when the file open takes marks.
+fn keys_for(
+    frame: Frame,
+    file_open: bool,
+    sides: bool,
+    marking: bool,
+) -> Vec<(String, &'static str)> {
     let list: &[(&str, &'static str)] = match (file_open, frame) {
         (true, _) => &[
             ("↑ ↓", "line"),
@@ -245,13 +250,15 @@ fn keys_for(frame: Frame, file_open: bool, sides: bool) -> Vec<(String, &'static
         keys.push(("b".into(), "before, after"));
         keys.extend(last);
     }
-    let marking = [
+    let marks = [
         ("c".to_owned(), "note"),
         ("a".to_owned(), "ask"),
         ("i".to_owned(), "edit"),
         (send_label(), "send"),
     ];
-    keys.splice(2..2, marking);
+    if marking {
+        keys.splice(2..2, marks);
+    }
     keys
 }
 
@@ -259,7 +266,7 @@ pub(super) fn key_line(
     tile: &str,
     frame: Frame,
     offered: &[Frame],
-    (sides, file_open): (bool, bool),
+    (sides, file_open, marking): (bool, bool, bool),
     servers: Option<El>,
     t: &Tokens,
 ) -> El {
@@ -269,7 +276,7 @@ pub(super) fn key_line(
             .font(type_::LABEL)
             .color(t.text_secondary)
     };
-    let keys = keys_for(frame, file_open, sides);
+    let keys = keys_for(frame, file_open, sides, marking);
     let tabs = (offered.len() > 1).then(|| {
         row()
             .role("tablist")
@@ -403,7 +410,7 @@ const ALL_KEYS: &[(&str, &str)] = &[
 ];
 
 /// Every key the review takes, with what it does.
-pub(super) fn sheet(prefix: &str, t: &Tokens) -> El {
+pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
     col()
         .key(format!("{prefix}.sheet"))
         .role("dialog")
@@ -416,6 +423,12 @@ pub(super) fn sheet(prefix: &str, t: &Tokens) -> El {
         .fill(t.bg_elevated)
         .border(1.0, t.border)
         .child(text("Keys").font(type_::TITLE).color(t.text_primary))
+        .children(read_only.then(|| {
+            text("This file is outside the repository and read-only: c, a and i do nothing here.")
+                .font(type_::BODY)
+                .color(t.text_secondary)
+                .wrap()
+        }))
         .children(ALL_KEYS.iter().map(|(keys, what)| {
             let keys = if *keys == "send" {
                 send_label()

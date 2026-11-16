@@ -41,6 +41,9 @@ pub(crate) struct OpenFile {
     pub(crate) select_from: Option<usize>,
     /// The latest read asked for it; an answer to an older one is dropped.
     pub(crate) asked: u64,
+    /// The line now an edit made in this view changed first, where its next read puts the
+    /// cursor.
+    pub(crate) edited: Option<i64>,
 }
 
 impl OpenFile {

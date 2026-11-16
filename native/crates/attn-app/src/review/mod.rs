@@ -15,6 +15,8 @@ mod search;
 pub(crate) mod setup;
 mod stop;
 
+pub use nav::places_built;
+
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
@@ -117,16 +119,26 @@ pub(crate) struct Review {
     asked: u64,
     /// The latest read asked for each widened stop.
     widening: HashMap<(String, i64), u64>,
+    /// The file and line now an edit made in the document changed first: the cursor stands on
+    /// that added line once the document shows it, until the cursor moves.
+    edited: Option<(String, i64)>,
     /// The files the running warm-up still means to color, and its round: a warm-up whose
     /// round has passed stops.
     warming: (u64, Vec<(String, String)>),
     sideways: file::Sideways,
 }
 
-/// A stop's rows widened by `extra` lines on each side, from its whole file.
+/// A stop's rows widened by `extra` lines on each side, from its whole file, and the stop as
+/// it was when they were read.
 pub(crate) struct Expansion {
     rows: Rc<[ReviewRow]>,
     extra: usize,
+    stop: String,
+}
+
+/// A stop as an expansion remembers it, to tell whether the stop changed since.
+fn stop_seen(stop: &attn_protocol::ReviewStop) -> String {
+    serde_json::to_string(stop).unwrap_or_default()
 }
 
 /// Lines of files the reader keeps colors for, past which it forgets the oldest.
@@ -408,6 +420,16 @@ impl<'a> Reading<'a> {
 
     fn cursor(&self, review: &Review) -> Option<usize> {
         let last = self.places.len().checked_sub(1)?;
+        if let Some((path, line)) = &review.edited {
+            let edited = Spot::Row {
+                path: path.clone(),
+                old: None,
+                now: Some(*line),
+            };
+            if let Some(at) = self.places.iter().position(|p| p.spot == edited) {
+                return Some(at);
+            }
+        }
         let Some(spot) = review.cursor.as_ref() else {
             return self.map_start();
         };
@@ -843,6 +865,7 @@ pub(crate) fn body(
         }
     };
     let offered = frames::offered(bundle, &BUILT);
+    let read_only = reads_outside(review);
     col()
         .key(prefix.clone())
         .w_full()
@@ -862,11 +885,12 @@ pub(crate) fn body(
             (
                 sides,
                 !review.files.is_empty() && reading.frame != Frame::Walkthrough,
+                !read_only,
             ),
             setup::states(tile, bundle, host, servers, t),
             t,
         ))
-        .children(review.help.then(|| keys::sheet(&prefix, t)))
+        .children(review.help.then(|| keys::sheet(&prefix, read_only, t)))
         .children(
             reviews
                 .editing
@@ -1322,9 +1346,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             }
         }
         (_, "/") => Some(Move::Search(String::new())),
-        (_, "i" | "c" | "a")
-            if viewing && review.files.last().is_some_and(|f| f.target.outside) =>
-        {
+        (_, "i" | "c" | "a") if viewing && reads_outside(review) => {
             let path = review
                 .files
                 .last()
@@ -1416,6 +1438,10 @@ fn apply(
     let Some(bundle) = message.review.as_ref() else {
         return;
     };
+    let moves = matches!(
+        to,
+        Some(Move::Line(..) | Move::Stop(_) | Move::Arrow | Move::Shown | Move::Stage(..))
+    );
     let review = state
         .readings
         .reviews
@@ -1530,6 +1556,9 @@ fn apply(
             );
         }
         _ => {}
+    }
+    if moves && let Some(review) = state.readings.reviews.tiles.get_mut(tile) {
+        review.edited = None;
     }
     state.readings.revision += 1;
 }
@@ -1787,6 +1816,11 @@ pub(crate) fn open_in_editor(state: &mut State, tile: &str, path: String, tx: &m
         path: Some(path),
     };
     crate::notebook::open_tile_at(state, params, tx);
+}
+
+/// Whether the file view shows a file outside the repository, which takes no marks or edits.
+fn reads_outside(review: &Review) -> bool {
+    review.files.last().is_some_and(|f| f.target.outside)
 }
 
 /// The key of the arrow the Map stands on, in the Map's diagrams.
@@ -2065,16 +2099,18 @@ fn placements<'m>(
                 .filter(|f| f.target.path == path)
                 .filter_map(|f| f.rows.as_deref())
                 .map(|rows| marks::Rows { rows, covers: None })
-                .chain(
-                    bundle
-                        .stops
-                        .iter()
-                        .filter(|s| s.path == path)
-                        .map(|s| marks::Rows {
+                .chain(bundle.stops.iter().filter(|s| s.path == path).map(|s| {
+                    match review.expansions.get(&(s.path.clone(), s.from)) {
+                        Some(e) => marks::Rows {
+                            rows: &e.rows,
+                            covers: Some((s.from - e.extra as i64, s.to + e.extra as i64)),
+                        },
+                        None => marks::Rows {
                             rows: &s.rows,
                             covers: Some((s.from, s.to)),
-                        }),
-                )
+                        },
+                    }
+                }))
                 .collect();
             let placed = if m.r#type == "edit" {
                 let stands = (
@@ -2264,6 +2300,20 @@ fn reread(
         );
     }
     state.readings.revision += 1;
+}
+
+/// After an edit of file `path` in review tile `tile` that changed it first at line now `line`:
+/// the file view the edit was made in, or the document when no file view shows, puts its
+/// cursor on that line once it shows it.
+fn land_edit(state: &mut State, tile: &str, path: &str, line: i64) {
+    let Some(review) = state.readings.reviews.tiles.get_mut(tile) else {
+        return;
+    };
+    match review.files.last_mut() {
+        Some(open) if open.target.path == path => open.edited = Some(line),
+        Some(_) => {}
+        None => review.edited = Some((path.to_owned(), line)),
+    }
 }
 
 /// Where a read puts the file view's cursor.
@@ -2572,12 +2622,16 @@ fn load(
             else {
                 return;
             };
+            let edited = open.edited.take();
             match read {
                 Ok(m) => {
                     let rows: Rc<[ReviewRow]> = m.rows.unwrap_or_default().into();
-                    open.cursor = match land {
-                        Land::Line(line) => file::row_index_of(&rows, line),
-                        Land::Refresh => file::row_index_after_refresh(&rows, open),
+                    let edited =
+                        edited.and_then(|line| rows.iter().position(|r| r.now == Some(line)));
+                    open.cursor = match (edited, land) {
+                        (Some(at), _) => at,
+                        (None, Land::Line(line)) => file::row_index_of(&rows, line),
+                        (None, Land::Refresh) => file::row_index_after_refresh(&rows, open),
                     };
                     open.select_from = None;
                     open.rows = Some(rows);
@@ -2674,13 +2728,18 @@ fn expand(
     review.asked += 1;
     let asked = review.asked;
     review.widening.insert(key.clone(), asked);
-    let (tile, shown) = (tile.to_owned(), stop.rows.clone());
+    let (tile, shown, seen) = (tile.to_owned(), stop.rows.clone(), stop_seen(stop));
+    let stop_path = stop.path.clone();
     let (host, document) = source;
     file::read(
         state,
         (host, document, stop.path.clone()),
         move |state, read, _| {
-            let Ok(m) = read else { return };
+            if let Ok(m) = &read
+                && let (Some(rows), Some(hash)) = (m.rows.as_deref(), m.hash.as_deref())
+            {
+                state.readings.reviews.keep_colors(&stop_path, hash, rows);
+            }
             let Some(review) = state.readings.reviews.tiles.get_mut(&tile) else {
                 return;
             };
@@ -2688,10 +2747,18 @@ fn expand(
                 return;
             }
             review.widening.remove(&key);
+            let Ok(m) = read else { return };
             let Some(rows) = widen(&shown, m.rows.as_deref().unwrap_or_default(), extra) else {
                 return;
             };
-            review.expansions.insert(key, Expansion { rows, extra });
+            review.expansions.insert(
+                key,
+                Expansion {
+                    rows,
+                    extra,
+                    stop: seen,
+                },
+            );
             state.readings.revision += 1;
         },
         tx,
@@ -2702,8 +2769,8 @@ fn expand(
 const MORE_LINES: usize = 10;
 
 /// Keeps each shown review current: when its content changed, the open files are read again
-/// with the cursor on its row, and the widened stops are widened again; a stop's file that has
-/// no colors yet is read once to color it, one file at a time.
+/// with the cursor on its row, and the widened stops that changed are widened again; a stop's
+/// file that has no colors yet is read once to color it, one file at a time.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
     let now = tx.clock();
     let mut expired = false;
@@ -2792,7 +2859,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
             .iter()
             .filter_map(|s| {
                 let e = review.expansions.get(&(s.path.clone(), s.from))?;
-                Some((s.clone(), e.extra))
+                (e.stop != stop_seen(s)).then(|| (s.clone(), e.extra))
             })
             .collect();
         for (id, path) in files {
@@ -2814,7 +2881,8 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 /// Reads the stops' files the reader has no colors for, one after another, to color them.
-/// A warm-up already running for those files goes on; one for other files gives way.
+/// A file a widened stop is reading again is colored by that read. A warm-up already running
+/// for those files goes on; one for other files gives way.
 fn warm(
     state: &mut State,
     tile: &str,
@@ -2823,10 +2891,19 @@ fn warm(
     tx: &mut Tx,
 ) {
     let reviews = &state.readings.reviews;
+    let widening = |path: &str| {
+        reviews
+            .tiles
+            .get(tile)
+            .is_some_and(|r| r.widening.keys().any(|(p, _)| p == path))
+    };
     let mut wanted: Vec<(String, String)> = Vec::new();
     for stop in &bundle.stops {
         let key = (stop.path.clone(), stop.file_hash.clone());
-        if !stop.file_hash.is_empty() && !reviews.colored(&key.0, &key.1) && !wanted.contains(&key)
+        if !stop.file_hash.is_empty()
+            && !reviews.colored(&key.0, &key.1)
+            && !widening(&stop.path)
+            && !wanted.contains(&key)
         {
             wanted.push(key);
         }
