@@ -316,6 +316,18 @@ fn opens_over_the_app_with_the_message_field_and_escape_hides_it_keeping_the_dra
 }
 
 #[test]
+fn a_press_on_the_panels_surface_leaves_typing_in_the_message() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    type_text(&mut world, "Before ");
+    world.capture_gesture(|d| d.click_at((40.0, 4.0)));
+    type_text(&mut world, "after");
+    assert_eq!(message_text(&world), "Before after");
+    rest(&mut world);
+}
+
+#[test]
 fn sends_once_to_the_member_picked_and_clears_only_after_the_daemon_kept_it() {
     let (daemon, kept) = home();
     let mut world = World::start(daemon);
