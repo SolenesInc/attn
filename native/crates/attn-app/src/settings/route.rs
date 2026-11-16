@@ -489,6 +489,8 @@ impl Target {
 /// The open picker.
 pub(crate) struct Picker {
     target: Target,
+    /// The layer the picker opened over; it closes when that layer goes.
+    layer: Option<crate::Layer>,
     /// The harness being browsed, until a pick commits it.
     preview: Option<String>,
     query: TextEdit,
@@ -639,6 +641,7 @@ fn toggle(state: &mut State, target: Target, tx: &mut Tx) {
     }
     state.window.settings.route_picker = Some(Picker {
         target,
+        layer: state.window.layer,
         preview: None,
         query: TextEdit::default(),
         provider: TextEdit::default(),
@@ -651,6 +654,13 @@ fn toggle(state: &mut State, target: Target, tx: &mut Tx) {
 pub(super) fn close(state: &mut State, tx: &mut Tx) {
     commit_effort(state, tx);
     state.window.settings.route_picker = None;
+}
+
+/// Closes a picker whose layer another has replaced.
+pub(super) fn follow_layer(state: &mut State, tx: &mut Tx) {
+    if picker(state).is_some_and(|p| p.layer != state.window.layer) {
+        close(state, tx);
+    }
 }
 
 fn finish(state: &mut State, tx: &mut Tx) {

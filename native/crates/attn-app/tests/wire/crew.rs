@@ -1389,3 +1389,17 @@ fn a_member_in_session_opens_its_seed_beside_its_session() {
     assert_eq!(opened["session_id"], "s-keel");
     assert!(opened.get("standalone").is_none_or(Value::is_null));
 }
+
+#[test]
+fn the_model_picker_closes_when_another_layer_replaces_manage_crew() {
+    let mut world = start(vec![member("keel", 1)]);
+    open(&mut world);
+    open_route(&mut world, "Crew launch model");
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(state, Action::UiOpenSettings, tx);
+        })
+    });
+    assert!(!picker_open(&world));
+    assert!(world.daemon.sent_of("crew_set").is_empty());
+}

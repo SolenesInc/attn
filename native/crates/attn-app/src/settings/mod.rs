@@ -333,6 +333,7 @@ pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     hygiene::poll(state);
     phones::poll(state, tx);
+    route::follow_layer(state, tx);
     let open = is_open(state);
     let focused = tx
         .focused()
