@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use attn_protocol::Session;
 
-use super::{Look, Pick, Row};
+use super::{Look, Pick, Row, Status};
 use crate::sidebar::model::{self, AgentRow, Line, TileRow};
 use crate::sidebar::queue::{self, Bands};
 use crate::{Action, State};
@@ -149,7 +149,11 @@ impl List<'_> {
             look: Look::Agent {
                 agent: AgentRow::of(session, false),
                 crew: !crew.is_empty() && session.chief_of_staff != Some(true),
-                status: status(session, snoozed),
+                status: status(
+                    session,
+                    snoozed,
+                    crate::asks::offline(session, &state.facts.outposts),
+                ),
                 slot: desktop.map_or_else(|| "—".to_owned(), |d| slot(state, d.shortcut_slot)),
                 age: if owed {
                     queue::turn_age(session.turn_opened_at.as_deref(), now_ms)
@@ -190,22 +194,23 @@ impl List<'_> {
     }
 }
 
-/// The word an agent row's pill shows, as the Tauri app's `agentStatus`.
-fn status(session: &Session, snoozed: bool) -> &'static str {
-    if session.chief_of_staff == Some(true) {
-        "chief"
+fn status(session: &Session, snoozed: bool, offline: bool) -> Status {
+    if offline {
+        Status::Unreachable
+    } else if session.chief_of_staff == Some(true) {
+        Status::Chief
     } else if snoozed {
-        "snoozed"
+        Status::Snoozed
     } else if session.turn_owed == Some(true) {
         if session.state == "pending_approval" {
-            "approval"
+            Status::Approval
         } else {
-            "waiting"
+            Status::Waiting
         }
     } else if matches!(session.state.as_str(), "working" | "launching") {
-        "working"
+        Status::Working
     } else {
-        "idle"
+        Status::Idle
     }
 }
 

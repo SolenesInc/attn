@@ -179,6 +179,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         &["dashboard", "overview"],
         Action::SessionGoToDashboard,
     ));
+    commands.push(
+        Command::new(
+            "desktop-overview",
+            "Desktop overview",
+            &["desktops", "workspaces"],
+            Action::DesktopOverview,
+        )
+        .describe("Every desktop, with shortcuts and sending panes")
+        .shortcut(Some(Action::DesktopOverview)),
+    );
     let profile = &facts.profiles.selected;
     let desktops: Vec<_> = facts
         .desktops
@@ -197,6 +207,12 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         ));
     }
     if !profile.is_empty() {
+        commands.push(Command::new(
+            "new-desktop",
+            "New desktop",
+            &["desktop", "create", "workspace"],
+            Action::CreateDesktop,
+        ));
         commands.push(
             Command::new(
                 "sort-desktops",
@@ -283,6 +299,43 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         )
         .describe("Seeds and plots, the trail beside what you are reading")
         .shortcut(Some(Action::BoardOpen)),
+    );
+    commands.push(
+        Command::new(
+            "notebook",
+            "Open the notebook",
+            &["notebook", "journal", "knowledge", "fullscreen"],
+            Action::NotebookOpenFullscreen,
+        )
+        .shortcut(Some(Action::NotebookOpenFullscreen)),
+    );
+    commands.push(
+        Command::new(
+            "open-markdown-file",
+            "Open a markdown file",
+            &["open", "file", "markdown", "md", "recent", "doc", "find"],
+            Action::FileOpen,
+        )
+        .describe("Recently opened documents, then a fuzzy search of this session’s folder")
+        .shortcut(Some(Action::FileOpen)),
+    );
+    commands.push(
+        Command::new(
+            "notebook-tile",
+            "Open Editor tile",
+            &[
+                "notebook",
+                "editor",
+                "tile",
+                "knowledge",
+                "journal",
+                "dock",
+                "split",
+            ],
+            Action::NotebookOpenTile,
+        )
+        .describe("Dock an editor beside your terminals, opened on any folder")
+        .shortcut(Some(Action::NotebookOpenTile)),
     );
     commands.push(
         Command::new(

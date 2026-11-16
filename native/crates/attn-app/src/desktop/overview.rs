@@ -76,7 +76,7 @@ fn send(state: &mut State, desktop: &str, tx: &mut Tx) {
 }
 
 /// Makes a desktop and switches to it once the daemon made it.
-fn create(state: &mut State, tx: &mut Tx) {
+pub(crate) fn create(state: &mut State, tx: &mut Tx) {
     let profile = state.facts.profiles.selected.clone();
     if profile.is_empty() {
         return;

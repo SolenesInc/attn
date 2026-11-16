@@ -3,7 +3,7 @@ use rune::tok::{space, type_};
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::TextInput;
 
-use super::{Look, Mode, Row};
+use super::{Look, Mode, Row, Status};
 use crate::{Action, State};
 
 /// The search palette over the window: its field, the rows its query lists with the
@@ -240,16 +240,11 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
                 )
                 .children(crew.then(|| muted("· crew".into()).key(format!("{key}.crew"))));
             option
-                .a11y_value(*status)
-                .child(crate::sidebar::state_mark(&key, agent, t))
+                .a11y_value(status.word())
+                .child(status_dot(&key, *status, t))
                 .child(name)
                 .child(caption(slot.clone(), "slot"))
-                .child(
-                    text(status.to_string())
-                        .key(format!("{key}.status"))
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
+                .child(status_pill(&key, *status, t))
                 .child(caption(age.clone(), "age"))
                 .children(tag.clone().map(|tag| caption(tag, "tag")))
         }
@@ -262,4 +257,49 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
             .child(caption(detail.clone(), "detail")),
         Look::Divider => unreachable!("a divider returned above"),
     }
+}
+
+/// An agent row's dot: filled warm while the agent waits for the user, green while it works or
+/// is the chief, an outline while it sleeps or its outpost is out of reach.
+fn status_dot(row_key: &str, status: Status, t: &Tokens) -> El {
+    let dot = el()
+        .key(format!("{row_key}.state"))
+        .role("img")
+        .label(status.word())
+        .a11y_value(status.word())
+        .w(7.0)
+        .h(7.0)
+        .radius(3.5);
+    match status {
+        Status::Waiting | Status::Approval => dot.fill(t.warning),
+        Status::Working | Status::Chief => dot.fill(t.success),
+        Status::Snoozed => dot.border(1.0, t.text_tertiary),
+        Status::Unreachable => dot.border(1.0, t.error),
+        Status::Idle => dot.fill(rune::color::hex("#555555").expect("a dot color is #rrggbb")),
+    }
+}
+
+const PILL_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0);
+
+/// An agent row's status word on a tint of its own color, as the Tauri app's pill.
+fn status_pill(row_key: &str, status: Status, t: &Tokens) -> El {
+    let (ink, tint) = match status {
+        Status::Waiting => (t.warning, 0.14),
+        Status::Approval | Status::Unreachable => (t.error, 0.14),
+        Status::Working => (t.success, 0.14),
+        Status::Chief => (t.accent, 0.14),
+        Status::Snoozed | Status::Idle => (t.text_tertiary, 0.12),
+    };
+    row()
+        .w(64.0)
+        .py(1.0)
+        .radius(4.0)
+        .center()
+        .fill(ink.alpha(tint))
+        .child(
+            text(status.word())
+                .key(format!("{row_key}.status"))
+                .font(PILL_TYPE)
+                .color(ink),
+        )
 }

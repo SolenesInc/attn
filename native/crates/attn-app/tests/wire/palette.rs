@@ -734,6 +734,29 @@ fn hints(world: &World) -> Vec<String> {
 }
 
 #[test]
+fn the_palette_offers_the_desktop_overview_a_new_desktop_the_notebook_and_the_markdown_opener() {
+    let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));
+    press_action(&mut world, Action::UiCommandPalette);
+    let offered = titles(&world);
+    for title in [
+        "Desktop overview",
+        "New desktop",
+        "Open the notebook",
+        "Open a markdown file",
+        "Open Editor tile",
+    ] {
+        assert!(offered.iter().any(|t| t == title), "{title}: {offered:?}");
+    }
+
+    world.gesture(|app| app.type_text("new desktop"));
+    press(&mut world, Key::Enter);
+    let created = world.daemon.sent_of("desktop_create");
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0]["profile_id"], "work");
+    rest(&mut world);
+}
+
+#[test]
 fn the_agents_face_lists_the_crew_then_turns_agents_runs_snoozed_agents_and_tiles() {
     let mut world = World::start(daemon(crew_and_queue(), vec![]));
     open_agents(&mut world);
@@ -792,6 +815,44 @@ fn the_agents_face_lists_the_crew_then_turns_agents_runs_snoozed_agents_and_tile
     assert_eq!(
         row_text(&world, "tile:d1:tile-docs", "kind").as_deref(),
         Some("WEB")
+    );
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn an_agent_row_s_dot_follows_its_turn_and_reach_not_its_state() {
+    let owed_while_idle = Session {
+        turn_owed: Some(true),
+        turn_opened_at: Some(ago(30)),
+        ..session("owed-idle")
+    };
+    let away = Session {
+        host: Some("gone-outpost".into()),
+        state: "working".into(),
+        ..session("away")
+    };
+    let panes = ["owed-idle", "away", "resting"].map(agent_pane).to_vec();
+    let mut world = World::start(daemon(
+        initial(
+            vec![desktop("d1", "work", 1, panes)],
+            vec![owed_while_idle, away, session("resting")],
+        ),
+        vec![],
+    ));
+    open_agents(&mut world);
+
+    let dot = |world: &World, id: &str| {
+        world
+            .screen()
+            .get(Target::key(format!("palette.row.agent:{id}.state")))
+            .value
+    };
+    assert_eq!(dot(&world, "owed-idle").as_deref(), Some("waiting"));
+    assert_eq!(dot(&world, "away").as_deref(), Some("unreachable"));
+    assert_eq!(dot(&world, "resting").as_deref(), Some("idle"));
+    assert_eq!(
+        row_text(&world, "agent:away", "status").as_deref(),
+        Some("unreachable")
     );
     rest_but_for_ages(&mut world);
 }

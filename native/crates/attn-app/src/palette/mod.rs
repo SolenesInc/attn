@@ -78,6 +78,32 @@ impl Row {
     }
 }
 
+/// Where an agent row's agent stands with the user, as the Tauri app's `agentStatus`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Status {
+    Unreachable,
+    Chief,
+    Snoozed,
+    Approval,
+    Waiting,
+    Working,
+    Idle,
+}
+
+impl Status {
+    pub(crate) fn word(self) -> &'static str {
+        match self {
+            Status::Unreachable => "unreachable",
+            Status::Chief => "chief",
+            Status::Snoozed => "snoozed",
+            Status::Approval => "approval",
+            Status::Waiting => "waiting",
+            Status::Working => "working",
+            Status::Idle => "idle",
+        }
+    }
+}
+
 pub(crate) enum Look {
     Command {
         description: Option<String>,
@@ -86,7 +112,7 @@ pub(crate) enum Look {
     Agent {
         agent: AgentRow,
         crew: bool,
-        status: &'static str,
+        status: Status,
         slot: String,
         age: String,
         tag: Option<String>,

@@ -41,7 +41,7 @@ pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
 pub(crate) use fit::{Widths, text_w};
 pub(crate) use host::outpost_name;
-pub(crate) use overview::view as overview;
+pub(crate) use overview::{create as create_desktop, view as overview};
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::{area, session_of_leaf};

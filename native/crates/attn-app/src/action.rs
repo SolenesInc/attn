@@ -73,6 +73,8 @@ macro_rules! actions {
             StartUpdate,
             /// Open the attention drawer and take the keyboard into it.
             OpenAttention,
+            /// Make a desktop and switch to it.
+            CreateDesktop,
             /// Replay the tour of what this release brings.
             OpenWhatsNew,
             /// Save a report for tracing a stuck terminal.
@@ -109,6 +111,7 @@ macro_rules! actions {
                     Action::OpenShortcutEditor => "shortcuts.edit",
                     Action::StartUpdate => "update.start",
                     Action::OpenAttention => "attention.open",
+                    Action::CreateDesktop => "desktop.create",
                     Action::OpenWhatsNew => "whatsNew.open",
                     Action::CreateDiagnosticReport => "diagnosticReport.create",
                 }
@@ -140,6 +143,7 @@ macro_rules! actions {
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
                     Action::StartUpdate => "Update attn",
                     Action::OpenAttention => "Open attention drawer",
+                    Action::CreateDesktop => "New desktop",
                     Action::OpenWhatsNew => "What's new",
                     Action::CreateDiagnosticReport => "Create diagnostic report",
                 }
