@@ -87,6 +87,11 @@ runs:
       with:
         include-wasm: 'true'
 
+    - name: Build each Rust workspace in its target, which the Rust cache keeps
+      if: inputs.app == 'native'
+      shell: bash
+      run: echo 'CARGO_BUILD_BUILD_DIR={workspace-root}/target' >> "$GITHUB_ENV"
+
     - name: Cache Rust build
       uses: Swatinem/rust-cache@v2
       with:

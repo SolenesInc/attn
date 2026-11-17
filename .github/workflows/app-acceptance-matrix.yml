@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-24.04
-    # 202s on run 34060183460; 30m leaves room for a cold Rust cache.
+    # Tauri 183s, native 521s with a cold Rust cache, on runs 44190682619 and 44194763596. 30m is slack.
     timeout-minutes: 30
     env:
       ATTN_INSTANCE: app-acceptance
@@ -63,7 +63,7 @@ jobs:
         shard: ${{ fromJSON(inputs.shards) }}
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
-    # Planned heaviest shard 106s of a 1453s matrix in 14 shards (scenario-durations.json, CI receipts to 2026-11-16); the slowest 10-shard receipt took 199s at p90. 40m is slack.
+    # Shard jobs took 119-249s on run 44194763596 (Tauri in 14 shards, native in 12). 40m is slack.
     timeout-minutes: 40
     env:
       ATTN_INSTANCE: app-acceptance
