@@ -258,7 +258,7 @@ note. --in and --at also set the seed's reminder to that time, with the note as
 its message, as attn seed remind does. When the session can compact, attn
 compacts it before closing; end your turn right after the command. --stay keeps
 this session open. attn refuses while the seed has mail you have not read, and
-refuses to close the session while the seed has an open ask: a wait on the user
+refuses to close the session while it has an open ask: a wait on the user
 keeps the session open, so ask with attn ask and end your turn.
 Standby ends once you have read all of the seed's mail, and when the seed is
 parked, harvested, withered or gets a new tender. Only the seed's tender sets

@@ -460,8 +460,9 @@ after any of them.
 a seed the session tends is on standby and has unread seed mail. The refusal names
 `attn agent inbox`.
 
-`attn seed standby` without `--stay` also refuses while the seed has an open
-ask, and names each ask: a session that waits on the user stays open. The
+`attn seed standby` without `--stay` also refuses while the session holds an
+open ask, by the rule `attn ask list` uses for its own asks, whichever seed the
+ask is about, and names each ask: a session that waits on the user stays open. The
 refusal names the two commands for a user who asked the agent to close:
 `attn seed standby <seed> --stay`, then `attn agent close --self`. That close
 leaves the seed on standby, so the answer resumes the tender.

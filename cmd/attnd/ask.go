@@ -282,14 +282,14 @@ opening your terminal.
 After you ask, carry on with work that does not depend on the answer, then end
 your turn. Your session stays open, so the user can find you, talk to you and
 run commands in your terminal, and attn types the answer into this conversation
-as the user's message.
+as the user's message. While any of your asks is open, attn refuses a standby
+that would close your session, and names each ask.
 
 When a delegation assigned you a seed, the ask is about that seed; --seed makes
 it about another seed you tend. The user sees which seed it concerns. The
 answer goes to whoever tends the seed by then. The seed stays open until the
-user answers: attn refuses an agent's harvest, and a standby that would close
-the session, and names the open ask. Harvest after you act on the answer.
-Withering the seed withdraws its open asks.
+user answers: attn refuses an agent's harvest and names the open ask. Harvest
+after you act on the answer. Withering the seed withdraws its open asks.
 
 To ask permission for a risky action, name the exact action and its target in
 the question, such as the command, branch or environment. The answer approves

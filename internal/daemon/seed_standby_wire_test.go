@@ -485,6 +485,48 @@ func TestATenderWithAnOpenAskStaysOpenUnlessItStaysOnStandbyAndClosesItself(t *t
 	onStandbyAndClosed(t, w, cli, unasked, w.Launched(string(unasked.SessionID)))
 }
 
+func TestAClosingStandbyRefusesWhileTheSessionHoldsAnOpenAskAboutAnotherSeedOrNoSeed(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	refusedAndOpen := func(session, seed string, asked *protocol.Ask, about string) {
+		t.Helper()
+		_, err := cli.WithGardenProfile("", protocol.SessionID(session)).SeedStandby(seed, client.SeedStandbyOptions{Note: standbyNote})
+		for _, want := range []string{asked.ID, asked.Subject, about, "end your turn", "attn seed standby " + seed + " --stay", "attn agent close --self"} {
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("a closing standby on %s while %s holds %s = %v, want a refusal naming %q", seed, session, asked.ID, err, want)
+			}
+		}
+		if shown := lifeShow(t, cli, seed); shown.Seed.Standby != nil {
+			t.Fatalf("the refused standby left %+v on %s", shown.Seed.Standby, seed)
+		}
+		if open := showSession(t, cli, session); protocol.Deref(open.ClosedAt) != "" {
+			t.Fatalf("the refused standby closed %s", session)
+		}
+	}
+
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	delegate := string(delegated.SessionID)
+	w.Launched(delegate).Prompted()
+	aboutStake, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", w.Path("api"))
+	if err != nil || protocol.Deref(aboutStake.SeedID) != delegated.SeedID {
+		t.Fatalf("the delegate asks about its stake = %+v, %v", aboutStake, err)
+	}
+	other := plantSeedAs(t, cli, delegate, "Tune the queue")
+	moveDelegationSeed(t, cli, delegate, other, "tend", "")
+	refusedAndOpen(delegate, other, aboutStake, "about "+delegated.SeedID)
+
+	solo := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(solo)
+	seedless, err := cli.AskOpen(protocol.SessionID(solo), "", cacheAsk, "", w.Path("shop"))
+	if err != nil || seedless.SeedID != nil {
+		t.Fatalf("a session with no stake asks %+v (%v), want an ask about no seed", seedless, err)
+	}
+	tended := plantSeedAs(t, cli, solo, "Pick the cache store")
+	moveDelegationSeed(t, cli, solo, tended, "tend", "")
+	refusedAndOpen(solo, tended, seedless, "open ask(s) to the user")
+}
+
 func TestStandbyForATimeSetsTheSeedsReminderAndItsFiringResumesTheClosedTenderWithTheNote(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

@@ -21,7 +21,7 @@ withdraw them. Asks are on by default, and an agent keeps the setting it launche
 - `ask-replied`: asks answered in the last day, shown again with their answers.
 - `ask-on-seed`: an ask about a seed the agent tends, answered to the seed's tender and kept as a note.
 - `ask-holds-harvest`: an agent's harvest of a seed with an open ask refuses and names each ask, a harvest-on-merge clears its arming instead, and a wither or the user's harvest withdraws the asks; `seed wither` names them.
-- `ask-keeps-session-open`: an agent that asks ends its turn and its session stays open. `attn seed standby` without `--stay` refuses while the seed has an open ask, names each ask and the two commands for a user who asked the agent to close: `attn seed standby <seed> --stay`, then `attn agent close --self`.
+- `ask-keeps-session-open`: an agent that asks ends its turn and its session stays open. `attn seed standby` without `--stay` refuses while the session holds an open ask, about that seed, another seed or none, names each ask and the two commands for a user who asked the agent to close: `attn seed standby <seed> --stay`, then `attn agent close --self`.
 - `ask-list`: an agent lists its open asks and those about seeds it tends, then, apart from them, the open asks of the agents it oversees, each with its asker.
 - `ask-show`: an agent prints one ask it holds or oversees, with its asker, seed, age and markdown, and "Not your ask" for an overseen one.
 - `ask-close`: an agent withdraws an ask it no longer needs, or an overseen ask with `-m "<why>"`; attn notes the reason on the ask's seed and mails it to the asker.

@@ -186,9 +186,9 @@ tend no seed for the work, plant one first.
 
 A wait on the user is different. Ask with `attn ask` and end your turn. Your
 session stays open, so the user can find you, talk to you and run commands in
-your terminal, and attn types the answer into this conversation. attn refuses a
-standby that would close you while the seed has an open ask, and names each
-ask.
+your terminal, and attn types the answer into this conversation. While you have
+an open ask, about this seed, another seed or none, attn refuses a standby that
+would close you, and names each ask.
 
     attn seed standby s-7k3f9m --at 2026-11-13T09:00:00+01:00 -m "The user asked to pick this up Friday: rerun the backfill, then report the counts."
     attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (the user approved this up front), then follow the deploy."

@@ -77,7 +77,7 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage, setter who
 		if err := d.unreadStandbyMailRefusal(caller, seed.ID); err != nil {
 			return nil, nil, err
 		}
-		if err := d.refuseClosingStandbyWithOpenAsks(seed.ID); err != nil {
+		if err := d.refuseClosingStandbyWithHeldAsks(caller.ID, seed.ID); err != nil {
 			return nil, nil, err
 		}
 	}

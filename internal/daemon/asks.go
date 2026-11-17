@@ -389,9 +389,8 @@ func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, e
 }
 
 type openAsksError struct {
-	seedID  string
-	asks    []store.Ask
-	standby bool
+	seedID string
+	asks   []store.Ask
 }
 
 func (e *openAsksError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
@@ -401,30 +400,55 @@ func (e *openAsksError) Error() string {
 	for i, ask := range e.asks {
 		asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
 	}
-	open := fmt.Sprintf("%s has %d open ask(s) to the user: %s.", e.seedID, len(asks), strings.Join(asks, ", "))
-	if e.standby {
-		return fmt.Sprintf("%s A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. If the user told you to close, run `attn seed standby %s --stay -m \"…\"`, then `attn agent close --self -m \"…\"`",
-			open, e.seedID)
-	}
-	return fmt.Sprintf("%s The answer comes to whoever tends the seed: end your turn, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`. If you do not tend the seed, `attn seed tend %s` first",
-		open, e.seedID)
+	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`. If you do not tend the seed, `attn seed tend %s` first",
+		e.seedID, len(asks), strings.Join(asks, ", "), e.seedID)
 }
 
 func (d *Daemon) refuseHarvestWithOpenAsks(seedID string) error {
-	return d.refuseWithOpenAsks(seedID, false)
-}
-
-func (d *Daemon) refuseClosingStandbyWithOpenAsks(seedID string) error {
-	return d.refuseWithOpenAsks(seedID, true)
-}
-
-func (d *Daemon) refuseWithOpenAsks(seedID string, standby bool) error {
 	asks, err := d.store.OpenAsksTo(who.ToTenderOf(seedID))
 	if err != nil {
 		return fmt.Errorf("reading the open asks about %s: %w", seedID, err)
 	}
 	if len(asks) > 0 {
-		return &openAsksError{seedID: seedID, asks: asks, standby: standby}
+		return &openAsksError{seedID: seedID, asks: asks}
+	}
+	return nil
+}
+
+type heldAsksError struct {
+	standbySeedID string
+	asks          []store.Ask
+}
+
+func (e *heldAsksError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
+
+func (e *heldAsksError) Error() string {
+	asks := make([]string, len(e.asks))
+	for i, ask := range e.asks {
+		if seedID, ok := ask.To.TenderOf(); ok {
+			asks[i] = fmt.Sprintf("%s (%q, about %s)", ask.ID, ask.Subject, seedID)
+		} else {
+			asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
+		}
+	}
+	return fmt.Sprintf("this session has %d open ask(s) to the user: %s. A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. If the user told you to close, run `attn seed standby %s --stay -m \"…\"`, then `attn agent close --self -m \"…\"`",
+		len(asks), strings.Join(asks, ", "), e.standbySeedID)
+}
+
+func (d *Daemon) refuseClosingStandbyWithHeldAsks(sessionID protocol.SessionID, standbySeedID string) error {
+	stored, err := d.store.Asks()
+	if err != nil {
+		return fmt.Errorf("reading the open asks of %s: %w", sessionID, err)
+	}
+	held := d.askAddressHeldBy(sessionID)
+	var open []store.Ask
+	for _, a := range stored {
+		if a.Reply == nil && held(a.To) {
+			open = append(open, a)
+		}
+	}
+	if len(open) > 0 {
+		return &heldAsksError{standbySeedID: standbySeedID, asks: open}
 	}
 	return nil
 }
