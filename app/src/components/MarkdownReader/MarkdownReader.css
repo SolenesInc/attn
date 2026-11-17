@@ -390,20 +390,6 @@
   opacity: 1;
 }
 
-/* Shiki dual-theme: spans carry --shiki-light/--shiki-dark; pick per theme
-   (attn defaults dark, mirrors App.css's theme-block structure). */
-.md-reader .md-shiki span {
-  color: var(--shiki-dark);
-}
-
-:root[data-theme='light'] .md-reader .md-shiki span {
-  color: var(--shiki-light);
-}
-
-:root[data-theme='dark'] .md-reader .md-shiki span {
-  color: var(--shiki-dark);
-}
-
 /* ---- Frontmatter metadata card ---- */
 
 .md-frontmatter {

@@ -1,6 +1,6 @@
 import type { CodeToTokensBaseOptions, GrammarState, ThemedToken } from 'shiki';
-import { loadShiki } from '../Markdown/shiki';
-import { languageOf, TOKENIZE_CHUNK_LINES, THEMES, type Language, type Shiki } from './tokenize';
+import { loadShiki, schemeCodeTheme } from '../Markdown/shiki';
+import { languageOf, TOKENIZE_CHUNK_LINES, type Language, type Shiki } from './tokenize';
 
 export type EditUnitKind = 'selection' | 'string' | 'comment' | 'line';
 
@@ -15,7 +15,6 @@ export interface EditUnit {
  * doubles while the unit reaches its edge. */
 export const EXPLAIN_WINDOW_LINES = 40;
 
-const THEME = THEMES.light;
 const STRING_END = /punctuation\.definition\.string(\.[\w-]+)*\.end/;
 
 interface StateCache {
@@ -28,7 +27,7 @@ let stateCache: StateCache | null = null;
 type LastState = (code: string, options: CodeToTokensBaseOptions) => Promise<GrammarState>;
 
 function lastState(shiki: Shiki, code: string, lang: Language, grammarState: GrammarState | undefined): Promise<GrammarState> {
-  return (shiki.getLastGrammarState as LastState)(code, { lang, theme: THEME, grammarState });
+  return (shiki.getLastGrammarState as LastState)(code, { lang, theme: schemeCodeTheme(shiki), grammarState });
 }
 
 /** The grammar state at the start of each chunk of lines, kept for the last file asked about. */
@@ -118,7 +117,7 @@ export async function findEditUnit(lines: readonly string[], path: string, curso
     const grammarState = await stateAt(shiki, lang, lines, key, low);
     const { tokens } = await shiki.codeToTokens(lines.slice(low, high + 1).join('\n'), {
       lang,
-      theme: THEME,
+      theme: schemeCodeTheme(shiki),
       grammarState,
       includeExplanation: 'scopeName',
     });

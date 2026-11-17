@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { loadShiki } from '../Markdown/shiki';
+import { loadShiki, schemeCodeTheme, type Shiki } from '../Markdown/shiki';
 
 export interface CodeToken {
   content: string;
@@ -13,11 +13,9 @@ export type TokenLine = CodeToken[];
  * frame; the next chunk waits for the next task. */
 export const TOKENIZE_CHUNK_LINES = 100;
 
-export const THEMES = { light: 'github-light-default', dark: 'github-dark-default' } as const;
-
 const NAMED_LANGUAGES: Record<string, string> = { makefile: 'make', dockerfile: 'docker' };
 
-export type Shiki = NonNullable<Awaited<ReturnType<typeof loadShiki>>>;
+export type { Shiki };
 
 export type Language = keyof Shiki['bundledLanguages'];
 
@@ -49,13 +47,12 @@ export async function tokenizeLines(
   for (let start = 0; start < lines.length; start += TOKENIZE_CHUNK_LINES) {
     const result = await shiki.codeToTokens(lines.slice(start, start + TOKENIZE_CHUNK_LINES).join('\n'), {
       lang,
-      themes: THEMES,
-      defaultColor: false,
+      theme: schemeCodeTheme(shiki),
       grammarState,
     });
     if (isCancelled()) return false;
     grammarState = result.grammarState;
-    onChunk(start, result.tokens.map((line) => line.map((token) => ({ content: token.content, style: token.htmlStyle as Record<string, string> | undefined }))));
+    onChunk(start, result.tokens.map((line) => line.map((token) => ({ content: token.content, style: token.color ? { color: token.color } : undefined }))));
     await nextTask();
     if (isCancelled()) return false;
   }
