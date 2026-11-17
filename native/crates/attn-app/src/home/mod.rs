@@ -427,7 +427,7 @@ const ROW_HEIGHT: f32 = 36.0;
 /// An agent's state dot on the card, as the Tauri app's `.state-dot`: 6 points across, or the
 /// sidebar's struck-through ring while its machine is unreachable.
 fn dot(key: &str, a: &HomeAgent, t: &Tokens) -> El {
-    let mark = state_mark(key, &a.agent, t);
+    let mark = state_mark(key, &a.agent, crate::sidebar::MARK, t);
     if a.agent.offline {
         mark
     } else {

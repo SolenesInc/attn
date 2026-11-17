@@ -239,6 +239,18 @@ outline!(
     r#"<path d="M6.5 13.5h-4v-4M2.5 13.5L8 8M9.5 2.5h4v10h-10"/>"#
 );
 outline!(
+    FOCUS_DOCUMENT,
+    16.0,
+    "1.5",
+    r#"<path d="M2.75 6V2.75H6M10 2.75h3.25V6M13.25 10v3.25H10M6 13.25H2.75V10"/>"#
+);
+outline!(
+    REVIEW_NOTES,
+    16.0,
+    "1.5",
+    r#"<path d="M3.25 3.25h9.5v7H7l-3.75 2.5v-9.5Z"/>"#
+);
+outline!(
     ANNOTATION_DELETE,
     24.0,
     "2",

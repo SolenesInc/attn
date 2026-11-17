@@ -126,15 +126,35 @@ fn state_meaning(status: &str) -> &'static str {
 }
 
 pub(crate) fn state_color(status: &str, t: &Tokens) -> Color {
+    let mix = attn_ui::colors::mix_srgb;
     match status {
-        "growing" => t.accent,
-        "parked" => t.warning,
-        "harvested" => t.success,
-        "planted" => t.text_tertiary,
+        "planted" => mix(t.text_secondary, t.warning, 0.23),
+        "growing" => mix(t.text_primary, t.success, 0.5),
+        "parked" => mix(t.text_secondary, t.accent, 0.3),
+        "harvested" => mix(t.text_primary, t.warning, 0.55),
+        "withered" => mix(t.text_secondary, t.error, 0.34),
         "plot" => t.text_secondary,
         _ => t.text_muted,
     }
 }
+
+/// A seed's state in words on a tint of its colour, as `.seed-state-label`.
+fn state_pill(status: &str, font: TextStyle, t: &Tokens) -> El {
+    let color = state_color(status, t);
+    text(state_label(status))
+        .font(TextStyle {
+            weight: 500.0,
+            ..font
+        })
+        .color(color)
+        .single_line()
+        .fill(color.alpha(STATE_PILL_TINT))
+        .radius(4.0)
+        .px(STATE_PILL_PAD)
+}
+
+const STATE_PILL_PAD: f32 = 5.0;
+const STATE_PILL_TINT: f32 = 0.1;
 
 fn plot_counts(seed: &Seed) -> Vec<(&'static str, i64)> {
     let Some(p) = &seed.plot_progress else {
@@ -347,7 +367,7 @@ pub(super) fn piece(
         chip.fraction.clone(),
     );
     let counts = chip.counts.clone();
-    let state = (!chip.aggregate()).then(|| state_label(&chip.status));
+    let pill = !chip.aggregate();
     let shows_label = full && !chip.repeats_title;
     let short = level == Level::Short;
     let mut face = row()
@@ -378,7 +398,7 @@ pub(super) fn piece(
                     .child(text(n.to_string()).font(font).color(t.text_tertiary))
             }))
             .children(fraction.map(|f| text(f).font(font).color(t.text_tertiary)))
-            .children(state.map(|s| text(s).font(font).color(state_color(&status, t))));
+            .children(pill.then(|| state_pill(&status, font, t)));
     }
     let pressed = (leaf.to_owned(), session.to_owned(), chip.opens.clone());
     let button = Button::new(chip.name())
@@ -411,7 +431,7 @@ pub(super) fn widths(chip: &Chip, font: TextStyle) -> Widths {
         rest.push(text_w(fraction, font));
     }
     if !chip.aggregate() {
-        rest.push(text_w(state_label(&chip.status), font));
+        rest.push(text_w(state_label(&chip.status), font) + 2.0 * STATE_PILL_PAD);
     }
     let rest: f32 = rest.iter().map(|w| w + MARK_GAP).sum();
     let with = |label: f32| icon + if label > 0.0 { MARK_GAP + label } else { 0.0 } + rest;

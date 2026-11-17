@@ -951,19 +951,26 @@ pub(crate) fn marker(row_key: &str, count: usize, t: &Tokens) -> Option<El> {
         "?".to_owned()
     };
     Some(
-        row()
+        ask_mark(glyph, t)
             .key(format!("{row_key}.ask"))
             .role("img")
-            .label(words)
-            .h(16.0)
-            .min_w(18.0)
-            .px(6.0)
-            .center()
-            .radius(10.0)
-            .fill(t.accent)
-            .child(text(glyph).font(MARKER_TYPE).color(t.bg_app)),
+            .label(words),
     )
 }
+
+/// The Tauri app's `.ask-marker`: `glyph` in bold monospace on the accent pill.
+fn ask_mark(glyph: String, t: &Tokens) -> El {
+    row()
+        .h(16.0)
+        .min_w(MARK_W)
+        .px(6.0)
+        .center()
+        .radius(10.0)
+        .fill(t.accent)
+        .child(text(glyph).font(MARKER_TYPE).color(t.bg_app))
+}
+
+const MARK_W: f32 = 18.0;
 
 /// The Tauri app's `.title-bar-count-badge`: the open asks' count over the button's corner.
 const BADGE_TYPE: rune::TextStyle = rune::TextStyle::new(9.5, 700.0).mono();
@@ -983,7 +990,7 @@ pub(crate) fn chip(leaf: &str, session: &str, chip: &Chip, level: ChipLevel, t: 
     let id = chip.ask.clone();
     let subject = (level != ChipLevel::Icon).then(|| {
         let el = text(chip.subject.clone())
-            .font(type_::LABEL)
+            .font(CHIP_TYPE)
             .color(t.text_primary)
             .single_line()
             .truncate()
@@ -994,17 +1001,18 @@ pub(crate) fn chip(leaf: &str, session: &str, chip: &Chip, level: ChipLevel, t: 
             el
         }
     });
-    let (accent, tertiary) = (t.accent, t.text_tertiary);
+    let tertiary = t.text_tertiary;
     let more = (chip.more > 0 && level != ChipLevel::Icon).then(|| format!("+{}", chip.more));
+    let mark = ask_mark("?".to_owned(), t);
     let el = Button::new(label)
         .label_with(move |_, _| {
             row()
                 .items_center()
                 .gap(CHIP_GAP)
                 .min_w(0.0)
-                .child(text("?").font(type_::LABEL).color(accent))
+                .child(mark)
                 .children(subject)
-                .children(more.map(|more| text(more).font(type_::LABEL).color(tertiary)))
+                .children(more.map(|more| text(more).font(CHIP_MORE_TYPE).color(tertiary)))
         })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             header_pop::close(state);
@@ -1012,23 +1020,36 @@ pub(crate) fn chip(leaf: &str, session: &str, chip: &Chip, level: ChipLevel, t: 
         })
         .build(attn_ui::kit(t))
         .key(chip_key(leaf))
-        .px(CHIP_PAD)
+        .h(CHIP_H)
+        .pl(CHIP_START)
+        .pr(CHIP_END)
         .min_w(0.0)
-        .radius(5.0)
-        .fill(t.bg_button)
-        .border(1.0, t.accent);
+        .radius(CHIP_H / 2.0)
+        .fill(t.accent.alpha(0.12))
+        .border(1.0, t.accent.alpha(0.45));
     header_pop::hovers(el, leaf, session, What::Ask)
 }
 
-const CHIP_GAP: f32 = 4.0;
-const CHIP_PAD: f32 = 6.0;
+/// `.pane-ask-chip`: a pill tinted in the accent, its `?` mark close to its start.
+const CHIP_H: f32 = 22.0;
+const CHIP_GAP: f32 = 6.0;
+const CHIP_START: f32 = 3.0;
+const CHIP_END: f32 = 9.0;
+const CHIP_TYPE: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
+    ..type_::LABEL
+};
+const CHIP_MORE_TYPE: rune::TextStyle = rune::TextStyle {
+    weight: 500.0,
+    ..type_::LABEL
+};
 
 /// The chip's widths in full, with its subject cut, and as its mark alone.
 pub(crate) fn chip_widths(chip: &Chip) -> crate::desktop::Widths {
-    let w = |s: &str| crate::desktop::text_w(s, type_::LABEL);
-    let frame = 2.0 * CHIP_PAD + 2.0 + w("?");
+    let w = |s: &str| crate::desktop::text_w(s, CHIP_TYPE);
+    let frame = CHIP_START + CHIP_END + 2.0 + MARK_W;
     let more = if chip.more > 0 {
-        CHIP_GAP + w(&format!("+{}", chip.more))
+        CHIP_GAP + crate::desktop::text_w(&format!("+{}", chip.more), CHIP_MORE_TYPE)
     } else {
         0.0
     };

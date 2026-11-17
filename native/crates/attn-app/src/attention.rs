@@ -450,7 +450,12 @@ fn session_row(session: &Session, outposts: &[attn_protocol::OutpostInfo], t: &T
                     .w_full()
                     .gap(space::S2)
                     .items_center()
-                    .child(crate::sidebar::state_mark(&mark_key, &agent, &t))
+                    .child(crate::sidebar::state_mark(
+                        &mark_key,
+                        &agent,
+                        crate::sidebar::MARK,
+                        &t,
+                    ))
                     .child(text(agent.name.clone()).font(font).color(ink).truncate())
             }
         })

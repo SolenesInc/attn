@@ -501,6 +501,40 @@ fn sidebar_and_terminal(dark: bool) {
     snap(&mut world, "sidebar-terminal-markdown", dark);
 }
 
+/// An agent's header while a document tile is active: lit in the brand colour, with its one
+/// seed's state in a pill and its open ask's chip, beside the document's header and controls;
+/// the agent's terminal draws a rounded box beside a square one.
+fn tile_headers(dark: bool) {
+    let tended = Seed {
+        claimed: true,
+        tender: Some(PartyView {
+            name: "Builder".into(),
+            r#ref: "session:s0".into(),
+            session_id: Some("s0".into()),
+        }),
+        ..seed("s-one", "Colors in one place", "growing", None)
+    };
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![tended]);
+    state.asks = Some(vec![Ask {
+        id: "a-cache".into(),
+        session_id: "s0".into(),
+        subject: "Cache store".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        ..Ask::default()
+    }]);
+    if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
+        desktop.active_pane_id = "m".into();
+    }
+    let mut world = start(Daemon::scripted().state(state));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    write(
+        &mut world,
+        "╭───────╮ ┌───────┐\r\n│ round │ │ box   │\r\n╰───────╯ └───────┘\r\n",
+    );
+    snap(&mut world, "tile-headers", dark);
+}
+
 fn review_stop(dark: bool) {
     let daemon =
         Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
@@ -2631,6 +2665,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
     SCHEME.set(scheme);
     for dark in [true, false] {
         sidebar_and_terminal(dark);
+        tile_headers(dark);
         review_stop(dark);
         garden(dark);
         garden_dock(dark);

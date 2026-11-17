@@ -1279,7 +1279,7 @@ const LANDS_AT_ONCE: &[AllowRow] = &[
     AllowRow::new("pop-in", ".in-view", "", IN_VIEW_BAR).max(2),
     AllowRow::new("pop-in", ".spotlight.", "", SPOTLIGHT_MARKS).max(4),
     AllowRow::new("pop-out", ".spotlight.", "", SPOTLIGHT_MARKS).max(4),
-    AllowRow::new("jump", "tile.a", ALONE, BY_DESIGN).max(22),
+    AllowRow::new("jump", "tile.a", ALONE, BY_DESIGN).max(24),
     AllowRow::new("pop-in", "tile.", ALONE, BY_DESIGN).max(2),
     AllowRow::new("pop-out", "tile.", ALONE, BY_DESIGN).max(2),
     AllowRow::new("pop-in", "divider.", ALONE, BY_DESIGN).max(1),

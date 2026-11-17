@@ -21,12 +21,21 @@ pub(super) const TILES: &str = "tiles";
 pub(super) const DIVIDER_PX: f32 = 9.0;
 /// How far a tile shown alone sits in from the tile area's edges, as in the Tauri app.
 pub(super) const ALONE_INSET: f32 = 10.0;
-const HEADER_PX: f32 = 2.0 * space::S1 + 18.0;
-const SUBLINE_PX: f32 = 15.0;
-const AGENT_HEADER_PX: f32 = HEADER_PX + SUBLINE_PX;
-/// A document or browser tile's header: `.desktop-dock-tile-header`, a 24 point control and
-/// 6 points above and below it.
-const TILE_HEADER_PX: f32 = 36.0;
+/// `.desktop-pane-headline`, the agent header's first line.
+const HEADLINE_PX: f32 = 30.0;
+const HEADLINE_PAD: f32 = 10.0;
+/// `.desktop-pane-subline`, pulled up into the headline.
+const SUBLINE_PX: f32 = 16.0;
+const SUBLINE_PULL: f32 = 6.0;
+/// The line that closes a header off from the tile's body.
+const HEADER_RULE_PX: f32 = 1.0;
+const AGENT_HEADER_PX: f32 = HEADLINE_PX + SUBLINE_PX - SUBLINE_PULL + HEADER_RULE_PX;
+/// `.desktop-dock-tile-header`: 24 pt controls in 6 pt of padding, inset 12 pt at its start
+/// and 8 pt at its end.
+const TILE_HEADLINE_PX: f32 = 24.0 + 2.0 * 6.0;
+const TILE_HEADER_PX: f32 = TILE_HEADLINE_PX + HEADER_RULE_PX;
+const TILE_HEADER_START: f32 = 12.0;
+const TILE_HEADER_END: f32 = 8.0;
 const TILE_TITLE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
 const SUBLINE_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 400.0);
 const SETTLING_TRACK_PX: f32 = 2.0;
@@ -241,9 +250,35 @@ impl Subline {
 
 /// The room a headline's controls take besides its chips: its side padding, the pop-out
 /// button and the gaps beside it.
-const HEADLINE_CONTROLS: f32 = 2.0 * space::S2 + 24.0 + space::S2;
+const HEADLINE_CONTROLS: f32 = 2.0 * HEADLINE_PAD + 24.0 + space::S2;
 /// The state dot at the headline's start.
-const HEADLINE_DOT: f32 = 8.0;
+const HEADLINE_DOT: f32 = crate::sidebar::MARK_SMALL;
+
+/// How much a document or browser tile's header shows, by the tile's width, as the Tauri app's
+/// container queries on `.desktop-dock-tile`: under 720 pt its overall-note button goes and its
+/// Focus pill becomes an icon, and under 480 pt its notes count loses its word.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Room {
+    Narrow,
+    Medium,
+    Wide,
+}
+
+impl Room {
+    /// The room tile `leaf`'s header has at its last layout; medium before the tile is laid out.
+    pub(crate) fn of(leaf: &str) -> Room {
+        rune::memo::layout_with(&format!("tile.{leaf}"), |[_, _, w, _]| {
+            if w <= 480.0 {
+                Room::Narrow
+            } else if w <= 720.0 {
+                Room::Medium
+            } else {
+                Room::Wide
+            }
+        })
+        .unwrap_or(Room::Medium)
+    }
+}
 
 const SUBLINE_GAP: f32 = 10.0;
 const SUBLINE_LEFT: f32 = 24.0;
@@ -1147,17 +1182,13 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
     let session = pane.and_then(|p| cx.sessions.iter().find(|s| s.id == p.session_id));
     let focused = cx.focused == Some(leaf.id.as_str());
     let popped = leaf.window.is_some();
-    let header_fill = match pane {
-        Some(_) => look.header_fill(t),
-        None => Some(look.header_fill(t).unwrap_or(t.bg_elevated)),
-    };
     let actions = row()
         .key(format!("{key}.actions"))
         .pin(None, Some(0.0), Some(0.0), Some(0.0))
         .items_center()
         .gap(2.0)
         .pl(space::S1)
-        .fill(header_fill.unwrap_or(t.bg_tile))
+        .fill(look.header_under(t))
         .group_opacity(0.0, 1.0)
         .children(session.map(|s| rename_button(&key, s, title, t)))
         .children(
@@ -1173,21 +1204,20 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                 cx,
             )
         }));
-    let headline = row()
-        .w_full()
-        .h(if pane.is_some() {
-            HEADER_PX
-        } else {
-            TILE_HEADER_PX
-        })
-        .items_center()
-        .gap(space::S2)
-        .pl(if pane.is_some() { space::S2 } else { space::S3 })
-        .pr(space::S2)
+    let headline = row().w_full().items_center().gap(space::S2);
+    let headline = match pane {
+        Some(_) => headline.h(HEADLINE_PX).px(HEADLINE_PAD),
+        None => headline
+            .h(TILE_HEADLINE_PX)
+            .pl(TILE_HEADER_START)
+            .pr(TILE_HEADER_END),
+    };
+    let headline = headline
         .children(session.map(|s| {
             crate::sidebar::state_mark(
                 &key,
                 &crate::sidebar::AgentRow::of(s, cx.outposts, false),
+                crate::sidebar::MARK_SMALL,
                 t,
             )
         }))
@@ -1304,16 +1334,11 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
     let header = col()
         .key(format!("{key}.header"))
         .keeps_press_from_within()
-        .fill(header_fill.unwrap_or(rune::Color::TRANSPARENT));
-    let header = match pane {
-        Some(_) => header,
-        None => header.border_sides([0.0, 0.0, 1.0, 0.0], t.border),
-    };
-    header
         .w_full()
         .h(height)
         .pl(cx.chrome_leading)
-        .hover_group()
+        .hover_group();
+    look.header(header, t)
         .child(headline)
         .children(pane.map(|pane| {
             subline(
@@ -1389,6 +1414,7 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
         .key(format!("{key}.subline"))
         .w_full()
         .h(SUBLINE_PX)
+        .mt(-SUBLINE_PULL)
         .clip_rounded(0.0)
         .items_center()
         .gap(SUBLINE_GAP)
@@ -1441,13 +1467,20 @@ fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) 
     )
 }
 
-/// The header's button that shows this document alone on its desktop.
+/// The header's button that shows this document alone on its desktop: a Focus pill, or its
+/// corners alone in a square where the header has less room.
 fn focus_document_button(key: &str, desktop: &str, leaf: &str, cx: &TileCx) -> El {
+    let room = Room::of(leaf);
     let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
     let ink = cx.t.text_secondary;
-    Button::new("Focus document")
+    let button = Button::new("Focus document")
         .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| text("Focus").font(FOCUS_PILL_TYPE).color(ink))
+        .label_with(move |_, _| match room {
+            Room::Wide => text("Focus").font(FOCUS_PILL_TYPE).color(ink),
+            Room::Medium | Room::Narrow => {
+                rune::icon(&attn_ui::icon::FOCUS_DOCUMENT, 14.0).color(ink)
+            }
+        })
         .help(with_key("Focus document", cx.keys.focus.as_ref()))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::actions::focus_leaf(state, &desktop, &leaf, tx)
@@ -1455,10 +1488,12 @@ fn focus_document_button(key: &str, desktop: &str, leaf: &str, cx: &TileCx) -> E
         .build(attn_ui::kit(cx.t))
         .key(format!("{key}.focus"))
         .h(24.0)
-        .px(9.0)
-        .radius(12.0)
         .border(1.0, cx.t.brand.alpha(0.36))
-        .fill(cx.t.brand.alpha(0.08))
+        .fill(cx.t.brand.alpha(0.08));
+    match room {
+        Room::Wide => button.px(9.0).radius(12.0),
+        Room::Medium | Room::Narrow => button.w(24.0).px(0.0).center().radius(5.0),
+    }
 }
 
 /// The Tauri app's Focus pill: 11 px, semibold.

@@ -266,6 +266,10 @@ fn click(world: &mut World, part: &str) {
     world.settle();
 }
 
+fn tile_width(world: &World) -> f32 {
+    world.screen().bounds(Target::key("tile.m")).unwrap()[2]
+}
+
 fn marks(kept: &Shared) -> Vec<Value> {
     kept.lock().unwrap().marks.clone()
 }
@@ -745,6 +749,34 @@ fn review_notes_list_marks_in_reading_order_and_remove_or_clear_them() {
     assert!(
         shown.iter().any(|t| t == "No annotations yet."),
         "{shown:?}"
+    );
+}
+
+#[test]
+fn a_document_headers_focus_pill_folds_to_its_corners_at_720_points_or_less() {
+    let (mut world, _) = start();
+    let focus = |world: &mut World, window: f32| {
+        world.resize((window, 900.0));
+        world.settle();
+        let screen = world.screen();
+        assert_eq!(
+            screen.get(Target::key("tile.m.focus")).name.as_deref(),
+            Some("Focus document")
+        );
+        (
+            tile_width(world),
+            screen.bounds(Target::key("tile.m.focus")).unwrap()[2],
+        )
+    };
+    let wide = focus(&mut world, 2700.0);
+    let medium = focus(&mut world, 2200.0);
+    assert!(
+        wide.0 > 720.0 && (480.0..=720.0).contains(&medium.0),
+        "{wide:?} {medium:?}"
+    );
+    assert!(
+        wide.1 > 24.0 && medium.1 == 24.0,
+        "Focus folds to its 24 pt icon: {wide:?} {medium:?}"
     );
 }
 

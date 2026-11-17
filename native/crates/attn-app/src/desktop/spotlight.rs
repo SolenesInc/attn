@@ -18,10 +18,19 @@ const ZOOMED_FADED: f32 = 0.72;
 const DRAGGED: f32 = 0.5;
 const FADE_SECONDS: f32 = 0.12;
 const SUBLINE_DIMMED: f32 = 0.7;
-const MARK_PX: f32 = 13.0;
+/// The Tauri app's 13 px mark box, with its 2 px border outside it.
+const MARK_PX: f32 = 15.0;
 const MARK_LINE_PX: f32 = 2.0;
 /// The share of the primary text colour the spotlit header mixes into the elevated surface.
 const HEADER_LIFT: f32 = 0.08;
+/// An agent header's light from the top: the brand colour at its top and bottom, over a white
+/// sheen that fades out, as `.desktop-pane-header`'s two gradients.
+const HEADER_BRAND: (f32, f32) = (0.11, 0.03);
+const HEADER_SHEEN: f32 = 0.05;
+/// The light line along an agent header's top edge.
+const HEADER_TOP_LINE: f32 = 0.05;
+/// `--pane-header-fade`: the brand's share of the surface under the hover actions.
+const HEADER_FADE: f32 = 0.07;
 
 /// What the screen shows around the tiles.
 #[derive(Clone, Copy)]
@@ -171,8 +180,46 @@ impl Look {
         if self.dimmed() { SUBLINE_DIMMED } else { 1.0 }
     }
 
-    /// The header's background, lighter on the spotlit tile.
-    pub(super) fn header_fill(&self, t: &Tokens) -> Option<Color> {
+    /// The header's surface, as `.desktop-pane-header` and `.desktop-dock-tile-header` draw it:
+    /// an agent's lit from the top in the brand colour under a light top edge, a document's or
+    /// browser's on the elevated surface, both lighter on the spotlit tile, and closed off from
+    /// the body by a line.
+    pub(super) fn header(&self, header: El, t: &Tokens) -> El {
+        let header = header.border_sides([0.0, 0.0, 1.0, 0.0], t.border);
+        let header = match self.header_fill(t) {
+            Some(fill) => header.fill(fill),
+            None if self.agent => {
+                let lit = |brand: f32, sheen: f32| {
+                    let sheened = attn_ui::colors::mix_srgb(t.bg_tile, t.highlight, sheen);
+                    attn_ui::colors::mix_srgb(sheened, t.brand, brand)
+                };
+                header.gradient(lit(HEADER_BRAND.0, HEADER_SHEEN), lit(HEADER_BRAND.1, 0.0))
+            }
+            None => header.fill(t.bg_elevated),
+        };
+        if !self.agent {
+            return header;
+        }
+        header.child(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), None)
+                .h(1.0)
+                .inert()
+                .fill(t.highlight.alpha(HEADER_TOP_LINE)),
+        )
+    }
+
+    /// The surface under the header's hover actions, which hides the title they cover.
+    pub(super) fn header_under(&self, t: &Tokens) -> Color {
+        self.header_fill(t).unwrap_or_else(|| {
+            if self.agent {
+                attn_ui::colors::mix_srgb(t.bg_tile, t.brand, HEADER_FADE)
+            } else {
+                t.bg_elevated
+            }
+        })
+    }
+
+    fn header_fill(&self, t: &Tokens) -> Option<Color> {
         self.spotlit()
             .then(|| attn_ui::colors::mix_srgb(t.bg_elevated, t.text_primary, HEADER_LIFT))
     }

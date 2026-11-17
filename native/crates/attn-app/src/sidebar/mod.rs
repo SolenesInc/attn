@@ -918,7 +918,7 @@ pub(crate) fn row_fill(agent: &AgentRow, t: &Tokens) -> rune::Color {
 
 pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
     if !logos || agent.state == AgentState::Launching || agent.offline {
-        return state_mark(row_key, agent, t);
+        return state_mark(row_key, agent, MARK, t);
     }
     rune::icon(harness_icon::of(&agent.harness), 14.0)
         .key(format!("{row_key}.state"))
@@ -928,16 +928,18 @@ pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> 
         .color(state_color(agent.state, t))
 }
 
-/// The dot in each agent's colour of state, as the Tauri app's `.session-lead[data-state]`.
-pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
+/// The dot in each agent's colour of state, as the Tauri app's `StateIndicator`: `side` across,
+/// or the 8 pt ring of an offline agent at any size.
+pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, side: f32, t: &Tokens) -> El {
+    let side = if agent.offline { OFFLINE_MARK } else { side };
     let mark = el()
         .key(format!("{row_key}.state"))
         .role("img")
         .label(agent.lead())
         .a11y_value(agent.state.wire())
-        .w(8.0)
-        .h(8.0)
-        .radius(4.0);
+        .w(side)
+        .h(side)
+        .radius(side / 2.0);
     if !agent.offline {
         return mark.fill(state_color(agent.state, t));
     }
@@ -950,6 +952,11 @@ pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
             .inert(),
     )
 }
+
+/// `StateIndicator`'s sizes: `sm` in a tile header, `md` in lists.
+pub(crate) const MARK_SMALL: f32 = 6.0;
+pub(crate) const MARK: f32 = 8.0;
+const OFFLINE_MARK: f32 = 8.0;
 
 pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
     match state {

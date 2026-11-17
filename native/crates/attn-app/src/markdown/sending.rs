@@ -11,6 +11,7 @@ use rune_kit::{Button, ButtonVariant, Menu, MenuItem, Placement};
 
 use super::drafts::{self, Sent, To};
 use crate::State;
+use crate::desktop::Room;
 
 /// How long "Sent ✓" shows before Send comes back, as the Tauri header shows it.
 pub(crate) const SENT_SECONDS: f64 = 4.0;
@@ -103,8 +104,7 @@ pub(crate) fn controls(
     );
     let any = !desktop_sessions(desktop, sessions).is_empty();
     let noting = matches!(kind, Kind::Seed { tender: None, .. });
-    let roomy = rune::memo::layout_with(&format!("tile.{tile}"), |r| r[2] > OVERALL_HIDDEN_AT)
-        .unwrap_or(false);
+    let room = Room::of(tile);
     let place = |button: Button, part: &str| {
         button
             .build(attn_ui::kit(t))
@@ -121,7 +121,7 @@ pub(crate) fn controls(
     let (overall_tile, overall_uri) = (tile.to_owned(), uri.to_owned());
     let notes_tile = tile.to_owned();
     let mut parts: Vec<El> = Vec::new();
-    if roomy {
+    if room == Room::Wide {
         parts.push(
             place(
                 quiet("Overall note".into(), words("Overall note".into()))
@@ -134,16 +134,24 @@ pub(crate) fn controls(
             .px(8.0),
         );
     }
+    let notes_face = match room {
+        Room::Narrow => row()
+            .gap(3.0)
+            .items_center()
+            .child(rune::icon(&attn_ui::icon::REVIEW_NOTES, 14.0).color(t.text_secondary))
+            .child(words(count.to_string())),
+        Room::Medium | Room::Wide => words(format!("Notes {count}")),
+    };
     parts.push(
         place(
-            quiet(format!("Notes {count}"), words(format!("Notes {count}")))
+            quiet(format!("Notes {count}"), notes_face)
                 .help("Show review notes")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     open_notes(state, &notes_tile, tx)
                 }),
             "notes",
         )
-        .px(8.0),
+        .px(if room == Room::Narrow { 4.0 } else { 8.0 }),
     );
     let done = |noted: bool| if noted { "Noted ✓" } else { "Sent ✓" };
     let status = match &sent {
@@ -176,8 +184,13 @@ pub(crate) fn controls(
         let face = row()
             .gap(4.0)
             .items_center()
-            .child(words("To".into()))
-            .child(words(name.clone()).single_line().truncate().max_w(82.0))
+            .children((room != Room::Narrow).then(|| words("To".into())))
+            .child(
+                words(name.clone())
+                    .single_line()
+                    .truncate()
+                    .max_w(target_name_max(room)),
+            )
             .child(caret_mark(t.text_secondary));
         parts.push(
             place(
@@ -308,7 +321,16 @@ pub(crate) fn controls(
 /// The Tauri tile header's controls, `.desktop-dock-tile-send-button` and its kin, are 24 points
 /// high; a tile 720 points across or less has no room for "Overall note".
 const CONTROL_H: f32 = 24.0;
-const OVERALL_HIDDEN_AT: f32 = 720.0;
+
+/// How long the target session's name may run, as `.desktop-dock-tile-send-target-name` at each
+/// width.
+fn target_name_max(room: Room) -> f32 {
+    match room {
+        Room::Wide => 82.0,
+        Room::Medium => 64.0,
+        Room::Narrow => 48.0,
+    }
+}
 
 /// The ▾ a header control opens its menu with.
 fn caret_mark(ink: rune::Color) -> El {

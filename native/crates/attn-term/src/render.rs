@@ -190,11 +190,10 @@ impl Raster {
         let span = if wide { 2.0 } else { 1.0 };
         let mut chars = text.chars();
         let cp = chars.next()? as u32;
+        let (w, h) = ((cw * span) as u32, ch as u32);
         if chars.next().is_none()
-            && let Some(rects) = sprites::rects(cp, cw * span, ch)
+            && let Some(mask) = sprites::mask(cp, w, h)
         {
-            let (w, h) = ((cw * span) as u32, ch as u32);
-            let mask = sprites::mask(&rects, w, h);
             return Some(Canvas {
                 w,
                 h,
