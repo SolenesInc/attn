@@ -7,7 +7,7 @@ const SWATCHES = ['bg_app', 'bg_panel', 'text_primary', 'accent', 'brand', 'stat
 
 export function ColorSchemeSettings() {
   const { settings, setSetting } = useSettings();
-  const { appearance } = useAppearance();
+  const { appearance } = useAppearance(settings);
   const selected = settings[COLOR_SCHEME_SETTING] || DEFAULT_SCHEME_ID;
 
   return (

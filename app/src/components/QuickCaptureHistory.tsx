@@ -87,7 +87,7 @@ function dayLabel(date: string) {
 }
 function mailboxColor(id: string) {
   const hash = [...id].reduce((hash, character) => (hash * 31 + character.codePointAt(0)!) >>> 0, 0);
-  return ['#6b5bd6', '#2f8a57', '#b0567a'][hash % 3];
+  return ['var(--color-accent)', 'var(--color-success)', 'var(--color-merged)'][hash % 3];
 }
 function fileType(name: string, mediaType?: string) {
   if (name.includes('.')) return name.slice(name.lastIndexOf('.') + 1).toUpperCase();

@@ -6,6 +6,7 @@ import { useProfilesStore } from '../store/profiles';
 import { useDaemonStore } from '../store/daemonSessions';
 import { quickCaptureDaemonClient } from '../quickCapture/daemonClient';
 import { isMacLikePlatform } from '../shortcuts/platform';
+import { useResolvedColors } from '../colors/useColors';
 import {
   QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_FONT,
   type QuickCaptureHostState, type QuickCaptureRequest,
@@ -18,6 +19,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const delivery = useMemo(() => quickCaptureDaemonClient(daemon, profileId), [daemon.sendQuickCaptureRequest, profileId]);
   const supported = isMacLikePlatform() && isTauri();
   const crew = useDaemonStore(store => store.crew);
+  const colors = useResolvedColors(settings);
   const [native, setNative] = useState<NativeStatus>({ binding: null, active: null });
   const [nativeReady, setNativeReady] = useState(false);
   const queue = useRef(Promise.resolve());
@@ -30,7 +32,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
     })),
     connectionError: daemon.connectionError ?? undefined,
     binding: native.binding, activeBinding: native.active, shortcutError: native.error,
-    fontScale: Number(settings.uiScale) || 1, keybindings: settings.keybindings_config,
+    fontScale: Number(settings.uiScale) || 1, keybindings: settings.keybindings_config, colors,
   };
   const stateRef = useRef(state);
   useLayoutEffect(() => { stateRef.current = state; });
@@ -116,6 +118,6 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   }, [binding, nativeReady, state.connected]);
   useEffect(() => {
     if (supported) void emitTo('capture', QUICK_CAPTURE_STATE, state);
-  }, [profileId, state.connected, state.connectionError, crew, native, state.fontScale, state.keybindings]);
+  }, [profileId, state.connected, state.connectionError, crew, native, state.fontScale, state.keybindings, colors]);
   return { supported, state, setBinding };
 }

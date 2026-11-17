@@ -50,7 +50,7 @@ export function QuickCaptureAttachmentPreview({ file, onSettled, onMotion, onRem
     });
     const preview = document.createElement(isImage ? 'img' : 'span');
     if (isDomInstance(preview, 'HTMLImageElement')) { preview.src = src; preview.alt = ''; }
-    else { preview.textContent = file.name; Object.assign(preview.style, { display: 'grid', placeItems: 'center', height: '100%', padding: '8px', fontSize: '12px', color: '#fff', overflowWrap: 'anywhere' }); }
+    else { preview.textContent = file.name; Object.assign(preview.style, { display: 'grid', placeItems: 'center', height: '100%', padding: '8px', fontSize: '12px', color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }); }
     ghost.append(preview);
     document.body.append(ghost);
     const paste = source.kind === 'paste';
