@@ -557,6 +557,54 @@ fn the_controls_build_a_cron_and_the_daemon_previews_its_next_runs() {
     assert_eq!(list_items(&world, "next-runs"), 5);
 }
 
+/// What the select keyed `name` shows.
+fn shown(world: &World, name: &str) -> String {
+    let trigger = world
+        .screen()
+        .get(Target::key(format!("{}-trigger", key(name))));
+    trigger.value.or(trigger.name).unwrap_or_default()
+}
+
+#[test]
+fn on_a_12_hour_clock_the_schedule_s_time_reads_with_am_or_pm_and_writes_the_24_hour_cron() {
+    let stored = Stored::of(
+        AutomationDefinitionSummary {
+            trigger_type: "scheduled".into(),
+            ..definition(1, "PR reviewer")
+        },
+        scheduled_spec("30 9 * * 1-5"),
+    );
+    let mut world = open_scene(&stored, |_| {});
+    world.use_hour_cycle(attn_app::HourCycle::Twelve);
+    click(&mut world, "automations.edit.1");
+    choose(&mut world, "schedule-days-half", "PM");
+    assert_eq!(value(&world, "cron"), "30 21 * * 1-5");
+    assert_eq!(
+        [
+            shown(&world, "schedule-days-hour"),
+            shown(&world, "schedule-days-minute"),
+            shown(&world, "schedule-days-half")
+        ],
+        ["09", "30", "PM"]
+    );
+
+    choose(&mut world, "schedule-days-hour", "12");
+    assert_eq!(value(&world, "cron"), "30 12 * * 1-5", "12 PM is noon");
+    choose(&mut world, "schedule-days-half", "AM");
+    assert_eq!(value(&world, "cron"), "30 0 * * 1-5", "12 AM is midnight");
+    assert_eq!(shown(&world, "schedule-days-hour"), "12");
+}
+
+#[test]
+fn on_a_24_hour_clock_the_schedule_s_time_has_no_am_or_pm() {
+    let world = open_schedule("30 21 * * 1-5");
+    assert_eq!(shown(&world, "schedule-days-hour"), "21");
+    assert!(!has(
+        &world,
+        &format!("{}-trigger", key("schedule-days-half"))
+    ));
+}
+
 #[test]
 fn a_zone_the_user_types_is_previewed_and_saved_and_one_the_daemon_refuses_holds_save() {
     let mut world = open_schedule("0 9 * * 1-5");

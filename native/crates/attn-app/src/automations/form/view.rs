@@ -1130,31 +1130,55 @@ fn change(schedule: &Friendly, edit: impl Fn(&mut Friendly, usize) + 'static) ->
     })
 }
 
-fn time_choices(name: &str, schedule: &Friendly, hour: u32, minute: u32) -> [Choice; 2] {
-    [
-        Choice {
+/// The hour, minute and, on a 12-hour clock, AM or PM a schedule runs at, on the user's clock
+/// as the system's time field writes it.
+fn time_choices(name: &str, schedule: &Friendly, hour: u32, minute: u32) -> Vec<Choice> {
+    let set_hour = |at: fn(u32, usize) -> u32| {
+        change(schedule, move |s, i| match s {
+            Friendly::Days { hour, .. } | Friendly::Monthly { hour, .. } => *hour = at(*hour, i),
+            Friendly::Every { .. } => {}
+        })
+    };
+    let twelve = crate::calendar::hour_cycle() == crate::calendar::HourCycle::Twelve;
+    let hours = match twelve {
+        true => Choice {
+            key: key(&format!("schedule-{name}-hour")),
+            label: "Hour",
+            options: std::iter::once(12).chain(1..12).map(pad).collect(),
+            current: (hour % 12) as usize,
+            pick: set_hour(|hour, i| hour / 12 * 12 + i as u32),
+        },
+        false => Choice {
             key: key(&format!("schedule-{name}-hour")),
             label: "Hour",
             options: (0..24).map(pad).collect(),
             current: hour as usize,
-            pick: change(schedule, |s, i| match s {
-                Friendly::Days { hour, .. } | Friendly::Monthly { hour, .. } => *hour = i as u32,
-                Friendly::Every { .. } => {}
-            }),
+            pick: set_hour(|_, i| i as u32),
         },
-        Choice {
-            key: key(&format!("schedule-{name}-minute")),
-            label: "Minute",
-            options: (0..60).map(pad).collect(),
-            current: minute as usize,
-            pick: change(schedule, |s, i| match s {
-                Friendly::Days { minute, .. } | Friendly::Monthly { minute, .. } => {
-                    *minute = i as u32;
-                }
-                Friendly::Every { .. } => {}
-            }),
-        },
-    ]
+    };
+    let minutes = Choice {
+        key: key(&format!("schedule-{name}-minute")),
+        label: "Minute",
+        options: (0..60).map(pad).collect(),
+        current: minute as usize,
+        pick: change(schedule, |s, i| match s {
+            Friendly::Days { minute, .. } | Friendly::Monthly { minute, .. } => {
+                *minute = i as u32;
+            }
+            Friendly::Every { .. } => {}
+        }),
+    };
+    let mut out = vec![hours, minutes];
+    if twelve {
+        out.push(Choice {
+            key: key(&format!("schedule-{name}-half")),
+            label: "AM or PM",
+            options: vec!["AM".into(), "PM".into()],
+            current: usize::from(hour >= 12),
+            pick: set_hour(|hour, i| hour % 12 + 12 * i as u32),
+        });
+    }
+    out
 }
 
 /// The schedule's controls that pick from a list, in the order they show.
@@ -1249,9 +1273,7 @@ fn choices(schedule: &Friendly) -> Vec<Choice> {
             }
             out
         }
-        Friendly::Days { hour, minute, .. } => {
-            time_choices("days", schedule, *hour, *minute).into()
-        }
+        Friendly::Days { hour, minute, .. } => time_choices("days", schedule, *hour, *minute),
         Friendly::Monthly { day, hour, minute } => {
             let mut out = vec![Choice {
                 key: key("schedule-month-day"),
@@ -1446,6 +1468,15 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> El {
             .child(inner)
     };
     let line = || row().w_full().gap(7.0).items_center().flex_wrap();
+    let twelve = crate::calendar::hour_cycle() == crate::calendar::HourCycle::Twelve;
+    let clock = |next: &mut dyn FnMut() -> El| {
+        row()
+            .items_center()
+            .child(next())
+            .child(words(":"))
+            .child(next())
+            .children(twelve.then(next))
+    };
     match schedule {
         Friendly::Every { unit, window, .. } => {
             let mut first = line()
@@ -1487,28 +1518,14 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> El {
             .w_full()
             .gap(space::S2)
             .child(day_buttons(schedule, t))
-            .child(
-                line().child(words("at")).child(boxed(
-                    row()
-                        .items_center()
-                        .child(next())
-                        .child(words(":"))
-                        .child(next()),
-                )),
-            ),
+            .child(line().child(words("at")).child(boxed(clock(&mut next)))),
         Friendly::Monthly { day, .. } => {
             let mut c = col().w_full().gap(space::S2).child(
                 line()
                     .child(words("On day"))
                     .child(boxed(next()))
                     .child(words("at"))
-                    .child(boxed(
-                        row()
-                            .items_center()
-                            .child(next())
-                            .child(words(":"))
-                            .child(next()),
-                    )),
+                    .child(boxed(clock(&mut next))),
             );
             if *day > 28 {
                 c = c.child(hint("Months without this day are skipped.", t));

@@ -21,7 +21,7 @@ pub fn use_hour_cycle(cycle: HourCycle) {
     HOUR_CYCLE.set(Some(cycle));
 }
 
-fn hour_cycle() -> HourCycle {
+pub(crate) fn hour_cycle() -> HourCycle {
     if let Some(cycle) = HOUR_CYCLE.get() {
         return cycle;
     }
