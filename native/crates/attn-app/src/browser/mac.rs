@@ -391,7 +391,6 @@ impl BrowserHost for WebKitHost {
     }
 }
 
-/// Runs `action` in the agent's script world on the page, with `done` given its JSON answer.
 const ZOOM_STEPS: [f64; 11] = [0.5, 0.75, 0.85, 1.0, 1.15, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
 
 fn next_zoom(current: f64, toward: Zoom) -> f64 {
@@ -408,6 +407,7 @@ fn next_zoom(current: f64, toward: Zoom) -> f64 {
     step.unwrap_or(current)
 }
 
+/// Runs `action` in the agent's script world on the page, with `done` given its JSON answer.
 fn run_page_action(
     web: &WKWebView,
     world: &WKContentWorld,
