@@ -235,9 +235,27 @@ fn click(world: &mut World, key: &str) {
 }
 
 fn type_into(world: &mut World, key: &str, text: &str) {
+    scroll_to(world, key);
     click(world, key);
     let text = text.to_owned();
     world.gesture(|app| app.type_text(&text));
+}
+
+/// Scrolls the ask the way a person does, with the wheel over it, until `key` is in view.
+fn scroll_to(world: &mut World, key: &str) {
+    let [x, y, w, h] = world.rect("asks.ask");
+    for _ in 0..20 {
+        let [_, top, _, height] = world.rect(key);
+        if top + height <= y + h {
+            return;
+        }
+        let at = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -60.0).at(at.0, at.1))
+        });
+    }
+    panic!("{key} stays below the ask's view");
 }
 
 fn checked(world: &World, key: &str) -> bool {
@@ -1446,4 +1464,52 @@ fn an_ask_from_a_member_between_sessions_names_the_member_and_leaves_attn_lowerc
             format!("{from} (between sessions)")
         );
     }
+}
+
+#[test]
+fn the_note_starts_three_lines_high_and_its_grip_drags_it_taller_but_never_shorter() {
+    let mut world = start(vec![release_day()], vec![api_working(), web_waiting()]);
+    open_drawer(&mut world);
+    scroll_to(&mut world, "asks.note.field");
+    let height = |world: &mut World| world.rect("asks.note.field")[3];
+    assert_eq!(height(&mut world), 72.0);
+
+    let [x, y, w, h] = world.rect("asks.note.field.grip");
+    let grip = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+    world.gesture(|app| app.drag(Target::key("asks.note.field.grip"), (grip.0, grip.1 + 40.0)));
+    assert_eq!(height(&mut world), 112.0);
+
+    let [x, y, w, h] = world.rect("asks.note.field.grip");
+    let grip = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+    world.gesture(|app| {
+        app.drag(
+            Target::key("asks.note.field.grip"),
+            (grip.0, grip.1 - 200.0),
+        )
+    });
+    assert_eq!(height(&mut world), 72.0);
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn a_prompt_wider_than_its_question_wraps_inside_it() {
+    let long = "Which region should we deploy to first, given that the Linux build is still \
+                being validated and the macOS build already shipped to the testers last week?";
+    let ask = ask(
+        "a-region",
+        "web",
+        "Region",
+        25,
+        vec![question("q1", "one", long, &["eu", "us"])],
+    );
+    let mut world = start(vec![ask], vec![api_working(), web_waiting()]);
+    open_drawer(&mut world);
+
+    let [card_x, _, card_w, _] = world.rect("asks.q.q1");
+    let [x, _, w, h] = world.rect("asks.q.q1.prompt");
+    assert!(
+        x + w <= card_x + card_w,
+        "{x} + {w} past {card_x} + {card_w}"
+    );
+    assert!(h > 18.0, "the prompt stays one line, {h} high");
 }

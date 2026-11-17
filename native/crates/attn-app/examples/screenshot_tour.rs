@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionResultMessage,
+    ActorView, Ask, AskChoice, AskPart, AskQuestion, AutomationDefinitionResultMessage,
     AutomationDefinitionSummary, AutomationDefinitionsResultMessage, AutomationProvenance,
     AutomationRunSummary, AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
     BrowseDirectoryResultMessage, BusConsumerStatus, BusStatusResultMessage,
@@ -1606,6 +1606,64 @@ fn asks(dark: bool) {
     snap(&mut world, "asks", dark);
 }
 
+/// The asks drawer with nothing open, under the asks setting.
+fn asks_empty(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state
+        .settings
+        .get_or_insert_with(Default::default)
+        .insert("asks_enabled".into(), "true".into());
+    let mut world = start(Daemon::scripted().state(state));
+    press(&mut world, Action::DockAsks);
+    snap(&mut world, "asks-empty", dark);
+}
+
+/// The asks drawer on an ask with a question of choices: its context, a recommended choice
+/// with a description, Other and the note.
+fn asks_choices(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let choice = |label: &str, description: &str| AskChoice {
+        label: label.into(),
+        description: Some(description.into()),
+    };
+    state.asks = Some(vec![Ask {
+        id: "a-cache".into(),
+        session_id: "s1".into(),
+        subject: "Cache store".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        parts: vec![
+            AskPart {
+                markdown: Some(
+                    "Deploys empty the cache, so the first requests after one are slow.".into(),
+                ),
+                ..AskPart::default()
+            },
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "store".into(),
+                    kind: "one".into(),
+                    prompt: "Which store should keep the cache?".into(),
+                    context: Some(
+                        "Postgres runs already; Redis is faster but adds a service to operate."
+                            .into(),
+                    ),
+                    choices: vec![
+                        choice("Postgres", "already deployed"),
+                        choice("Redis", "faster, one more service"),
+                    ],
+                    recommended: Some("Postgres".into()),
+                }),
+                ..AskPart::default()
+            },
+        ],
+        ..Ask::default()
+    }]);
+    let mut world = start(Daemon::scripted().state(state));
+    press(&mut world, Action::DockAsks);
+    snap(&mut world, "asks-choices", dark);
+}
+
 fn notebook(dark: bool) {
     let mut world = with_document(dark);
     world
@@ -2697,6 +2755,8 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         settings_analytics(dark);
         ledger(dark);
         asks(dark);
+        asks_empty(dark);
+        asks_choices(dark);
         notebook(dark);
         notebook_tree(dark);
         review_keys(dark);

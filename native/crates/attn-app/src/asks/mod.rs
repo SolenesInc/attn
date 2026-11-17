@@ -28,6 +28,8 @@ pub struct Asks {
     pub(crate) sending: Option<String>,
     /// Why the daemon refused the answer to an ask, shown under that ask.
     pub(crate) error: Option<(String, String)>,
+    /// The written fields' heights, by field key, once their grips dragged them taller.
+    pub(crate) heights: HashMap<String, f32>,
     /// The ask, and whether it was replied, that the keyboard last moved into.
     focused_on: Option<(String, bool)>,
     /// The keyboard moves into the drawer at the next follow, whatever it shows.

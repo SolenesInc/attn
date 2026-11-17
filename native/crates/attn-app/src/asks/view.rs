@@ -7,7 +7,7 @@ use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Image, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown, Switch};
+use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown};
 
 use super::{Chip, Item, Kind, Lists, mentions, questions};
 use crate::State;
@@ -54,6 +54,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
         .role("region")
         .label("Asks")
         .focusable(true)
+        .no_focus_ring()
         .on_key(drawer_key)
         .h_full()
         .min_h(0.0)
@@ -68,11 +69,6 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
 }
 
 fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
-    let replied_label = if replied > 0 {
-        format!("Replied {replied}")
-    } else {
-        "Replied".to_owned()
-    };
     row()
         .key("asks.header")
         .w_full()
@@ -82,27 +78,23 @@ fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
         .pt(16.0)
         .pb(12.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            type_::upper("Asks", type_::DRAWER_TITLE)
-                .color(t.text_muted)
-                .grow(1.0),
-        )
+        .child(type_::upper("Asks", type_::DRAWER_TITLE).color(t.text_muted))
         .children((live > 0).then(|| {
             text(live.to_string())
                 .key("asks.count")
                 .role("status")
                 .label(format!("{live} open"))
-                .font(type_::LABEL)
-                .color(t.accent)
+                .font(COUNT_TYPE)
+                .color(t.bg_app)
+                .min_w(20.0)
+                .px(8.0)
+                .py(2.0)
+                .align(rune::Align::Center)
+                .radius(10.0)
+                .fill(t.accent)
         }))
-        .child(
-            Switch::new(show_replied)
-                .label(replied_label)
-                .control_size(ControlSize::Mini)
-                .on_toggle_tx(toggle_replied)
-                .build(attn_ui::kit(t))
-                .key("asks.replied"),
-        )
+        .child(el().grow(1.0))
+        .child(replied_toggle(replied, show_replied, t))
         .child(
             attn_ui::GlyphButton::new(attn_ui::glyph::TIMES, "Close asks")
                 .font(attn_ui::glyph::LARGE)
@@ -113,29 +105,83 @@ fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
         )
 }
 
+/// The Tauri app's `.asks-count`: the open asks' number on the accent pill.
+const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
+
+/// The Tauri app's `--font-size-xs` and `--font-size-sm` text, at the native app's sizes.
+const SMALL: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
+
+/// The Tauri app's `.asks-replied-toggle`: an outlined button that reads as pressed while the
+/// replied asks show.
+fn replied_toggle(replied: usize, on: bool, t: &Tokens) -> El {
+    let label = if on {
+        "Hide the asks you replied to in the last day (r)"
+    } else {
+        "Show the asks you replied to in the last day (r)"
+    };
+    let ink = if on { t.text_primary } else { t.text_dimmed };
+    row()
+        .key("asks.replied")
+        .role("button")
+        .label(if replied > 0 {
+            format!("Replied {replied}")
+        } else {
+            "Replied".to_owned()
+        })
+        .help(label)
+        .checked(on)
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.accent)
+        .items_center()
+        .gap(6.0)
+        .px(8.0)
+        .py(3.0)
+        .radius(6.0)
+        .border(1.0, if on { t.border } else { t.border_subtle })
+        .fill(if on {
+            t.bg_selected
+        } else {
+            rune::Color::TRANSPARENT
+        })
+        .hover(t.bg_elevated)
+        .on_press_tx(toggle_replied)
+        .child(text("Replied").font(SMALL).color(ink).a11y_hidden())
+        .children((replied > 0).then(|| {
+            text(replied.to_string())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_tertiary)
+                .a11y_hidden()
+        }))
+}
+
 fn empty(replied: usize, t: &Tokens) -> El {
     let replies = match replied {
         0 => None,
         1 => Some("r shows the one you replied to in the last day".to_owned()),
         n => Some(format!("r shows the {n} you replied to in the last day")),
     };
+    let line = |words: String, style: rune::TextStyle, ink: rune::Color| {
+        text(words)
+            .font(style)
+            .color(ink)
+            .align(rune::Align::Center)
+            .wrap()
+            .w_full()
+    };
     col()
         .key("asks.empty")
         .w_full()
-        .padding(space::S3)
-        .gap(space::S2)
-        .child(
-            text("No open asks.")
-                .font(type_::BODY)
-                .color(t.text_primary),
-        )
-        .child(
-            text("When an agent needs a decision from you, its ask lands here.")
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .wrap(),
-        )
-        .children(replies.map(|r| text(r).font(type_::LABEL).color(t.text_tertiary)))
+        .items_center()
+        .px(24.0)
+        .py(60.0)
+        .gap(6.0)
+        .child(line("No open asks.".into(), type_::BODY, t.text_tertiary))
+        .child(line(
+            "When an agent needs a decision from you, its ask lands here.".into(),
+            SMALL,
+            t.text_dimmed,
+        ))
+        .children(replies.map(|r| line(r, SMALL, t.text_dimmed)))
 }
 
 fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
@@ -164,7 +210,7 @@ fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .py(space::S1)
+        .padding(8.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .children(rows)
 }
@@ -173,10 +219,11 @@ fn divider(words: &'static str, t: &Tokens) -> El {
     text(words)
         .role("listitem")
         .label(words)
-        .font(type_::LABEL)
-        .color(t.text_tertiary)
-        .px(space::S3)
-        .pt(space::S2)
+        .font(SMALL)
+        .color(t.text_dimmed)
+        .px(10.0)
+        .pt(10.0)
+        .pb(4.0)
 }
 
 fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
@@ -211,16 +258,24 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
         .a11y_value(if selected { "current" } else { "" })
         .w_full()
         .items_center()
-        .gap(space::S2)
-        .px(space::S3)
-        .py(space::S1)
+        .gap(10.0)
+        .px(10.0)
+        .py(7.0)
+        .radius(6.0)
+        .border(
+            1.0,
+            if selected {
+                t.border
+            } else {
+                rune::Color::TRANSPARENT
+            },
+        )
         .fill(if selected {
             t.bg_selected
         } else {
             rune::Color::TRANSPARENT
         })
         .hover(t.bg_elevated)
-        .opacity(if dimmed { 0.6 } else { 1.0 })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             state.window.asks.selected = Some(id.clone());
             state.window.asks.error = None;
@@ -228,16 +283,26 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
         })
         .child(
             text(item.from.clone())
-                .font(type_::LABEL)
-                .color(t.text_secondary)
+                .font(SMALL_STRONG)
+                .color(if dimmed && !selected {
+                    t.text_tertiary
+                } else {
+                    t.text_primary
+                })
                 .single_line()
                 .truncate()
                 .max_w(110.0),
         )
         .child(
             text(ask.subject.clone())
-                .font(type_::LABEL)
-                .color(t.text_primary)
+                .font(SMALL)
+                .color(if dimmed && !selected {
+                    t.text_tertiary
+                } else if selected {
+                    t.text_primary
+                } else {
+                    t.text_secondary
+                })
                 .single_line()
                 .truncate()
                 .grow(1.0)
@@ -248,11 +313,20 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
             if waiting {
                 el().w(6.0).h(6.0).radius(3.0).fill(t.accent)
             } else {
-                text(tag).font(type_::LABEL).color(t.text_tertiary)
+                text(tag).font(SMALL).color(t.text_dimmed)
             }
         }))
-        .child(text(age).font(type_::MONO_CAPTION).color(t.text_tertiary))
+        .child(
+            text(age)
+                .font(type_::MONO_CAPTION)
+                .color(t.text_dimmed)
+                .min_w(24.0)
+                .align(rune::Align::End),
+        )
 }
+
+/// The Tauri app's semibold `--font-size-sm` names: the agent an ask comes from.
+const SMALL_STRONG: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
 
 /// How an ask's words show: the seeds they name as links that open them, and its pictures,
 /// read from the copy of them the home keeps.
@@ -288,6 +362,7 @@ impl<'a> Prose<'a> {
         let path = self.document.clone();
         let pictures = self.pictures.clone();
         Markdown::new(mentions::linked_markdown(source, self.names))
+            .style(crate::markdown::look(self.t))
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
                 match mentions::seed_of(href) {
                     Some(seed) => super::open_seed(state, seed, tx),
@@ -332,8 +407,8 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .child(
             text(item.from.clone())
                 .key("asks.from")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
+                .font(SMALL_STRONG)
+                .color(t.text_primary)
                 .grow(1.0)
                 .min_w(0.0)
                 .single_line()
@@ -355,7 +430,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
             )
             .child(
                 text(ask.seed_title.clone().unwrap_or_default())
-                    .font(type_::LABEL)
+                    .font(SMALL)
                     .color(t.text_secondary)
                     .grow(1.0)
                     .min_w(0.0)
@@ -363,7 +438,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     .truncate(),
             )
             .child(
-                small_button(
+                ask_button(
                     OPEN_SEED,
                     "Open in Garden",
                     "Open the seed in the garden (g)",
@@ -388,7 +463,15 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     Some(answers) => Shown::Replied(answers.iter().find(|a| a.key == question.key)),
                     None => Shown::Draft(draft.and_then(|d| d.answers.get(&question.key))),
                 };
-                question_card(&ask.id, index, question, answer, &prose, t)
+                question_card(
+                    &ask.id,
+                    index,
+                    question,
+                    answer,
+                    &prose,
+                    &state.window.asks.heights,
+                    t,
+                )
             }
             None => col()
                 .key(format!("asks.part.{at}"))
@@ -409,10 +492,13 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         None => {
             let edit = draft.map(|d| &d.note);
             let id = ask.id.clone();
-            Some(
+            Some(written_area(
                 field(edit, NOTE, "Note", &note_placeholder, t)
                     .on_edit(move |state: &mut State| state.note(&id)),
-            )
+                NOTE,
+                &state.window.asks.heights,
+                t,
+            ))
         }
     };
     let error = state
@@ -451,7 +537,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
             prose.text(
                 text(ask.subject.clone())
                     .role("heading")
-                    .font(type_::TITLE)
+                    .font(SUBJECT_TYPE)
                     .color(t.text_primary)
                     .wrap(),
                 &ask.subject,
@@ -464,7 +550,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
 
 fn open_agent(session: &Session, from: &str, t: &Tokens) -> El {
     let id = session.id.clone();
-    small_button(
+    ask_button(
         "asks.open-agent",
         "Open agent",
         &format!("Open {from} (o)"),
@@ -479,7 +565,7 @@ fn snooze_button(snoozed: bool, from: &str, t: &Tokens) -> El {
     } else {
         ("Snooze", format!("Snooze {from} and its asks (s)"))
     };
-    small_button(SNOOZE, words, &hint, t).on_press_tx(super::toggle_snooze)
+    ask_button(SNOOZE, words, &hint, t).on_press_tx(super::toggle_snooze)
 }
 
 fn small_button(key: &str, words: &str, hint: &str, t: &Tokens) -> El {
@@ -491,6 +577,26 @@ fn small_button(key: &str, words: &str, hint: &str, t: &Tokens) -> El {
     };
     button.build(attn_ui::kit(t)).key(key.to_owned())
 }
+
+/// The Tauri app's `.asks-ask-open`: Open agent, Snooze and Open in Garden, as small bordered
+/// buttons in the secondary color.
+fn ask_button(key: &str, words: &str, hint: &str, t: &Tokens) -> El {
+    let (ink, label) = (t.text_secondary, words.to_owned());
+    Button::new(words)
+        .variant(ButtonVariant::Ghost)
+        .control_size(ControlSize::Small)
+        .help(hint)
+        .label_with(move |_, _| text(label).font(SMALL).color(ink))
+        .build(attn_ui::kit(t))
+        .key(key.to_owned())
+        .px(10.0)
+        .radius(6.0)
+        .fill(t.bg_button)
+        .border(1.0, t.border)
+}
+
+/// The Tauri app's `.asks-ask-subject`: the ask's heading, at `--font-size-lg`.
+const SUBJECT_TYPE: rune::TextStyle = rune::TextStyle::new(18.0, 600.0);
 
 enum Shown<'a> {
     Draft(Option<&'a super::Answer>),
@@ -512,21 +618,26 @@ fn question_card(
     question: &AskQuestion,
     answer: Shown<'_>,
     prose: &Prose<'_>,
+    heights: &HashMap<String, f32>,
     t: &Tokens,
 ) -> El {
     let kind = Kind::of(question);
-    let prompt = row()
-        .w_full()
+    let number = index.to_string();
+    let natural = crate::desktop::text_w(&number, INDEX_TYPE)
+        + space::S2
+        + crate::desktop::text_w(&question.prompt, PROMPT_TYPE);
+    let legend = row()
+        .key(format!("asks.q.{}.prompt", question.key))
+        .grow(1.0)
+        .min_w(0.0)
+        .max_w(natural.ceil())
         .gap(space::S2)
-        .child(
-            text(index.to_string())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary),
-        )
+        .fill(t.bg_panel)
+        .child(text(number).font(INDEX_TYPE).color(t.text_dimmed))
         .child(
             prose.text(
                 text(question.prompt.clone())
-                    .font(type_::BODY)
+                    .font(PROMPT_TYPE)
                     .color(t.text_primary)
                     .wrap()
                     .grow(1.0)
@@ -534,13 +645,18 @@ fn question_card(
                 &question.prompt,
             ),
         );
+    let legend = row()
+        .w_full()
+        .mt(-(PROMPT_TYPE.line_height + 1.0) / 2.0)
+        .mb(PADDING_Y - QUESTION_GAP)
+        .child(legend);
     let context = question
         .context
         .as_ref()
         .filter(|c| !c.is_empty())
         .map(|c| prose.markdown(c).w_full());
     let body = match kind {
-        Kind::Text => written(ask, question, &answer, t),
+        Kind::Text => written(ask, question, &answer, heights, t),
         Kind::One | Kind::Any => choices(ask, question, kind, &answer, t),
     };
     col()
@@ -548,16 +664,38 @@ fn question_card(
         .role("group")
         .label(question.prompt.clone())
         .w_full()
-        .gap(space::S2)
-        .padding(space::S2)
-        .radius(6.0)
-        .border(1.0, t.border_subtle)
-        .child(prompt)
+        .mt((PROMPT_TYPE.line_height - 1.0) / 2.0)
+        .gap(QUESTION_GAP)
+        .px(16.0)
+        .pb(PADDING_Y)
+        .radius(10.0)
+        .fill(t.bg_panel)
+        .border(1.0, t.border)
+        .child(legend)
         .children(context)
         .child(body)
 }
 
-fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) -> El {
+/// The Tauri app's `.ask-question`, a fieldset whose prompt is its legend: the legend sits on
+/// the top border, which breaks around it.
+const PROMPT_TYPE: rune::TextStyle = rune::TextStyle {
+    line_height: 18.0,
+    ..rune::TextStyle::new(13.0, 600.0)
+};
+const INDEX_TYPE: rune::TextStyle = rune::TextStyle {
+    line_height: 18.0,
+    ..rune::TextStyle::new(13.0, 500.0).mono()
+};
+const PADDING_Y: f32 = 14.0;
+const QUESTION_GAP: f32 = 10.0;
+
+fn written(
+    ask: &str,
+    question: &AskQuestion,
+    answer: &Shown<'_>,
+    heights: &HashMap<String, f32>,
+    t: &Tokens,
+) -> El {
     let key = question.key.clone();
     match answer {
         Shown::Replied(answer) => replied_text(
@@ -574,8 +712,14 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
                 _ => "Your answer…".to_owned(),
             };
             let (ask_id, q) = (ask.to_owned(), key.clone());
-            let field = field(edit, &text_key(&key), &question.prompt, &placeholder, t)
-                .on_edit(move |state: &mut State| &mut state.answer(&ask_id, &q).text);
+            let field_key = text_key(&key);
+            let field = written_area(
+                field(edit, &field_key, &question.prompt, &placeholder, t)
+                    .on_edit(move |state: &mut State| &mut state.answer(&ask_id, &q).text),
+                &field_key,
+                heights,
+                t,
+            );
             let suggestion = question
                 .recommended
                 .clone()
@@ -607,60 +751,55 @@ fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t:
         let picked = answer.picked(&choice.label);
         let recommended = question.recommended.as_deref() == Some(choice.label.as_str());
         let (ask_id, q, label) = (ask.to_owned(), question.key.clone(), choice.label.clone());
-        let mark = match (kind, picked) {
-            (Kind::One, true) => attn_ui::glyph::CIRCLE_DOT,
-            (Kind::One, false) => attn_ui::glyph::CIRCLE_OPEN,
-            (_, true) => attn_ui::glyph::CHECKED,
-            (_, false) => attn_ui::glyph::UNCHECKED,
-        };
-        let el =
-            row()
-                .key(choice_key(&question.key, i))
-                .role(if kind == Kind::One {
-                    "radio"
-                } else {
-                    "checkbox"
-                })
-                .label(choice.label.clone())
-                .checked(picked)
-                .disabled(replied)
-                .focusable(!replied)
-                .w_full()
-                .gap(space::S2)
-                .px(space::S2)
-                .py(space::S1)
-                .radius(4.0)
-                .fill(if picked {
-                    t.bg_selected
-                } else {
-                    rune::Color::TRANSPARENT
-                })
-                .hover(t.bg_elevated)
-                .child(text(mark).font(type_::BODY).color(t.text_secondary))
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .child(
-                            row()
-                                .gap(space::S2)
-                                .child(
-                                    text(choice.label.clone())
-                                        .font(type_::BODY)
-                                        .color(t.text_primary),
-                                )
-                                .children(recommended.then(|| {
-                                    text("recommended").font(type_::LABEL).color(t.accent)
-                                })),
-                        )
-                        .children(
-                            choice
-                                .description
-                                .clone()
-                                .filter(|d| !d.is_empty())
-                                .map(|d| text(d).font(type_::LABEL).color(t.text_tertiary).wrap()),
-                        ),
-                );
+        let el = row()
+            .key(choice_key(&question.key, i))
+            .role(if kind == Kind::One {
+                "radio"
+            } else {
+                "checkbox"
+            })
+            .label(choice.label.clone())
+            .checked(picked)
+            .disabled(replied)
+            .focusable(!replied)
+            .w_full()
+            .items_start()
+            .gap(10.0)
+            .px(10.0)
+            .py(8.0)
+            .radius(8.0)
+            .border(1.0, if picked { t.accent } else { t.border_subtle })
+            .fill(if picked {
+                t.accent.alpha(0.08)
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .hover(t.bg_elevated)
+            .child(choice_mark(kind, picked, t))
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .gap(2.0)
+                    .child(
+                        row()
+                            .items_center()
+                            .gap(8.0)
+                            .child(
+                                text(choice.label.clone())
+                                    .font(type_::BODY)
+                                    .color(t.text_primary),
+                            )
+                            .children(recommended.then(|| recommended_tag(t))),
+                    )
+                    .children(
+                        choice
+                            .description
+                            .clone()
+                            .filter(|d| !d.is_empty())
+                            .map(|d| text(d).font(SMALL).color(t.text_tertiary).wrap()),
+                    ),
+            );
         if replied {
             el
         } else {
@@ -684,6 +823,7 @@ fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t:
                     t,
                 )
                 .single_line()
+                .min_h(35.0)
                 .on_edit({
                     let (ask_id, q) = (ask_id.clone(), q.clone());
                     move |state: &mut State| &mut state.answer(&ask_id, &q).other
@@ -703,9 +843,51 @@ fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t:
         })
         .label(question.prompt.clone())
         .w_full()
-        .gap(2.0)
+        .gap(6.0)
         .children(rows)
         .children(other)
+}
+
+/// The Tauri app's `.ask-recommended`: a small tag on the accent's tint.
+fn recommended_tag(t: &Tokens) -> El {
+    text("recommended")
+        .font(TAG_TYPE)
+        .color(t.accent)
+        .px(6.0)
+        .py(1.0)
+        .radius(4.0)
+        .fill(t.accent.alpha(0.15))
+}
+
+const TAG_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 500.0);
+
+/// The system's radio and checkbox, as the Tauri app draws its choices' inputs: a 10 point
+/// ring or box with a thin gray edge, filled with the accent once picked.
+fn choice_mark(kind: Kind, picked: bool, t: &Tokens) -> El {
+    let edge = attn_ui::colors::rgb(if t.dark {
+        [0x9a, 0x9a, 0x9a]
+    } else {
+        [0x80, 0x80, 0x80]
+    });
+    let radius = if kind == Kind::One { 6.0 } else { 3.0 };
+    let mark = el()
+        .w(12.0)
+        .h(12.0)
+        .mt(3.0)
+        .center()
+        .radius(radius)
+        .a11y_hidden();
+    match (kind, picked) {
+        (_, false) => mark.border(1.0, edge),
+        (Kind::One, true) => mark
+            .fill(t.accent)
+            .child(el().w(4.0).h(4.0).radius(2.0).fill(t.bg_app)),
+        (_, true) => mark.fill(t.accent).child(
+            text(attn_ui::glyph::CHECK)
+                .font(attn_ui::glyph::SMALL)
+                .color(t.bg_app),
+        ),
+    }
 }
 
 fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {
@@ -746,7 +928,6 @@ fn field(
         .label(label.to_owned())
         .placeholder(placeholder.to_owned(), t.text_muted)
         .w_full()
-        .min_h(35.0)
         .px(10.0)
         .py(8.0)
         .radius(8.0)
@@ -755,6 +936,34 @@ fn field(
         .color(t.text_primary)
         .on_input_key(field_key)
 }
+
+/// The Tauri app's `textarea rows={3}` with `resize: vertical`: `input` three lines high, with a
+/// grip in its corner that drags it taller.
+fn written_area(input: El, key: &str, heights: &HashMap<String, f32>, t: &Tokens) -> El {
+    let height = heights.get(key).copied().unwrap_or(WRITTEN_HEIGHT);
+    let dragged = key.to_owned();
+    let grip = rune::icon(&attn_ui::icon::RESIZE_GRIP, 10.0)
+        .key(format!("{key}.grip"))
+        .color(t.text_tertiary)
+        .cursor(rune::Cursor::ResizeRow)
+        .pin(None, None, Some(3.0), Some(3.0))
+        .on_drag(
+            move |state: &mut State, drag: &mut rune::Drag, _: &mut Tx| {
+                let heights = &mut state.window.asks.heights;
+                match drag.phase {
+                    rune::Phase::Down => drag.data = height,
+                    rune::Phase::Move => {
+                        heights.insert(dragged.clone(), (drag.data + drag.dy).max(WRITTEN_HEIGHT));
+                    }
+                    rune::Phase::Up => {}
+                }
+            },
+        );
+    col().w_full().child(input.h(height)).child(grip)
+}
+
+/// Three lines of `--font-size-md` text at 1.4, inside the field's padding and edge.
+const WRITTEN_HEIGHT: f32 = 72.0;
 
 /// A drawer field's keys it does not take as text: ⌘↩ sends and Escape closes.
 fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
