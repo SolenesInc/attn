@@ -232,7 +232,8 @@ that input. A ring lost to an open menu in the harness stays lost.
   terminal. Waiting costs no attempt.
 - A shell never gets a ring.
 - When a ring includes the 📬 line, the address has an outstanding ring until
-  the agent reads the inbox or 5 minutes pass. While the address has an
+  the agent reads the inbox, attn types the last unread item, or 5 minutes
+  pass. While the address has an
   outstanding ring, new items wait for the read or for the next ring. attn types
   user input right away, without the 📬 line.
 - After 5 minutes with unread items, attn rings again. Seed mail that nobody

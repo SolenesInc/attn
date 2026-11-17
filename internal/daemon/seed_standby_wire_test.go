@@ -1292,3 +1292,53 @@ func TestATenderResumeThatFailsOnItsLastAttemptIsBlockedUntilNewMailResumesIt(t 
 		}
 	})
 }
+
+func TestAnAnswerResumesATenderOnStandbyAtOnceAfterAnEarlierAnswerResumedIt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
+		session := string(delegated.SessionID)
+		asksThenStandsByClosed := func() string {
+			t.Helper()
+			asked, err := cli.AskOpen(delegated.SessionID, delegated.SeedID, cacheAsk, "", w.Path("tender"))
+			if err != nil {
+				t.Fatalf("ask about %s: %v", delegated.SeedID, err)
+			}
+			if _, err := standbyAs(t, cli, delegated, false); err != nil {
+				t.Fatalf("seed standby: %v", err)
+			}
+			if _, err := cli.AgentClose(session, delegated.SessionID, "the user told me to close"); err != nil {
+				t.Fatalf("close the tender: %v", err)
+			}
+			synctest.Wait()
+			stillClosed(t, cli, delegated, "the close")
+			return asked.ID
+		}
+		resumedAndTypedTheAnswer := func(what string) {
+			t.Helper()
+			synctest.Wait()
+			var resumed driverLaunch
+			select {
+			case resumed = <-driver.launches:
+			default:
+				t.Fatalf("%s did not resume the tender on standby at once", what)
+			}
+			if err := driver.state(resumed, 1, "waiting_input"); err != nil {
+				t.Fatal(err)
+			}
+			synctest.Wait()
+			if typed := strings.Join(w.terminal(session).Submitted(), "\n"); !strings.Contains(typed, "Postgres") {
+				t.Fatalf("after %s the tender received %q, want the answer", what, typed)
+			}
+		}
+
+		answerCacheAsk(t, app, asksThenStandsByClosed())
+		resumedAndTypedTheAnswer("the first answer")
+
+		second := asksThenStandsByClosed()
+		w.advance(2 * time.Minute)
+		answerCacheAsk(t, app, second)
+		resumedAndTypedTheAnswer("the answer 2 minutes after the first resume")
+	})
+}

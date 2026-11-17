@@ -431,6 +431,16 @@ func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, r
 	if err := clearPendingInboxInput(tx, to); err != nil {
 		return "", err
 	}
+	var unread bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM inbox_items WHERE address=? AND read_at='')`, to.String()).Scan(&unread); err != nil {
+		return "", err
+	}
+	if !unread {
+		if err := acknowledgeInbox(tx, to); err != nil {
+			return "", err
+		}
+		return stamp, tx.Commit()
+	}
 	if !notified {
 		return stamp, tx.Commit()
 	}
