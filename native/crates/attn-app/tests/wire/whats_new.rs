@@ -119,7 +119,7 @@ fn right_enter_and_next_step_forward_and_left_and_back_step_back() {
 }
 
 #[test]
-fn the_dialog_and_its_next_button_hold_still_from_step_to_step() {
+fn the_dialog_its_next_button_and_its_centered_step_dots_hold_still_from_step_to_step() {
     let dir = tempfile::tempdir().unwrap();
     let mut world = launch(&after_update(dir.path()), &[]);
     let place = |world: &mut World| {
@@ -131,10 +131,18 @@ fn the_dialog_and_its_next_button_hold_still_from_step_to_step() {
         (
             screen.bounds(Target::role("dialog").name("What's new")),
             next,
+            screen.bounds(Target::key("whats-new.dots")),
         )
     };
     let first = place(&mut world);
-    assert!(first.0.is_some() && first.1.is_some(), "{first:?}");
+    let (Some([dialog_x, _, dialog_w, _]), Some(_), Some([dots_x, _, dots_w, _])) = first else {
+        panic!("the tour shows its dialog, Next and the step dots: {first:?}");
+    };
+    let off_center = (dots_x + dots_w / 2.0) - (dialog_x + dialog_w / 2.0);
+    assert!(
+        off_center.abs() <= 0.5,
+        "the step dots sit {off_center} pt off the dialog's center"
+    );
     for step in 1..STEPS {
         press(&mut world, Key::Right);
         assert_eq!(

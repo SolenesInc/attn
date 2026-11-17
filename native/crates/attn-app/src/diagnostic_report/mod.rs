@@ -448,11 +448,13 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .border_layout()
         .child(footer_button(
             Button::new("Cancel")
-                .variant(ButtonVariant::Ghost)
+                .label_with(move |_, ink| text("Cancel").font(ACTION).color(ink))
                 .disabled(saving)
                 .on_press_tx(close)
                 .build(k)
-                .key("diagnostic-report.cancel"),
+                .key("diagnostic-report.cancel")
+                .fill(t.bg_panel)
+                .border(1.0, t.border_hover),
         ))
         .child(footer_button(
             Button::new(if saving { "Saving…" } else { "Save report" })
@@ -478,8 +480,14 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             col()
                 .key("diagnostic-report.included")
                 .mt(18.0)
-                .px(INSET)
+                .mx(INSET)
+                .px(16.0)
+                .py(14.0)
                 .gap(5.0)
+                .corners([3.0, 8.0, 8.0, 3.0])
+                .fill(attn_ui::colors::mix_srgb(t.bg_app, t.brand, 0.07))
+                .border_sides([0.0, 0.0, 0.0, 3.0], t.brand.alpha(0.65))
+                .border_layout()
                 .child(text("Included automatically").font(HEADING).color(t.text_primary))
                 .child(paragraph("App and daemon versions, session and pane metadata, shortened working directories, and the daemon's terminal health."))
                 .child(paragraph("Environment variables, credentials, clipboard data, raw prompt bodies, raw terminal bytes, logs, and error text stay out.")),
@@ -534,7 +542,10 @@ const CALLOUT: TextStyle = TextStyle::new(12.0, 400.0).lh(18.6);
 /// least text size.
 const SMALL_PRINT: TextStyle = TextStyle::new(12.0, 400.0);
 
-/// `.diagnostic-report-actions button`: at least 96 points wide and 32 high.
+/// `.diagnostic-report-actions button`'s label.
+const ACTION: TextStyle = TextStyle::new(12.0, 600.0);
+
+/// `.diagnostic-report-actions button`: at least 96 points wide and 32 high, 6 point corners.
 fn footer_button(button: El) -> El {
-    button.h(32.0).min_w(96.0).px(14.0)
+    button.h(32.0).min_w(96.0).px(14.0).radius(6.0)
 }

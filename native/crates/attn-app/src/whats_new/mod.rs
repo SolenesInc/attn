@@ -282,7 +282,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         }));
     let dots = row()
         .key("whats-new.dots")
-        .gap(space::S1)
+        .gap(6.0)
         .items_center()
         .children(steps.iter().enumerate().map(|(i, s)| {
             let current = i == index;
@@ -291,9 +291,13 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .role("button")
                 .label(format!("Step {}: {}", i + 1, s.title))
                 .a11y_value(if current { "current" } else { "" })
-                .size(7.0, 7.0)
+                .size(if current { 18.0 } else { 7.0 }, 7.0)
                 .radius(3.5)
-                .fill(if current { t.brand } else { t.border })
+                .fill(if current {
+                    t.brand
+                } else {
+                    t.text_tertiary.alpha(0.6)
+                })
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     go(state, i as isize, tx);
                     tx.focus(PRIMARY, false);
@@ -310,34 +314,41 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
         .border_layout()
         .child(
-            Button::new("View all shortcuts →")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .on_press_tx(view_shortcuts)
-                .build(k)
-                .key("whats-new.shortcuts"),
+            row().grow(1.0).min_w(0.0).child(
+                link_button("View all shortcuts →", t)
+                    .on_press_tx(view_shortcuts)
+                    .build(k)
+                    .key("whats-new.shortcuts"),
+            ),
         )
-        .child(rune::el().grow(1.0))
         .child(dots)
-        .child(rune::el().grow(1.0))
-        .children((index > 0).then(|| {
-            Button::new("Back")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .on_press_tx(back)
-                .build(k)
-                .key("whats-new.back")
-        }))
         .child(
-            Button::new(if last { "Got it" } else { "Next" })
-                .variant(ButtonVariant::Submit)
-                .on_press_tx(advance)
-                .build(k)
-                .key(PRIMARY)
-                .default_button()
-                .h(32.0)
-                .px(18.0)
-                .radius(8.0),
+            row()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(8.0)
+                .justify_end()
+                .children((index > 0).then(|| {
+                    back_button(t)
+                        .on_press_tx(back)
+                        .build(k)
+                        .key("whats-new.back")
+                        .h(32.0)
+                        .px(14.0)
+                        .radius(8.0)
+                        .border(1.0, t.border)
+                }))
+                .child(
+                    Button::new(if last { "Got it" } else { "Next" })
+                        .variant(ButtonVariant::Submit)
+                        .on_press_tx(advance)
+                        .build(k)
+                        .key(PRIMARY)
+                        .default_button()
+                        .h(32.0)
+                        .px(18.0)
+                        .radius(8.0),
+                ),
         );
     let step_view = col()
         .key("whats-new.step")
@@ -374,11 +385,22 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     Dialog::new(DIALOG, "What's new", DialogFrame::whats_new(t))
         .width(scenes::WIDTH + 2.0 * INSET)
         .click_outside(true)
-        .header(
-            text(format!("{} of {}", index + 1, steps.len()))
-                .key("whats-new.count")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+        .lead(
+            row()
+                .items_center()
+                .gap(10.0)
+                .child(
+                    text("WHAT'S NEW")
+                        .key("whats-new.eyebrow")
+                        .font(EYEBROW)
+                        .color(t.brand),
+                )
+                .child(
+                    text(format!("{} of {}", index + 1, steps.len()))
+                        .key("whats-new.count")
+                        .font(COUNT)
+                        .color(t.text_dimmed),
+                ),
         )
         .on_close_tx(dismiss)
         .child(
@@ -410,6 +432,29 @@ fn scheme_button(state: &State, scheme: &Scheme, k: &rune_kit::Kit) -> El {
         })
         .build(k)
         .key("whats-new.scheme")
+}
+
+/// `.whats-new-eyebrow`, at the native app's least text size.
+const EYEBROW: TextStyle = TextStyle::new(12.0, 700.0).tracking(0.96);
+
+/// `.whats-new-count`, at the native app's least text size.
+const COUNT: TextStyle = TextStyle::new(12.0, 400.0);
+
+/// `.whats-new-link`: a quiet link in the tertiary color.
+fn link_button(words: &'static str, t: &Tokens) -> Button {
+    let ink = t.text_tertiary;
+    Button::new(words)
+        .variant(ButtonVariant::Ghost)
+        .control_size(ControlSize::Small)
+        .label_with(move |_, _| text(words).font(STEP_BODY).color(ink))
+}
+
+/// `.whats-new-back`: regular type in the secondary color, inside the border color's edge.
+fn back_button(t: &Tokens) -> Button {
+    let ink = t.text_secondary;
+    Button::new("Back")
+        .variant(ButtonVariant::Ghost)
+        .label_with(move |_, _| text("Back").font(STEP_BODY).color(ink))
 }
 
 /// `.whats-new-step`'s and `.whats-new-footer`'s inset.

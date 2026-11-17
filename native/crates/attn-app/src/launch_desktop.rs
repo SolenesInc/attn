@@ -10,7 +10,7 @@ use attn_protocol::{
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
-use rune_kit::{Button, Select, SelectAppearance, TextInput};
+use rune_kit::{Select, SelectAppearance, TextInput};
 
 use crate::State;
 
@@ -398,19 +398,15 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 ),
         )
         .child(crate::prompt_dialog::actions(
+            crate::prompt_dialog::button("Cancel", false, "launch-desktop.naming.cancel", t, |b| {
+                b.on_press_tx(cancel_name)
+            }),
             crate::prompt_dialog::button(
-                Button::new("Cancel").on_press_tx(cancel_name),
-                false,
-                "launch-desktop.naming.cancel",
-                t,
-            ),
-            crate::prompt_dialog::button(
-                Button::new("Use this name")
-                    .disabled(empty)
-                    .on_press_tx(use_name),
+                "Use this name",
                 true,
                 "launch-desktop.naming.use",
                 t,
+                |b| b.disabled(empty).on_press_tx(use_name),
             ),
         ))
         .build(t, layers);

@@ -767,24 +767,16 @@ pub(crate) fn confirm(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .children(items),
         )
         .child(crate::prompt_dialog::actions(
-            crate::prompt_dialog::button(
-                Button::new("Cancel").on_press_tx(close),
-                false,
-                format!("{key}.cancel"),
-                t,
-            )
+            crate::prompt_dialog::button("Cancel", false, format!("{key}.cancel"), t, |b| {
+                b.on_press_tx(close)
+            })
             .autofocus(),
-            crate::prompt_dialog::button(
-                Button::new(action).on_press_tx(
-                    move |state: &mut State, tx: &mut Tx| match confirm {
-                        Confirm::Restart => restart(state, true, tx),
-                        Confirm::Reload => reload_old_tiles(state, tx),
-                    },
-                ),
-                true,
-                format!("{key}.confirm"),
-                t,
-            ),
+            crate::prompt_dialog::button(action, true, format!("{key}.confirm"), t, |b| {
+                b.on_press_tx(move |state: &mut State, tx: &mut Tx| match confirm {
+                    Confirm::Restart => restart(state, true, tx),
+                    Confirm::Reload => reload_old_tiles(state, tx),
+                })
+            }),
         ))
         .build(t, layers);
 }

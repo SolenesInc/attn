@@ -1,7 +1,6 @@
 use attn_protocol::{Desktop, DesktopCloseMessage};
 use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::{El, Tx};
-use rune_kit::Button;
 
 use super::layout::Node;
 use crate::State;
@@ -120,19 +119,13 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     .on_close_tx(cancel)
     .width(620.0)
     .child(crate::prompt_dialog::actions(
-        crate::prompt_dialog::button(
-            Button::new("Cancel").on_press_tx(cancel),
-            false,
-            "close_desktop.cancel",
-            t,
-        )
+        crate::prompt_dialog::button("Cancel", false, "close_desktop.cancel", t, |b| {
+            b.on_press_tx(cancel)
+        })
         .autofocus(),
-        crate::prompt_dialog::button(
-            Button::new("Close desktop").on_press_tx(confirm),
-            true,
-            "close_desktop.confirm",
-            t,
-        ),
+        crate::prompt_dialog::button("Close desktop", true, "close_desktop.confirm", t, |b| {
+            b.on_press_tx(confirm)
+        }),
     ))
     .build(t, &mut layer);
     layer
