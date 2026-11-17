@@ -22,11 +22,11 @@ const VerdictParked = "parked"
 
 const ClaudeVerdictSchema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["WAITING","DONE","PARKED"]}},"required":["verdict"],"additionalProperties":false}`
 
-func ComposeYieldInput(lastMessage string, runningBackgroundTasks int) string {
+func ComposeYieldInput(lastMessage string, runningBackgroundTasks []string) string {
 	return fmt.Sprintf(
-		"%s\n\n[harness facts] The turn yielded with %d background process(es) still running; the harness will resume the agent when one exits.",
+		"%s\n\n[harness facts] Still running when the turn ended: %s.",
 		lastMessage,
-		runningBackgroundTasks,
+		strings.Join(runningBackgroundTasks, "; "),
 	)
 }
 

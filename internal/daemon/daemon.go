@@ -3399,7 +3399,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		}
 		classification := sessionmonitor.StopClassification{
 			Yielded:                true,
-			RunningBackgroundTasks: runningBackgroundTaskCount(msg),
+			RunningBackgroundTasks: runningBackgroundTasks(msg),
 		}
 		d.life.Go("classifyStop", func() { monitor.ClassifyStop(msg.TranscriptPath, classification) })
 		return

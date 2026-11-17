@@ -32,7 +32,7 @@ type classifyDecision struct {
 
 type StopClassification struct {
 	Yielded                bool
-	RunningBackgroundTasks int
+	RunningBackgroundTasks []string
 }
 
 func classifyPreTranscript(transcriptEnabled, classifierEnabled bool, stop StopClassification) classifyDecision {

@@ -19,8 +19,8 @@ func TestAParkedVerdictHoldsAYieldedTurnWorkingPastTheIdlePromptUntilItExpires(t
 		transcript.Answer("The deploy is running in the background; I'll continue when it completes.")
 		yieldWithBackgroundWork(t, w, cli, transcript)
 		task := w.HeadlessTask()
-		if !strings.Contains(task.Prompt, "yielded with 1 background process") {
-			t.Errorf("the verdict prompt %q does not say the turn yielded with work running", task.Prompt)
+		if !strings.Contains(task.Prompt, `Still running when the turn ended: background_session "./deploy.sh staging".`) {
+			t.Errorf("the verdict prompt %q does not name the work still running", task.Prompt)
 		}
 		task.Answer(`{"verdict":"PARKED"}`)
 		parked := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
