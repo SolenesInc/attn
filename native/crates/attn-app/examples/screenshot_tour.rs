@@ -11,7 +11,7 @@ use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap, State};
 use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
-    AutomationSchedulePreviewResultMessage, DelegationPreferences,
+    AutomationSchedulePreviewResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, Desktop, DesktopPane, DesktopTileContentMessage,
     GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, InitialStateMessage, Profile,
     RecentLocation, RecentLocationsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote,
@@ -879,6 +879,35 @@ fn ledger_seeded(dark: bool) {
     snap(&mut world, "ledger-seeded", dark);
 }
 
+/// The Chief's setup, opened from its row while it has no harness yet.
+fn chief_setup(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.crew = Some(vec![CrewMember {
+        id: "chief-key".into(),
+        name: "Captain".into(),
+        chief: Some(true),
+        profile_id: PROFILE.into(),
+        revision: 1,
+        resolved_agent: "claude".into(),
+        ..CrewMember::default()
+    }]);
+    if let Some(settings) = state.settings.as_mut() {
+        for (key, value) in [
+            ("claude_available", "true"),
+            ("codex_available", "true"),
+            ("claude_cap_launch_instructions", "true"),
+            ("codex_cap_launch_instructions", "true"),
+            ("new_session_agent", "claude"),
+            ("queue_mode_enabled", "true"),
+        ] {
+            settings.insert(key.into(), value.into());
+        }
+    }
+    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    world.gesture(|app| app.click(Target::key("chief-slot")));
+    snap(&mut world, "chief-setup", dark);
+}
+
 /// The asks drawer showing one ask from the waiting agent, with its footer's keys and Send.
 fn asks(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
@@ -1038,6 +1067,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         review_keys(dark);
         review_file(dark);
         ledger_seeded(dark);
+        chief_setup(dark);
     }
 }
 

@@ -81,7 +81,7 @@ light, one PNG each: the sidebar with an agent in every state, a terminal with
 the 16 ANSI colors and a selection, a terminal with a comment mark, a seed id, a
 selected command block and find matches, a Markdown file with code and a Mermaid
 diagram, a review stop with its key line, the review's key sheet and file view,
-the Garden, Settings on Appearance, Agents and Analytics, the shortcut editor
+the Garden, the Chief's setup, Settings on Appearance, Agents and Analytics, the shortcut editor
 and the shortcuts sheet, What's New on its first and its queue step, the
 close-desktop dialog, the command and agent palettes, the profile switcher, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
