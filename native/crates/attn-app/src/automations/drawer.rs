@@ -1,6 +1,6 @@
 use attn_protocol::{AutomationDefinitionSummary, AutomationRunSummary};
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Switch, TextInput};
@@ -75,7 +75,10 @@ fn list(automations: &Automations, t: &Tokens) -> El {
         )
         .child(new_button("automations.new", t))
         .child(
-            GlyphButton::new(icon::CLOSE, "Close automations")
+            GlyphButton::new(glyph::TIMES, "Close automations")
+                .font(glyph::SMALL)
+                .color(t.text_secondary)
+                .side(19.0)
                 .on_press_tx(super::close)
                 .build(attn_ui::kit(t))
                 .key("automations.close"),

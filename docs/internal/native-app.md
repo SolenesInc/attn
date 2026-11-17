@@ -86,9 +86,11 @@ and the shortcuts sheet, What's New on its first and its queue step, the
 close-desktop dialog, the command and agent palettes, the profile switcher, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
 notebook, a popped-out tile window, the classic new-session picker, Launcher 2.0
-in its dialog, its Where list and on an empty desktop, and a new automation's
-hour picker and suggested time zones, each with a row reached by an arrow key.
-The `screenshot_tour` example of `attn-app`
+in its dialog, its Where list and on an empty desktop, a new automation's hour
+picker and suggested time zones, each with a row reached by an arrow key, Home
+with the Chief and a crew member in the sidebar, the command palette offering
+the Chief's setup, the notifications panel, the PRs drawer and an agent's
+actions menu. The `screenshot_tour` example of `attn-app`
 sets each one up on the wire-test world and draws it on Rune's offscreen GPU
 renderer, so it needs no window and no VM, and two runs of the same source match
 pixel for pixel.

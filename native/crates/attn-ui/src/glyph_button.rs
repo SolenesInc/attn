@@ -1,28 +1,71 @@
-use rune::{Color, El, TextStyle, Tx, row, text};
+use rune::{Color, El, Icon, TextStyle, Tx, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
-/// An icon button whose icon is a glyph of [`crate::icon`], or a short mark such as `×` or
-/// `Aa`, named by its label. rune-kit's `IconButton` draws vector icons; attn's icons are
-/// font glyphs, so this is a `rune_kit::Button` that draws the glyph in place of its label.
+/// What a [`GlyphButton`] draws: an icon of [`crate::icon`], or text such as a mark of
+/// [`crate::glyph`] or `Aa`.
+pub enum Glyph {
+    Icon(&'static Icon),
+    Text(String),
+}
+
+impl Glyph {
+    /// An icon `icon_size` points square, or text in `font`, in `ink`.
+    pub fn draw(self, icon_size: f32, font: TextStyle, ink: Color) -> El {
+        match self {
+            Glyph::Icon(icon) => rune::icon(icon, icon_size).color(ink),
+            Glyph::Text(glyph) => text(glyph).font(font).color(ink),
+        }
+    }
+}
+
+impl From<&'static Icon> for Glyph {
+    fn from(icon: &'static Icon) -> Glyph {
+        Glyph::Icon(icon)
+    }
+}
+
+impl From<&str> for Glyph {
+    fn from(text: &str) -> Glyph {
+        Glyph::Text(text.to_owned())
+    }
+}
+
+impl From<String> for Glyph {
+    fn from(text: String) -> Glyph {
+        Glyph::Text(text)
+    }
+}
+
+/// A button that draws a [`Glyph`] in place of its label, which names it. rune-kit's
+/// `IconButton` sizes its icon to the kit's controls; attn's buttons size each icon as the
+/// Tauri app's CSS does, so this is a `rune_kit::Button` that draws the glyph instead.
 pub struct GlyphButton {
-    glyph: String,
+    glyph: Glyph,
     button: Button,
     side: f32,
     font: Option<TextStyle>,
+    icon_size: f32,
     color: Option<Color>,
     trailing: Option<El>,
 }
 
 impl GlyphButton {
-    pub fn new(glyph: impl Into<String>, label: impl Into<String>) -> GlyphButton {
+    pub fn new(glyph: impl Into<Glyph>, label: impl Into<String>) -> GlyphButton {
         GlyphButton {
             glyph: glyph.into(),
             button: Button::new(label).variant(ButtonVariant::GhostMuted),
             side: 22.0,
             font: None,
+            icon_size: 14.0,
             color: None,
             trailing: None,
         }
+    }
+
+    /// An icon's width and height; 14 points unless set.
+    pub fn icon_size(mut self, size: f32) -> Self {
+        self.icon_size = size;
+        self
     }
 
     /// The button's height and least width; 22 points unless set.
@@ -75,15 +118,14 @@ impl GlyphButton {
             button,
             side,
             font,
+            icon_size,
             color,
             trailing,
         } = self;
         let padding = if trailing.is_some() { 4.0 } else { 0.0 };
         button
             .label_with(move |style, ink| {
-                let glyph = text(glyph)
-                    .font(font.unwrap_or(style))
-                    .color(color.unwrap_or(ink));
+                let glyph = glyph.draw(icon_size, font.unwrap_or(style), color.unwrap_or(ink));
                 match trailing {
                     Some(trailing) => row().gap(4.0).items_center().child(glyph).child(trailing),
                     None => glyph,

@@ -203,9 +203,10 @@ pub const FAMILIES: (&str, &str) = (
     "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, ui-monospace, Symbols Nerd Font Mono",
 );
 
+pub mod glyph;
 mod glyph_button;
 pub mod icon;
 pub mod keycap;
-pub use glyph_button::GlyphButton;
+pub use glyph_button::{Glyph, GlyphButton};
 mod stories;
 pub use stories::{STORIES, Showcase, playground};

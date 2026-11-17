@@ -318,11 +318,16 @@ pub(crate) fn told(state: &State) -> Option<String> {
     chip.single().then(|| chip.entries[0].id.clone())
 }
 
-fn mark(status: &str, font: TextStyle, t: &Tokens) -> El {
-    text(attn_ui::icon::SEEDLING)
-        .font(font)
-        .color(state_color(status, t))
+/// The drawing of a seed in `status`, `size` points square, as the Tauri app's
+/// `SeedStateIcon`.
+fn mark(status: &str, size: f32, t: &Tokens) -> El {
+    rune::icon(attn_ui::icon::seed(status), size).color(state_color(status, t))
 }
+
+/// The chip's own mark, and the marks beside its counts: `.pane-seed-chip .seed-state-icon`
+/// and `.pane-seed-counts svg`.
+const CHIP_MARK: f32 = 16.0;
+const COUNT_MARK: f32 = 13.0;
 
 /// The chip in the header of `leaf`: a press opens its seed beside the agent, or pins the list
 /// of an aggregate chip; resting on it previews the popover.
@@ -348,7 +353,7 @@ pub(super) fn piece(
     let mut face = row()
         .items_center()
         .gap(MARK_GAP)
-        .child(mark(&status, font, t));
+        .child(mark(&status, CHIP_MARK, t));
     if shows_label {
         let words = text(label)
             .key(format!("{anchor}.label"))
@@ -369,7 +374,7 @@ pub(super) fn piece(
                     .items_center()
                     .gap(1.0)
                     .label(format!("{n} {state}"))
-                    .child(mark(state, font, t))
+                    .child(mark(state, COUNT_MARK, t))
                     .child(text(n.to_string()).font(font).color(t.text_tertiary))
             }))
             .children(fraction.map(|f| text(f).font(font).color(t.text_tertiary)))
@@ -391,8 +396,7 @@ pub(super) fn piece(
 
 /// The chip's width in full, with its label cut short, and as its mark alone.
 pub(super) fn widths(chip: &Chip, font: TextStyle) -> Widths {
-    let mark = text_w(attn_ui::icon::SEEDLING, font);
-    let icon = 2.0 * PAD + mark;
+    let icon = 2.0 * PAD + CHIP_MARK;
     let label = if chip.repeats_title {
         0.0
     } else {
@@ -401,7 +405,7 @@ pub(super) fn widths(chip: &Chip, font: TextStyle) -> Widths {
     let mut rest: Vec<f32> = chip
         .counts
         .iter()
-        .map(|(_, n)| mark + 1.0 + text_w(&n.to_string(), font))
+        .map(|(_, n)| COUNT_MARK + 1.0 + text_w(&n.to_string(), font))
         .collect();
     if let Some(fraction) = &chip.fraction {
         rest.push(text_w(fraction, font));
@@ -612,7 +616,7 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
         .w_full()
         .items_center()
         .gap(space::S2)
-        .child(mark(status, type_::TITLE, t))
+        .child(mark(status, 44.0, t))
         .child(
             col()
                 .grow(1.0)
@@ -779,7 +783,7 @@ fn option(
         .padding(4.0)
         .radius(4.0)
         .fill(if picked { t.bg_selected } else { t.bg_elevated })
-        .child(mark(status, type_::BODY, t))
+        .child(mark(status, 24.0, t))
         .child(
             col()
                 .grow(1.0)

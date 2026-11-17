@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx, col, row, text};
 use rune_kit::{
@@ -165,7 +165,10 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
         );
     }
     header = header.child(
-        GlyphButton::new(icon::CLOSE, "Close")
+        GlyphButton::new(glyph::TIMES, "Close")
+            .font(glyph::SMALL)
+            .color(t.text_secondary)
+            .side(19.0)
             .on_press_tx(super::close)
             .build(kit(t))
             .key(key("close")),
@@ -373,7 +376,7 @@ fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
                     .color(if invalid { t.error } else { t.text_primary }),
             )
             .child(
-                GlyphButton::new(icon::CLOSE, format!("Remove {repository}"))
+                GlyphButton::new(glyph::TIMES, format!("Remove {repository}"))
                     .side(18.0)
                     .on_press(move |state: &mut State| {
                         super::remove_repository(state, exclude, i);

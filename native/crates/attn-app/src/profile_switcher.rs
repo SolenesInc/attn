@@ -512,7 +512,9 @@ fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens, k: &Kit)
         .grow(1.0)
         .min_w(0.0)
         .justify_start();
-    let rename = GlyphButton::new(attn_ui::icon::PENCIL, format!("Rename {name}"))
+    let rename = GlyphButton::new(&attn_ui::icon::PENCIL, format!("Rename {name}"))
+        .icon_size(13.0)
+        .color(t.text_secondary)
         .help("Rename  R")
         .trailing(keycap::Keys::outlined(&["R"]).build(t).a11y_hidden())
         .on_press_tx({
@@ -521,8 +523,9 @@ fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens, k: &Kit)
         })
         .build(k)
         .key(format!("profile-switcher.rename.{id}"));
-    let delete = GlyphButton::new(attn_ui::icon::TRASH, format!("Delete {name}"))
-        .variant(ButtonVariant::Ghost)
+    let delete = GlyphButton::new(&attn_ui::icon::TRASH, format!("Delete {name}"))
+        .icon_size(13.0)
+        .color(t.text_secondary)
         .help("Delete  ⌫")
         .trailing(keycap::Keys::outlined(&["⌫"]).build(t).a11y_hidden())
         .on_press_tx({

@@ -10,7 +10,7 @@ use attn_protocol::{
     InstallCodexUpdateMessage, RestartSharedCodexMessage, SharedCodexBlocker, SharedCodexState,
 };
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
@@ -461,7 +461,7 @@ fn link(
 }
 
 fn dismiss(label: &str, key: &str, t: &Tokens, press: fn(&mut State)) -> El {
-    GlyphButton::new(icon::CLOSE, label)
+    GlyphButton::new(glyph::TIMES, label)
         .help("Dismiss")
         .on_press(press)
         .build(attn_ui::kit(t))

@@ -1,13 +1,10 @@
 use attn_client::Notifications;
 use attn_protocol::Notification;
 use attn_ui::type_;
-use attn_ui::{Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
-use rune_kit::{
-    Button, ButtonVariant, Collapsible, ControlSize, IconButton, IconButtonVariant, Placement,
-    popover,
-};
+use rune_kit::{Button, ButtonVariant, Collapsible, ControlSize, Placement, popover};
 
 use super::{Act, Severity};
 use crate::State;
@@ -41,7 +38,7 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> El {
             row()
                 .items_center()
                 .gap(2.0)
-                .child(text(icon::BELL).font(type_::BODY).color(bell))
+                .child(rune::icon(&icon::BELL, 13.0).color(bell))
                 .children(unread.then(|| el().size(6.0, 6.0).radius(3.0).fill(dot)))
         })
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
@@ -128,9 +125,9 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
                 .key("notifications.mark-all"),
         )
         .child(
-            IconButton::new(k.glyph.close)
-                .variant(IconButtonVariant::Ghost)
-                .label("Close")
+            GlyphButton::new(glyph::TIMES, "Close")
+                .font(glyph::LARGE)
+                .color(t.text_muted)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx))
                 .build(k)
                 .key("notifications.close"),

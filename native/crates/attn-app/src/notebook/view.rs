@@ -294,19 +294,17 @@ fn tree_row(
     t: &Tokens,
 ) -> El {
     let (id, path, folder) = (id.clone(), entry.path.clone(), entry.is_dir);
-    let name = if folder {
-        format!(
-            "{} {}",
+    let chevron = folder.then(|| {
+        rune::icon(
             if expanded {
-                attn_ui::icon::CARET_DOWN
+                &attn_ui::icon::DISCLOSE_OPEN
             } else {
-                attn_ui::icon::CARET_RIGHT
+                &attn_ui::icon::DISCLOSE_CLOSED
             },
-            entry.name
+            12.0,
         )
-    } else {
-        entry.name.clone()
-    };
+        .color(t.text_secondary)
+    });
     let mut row_el = row()
         .key(format!("{}.{}", key(&id, "file"), entry.path))
         .role(if folder { "treeitem" } else { "link" })
@@ -315,8 +313,11 @@ fn tree_row(
         .pl(space::S3 + depth as f32 * INDENT)
         .pr(space::S2)
         .py(3.0)
+        .items_center()
+        .gap(space::S1)
+        .children(chevron)
         .child(
-            text(name)
+            text(entry.name.clone())
                 .font(type_::BODY)
                 .color(if open { t.brand } else { t.text_secondary })
                 .truncate(),

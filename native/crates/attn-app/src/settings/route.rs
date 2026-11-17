@@ -583,7 +583,7 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
                             part(name, v).grow(grow).min_w(0.0)
                         }))
                         .child(
-                            text(attn_ui::icon::CARET_DOWN)
+                            text(attn_ui::glyph::CARET_DOWN)
                                 .font(font)
                                 .color(tokens.text_tertiary),
                         ),

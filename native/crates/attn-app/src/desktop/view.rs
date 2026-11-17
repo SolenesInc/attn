@@ -1151,10 +1151,15 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
             (pane.is_some() && !focused && !popped)
                 .then(|| focus_button(&key, &cx.desktop.id, &leaf.id, title, cx)),
         )
-        .children(
-            pane.is_some()
-                .then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)),
-        );
+        .children(pane.is_some().then(|| {
+            pop_out_button(
+                &cx.desktop.id,
+                &leaf.id,
+                popped,
+                HeaderLook::agent(cx.t),
+                cx,
+            )
+        }));
     let headline = row()
         .w_full()
         .h(HEADER_PX)
@@ -1228,21 +1233,24 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
     let is_tile = matches!(leaf.kind, LeafKind::Tile { .. });
     let is_document =
         matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == "markdown" || kind == "seed");
-    let tile_actions = row()
-        .items_center()
-        .gap(2.0)
-        .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)))
-        .children(
-            (is_document && !focused && !popped)
-                .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
-        )
-        .children(
-            (matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
-                && !popped)
-                .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
-        )
-        .children(is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
-        .children(is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)));
+    let tile_actions =
+        row()
+            .items_center()
+            .gap(2.0)
+            .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)))
+            .children(
+                (is_document && !focused && !popped)
+                    .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
+            )
+            .children(
+                (matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
+                    && !popped)
+                    .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
+            )
+            .children(is_tile.then(|| {
+                pop_out_button(&cx.desktop.id, &leaf.id, popped, HeaderLook::tile(cx.t), cx)
+            }))
+            .children(is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)));
     let headline = headline
         .children(match &leaf.kind {
             LeafKind::Tile { kind, params, .. } if kind == "notebook" => {
@@ -1381,7 +1389,8 @@ fn rename_button(key: &str, session: &Session, title: &str, t: &Tokens) -> El {
     header_button(
         under.clone(),
         format!("Rename session {title}"),
-        attn_ui::icon::PENCIL,
+        &attn_ui::icon::PENCIL,
+        HeaderLook::agent(t),
         t,
         move |state, tx| crate::sidebar::rename::session(state, &id, under.clone(), tx),
     )
@@ -1393,7 +1402,8 @@ fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) 
     header_button(
         format!("{key}.focus"),
         with_key(&format!("Focus agent {title}"), cx.keys.focus.as_ref()),
-        attn_ui::icon::EXPAND,
+        &attn_ui::icon::FOCUS_AGENT,
+        HeaderLook::agent(cx.t),
         cx.t,
         move |state, tx| super::actions::focus_leaf(state, &desktop, &leaf, tx),
     )
@@ -1429,8 +1439,9 @@ const FOCUS_PILL_TYPE: rune::TextStyle = rune::TextStyle {
 /// The header's button that takes the document or browser tile off its desktop.
 fn close_tile_button(key: &str, desktop: &str, leaf: &str, t: &Tokens) -> El {
     let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
-    GlyphButton::new("×", "Close tile")
+    GlyphButton::new(attn_ui::glyph::TIMES, "Close tile")
         .variant(ButtonVariant::GhostFaint)
+        .color(t.text_muted)
         .font(rune::TextStyle {
             size: 15.0,
             weight: 400.0,
@@ -1451,42 +1462,79 @@ fn return_to_row(key: &str, desktop: &str, cx: &TileCx) -> El {
     header_button(
         format!("{key}.return"),
         with_key("Return to row", cx.keys.focus.as_ref()),
-        attn_ui::icon::COMPRESS,
+        &attn_ui::icon::UNFOCUS,
+        HeaderLook {
+            side: 22.0,
+            icon: 14.0,
+            ink: cx.t.text_secondary,
+        },
         cx.t,
         move |state, tx| super::actions::return_to_row(state, &desktop, tx),
     )
 }
 
+/// How big a header button and its icon are, and the icon's colour, as the Tauri app's
+/// header CSS sets each.
+#[derive(Clone, Copy)]
+struct HeaderLook {
+    side: f32,
+    icon: f32,
+    ink: rune::Color,
+}
+
+impl HeaderLook {
+    /// An agent header's button: `.desktop-pane-focus-btn`.
+    fn agent(t: &Tokens) -> HeaderLook {
+        HeaderLook {
+            side: 20.0,
+            icon: 14.0,
+            ink: t.text_dimmed,
+        }
+    }
+
+    /// A document or browser tile's button: `.desktop-dock-tile-action`.
+    fn tile(t: &Tokens) -> HeaderLook {
+        HeaderLook {
+            side: 24.0,
+            icon: 16.0,
+            ink: t.text_muted,
+        }
+    }
+}
+
 fn header_button(
     key: String,
     label: String,
-    glyph: &'static str,
+    glyph: impl Into<attn_ui::Glyph>,
+    look: HeaderLook,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
     GlyphButton::new(glyph, label)
         .variant(ButtonVariant::GhostFaint)
         .font(type_::LABEL)
-        .side(type_::LABEL.line_px())
+        .icon_size(look.icon)
+        .color(look.ink)
+        .side(look.side)
         .on_press_tx(press)
         .build(attn_ui::kit(t))
         .key(key)
-        .px(space::S1)
         .radius(4.0)
 }
 
 /// The header's button that pops the tile out into its own window, or brings it back.
-fn pop_out_button(desktop: &str, leaf: &str, popped: bool, cx: &TileCx) -> El {
+fn pop_out_button(desktop: &str, leaf: &str, popped: bool, look: HeaderLook, cx: &TileCx) -> El {
     let (label, glyph) = if popped {
-        ("Bring back tile", attn_ui::icon::BRING_BACK)
+        ("Bring back tile", &attn_ui::icon::BRING_BACK)
     } else {
-        ("Pop out tile", attn_ui::icon::POP_OUT)
+        ("Pop out tile", &attn_ui::icon::POP_OUT)
     };
     let (desktop, leaf_id) = (desktop.to_owned(), leaf.to_owned());
     header_button(
         format!("tile.{leaf}.popout"),
         with_key(label, cx.keys.pop_out.as_ref()),
         glyph,
+        look,
         cx.t,
         move |state, tx| super::windows::toggle_leaf(state, &desktop, &leaf_id, tx),
     )

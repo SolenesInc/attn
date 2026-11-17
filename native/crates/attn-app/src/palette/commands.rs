@@ -848,6 +848,10 @@ fn icon_of(id: &str) -> Option<Icon> {
         "automations" => Icon::Automations,
         "show-tended-seeds" => Icon::Garden,
         "show-delegation-chain" => Icon::Delegation,
+        "open-in-editor" => Icon::Editor,
+        "chief-setup" | "chief-route" => Icon::ChiefSetup,
+        "chief-start" => Icon::ChiefStart,
+        "chief-close" => Icon::ChiefClose,
         _ => Icon::Context,
     })
 }

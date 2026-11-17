@@ -7,7 +7,7 @@ use attn_protocol::{
     CalloutAnchorsRequestMessage, CalloutResultMessage, CalloutShowRequestMessage, CalloutStep,
 };
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{Align, Cx, El, ElementInfo, Key, KeyEvent, Mods, Side, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
@@ -412,7 +412,7 @@ fn card(callout: &Callout, unanchored: bool, t: &Tokens) -> El {
             .key("callout.count"),
         )
         .child(
-            GlyphButton::new(icon::CLOSE, "End callout")
+            GlyphButton::new(glyph::TIMES, "End callout")
                 .help("End callout (Esc)")
                 .on_press_tx(end)
                 .build(k)

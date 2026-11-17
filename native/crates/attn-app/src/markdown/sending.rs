@@ -128,7 +128,7 @@ pub(crate) fn controls(
         place(
             small(
                 format!("Notes {count}"),
-                format!("{} {count}", attn_ui::icon::COMMENT),
+                format!("{} {count}", attn_ui::glyph::COMMENT),
             )
             .help("Show review notes")
             .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &notes_tile, tx)),
@@ -148,7 +148,7 @@ pub(crate) fn controls(
     let caret = |label: &str| {
         let tile = tile.to_owned();
         place(
-            small(label.to_owned(), attn_ui::icon::CARET_DOWN.into())
+            small(label.to_owned(), attn_ui::glyph::CARET_DOWN.into())
                 .on_press(move |state: &mut State| toggle_menu(state, &tile)),
             "send.menu",
         )
@@ -159,7 +159,7 @@ pub(crate) fn controls(
         parts.push(place(
             small(
                 format!("Annotation destination: {name}"),
-                format!("To {name} {}", attn_ui::icon::CARET_DOWN),
+                format!("To {name} {}", attn_ui::glyph::CARET_DOWN),
             )
             .help(format!("Annotations will be sent to {name}"))
             .disabled(!any)
@@ -838,7 +838,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
                 .children(orphan.then(|| text("⚠ moved").font(type_::LABEL).color(t.warning)))
                 .child(el().grow(1.0))
                 .child(
-                    GlyphButton::new(attn_ui::icon::CLOSE, "Remove annotation")
+                    GlyphButton::new(attn_ui::glyph::TIMES, "Remove annotation")
                         .font(type_::LABEL)
                         .side(18.0)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {

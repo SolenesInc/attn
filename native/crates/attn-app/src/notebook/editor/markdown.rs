@@ -196,8 +196,8 @@ pub(crate) enum Style {
     Heading(u8),
 }
 
-pub(crate) const CHECKED: &str = attn_ui::icon::CHECKED;
-pub(crate) const UNCHECKED: &str = attn_ui::icon::UNCHECKED;
+pub(crate) const CHECKED: &str = attn_ui::glyph::CHECKED;
+pub(crate) const UNCHECKED: &str = attn_ui::glyph::UNCHECKED;
 pub(crate) const BULLET: &str = "•";
 
 impl Shown {

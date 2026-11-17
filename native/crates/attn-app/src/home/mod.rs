@@ -105,15 +105,19 @@ fn header(logo: Option<&Image>, t: &Tokens) -> El {
                 )
                 .child(type_::sans_caps("attention hub").color(t.text_dimmed)),
         )
-        .child(button(
-            "home.settings",
-            "Settings",
-            attn_ui::icon::SETTINGS,
-            t,
-            |state, tx| {
-                crate::dispatch(state, Action::UiOpenSettings, tx);
-            },
-        ))
+        .child(
+            GlyphButton::new(&attn_ui::icon::SETTINGS, "Settings")
+                .icon_size(16.0)
+                .color(t.text_dimmed)
+                .side(32.0)
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                    crate::dispatch(state, Action::UiOpenSettings, tx);
+                })
+                .build(attn_ui::kit(t))
+                .key("home.settings")
+                .radius(6.0)
+                .hover(t.bg_elevated),
+        )
 }
 
 fn all_settled(running: &str, follow: bool, t: &Tokens) -> El {
@@ -163,9 +167,9 @@ fn follow_check(follow: bool, t: &Tokens) -> El {
         })
         .child(
             text(if follow {
-                attn_ui::icon::CHECKED
+                attn_ui::glyph::CHECKED
             } else {
-                attn_ui::icon::UNCHECKED
+                attn_ui::glyph::UNCHECKED
             })
             .font(type_::BODY)
             .color(if follow { t.accent } else { t.text_tertiary }),
@@ -332,9 +336,9 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
                         .items_center()
                         .child(
                             text(if open {
-                                attn_ui::icon::CARET_DOWN
+                                attn_ui::glyph::CARET_DOWN
                             } else {
-                                attn_ui::icon::CARET_RIGHT
+                                attn_ui::glyph::CARET_RIGHT
                             })
                             .font(type_::LABEL)
                             .color(tokens.text_tertiary),

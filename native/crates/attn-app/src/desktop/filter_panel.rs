@@ -45,7 +45,7 @@ pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &To
     let close = filter_button(
         id,
         "close",
-        attn_ui::icon::CLOSE,
+        attn_ui::glyph::TIMES,
         "Close filter",
         false,
         t,

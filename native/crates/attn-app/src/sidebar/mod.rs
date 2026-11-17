@@ -304,16 +304,24 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
 }
 
 pub(crate) fn home_row(home: bool, keys: Option<String>, t: &Tokens) -> El {
-    nav_row("sidebar.home", attn_ui::icon::HOME, "Home", keys, t)
-        .a11y_value(if home { "current" } else { "" })
-        .fill(if home { t.bg_selected } else { t.bg_panel })
-        .on_press(|state: &mut State| state.window.go_home())
+    nav_row(
+        "sidebar.home",
+        &attn_ui::icon::HOME,
+        t.text_primary,
+        "Home",
+        keys,
+        t,
+    )
+    .a11y_value(if home { "current" } else { "" })
+    .fill(if home { t.bg_selected } else { t.bg_panel })
+    .on_press(|state: &mut State| state.window.go_home())
 }
 
 fn overview_row(keys: Option<String>, t: &Tokens) -> El {
     nav_row(
         "sidebar.overview",
-        attn_ui::icon::GRID,
+        &attn_ui::icon::OVERVIEW,
+        t.text_secondary,
         "Desktop overview",
         keys,
         t,
@@ -326,7 +334,14 @@ fn overview_row(keys: Option<String>, t: &Tokens) -> El {
 
 /// A row that goes somewhere rather than to an agent, with the keys that go there too, as the
 /// Tauri app's `sidebar-nav-row`.
-fn nav_row(key: &str, glyph: &str, label: &str, keys: Option<String>, t: &Tokens) -> El {
+fn nav_row(
+    key: &str,
+    glyph: impl Into<attn_ui::Glyph>,
+    ink: rune::Color,
+    label: &str,
+    keys: Option<String>,
+    t: &Tokens,
+) -> El {
     let row = row()
         .key(key)
         .role("button")
@@ -340,10 +355,10 @@ fn nav_row(key: &str, glyph: &str, label: &str, keys: Option<String>, t: &Tokens
         .radius(4.0)
         .hover(t.bg_elevated)
         .child(
-            text(glyph)
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .w(14.0),
+            row()
+                .w(14.0)
+                .justify_center()
+                .child(glyph.into().draw(14.0, type_::BODY, ink)),
         )
         .child(
             text(label)
@@ -594,7 +609,7 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
         .children(
             agent
                 .chief
-                .then(|| mark(&key, "chief", attn_ui::icon::BOLT, "Chief of staff", t)),
+                .then(|| mark(&key, "chief", attn_ui::glyph::BOLT, "Chief of staff", t)),
         )
         .children(
             agent
@@ -620,7 +635,7 @@ fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> 
         row_key,
         "rename",
         format!("Rename {}", desktop.title),
-        attn_ui::icon::PENCIL,
+        attn_ui::glyph::PENCIL,
         t,
         move |state, tx| rename::desktop(state, &id, under.clone(), tx),
     )

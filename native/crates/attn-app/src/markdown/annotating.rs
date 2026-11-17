@@ -544,7 +544,8 @@ pub(crate) fn in_document(
 fn button(
     tile: &str,
     part: &str,
-    glyph: &str,
+    glyph: impl Into<attn_ui::Glyph>,
+    ink: rune::Color,
     label: &str,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
@@ -552,6 +553,8 @@ fn button(
     GlyphButton::new(glyph, label)
         .variant(ButtonVariant::Ghost)
         .font(type_::BODY)
+        .icon_size(16.0)
+        .color(ink)
         .side(CHIP)
         .on_press_tx(press)
         .build(attn_ui::kit(t))
@@ -570,7 +573,8 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
         button(
             tile,
             "delete",
-            attn_ui::icon::TRASH,
+            &attn_ui::icon::ANNOTATION_DELETE,
+            attn_ui::colors::mix_srgb(t.error, rune::Color::WHITE, 0.24),
             "Delete",
             t,
             on(|state, tile, tx| mark(state, tile, Saying::Deletion, tx)),
@@ -578,7 +582,8 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
         button(
             tile,
             "comment",
-            attn_ui::icon::COMMENT,
+            &attn_ui::icon::ANNOTATION_COMMENT,
+            t.warning,
             "Comment",
             t,
             on(|state, tile, tx| compose(state, tile, false, "", tx)),
@@ -586,7 +591,8 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
         button(
             tile,
             "zap",
-            attn_ui::icon::BOLT,
+            &attn_ui::icon::ANNOTATION_LABEL,
+            t.warning,
             "Quick label",
             t,
             move |state, _| picker(state),
@@ -603,6 +609,7 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
             tile,
             &format!("label.{id}"),
             promoted.emoji,
+            t.text_secondary,
             promoted.text,
             t,
             move |state: &mut State, tx: &mut Tx| label(state, &pressed, id, tx),
@@ -612,7 +619,8 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
     parts.push(button(
         tile,
         "cancel",
-        attn_ui::icon::CLOSE,
+        &attn_ui::icon::ANNOTATION_CANCEL,
+        t.text_secondary,
         "Cancel",
         t,
         on(close_toolbar),
@@ -751,7 +759,7 @@ fn composer_box(
                         .grow(1.0),
                 )
                 .child(
-                    GlyphButton::new(attn_ui::icon::CLOSE, "Close")
+                    GlyphButton::new(attn_ui::glyph::TIMES, "Close")
                         .font(type_::LABEL)
                         .side(20.0)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {

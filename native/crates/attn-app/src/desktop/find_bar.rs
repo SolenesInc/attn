@@ -40,7 +40,7 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
     let older = find_button(
         id,
         "prev",
-        attn_ui::icon::CARET_UP,
+        attn_ui::glyph::PREVIOUS,
         "Previous match",
         false,
         t,
@@ -49,7 +49,7 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
     let newer = find_button(
         id,
         "next",
-        attn_ui::icon::CARET_DOWN,
+        attn_ui::glyph::NEXT,
         "Next match",
         false,
         t,
@@ -58,7 +58,7 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
     let close = find_button(
         id,
         "close",
-        attn_ui::icon::CLOSE,
+        attn_ui::glyph::TIMES,
         "Close find",
         false,
         t,
@@ -134,8 +134,8 @@ pub(super) fn button(
         } else {
             ButtonVariant::GhostMuted
         })
-        .font(type_::LABEL)
-        .side(type_::LABEL.line_px())
+        .font(attn_ui::glyph::SMALL)
+        .side(attn_ui::glyph::SMALL.line_px() + 4.0)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             press(state, tx);
             if let Some(field) = field(state) {

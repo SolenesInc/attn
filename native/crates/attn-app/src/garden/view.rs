@@ -398,18 +398,22 @@ fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
         "Expand the garden"
     };
     let frame_glyph = if full {
-        attn_ui::icon::COMPRESS
+        &attn_ui::icon::FRAME_IN
     } else {
-        attn_ui::icon::EXPAND
+        &attn_ui::icon::FRAME_OUT
     };
     bar.child(
         GlyphButton::new(frame_glyph, frame_label)
+            .icon_size(12.0)
+            .color(t.text_muted)
             .on_press_tx(super::toggle_frame)
             .build(attn_ui::kit(t))
             .key("garden.frame-button"),
     )
     .child(
-        GlyphButton::new(attn_ui::icon::CLOSE, "Close")
+        GlyphButton::new(attn_ui::glyph::TIMES, "Close")
+            .font(attn_ui::glyph::REGULAR)
+            .color(t.text_muted)
             .on_press(super::close)
             .build(attn_ui::kit(t))
             .key("garden.close"),

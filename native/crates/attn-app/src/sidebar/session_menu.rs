@@ -1,7 +1,6 @@
 use attn_protocol::{ReloadSessionMessage, Session, UnregisterMessage};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::{El, Tx, text};
+use rune::{El, Tx, row};
 use rune_kit::{MenuItem, Placement};
 
 use crate::State;
@@ -80,6 +79,9 @@ fn rename(state: &mut State, tx: &mut Tx) {
 
 /// A reload with no terminal of a usable size asks for this one, as the Tauri app does, since
 /// the daemon needs a size to restart an agent that has no live worker.
+/// An item's mark: `.session-actions-popover button > span`, 13 px monospace.
+const MARK: rune::TextStyle = rune::TextStyle::new(13.0, 400.0).mono();
+
 const FALLBACK_SIZE: (u16, u16) = (80, 24);
 const MIN_COLS: u16 = 20;
 const MIN_ROWS: u16 = 8;
@@ -163,12 +165,12 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == menu.session);
     let priority = session.is_some_and(|s| s.priority == Some(true));
     let chief = session.is_some_and(|s| s.chief_of_staff == Some(true));
-    let item = |id: &str, glyph: &str, label: &str| {
+    let item = |id: &str, glyph: attn_ui::Glyph, label: &str| {
         MenuItem::new(label).key(format!("{MENU}.{id}")).lead(
-            text(glyph.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .w(14.0),
+            row()
+                .w(14.0)
+                .justify_center()
+                .child(glyph.draw(13.0, MARK, t.text_secondary)),
         )
     };
     let id = menu.session.clone();
@@ -210,7 +212,7 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         };
         kit_menu = kit_menu
             .item(
-                item("member-details", attn_ui::icon::BOLT, label).on_select_tx(
+                item("member-details", (&attn_ui::icon::CHIEF).into(), label).on_select_tx(
                     move |state: &mut State, tx: &mut Tx| {
                         let opener = state.window.session_menu.take().map(|m| m.under);
                         if is_chief {
@@ -225,21 +227,23 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
     }
     kit_menu = kit_menu
         .item(
-            item("priority", attn_ui::icon::FLAG, priority_label).on_select(
+            item("priority", (&attn_ui::icon::FLAG).into(), priority_label).on_select(
                 move |state: &mut State| {
                     state.window.session_menu = None;
                     super::actions::set_priority(state, &id, !priority);
                 },
             ),
         )
-        .item(item("rename", attn_ui::icon::PENCIL, "Rename session").on_select_tx(rename))
+        .item(
+            item("rename", (&attn_ui::icon::PENCIL).into(), "Rename session").on_select_tx(rename),
+        )
         .separator()
-        .item(item("reload", "↻", "Reload session").on_select_tx(reload));
+        .item(item("reload", attn_ui::glyph::RELOAD.into(), "Reload session").on_select_tx(reload));
     if let Some(slot) = &chief_slot {
         kit_menu = kit_menu.item(
             item(
                 "ask-close",
-                attn_ui::icon::MOON,
+                (&attn_ui::icon::MOON).into(),
                 &format!("Ask {} to close", slot.name),
             )
             .on_select_tx(|state: &mut State, tx: &mut Tx| {
@@ -248,7 +252,8 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
             }),
         );
     } else if !chief {
-        kit_menu = kit_menu.item(item("close", "×", "Close session").on_select_tx(close));
+        kit_menu = kit_menu
+            .item(item("close", attn_ui::glyph::TIMES.into(), "Close session").on_select_tx(close));
     }
     let mut layer = Vec::new();
     kit_menu.build(attn_ui::kit(t), &mut layer);

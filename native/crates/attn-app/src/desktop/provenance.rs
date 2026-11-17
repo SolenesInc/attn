@@ -219,7 +219,7 @@ pub(crate) fn run_view(row_key: &str, run: &Run, t: &Tokens) -> El {
         .shrink()
         .max_w(RUN_MAX_W)
         .child(
-            text(attn_ui::icon::BOLT)
+            text(attn_ui::glyph::BOLT)
                 .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary),
         )

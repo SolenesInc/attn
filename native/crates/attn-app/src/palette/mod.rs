@@ -93,6 +93,10 @@ pub(crate) enum Icon {
     Garden,
     Delegation,
     Automations,
+    Editor,
+    ChiefSetup,
+    ChiefStart,
+    ChiefClose,
 }
 
 impl Icon {
@@ -107,20 +111,27 @@ impl Icon {
             Icon::Garden => "Garden",
             Icon::Delegation => "Delegation",
             Icon::Automations => "Automations",
+            Icon::Editor => "Editor",
+            Icon::ChiefSetup | Icon::ChiefStart | Icon::ChiefClose => "Chief",
         }
     }
 
-    pub(crate) fn glyph(self) -> &'static str {
-        use attn_ui::icon;
+    pub(crate) fn glyph(self) -> attn_ui::Glyph {
+        use attn_ui::{glyph, icon};
         match self {
-            Icon::Context => icon::FILE_TEXT,
-            Icon::Attention | Icon::Notifications => icon::BELL,
-            Icon::Keys => icon::KEYBOARD,
-            Icon::Desktops => icon::COLUMNS,
-            Icon::Notebook => icon::BOOK,
-            Icon::Garden => icon::SEEDLING,
-            Icon::Delegation => icon::SITEMAP,
-            Icon::Automations => icon::STAR_OPEN,
+            Icon::Context => (&icon::CONTEXT).into(),
+            Icon::Attention => (&icon::ATTENTION).into(),
+            Icon::Notifications => (&icon::BELL).into(),
+            Icon::Keys => (&icon::KEYBOARD).into(),
+            Icon::Desktops => (&icon::BOARD).into(),
+            Icon::Notebook => (&icon::NOTEBOOK).into(),
+            Icon::Garden => (&icon::GARDEN).into(),
+            Icon::Delegation => glyph::SITEMAP.into(),
+            Icon::Automations => (&icon::AUTOMATIONS).into(),
+            Icon::Editor => (&icon::EDITOR).into(),
+            Icon::ChiefSetup => (&icon::CHIEF).into(),
+            Icon::ChiefStart => glyph::SUNRISE.into(),
+            Icon::ChiefClose => (&icon::MOON).into(),
         }
     }
 }

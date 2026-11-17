@@ -6,7 +6,7 @@
 use attn_client::Connection;
 use attn_protocol::OutpostInfo;
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, Tx, row, text};
 use rune_kit::{Button, ControlSize};
@@ -263,7 +263,7 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
                 .font(type_::BODY)
                 .color(t.text_tertiary)
         });
-    let dismiss = GlyphButton::new(icon::CLOSE, "Dismiss outpost updates")
+    let dismiss = GlyphButton::new(glyph::TIMES, "Dismiss outpost updates")
         .help("Dismiss")
         .on_press(close)
         .build(kit)

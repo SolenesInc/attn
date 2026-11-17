@@ -461,7 +461,7 @@ fn results(key: String, label: &str, children: Vec<El>) -> El {
 }
 
 /// A row's glyph in its tile, which turns to the accent while the row is highlighted.
-fn tile(glyph: &'static str, highlighted: bool, look: &Look) -> El {
+fn tile(glyph: &'static rune::Icon, highlighted: bool, look: &Look) -> El {
     row()
         .w(28.0)
         .h(28.0)
@@ -480,15 +480,11 @@ fn tile(glyph: &'static str, highlighted: bool, look: &Look) -> El {
                 look.border_tile
             },
         )
-        .child(
-            text(glyph)
-                .font(TextStyle::new(ICON_SIZE, 400.0))
-                .color(if highlighted {
-                    look.accent_text
-                } else {
-                    look.text_quiet
-                }),
-        )
+        .child(rune::icon(glyph, ICON_SIZE).color(if highlighted {
+            look.accent_text
+        } else {
+            look.text_quiet
+        }))
 }
 
 /// A list row: the accent border and tint while highlighted, a faint wash under the pointer.
@@ -728,11 +724,11 @@ fn location_row(
         .as_deref()
         .map(|seen| age(seen, state.window.now_ms));
     let glyph = match r.kind {
-        Kind::Recent => icon::CLOCK,
-        Kind::Folder if r.repo_root.is_some() => icon::REPO,
-        Kind::Folder => icon::FOLDER,
-        Kind::Machine => icon::DESKTOP,
-        Kind::Elsewhere => icon::SEARCH,
+        Kind::Recent => &icon::RECENT,
+        Kind::Folder if r.repo_root.is_some() => &icon::REPO,
+        Kind::Folder => &icon::FOLDER,
+        Kind::Machine => &icon::MACHINE,
+        Kind::Elsewhere => &icon::ELSEWHERE,
     };
     let picked = r.clone();
     let mut row_el = option(format!("{w}.row.{i}"), &name, highlighted, look, t)
@@ -895,10 +891,10 @@ fn where_row(
         _ => None,
     };
     let glyph = match (r, deleting) {
-        (_, Some(_)) => icon::TRASH,
-        (WhereRow::New { .. }, _) => icon::PLUS,
-        (WhereRow::Main { .. }, _) => icon::COMMIT,
-        (WhereRow::Existing { .. }, _) => icon::BRANCH,
+        (_, Some(_)) => &icon::DELETE,
+        (WhereRow::New { .. }, _) => &icon::PLUS,
+        (WhereRow::Main { .. }, _) => &icon::MAIN_BRANCH,
+        (WhereRow::Existing { .. }, _) => &icon::BRANCH,
     };
     let picked = r.clone();
     option(

@@ -872,9 +872,9 @@ fn header(shown: &GardenReview, complete: bool, full: bool, t: &Tokens) -> El {
         )
     };
     let (frame_label, frame_glyph) = if full {
-        ("Return the garden to the dock", attn_ui::icon::COMPRESS)
+        ("Return the garden to the dock", &attn_ui::icon::FRAME_IN)
     } else {
-        ("Expand the garden", attn_ui::icon::EXPAND)
+        ("Expand the garden", &attn_ui::icon::FRAME_OUT)
     };
     row()
         .key("garden.review.chrome")
@@ -909,12 +909,16 @@ fn header(shown: &GardenReview, complete: bool, full: bool, t: &Tokens) -> El {
         )
         .child(
             GlyphButton::new(frame_glyph, frame_label)
+                .icon_size(12.0)
+                .color(t.text_muted)
                 .on_press_tx(super::toggle_frame)
                 .build(attn_ui::kit(t))
                 .key("garden.review.frame-button"),
         )
         .child(
-            GlyphButton::new(attn_ui::icon::CLOSE, "Close")
+            GlyphButton::new(attn_ui::glyph::TIMES, "Close")
+                .font(attn_ui::glyph::REGULAR)
+                .color(t.text_muted)
                 .on_press(super::close)
                 .build(attn_ui::kit(t))
                 .key("garden.review.close"),

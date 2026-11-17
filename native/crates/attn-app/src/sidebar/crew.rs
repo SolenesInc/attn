@@ -5,7 +5,7 @@ use attn_protocol::CrewMember;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
-use rune::{El, Tx, row, text};
+use rune::{El, Tx, el, row, text};
 use rune_kit::{ButtonVariant, MenuItem, Placement};
 
 use crate::State;
@@ -59,15 +59,20 @@ pub(crate) struct Resting {
     pub(crate) phase: Option<Phase>,
     /// The Chief, whose start takes one click.
     pub(crate) chief: bool,
+    /// The harness it starts on, while the sidebar shows harness logos.
+    pub(crate) harness: Option<String>,
 }
 
 pub(crate) fn resting(state: &State, member: &str) -> Resting {
-    let name = crate::crew::members(state)
+    let found = crate::crew::members(state)
         .into_iter()
-        .find(|m| m.id == member)
+        .find(|m| m.id == member);
+    let name = found
         .map(|m| m.name.clone())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| crate::asks::crew_display_name(member));
+    let harness =
+        super::logos(state).then(|| found.map(|m| m.resolved_agent.clone()).unwrap_or_default());
     let phase = state
         .window
         .crew_rows
@@ -80,7 +85,21 @@ pub(crate) fn resting(state: &State, member: &str) -> Resting {
         name,
         phase,
         chief: crate::chief::member(state).is_some_and(|c| c.id == member),
+        harness,
     }
+}
+
+/// The lead of a crew row with no session: its harness's logo, or the dot when the sidebar
+/// shows no logos, in the idle colour, as the Tauri app's `SessionLead` in state idle.
+fn idle_lead(harness: Option<&str>, t: &Tokens) -> El {
+    let lead = match harness {
+        Some(harness) => rune::icon(super::harness_icon::of(harness), 14.0),
+        None => el().size(8.0, 8.0).radius(4.0).fill(t.state_idle),
+    };
+    row()
+        .w(14.0)
+        .justify_center()
+        .child(lead.color(t.state_idle))
 }
 
 /// The members of the selected profile with no session, in key order.
@@ -172,6 +191,8 @@ pub(crate) fn row_prefixes() -> [String; 2] {
     [format!("{QUEUE_ROW}."), format!("{CLASSIC_ROW}.")]
 }
 
+const SUN_SIDE: f32 = 20.0;
+
 pub(crate) const QUEUE_ROW: &str = "queue-crew.member";
 pub(crate) const CLASSIC_ROW: &str = "sidebar.crew";
 
@@ -190,13 +211,15 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
     let (member, pressed, outside) = (m.member.clone(), key.clone(), m.member.clone());
     let sun = {
         let (member, row_key) = (m.member.clone(), key.clone());
-        GlyphButton::new(attn_ui::icon::SUN, start_label.clone())
-            .font(type_::LABEL)
-            .side(20.0)
-            .variant(sun_variant)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                trigger(state, &row_key, &member, tx)
-            })
+        let sun = GlyphButton::new(&attn_ui::icon::CREW_SUN, start_label.clone())
+            .icon_size(16.0)
+            .side(SUN_SIDE)
+            .variant(sun_variant);
+        let sun = match m.phase {
+            None => sun.color(t.text_dimmed),
+            Some(_) => sun,
+        };
+        sun.on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &row_key, &member, tx))
             .build(attn_ui::kit(t))
             .key(format!("{key}.start"))
             .radius(4.0)
@@ -226,12 +249,7 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
         .radius(4.0)
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &pressed, &member, tx))
-        .child(
-            text(attn_ui::icon::CIRCLE_OPEN)
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .w(14.0),
-        )
+        .child(idle_lead(m.harness.as_deref(), t))
         .child(
             text(m.name.clone())
                 .font(type_::BODY)
@@ -241,9 +259,8 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
                 .grow(1.0),
         )
         .children(m.chief.then(|| {
-            text(attn_ui::icon::BOLT)
+            rune::icon(&attn_ui::icon::CHIEF, 12.0)
                 .key(format!("{key}.chief"))
-                .font(type_::LABEL)
                 .color(t.text_tertiary)
                 .help(m.name.clone())
         }))
@@ -264,6 +281,13 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
         .child(
             row()
                 .key(format!("{key}.controls"))
+                .pin(
+                    None,
+                    Some(0.0),
+                    Some(SUN_SIDE + space::S2 + space::S1),
+                    Some(0.0),
+                )
+                .items_center()
                 .group_opacity(0.0, 1.0)
                 .child(actions),
         );
@@ -285,7 +309,12 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
 
 /// The Chief's slot before it has a session: Set up opens its setup, and the slot says when
 /// the Chief is starting.
-pub(crate) fn chief_setup_row(key: String, chief: &crate::chief::View, t: &Tokens) -> El {
+pub(crate) fn chief_setup_row(
+    key: String,
+    chief: &crate::chief::View,
+    logos: bool,
+    t: &Tokens,
+) -> El {
     use crate::chief::Phase;
     let pill = if chief.phase == Phase::Unconfigured {
         "Set up ⏎"
@@ -308,12 +337,10 @@ pub(crate) fn chief_setup_row(key: String, chief: &crate::chief::View, t: &Token
         .gap(space::S2)
         .px(space::S1)
         .radius(4.0)
-        .child(
-            text(attn_ui::icon::CIRCLE_OPEN)
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .w(14.0),
-        )
+        .child(idle_lead(
+            logos.then_some(chief.agent.as_deref().unwrap_or_default()),
+            t,
+        ))
         .child(
             text(chief.name.clone())
                 .font(type_::BODY)
@@ -428,10 +455,10 @@ pub(crate) fn menu_view(state: &State, t: &Tokens) -> Vec<El> {
         })
         .key(format!("{MENU}.details"))
         .lead(
-            text(attn_ui::icon::BOLT)
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .w(14.0),
+            row()
+                .w(14.0)
+                .justify_center()
+                .child(rune::icon(&attn_ui::icon::CHIEF, 12.0).color(t.text_tertiary)),
         )
         .on_select_tx(move |state: &mut State, tx: &mut Tx| {
             let opener = state.window.crew_rows.menu.take().map(|m| m.under);

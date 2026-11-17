@@ -1194,7 +1194,7 @@ pub(super) fn copy_path(
                 .min_w(0.0),
         )
         .child(
-            attn_ui::GlyphButton::new(attn_ui::icon::COPY, "Copy the path (y)")
+            attn_ui::GlyphButton::new(attn_ui::glyph::COPY, "Copy the path (y)")
                 .side(18.0)
                 .on_press_tx(copy)
                 .build(attn_ui::kit(t))

@@ -117,6 +117,30 @@ impl Paint<'_> {
         );
     }
 
+    /// `s` with a disclosure triangle: after it while `open`, before it while closed, as the
+    /// Tauri scenes' `▾` and `▸` in the label's own size.
+    fn disclosed(&mut self, x: f32, baseline: f32, s: &str, open: bool, ink: Ink) {
+        let (style, color) = self.ink(ink);
+        let mark = rune::icon(
+            if open {
+                &attn_ui::icon::DISCLOSE_OPEN
+            } else {
+                &attn_ui::icon::DISCLOSE_CLOSED
+            },
+            style.size,
+        )
+        .color(color);
+        let words = text(s).font(style).color(color);
+        let line = rune::row().items_center().gap(style.size * 0.25);
+        let line = if open {
+            line.child(words).child(mark)
+        } else {
+            line.child(mark).child(words)
+        };
+        self.out
+            .push(line.absolute(x, baseline - style.size * 0.93));
+    }
+
     fn text_end(&mut self, right: f32, baseline: f32, s: &str, ink: Ink) {
         let (style, color) = self.ink(ink);
         self.out.push(
@@ -292,20 +316,21 @@ impl Paint<'_> {
 
     fn queue_rail(&mut self, waiting: &[&str], more: usize) {
         let head = format!("{} WAITING", waiting.len());
-        let tail = format!(
-            "{} {more} MORE {}",
-            attn_ui::icon::CARET_RIGHT,
-            if more == 1 { "AGENT" } else { "AGENTS" }
-        );
-        let rule_from = |label: &str| 18.0 + label.chars().count() as f32 * 6.3 + 6.0;
+        let tail = format!("{more} MORE {}", if more == 1 { "AGENT" } else { "AGENTS" });
+        let rule_after = |chars: usize| 18.0 + chars as f32 * 6.3 + 6.0;
         let more_y = 62.0 + waiting.len() as f32 * 20.0 + 6.0;
         self.text(18.0, 44.0, &head, Ink::Label);
-        self.hline(rule_from(&head), 134.0, 41.5);
+        self.hline(rule_after(head.chars().count()), 134.0, 41.5);
         for (i, label) in waiting.iter().enumerate() {
             self.row(62.0 + i as f32 * 20.0, label, Agent::Waiting, i == 0);
         }
-        self.text(18.0, more_y, &tail, Ink::Label);
-        self.hline(rule_from(&tail), 134.0, more_y - 2.5);
+        self.disclosed(18.0, more_y, &tail, false, Ink::Label);
+        let disclosure = 2;
+        self.hline(
+            rule_after(disclosure + tail.chars().count()),
+            134.0,
+            more_y - 2.5,
+        );
         self.text(
             18.0,
             more_y + 16.0,
@@ -320,12 +345,7 @@ impl Paint<'_> {
             Scene::Profiles => {
                 self.sidebar();
                 self.pill(16.0, 36.0, 84.0, 18.0);
-                self.text(
-                    26.0,
-                    49.0,
-                    &format!("Personal {}", attn_ui::icon::CARET_DOWN),
-                    Ink::Text,
-                );
+                self.disclosed(26.0, 49.0, "Personal", true, Ink::Text);
                 self.desktop_rule(72.0, 1, true);
                 self.row(90.0, "blog", Busy, true);
                 self.row(110.0, "taxes", Waiting, false);
@@ -386,18 +406,14 @@ impl Paint<'_> {
             Scene::QueueBar => {
                 self.rect(9.0, 28.0, 502.0, 24.0, 0.0, self.t.bg_panel, None);
                 self.pill(16.0, 33.0, 60.0, 14.0);
-                self.text(
-                    24.0,
-                    44.0,
-                    &format!("Work {}", attn_ui::icon::CARET_DOWN),
-                    Ink::Small,
-                );
+                self.disclosed(24.0, 44.0, "Work", true, Ink::Small);
                 self.pill(84.0, 33.0, 208.0, 14.0);
                 self.dot(94.0, 40.0, 3.0, Waiting);
-                self.text(
+                self.disclosed(
                     102.0,
                     44.0,
-                    &format!("3 waiting · api › web › docs {}", attn_ui::icon::CARET_DOWN),
+                    "3 waiting · api › web › docs",
+                    true,
                     Ink::Small,
                 );
                 self.chip(444.0, 44.0, 1, true);

@@ -17,7 +17,7 @@ fn box_glyph(state: &str) -> &'static str {
     match state {
         "reported" => "?",
         "confirmed" => "✓",
-        "rejected" => attn_ui::icon::CLOSE,
+        "rejected" => attn_ui::glyph::TIMES,
         _ => "",
     }
 }

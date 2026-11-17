@@ -284,8 +284,7 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
         .fill(t.bg_panel)
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
         .child(
-            GlyphButton::new(attn_ui::icon::HOME, "Home")
-                .font(type_::BODY)
+            GlyphButton::new(&attn_ui::icon::HOME, "Home")
                 .on_press(|state: &mut State| state.window.go_home())
                 .build(attn_ui::kit(t))
                 .key("rail.home")
@@ -354,7 +353,7 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             } else {
                 "Hide the garden"
             },
-            attn_ui::icon::SEEDLING,
+            &attn_ui::icon::GARDEN,
             t,
             crate::garden::toggle_from_icon,
         ),
@@ -366,13 +365,13 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             } else {
                 "Show Automations"
             },
-            attn_ui::icon::STAR_OPEN,
+            &attn_ui::icon::AUTOMATIONS,
             t,
             crate::automations::toggle,
         ),
         tool_button(
             "titlebar.commands",
-            GlyphButton::new(attn_ui::icon::BOLT, "Commands").color(t.brand),
+            GlyphButton::new(&attn_ui::icon::COMMANDS, "Commands").color(t.brand),
             t,
             |state, tx| {
                 crate::dispatch(state, crate::Action::UiCommandPalette, tx);
@@ -382,9 +381,9 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             "titlebar.flow",
             flow,
             if queue {
-                attn_ui::icon::WINDOW
+                &attn_ui::icon::DESKTOP_FLOW
             } else {
-                attn_ui::icon::LIST
+                &attn_ui::icon::QUEUE_FLOW
             },
             t,
             actions::toggle_flow,
@@ -392,7 +391,11 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
         tool(
             "titlebar.sidebar",
             sidebar,
-            if collapsed { "»" } else { "«" },
+            if collapsed {
+                &attn_ui::icon::EXPAND
+            } else {
+                &attn_ui::icon::COLLAPSE
+            },
             t,
             |state, _| state.window.sidebar_hidden = !state.window.sidebar_hidden,
         ),
@@ -408,7 +411,7 @@ fn ledger_button(state: &State, t: &Tokens) -> El {
     tool(
         "titlebar.ledger",
         &format!("Open Ledger{keys}"),
-        attn_ui::icon::CLOCK,
+        &attn_ui::icon::LEDGER,
         t,
         crate::ledger::open_last,
     )
@@ -417,7 +420,7 @@ fn ledger_button(state: &State, t: &Tokens) -> El {
 fn tool(
     key: &str,
     label: &str,
-    glyph: &str,
+    glyph: impl Into<attn_ui::Glyph>,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
@@ -432,6 +435,7 @@ fn tool_button(
 ) -> El {
     button
         .font(type_::BODY)
+        .icon_size(13.0)
         .on_press_tx(press)
         .build(attn_ui::kit(t))
         .key(key.to_owned())
@@ -559,7 +563,7 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
                     .items_center()
                     .gap(space::S1)
                     .child(
-                        text(format!("{} {runs}", attn_ui::icon::STAR_OPEN))
+                        text(format!("{} {runs}", attn_ui::glyph::STAR_OPEN))
                             .font(type_::LABEL)
                             .color(tokens.text_secondary)
                             .single_line(),

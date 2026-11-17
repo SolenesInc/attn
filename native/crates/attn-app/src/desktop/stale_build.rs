@@ -43,7 +43,7 @@ pub(super) fn notice(session: &str, t: &Tokens) -> El {
                 .stale_build_dismissed
                 .insert(dismissed.clone());
         })
-        .label_with(move |_, _| text(attn_ui::icon::CLOSE).font(type_::LABEL).color(ink))
+        .label_with(move |_, _| text(attn_ui::glyph::TIMES).font(type_::LABEL).color(ink))
         .build(attn_ui::kit(t))
         .key(format!("session.{session}.stale-build.dismiss"))
         .h(type_::LABEL.line_px() + 4.0)

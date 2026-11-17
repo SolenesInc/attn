@@ -301,7 +301,7 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
                     .key("home.intro-banner.replay"),
             )
             .child(
-                attn_ui::GlyphButton::new(attn_ui::icon::CLOSE, "Dismiss the intro banner")
+                attn_ui::GlyphButton::new(attn_ui::glyph::TIMES, "Dismiss the intro banner")
                     .help("Dismiss the intro banner")
                     .on_press(|state: &mut State| {
                         state.window.whats_new.banner_dismissed = true;

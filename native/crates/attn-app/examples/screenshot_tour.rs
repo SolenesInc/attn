@@ -1028,6 +1028,63 @@ fn automation_time_zones(dark: bool) {
     snap(&mut world, "automation-time-zones", dark);
 }
 
+/// The Chief before its setup, and a member between sessions.
+fn crew() -> Vec<CrewMember> {
+    let member = |id: &str, name: &str, chief: bool| CrewMember {
+        id: id.into(),
+        name: name.into(),
+        chief: Some(chief),
+        profile_id: PROFILE.into(),
+        revision: 1,
+        resolved_agent: "claude".into(),
+        ..CrewMember::default()
+    };
+    vec![
+        member("chief", "Chief", true),
+        member("scout", "scout", false),
+    ]
+}
+
+fn with_crew(dark: bool) -> World {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.crew = Some(crew());
+    let mut world = start(Daemon::scripted().state(state));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    world
+}
+
+/// Home, with the crew in the sidebar.
+fn home(dark: bool) {
+    let mut world = with_crew(dark);
+    press(&mut world, Action::SessionGoToDashboard);
+    snap(&mut world, "home", dark);
+}
+
+/// The palette offering to set up the Chief.
+fn palette_chief(dark: bool) {
+    let mut world = with_crew(dark);
+    press(&mut world, Action::UiCommandPalette);
+    snap(&mut world, "palette-chief", dark);
+}
+
+fn notifications(dark: bool) {
+    let mut world = with_document(dark);
+    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    snap(&mut world, "notifications", dark);
+}
+
+fn attention(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::DockAttention);
+    snap(&mut world, "attention", dark);
+}
+
+fn session_menu(dark: bool) {
+    let mut world = with_document(dark);
+    world.gesture(|app| app.click(Target::role("button").name("Actions for idle agent")));
+    snap(&mut world, "session-menu", dark);
+}
+
 fn shoot(out: PathBuf, scheme: Option<String>) {
     if let Some(id) = &scheme {
         let ids: Vec<&str> = attn_ui::colors::SCHEMES.iter().map(|s| s.id).collect();
@@ -1068,6 +1125,11 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         review_file(dark);
         ledger_seeded(dark);
         chief_setup(dark);
+        home(dark);
+        palette_chief(dark);
+        notifications(dark);
+        attention(dark);
+        session_menu(dark);
     }
 }
 

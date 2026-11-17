@@ -1496,7 +1496,7 @@ fn pressing_a_task_box_checks_it_without_moving_the_caret() {
     open_fullscreen(&mut world);
     assert!(shows_line(
         &world,
-        &format!("{} todo", attn_ui::icon::UNCHECKED)
+        &format!("{} todo", attn_ui::glyph::UNCHECKED)
     ));
 
     world
@@ -1513,7 +1513,7 @@ fn pressing_a_task_box_checks_it_without_moving_the_caret() {
     );
     assert!(shows_line(
         &world,
-        &format!("{} todo", attn_ui::icon::CHECKED)
+        &format!("{} todo", attn_ui::glyph::CHECKED)
     ));
     world.advance(Duration::from_millis(700));
     assert!(

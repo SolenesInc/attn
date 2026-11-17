@@ -247,7 +247,7 @@ fn popup(
     chips.push(chip(
         id,
         "write",
-        attn_ui::icon::COMMENT,
+        attn_ui::glyph::COMMENT,
         "Write a comment",
         t,
         move |state, tx| draft::write(state, &written, tx),
@@ -257,7 +257,7 @@ fn popup(
         chip(
             id,
             "remove",
-            attn_ui::icon::TRASH,
+            &attn_ui::icon::TRASH,
             "Remove this annotation",
             t,
             move |state, tx| draft::remove(state, &removed, &gone, tx),
@@ -296,7 +296,7 @@ fn popup(
         let (dragged, keyed) = (id.to_owned(), id.to_owned());
         parts.insert(
             0,
-            text(attn_ui::icon::GRABBER)
+            text(attn_ui::glyph::GRABBER)
                 .key(format!("terminal.{id}.annotation.handle"))
                 .role("button")
                 .label("Move comment editor with arrow keys")
@@ -341,7 +341,7 @@ fn popup(
 fn chip(
     id: &str,
     part: &str,
-    glyph: &str,
+    glyph: impl Into<attn_ui::Glyph>,
     label: &str,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
@@ -563,7 +563,7 @@ fn panel(
             drag_box(state, &dragged, Moves::Panel, d, tx);
         })
         .child(
-            text(attn_ui::icon::GRABBER)
+            text(attn_ui::glyph::GRABBER)
                 .font(type_::LABEL)
                 .color(t.text_tertiary),
         )
@@ -712,7 +712,7 @@ fn panel(
 }
 
 fn card(id: &str, mark: &Annotation, t: &Tokens) -> El {
-    let emoji = annotations::label_by_id(&mark.label).map_or(attn_ui::icon::COMMENT, |l| l.emoji);
+    let emoji = annotations::label_by_id(&mark.label).map_or(attn_ui::glyph::COMMENT, |l| l.emoji);
     let (opened, removed, mark_id, gone) = (
         id.to_owned(),
         id.to_owned(),
@@ -752,7 +752,7 @@ fn card(id: &str, mark: &Annotation, t: &Tokens) -> El {
                 draft::open_card(state, &opened, &mark_id, at, tx);
             }
         });
-    let remove = GlyphButton::new(attn_ui::icon::CLOSE, "Remove annotation")
+    let remove = GlyphButton::new(attn_ui::glyph::TIMES, "Remove annotation")
         .variant(ButtonVariant::GhostFaint)
         .font(type_::LABEL)
         .side(type_::LABEL.line_px())

@@ -228,7 +228,9 @@ pub(super) fn chief_slot(state: &State, t: &Tokens) -> Option<El> {
     let key = line.key();
     Some(match &line {
         QLine::Agent(agent) => queue_row(key, agent, false, super::logos(state), t),
-        QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, t),
+        QLine::ChiefSetup(chief) => {
+            super::crew::chief_setup_row(key, chief, super::logos(state), t)
+        }
         QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
         _ => return None,
     })
@@ -582,7 +584,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 }
                 QLine::CrewRule => crew_rule(key, t),
                 QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
-                QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, t),
+                QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, logos, t),
                 QLine::RunsHead { runs, needing } => runs_head(key, *runs, *needing, keys, t),
                 QLine::RunGroup(group) => run_group(key, group, t),
                 QLine::Filter => unreachable!("the filter is built above"),
@@ -722,9 +724,9 @@ fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: 
                 .gap(space::S1)
                 .child(
                     text(if open {
-                        attn_ui::icon::CARET_DOWN
+                        attn_ui::glyph::CARET_DOWN
                     } else {
-                        attn_ui::icon::CARET_RIGHT
+                        attn_ui::glyph::CARET_RIGHT
                     })
                     .font(type_::LABEL)
                     .color(tokens.text_tertiary),
@@ -832,9 +834,9 @@ fn run_group(key: String, group: &RunGroup, t: &Tokens) -> El {
                 .gap(space::S1)
                 .child(
                     text(if open {
-                        attn_ui::icon::CARET_DOWN
+                        attn_ui::glyph::CARET_DOWN
                     } else {
-                        attn_ui::icon::CARET_RIGHT
+                        attn_ui::glyph::CARET_RIGHT
                     })
                     .font(type_::LABEL)
                     .color(tokens.text_tertiary),
@@ -878,11 +880,7 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
         .h(ROW_HEIGHT)
         .items_center()
         .gap(space::S1)
-        .child(
-            text(attn_ui::icon::SEARCH)
-                .font(type_::BODY)
-                .color(t.text_tertiary),
-        )
+        .child(rune::icon(&attn_ui::icon::SEARCH, 11.0).color(t.text_dimmed))
         .child(
             TextInput::new(&state.window.agent_filter)
                 .key(FILTER_FIELD)
@@ -998,7 +996,7 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             key,
             "snooze",
             format!("Snooze {name}"),
-            attn_ui::icon::MOON,
+            attn_ui::glyph::MOON,
             t,
             move |state, tx| super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx),
         )
@@ -1010,7 +1008,7 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             key,
             "ask-close",
             format!("Ask {name} to close"),
-            attn_ui::icon::MOON,
+            attn_ui::glyph::MOON,
             t,
             move |state, tx| {
                 if chief {

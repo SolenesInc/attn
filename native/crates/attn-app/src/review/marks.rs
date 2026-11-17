@@ -186,7 +186,7 @@ pub(crate) fn mark_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
 fn remove(id: &str, help: &'static str, t: &Tokens) -> El {
     let key = format!("review.mark.{id}.remove");
     let id = id.to_owned();
-    attn_ui::GlyphButton::new(attn_ui::icon::CLOSE, help)
+    attn_ui::GlyphButton::new(attn_ui::glyph::TIMES, help)
         .help(help)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             if state.drafts.remove(&id, tx.clock()) {

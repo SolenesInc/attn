@@ -1,7 +1,7 @@
 use attn_ui::colors::mix_srgb;
 use attn_ui::keycap;
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Dialog, TextInput};
@@ -589,7 +589,14 @@ fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Toke
         .child(
             row()
                 .gap(space::S1)
-                .child(text(if r.recent { icon::CLOCK } else { icon::FOLDER }).font(type_::BODY))
+                .child(
+                    text(if r.recent {
+                        glyph::CLOCK
+                    } else {
+                        glyph::FOLDER
+                    })
+                    .font(type_::BODY),
+                )
                 .child(text(r.name.clone()).font(type_::BODY).color(t.text_primary)),
         );
     if let Some(shown) = &r.shown_path {
@@ -642,9 +649,9 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                     .gap(space::S1)
                     .child(
                         text(if d.main {
-                            icon::CIRCLE
+                            glyph::CIRCLE
                         } else {
-                            icon::CIRCLE_DOT
+                            glyph::CIRCLE_DOT
                         })
                         .font(type_::BODY),
                     )
@@ -681,9 +688,9 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
             })
             .child(
                 text(if chosen {
-                    icon::CIRCLE_DOT
+                    glyph::CIRCLE_DOT
                 } else {
-                    icon::CIRCLE_OPEN
+                    glyph::CIRCLE_OPEN
                 })
                 .font(type_::BODY),
             )
@@ -719,7 +726,7 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                         .grow(1.0),
                 )
                 .child(
-                    GlyphButton::new(icon::REFRESH, "Pick another name")
+                    GlyphButton::new(glyph::REFRESH, "Pick another name")
                         .variant(ButtonVariant::Ghost)
                         .font(type_::BODY)
                         .side(type_::BODY.line_px())

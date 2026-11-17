@@ -10,7 +10,7 @@ use attn_protocol::{
     PRVisitedMessage, RefreshPRsMessage, Session,
 };
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
@@ -51,12 +51,12 @@ impl Act {
     /// The glyph and name of its button while it is in `phase`.
     fn shown(self, phase: Option<Phase>) -> (&'static str, &'static str) {
         match (self, phase) {
-            (Act::Approve, None) => (icon::CHECK, "Approve"),
+            (Act::Approve, None) => (glyph::CHECK, "Approve"),
             (Act::Approve, Some(Phase::Busy)) => ("…", "Approving"),
-            (Act::Approve, Some(Phase::Done(_))) => (icon::CHECK, "Approved"),
-            (Act::Merge, None) => (icon::MERGE, "Merge"),
+            (Act::Approve, Some(Phase::Done(_))) => (glyph::CHECK, "Approved"),
+            (Act::Merge, None) => (glyph::MERGE, "Merge"),
             (Act::Merge, Some(Phase::Busy)) => ("…", "Merging"),
-            (Act::Merge, Some(Phase::Done(_))) => (icon::CHECK, "Merged"),
+            (Act::Merge, Some(Phase::Done(_))) => (glyph::CHECK, "Merged"),
         }
     }
 }
@@ -394,7 +394,9 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
                         .color(t.text_secondary),
                 )
                 .child(
-                    GlyphButton::new(icon::CLOSE, "Close")
+                    GlyphButton::new(glyph::TIMES, "Close")
+                        .font(glyph::LARGE)
+                        .color(t.text_dimmed)
                         .help("Close (Esc)")
                         .on_press_tx(close)
                         .build(k)
@@ -538,7 +540,7 @@ fn pr_row(
     let home = place == Place::Home;
     let new_session = home.then(|| {
         let pr = pr.clone();
-        GlyphButton::new(icon::POP_OUT, "New worktree session")
+        GlyphButton::new(glyph::POP_OUT, "New worktree session")
             .help("New worktree session")
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 crate::picker::pull_request::open_in_worktree(state, &pr, tx)
@@ -576,7 +578,7 @@ fn pr_row(
         .child(action(Act::Approve))
         .child(action(Act::Merge))
         .child(
-            GlyphButton::new(icon::BELL_SLASH, "Mute this PR")
+            GlyphButton::new(glyph::BELL_SLASH, "Mute this PR")
                 .help("Mute this PR")
                 .on_press(move |state: &mut State| mute(state, &mute_id))
                 .build(k)
@@ -619,7 +621,7 @@ fn marks(pr: &PR, key: &str, t: &Tokens) -> Vec<El> {
     }
     if pr.approved_by_me {
         marks.push(
-            text(icon::CHECK)
+            text(glyph::CHECK)
                 .key(format!("{key}.approved"))
                 .role("status")
                 .label("Approved")
@@ -822,7 +824,10 @@ fn pr_card(state: &State, t: &Tokens) -> El {
                         .grow(1.0),
                 )
                 .child(
-                    GlyphButton::new(icon::REFRESH, "Refresh PRs")
+                    GlyphButton::new(&icon::REFRESH, "Refresh PRs")
+                        .icon_size(12.0)
+                        .color(t.text_dimmed)
+                        .side(20.0)
                         .help(refresh_help)
                         .on_press_tx(refresh)
                         .build(k)
@@ -858,9 +863,9 @@ fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
                     let said = format!(
                         "{} {name}  {} review",
                         if folded {
-                            icon::CARET_RIGHT
+                            glyph::CARET_RIGHT
                         } else {
-                            icon::CARET_DOWN
+                            glyph::CARET_DOWN
                         },
                         prs.len()
                     );
@@ -877,7 +882,7 @@ fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
                 .grow(1.0),
         )
         .child(
-            GlyphButton::new(icon::BAN, "Mute all PRs from this repo")
+            GlyphButton::new(glyph::BAN, "Mute all PRs from this repo")
                 .help("Mute all PRs from this repo")
                 .on_press(move |state: &mut State| mute_repo(state, &mute_repo_id))
                 .build(k)

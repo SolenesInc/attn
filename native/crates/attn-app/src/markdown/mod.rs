@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::{radius, space};
 use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
 use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
@@ -539,9 +539,9 @@ fn with_copy(card: El, frame: &CodeFrame<'_>, view: &str, copied: Option<usize>,
     }
     let done = copied == Some(frame.index);
     let (glyph, label) = if done {
-        (icon::CHECK, "Copied!")
+        (glyph::CHECK, "Copied!")
     } else {
-        (icon::COPY, "Copy code")
+        (glyph::COPY, "Copy code")
     };
     let (code, view, index) = (frame.source.to_owned(), view.to_owned(), frame.index);
     let button = GlyphButton::new(glyph, label)

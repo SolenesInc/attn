@@ -5,7 +5,7 @@
 
 use attn_protocol::{StartUpdateMessage, UpdateOutpostProgress, UpdateRun};
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, Tx, row, text};
 use rune_kit::{Button, ControlSize};
@@ -208,7 +208,7 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
                 .color(t.text_tertiary)
         });
     let dismiss = (!open).then(|| {
-        GlyphButton::new(icon::CLOSE, "Dismiss update")
+        GlyphButton::new(glyph::TIMES, "Dismiss update")
             .help("Dismiss")
             .on_press(close)
             .build(kit)

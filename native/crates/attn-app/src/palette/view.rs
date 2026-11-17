@@ -232,13 +232,13 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
             }
             option
                 .children(icon.map(|icon| {
-                    text(icon.glyph())
+                    row()
                         .key(format!("{key}.icon"))
                         .role("img")
                         .label(icon.word())
-                        .font(type_::BODY)
-                        .color(t.text_tertiary)
                         .w(16.0)
+                        .justify_center()
+                        .child(icon.glyph().draw(15.0, type_::BODY, t.text_tertiary))
                 }))
                 .child(name)
                 .children(shortcut.as_ref().map(|caps| {

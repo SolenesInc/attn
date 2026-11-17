@@ -107,7 +107,9 @@ fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
                 .key("asks.replied"),
         )
         .child(
-            attn_ui::GlyphButton::new(attn_ui::icon::CLOSE, "Close asks")
+            attn_ui::GlyphButton::new(attn_ui::glyph::TIMES, "Close asks")
+                .font(attn_ui::glyph::LARGE)
+                .color(t.text_dimmed)
                 .on_press_tx(super::close)
                 .build(attn_ui::kit(t))
                 .key("asks.close"),
@@ -607,10 +609,10 @@ fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t:
         let recommended = question.recommended.as_deref() == Some(choice.label.as_str());
         let (ask_id, q, label) = (ask.to_owned(), question.key.clone(), choice.label.clone());
         let mark = match (kind, picked) {
-            (Kind::One, true) => attn_ui::icon::CIRCLE_DOT,
-            (Kind::One, false) => attn_ui::icon::CIRCLE_OPEN,
-            (_, true) => attn_ui::icon::CHECKED,
-            (_, false) => attn_ui::icon::UNCHECKED,
+            (Kind::One, true) => attn_ui::glyph::CIRCLE_DOT,
+            (Kind::One, false) => attn_ui::glyph::CIRCLE_OPEN,
+            (_, true) => attn_ui::glyph::CHECKED,
+            (_, false) => attn_ui::glyph::UNCHECKED,
         };
         let el =
             row()
@@ -1159,7 +1161,7 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
                 row()
                     .gap(2.0)
                     .items_center()
-                    .child(text("?").font(type_::BODY).color(tokens.text_secondary))
+                    .child(rune::icon(&attn_ui::icon::ASKS, 13.0).color(tokens.text_secondary))
                     .children((count > 0).then(|| {
                         text(count.to_string())
                             .font(type_::MONO_CAPTION)
