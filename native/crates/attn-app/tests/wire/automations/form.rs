@@ -1000,3 +1000,87 @@ fn a_new_named_desktop_goes_beside_the_definition_and_never_into_its_spec() {
     assert_eq!(request["profile_id"], "work");
     assert!(applied(&world)[0].0.get("launch_desktop").is_none());
 }
+
+fn reopen_drawer(world: &mut World) {
+    click(world, "titlebar.automations");
+    assert!(!has(world, "automations.list"));
+    click(world, "titlebar.automations");
+}
+
+#[test]
+fn a_save_answered_after_its_form_closed_leaves_the_next_form_and_its_edits_alone() {
+    let mut world = open_new_with(|daemon| {
+        daemon.answer_in_turn("automation_apply", [Answer::Hold]);
+    });
+    fill_manual(&mut world);
+    press(&mut world, "save");
+    reopen_drawer(&mut world);
+    click(&mut world, "automations.new");
+    fill(&mut world, "name", "Second draft");
+
+    let save = world.daemon.sent_of("automation_apply")[0].clone();
+    world.daemon.reply_to(
+        &save,
+        AutomationApplyResultMessage {
+            success: true,
+            definition: Some(definition(4, "My automation")),
+            spec_yaml: Some(String::new()),
+            ..AutomationApplyResultMessage::new()
+        },
+    );
+    world.settle();
+
+    assert!(has(&world, FORM));
+    assert_eq!(value(&world, "name"), "Second draft");
+}
+
+#[test]
+fn a_read_answered_after_its_form_closed_never_fills_the_next_form() {
+    let first = Stored::of(definition(1, "PR reviewer"), manual_spec("PR reviewer"));
+    let mut world = open_scene(&first, |daemon| {
+        daemon.on("automation_definitions_get", |_| {
+            message(attn_protocol::AutomationDefinitionsResultMessage {
+                success: true,
+                definitions: Some(vec![definition(1, "PR reviewer"), definition(2, "Triage")]),
+                ..attn_protocol::AutomationDefinitionsResultMessage::new()
+            })
+        });
+        daemon.answer_in_turn("automation_definition_get", [Answer::Hold, Answer::Hold]);
+    });
+    click(&mut world, "automations.edit.1");
+    reopen_drawer(&mut world);
+    click(&mut world, "automations.edit.2");
+    let reads = world.daemon.sent_of("automation_definition_get");
+    assert_eq!(reads.len(), 2);
+
+    let answer = |id: i64, name: &str| AutomationDefinitionResultMessage {
+        success: true,
+        spec_json: Some(with(manual_spec(name), "id", json!(id)).to_string()),
+        spec_yaml: Some(String::new()),
+        definition: Some(definition(id, name)),
+        ..AutomationDefinitionResultMessage::new()
+    };
+    world.daemon.reply_to(&reads[0], answer(1, "PR reviewer"));
+    world.settle();
+    assert!(!has(&world, &key("id")));
+    assert!(!has(&world, &key("name")));
+
+    world.daemon.reply_to(&reads[1], answer(2, "Triage"));
+    world.settle();
+    assert_eq!(name(&world, &key("id")).as_deref(), Some("ID: 2"));
+    fill(&mut world, "name", "Triage, renamed");
+    press(&mut world, "save");
+    let saves = applied(&world);
+    assert_eq!(saves.len(), 1);
+    assert_eq!(saves[0].0["name"], "Triage, renamed");
+    assert_eq!(saves[0].1, 2);
+}
+
+#[test]
+fn the_title_bar_closes_the_drawer_while_a_form_field_holds_the_keyboard() {
+    let mut world = open_new();
+    fill_manual(&mut world);
+    click(&mut world, "titlebar.automations");
+    assert!(!has(&world, FORM));
+    assert!(!has(&world, "automations.list"));
+}

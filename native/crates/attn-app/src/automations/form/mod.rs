@@ -92,7 +92,10 @@ pub(crate) struct Form {
     pub(crate) open_select: Option<String>,
     pub(crate) zone_suggestions: ZoneSuggestions,
     focused: Option<String>,
-    epoch: u64,
+    /// This opening of the form: a save or delete answered after it closed changes nothing.
+    opening: u64,
+    /// The read the form waits for: only its answer fills the form.
+    reading: u64,
 }
 
 /// The zones listed under the time zone field while the user types in it, as the Tauri form's
@@ -197,7 +200,7 @@ pub(crate) fn choose_zone(state: &mut State, zone: &str) {
 }
 
 impl Form {
-    fn new(id: Option<i64>, profile: String) -> Form {
+    fn new(id: Option<i64>, profile: String, opening: u64) -> Form {
         let mut form = Form {
             id,
             load: if id.is_some() {
@@ -243,7 +246,8 @@ impl Form {
             open_select: None,
             zone_suggestions: ZoneSuggestions::Hidden,
             focused: None,
-            epoch: 0,
+            opening,
+            reading: 0,
         };
         form.reset(Values::new(&local_zone()));
         form
@@ -376,10 +380,16 @@ pub(crate) fn form_mut(state: &mut State) -> Option<&mut Form> {
     state.window.automations.form.as_mut()
 }
 
+/// The form, while it is still the opening that asked.
+fn opened_as(state: &mut State, opening: u64) -> Option<&mut Form> {
+    form_mut(state).filter(|f| f.opening == opening)
+}
+
 /// Opens the form for a new automation, or for `definition` and reads it.
 pub(crate) fn open(state: &mut State, definition: Option<i64>, tx: &mut Tx) {
     let profile = state.facts.profiles.selected.clone();
-    state.window.automations.form = Some(Form::new(definition, profile));
+    let opening = state.window.automations.issue();
+    state.window.automations.form = Some(Form::new(definition, profile, opening));
     state.window.automations.pull_request = None;
     crate::settings::want_harnesses(state, tx);
     match definition {
@@ -390,9 +400,12 @@ pub(crate) fn open(state: &mut State, definition: Option<i64>, tx: &mut Tx) {
 
 /// Reads the definition into the form: on open, and on Reload after a refused save.
 fn read(state: &mut State, id: i64, reload: bool, tx: &mut Tx) {
-    let Some(f) = form_mut(state) else { return };
-    f.epoch += 1;
-    let epoch = f.epoch;
+    let automations = &mut state.window.automations;
+    let reading = automations.issue();
+    let Some(f) = automations.form.as_mut() else {
+        return;
+    };
+    f.reading = reading;
     state.ask(
         |request_id| AutomationDefinitionGetMessage {
             request_id: Some(request_id),
@@ -400,7 +413,7 @@ fn read(state: &mut State, id: i64, reload: bool, tx: &mut Tx) {
             ..AutomationDefinitionGetMessage::new()
         },
         move |state, answer, tx: &mut Tx| {
-            let Some(f) = form_mut(state).filter(|f| f.epoch == epoch) else {
+            let Some(f) = form_mut(state).filter(|f| f.reading == reading) else {
                 return;
             };
             let read = answer.outcome().and_then(|reply| {
@@ -490,6 +503,7 @@ pub(crate) fn save(state: &mut State, tx: &mut Tx) {
     let (expected_id, expected_revision) = (f.id.unwrap_or(0), f.revision);
     let launch_desktop = f.launch_desktop.clone();
     let profile = Some(f.profile.clone()).filter(|p| !p.is_empty());
+    let opening = f.opening;
     state.ask(
         |request_id| AutomationApplyMessage {
             request_id: Some(request_id),
@@ -501,7 +515,9 @@ pub(crate) fn save(state: &mut State, tx: &mut Tx) {
             ..AutomationApplyMessage::new()
         },
         move |state, answer, tx: &mut Tx| {
-            let Some(f) = form_mut(state) else { return };
+            let Some(f) = opened_as(state, opening) else {
+                return;
+            };
             f.saving = false;
             let code = match &answer {
                 Answer::Reply(reply) => reply
@@ -533,24 +549,29 @@ pub(crate) fn delete(state: &mut State, tx: &mut Tx) {
         f.delete_armed = true;
         return;
     }
+    let opening = f.opening;
     state.ask(
         |request_id| AutomationDeleteMessage {
             request_id: Some(request_id),
             definition_id: id,
             ..AutomationDeleteMessage::new()
         },
-        move |state, answer, tx: &mut Tx| match answer.outcome() {
-            Ok(_) => {
-                let automations = &mut state.window.automations;
-                automations.form = None;
-                if automations.selected == Some(id) {
-                    automations.selected = None;
+        move |state, answer, tx: &mut Tx| {
+            let outcome = answer.outcome();
+            let Some(f) = opened_as(state, opening) else {
+                return;
+            };
+            match outcome {
+                Ok(_) => {
+                    let automations = &mut state.window.automations;
+                    automations.form = None;
+                    if automations.selected == Some(id) {
+                        automations.selected = None;
+                    }
+                    tx.focus(DRAWER, false);
+                    super::list(state, tx);
                 }
-                tx.focus(DRAWER, false);
-                super::list(state, tx);
-            }
-            Err(why) => {
-                if let Some(f) = form_mut(state) {
+                Err(why) => {
                     f.delete_armed = false;
                     f.save_error = Some(why);
                 }

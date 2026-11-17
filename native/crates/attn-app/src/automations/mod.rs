@@ -30,9 +30,16 @@ const RUN_ANSWER_SECONDS: f64 = 30.0;
 pub(crate) const STILL_IN_FLIGHT: &str = "Run request is still in flight — it will appear in run history; clicking again retries the same run.";
 const MANUAL: &str = "manual:";
 
-/// What the drawer holds while the window lives, open or not.
+/// What the drawer holds while the window lives, open or not. Everything but the form belongs
+/// to `profile`, and goes when the window shows another.
 #[derive(Default)]
 pub struct Automations {
+    profile: String,
+    /// The identity of the drawer's time on `profile`: a reply asked for in another one
+    /// changes nothing.
+    tenure: u64,
+    /// The last identity handed out, to a tenure, a Run now or a form's opening or read.
+    issued: u64,
     pub(crate) definitions: Vec<AutomationDefinitionSummary>,
     /// The daemon answered a list since the drawer opened.
     pub(crate) loaded: bool,
@@ -54,9 +61,17 @@ pub struct Automations {
     /// The request id of each definition's manual run not yet known delivered or failed. The
     /// daemon keeps it as the run's dedup key, so a retry of the same click must reuse it.
     pub(crate) run_keys: HashMap<i64, String>,
-    attempts: u64,
     pub(crate) pull_request: Option<PullRequestPrompt>,
     pub(crate) form: Option<form::Form>,
+    /// Where an edit lands that a field of the form sends after the form is gone.
+    pub(crate) spare: TextEdit,
+}
+
+impl Automations {
+    pub(crate) fn issue(&mut self) -> u64 {
+        self.issued += 1;
+        self.issued
+    }
 }
 
 pub(crate) struct Running {
@@ -84,6 +99,7 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
 }
 
 pub(crate) fn open(state: &mut State, tx: &mut Tx) {
+    hold_selected_profile(state);
     state.window.open_drawer(Drawer::Automations);
     let automations = &mut state.window.automations;
     automations.loaded = false;
@@ -104,10 +120,12 @@ pub(crate) fn close(state: &mut State, tx: &mut Tx) {
 }
 
 /// Lists the definitions again, and the selected one's runs, when the daemon says they changed
-/// while the drawer is open; the open form keeps what is typed in it.
+/// or the window shows another profile while the drawer is open; the open form keeps what is
+/// typed in it.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
+    let switched = hold_selected_profile(state);
     let changes = state.facts.automations_changed;
-    if !is_open(state) || state.window.automations.seen_changes == changes {
+    if !is_open(state) || (!switched && state.window.automations.seen_changes == changes) {
         return;
     }
     state.window.automations.seen_changes = changes;
@@ -115,6 +133,47 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     if let Some(id) = state.window.automations.selected {
         read_runs(state, id, tx);
     }
+}
+
+/// Starts the drawer over on the profile the window shows, when it held another. Returns whether
+/// it did.
+fn hold_selected_profile(state: &mut State) -> bool {
+    let selected = &state.facts.profiles.selected;
+    let automations = &mut state.window.automations;
+    if &automations.profile == selected {
+        return false;
+    }
+    let mut fresh = Automations {
+        profile: selected.clone(),
+        issued: automations.issued,
+        form: automations.form.take(),
+        ..Automations::default()
+    };
+    fresh.tenure = fresh.issue();
+    *automations = fresh;
+    true
+}
+
+/// Sends a request of the drawer's, whose answer `then` takes only while the drawer is still on
+/// the profile it was sent for.
+fn ask_in_tenure(
+    state: &mut State,
+    id: String,
+    command: &impl serde::Serialize,
+    then: impl FnOnce(&mut State, Answer, &mut Tx) + 'static,
+    tx: &mut Tx,
+) {
+    let tenure = state.window.automations.tenure;
+    state.ask_as(
+        id,
+        command,
+        move |state, answer, tx| {
+            if state.window.automations.tenure == tenure {
+                then(state, answer, tx);
+            }
+        },
+        tx,
+    );
 }
 
 /// The list goes out under a `request_id` that carries its command, as the Tauri app's does, so
@@ -125,7 +184,8 @@ fn list(state: &mut State, tx: &mut Tx) {
         request_id: Some(id.clone()),
         ..AutomationDefinitionsGetMessage::new()
     };
-    state.ask_as(
+    ask_in_tenure(
+        state,
         id,
         &message,
         |state, answer, tx| {
@@ -158,9 +218,12 @@ fn list(state: &mut State, tx: &mut Tx) {
 }
 
 fn read_runs(state: &mut State, definition: i64, tx: &mut Tx) {
-    state.ask(
-        |request_id| AutomationRunsGetMessage {
-            request_id: Some(request_id),
+    let id = state.next_request_id();
+    ask_in_tenure(
+        state,
+        id.clone(),
+        &AutomationRunsGetMessage {
+            request_id: Some(id),
             definition_id: definition,
             ..AutomationRunsGetMessage::new()
         },
@@ -229,9 +292,12 @@ pub(crate) fn set_enabled(state: &mut State, definition: i64, enabled: bool, tx:
         return;
     }
     automations.toggle_errors.remove(&definition);
-    state.ask(
-        |request_id| AutomationSetEnabledMessage {
-            request_id: Some(request_id),
+    let id = state.next_request_id();
+    ask_in_tenure(
+        state,
+        id.clone(),
+        &AutomationSetEnabledMessage {
+            request_id: Some(id),
             definition_id: definition,
             enabled,
             ..AutomationSetEnabledMessage::new()
@@ -304,8 +370,7 @@ fn run(state: &mut State, definition: i64, pr_url: Option<String>, tx: &mut Tx) 
         .entry(definition)
         .or_insert_with(|| uuid::Uuid::new_v4().to_string())
         .clone();
-    automations.attempts += 1;
-    let attempt = automations.attempts;
+    let attempt = automations.issue();
     let until = tx.clock() + RUN_ANSWER_SECONDS;
     automations
         .running
@@ -318,7 +383,8 @@ fn run(state: &mut State, definition: i64, pr_url: Option<String>, tx: &mut Tx) 
         pr_url,
         ..AutomationRunMessage::new()
     };
-    state.ask_as(
+    ask_in_tenure(
+        state,
         key,
         &message,
         move |state, answer: Answer, _| {

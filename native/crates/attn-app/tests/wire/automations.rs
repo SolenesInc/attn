@@ -5,7 +5,7 @@ use attn_protocol::{
     AutomationDefinitionSummary, AutomationDefinitionsResultMessage, AutomationGuardCheck,
     AutomationProvenance, AutomationRunFix, AutomationRunResultMessage, AutomationRunSummary,
     AutomationRunsResultMessage, AutomationSetEnabledResultMessage, AutomationsChangedMessage,
-    InitialStateMessage,
+    Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
 };
 use attn_testkit::{Daemon, Target, World, message};
 use serde_json::Value;
@@ -628,4 +628,81 @@ fn the_list_takes_only_the_answer_to_its_own_request() {
     world.settle();
     assert!(has(&world, "automations.row.1"));
     assert!(!has(&world, "automations.row.99"));
+}
+
+fn listing(definitions: Vec<AutomationDefinitionSummary>) -> attn_testkit::Answer {
+    attn_testkit::Answer::Reply(message(AutomationDefinitionsResultMessage {
+        success: true,
+        definitions: Some(definitions),
+        ..AutomationDefinitionsResultMessage::new()
+    }))
+}
+
+fn switch_profile(world: &mut World, profile: &str) {
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            id: profile.into(),
+            name: profile.into(),
+            current_desktop_id: format!("{profile}-d1"),
+            revision: 1,
+            ..Profile::default()
+        },
+        desktops: vec![Desktop {
+            id: format!("{profile}-d1"),
+            profile_id: profile.into(),
+            order_key: "k1".into(),
+            ..Desktop::default()
+        }],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+}
+
+#[test]
+fn a_profile_switch_shows_the_new_profile_s_automations_and_drops_what_the_old_one_asked_for() {
+    let work = AutomationDefinitionSummary {
+        profile_id: "work".into(),
+        ..definition(1, "Work reviewer")
+    };
+    let home = AutomationDefinitionSummary {
+        profile_id: "home".into(),
+        ..definition(2, "Home triage")
+    };
+    let mut world = opened_with(&Scene::default().with_runs(vec![run("r1")]), |daemon| {
+        daemon.answer_in_turn(
+            "automation_definitions_get",
+            [
+                listing(vec![work.clone()]),
+                attn_testkit::Answer::Hold,
+                listing(vec![home.clone()]),
+            ],
+        );
+    });
+    click(&mut world, "automations.row.1");
+    assert!(has(&world, "automations.runs"));
+    changed(&mut world);
+    let held = world.daemon.sent_of("automation_definitions_get")[1].clone();
+
+    switch_profile(&mut world, "home");
+    assert_eq!(listed(&world), 3);
+    assert!(has(&world, "automations.row.2"));
+    assert!(!has(&world, "automations.row.1"));
+    assert!(!has(&world, "automations.runs"));
+
+    world.daemon.reply_to(
+        &held,
+        AutomationDefinitionsResultMessage {
+            success: true,
+            definitions: Some(vec![work]),
+            ..AutomationDefinitionsResultMessage::new()
+        },
+    );
+    world.settle();
+    assert!(has(&world, "automations.row.2"));
+    assert!(!has(&world, "automations.row.1"));
+    let state = world
+        .automate("state", serde_json::json!({"of": "automations"}))
+        .unwrap();
+    assert_eq!(state["selected"], Value::Null);
+    assert_eq!(state["runs"], Value::Null);
 }

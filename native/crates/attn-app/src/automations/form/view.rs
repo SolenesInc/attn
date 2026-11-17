@@ -103,8 +103,14 @@ fn input(
         .w_full()
 }
 
-fn edit_of(state: &mut State) -> &mut Form {
-    form_mut(state).expect("the form shows")
+/// The form's field `pick` names, or a spare once the form is gone, so a late edit has somewhere
+/// to land.
+fn field_of(state: &mut State, pick: impl FnOnce(&mut Form) -> &mut TextEdit) -> &mut TextEdit {
+    let automations = &mut state.window.automations;
+    match automations.form.as_mut() {
+        Some(f) => pick(f),
+        None => &mut automations.spare,
+    }
 }
 
 pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
@@ -195,7 +201,7 @@ fn name(f: &Form, t: &Tokens) -> El {
             field_key(Field::Name),
             "Name",
             "Automation name",
-            |s| &mut edit_of(s).name,
+            |s| field_of(s, |f| &mut f.name),
             t,
         ))
         .children(field_error(f, Field::Name, t));
@@ -254,7 +260,7 @@ fn trigger(f: &Form, t: &Tokens) -> El {
                             key("guard"),
                             "Only run if",
                             "git rev-parse HEAD",
-                            |s| &mut edit_of(s).guard,
+                            |s| field_of(s, |f| &mut f.guard),
                             t,
                         ))
                         .child(hint(
@@ -286,7 +292,7 @@ fn directory(f: &Form, t: &Tokens) -> El {
                         field_key(Field::DirectoryPath),
                         "Folder",
                         "/absolute/path",
-                        |s| &mut edit_of(s).directory,
+                        |s| field_of(s, |f| &mut f.directory),
                         t,
                     )
                     .grow(1.0),
@@ -356,12 +362,13 @@ fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
         .spellcheck(false)
         .disabled(f.saving)
         .on_edit(move |state: &mut State| {
-            let f = edit_of(state);
-            if exclude {
-                &mut f.exclude_draft
-            } else {
-                &mut f.include_draft
-            }
+            field_of(state, |f| {
+                if exclude {
+                    &mut f.exclude_draft
+                } else {
+                    &mut f.include_draft
+                }
+            })
         })
         .on_submit(move |state: &mut State, _: &mut Tx| super::add_repository(state, exclude))
         .on_key(move |state: &mut State, ev: &KeyEvent, _: &mut Tx| {
@@ -504,7 +511,7 @@ fn prompt(f: &Form, t: &Tokens) -> El {
                 .label("Prompt")
                 .rows(6)
                 .spellcheck(true)
-                .on_edit(|s: &mut State| &mut edit_of(s).prompt)
+                .on_edit(|s: &mut State| field_of(s, |f| &mut f.prompt))
                 .on_change(move |state: &mut State, _: &mut Tx| {
                     if let (Some(f), Some(which)) = (form_mut(state), checked) {
                         f.edited(which);
@@ -681,7 +688,7 @@ fn advanced(f: &Form, t: &Tokens) -> El {
             key("executable"),
             "Executable",
             "Default from PATH",
-            |s| &mut edit_of(s).executable,
+            |s| field_of(s, |f| &mut f.executable),
             t,
         ));
     }
@@ -715,7 +722,9 @@ fn overrides(f: &Form, t: &Tokens) -> El {
                                 .placeholder("host/owner/repository")
                                 .spellcheck(false)
                                 .invalid(f.errors.contains_key(&Field::OverrideRepository(i)))
-                                .on_edit(move |s: &mut State| &mut edit_of(s).overrides[i].0)
+                                .on_edit(move |s: &mut State| {
+                                    field_of(s, |f| &mut f.overrides[i].0)
+                                })
                                 .build(kit(t))
                                 .grow(1.0),
                         )
@@ -726,7 +735,9 @@ fn overrides(f: &Form, t: &Tokens) -> El {
                                 .placeholder("/absolute/path")
                                 .spellcheck(false)
                                 .invalid(f.errors.contains_key(&Field::OverridePath(i)))
-                                .on_edit(move |s: &mut State| &mut edit_of(s).overrides[i].1)
+                                .on_edit(move |s: &mut State| {
+                                    field_of(s, |f| &mut f.overrides[i].1)
+                                })
                                 .build(kit(t))
                                 .grow(1.0),
                         )
@@ -1137,7 +1148,9 @@ fn zone_suggestions(f: &Form, t: &Tokens, layers: &mut Vec<El>) {
         .items(zones.iter().map(|zone| PopupItem::new(*zone, *zone)))
         .active(active)
         .on_active(|state: &mut State, i| {
-            edit_of(state).zone_suggestions = ZoneSuggestions::Shown { active: Some(i) }
+            if let Some(f) = form_mut(state) {
+                f.zone_suggestions = ZoneSuggestions::Shown { active: Some(i) };
+            }
         })
         .on_choose(|state: &mut State, zone: &str, _: &mut Tx| super::choose_zone(state, zone))
         .build(kit(t), layers);
@@ -1364,9 +1377,11 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
                     .label("Time zone")
                     .spellcheck(false)
                     .active_descendant(active_zone(f).map(zone_option_key))
-                    .on_edit(|s: &mut State| &mut edit_of(s).time_zone)
+                    .on_edit(|s: &mut State| field_of(s, |f| &mut f.time_zone))
                     .on_change(|s: &mut State, _: &mut Tx| {
-                        edit_of(s).zone_suggestions = ZoneSuggestions::Shown { active: None };
+                        if let Some(f) = form_mut(s) {
+                            f.zone_suggestions = ZoneSuggestions::Shown { active: None };
+                        }
                     })
                     .on_key(zone_keys)
                     .build(kit(t))
@@ -1455,7 +1470,7 @@ fn schedule(f: &Form, t: &Tokens) -> El {
             .label("Cron")
             .spellcheck(false)
             .invalid(f.preview.error.is_some())
-            .on_edit(|s: &mut State| &mut edit_of(s).cron)
+            .on_edit(|s: &mut State| field_of(s, |f| &mut f.cron))
             .on_change(|state: &mut State, _: &mut Tx| {
                 if let Some(f) = form_mut(state) {
                     f.replaced = None;
