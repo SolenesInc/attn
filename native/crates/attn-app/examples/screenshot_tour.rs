@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use attn_app::screen::Screens;
-use attn_app::{Action, Binding, Keymap, State};
+use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
     AutomationSchedulePreviewResultMessage, CrewMember, DelegationPreferences,
@@ -393,7 +393,10 @@ fn review() -> ReviewBundle {
     }
 }
 
-fn pixels(rt: &mut Runtime<State>) -> (u32, u32, Vec<u8>) {
+fn pixels<S: 'static>(
+    rt: &mut Runtime<S>,
+    compositor: &mut impl Compositor<S>,
+) -> (u32, u32, Vec<u8>) {
     let gpu = Gpu::headless();
     let (w, h) = rt.window_viewport();
     let scale = rt.env.scale;
@@ -410,7 +413,7 @@ fn pixels(rt: &mut Runtime<State>) -> (u32, u32, Vec<u8>) {
     renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
     renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, size);
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    Screens::default().render(&mut Frame {
+    compositor.render(&mut Frame {
         device: &gpu.device,
         queue: &gpu.queue,
         encoder: &mut encoder,
@@ -440,15 +443,36 @@ fn save(name: &str, dark: bool, (w, h, rgba): (u32, u32, Vec<u8>)) {
 
 fn snap(world: &mut World, name: &str, dark: bool) {
     let mut shot = None;
-    world.gesture(|app| shot = Some(pixels(app.runtime)));
+    world.gesture(|app| shot = Some(pixels(app.runtime, &mut Screens::default())));
     save(name, dark, shot.expect("the window drew"));
+}
+
+/// Draws a window with no terminals: the Quick Capture panel's.
+struct Interface;
+
+impl<S: 'static> Compositor<S> for Interface {
+    fn render(&mut self, f: &mut Frame<'_, S>) {
+        let (device, queue) = (f.device, f.queue);
+        let clear = f.rt.clear_color();
+        let core: &mut rune::RuntimeCore = f.rt;
+        f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, f.size);
+        f.ui.draw_with(f.encoder, f.target, clear, &mut |_, _| {});
+    }
+}
+
+fn snap_capture(world: &mut World, name: &str, dark: bool) {
+    let mut shot = None;
+    world.capture_gesture(|panel| shot = Some(pixels(panel.runtime, &mut Interface)));
+    save(name, dark, shot.expect("the capture panel drew"));
 }
 
 fn snap_tile_window(world: &mut World, name: &str, dark: bool) {
     let windows = world.tile_windows();
     let key = windows.first().expect("a tile window is open").key.clone();
     let mut shot = None;
-    world.tile_gesture(&key, |app| shot = Some(pixels(app.runtime)));
+    world.tile_gesture(&key, |app| {
+        shot = Some(pixels(app.runtime, &mut Screens::default()))
+    });
     save(name, dark, shot.expect("the tile window drew"));
 }
 
@@ -543,12 +567,6 @@ fn shortcut_editor(dark: bool) {
     let mut world = with_document(dark);
     run(&mut world, Action::OpenShortcutEditor);
     snap(&mut world, "shortcut-editor", dark);
-}
-
-fn diagnostic_report(dark: bool) {
-    let mut world = with_document(dark);
-    run(&mut world, Action::CreateDiagnosticReport);
-    snap(&mut world, "diagnostic-report", dark);
 }
 
 fn close_desktop(dark: bool) {
@@ -850,6 +868,134 @@ fn settings_analytics(dark: bool) {
     world.gesture(|app| app.type_text("analytics"));
     world.gesture(|app| app.click(Target::key("settings.nav.analytics")));
     snap(&mut world, "settings-analytics", dark);
+}
+
+/// The settings page `section` opens, with delegation's preferences answered and Outposts and
+/// Launcher 2.0 turned on, so the pages show their on switches.
+fn settings_section(dark: bool, section: &str) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), seeds());
+    if let Some(settings) = state.settings.as_mut() {
+        for key in ["outposts_enabled", "new_session_launcher_enabled"] {
+            settings.insert(key.into(), "true".into());
+        }
+    }
+    let daemon = Daemon::scripted().state(state);
+    daemon.on("delegation_preferences_get", |_: &Request| {
+        message(DelegationPreferencesResultMessage {
+            success: true,
+            preferences: Some(DelegationPreferences::default()),
+            ..DelegationPreferencesResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    press(&mut world, Action::UiOpenSettings);
+    world.gesture(|app| app.click(Target::key(format!("settings.nav.{section}"))));
+    snap(&mut world, &format!("settings-{section}"), dark);
+}
+
+/// The diagnostic report's choices, its Save the primary action.
+fn diagnostic_report(dark: bool) {
+    let mut world = with_document(dark);
+    world.daemon.on("support_snapshot", |_: &Request| {
+        json!({
+            "event": "support_snapshot_result",
+            "protocol_version": "1",
+            "daemon_instance_id": "daemon-home",
+            "daemon_started_at_unix_ms": 1,
+            "captured_at_unix_ms": 2,
+            "backend": "worker",
+            "warning_codes": [],
+            "trace_capacity": 512,
+            "trace_total": 0,
+            "input_traces": [],
+            "runtimes": [],
+        })
+    });
+    run(&mut world, Action::CreateDiagnosticReport);
+    snap(&mut world, "diagnostic-report", dark);
+}
+
+/// Quick Capture open with a message typed, so Send is its primary action. It keeps drafts
+/// only for a profile whose id is a `profile-` uuid.
+fn quick_capture_world(dark: bool) -> World {
+    const CAPTURE_PROFILE: &str = "profile-0b7f2a3c-1111-4222-8333-444455556666";
+    let crew = crew()
+        .into_iter()
+        .map(|member| CrewMember {
+            profile_id: CAPTURE_PROFILE.into(),
+            ..member
+        })
+        .collect();
+    let state = InitialStateMessage {
+        selected_profile_id: Some(CAPTURE_PROFILE.into()),
+        profiles: Some(vec![Profile {
+            id: CAPTURE_PROFILE.into(),
+            name: "Work".into(),
+            ..Profile::default()
+        }]),
+        crew: Some(crew),
+        settings: settings(dark),
+        ..InitialStateMessage::new()
+    };
+    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    run(&mut world, Action::OpenQuickCapture);
+    world.capture_gesture(|panel| panel.type_text("Ship the cache fix"));
+    world
+}
+
+fn quick_capture(dark: bool) {
+    let mut world = quick_capture_world(dark);
+    snap_capture(&mut world, "quick-capture", dark);
+}
+
+/// Quick Capture's mailbox list, with the chosen mailbox marked.
+fn quick_capture_mailboxes(dark: bool) {
+    let mut world = quick_capture_world(dark);
+    world.capture_gesture(|panel| panel.click(Target::key("capture.to")));
+    snap_capture(&mut world, "quick-capture-mailboxes", dark);
+}
+
+/// The fullscreen notebook with a note open from its tree.
+fn notebook_open(dark: bool) -> World {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert(
+            "notebook.root.effective".to_owned(),
+            "/home/me/notebook".to_owned(),
+        );
+    }
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("fs_list", |_: &Request| {
+            let entry = |path: &str, is_dir: bool| {
+                json!({ "path": path, "name": path, "is_dir": is_dir, "size": 1 })
+            };
+            json!({ "event": "fs_list_result", "success": true,
+                "entries": [entry("journal", true), entry("todo.md", false)] })
+        })
+        .on("fs_index", |_: &Request| {
+            json!({ "event": "fs_index_result", "success": true, "root": "/home/me/notebook",
+                "files": ["journal/2026-11-14.md", "todo.md"], "truncated": false })
+        });
+    let mut world = start(daemon);
+    world
+        .automate("run", json!({ "name": "notebook.openFullscreen" }))
+        .unwrap();
+    world.settle();
+    world.gesture(|app| app.click(Target::key("notebook.file.todo.md")));
+    world
+}
+
+fn notebook_file(dark: bool) {
+    let mut world = notebook_open(dark);
+    snap(&mut world, "notebook-file", dark);
+}
+
+/// The notebook's finder over the open note.
+fn notebook_finder(dark: bool) {
+    let mut world = notebook_open(dark);
+    run(&mut world, Action::FileOpen);
+    snap(&mut world, "notebook-finder", dark);
 }
 
 /// The ledger with nothing in it: its header's Close and its status bar's keys.
@@ -1457,7 +1603,6 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         settings_agents(dark);
         shortcut_editor(dark);
         close_desktop(dark);
-        diagnostic_report(dark);
         palette(dark);
         terminal_overlays(dark);
         tile_window(dark);
@@ -1496,6 +1641,14 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         session_seed_context(dark);
         notifications_empty(dark);
         desktop_overview(dark);
+        for section in ["delegation", "outposts", "experimental"] {
+            settings_section(dark, section);
+        }
+        diagnostic_report(dark);
+        quick_capture(dark);
+        quick_capture_mailboxes(dark);
+        notebook_file(dark);
+        notebook_finder(dark);
     }
 }
 
