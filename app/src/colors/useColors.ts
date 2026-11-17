@@ -6,6 +6,7 @@ import {
   COLOR_SCHEME_SETTING,
   resolveColors,
   systemAppearance,
+  type Colors,
   THEME_SETTING,
   themePreference,
   type ThemePreference,
@@ -25,20 +26,23 @@ function useSystemAppearance(follow: boolean): AppearanceName {
   return appearance;
 }
 
-export function useAppearance(): { preference: ThemePreference; appearance: AppearanceName } {
-  const { settings } = useSettings();
+export function useAppearance(settings: Record<string, string>): { preference: ThemePreference; appearance: AppearanceName } {
   const preference = themePreference(settings);
   const system = useSystemAppearance(preference === 'system');
   return { preference, appearance: preference === 'system' ? system : preference };
 }
 
-export function useColors() {
-  const { settings, setSetting } = useSettings();
-  const { preference, appearance } = useAppearance();
+export function useResolvedColors(settings: Record<string, string>): Colors {
+  const { appearance } = useAppearance(settings);
   const scheme = settings[COLOR_SCHEME_SETTING];
   const overrides = settings[COLOR_OVERRIDES_SETTING];
+  return useMemo(() => resolveColors(scheme, overrides, appearance), [scheme, overrides, appearance]);
+}
 
-  const colors = useMemo(() => resolveColors(scheme, overrides, appearance), [scheme, overrides, appearance]);
+export function useColors() {
+  const { settings, setSetting } = useSettings();
+  const preference = themePreference(settings);
+  const colors = useResolvedColors(settings);
   useLayoutEffect(() => applyColors(colors), [colors]);
 
   const setTheme = useCallback((value: ThemePreference) => setSetting(THEME_SETTING, value), [setSetting]);

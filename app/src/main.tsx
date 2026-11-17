@@ -17,7 +17,8 @@ async function boot() {
   const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
   if (new URLSearchParams(window.location.search).get("window") === "capture") {
-    const { QuickCapture } = await import("./components/QuickCapture");
+    const [{ QuickCapture }, colors] = await Promise.all([import("./components/QuickCapture"), import("./colors/resolve")]);
+    colors.applyColors(colors.resolveColors(undefined, undefined, 'dark'));
     root.render(<QuickCapture />);
     return;
   }

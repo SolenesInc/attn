@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { applyColors, resolveColors } from '../colors/resolve';
 import { useAppearance } from '../colors/useColors';
+import { useSettings } from '../contexts/SettingsContext';
 import './WhatsNewScenes.css';
 
 type AgentState = 'waiting' | 'busy' | 'idle';
@@ -61,7 +62,8 @@ export function NewLookScene() {
 
 export function NightScene() {
   const scene = useRef<HTMLDivElement>(null);
-  const { appearance } = useAppearance();
+  const { settings } = useSettings();
+  const { appearance } = useAppearance(settings);
   useLayoutEffect(() => {
     if (scene.current) applyColors(resolveColors('night', undefined, appearance), scene.current);
   }, [appearance]);

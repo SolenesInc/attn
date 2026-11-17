@@ -3,6 +3,7 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { hideBootSplash } from '../utils/bootSplash';
+import { applyColors } from '../colors/resolve';
 import { QuickCaptureAttachmentPreview, type QuickCaptureAttachment, type AttachmentOrigin, type AttachmentMotion } from './QuickCaptureAttachmentPreview';
 import './QuickCapture.css';
 import { QuickCaptureHistory } from './QuickCaptureHistory';
@@ -29,6 +30,7 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue }: Q
     return () => connection.dispose();
   }, [suppliedClient]);
   useEffect(() => { if (hostState) setHost(hostState); }, [hostState]);
+  useLayoutEffect(() => { if (host.colors) applyColors(host.colors); }, [host.colors]);
   const client = useMemo(() => suppliedClient ?? bridge?.forProfile(host.profileId), [suppliedClient, bridge, host.profileId]);
   if (!client || !host.profileId) return <main className="capture" aria-busy="true">Connecting Quick Capture…</main>;
   return <QuickCaptureForProfile key={host.profileId} client={client} hostState={host} workQueue={workQueue} refresh={bridge?.refresh} />;
