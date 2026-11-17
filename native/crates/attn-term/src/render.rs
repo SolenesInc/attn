@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use parley::{FontFamily, FontStyle, FontWeight, PositionedLayoutItem, StyleProperty};
 use rune::compose::DeviceKey;
 use rune::render::EffectSite;
+use rune::text::{SmoothingInk, smoothed_glyph};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith, image::Content};
 use swash::zeno::Format;
 
@@ -132,6 +133,9 @@ struct Raster {
     scale: f32,
     metrics: Metrics,
     baseline: f32,
+    /// The ink every glyph is drawn in before its cell tints it: white, as the Tauri terminal
+    /// fills its atlas, so font smoothing dilates each glyph as it does white text.
+    ink: SmoothingInk,
 }
 
 impl Raster {
@@ -142,6 +146,7 @@ impl Raster {
             scale,
             metrics,
             baseline: 0.0,
+            ink: SmoothingInk::of(attn_ui::colors::rgb([255, 255, 255])),
         };
         let layout = r.layout("M", 0);
         r.baseline = layout
@@ -225,33 +230,54 @@ impl Raster {
                 else {
                     continue;
                 };
-                let mut scaler = self
-                    .scx
-                    .builder(font_ref)
-                    .size(run.run().font_size())
-                    .hint(true)
-                    .normalized_coords(run.run().normalized_coords().iter().map(|c| c.to_bits()))
-                    .build();
+                let size = run.run().font_size();
+                let coords: Vec<i16> = run
+                    .run()
+                    .normalized_coords()
+                    .iter()
+                    .map(|c| c.to_bits())
+                    .collect();
                 let mut x = run.offset();
                 for g in run.glyphs() {
                     let pen = [margin + x + g.x, baseline + g.y];
                     x += g.advance;
-                    let Some(img) = Render::new(&[
+                    let mut scaler = self
+                        .scx
+                        .builder(font_ref)
+                        .size(size)
+                        .hint(true)
+                        .normalized_coords(coords.iter().copied())
+                        .build();
+                    let colored = Render::new(&[
                         Source::ColorOutline(0),
                         Source::ColorBitmap(StrikeWith::BestFit),
-                        Source::Outline,
                     ])
                     .format(Format::Alpha)
                     .offset(swash::zeno::Vector::new(pen[0].fract(), 0.0))
-                    .render(&mut scaler, g.id as u16) else {
-                        continue;
+                    .render(&mut scaler, g.id as u16)
+                    .filter(|img| img.content == Content::Color);
+                    let (data, p, color) = match colored {
+                        Some(img) => (img.data, img.placement, true),
+                        None => {
+                            let Some((data, p)) = smoothed_glyph(
+                                &mut self.scx,
+                                font_ref,
+                                &coords,
+                                g.id as u16,
+                                size,
+                                pen[0].fract(),
+                                self.ink,
+                            ) else {
+                                continue;
+                            };
+                            (data, p, false)
+                        }
                     };
-                    let p = img.placement;
                     let image = Image {
                         w: p.width as i32,
                         h: p.height as i32,
-                        data: &img.data,
-                        color: img.content == Content::Color,
+                        data: &data,
+                        color,
                     };
                     if image.color && (image.w as f32) > cw * span * 1.2 {
                         let fitted = image.fit(cw * span);
