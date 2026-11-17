@@ -297,17 +297,17 @@ fn ratio_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, drag: &RatioDrag)
 
 fn daemon_ratio(state: &State, desktop: &str, split: &str) -> Option<f32> {
     let d = state.facts.desktops.iter().find(|d| d.id == desktop)?;
-    Node::parse(&d.tree_json)?.split_ratio(split)
+    d.tree()?.split_ratio(split)
 }
 
 /// Forgets each ratio override the daemon caught up with or changed under, unless its divider
 /// is still held.
 pub(crate) fn settle_ratios(state: &mut State) {
-    let trees: Vec<Node> = state
+    let trees: Vec<&Node> = state
         .facts
         .desktops
         .iter()
-        .filter_map(|d| Node::parse(&d.tree_json))
+        .filter_map(|d| d.tree())
         .collect();
     state.window.desk.ratios.retain(|split, o| {
         if o.dragging {

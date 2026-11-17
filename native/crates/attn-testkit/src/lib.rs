@@ -1,3 +1,4 @@
+pub mod allocations;
 mod capture;
 mod daemon;
 mod screen;

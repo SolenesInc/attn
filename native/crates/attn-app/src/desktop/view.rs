@@ -1,4 +1,5 @@
-use attn_protocol::{Desktop, DesktopPane, Session};
+use attn_client::Desktop;
+use attn_protocol::{DesktopPane, Session};
 use attn_term::mouse;
 use attn_ui::colors::TerminalColors;
 use attn_ui::type_;
@@ -226,14 +227,14 @@ fn review_tabs(desktop: &Desktop, view: super::layout::View, t: &Tokens) -> Opti
     let super::layout::View::Focused(shown) = view else {
         return None;
     };
-    let documents: Vec<(String, String)> = crate::sidebar::model::leaves(&desktop.tree_json)
+    let documents: Vec<(String, String)> = desktop
+        .leaves()
         .into_iter()
-        .filter_map(|leaf| match leaf {
-            crate::sidebar::model::Leaf::Tile { id, kind, params }
-                if kind == "markdown" || kind == "seed" =>
-            {
-                Some((id, crate::sidebar::model::document_tab(&kind, &params)))
-            }
+        .filter_map(|leaf| match leaf.tile()? {
+            (kind @ ("markdown" | "seed"), params) => Some((
+                leaf.id.clone(),
+                crate::sidebar::model::document_tab(kind, params),
+            )),
             _ => None,
         })
         .collect();
@@ -891,7 +892,7 @@ pub(crate) fn session_of_leaf(desktop: &Desktop, id: &str) -> Option<String> {
     if let Some(pane) = pane_of(desktop, id).filter(|p| !p.session_id.is_empty()) {
         return Some(pane.session_id.clone());
     }
-    match Node::parse(&desktop.tree_json)?.find_leaf(id)? {
+    match desktop.tree()?.find_leaf(id)? {
         Node::Leaf(Leaf {
             kind: LeafKind::Tile { session, .. },
             ..
@@ -1098,9 +1099,10 @@ fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
 }
 
 fn holds_a_seed(desktop: &Desktop) -> bool {
-    crate::sidebar::model::leaves(&desktop.tree_json)
+    desktop
+        .leaves()
         .iter()
-        .any(|l| matches!(l, crate::sidebar::model::Leaf::Tile { kind, .. } if kind == "seed"))
+        .any(|l| matches!(l.tile(), Some(("seed", _))))
 }
 
 /// A document tile's controls for its marks, once its document reads: a markdown file's, or a

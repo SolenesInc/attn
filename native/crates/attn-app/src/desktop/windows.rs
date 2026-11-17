@@ -39,7 +39,7 @@ pub(crate) fn pops_out(state: &State, desktop: &str, leaf: &str) -> bool {
         .desktops
         .iter()
         .find(|d| d.id == desktop)
-        .and_then(|d| Node::parse(&d.tree_json))
+        .and_then(attn_client::Desktop::tree)
         .is_some_and(|tree| matches!(tree.find_leaf(leaf), Some(Node::Leaf(_))))
 }
 
@@ -49,7 +49,7 @@ pub(crate) fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
         .desktops
         .iter()
         .find(|d| d.id == desktop)
-        .and_then(|d| Node::parse(&d.tree_json))
+        .and_then(attn_client::Desktop::tree)
         .is_some_and(|tree| tree.popped().iter().any(|l| l.id == leaf))
 }
 
@@ -242,7 +242,7 @@ pub(crate) fn follow(state: &mut State) {
         .desktops
         .iter()
         .filter(|d| d.profile_id == state.facts.profiles.selected)
-        .filter_map(|d| Some((d, Node::parse(&d.tree_json)?)))
+        .filter_map(|d| Some((d, d.tree()?)))
         .flat_map(|(d, tree)| {
             tree.popped()
                 .into_iter()
@@ -401,7 +401,7 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
     cx.zoom(crate::settings::text_scale(&state.facts.settings));
     let shown = state.window.tile.as_ref().and_then(|tile| {
         let desktop = state.facts.desktops.iter().find(|d| d.id == tile.desktop)?;
-        let tree = Node::parse(&desktop.tree_json)?;
+        let tree = desktop.tree()?;
         let Some(Node::Leaf(leaf)) = tree.find_leaf(&tile.leaf) else {
             return None;
         };
@@ -440,7 +440,7 @@ pub(crate) fn follow_title(state: &mut State, tx: &mut Tx) {
         .iter()
         .find(|d| d.id == tile.desktop)
         .and_then(|d| {
-            let tree = Node::parse(&d.tree_json)?;
+            let tree = d.tree()?;
             match tree.find_leaf(&tile.leaf)? {
                 Node::Leaf(leaf) => Some(super::view::leaf_title(
                     d,
@@ -480,7 +480,7 @@ fn report_frame(state: &State) {
         .desktops
         .iter()
         .find(|d| d.id == tile.desktop)
-        .and_then(|d| Node::parse(&d.tree_json))
+        .and_then(attn_client::Desktop::tree)
         .and_then(|tree| tree.popped().iter().find(|l| l.id == tile.leaf)?.window);
     if kept.is_none() || kept == Some(frame) {
         return;

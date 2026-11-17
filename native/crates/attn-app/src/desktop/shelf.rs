@@ -1,9 +1,8 @@
 //! The shelf: the columns of the current desktop's row that the screen does not show, as
 //! chips in the title bar either side of a dot per column on screen.
 
-use attn_protocol::{
-    Desktop, DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage,
-};
+use attn_client::Desktop;
+use attn_protocol::{DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
@@ -940,9 +939,9 @@ pub(crate) fn clear_dragged_widths(state: &mut State, desktop: &str, tx: &mut Tx
         .desktops
         .iter()
         .find(|d| d.id == desktop)
-        .and_then(|d| Node::parse(&d.tree_json))
+        .and_then(Desktop::tree)
         .map(|tree| {
-            layout::read_row(&tree)
+            layout::read_row(tree)
                 .iter()
                 .filter(|c| c.wanted_cols.is_some())
                 .map(|c| c.first().to_owned())
@@ -1065,7 +1064,7 @@ pub(crate) fn carry(state: &mut State, step: i32, tx: &mut Tx) {
     if active.is_empty() || matches!(row_state.view, View::Focused(_)) {
         return;
     }
-    let Some(tree) = Node::parse(&desktop.tree_json).and_then(|t| t.main()) else {
+    let Some(tree) = desktop.tree().and_then(|t| t.main()) else {
         return;
     };
     let row: Vec<Column> = layout::read_row(&tree)
@@ -1192,7 +1191,7 @@ pub(crate) fn step_width(state: &mut State, fewer: bool, tx: &mut Tx) {
         return;
     };
     let row_state = desk.row(&desktop.id);
-    let Some(tree) = Node::parse(&desktop.tree_json).and_then(|t| t.main()) else {
+    let Some(tree) = desktop.tree().and_then(|t| t.main()) else {
         return;
     };
     let Some(input) = desk.row_input(facts, &tree, desktop, &row_state) else {
@@ -1248,7 +1247,7 @@ fn settle_desktop(state: &mut State, id: &str, tx: &mut Tx) {
         return;
     };
     let desktop_tree = desktop.tree_json.clone();
-    let Some(tree) = Node::parse(&desktop.tree_json).and_then(|t| t.main()) else {
+    let Some(tree) = desktop.tree().and_then(|t| t.main()) else {
         return;
     };
     let row_state = desk.row(id);

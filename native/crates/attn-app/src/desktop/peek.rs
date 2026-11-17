@@ -485,8 +485,8 @@ fn title(state: &State, open: &Open) -> String {
         .iter()
         .find(|d| d.id == open.desktop)
         .and_then(|d| {
-            let tree = Node::parse(&d.tree_json)?;
-            Some(super::shelf::title(d, &state.facts, &tree, &open.leaf))
+            let tree = d.tree()?;
+            Some(super::shelf::title(d, &state.facts, tree, &open.leaf))
         })
         .unwrap_or_default()
 }
@@ -730,8 +730,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let open = peeks.open.as_ref()?;
     let area = state.window.desk.area()?;
     let desktop = state.facts.desktops.iter().find(|d| d.id == open.desktop)?;
-    let tree = Node::parse(&desktop.tree_json)?;
-    let title = super::shelf::title(desktop, &state.facts, &tree, &open.leaf);
+    let tree = desktop.tree()?;
+    let title = super::shelf::title(desktop, &state.facts, tree, &open.leaf);
     let pane = super::view::pane_of(desktop, &open.leaf);
     let agent = pane
         .and_then(|p| session_of(state, &p.session_id))

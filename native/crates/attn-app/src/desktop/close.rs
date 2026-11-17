@@ -1,8 +1,8 @@
-use attn_protocol::{Desktop, DesktopCloseMessage};
+use attn_client::Desktop;
+use attn_protocol::DesktopCloseMessage;
 use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::{El, Tx};
 
-use super::layout::Node;
 use crate::State;
 use crate::requests::Refused;
 use crate::shell::Layer;
@@ -56,10 +56,10 @@ pub(crate) fn request(state: &mut State, desktop_id: &str, tx: &mut Tx) {
         );
         return;
     }
-    let holds_leaves = Node::parse(&desktop.tree_json).is_some();
+    let holds_leaves = desktop.tree().is_some();
     let desktop = desktop.clone();
     if !holds_leaves {
-        send(state, desktop.id, desktop.revision, tx);
+        send(state, desktop.id.clone(), desktop.revision, tx);
         return;
     }
     let profile: Vec<Desktop> = state
@@ -71,7 +71,7 @@ pub(crate) fn request(state: &mut State, desktop_id: &str, tx: &mut Tx) {
         .collect();
     state.window.closing_desktop = Some(Closing {
         title: model::desktop_title(&desktop, &profile),
-        desktop_id: desktop.id,
+        desktop_id: desktop.id.clone(),
         revision: desktop.revision,
     });
     state.window.layer = Some(Layer::CloseDesktop);

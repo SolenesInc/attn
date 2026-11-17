@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+use attn_client::Desktop;
 use attn_client::Facts;
-use attn_protocol::{Desktop, OutpostInfo, Session};
+use attn_protocol::{OutpostInfo, Session};
 use serde_json::Value;
 
 /// Desktops 1 to 9 have their own shortcut slot; the rest number on from 10.
@@ -525,55 +526,6 @@ pub fn desktop_title(desktop: &Desktop, desktops: &[Desktop]) -> String {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Leaf {
-    Pane(String),
-    Tile {
-        id: String,
-        kind: String,
-        params: String,
-    },
-}
-
-/// The leaves of a desktop's layout tree in reading order: first child before second.
-pub fn leaves(tree_json: &str) -> Vec<Leaf> {
-    fn walk(node: &Value, out: &mut Vec<Leaf>) {
-        let field = |name: &str| node.get(name).and_then(Value::as_str);
-        match field("type") {
-            Some("pane") => {
-                if let Some(id) = field("pane_id") {
-                    out.push(Leaf::Pane(id.to_owned()));
-                }
-            }
-            Some("tile") => {
-                if let (Some(id), Some(kind)) = (field("tile_id"), field("tile_kind"))
-                    && !id.is_empty()
-                    && !kind.is_empty()
-                {
-                    out.push(Leaf::Tile {
-                        id: id.to_owned(),
-                        kind: kind.to_owned(),
-                        params: field("tile_params").unwrap_or_default().to_owned(),
-                    });
-                }
-            }
-            Some("split") => {
-                if let Some(children) = node.get("children").and_then(Value::as_array) {
-                    for child in children.iter().take(2) {
-                        walk(child, out);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut out = Vec::new();
-    if let Ok(tree) = serde_json::from_str::<Value>(tree_json) {
-        walk(&tree, &mut out);
-    }
-    out
-}
-
 /// What the desktop sidebar lists: each desktop, then its agents and tiles in layout order,
 /// then any agent of it the layout does not hold. An agent not in `on_screen` shows its
 /// countdown.
@@ -606,28 +558,30 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
             .collect();
         let mut children = Vec::new();
         let mut placed = HashSet::new();
-        for leaf in leaves(&desktop.tree_json) {
-            match leaf {
-                Leaf::Tile { id, kind, params } => children.push(Line::Tile(TileRow {
+        for leaf in desktop.leaves() {
+            match leaf.tile() {
+                Some((kind, params)) => children.push(Line::Tile(TileRow {
                     desktop: desktop.id.clone(),
                     title: tile_title(
-                        &kind,
-                        &params,
+                        kind,
+                        params,
                         facts
                             .tile_contents
                             .get(&attn_client::TileKey {
                                 desktop: desktop.id.clone(),
-                                tile: id.clone(),
+                                tile: leaf.id.clone(),
                             })
                             .map(|c| &*c.message),
                         facts.garden.of(&facts.profiles.selected),
                     ),
-                    selected: shown && id == desktop.active_pane_id,
-                    id,
-                    kind,
+                    selected: shown && leaf.id == desktop.active_pane_id,
+                    id: leaf.id.clone(),
+                    kind: kind.to_owned(),
                 })),
-                Leaf::Pane(pane) => {
-                    let Some(session) = session_of.get(pane.as_str()).and_then(|id| by_id.get(id))
+                None => {
+                    let Some(session) = session_of
+                        .get(leaf.id.as_str())
+                        .and_then(|id| by_id.get(id))
                     else {
                         continue;
                     };

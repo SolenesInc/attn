@@ -3,9 +3,9 @@
 
 use std::collections::BTreeMap;
 
+use attn_client::Desktop;
 use attn_protocol::{
-    Desktop, LaunchDesktopGetMessage, LaunchDesktopKind, LaunchDesktopResultMessage,
-    LaunchDesktopSetting,
+    LaunchDesktopGetMessage, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetting,
 };
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, Tokens};
@@ -247,9 +247,10 @@ pub(crate) fn poll(state: &mut State, tx: &mut Tx) -> bool {
             let read = state.window.launch_desktop.reads.entry(key).or_default();
             match answer.outcome() {
                 Ok(reply) => {
-                    read.desktops = reply
-                        .parse::<LaunchDesktopResultMessage>()
-                        .map(|r| r.desktops.unwrap_or_default());
+                    read.desktops = reply.parse::<LaunchDesktopResultMessage>().map(|r| {
+                        let desktops = r.desktops.unwrap_or_default();
+                        desktops.into_iter().map(Desktop::from).collect()
+                    });
                     read.error = None;
                 }
                 Err(why) => read.error = Some(why),

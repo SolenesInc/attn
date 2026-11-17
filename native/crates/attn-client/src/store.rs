@@ -1,12 +1,57 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
+use crate::layout::{Leaf, Node};
 use attn_protocol::{
-    Ask, AuthorState, CrewMember, Desktop, DesktopTileContentMessage, GardenReview, GitOperation,
+    Ask, AuthorState, CrewMember, DesktopTileContentMessage, GardenReview, GitOperation,
     InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage, PluginInfo,
     PluginIssue, Profile, RepoState, Seed, Session, SessionLedgerEntry, SharedCodexState,
     UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
+
+/// A desktop as the daemon sent it, with its layout tree read once on arrival.
+#[derive(Clone, Debug, Default)]
+pub struct Desktop {
+    sent: attn_protocol::Desktop,
+    tree: Option<Node>,
+}
+
+impl Desktop {
+    /// The desktop's tiles; None for an empty desktop or a tree this app cannot read.
+    pub fn tree(&self) -> Option<&Node> {
+        self.tree.as_ref()
+    }
+
+    /// The desktop's leaves in reading order: first child before second.
+    pub fn leaves(&self) -> Vec<&Leaf> {
+        self.tree().map(Node::leaves).unwrap_or_default()
+    }
+}
+
+impl From<attn_protocol::Desktop> for Desktop {
+    fn from(sent: attn_protocol::Desktop) -> Desktop {
+        let tree = Node::parse(&sent.tree_json);
+        Desktop { sent, tree }
+    }
+}
+
+impl serde::Serialize for Desktop {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.sent.serialize(serializer)
+    }
+}
+
+impl std::ops::Deref for Desktop {
+    type Target = attn_protocol::Desktop;
+
+    fn deref(&self) -> &attn_protocol::Desktop {
+        &self.sent
+    }
+}
+
+fn arrived(desktops: Vec<attn_protocol::Desktop>) -> Arc<Vec<Desktop>> {
+    Arc::new(desktops.into_iter().map(Desktop::from).collect())
+}
 
 /// The shared Codex app server's state, as the daemon said it of `profile_id`.
 #[derive(Clone, Debug, Default)]
@@ -498,7 +543,7 @@ impl Store {
                 all: state.profiles.unwrap_or_default(),
                 selected: state.selected_profile_id.unwrap_or_default(),
             });
-            facts.desktops = Arc::new(state.desktops.unwrap_or_default());
+            facts.desktops = arrived(state.desktops.unwrap_or_default());
             if let Some(kept) = facts.tile_contents.held_by(&facts.desktops) {
                 facts.tile_contents = Arc::new(kept);
             }
@@ -848,7 +893,12 @@ impl Store {
     /// connection only the arrangement of the profile it scoped the connection to, so the
     /// arrangement's profile becomes the selected one, as after a switch or after the daemon
     /// deleted the profile this window showed. The previous profile's asks and vents go with it.
-    pub(crate) fn apply_arrangement(&self, profile: Profile, desktops: Vec<Desktop>) {
+    pub(crate) fn apply_arrangement(
+        &self,
+        profile: Profile,
+        desktops: Vec<attn_protocol::Desktop>,
+    ) {
+        let desktops = arrived(desktops);
         self.change(|facts| {
             let mut changed = Slices::PROFILES | Slices::DESKTOPS;
             let mut profiles = (*facts.profiles).clone();
@@ -868,7 +918,7 @@ impl Store {
                 facts.tile_contents = Arc::new(kept);
                 changed |= Slices::TILE_CONTENTS;
             }
-            facts.desktops = Arc::new(desktops);
+            facts.desktops = desktops;
             changed
         });
     }
@@ -963,16 +1013,9 @@ impl Store {
 
 /// Whether a desktop in `desktops` still holds the tile `key` names.
 fn holds_tile(desktops: &[Desktop], key: &TileKey) -> bool {
-    fn within(node: &serde_json::Value, tile: &str) -> bool {
-        node.get("tile_id").and_then(serde_json::Value::as_str) == Some(tile)
-            || node
-                .get("children")
-                .and_then(serde_json::Value::as_array)
-                .is_some_and(|children| children.iter().any(|c| within(c, tile)))
-    }
     desktops
         .iter()
         .find(|d| d.id == key.desktop)
-        .and_then(|d| serde_json::from_str(&d.tree_json).ok())
-        .is_some_and(|tree| within(&tree, &key.tile))
+        .and_then(Desktop::tree)
+        .is_some_and(|tree| tree.has_leaf(&key.tile))
 }

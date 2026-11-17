@@ -3,7 +3,8 @@
 //! bound to or to another session on its desktop, a seed's to the session tending it or as a
 //! note on the seed.
 
-use attn_protocol::{Desktop, DesktopUpdateTileMessage, MarkdownAnnotation, Session};
+use attn_client::Desktop;
+use attn_protocol::{DesktopUpdateTileMessage, MarkdownAnnotation, Session};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::{Cx, El, Tx, col, el, row, text};
@@ -381,13 +382,12 @@ fn tile_of<'a>(state: &'a State, tile: &str) -> Option<Tiled<'a>> {
         });
     }
     state.facts.desktops.iter().find_map(|desktop| {
-        let id = crate::sidebar::model::leaves(&desktop.tree_json)
+        let id = desktop
+            .leaves()
             .into_iter()
-            .find_map(|leaf| match leaf {
-                crate::sidebar::model::Leaf::Tile { id, kind, params }
-                    if id == tile && kind == "seed" && !params.is_empty() =>
-                {
-                    Some(params)
+            .find_map(|leaf| match leaf.tile() {
+                Some(("seed", params)) if leaf.id == tile && !params.is_empty() => {
+                    Some(params.to_owned())
                 }
                 _ => None,
             })?;

@@ -174,6 +174,11 @@ both sides have nothing left to do.
   whether its next frame would draw differently, as a window does before it
   presents a frame that only a key or a timer asked for, and draws it without
   a GPU when it would. A key whose echo has not come back adds none.
+- `attn_testkit::allocations::made_here()` counts the heap allocations the
+  test's thread has made, which include every frame the world draws. Hold a
+  frame's work to a budget with it, never with time: a loaded machine moves
+  time but not the count. `attn-app`'s wire binary declares the counting
+  allocator in `tests/wire.rs`.
 - `world.runtime().state` is the window's state, for what the screen cannot
   show.
 

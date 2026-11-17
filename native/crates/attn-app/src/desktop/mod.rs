@@ -13,7 +13,7 @@ mod find_bar;
 mod fit;
 pub(crate) mod header_pop;
 pub(crate) mod host;
-pub mod layout;
+pub use attn_client::layout;
 mod overview;
 mod peek;
 pub(crate) mod provenance;
@@ -32,8 +32,8 @@ mod windows;
 
 use std::collections::HashMap;
 
+use attn_client::Desktop;
 use attn_client::Facts;
-use attn_protocol::Desktop;
 use rune::Tx;
 
 use crate::State;
@@ -391,7 +391,7 @@ impl Desk {
 
     /// What this window's screen shows of `desktop`'s row; None for an empty desktop.
     pub(crate) fn plan(&self, facts: &Facts, desktop: &Desktop) -> Option<(Node, RowPlan)> {
-        let tree = Node::parse(&desktop.tree_json)?.main()?;
+        let tree = desktop.tree()?.main()?;
         let row = self.row(&desktop.id);
         let measures = self.measures(facts).unwrap_or(Measures {
             area_px: f32::INFINITY,
@@ -450,15 +450,13 @@ pub(crate) fn holds_nothing(desktop: &Desktop) -> bool {
 }
 
 pub(crate) fn leaf_ids(desktop: &Desktop) -> Vec<String> {
-    Node::parse(&desktop.tree_json)
-        .map(|tree| tree.leaves().into_iter().map(|l| l.id.clone()).collect())
-        .unwrap_or_default()
+    desktop.leaves().into_iter().map(|l| l.id.clone()).collect()
 }
 
 /// The session tile `tile` on `desktop` is bound to.
 pub(crate) fn tile_session(desktop: &Desktop, tile: &str) -> Option<String> {
-    let tree = Node::parse(&desktop.tree_json)?;
-    tree.leaves()
+    desktop
+        .leaves()
         .into_iter()
         .find(|l| l.id == tile)
         .and_then(|l| match &l.kind {
@@ -490,7 +488,8 @@ pub(crate) fn terminal_panes<'f>(
     window: &crate::Window,
 ) -> Vec<&'f attn_protocol::DesktopPane> {
     let popped = |desktop: &Desktop| -> Vec<String> {
-        Node::parse(&desktop.tree_json)
+        desktop
+            .tree()
             .map(|tree| tree.popped().into_iter().map(|l| l.id.clone()).collect())
             .unwrap_or_default()
     };

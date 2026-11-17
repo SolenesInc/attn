@@ -1,6 +1,7 @@
+use attn_client::Desktop;
 use attn_client::Facts;
 use attn_protocol::{
-    Desktop, DesktopCloseTileMessage, DesktopCreateMessage, DesktopMoveLeafMessage,
+    DesktopCloseTileMessage, DesktopCreateMessage, DesktopMoveLeafMessage,
     DesktopRemoveLeafMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage,
     DesktopShowLeafMessage, SessionPlacement, SpawnSessionMessage,
 };
@@ -587,9 +588,8 @@ pub(super) fn split_at(
     };
     let mut direction = direction;
     if direction == Direction::Horizontal
-        && let (Some(tree), Some(area)) =
-            (Node::parse(&desktop.tree_json), state.window.desk.area())
-        && let Some(message) = layout::stack_limit_message(&tree, &pane.pane_id, area.h)
+        && let (Some(tree), Some(area)) = (desktop.tree(), state.window.desk.area())
+        && let Some(message) = layout::stack_limit_message(tree, &pane.pane_id, area.h)
     {
         state.window.notify(message, tx);
         direction = Direction::Vertical;
@@ -702,7 +702,7 @@ fn close(state: &mut State, tx: &mut Tx) {
         return;
     };
     let desktop_id = desktop.id.clone();
-    let Some(tree) = Node::parse(&desktop.tree_json) else {
+    let Some(tree) = desktop.tree() else {
         super::close::request(state, &desktop_id, tx);
         return;
     };

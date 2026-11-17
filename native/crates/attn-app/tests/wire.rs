@@ -1,3 +1,6 @@
+#[global_allocator]
+static ALLOCATOR: attn_testkit::allocations::Counting = attn_testkit::allocations::Counting;
+
 mod wire {
     mod asks;
     mod attention;
@@ -18,6 +21,7 @@ mod wire {
     mod diagnostic_report;
     mod dock;
     mod field_keys;
+    mod frame_cost;
     mod garden;
     mod home;
     mod keys;

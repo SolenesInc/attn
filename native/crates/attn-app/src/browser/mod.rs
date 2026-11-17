@@ -104,7 +104,7 @@ fn wanted(state: &State) -> Vec<(TileKey, String)> {
         .iter()
         .filter(|d| Some(d.id.as_str()) == current || Some(d.id.as_str()) == previous)
         .flat_map(|desktop| {
-            let Some(tree) = Node::parse(&desktop.tree_json) else {
+            let Some(tree) = desktop.tree() else {
                 return Vec::new();
             };
             tree.leaves()
@@ -233,7 +233,7 @@ fn located(state: &mut State, page: TileKey, url: String, tx: &mut Tx) -> bool {
 
 fn leaf_of(state: &State, page: &TileKey) -> Option<crate::desktop::layout::Leaf> {
     let desktop = state.facts.desktops.iter().find(|d| d.id == page.desktop)?;
-    match Node::parse(&desktop.tree_json)?.find_leaf(&page.tile)? {
+    match desktop.tree()?.find_leaf(&page.tile)? {
         Node::Leaf(leaf) => Some(leaf.clone()),
         _ => None,
     }

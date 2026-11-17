@@ -217,13 +217,12 @@ fn shown_tiles(state: &State) -> Vec<(String, Params)> {
     if leaves.is_empty() {
         return Vec::new();
     }
-    crate::sidebar::model::leaves(&desktop.tree_json)
+    desktop
+        .leaves()
         .into_iter()
-        .filter_map(|leaf| match leaf {
-            crate::sidebar::model::Leaf::Tile { id, kind, params }
-                if kind == "notebook" && leaves.contains(&id) =>
-            {
-                Some((id, Params::parse(&params)))
+        .filter_map(|leaf| match leaf.tile() {
+            Some(("notebook", params)) if leaves.contains(&leaf.id) => {
+                Some((leaf.id.clone(), Params::parse(params)))
             }
             _ => None,
         })
@@ -262,8 +261,11 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
 }
 
 fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
-    let may_show = crate::desktop::drawn_leaves(state)
-        .is_some_and(|(d, _)| d.tree_json.contains("\"notebook\""));
+    let may_show = crate::desktop::drawn_leaves(state).is_some_and(|(d, _)| {
+        d.leaves()
+            .iter()
+            .any(|l| matches!(l.tile(), Some(("notebook", _))))
+    });
     if state.notebook.tiles.is_empty() && !may_show {
         return false;
     }

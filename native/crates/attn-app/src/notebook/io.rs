@@ -476,13 +476,12 @@ pub(crate) fn update_tile(state: &mut State, tile: &str, params: String, tx: &mu
 /// The desktop that holds notebook tile `tile`, and the tile's params.
 pub(crate) fn tile_params(state: &State, tile: &str) -> Option<(String, String)> {
     state.facts.desktops.iter().find_map(|desktop| {
-        crate::sidebar::model::leaves(&desktop.tree_json)
+        desktop
+            .leaves()
             .into_iter()
-            .find_map(|leaf| match leaf {
-                crate::sidebar::model::Leaf::Tile { id, kind, params }
-                    if id == tile && kind == "notebook" =>
-                {
-                    Some((desktop.id.clone(), params))
+            .find_map(|leaf| match leaf.tile() {
+                Some(("notebook", params)) if leaf.id == tile => {
+                    Some((desktop.id.clone(), params.to_owned()))
                 }
                 _ => None,
             })

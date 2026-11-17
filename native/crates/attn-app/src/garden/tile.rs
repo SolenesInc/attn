@@ -147,13 +147,9 @@ pub(crate) fn climb(state: &mut State, tx: &mut Tx) -> bool {
         .iter()
         .find(|d| d.id == holder.desktop)
         .into_iter()
-        .flat_map(|d| crate::sidebar::model::leaves(&d.tree_json))
-        .find_map(|leaf| match leaf {
-            crate::sidebar::model::Leaf::Tile { id, kind, params }
-                if id == holder.pane && kind == "seed" =>
-            {
-                Some(params)
-            }
+        .flat_map(|d| d.leaves())
+        .find_map(|leaf| match leaf.tile() {
+            Some(("seed", params)) if leaf.id == holder.pane => Some(params.to_owned()),
             _ => None,
         });
     let Some(id) = held else {

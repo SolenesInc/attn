@@ -1,5 +1,5 @@
+use attn_client::Desktop;
 use attn_client::{Connection, Facts, Refusal};
-use attn_protocol::Desktop;
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::tok::space;
@@ -409,9 +409,10 @@ impl Window {
         let kept = self.keyboard.as_ref().is_some_and(|holder| {
             holder.desktop == desktop.id
                 && (desktop.panes.iter().any(|p| p.pane_id == holder.pane)
-                    || crate::sidebar::model::leaves(&desktop.tree_json)
+                    || desktop
+                        .leaves()
                         .iter()
-                        .any(|leaf| matches!(leaf, crate::sidebar::model::Leaf::Tile { id, .. } if *id == holder.pane)))
+                        .any(|leaf| leaf.id == holder.pane && leaf.tile().is_some()))
         });
         if kept {
             return;

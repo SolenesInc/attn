@@ -499,7 +499,7 @@ pub(crate) fn follow(state: &mut State) {
         .facts
         .desktops
         .iter()
-        .any(|d| d.id == back.desktop && d.tree_json.contains(&back.tile));
+        .any(|d| d.id == back.desktop && d.tree().is_some_and(|t| t.has_leaf(&back.tile)));
     if shown {
         back.arrived = true;
     } else if back.arrived {

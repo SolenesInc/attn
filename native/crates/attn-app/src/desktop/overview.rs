@@ -1,9 +1,8 @@
 //! The desktop overview: every desktop of the profile as a card with its layout in miniature,
 //! to switch to, to send the active tile to, or to start a new one.
 
-use attn_protocol::{
-    Desktop, DesktopCreateMessage, DesktopMoveLeafMessage, ProfileActionResultMessage,
-};
+use attn_client::Desktop;
+use attn_protocol::{DesktopCreateMessage, DesktopMoveLeafMessage, ProfileActionResultMessage};
 use attn_ui::Tokens;
 use attn_ui::frame::{self, Frame};
 use attn_ui::type_;
@@ -164,8 +163,8 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 /// `desktop`'s layout in miniature: each leaf at its share of the layout, under its name,
 /// the active one marked.
 fn mini(desktop: &Desktop, t: &Tokens) -> Option<El> {
-    let tree = Node::parse(&desktop.tree_json)?;
-    Some(mini_node(&tree, desktop, t))
+    let tree = desktop.tree()?;
+    Some(mini_node(tree, desktop, t))
 }
 
 fn mini_node(node: &Node, desktop: &Desktop, t: &Tokens) -> El {

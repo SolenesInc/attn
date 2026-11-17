@@ -544,7 +544,7 @@ fn dock_target(state: &State, drag: &LeafDrag) -> Option<Dock> {
                 .desktops
                 .iter()
                 .find(|d| d.id == drag.source.desktop())
-                .and_then(|d| Node::parse(&d.tree_json));
+                .and_then(attn_client::Desktop::tree);
             Some(fit_column(dock, rect, source.as_ref()?, dragged))
         }
         _ => Some(dock),
@@ -698,9 +698,10 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
             let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == source) else {
                 return;
             };
-            let column_leaves = Node::parse(&desktop.tree_json)
+            let column_leaves = desktop
+                .tree()
                 .map(|t| {
-                    let row = layout::read_row(&t);
+                    let row = layout::read_row(t);
                     layout::column_index(&row, column)
                         .map(|i| row[i].leaf_ids.clone())
                         .unwrap_or_default()
@@ -746,10 +747,10 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
             let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == source) else {
                 return;
             };
-            let Some(tree) = Node::parse(&desktop.tree_json) else {
+            let Some(tree) = desktop.tree() else {
                 return;
             };
-            let (chip_edge, back) = slot_return(&tree, &leaf, &dock.anchor);
+            let (chip_edge, back) = slot_return(tree, &leaf, &dock.anchor);
             let moves = if back.is_some() { 2 } else { 1 };
             let sent_on = desktop.tree_json.clone();
             let row = state.window.desk.row_mut(&source);
@@ -976,7 +977,7 @@ pub(crate) fn settle_drag(state: &mut State) {
         .desktops
         .iter()
         .find(|d| d.id == source.desktop())
-        .and_then(|d| Node::parse(&d.tree_json))
+        .and_then(attn_client::Desktop::tree)
         .is_some_and(|tree| tree.has_leaf(source.leaf()));
     if !there || state.window.view != crate::shell::View::Desktop {
         state.window.desk.drag = None;

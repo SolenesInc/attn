@@ -345,13 +345,9 @@ fn shown<'a>(facts: &'a Facts, garden: &'a crate::garden::Garden) -> Vec<(Source
     let seeds = facts
         .desktops
         .iter()
-        .flat_map(|d| crate::sidebar::model::leaves(&d.tree_json))
-        .filter_map(|leaf| match leaf {
-            crate::sidebar::model::Leaf::Tile { kind, params, .. }
-                if kind == "seed" && !params.is_empty() =>
-            {
-                Some(params)
-            }
+        .flat_map(|d| d.leaves())
+        .filter_map(|leaf| match leaf.tile() {
+            Some(("seed", params)) if !params.is_empty() => Some(params.to_owned()),
             _ => None,
         })
         .map(|id| {

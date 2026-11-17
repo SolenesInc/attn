@@ -1,4 +1,5 @@
-use attn_protocol::{Desktop, Session};
+use attn_client::Desktop;
+use attn_protocol::Session;
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::{El, col, text};

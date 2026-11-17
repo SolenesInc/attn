@@ -52,6 +52,16 @@ pub struct Leaf {
     pub window: Option<Frame>,
 }
 
+impl Leaf {
+    /// A tile leaf's kind and params; None for a terminal pane.
+    pub fn tile(&self) -> Option<(&str, &str)> {
+        match &self.kind {
+            LeafKind::Tile { kind, params, .. } => Some((kind, params.as_deref().unwrap_or(""))),
+            LeafKind::Pane => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Split {
     pub id: String,

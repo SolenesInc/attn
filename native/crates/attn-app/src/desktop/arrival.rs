@@ -177,11 +177,7 @@ fn leaves(facts: &Facts, desktop: &str) -> Vec<String> {
         .desktops
         .iter()
         .find(|d| d.id == desktop)
-        .map(|d| {
-            let tree = super::layout::Node::parse(&d.tree_json);
-            tree.map(|t| t.leaves().iter().map(|l| l.id.clone()).collect())
-                .unwrap_or_default()
-        })
+        .map(|d| d.leaves().iter().map(|l| l.id.clone()).collect())
         .unwrap_or_default()
 }
 
