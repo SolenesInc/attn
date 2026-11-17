@@ -1062,3 +1062,63 @@ fn a_press_on_a_control_in_an_inactive_document_tile_takes_the_tile_and_the_cont
         "m"
     );
 }
+
+const MEASURED: &str = "---\ntitle: Launch plan\n---\n# The plan\n\nA paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.\n\n> a quote that also runs long enough to wrap before it reaches across a wide tile, as prose does\n\n| One | Two |\n| --- | --- |\n| 1 | 2 |\n\n```sh\nmake check\n```\n";
+
+/// The widths of the document's prose (heading, paragraph, quote) and of its wide blocks (front
+/// matter, table, code block), and the document view's width, in a window `width` wide.
+fn measured_at(width: f32) -> (Vec<f32>, Vec<f32>, f32) {
+    let mut world = start_with(document_tile("m", PLAN));
+    world.resize((width, 900.0));
+    world.daemon.emit(content(MEASURED));
+    world.settle();
+    let screen = world.screen();
+    let width_of = |target: Target| {
+        let described = format!("{target:?}");
+        screen
+            .bounds(target)
+            .unwrap_or_else(|| panic!("{described} is drawn"))[2]
+    };
+    let prose = vec![
+        width_of(Target::role("heading").name("The plan")),
+        width_of(Target::role("label").name(
+            "A paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.",
+        )),
+        width_of(Target::role("blockquote")),
+    ];
+    let wide = vec![
+        width_of(Target::role("note").name("Front matter")),
+        width_of(Target::role("table")),
+        width_of(Target::role("code")),
+    ];
+    let document = width_of(Target::key("tile.m.document"));
+    (prose, wide, document)
+}
+
+#[test]
+fn a_wide_document_tile_fills_with_its_card_while_prose_keeps_its_reading_measure() {
+    let (prose, wide, document) = measured_at(2100.0);
+    assert!(document > 1700.0, "the tile is wide: {document}");
+    let text = wide[0];
+    assert!(
+        document - text < 120.0,
+        "the card fills the tile: its text is {text} of {document}"
+    );
+    for w in &wide {
+        assert!(
+            (w - text).abs() < 1.0,
+            "a wide block takes the card: {wide:?}"
+        );
+    }
+    assert_eq!(prose, [760.0; 3], "prose keeps the reading measure");
+
+    let (prose, wide, document) = measured_at(900.0);
+    assert!(document < 760.0, "the tile is narrow: {document}");
+    let text = wide[0];
+    for w in prose.iter().chain(&wide) {
+        assert!(
+            (w - text).abs() < 1.0,
+            "every block shares the card: {prose:?} {wide:?}"
+        );
+    }
+}

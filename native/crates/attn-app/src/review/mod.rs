@@ -32,11 +32,11 @@ use crate::State;
 use document::Part;
 use frames::{Frame, MapPlace, Side};
 
-/// The reading column's width, as the markdown reader's card caps it.
 /// The review's card, as the Tauri review reader widens the markdown reader's.
 pub(crate) const CARD_MAX_WIDTH: f32 = 1180.0;
-/// How many characters wide prose and headings run, as the Tauri review reader caps them.
-const PROSE_CHARACTERS: usize = 68;
+/// The widest the review's prose and headings run, as the Tauri review reader's
+/// `--md-prose-measure` caps them.
+pub(crate) const PROSE_MEASURE: f32 = 644.0;
 /// The frames the reader draws.
 const BUILT: [Frame; 3] = [Frame::Brief, Frame::Walkthrough, Frame::Map];
 /// The Walkthrough's script column is this wide, at most this share of the tile.
@@ -653,7 +653,7 @@ pub(crate) fn body(
                     let el = col()
                         .key(key.clone())
                         .w_full()
-                        .max_w(prose_width(t, *kind))
+                        .max_w(prose_width(*kind))
                         .child(block);
                     cursor_frame(place_press(el, tile, key), current.is_some(), t)
                 }
@@ -998,16 +998,13 @@ fn spaced(parts: impl Iterator<Item = ((f32, f32), El)>) -> Vec<El> {
         .collect()
 }
 
-/// How wide a prose part of kind `block` runs: its font's 68 characters, as CSS's `68ch`, for
-/// the text blocks the Tauri review caps; a code block, table or anything else takes the card.
-fn prose_width(t: &Tokens, block: document::Prose) -> f32 {
-    let heading = match block {
-        document::Prose::Heading(level) => Some(level),
-        document::Prose::Other => return f32::INFINITY,
-        _ => None,
-    };
-    let font = crate::markdown::font(t, heading);
-    rune::text::measure(&"0".repeat(PROSE_CHARACTERS), &[], font, None).0
+/// How wide a prose part of kind `block` runs: the review's measure for the text blocks the
+/// Tauri review caps; a code block, table or anything else takes the card.
+fn prose_width(block: document::Prose) -> f32 {
+    match block {
+        document::Prose::Other => f32::INFINITY,
+        _ => PROSE_MEASURE,
+    }
 }
 
 /// `panel` floating over the reader as the Tauri app's review sheets do: centered across,

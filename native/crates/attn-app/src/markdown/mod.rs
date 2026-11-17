@@ -31,8 +31,9 @@ pub use images::Pictures;
 pub(crate) use images::{follow as follow_images, over as with_image_preview};
 pub(crate) use links::Document;
 
-/// The reading column's width, as the Tauri reader's card caps it.
-const CARD_MAX_WIDTH: f32 = 832.0;
+/// The widest paragraphs, lists, quotes and headings run, as the Tauri reader's
+/// `--md-prose-measure` caps them; tables, code, diagrams and front matter take the card.
+const PROSE_MEASURE: f32 = 760.0;
 const CARD_BORDER: f32 = 1.0;
 
 /// The Tauri reader's card padding for the room inside the tile's gutter: 1.25rem, then 2, 2.5
@@ -95,10 +96,10 @@ pub(crate) fn body(
     .uri();
     let marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
     let kept = readings.kept(&view);
-    let widest = if content.review.is_some() {
-        crate::review::CARD_MAX_WIDTH
+    let (widest, measure) = if content.review.is_some() {
+        (crate::review::CARD_MAX_WIDTH, crate::review::PROSE_MEASURE)
     } else {
-        CARD_MAX_WIDTH
+        (f32::INFINITY, PROSE_MEASURE)
     };
     let (padding, text_width) = card_fit(kept.width, widest);
     let version = (
@@ -141,7 +142,6 @@ pub(crate) fn body(
     let card = |reading: El| {
         col()
             .w_full()
-            .max_w(CARD_MAX_WIDTH)
             .padding(padding)
             .radius(radius::LG)
             .fill(t.bg_panel)
@@ -163,7 +163,10 @@ pub(crate) fn body(
             pictures,
             kept.clone(),
             marking,
-            text_width.map_or_else(|| look(t), |width| look(t).text_width(width)),
+            match text_width {
+                Some(width) => look(t).prose_measure(measure).text_width(width),
+                None => look(t).prose_measure(measure),
+            },
             t,
         )
     };
@@ -453,6 +456,7 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     };
     let code = attn_ui::colors::syntax(t.dark);
     MarkdownStyle::from_kit(kit)
+        .prose_measure(PROSE_MEASURE)
         .text(text)
         .body_font(body)
         .heading_font(1, font(t, Some(1)))
