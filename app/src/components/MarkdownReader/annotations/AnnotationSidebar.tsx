@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnnotationOrphanReason } from './useAnnotations';
-import { LABEL_COLOR_MAP, quickLabelById } from './quickLabels';
+import { labelChipStyle, quickLabelById } from './quickLabels';
 import { sortAnnotations } from './sortAnnotations';
 import { fileAnchorPlace } from './types';
 import type { Annotation } from './types';
@@ -25,19 +25,10 @@ function CardBadge({ annotation }: { annotation: Annotation }) {
       // Unknown id (forward compat): render the raw id.
       return <span className="md-card-badge md-card-badge--comment">{annotation.quickLabelId}</span>;
     }
-    const color = LABEL_COLOR_MAP[label.color];
     return (
       <span
         className="md-card-badge md-ql-chip"
-        style={
-          color
-            ? ({
-                background: color.bg,
-                '--md-ql-text': color.text,
-                '--md-ql-text-dark': color.darkText,
-              } as React.CSSProperties)
-            : undefined
-        }
+        style={labelChipStyle(label)}
       >
         {label.emoji} {label.text}
       </span>

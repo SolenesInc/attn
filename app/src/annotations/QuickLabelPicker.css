@@ -6,14 +6,9 @@
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 999px;
-  /* Per-chip colors arrive as inline custom props from LABEL_COLOR_MAP. */
-  color: var(--md-ql-text-dark, var(--color-text-primary));
+  color: var(--color-text-primary);
   text-transform: none;
   letter-spacing: normal;
-}
-
-:root[data-theme='light'] .md-ql-chip {
-  color: var(--md-ql-text, var(--color-text-primary));
 }
 
 .md-quick-label-picker {

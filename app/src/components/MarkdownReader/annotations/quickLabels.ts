@@ -4,7 +4,7 @@
 import { labelById, type QuickLabel } from '../../../annotations/quickLabels';
 
 export {
-  LABEL_COLOR_MAP,
+  labelChipStyle,
   PROMOTED_LABELS,
   QUICK_LABEL_PICKER_GROUPS,
   QUICK_LABEL_PICKER_LABELS,
