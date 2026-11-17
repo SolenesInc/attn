@@ -5,6 +5,7 @@ use attn_client::Facts;
 use attn_protocol::{Seed, SeedDocument, SeedNote, Session};
 use attn_ui::Tokens;
 use attn_ui::type_;
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use rune::tok::space;
 use rune::{Color, El, Key, KeyEvent, TextStyle, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Placement};
@@ -460,53 +461,21 @@ fn open(state: &mut State, seed: &str, session: &str, tx: &mut Tx) {
 /// Plain words from markdown `body`, cut at a word near `max` characters.
 pub(crate) fn excerpt(body: &str, max: usize) -> String {
     let mut prose = String::new();
-    let mut fenced = false;
-    for line in body.lines() {
-        if line.trim_start().starts_with("```") {
-            fenced = !fenced;
-            continue;
-        }
-        if fenced {
-            continue;
-        }
-        let line = line.trim_start();
-        let line = line.trim_start_matches('#');
-        let line = ["- ", "* ", "+ "]
-            .iter()
-            .find_map(|m| line.strip_prefix(m))
-            .unwrap_or(line);
-        prose.push_str(line);
-        prose.push(' ');
-    }
-    let mut plain = String::new();
-    let mut rest = prose.as_str();
-    while let Some(open) = rest.find('[') {
-        let end = rest[open..].find("](").map(|i| open + i);
-        let close = end.and_then(|e| rest[e..].find(')').map(|i| e + i));
-        match (end, close) {
-            (Some(end), Some(close)) => {
-                let before = &rest[..open];
-                match before.strip_suffix('!') {
-                    Some(before) => plain.push_str(before),
-                    None => {
-                        plain.push_str(before);
-                        plain.push_str(&rest[open + 1..end]);
-                    }
-                }
-                rest = &rest[close + 1..];
-            }
-            _ => {
-                plain.push_str(&rest[..=open]);
-                rest = &rest[open + 1..];
-            }
+    let mut hidden = 0usize;
+    for event in Parser::new_ext(body, Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH) {
+        match event {
+            Event::Start(Tag::CodeBlock(_) | Tag::Image { .. }) => hidden += 1,
+            Event::End(TagEnd::CodeBlock | TagEnd::Image) => hidden -= 1,
+            Event::Text(words) | Event::Code(words) if hidden == 0 => prose.push_str(&words),
+            Event::SoftBreak
+            | Event::HardBreak
+            | Event::End(
+                TagEnd::Paragraph | TagEnd::Heading(_) | TagEnd::Item | TagEnd::TableCell,
+            ) => prose.push(' '),
+            _ => {}
         }
     }
-    plain.push_str(rest);
-    let plain: String = plain
-        .chars()
-        .map(|c| if "*_~`>|".contains(c) { ' ' } else { c })
-        .collect();
-    let plain = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+    let plain = prose.split_whitespace().collect::<Vec<_>>().join(" ");
     if plain.chars().count() <= max {
         return plain;
     }

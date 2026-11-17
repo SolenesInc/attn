@@ -570,6 +570,35 @@ fn the_seed_context_shows_the_newer_of_two_notes_written_in_the_same_second() {
 }
 
 #[test]
+fn the_seed_context_keeps_punctuation_against_the_markup_before_it() {
+    let value = tended_by(seed("s-work11", "Garden icons"), "s1");
+    let mut world = start(vec![value.clone()], agent(None));
+    show_seeds(&mut world);
+    let read = reads(&world)
+        .pop()
+        .expect("the open popover reads its seed");
+    answer(
+        &mut world,
+        &read,
+        value,
+        vec![note(
+            "n-1",
+            "note",
+            "The parser moved into **one module**. Callers use `parse()`, not _parse_v1_.",
+            "2026-11-16T17:02:31Z",
+        )],
+    );
+    assert!(
+        says(
+            &world,
+            "The parser moved into one module. Callers use parse(), not parse_v1."
+        ),
+        "{:?}",
+        context(&world)
+    );
+}
+
+#[test]
 fn an_open_context_follows_each_garden_push_and_drops_an_answer_a_later_read_replaced() {
     let value = tended_by(seed("s-work11", "Garden icons"), "s1");
     let mut world = start(vec![value.clone()], agent(None));
