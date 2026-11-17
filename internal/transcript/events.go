@@ -419,6 +419,10 @@ func parseCodexEvent(envelope eventEnvelope) []Event {
 			Message string `json:"message"`
 			Text    string `json:"text"`
 			Error   string `json:"error"`
+			Item    struct {
+				Type    string          `json:"type"`
+				Content json.RawMessage `json:"content"`
+			} `json:"item"`
 		}
 		if json.Unmarshal(envelope.Payload, &payload) != nil {
 			return nil
@@ -426,6 +430,10 @@ func parseCodexEvent(envelope eventEnvelope) []Event {
 		switch payload.Type {
 		case "user_message":
 			return textEvent(envelope.Timestamp, EventKindUser, "user", payload.Message)
+		case "item_completed":
+			if payload.Item.Type == "UserMessage" {
+				return textEvent(envelope.Timestamp, EventKindUser, "user", extractEventContentText(payload.Item.Content))
+			}
 		case "agent_message":
 			return textEvent(envelope.Timestamp, EventKindAssistant, "assistant", payload.Message)
 		case "agent_reasoning":

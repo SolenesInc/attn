@@ -78,6 +78,31 @@ func TestReadEventPageCodexNormalizesAndRedacts(t *testing.T) {
 	}
 }
 
+func TestReadEventPageCodexPaginatedRolloutShowsUserMessages(t *testing.T) {
+	path := writeEventTranscript(t,
+		`{"timestamp":"2026-11-17T01:31:49Z","type":"session_meta","payload":{"id":"native-id"}}`,
+		`{"timestamp":"2026-11-17T01:31:50Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions"}]}}`,
+		`{"timestamp":"2026-11-17T01:31:50Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"t","turn_id":"u","item":{"type":"UserMessage","id":"m","content":[{"type":"text","text":"Your assignment is \"Review\" (seed s-hmxwsr)."},{"type":"text","text":"Role: Reviewer"}]}}}`,
+		`{"timestamp":"2026-11-17T01:31:51Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"t","turn_id":"u","item":{"type":"CommandExecution","id":"c","command":"attn seed show s-hmxwsr","aggregated_output":"s-hmxwsr"}}}`,
+		`{"timestamp":"2026-11-17T01:31:52Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Reading the seed."}]}}`,
+	)
+
+	page, err := ReadEventPage(path, "codex", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 2 {
+		t.Fatalf("events = %#v, want the user's message and the assistant's", page.Events)
+	}
+	user := page.Events[0]
+	if user.Kind != EventKindUser || user.Role != "user" || user.Timestamp != "2026-11-17T01:31:50Z" || user.Text != "Your assignment is \"Review\" (seed s-hmxwsr).\nRole: Reviewer" {
+		t.Fatalf("user event = %#v", user)
+	}
+	if page.Events[1].Kind != EventKindAssistant {
+		t.Fatalf("assistant event = %#v", page.Events[1])
+	}
+}
+
 func TestReadEventPageCodexResponseItemAssistantOnly(t *testing.T) {
 	path := writeEventTranscript(t,
 		`{"timestamp":"2026-07-19T10:00:00Z","type":"session_meta","payload":{"id":"native-id"}}`,

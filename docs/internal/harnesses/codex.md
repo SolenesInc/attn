@@ -76,6 +76,24 @@ Probed on 0.167.0 with a mock model and read in the source at `rust-v0.167.0`:
   `thread/fork` reaches the side's shell tools and merges with the same table
   set when the app-server started. It does not reach hooks.
 
+## Rollout events
+
+Read in the source at openai/codex 6aaac69480 (`rollout/src/policy.rs`) and
+seen in rollouts written by 0.167.0:
+
+- `session_meta.history_mode` is `legacy` or `paginated`. Each of the 130
+  rollouts from 0.167.0 checked on ai-sandbox on 2026-11-17 was `paginated`.
+- A `paginated` rollout records each completed item as an `event_msg` of type
+  `item_completed`. A user's message is
+  `{"type":"item_completed","item":{"type":"UserMessage","content":[{"type":"text","text":"..."}]}}`.
+  It writes none of the legacy `user_message`, `agent_message` or
+  `agent_reasoning` events, so one rollout never holds both shapes.
+- A `legacy` rollout writes `user_message`, `agent_message` and
+  `agent_reasoning`, and keeps `item_completed` only for items with no legacy
+  equivalent.
+- In both modes, `response_item` messages with role `user` also carry AGENTS.md
+  and environment context, so they are not the user's prompts.
+
 ## Local memories
 
 Read in the source at openai/codex 4aa94dce and checked against the
