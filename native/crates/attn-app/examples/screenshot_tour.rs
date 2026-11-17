@@ -950,6 +950,42 @@ fn notebook(dark: bool) {
     snap(&mut world, "notebook", dark);
 }
 
+/// The fullscreen notebook over a folder of two folders and a note, one folder opened.
+fn notebook_tree(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert(
+            "notebook.root.effective".to_owned(),
+            "/home/me/notebook".to_owned(),
+        );
+    }
+    let daemon = Daemon::scripted().state(state);
+    daemon.on("fs_list", |req| {
+        let entry = |path: &str, is_dir: bool| {
+            let name = path.rsplit('/').next().unwrap_or(path);
+            json!({ "path": path, "name": name, "is_dir": is_dir, "size": 1 })
+        };
+        let entries = match req["path"].as_str().unwrap_or("") {
+            "" => vec![
+                entry("journal", true),
+                entry("knowledge", true),
+                entry("todo.md", false),
+            ],
+            "knowledge" => vec![entry("knowledge/index.md", false)],
+            _ => vec![],
+        };
+        json!({ "event": "fs_list_result", "success": true, "entries": entries })
+    });
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    world
+        .automate("run", json!({ "name": "notebook.openFullscreen" }))
+        .unwrap();
+    world.settle();
+    world.gesture(|app| app.click(Target::key("notebook.file.knowledge")));
+    snap(&mut world, "notebook-tree", dark);
+}
+
 /// The review's file view, opened from the brief's stop: its back bar and its keys.
 fn review_file(dark: bool) {
     let daemon =
@@ -1418,6 +1454,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         ledger(dark);
         asks(dark);
         notebook(dark);
+        notebook_tree(dark);
         review_keys(dark);
         review_file(dark);
         ledger_seeded(dark);
