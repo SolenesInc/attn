@@ -45,6 +45,9 @@ alternatives guidance in `references/planning.md` adapt the `architect` skill, a
 the independent candidates in `references/prototype.md` adapt its `arena` skill. The independent-review, standing-brief and second-review
 guidance in `references/orchestration.md` and `references/review.md` adapts
 pstack's orchestrate and autopilot playbooks and its `interrogate` skill. The
+rule in `references/implementation.md` that the seed's checks and the
+repository's verification guidance set how far a Builder verifies adapts
+`worker.md` in pstack's `poteto-mode` skill. The
 repository's `audit-feature-map` skill (`.agents/skills/audit-feature-map`)
 adapts pstack's `maintain-verification-skill` skill:
 
