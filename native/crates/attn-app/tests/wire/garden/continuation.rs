@@ -382,6 +382,14 @@ fn offers_resume_of_an_outpost_session_and_reads_the_seed_again_when_the_outpost
         .get(Target::role("button").name("Resume on studio"));
     assert!(resume.is("disabled"), "{resume:?}");
     assert_eq!(resume.description.as_deref(), Some(reason));
+    let resume_key = resume.key.clone();
+    for _ in 0..12 {
+        if focused(&world).and_then(|n| n.key) == resume_key {
+            break;
+        }
+        key(&mut world, Key::Tab);
+    }
+    assert_eq!(focused(&world).and_then(|n| n.key), resume_key);
     click(&mut world, "Resume on studio");
     assert!(world.daemon.sent_of("seed_resume").is_empty());
 
@@ -407,6 +415,7 @@ fn offers_resume_of_an_outpost_session_and_reads_the_seed_again_when_the_outpost
         .screen()
         .get(Target::role("button").name("Resume on studio"));
     assert!(!returned.is("disabled"), "{returned:?}");
+    assert_eq!(focused(&world).and_then(|n| n.key), resume_key);
     assert!(!shows(&world, "is unreachable"));
     click(&mut world, "Resume on studio");
     let resumed = world.daemon.sent_of("seed_resume");

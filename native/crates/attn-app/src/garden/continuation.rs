@@ -70,7 +70,7 @@ impl Sheet<'_> {
                     .as_deref()
                     .filter(|_| unreachable)
                 {
-                    Some(reason) => button.disabled(true).help(reason),
+                    Some(reason) => button.unavailable(reason),
                     None => button,
                 };
                 actions.push(
