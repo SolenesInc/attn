@@ -30,11 +30,13 @@ pub(crate) enum Shown {
 
 /// A show this window asked for that has not landed on screen yet. An `announced` one rings
 /// its tile when it lands; a quiet one for a session that just started only keeps its tile
-/// from ringing as it joins, and is done once the session has a tile.
+/// from ringing as it joins, and is done once the session has a tile. One that takes the
+/// `keyboard` gives it to the tile it lands on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Awaited {
     shown: Shown,
     announced: bool,
+    keyboard: bool,
 }
 
 /// A tile ringing until `until`.
@@ -53,8 +55,19 @@ pub(crate) struct OnScreen {
 
 /// Waits for `shown` to land, ringing its tile then if `announced`.
 pub(crate) fn expect(state: &mut State, shown: Shown, announced: bool, tx: &mut Tx) {
-    state.window.desk.awaited = Some(Awaited { shown, announced });
+    state.window.desk.awaited = Some(Awaited {
+        shown,
+        announced,
+        keyboard: false,
+    });
     land(state, tx);
+}
+
+/// Gives the keyboard to the tile the awaited show lands on.
+pub(crate) fn hand_keyboard(state: &mut State) {
+    if let Some(awaited) = state.window.desk.awaited.as_mut() {
+        awaited.keyboard = true;
+    }
 }
 
 /// Stops waiting for `shown`, which the daemon refused or put out of sight.
@@ -142,7 +155,10 @@ fn land(state: &mut State, tx: &mut Tx) {
     desk.awaited = None;
     if awaited.announced {
         desk.rings.clear();
-        ring(desk, &id, leaf, tx.clock() + RING_SECONDS, tx);
+        ring(desk, &id, leaf.clone(), tx.clock() + RING_SECONDS, tx);
+    }
+    if awaited.keyboard {
+        super::give_keyboard(state, &id, &leaf, tx);
     }
 }
 

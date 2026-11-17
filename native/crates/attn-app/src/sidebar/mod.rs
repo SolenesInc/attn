@@ -935,10 +935,14 @@ pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
     {
         state.window.run_groups_open.insert(run.definition_id);
     }
-    if let Some((desktop, leaf)) = pane_of(state, session) {
-        crate::desktop::give_keyboard(state, &desktop, &leaf, tx);
+    let tiled = pane_of(state, session);
+    if let Some((desktop, leaf)) = &tiled {
+        crate::desktop::give_keyboard(state, desktop, leaf, tx);
     }
     show_agent(state, session, tx);
+    if tiled.is_none() {
+        crate::desktop::arrival::hand_keyboard(state);
+    }
 }
 
 /// Shows the agent where it is and leaves the keyboard where it was. A show the daemon refuses

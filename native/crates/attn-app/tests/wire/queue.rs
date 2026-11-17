@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use attn_app::{Action, Keymap};
 use attn_protocol::{
-    AutomationProvenance, Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
-    Session, SessionStateChangedMessage, SessionUnregisteredMessage,
+    AutomationProvenance, Desktop, DesktopPane, InitialStateMessage, Profile,
+    ProfileArrangementChangedMessage, Session, SessionStateChangedMessage,
+    SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
 use rune::KeyPlatform;
@@ -1955,6 +1956,38 @@ fn a_hidden_agent_queues_without_a_desktop_slot_and_opens_in_a_tile_when_chosen(
     assert_eq!(sent_ids(&world, "desktop_show_session"), ["h1"]);
     daemon_shows(&mut world, &[&s1, &h1], "h1");
     assert!(world.screen().find(Target::key("tile.p1")).is_some());
+}
+
+#[test]
+fn a_hidden_agent_chosen_from_the_queue_takes_the_keyboard_once_its_tile_lands() {
+    let (message, s1, h1) = with_hidden_turn(&[]);
+    let mut world = World::start(Daemon::scripted().state(message));
+    world.gesture(|app| app.click(Target::key("queue-turn.h1")));
+    let panes = [&s1, &h1]
+        .iter()
+        .enumerate()
+        .map(|(i, s)| DesktopPane {
+            runtime_id: format!("rt-{}", s.id),
+            ..pane("d1", &format!("p{i}"), &s.id)
+        })
+        .collect();
+    let mut d1 = slotted(desktop("d1", "a", "", panes), 1);
+    d1.active_pane_id = "p1".into();
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            current_desktop_id: "d1".into(),
+            ..Profile::default()
+        },
+        desktops: vec![d1],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+    world.gesture(|app| app.type_text("y"));
+    let sent = world.daemon.sent_of("pty_input");
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert_eq!(sent[0]["id"], "rt-h1");
 }
 
 #[test]
