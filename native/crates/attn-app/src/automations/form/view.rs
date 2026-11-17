@@ -38,7 +38,8 @@ const MONTHS: [&str; 12] = [
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /// The prompt's least height, the Tauri app's `.automation-form__textarea { min-height: 120px }`.
 const PROMPT_HEIGHT: f32 = 120.0;
-/// The Tauri form's unstyled Desktop `<select>`: a macOS pop-up button, 20 points tall.
+/// The Tauri form's unstyled Desktop `<select>`, a macOS pop-up button: 20 points tall in
+/// the pixel audit's automations-notebook-21 crop.
 const DESKTOP_SELECT_HEIGHT: f32 = 20.0;
 /// The width `attn_ui::scroll_bar` takes beside the content, as WebKit's styled scroll bar does.
 const SCROLL_BAR: f32 = 8.0;

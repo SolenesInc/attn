@@ -42,6 +42,8 @@ pub(crate) struct Delegation {
     adoption_open: Option<String>,
     /// The text of each field while the focus is in it.
     drafts: BTreeMap<String, Draft>,
+    /// The height each text area's grip dragged it to, which outlives its drafts.
+    dragged_heights: BTreeMap<String, f32>,
 }
 
 struct Pending {
@@ -95,6 +97,7 @@ pub(super) fn arrive(state: &mut State, tx: &mut Tx) {
     d.adoption = None;
     d.adoption_open = None;
     d.drafts.clear();
+    d.dragged_heights.clear();
     if d.preferences.is_some() {
         reload(state, tx);
     }
@@ -286,6 +289,11 @@ pub(super) fn poll(state: &mut State, tx: &mut Tx) -> bool {
     if let Some(draft) = focused.as_ref().and_then(|key| d.drafts.get_mut(key)) {
         draft.held_focus = true;
     }
+    for (key, draft) in &d.drafts {
+        if let Some(h) = draft.edit.dragged_height() {
+            d.dragged_heights.insert(key.clone(), h);
+        }
+    }
     d.drafts
         .retain(|key, draft| draft.held_focus || Some(key) == focused.as_ref());
     let left: Vec<String> = d
@@ -325,13 +333,19 @@ fn draft_mut<'a>(state: &'a mut State, field: &table::Field) -> &'a mut TextEdit
         .as_ref()
         .map(|p| field.value(p))
         .unwrap_or_default();
-    &mut page_state_mut(state)
+    let d = page_state_mut(state);
+    let height = d.dragged_heights.get(&key).copied();
+    &mut d
         .drafts
         .entry(key)
-        .or_insert_with(|| Draft {
-            edit: TextEdit::new(value),
-            field: field.clone(),
-            held_focus: false,
+        .or_insert_with(|| {
+            let mut edit = TextEdit::new(value);
+            edit.set_dragged_height(height);
+            Draft {
+                edit,
+                field: field.clone(),
+                held_focus: false,
+            }
         })
         .edit
 }

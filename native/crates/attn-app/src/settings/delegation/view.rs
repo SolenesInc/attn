@@ -745,12 +745,13 @@ fn text_field(
     let d = page_state(state);
     let key = field.key();
     let label_key = format!("{key}.label");
-    let shown = TextEdit::new(
+    let mut shown = TextEdit::new(
         d.preferences
             .as_ref()
             .map(|p| field.value(p))
             .unwrap_or_default(),
     );
+    shown.set_dragged_height(d.dragged_heights.get(&key).copied());
     let edit = d.drafts.get(&key).map_or(&shown, |draft| &draft.edit);
     let k = crate::settings::pages::kit(t);
     let control = if field.single_line() {

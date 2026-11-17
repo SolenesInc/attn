@@ -458,6 +458,29 @@ fn return_in_a_multi_line_field_breaks_the_line_and_saves_both_lines() {
 }
 
 #[test]
+fn a_dragged_multi_line_field_keeps_its_height_through_typing_and_leaving_it() {
+    let (mut world, _server) = open_fallback(Spec::default());
+    let grip = format!("{FALLBACK_FIELD}-grip");
+    let rest = world.rect(&grip)[1];
+    let [x, y, w, h] = world.rect(&grip);
+    let to = ((x + w / 2.0) as f32, (y + h / 2.0 + 90.0) as f32);
+    world.gesture(|app| app.drag(Target::key(&grip), to));
+    world.settle();
+    let dragged = world.rect(&grip)[1];
+    assert!(
+        (dragged - (rest + 90.0)).abs() < 1.0,
+        "the drag survives the next poll: {dragged} against {rest} + 90"
+    );
+
+    write(&mut world, FALLBACK_FIELD, "keep it short");
+    assert_eq!(
+        world.rect(&grip)[1],
+        dragged,
+        "typing and leaving the field keep the dragged height"
+    );
+}
+
+#[test]
 fn edits_made_during_a_save_collapse_into_one_follow_up_carrying_the_returned_revision() {
     let (mut world, server) = open_fallback(Spec::default());
     server.hold_saves();
