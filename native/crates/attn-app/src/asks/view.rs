@@ -478,10 +478,13 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                 .w_full()
                 .child(prose.markdown(part.markdown.as_deref().unwrap_or_default())),
         });
-    let note_placeholder = if item.holder.is_some() || ask.seed_id.is_none() {
-        format!("Anything else for {}?", item.from)
-    } else {
-        "Anything else for its next tender?".to_owned()
+    let note_placeholder = match (item.holder, item.standby, &ask.seed_id) {
+        (None, Some(tender), _) => format!(
+            "Anything else for {}?",
+            crate::desktop::chain::dormant_name(tender)
+        ),
+        (None, None, Some(_)) => "Anything else for its next tender?".to_owned(),
+        _ => format!("Anything else for {}?", item.from),
     };
     let note = match &ask.reply {
         Some(reply) => reply
@@ -532,6 +535,12 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .pb(20.0)
         .gap(14.0)
         .child(from)
+        .children((item.standby.is_some() && !replied).then(|| {
+            text("Your answer resumes it.")
+                .key("asks.resumes")
+                .font(SMALL)
+                .color(t.text_secondary)
+        }))
         .children(seed)
         .child(
             prose.text(

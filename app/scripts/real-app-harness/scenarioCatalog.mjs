@@ -273,7 +273,7 @@ export const scenarioCatalog = [
   {
     id: 'native-delegation-chain',
     runnerId: 'NATIVE-DELEGATION-CHAIN',
-    label: 'In the native app delegates carry their roles into the header and the delegation chain, opened from a row, the header and the palette; a delegate to a missing numbered desktop leaves the caller on screen',
+    label: 'In the native app delegates carry their roles into the header and the delegation chain, opened from a row, the header and the palette; a delegate on standby stays in it as a dormant row that opens its seed; a delegate to a missing numbered desktop leaves the caller on screen',
     command: ['node', 'scripts/real-app-harness/scenario-native-delegation-chain.mjs'],
     app: 'native',
   },

@@ -123,7 +123,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) has Settings → Delegation with its switch, the roles table, each role's alternatives, the fallback "Anything else", delete with Undo and the workflow install; the role on the tile header and the delegation chain card from a tile header, a sidebar row and the palette. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+The native app (`native/`) has Settings → Delegation with its switch, the roles table, each role's alternatives, the fallback "Anything else", delete with Undo and the workflow install; the role on the tile header and the delegation chain card from a tile header, a sidebar row and the palette. The card keeps a delegate that closed on standby as a dormant row under its dispatcher, named with "on standby" and what it waits for, and Enter or a press on that row opens its seed in a tile beside the dispatcher. A dispatcher whose only delegate is on standby keeps its chain. The Tauri app's card drops a closed delegate. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
 
 Preconditions:
 
@@ -137,6 +137,7 @@ Steps:
 - **The role on the tile header.** Press the delegate's row `sidebar.session.<delegate>`: `tile.<leaf>.role.name` reads the role's name. Hover `tile.<leaf>.role`: its card `tile.<leaf>.role.popover` lists the chain with the delegate picked. ↑ and ↓ move the pick, Enter opens the picked agent and Escape closes the card. A chain shown by hover takes these keys before the terminal does.
 - **The chain from a sidebar row.** Hover `sidebar.session.<dispatcher>.chain`: `sidebar.session.<dispatcher>.chain.popover` names both agents.
 - **The chain from the palette.** `bridge run '{"name":"ui.commandPalette"}'`, `bridge type '{"text":"delegation chain"}'`, wait for `palette.row.command:show-delegation-chain` and `bridge key '{"chord":"Enter"}'`: the shown agent's card opens with that agent picked. ↓ and Enter open the delegate, and `bridge state '{"of":"window"}'` names it `on_screen`.
+- **A delegate on standby.** After the delegate runs `./attn seed standby <seed> -m "Merge once CI is green"` and closes, press `sidebar.session.<dispatcher>.chain`: the card lists a row named `<delegate label> · on standby · Merge once CI is green` right under the dispatcher. ↓ to it and Enter: the card closes and the seed opens in a tile beside the dispatcher.
 - **Proof.** In `$P`, keep each `./attn` and `bridge` answer with its exit code, and `bridge shot '{"path":"<P>/delegation-chain.png"}'` with a card open.
 
 ## Contexts

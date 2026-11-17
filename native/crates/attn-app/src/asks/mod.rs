@@ -4,7 +4,7 @@ mod view;
 use std::collections::{BTreeMap, HashMap};
 
 use attn_client::Facts;
-use attn_protocol::{Ask, AskAnswer, AskAnswerMessage, AskQuestion, Session};
+use attn_protocol::{Ask, AskAnswer, AskAnswerMessage, AskQuestion, Session, StandbyTender};
 use rune::{TextEdit, Tx};
 
 use crate::State;
@@ -67,11 +67,12 @@ impl Kind {
     }
 }
 
-/// One row of the drawer's list: the ask, the agent that holds it, and how the drawer names
-/// that agent.
+/// One row of the drawer's list: the ask, the agent that holds it or the closed agent on
+/// standby that its answer resumes, and how the drawer names that agent.
 pub(crate) struct Item<'a> {
     pub ask: &'a Ask,
     pub holder: Option<&'a Session>,
+    pub standby: Option<&'a StandbyTender>,
     pub from: String,
     pub questions: usize,
     pub snoozed_until: Option<&'a str>,
@@ -89,10 +90,15 @@ impl<'a> Lists<'a> {
     pub(crate) fn of(facts: &'a Facts, now_ms: i64) -> Lists<'a> {
         let item = |ask: &'a Ask| {
             let holder = holder(ask, facts);
+            let standby = holder
+                .is_none()
+                .then(|| standby_tender(ask, facts))
+                .flatten();
             Item {
                 ask,
                 holder,
-                from: from(ask, holder),
+                standby,
+                from: from(ask, holder, standby),
                 questions: questions(ask).count(),
                 snoozed_until: None,
             }
@@ -187,7 +193,21 @@ pub(crate) fn belongs_to(ask: &Ask, session: &Session, facts: &Facts) -> bool {
     ask.session_id == session.id
 }
 
-fn from(ask: &Ask, holder: Option<&Session>) -> String {
+/// The closed agent on standby that tends the ask's seed, which an answer resumes.
+fn standby_tender<'a>(ask: &Ask, facts: &'a Facts) -> Option<&'a StandbyTender> {
+    let seed = ask.seed_id.as_ref()?;
+    facts
+        .garden
+        .of(&facts.profiles.selected)
+        .iter()
+        .find(|s| &s.id == seed)?
+        .standby
+        .as_ref()?
+        .tender
+        .as_ref()
+}
+
+fn from(ask: &Ask, holder: Option<&Session>, standby: Option<&StandbyTender>) -> String {
     if holder.is_some_and(|s| s.chief_of_staff == Some(true)) {
         return "Chief".into();
     }
@@ -197,6 +217,12 @@ fn from(ask: &Ask, holder: Option<&Session>) -> String {
             Some(_) => name,
             None => format!("{name} (between sessions)"),
         };
+    }
+    if let (None, Some(tender)) = (holder, standby) {
+        return format!(
+            "{} · on standby",
+            crate::desktop::chain::dormant_name(tender)
+        );
     }
     match (holder, &ask.seed_id) {
         (Some(session), _) => crate::sidebar::display_name(session),
@@ -591,6 +617,6 @@ pub(crate) fn toggle_snooze(state: &mut State, tx: &mut Tx) {
         crate::sidebar::wake(state, &holder.id);
         return;
     }
-    let name = from(ask, Some(&holder));
+    let name = from(ask, Some(&holder), None);
     crate::sidebar::snooze::open(state, &holder.id, name, Some(view::SNOOZE.into()), tx);
 }

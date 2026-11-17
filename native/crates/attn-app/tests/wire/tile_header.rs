@@ -5,8 +5,8 @@ use attn_protocol::{
     ActorView, AutomationProvenance, CommandUsage, Desktop, DesktopPane,
     GetCommandUsageResultMessage, InitialStateMessage, OutpostInfo, OutpostsUpdatedMessage,
     Profile, ProfileArrangementChangedMessage, PullRequestProvenance,
-    RecordCommandUsageResultMessage, Session, SessionDelegationRole, SessionPullRequest,
-    SessionStateChangedMessage, SessionUsage, SessionUsageModel,
+    RecordCommandUsageResultMessage, Seed, SeedStandbyView, Session, SessionDelegationRole,
+    SessionPullRequest, SessionStateChangedMessage, SessionUsage, SessionUsageModel, StandbyTender,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
@@ -1097,6 +1097,111 @@ fn a_chain_walks_the_whole_tree_from_its_root_with_each_agents_depth() {
             ("child".to_owned(), 2),
             ("grandchild".to_owned(), 3),
             ("peer".to_owned(), 2),
+        ]
+    );
+    rest(&mut world);
+}
+
+fn on_standby(id: &str, tender: &str, label: &str, dispatcher: &str) -> Seed {
+    let mut seed = super::garden::seed(id, "Publish the plugin SDK");
+    seed.standby = Some(SeedStandbyView {
+        note: "Waits for the npm login\nthen publishes 0.4.0".into(),
+        set_at: "2026-11-17T09:00:00Z".into(),
+        tender: Some(StandbyTender {
+            session_id: format!("s-{tender}"),
+            label: label.into(),
+            agent: "claude".into(),
+            dispatcher_session_id: Some(format!("s-{dispatcher}")),
+            ..StandbyTender::default()
+        }),
+        ..SeedStandbyView::default()
+    });
+    seed
+}
+
+#[test]
+fn a_closed_agent_on_standby_stays_under_its_dispatcher_in_the_chain_and_opens_its_seed() {
+    let mut world = start_from(InitialStateMessage {
+        desktops: Some(vec![desktop("a")]),
+        sessions: Some(vec![
+            session("a", "ledger sweep", None),
+            session("b", "docs", None),
+        ]),
+        seeds: Some(vec![on_standby(
+            "s-publish",
+            "gone",
+            "Publish the plugin SDK",
+            "a",
+        )]),
+        ..InitialStateMessage::new()
+    });
+    assert_eq!(
+        role_button(&world),
+        Some("Show delegation chain for ledger sweep".into()),
+        "a dispatcher whose only delegate is on standby keeps its chain"
+    );
+    assert_eq!(
+        chip(&world, "sidebar.session.s-a").as_deref(),
+        Some("Show delegation chain for ledger sweep")
+    );
+    assert!(world.screen().find(Target::key("tile.b.role")).is_none());
+
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    assert_eq!(
+        chain(&world).expect("a press pins the chain"),
+        [
+            "ledger sweep · Unknown harness · current",
+            "Publish the plugin SDK · on standby · Waits for the npm login",
+        ]
+    );
+    assert_eq!(
+        chain_levels(&world),
+        [
+            ("ledger sweep".to_owned(), 1),
+            ("Publish the plugin SDK".to_owned(), 2)
+        ]
+    );
+    rest(&mut world);
+    assert!(
+        chain(&world).is_some(),
+        "the open card with its dormant row rests"
+    );
+
+    key(&mut world, Key::Down);
+    key(&mut world, Key::Enter);
+    assert_eq!(chain(&world), None);
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], "s-publish");
+    assert_eq!(opened[0]["session_id"], "s-a");
+    assert!(world.daemon.sent_of("desktop_show_session").is_empty());
+    rest(&mut world);
+}
+
+#[test]
+fn a_live_delegate_of_an_agent_on_standby_finds_its_chain_through_the_dormant_row() {
+    let mut world = start_from(InitialStateMessage {
+        desktops: Some(vec![desktop("a")]),
+        sessions: Some(vec![
+            delegate_of("a", "release notes", "gone"),
+            session("b", "docs", None),
+            session("root", "root session", None),
+        ]),
+        seeds: Some(vec![on_standby(
+            "s-publish",
+            "gone",
+            "Publish the plugin SDK",
+            "root",
+        )]),
+        ..InitialStateMessage::new()
+    });
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    assert_eq!(
+        chain_levels(&world),
+        [
+            ("root session".to_owned(), 1),
+            ("Publish the plugin SDK".to_owned(), 2),
+            ("release notes".to_owned(), 3),
         ]
     );
     rest(&mut world);

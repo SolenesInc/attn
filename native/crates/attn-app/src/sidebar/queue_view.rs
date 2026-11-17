@@ -188,7 +188,7 @@ fn agent(
                 state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
             )
             .asking(&state.facts, session)
-            .chained(session, &state.facts.sessions);
+            .chained(session, &state.facts);
             if on_screen.contains(&session.id) {
                 row
             } else {

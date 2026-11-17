@@ -349,6 +349,31 @@ impl Standby {
             .then(|| format!("resume blocked: {}", self.resume_blocked))
     }
 
+    /// What the seed waits on in a few words: a blocked resume, the reminder, the pull
+    /// requests, or else the note's first line.
+    pub(crate) fn waits(&self) -> String {
+        if !self.resume_blocked.is_empty() {
+            return "resume blocked".into();
+        }
+        if !self.reminder_at.is_empty() {
+            return format!("until {}", self.reminder_at);
+        }
+        if !self.pull_requests.is_empty() {
+            return self
+                .pull_requests
+                .iter()
+                .map(|pr| format!("PR {}", pr.number))
+                .collect::<Vec<_>>()
+                .join(", ");
+        }
+        self.note
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_owned()
+    }
+
     /// Everything the marker stands for, one line each, for its tooltip.
     pub(crate) fn details(&self) -> String {
         (!self.note.is_empty())

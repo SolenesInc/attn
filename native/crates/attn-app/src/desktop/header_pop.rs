@@ -33,7 +33,7 @@ impl What {
         match self {
             What::Usage => super::usage::shown(session).is_some(),
             What::Details => super::provenance::pull_request(session).is_some(),
-            What::Chain => super::chain::shown(session, &facts.sessions),
+            What::Chain => super::chain::shown(session, facts),
             What::Ask => !crate::asks::of_session(facts, session).is_empty(),
             What::Seed => super::seed_chip::shown(session, facts),
         }
@@ -42,7 +42,7 @@ impl What {
     /// The row a popover listing several things picks first.
     fn first_pick(self, session: &str, facts: &attn_client::Facts) -> usize {
         match self {
-            What::Chain => super::chain::current_row(session, &facts.sessions),
+            What::Chain => super::chain::current_row(session, facts),
             What::Seed => super::seed_chip::first_pick(session, facts),
             What::Usage | What::Details | What::Ask => 0,
         }

@@ -70,7 +70,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) draws both sidebars, the rail, the queue bar, the agent list and its filter, each row's actions menu, the resize edge, the width keys and Settings → Appearance's width field, drags desktops into a new order, and shows an unread critical notification as a strip above Home ([home.md](home.md)). Of the title bar's feature buttons it draws the bell and asks. The others, and resizing beside a browser tile, drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) draws both sidebars, the rail, the queue bar, the agent list and its filter, each row's actions menu, the resize edge, the width keys and Settings → Appearance's width field, drags desktops into a new order, and shows an unread critical notification as a strip above Home ([home.md](home.md)). A row's delegation chain chip stays on a dispatcher whose only delegate closed on standby, and its card shows that delegate as a dormant row; the sidebar itself lists no row for it ([delegation.md](delegation.md)). Of the title bar's feature buttons it draws the bell and asks. The others, and resizing beside a browser tile, drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 

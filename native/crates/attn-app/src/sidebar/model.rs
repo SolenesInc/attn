@@ -144,8 +144,8 @@ impl AgentRow {
     }
 
     /// The row with its way into the delegation chain it sits in.
-    pub fn chained(mut self, session: &Session, sessions: &[Session]) -> AgentRow {
-        self.chain = crate::desktop::chain::trigger(session, sessions).map(Box::new);
+    pub fn chained(mut self, session: &Session, facts: &Facts) -> AgentRow {
+        self.chain = crate::desktop::chain::trigger(session, facts).map(Box::new);
         self
     }
 
@@ -683,7 +683,7 @@ fn agent_line(
     let selected = shown && active == Some(session.id.as_str());
     let row = AgentRow::of(session, &facts.outposts, selected)
         .asking(facts, session)
-        .chained(session, &facts.sessions);
+        .chained(session, facts);
     Line::Agent {
         desktop: desktop.id.clone(),
         row: if on_screen.contains(&session.id) {

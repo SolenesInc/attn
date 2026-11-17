@@ -8,6 +8,7 @@ use attn_protocol::{
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
+    SeedStandbyView, StandbyTender,
 };
 use attn_testkit::{Daemon, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -691,6 +692,28 @@ fn an_ask_about_a_seed_nobody_live_tends_waits_for_its_next_tender() {
         name(&world, "asks.from"),
         "waiting for the next tender of Cache store migration"
     );
+    assert!(!has(&world, "asks.open-agent"));
+    assert!(!has(&world, "asks.snooze"));
+}
+
+#[test]
+fn an_ask_whose_tender_is_on_standby_names_it_and_says_an_answer_resumes_it() {
+    let mut seed = migration(Some("delegate"));
+    seed.standby = Some(SeedStandbyView {
+        note: "Waits for the user".into(),
+        tender: Some(StandbyTender {
+            session_id: "delegate".into(),
+            label: "Migrate the cache".into(),
+            agent: "claude".into(),
+            ..StandbyTender::default()
+        }),
+        ..SeedStandbyView::default()
+    });
+    let mut world = start_with_seeds(vec![landing()], vec![api_working()], vec![seed]);
+    open_drawer(&mut world);
+
+    assert_eq!(name(&world, "asks.from"), "Migrate the cache · on standby");
+    assert_eq!(name(&world, "asks.resumes"), "Your answer resumes it.");
     assert!(!has(&world, "asks.open-agent"));
     assert!(!has(&world, "asks.snooze"));
 }

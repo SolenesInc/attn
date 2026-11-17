@@ -199,11 +199,8 @@ pub(crate) fn shows_usage(session: &attn_protocol::Session) -> bool {
     usage::shown(session).is_some()
 }
 
-pub(crate) fn shows_chain(
-    session: &attn_protocol::Session,
-    sessions: &[attn_protocol::Session],
-) -> bool {
-    chain::shown(session, sessions)
+pub(crate) fn shows_chain(session: &attn_protocol::Session, facts: &attn_client::Facts) -> bool {
+    chain::shown(session, facts)
 }
 
 /// The open tile header popover.

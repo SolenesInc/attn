@@ -386,7 +386,7 @@ fn sublines(
             let s = facts.sessions.iter().find(|s| s.id == p.session_id)?;
             let mut sub = Subline {
                 seed: super::seed_chip::of(s, seeds, &crate::sidebar::display_name(s)),
-                role: super::chain::trigger(s, &facts.sessions),
+                role: super::chain::trigger(s, facts),
                 host: super::host::name(s, &facts.outposts),
                 usage: super::usage::badge(s),
                 usage_open: desk.header_pop.open.as_ref().is_some_and(|pop| {
