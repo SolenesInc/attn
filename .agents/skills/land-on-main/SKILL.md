@@ -138,15 +138,15 @@ The last lines of the output warn when the landing undid earlier commits on
 undo a commit, restore it right away in a new landing with `git cherry-pick`,
 and say so in your report.
 
-One land runs at a time per clone. When a land from another worktree of the
-clone holds the land queue, `scripts/land.sh` prints `land: waiting for the
-land queue: held by pid <pid> (<worktree>) since <time>` and waits. Waiting is normal: leave the land
-running, and do not kill it or start it again. It prints `land: took the land
-queue` when its turn comes.
+Lands run their checks side by side. Only the push waits for the clone's land
+queue: when another land of the clone is pushing, `scripts/land.sh` prints
+`land: waiting for the land queue: held by pid <pid> (<worktree>) since <time>`,
+waits a few seconds, and prints `land: took the land queue`. Leave it running.
 
-When `main` moves during landing, `scripts/land.sh` rebases, runs its gate
-again and pushes on its own. Your checks still count. When `scripts/land.sh`
-stops on a conflict in your code, resolve the conflict with
+When `main` moves during landing, `scripts/land.sh` rebases and pushes without
+running its checks again, and prints `land: main moved after the checks ran on
+<commit>`. Your checks still count; name that commit in your report. When
+`scripts/land.sh` stops on a conflict in your code, resolve the conflict with
 `git rebase origin/main`, rerun the checks that the resolution touches, and
 run `scripts/land.sh` again.
 

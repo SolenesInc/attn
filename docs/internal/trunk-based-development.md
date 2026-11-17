@@ -49,9 +49,7 @@ because the landing changed no feature file that lists the scenario, or because
 the scenario failed only after other scenarios ran in the same shard. Running
 the whole matrix for every product change would catch them, on 58% of landings,
 at 48 times this selection's scenario time.
-A landing that edits only a shared harness file selects no scenario. This step
-runs before `land.sh`
-takes the land queue, and only once, so a later rebase does not repeat it. The
+A landing that edits only a shared harness file selects no scenario. The
 fast gate:
 
 - Go: vet all packages and their tests, which type-checks everything without
@@ -116,18 +114,21 @@ undoes, and one whose lines a later commit changed.
 After the push, `land.sh` runs `scripts/native-build-clean`, which removes old
 Rust build output. [Native app](native-app.md#build-output) says what it removes.
 
-One land runs at a time per clone. `land.sh` takes the clone's land queue, a
-lock that every worktree of the clone shares, before its first fetch, and holds
-it until it exits. A land that finds the queue taken prints the holder's PID,
-worktree and start time, waits, and says when it takes the queue. The lock dies
-with its process, so a land that crashes or is killed holds nothing. Lands from
-one clone therefore never push under each other's running gate.
+Lands run their scenarios and their gate side by side, once each. Only the
+push waits: `land.sh` then takes the clone's land queue, a lock that every
+worktree of the clone shares, fetches, rebases onto `origin/main` and pushes.
+The queue keeps two lands of one clone from fetching into the shared
+`origin/main` ref at once, and a land that finds it taken prints the holder's
+PID, worktree and start time, waits, and says when it takes the queue. The lock
+dies with its process, so a land that crashes or is killed holds nothing.
 
-When only protocol types or prompt catalogs conflict, `land.sh` regenerates
-them. When `main` moves during landing, such as from a land in another clone or
-on another machine, `land.sh` rebases, runs the gate again on the new
-combination, and pushes. Go's test cache answers for the Go landing tests the
-new commits do not reach.
+When `main` moved after the checks, `land.sh` says so, naming the commit the
+checks ran on, and pushes the rebased commits without running the checks again.
+Rerunning would make every land behind a push start over, so that concurrent
+lands mostly reran each other's gates. Two changes that pass alone can still
+break `main` together. CI on `main` catches that, and the sheriff fixes it. When
+only protocol types or prompt catalogs conflict, `land.sh` regenerates them;
+any other conflict stops the land before the push.
 
 ## Verifying before landing
 

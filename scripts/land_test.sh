@@ -343,8 +343,8 @@ no_land_scenario_refs
 touch "$LAND_MOVE_MAIN"
 printf '\n' >>internal/example/example.go
 land 'Go change while main moves'
-expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" \
-  'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_output 'main moved after the checks ran on'
 
 printf '\n' >>internal/example/example.go
 LAND_FLAGS=--baseline land 'Go change landed on the baseline'
@@ -400,58 +400,26 @@ refuses 'a failed Go compile' LAND_COMPILE_EXIT=1 internal/example/example.go
 
 hold="$work/hold" second="$work/second"
 mkdir "$hold"
-mkfifo "$hold/started" "$hold/release" "$work/second-output"
+mkfifo "$hold/started" "$hold/release"
 git worktree add -q -b second "$second" origin/main
 
-hold_queue() {
-  printf '\n' >>app/src/example.ts
-  git add -A
-  git commit -qm "$1"
-  LAND_HOLD="$hold" bash "$root/scripts/land.sh" >"$work/holder-output" 2>&1 &
-  holder=$!
-  read -r _ <"$hold/started"
-}
-
-land_second_in_background() {
-  git -C "$second" pull -q --rebase origin main
-  printf '%s\n' "$1" >"$second/$1.md"
-  git -C "$second" add -A
-  git -C "$second" commit -qm "$1"
-  (cd "$second" && exec bash "$root/scripts/land.sh") >"$work/second-output" 2>&1 &
-  waiter=$!
-  exec 3<"$work/second-output"
-  read -r first_line <&3
-}
-
-finish_second() {
-  { printf '%s\n' "$first_line"; cat <&3; } >"$work/output"
-  exec 3<&-
-  wait "$waiter" || { cat "$work/output" >&2; exit 1; }
-  [ "$(git -C "$second" rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
-}
-
-hold_queue 'App change that holds the land queue'
-land_second_in_background waits
-case "$first_line" in
-  "land: waiting for the land queue: held by pid $holder (repo) since "*) ;;
-  *) echo "the second land did not wait for the queue: $first_line" >&2; exit 1 ;;
-esac
+printf '\n' >>app/src/example.ts
+git add -A
+git commit -qm 'App change whose checks run beside another land'
+LAND_HOLD="$hold" bash "$root/scripts/land.sh" >"$work/holder-output" 2>&1 &
+holder=$!
+read -r _ <"$hold/started"
+git -C "$second" pull -q --rebase origin main
+printf 'beside\n' >"$second/beside.md"
+git -C "$second" add -A
+git -C "$second" commit -qm 'Land beside running checks'
+(cd "$second" && exec bash "$root/scripts/land.sh") >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
+[ "$(git -C "$second" rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ] || { echo 'a land did not push while another land of the clone ran its checks' >&2; exit 1; }
 echo release >"$hold/release"
-wait "$holder"
-finish_second
-expect_output 'land: took the land queue'
-if grep -qF 'main moved' "$work/output"; then cat "$work/output" >&2; exit 1; fi
-
-hold_queue 'App change whose land is killed'
-kill -KILL "$holder"
-wait "$holder" 2>/dev/null || true
-land_second_in_background follows-killed
-echo release >"$hold/release"
-case "$first_line" in
-  "land: main is at "*) ;;
-  *) echo "a killed land kept the queue: $first_line" >&2; exit 1 ;;
-esac
-finish_second
+wait "$holder" || { cat "$work/holder-output" >&2; exit 1; }
+[ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
+[ "$(grep -c '^make ran:' "$work/holder-output")" = 1 ] || { echo 'a land ran its checks again after main moved' >&2; cat "$work/holder-output" >&2; exit 1; }
+grep -qF 'main moved after the checks ran on' "$work/holder-output" || { cat "$work/holder-output" >&2; exit 1; }
 git reset -q --hard origin/main
 
 mkdir -p "$work/tests-repo/scripts"

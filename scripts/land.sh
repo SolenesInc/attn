@@ -384,12 +384,16 @@ EOF
 }
 
 land() {
-  local undone
+  local undone checked
+  [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
+  rebase_onto_main
+  run_checks
+  checked="$(git rev-parse --short HEAD)"
+  take_land_queue
   for _ in $(seq "$max_attempts"); do
     git fetch --quiet origin main
-    [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
     rebase_onto_main
-    run_checks
+    [ "$(git rev-parse --short HEAD)" = "$checked" ] || echo "land: main moved after the checks ran on $checked; pushing without running them again" >&2
     undone="$(commits_this_landing_undoes || true)"
     if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
       echo "land: main is at $(git rev-parse --short HEAD)"
@@ -400,7 +404,6 @@ land() {
     fi
     git fetch --quiet origin main
     git merge-base --is-ancestor origin/main HEAD && fail "git push failed, and not because main moved"
-    echo "land: main moved; rebasing again" >&2
   done
   fail "main moved $max_attempts times while landing; run scripts/land.sh again"
 }
@@ -445,5 +448,4 @@ git fetch --quiet origin main
 refuse_commits_by_another_author
 refuse_frozen_changes
 run_landing_scenarios
-take_land_queue
 land
