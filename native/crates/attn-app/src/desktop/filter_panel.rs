@@ -55,8 +55,8 @@ pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &To
         .key(format!("terminal.{id}.filter"))
         .items_center()
         .gap(4.0)
-        .px(6.0)
-        .py(4.0)
+        .px(7.0)
+        .py(5.0)
         .children([field, case, count, close]);
     let bar = surface(bar, t);
     let mut panel = col().items_end().gap(4.0).max_w(640.0).child(bar);
@@ -73,7 +73,7 @@ pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &To
 fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
     let list = col()
         .key(format!("terminal.{id}.filter.results"))
-        .padding(4.0)
+        .padding(5.0)
         .max_h(max_height)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
@@ -122,7 +122,7 @@ fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
 }
 
 fn surface(el: El, t: &Tokens) -> El {
-    rune_kit::popover::raised(attn_ui::kit(t), el, 6.0)
+    attn_ui::Frame::terminal_bar(t).draw(el)
 }
 
 fn filter_button(

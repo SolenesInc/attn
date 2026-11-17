@@ -35,6 +35,17 @@ impl Frame {
         }
     }
 
+    /// A bar over a terminal and what it lists: `.ghostty-find-bar`, `.ghostty-filter-bar`,
+    /// `.ghostty-filter-results`.
+    pub fn terminal_bar(t: &Tokens) -> Frame {
+        Frame {
+            fill: t.bg_tile.alpha(0.95),
+            edge: t.border,
+            radius: 6.0,
+            shadow: shadow(t, 2.0, 8.0, 0.25),
+        }
+    }
+
     pub fn draw(self, surface: El) -> El {
         surface
             .fill(self.fill)
