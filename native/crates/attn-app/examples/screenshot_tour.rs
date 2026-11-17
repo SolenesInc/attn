@@ -2160,12 +2160,16 @@ A short document that exercises every block the reader draws.
 Colors move into one module, and every view reads them from there.
 ";
 
-/// The release notes beside agent `a`, the tile bound to it, over a daemon that keeps the
+/// The release notes beside agent `a`, the tile active and bound to the agent, over a daemon that keeps the
 /// document's marks as it is asked to.
 fn annotated_document(dark: bool) -> World {
     let mut tile = document_tile("m", "/repo/release.md");
     tile["tile_session_id"] = json!("s0");
-    let daemon = Daemon::scripted().state(initial(dark, tile, vec![]));
+    let mut state = initial(dark, tile, vec![]);
+    if let Some(desktops) = state.desktops.as_mut() {
+        desktops[0].active_pane_id = "m".into();
+    }
+    let daemon = Daemon::scripted().state(state);
     let kept = std::sync::Arc::new(std::sync::Mutex::new((Vec::<Value>::new(), 0_i64)));
     let draft = |(marks, generation): &(Vec<Value>, i64), r: &Request, event: &str| {
         json!({
@@ -2196,8 +2200,8 @@ fn annotated_document(dark: bool) -> World {
     world
 }
 
-/// The release notes with their first paragraph's words "short document that exercises every
-/// block" selected and let go, so the annotation toolbar shows over them.
+/// The release notes, their tile active, with their first paragraph's words "short document
+/// that exercises every block" selected and let go, so the annotation toolbar shows over them.
 fn annotation_selected(dark: bool) -> World {
     let mut world = annotated_document(dark);
     world.gesture(|app| {

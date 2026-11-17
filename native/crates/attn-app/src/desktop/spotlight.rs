@@ -157,11 +157,13 @@ impl Look {
         ]
     }
 
+    /// An agent's name reads in full while it is active; any other tile's title, such as a
+    /// document's, reads quieter, as the Tauri app's `.desktop-dock-tile-title`.
     pub(super) fn title(&self, t: &Tokens) -> Color {
-        if self.dimmed() {
-            t.text_secondary
-        } else {
+        if self.agent && !self.dimmed() {
             t.text_primary
+        } else {
+            t.text_secondary
         }
     }
 
