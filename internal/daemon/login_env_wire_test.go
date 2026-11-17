@@ -218,6 +218,7 @@ func TestADelegationToAPluginHarnessWaitsForItsPluginAcrossARestartDuringTheCapt
 		t.Run(row.name, func(t *testing.T) {
 			w := &world{World: prepareWorld(t)}
 			shell := installBlockedLoginShell(t, w)
+			writePluginManifest(t, filepath.Join(w.Dir, "plugins", "attn-plug"), "attn-plug", "exec tail -f /dev/null")
 			w.start()
 			app := w.App()
 			driver := connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
@@ -257,9 +258,9 @@ func TestADelegationToAPluginHarnessWaitsForItsPluginAcrossARestartDuringTheCapt
 			if _, err := w.Client().StartDelegation(request); err != nil {
 				t.Fatalf("the client's retry during the capture: %v", err)
 			}
+			shell.release()
 			waiting.Await()
 			waiting.Release()
-			shell.release()
 			driver = connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
 
 			delegated := make(chan *protocol.DelegateResult, 1)
