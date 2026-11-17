@@ -443,6 +443,48 @@ func TestStandbyCloseWaitsUntilTheTenderHasReadItsSeedMail(t *testing.T) {
 	endsTurnAndCloses(t, w, set, tender)
 }
 
+func TestATenderWithAnOpenAskStaysOpenUnlessItStaysOnStandbyAndClosesItself(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
+	session, seed := string(delegated.SessionID), delegated.SeedID
+	w.Launched(session).Prompted()
+	asked, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", w.Path("api"))
+	if err != nil {
+		t.Fatalf("ask about %s: %v", seed, err)
+	}
+
+	_, err = standbyAs(t, cli, delegated, true)
+	for _, want := range []string{asked.ID, asked.Subject, "end your turn", "attn seed standby " + seed + " --stay", "attn agent close --self"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("a closing standby with an open ask = %v, want a refusal naming %q", err, want)
+		}
+	}
+	if shown := lifeShow(t, cli, seed); shown.Seed.Standby != nil {
+		t.Fatalf("the refused standby left %+v on the seed", shown.Seed.Standby)
+	}
+	if open := showSession(t, cli, session); protocol.Deref(open.ClosedAt) != "" {
+		t.Fatalf("the refused standby closed %s", session)
+	}
+
+	set, err := standbyAs(t, cli, delegated, false)
+	if err != nil || set.Close != nil || set.Seed.Standby == nil {
+		t.Fatalf("standby --stay with an open ask = %+v, %v; want the seed on standby and the session open", set, err)
+	}
+	if open := showSession(t, cli, session); protocol.Deref(open.ClosedAt) != "" {
+		t.Fatalf("standby --stay closed %s", session)
+	}
+	closeSession(t, cli, session, "The user told me to close.")
+	stillClosed(t, cli, delegated, "closing after standby --stay")
+	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
+		t.Fatalf("%s left standby when its tender closed itself", seed)
+	}
+
+	unasked := seedResumeDelegate(t, w, fakeagent.Codex, "web")
+	onStandbyAndClosed(t, w, cli, unasked, w.Launched(string(unasked.SessionID)))
+}
+
 func TestStandbyForATimeSetsTheSeedsReminderAndItsFiringResumesTheClosedTenderWithTheNote(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
@@ -1218,7 +1260,10 @@ func TestAnAnswerWaitsForTheRetryOfATenderResumeThatFailedToLaunch(t *testing.T)
 		if err != nil {
 			t.Fatalf("ask: %v", err)
 		}
-		onStandbyAndClosed(t, w, cli, delegated, nil)
+		if _, err := standbyAs(t, cli, delegated, false); err != nil {
+			t.Fatalf("seed standby --stay: %v", err)
+		}
+		closeSession(t, cli, string(delegated.SessionID), "The user told me to close.")
 
 		w.terms.RefuseNextSpawn(errors.New("PTY temporarily unavailable"))
 		requestID := uuid.NewString()

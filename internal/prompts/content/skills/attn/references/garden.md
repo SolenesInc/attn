@@ -178,11 +178,17 @@ the user, or anyone when nobody holds the claim.
 
 ## Standby
 
-When your work waits on something outside your session, such as a time, a pull
-request, another seed or the user, put its seed on standby with a note that says
-what to do next. attn closes your session and resumes it when mail reaches the
-seed, or starts a session for a crew member, handing it the note. If you tend no
-seed for the work, plant one first.
+Standby closes your session for a wait that needs nobody in it: a time, a pull
+request, another seed or another agent. Put the seed on standby with a note that
+says what to do next. attn closes your session and resumes it when mail reaches
+the seed, or starts a session for a crew member, handing it the note. If you
+tend no seed for the work, plant one first.
+
+A wait on the user is different. Ask with `attn ask` and end your turn. Your
+session stays open, so the user can find you, talk to you and run commands in
+your terminal, and attn types the answer into this conversation. attn refuses a
+standby that would close you while the seed has an open ask, and names each
+ask.
 
     attn seed standby s-7k3f9m --at 2026-11-13T09:00:00+01:00 -m "The user asked to pick this up Friday: rerun the backfill, then report the counts."
     attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (the user approved this up front), then follow the deploy."
@@ -198,7 +204,10 @@ Only the seed's tender can put a growing seed on standby, from its own session,
 and the seed stays claimed while the session is closed. When the session can
 compact, attn compacts it before closing, so end your turn right after the
 command. attn refuses while the seed has unread mail; read it with
-`attn agent inbox` first. Pass `--stay` only when the user asked you to stay.
+`attn agent inbox` first. `--stay` puts the seed on standby and keeps your
+session open. When the user tells you to close while an ask is open, run
+`attn seed standby <id> --stay -m "…"`, then `attn agent close --self -m "…"`:
+the seed stays on standby, and the answer resumes you.
 
 The note is the first thing the resumed session reads, so write down anything
 the user approved up front, such as "merge once approved". The resumed session
@@ -207,10 +216,9 @@ should act without waiting for the user: go on standby again, harvest, ask with
 
 An ask about the seed keeps it open. An agent's harvest refuses while the user
 has not answered, and names each open ask. The answer comes to whoever tends the
-seed, so end your turn or go on standby, and harvest after you act on the
-answer. Withdraw an ask that no longer matters with `attn ask close <id>`. The
-user's own harvest and any wither withdraw the seed's open asks, and the command
-names them.
+seed, so end your turn, and harvest after you act on the answer. Withdraw an ask
+that no longer matters with `attn ask close <id>`. The user's own harvest and
+any wither withdraw the seed's open asks, and the command names them.
 
 Standby ends once the tender has read all of the seed's mail, or when the seed
 is parked, harvested, withered or gets a new tender. If the session closes

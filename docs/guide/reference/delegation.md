@@ -305,8 +305,8 @@ the message, and when the seed is harvested or withered. Until then,
 
 ### Seeds on standby
 
-An agent that waits on someone else can put its seed on standby, instead of
-keeping a session open for the wait:
+An agent that waits on a time, a pull request or another agent can put its seed
+on standby, instead of keeping a session open for the wait:
 
 ```sh
 attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (approved by the user up front), then follow the deploy."
@@ -314,7 +314,11 @@ attn seed standby s-7k3f9m --at 2026-11-13T09:00:00+01:00 -m "Pick this up Frida
 ```
 
 The note says what to do next, and standby closes the agent's session. `--stay`
-keeps it open, and agents pass it only when you asked them to stay. `--in` and
+keeps it open. An agent that waits on you asks with `attn ask` and ends its turn,
+and its session stays open, so you can find it, talk to it and run commands in
+its terminal. Attn refuses a standby that would close a session while the seed
+has an open ask. When you tell such an agent to close, it puts the seed on
+standby with `--stay` and then closes itself, and your answer resumes it. `--in` and
 `--at` also set the seed's reminder to that time, with the note as its message,
 so the agent resumes then if no other mail arrives first.
 `attn seed standby --clear` ends standby and leaves the reminder.

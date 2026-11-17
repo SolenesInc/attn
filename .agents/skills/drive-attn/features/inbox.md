@@ -41,7 +41,7 @@ does to the queue.
 
 - An item lands, an outstanding ring ends, or the agent reaches a safe prompt: attn rings the address, retrying every 5 minutes up to 3 attempts per item (`internal/daemon/inbox_delivery.go`, `internal/daemon/inbox.go`).
 - An item for a crew member between sessions starts a session for the member first. [crew.md](crew.md) has the recipe that drives it.
-- An item for a seed on standby whose tender is a closed session resumes that session first, when `garden.tender_resume` allows the item. Nobody holds a closed session's mailbox, so attn does not wait 5 minutes before the next resume, and standby ends only once the tender has read the mail ([garden.md](garden.md)).
+- An item for a seed on standby whose tender is a closed session resumes that session first, when `garden.tender_resume` allows the item. Nobody holds a closed session's mailbox, so attn does not wait 5 minutes before the next resume, and standby ends only once the tender has read the mail ([garden.md](garden.md)). A tender with an open ask does not close through standby, so an answer usually reaches an open session; a tender that put its seed on standby with `--stay` and then closed itself is resumed by the answer.
 - Seed updates ([garden.md](garden.md)), PR watch updates ([pull-requests.md](pull-requests.md)), answers ([asks.md](asks.md)), quick captures ([quick-capture.md](quick-capture.md)), authorization changes ([delegation.md](delegation.md)) and crew notices ([crew.md](crew.md)) arrive through this inbox. Drive the events that cause them in each feature's file.
 
 ## Driving it

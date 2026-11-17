@@ -21,6 +21,7 @@ withdraw them. Asks are on by default, and an agent keeps the setting it launche
 - `ask-replied`: asks answered in the last day, shown again with their answers.
 - `ask-on-seed`: an ask about a seed the agent tends, answered to the seed's tender and kept as a note.
 - `ask-holds-harvest`: an agent's harvest of a seed with an open ask refuses and names each ask, a harvest-on-merge clears its arming instead, and a wither or the user's harvest withdraws the asks; `seed wither` names them.
+- `ask-keeps-session-open`: an agent that asks ends its turn and its session stays open. `attn seed standby` without `--stay` refuses while the seed has an open ask, names each ask and the two commands for a user who asked the agent to close: `attn seed standby <seed> --stay`, then `attn agent close --self`.
 - `ask-list`: an agent lists its open asks and those about seeds it tends, then, apart from them, the open asks of the agents it oversees, each with its asker.
 - `ask-show`: an agent prints one ask it holds or oversees, with its asker, seed, age and markdown, and "Not your ask" for an overseen one.
 - `ask-close`: an agent withdraws an ask it no longer needs, or an overseen ask with `-m "<why>"`; attn notes the reason on the ask's seed and mails it to the asker.
@@ -75,6 +76,9 @@ Preconditions:
   {"includes": "harvest", "actions": [
     {"type": "capture", "name": "seed", "pattern": "(s-[a-z0-9]+)"},
     {"type": "attn", "args": ["seed", "harvest", "{{seed}}", "-m", "done"]}]},
+  {"includes": "standby", "actions": [
+    {"type": "capture", "name": "seed", "pattern": "(s-[a-z0-9]+)"},
+    {"type": "attn", "args": ["seed", "standby", "{{seed}}", "-m", "wait for the answer"]}]},
   {"includes": "list asks", "actions": [
     {"type": "attn", "args": ["ask", "list"]}]},
   {"includes": "ask about", "actions": [
@@ -121,7 +125,7 @@ Preconditions:
   - Plant a seed: `./attn seed plant "Asks drive"` prints `<seed>  <slug>  Asks drive`. Run `wsctl input --id <terminal> --text "ask about <seed>" --enter`. Peek shows `Asked <ask> about asks-drive: "Release note".`
   - Select ask-agent for setup with `bridge select_session '{"sessionId":"ask-agent"}'`. `[data-testid="ask-chip-ask-agent"]` carries `aria-label="Open ask: Release note"`. Click it natively: the drawer opens on that ask, and `bridge dom_text '{"selector":".asks-ask-seed"}'` names `asks-drive`. The text field has focus.
   - Click `[data-seed-target="<seed>"]` natively. `bridge garden_get_state` shows `here` naming the seed. Press Escape to return to the ask.
-  - Before answering, run `wsctl input --id <terminal> --text "harvest <seed>" --enter`. Peek shows `mock agent error:` with `<seed> has 1 open ask(s) to the user: <ask> ("Release note")`, the standby command and `attn ask close`, and the seed is still growing.
+  - Before answering, run `wsctl input --id <terminal> --text "harvest <seed>" --enter`. Peek shows `mock agent error:` with `<seed> has 1 open ask(s) to the user: <ask> ("Release note")`, `end your turn` and `attn ask close`, and the seed is still growing. Run `wsctl input --id <terminal> --text "standby <seed>" --enter`. Peek shows `mock agent error:` with the ask, `end your turn` and `attn seed standby <seed> --stay`, `./attn seed show <seed>` shows no standby, and ask-agent is still open.
   - Run `bridge native_text '{"text":"Ship it on Friday."}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `./attn seed notes <seed>` shows the answer as a note.
   - Run `wsctl input --id <terminal> --text "harvest <seed>" --enter` again: the seed is harvested.
   - Plant another seed, ask about it, and run `./attn seed wither <seed> -m "dropped" --force`: the output ends with `this withdrew 1 open ask(s) from the user:` and the ask, and the drawer no longer shows it.

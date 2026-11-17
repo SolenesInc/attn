@@ -117,8 +117,8 @@ func openAsk(c *client.Client, sessionID protocol.SessionID, seedID, subject, fi
 		fmt.Fprintf(stdout, "Asked %s: %q. attn types the answer into this conversation as the user's message.\n", opened.ID, opened.Subject)
 		return nil
 	}
-	fmt.Fprintf(stdout, "Asked %s about %s: %q. The answer goes to whoever tends the seed by then, and the seed cannot be harvested until the user answers: end your turn, or wait with attn seed standby %s -m \"<what to do with the answer>\"\n",
-		opened.ID, askSeedName(*opened), opened.Subject, *opened.SeedID)
+	fmt.Fprintf(stdout, "Asked %s about %s: %q. End your turn: your session stays open so the user can find you, and attn types the answer into this conversation. The seed cannot be harvested until the user answers.\n",
+		opened.ID, askSeedName(*opened), opened.Subject)
 	return nil
 }
 
@@ -279,12 +279,17 @@ func writeAskHelp(w io.Writer) {
 Ask the user what you cannot settle alone. They answer from attn, without
 opening your terminal.
 
+After you ask, carry on with work that does not depend on the answer, then end
+your turn. Your session stays open, so the user can find you, talk to you and
+run commands in your terminal, and attn types the answer into this conversation
+as the user's message.
+
 When a delegation assigned you a seed, the ask is about that seed; --seed makes
 it about another seed you tend. The user sees which seed it concerns. The
 answer goes to whoever tends the seed by then. The seed stays open until the
-user answers: attn refuses an agent's harvest and names the open ask, so end
-your turn or wait with attn seed standby <id>, and harvest after you act on the
-answer. Withering the seed withdraws its open asks.
+user answers: attn refuses an agent's harvest, and a standby that would close
+the session, and names the open ask. Harvest after you act on the answer.
+Withering the seed withdraws its open asks.
 
 To ask permission for a risky action, name the exact action and its target in
 the question, such as the command, branch or environment. The answer approves

@@ -618,7 +618,7 @@ func TestAnAgentHarvestsASeedOnlyAfterItsAskIsAnsweredAndAWitherWithdrawsTheAsk(
 	asked := ask(side, side)
 	for _, harvester := range []string{string(delegated.SessionID), "caller"} {
 		_, err := cli.SeedTransition(protocol.SessionID(harvester), side, "harvest", "tuned", true, client.SeedTransitionOptions{})
-		for _, want := range []string{asked.ID, asked.Subject, "attn seed standby " + side, "attn ask close", "attn seed tend " + side} {
+		for _, want := range []string{asked.ID, asked.Subject, "end your turn", "attn ask close", "attn seed tend " + side} {
 			if err == nil || !strings.Contains(err.Error(), want) {
 				t.Fatalf("%s harvested %s with an open ask: %v; want a refusal naming %q", harvester, side, err, want)
 			}

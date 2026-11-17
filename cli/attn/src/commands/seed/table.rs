@@ -257,7 +257,9 @@ an ask answer, a PR watch update), attn resumes the session and delivers the
 note. --in and --at also set the seed's reminder to that time, with the note as
 its message, as attn seed remind does. When the session can compact, attn
 compacts it before closing; end your turn right after the command. --stay keeps
-this session open. attn refuses while the seed has mail you have not read.
+this session open. attn refuses while the seed has mail you have not read, and
+refuses to close the session while the seed has an open ask: a wait on the user
+keeps the session open, so ask with attn ask and end your turn.
 Standby ends once you have read all of the seed's mail, and when the seed is
 parked, harvested, withered or gets a new tender. Only the seed's tender sets
 standby. --clear ends standby and leaves the reminder.
@@ -311,8 +313,8 @@ succeeds with the earlier reason; a different reason goes on its log.
 A withered seed must be replanted first. A plot refuses while any direct
 child is open, including with --force or --when-merged; replant hands it
 back if your part is done. A seed with an ask the user has not answered
-refuses and names the ask: end your turn or wait with attn seed standby,
-harvest after you act on the answer, or withdraw the ask with attn ask close.
+refuses and names the ask: end your turn, harvest after you act on the
+answer, or withdraw the ask with attn ask close.
 Closing the last child leaves a ringing note on the plot, names it here and
 keeps the plot's state. Moves print who they rang.
 --when-merged releases your claim and harvests the seed with your -m

@@ -389,8 +389,9 @@ func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, e
 }
 
 type openAsksError struct {
-	seedID string
-	asks   []store.Ask
+	seedID  string
+	asks    []store.Ask
+	standby bool
 }
 
 func (e *openAsksError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
@@ -400,17 +401,30 @@ func (e *openAsksError) Error() string {
 	for i, ask := range e.asks {
 		asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
 	}
-	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, or wait with your session closed with `attn seed standby %s -m \"…\"`, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`. If you do not tend the seed, `attn seed tend %s` first",
-		e.seedID, len(asks), strings.Join(asks, ", "), e.seedID, e.seedID)
+	open := fmt.Sprintf("%s has %d open ask(s) to the user: %s.", e.seedID, len(asks), strings.Join(asks, ", "))
+	if e.standby {
+		return fmt.Sprintf("%s A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. If the user told you to close, run `attn seed standby %s --stay -m \"…\"`, then `attn agent close --self -m \"…\"`",
+			open, e.seedID)
+	}
+	return fmt.Sprintf("%s The answer comes to whoever tends the seed: end your turn, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`. If you do not tend the seed, `attn seed tend %s` first",
+		open, e.seedID)
 }
 
 func (d *Daemon) refuseHarvestWithOpenAsks(seedID string) error {
+	return d.refuseWithOpenAsks(seedID, false)
+}
+
+func (d *Daemon) refuseClosingStandbyWithOpenAsks(seedID string) error {
+	return d.refuseWithOpenAsks(seedID, true)
+}
+
+func (d *Daemon) refuseWithOpenAsks(seedID string, standby bool) error {
 	asks, err := d.store.OpenAsksTo(who.ToTenderOf(seedID))
 	if err != nil {
 		return fmt.Errorf("reading the open asks about %s: %w", seedID, err)
 	}
 	if len(asks) > 0 {
-		return &openAsksError{seedID: seedID, asks: asks}
+		return &openAsksError{seedID: seedID, asks: asks, standby: standby}
 	}
 	return nil
 }
