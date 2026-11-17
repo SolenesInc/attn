@@ -159,8 +159,8 @@ any other conflict stops the land before the push.
 Checks before landing are fast and local: targeted tests, the change on the
 surface it touches, and a review scaled to the change's risk. The full Go
 suite, the Playwright specs and the Linux scenario matrices of both app
-shells, Tauri and native, run in CI on every push to `main` after landing, and so do the combinations of changes that
-landed together. The macOS jobs run in their own workflow, `CI macOS`, so
+shells, Tauri and native, run in CI on every push to `main` after landing,
+and so do the combinations of changes that landed together. The macOS jobs run in their own workflow, `CI macOS`, so
 waiting for a macOS runner never holds up Linux's Acceptance. `CI macOS` runs
 each macOS job on a push only when the commits since its last green push run
 change paths that can break it, so a failed job runs again on every push until
