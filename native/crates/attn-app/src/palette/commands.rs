@@ -3,6 +3,7 @@ use attn_protocol::CommandUsage;
 use attn_protocol::go_values::FEATURES;
 
 use super::{Icon, Look, Pick, Row};
+use crate::desktop::FocusStyle;
 use crate::setting;
 use crate::sidebar::{model, queue, width};
 use crate::{Action, State};
@@ -575,6 +576,29 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         )
         .describe("The Claude or Codex mark beside each agent"),
     ]);
+    let focus_style = FocusStyle::chosen();
+    commands.extend(FocusStyle::ALL.map(|style| {
+        let name = style.name();
+        Command::new(
+            &format!("tile-focus-{name}"),
+            &format!("Tile focus: {name}"),
+            &[
+                "tile",
+                "focus",
+                "style",
+                "selection",
+                "dim",
+                "rail",
+                "spotlight",
+            ],
+            Action::SetTileFocus { style },
+        )
+        .describe(&if style == focus_style {
+            "Current tile focus style".to_owned()
+        } else {
+            format!("Use {name} to mark the selected tile")
+        })
+    }));
     for feature in FEATURES {
         let on = setting::on(settings, feature.key);
         let keywords: Vec<&str> = ["experimental", "feature"]

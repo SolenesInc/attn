@@ -97,6 +97,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .and_then(|d| d.dragging())
         .map(str::to_owned);
     let sublines = desktop.map_or_else(Vec::new, |d| sublines(d, facts, desk));
+    let focus_style = super::FocusStyle::chosen();
     let reads = (
         version(&facts.desktops),
         version(&facts.profiles),
@@ -112,8 +113,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             desk.peeks.unsent(),
             sublines.clone(),
         ),
-        *t,
-        scale.to_bits(),
+        (*t, scale.to_bits(), focus_style),
     );
     let settles = desktop.map_or_else(Vec::new, |d| settles(d, facts));
     let keys = header_keys(state);
@@ -186,7 +186,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                     (&state.drafts, &state.readings),
                     &state.browser,
                 ),
-                (t, scale, state.window.now_ms),
+                (t, scale, state.window.now_ms, focus_style),
             ))
         })
     });
@@ -571,8 +571,8 @@ pub(super) fn lone(
         dragging: None,
         rings: &[],
         refusals: &state.window.desk.refusals,
-        screen: super::spotlight::Screen {
-            many: false,
+        screen: super::tile_look::Screen {
+            marking: None,
             zoomed: false,
             focus: false,
             lone: true,
@@ -624,7 +624,7 @@ fn screen(
         (&crate::markdown::Drafts, &crate::markdown::Readings),
         &crate::browser::Browsers,
     ),
-    (t, scale, now_ms): (&Tokens, f32, i64),
+    (t, scale, now_ms, focus_style): (&Tokens, f32, i64, super::FocusStyle),
 ) -> El {
     match desktop {
         None => empty(t, "No desktop"),
@@ -660,8 +660,8 @@ fn screen(
                     dragging,
                     rings: &desk.rings,
                     refusals: &desk.refusals,
-                    screen: super::spotlight::Screen {
-                        many: rendered.leaves().len() > 1,
+                    screen: super::tile_look::Screen {
+                        marking: (rendered.leaves().len() > 1).then_some(focus_style),
                         zoomed: view == super::layout::View::Zoomed,
                         focus: matches!(view, super::layout::View::Focused(_)),
                         lone: false,
@@ -747,7 +747,7 @@ struct TileCx<'a> {
     rings: &'a [super::arrival::Ring],
     /// Input the daemon refused, by terminal.
     refusals: &'a super::refusal::Refusals,
-    screen: super::spotlight::Screen,
+    screen: super::tile_look::Screen,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
     terminal_colors: &'a TerminalColors,
@@ -1040,7 +1040,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         }
         (LeafKind::Tile { kind, .. }, _) => empty(t, tile_kind_label(kind)),
     };
-    let look = super::spotlight::Look::of(
+    let look = super::tile_look::Look::of(
         matches!(leaf.kind, LeafKind::Pane),
         active,
         cx.dragging == Some(leaf.id.as_str()),
@@ -1262,7 +1262,7 @@ pub(crate) fn header_source(state: &State, leaf: &str) -> Option<super::drag::So
 
 /// A tile's header, which the tile area drags the tile by. An agent's header carries a second
 /// line under its name.
-fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) -> El {
+fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) -> El {
     let t = cx.t;
     let key = format!("tile.{}", leaf.id);
     let settle = cx
@@ -1332,7 +1332,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                     }
                     _ if pane.is_none() => text(title.to_owned())
                         .font(TILE_TITLE)
-                        .color(t.text_secondary)
+                        .color(look.title(t))
                         .single_line()
                         .truncate()
                         .grow(1.0),

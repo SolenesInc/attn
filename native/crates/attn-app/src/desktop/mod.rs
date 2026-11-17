@@ -23,9 +23,9 @@ mod seed_card;
 pub(crate) mod seed_chip;
 mod shared_conversation;
 mod shelf;
-mod spotlight;
 mod stale_build;
 mod terminal_menu;
+mod tile_look;
 pub(crate) mod usage;
 mod view;
 mod windows;
@@ -49,6 +49,7 @@ pub(crate) use host::outpost_name;
 pub(crate) use overview::{create as create_desktop, view as overview};
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
+pub use tile_look::FocusStyle;
 pub(crate) use view::{Room, area, session_of_leaf};
 pub use windows::{
     Deliver, Opened, Opener, Placement, Setup, TileWindow, on_close as tile_window_closed,

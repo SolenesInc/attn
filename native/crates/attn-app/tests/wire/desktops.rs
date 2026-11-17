@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use attn_app::whats_new::{BANNER_PREF, RELEASE, SEEN_PREF};
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
@@ -8,6 +9,7 @@ use attn_protocol::{
 use attn_testkit::tree::{below, pane, row, tile};
 use attn_testkit::{Daemon, Request, Target, World, key_event};
 use rune::KeyPlatform;
+use rune::prefs::Prefs;
 use serde_json::Value;
 
 /// Wide enough for two tiles at the narrowest width, and too narrow for three.
@@ -79,18 +81,22 @@ fn profile(current: &str) -> Profile {
 }
 
 fn daemon(desktops: Vec<Desktop>) -> Daemon {
+    Daemon::scripted().state(initial(desktops))
+}
+
+fn initial(desktops: Vec<Desktop>) -> InitialStateMessage {
     let sessions = desktops
         .iter()
         .flat_map(|d| d.panes.iter())
         .map(|p| session(&p.pane_id))
         .collect();
-    Daemon::scripted().state(InitialStateMessage {
+    InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile(&desktops[0].id)]),
         desktops: Some(desktops),
         sessions: Some(sessions),
         ..InitialStateMessage::new()
-    })
+    }
 }
 
 fn start(desktops: Vec<Desktop>) -> World {
@@ -714,6 +720,15 @@ fn veil(world: &World, leaf: &str) -> f32 {
 
 /// The tiles that show the spotlight's corner marks.
 fn spotlit(world: &World) -> Vec<String> {
+    marked_by(world, ".spotlight.top")
+}
+
+/// The tiles that show the rail down their left edge.
+fn railed(world: &World) -> Vec<String> {
+    marked_by(world, ".rail")
+}
+
+fn marked_by(world: &World, mark: &str) -> Vec<String> {
     let mut leaves: Vec<String> = world
         .runtime()
         .elements()
@@ -721,12 +736,107 @@ fn spotlit(world: &World) -> Vec<String> {
         .filter(|e| !e.exiting)
         .filter_map(|e| {
             let key = e.key?;
-            let leaf = key.strip_prefix("tile.")?.strip_suffix(".spotlight.top")?;
+            let leaf = key.strip_prefix("tile.")?.strip_suffix(mark)?;
             Some(leaf.to_owned())
         })
         .collect();
     leaves.sort();
     leaves
+}
+
+/// The description the palette gives each Tile focus command, by style.
+fn tile_focus_descriptions(world: &mut World) -> Vec<(String, String)> {
+    press(world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("tile focus"));
+    let rows = ["dim", "rail", "spotlight"]
+        .map(|style| {
+            let row = world.screen().get(Target::key(format!(
+                "palette.row.command:tile-focus-{style}"
+            )));
+            (style.to_owned(), row.description.unwrap_or_default())
+        })
+        .to_vec();
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    rows
+}
+
+#[test]
+fn the_tile_focus_style_chosen_in_the_palette_marks_the_active_tile_and_outlives_a_relaunch() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("prefs.json");
+    let mut prefs = Prefs::at(&path);
+    for key in [SEEN_PREF, BANNER_PREF] {
+        prefs.set(key, &RELEASE.to_owned()).unwrap();
+    }
+    let launch = || {
+        let tiles = desktop(1, "a", Some(row([pane("a"), pane("b")])));
+        let daemon = super::palette::daemon(initial(vec![tiles]), vec![]);
+        let mut world = World::start_sized_with_prefs(daemon, TWO_FIT, Prefs::at(&path));
+        world.open_desktop();
+        world.advance(Duration::from_secs(1));
+        world
+    };
+    let current = |style: &str| {
+        ["dim", "rail", "spotlight"]
+            .map(|s| {
+                let description = if s == style {
+                    "Current tile focus style".to_owned()
+                } else {
+                    format!("Use {s} to mark the selected tile")
+                };
+                (s.to_owned(), description)
+            })
+            .to_vec()
+    };
+    let none = Vec::<String>::new();
+
+    let mut world = launch();
+    assert_eq!(
+        (spotlit(&world), railed(&world)),
+        (vec!["a".to_owned()], none.clone())
+    );
+    assert_eq!(tile_focus_descriptions(&mut world), current("spotlight"));
+
+    super::palette::run_command(&mut world, "tile focus: rail");
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        (spotlit(&world), railed(&world)),
+        (none.clone(), vec!["a".to_owned()])
+    );
+    assert_eq!(
+        veil(&world, "b"),
+        0.42,
+        "every style veils the inactive agents"
+    );
+
+    super::palette::run_command(&mut world, "tile focus: dim");
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        (spotlit(&world), railed(&world)),
+        (none.clone(), none.clone())
+    );
+    assert_eq!(veil(&world, "b"), 0.42);
+    assert!(world.runtime_is_at_rest());
+    drop(world);
+
+    let mut relaunched = launch();
+    assert_eq!(
+        (spotlit(&relaunched), railed(&relaunched)),
+        (none.clone(), none.clone())
+    );
+    assert_eq!(tile_focus_descriptions(&mut relaunched), current("dim"));
+    super::palette::run_command(&mut relaunched, "tile focus: spotlight");
+    relaunched.advance(Duration::from_secs(1));
+    assert_eq!(
+        (spotlit(&relaunched), railed(&relaunched)),
+        (vec!["a".to_owned()], none)
+    );
+    assert!(relaunched.runtime_is_at_rest());
 }
 
 #[test]

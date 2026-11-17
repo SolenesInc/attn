@@ -117,6 +117,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::ProfileSwitch => crate::profile_switcher::toggle(state, tx),
         Action::SwitchToProfile { profile } => crate::profile_switcher::select(state, &profile, tx),
         Action::AppQuit => tx.quit(),
+        Action::SetTileFocus { style } => style.choose(),
         Action::SetSetting { key, value } => {
             let _ = state.daemon.send(&SetSettingMessage {
                 key,

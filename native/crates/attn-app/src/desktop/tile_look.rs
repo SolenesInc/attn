@@ -1,7 +1,7 @@
-//! How the tiles show which one the keyboard acts on, as the Tauri app's spotlight: the active
-//! tile lifts on a shadow with a lighter header and two corner marks while the screen shows
-//! more than one tile, and a veil dims the bodies of the agents that are not active. Tiles carry
-//! no border, except the one a desktop shows alone in focus.
+//! How the tiles show which one the keyboard acts on, in the tile focus style the user chose,
+//! as the Tauri app draws it: a veil dims the bodies of the agents that are not active, and
+//! while the screen shows more than one tile the style marks the active one. Tiles carry no
+//! border, except the one a desktop shows alone in focus.
 
 use attn_ui::Tokens;
 use rune::{Color, Curve, Easing, El, Shadow, el};
@@ -32,11 +32,51 @@ const HEADER_TOP_LINE: f32 = 0.05;
 /// `--pane-header-fade`: the brand's share of the surface under the hover actions.
 const HEADER_FADE: f32 = 0.07;
 
+/// The app setting that keeps the chosen style, under the Tauri app's `localStorage` key.
+const STYLE_PREF: &str = "attn.workspace.selectionStyle";
+/// The Tauri app's 3 px rail down the active tile's left edge.
+const RAIL_PX: f32 = 3.0;
+
+/// How the active tile stands out among several. Dim leaves it at that: only the others
+/// fade. Rail draws a brand line down its left edge, and spotlight lifts it on a shadow with a
+/// lighter header and two corner marks. Both read its title in full.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FocusStyle {
+    Dim,
+    Rail,
+    Spotlight,
+}
+
+impl FocusStyle {
+    pub const ALL: [FocusStyle; 3] = [FocusStyle::Dim, FocusStyle::Rail, FocusStyle::Spotlight];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            FocusStyle::Dim => "dim",
+            FocusStyle::Rail => "rail",
+            FocusStyle::Spotlight => "spotlight",
+        }
+    }
+
+    /// The style the user last chose, or spotlight.
+    pub(crate) fn chosen() -> FocusStyle {
+        match crate::frame::pref_string(STYLE_PREF).as_deref() {
+            Some("dim") => FocusStyle::Dim,
+            Some("rail") => FocusStyle::Rail,
+            _ => FocusStyle::Spotlight,
+        }
+    }
+
+    pub(crate) fn choose(self) {
+        crate::frame::set_pref_string(STYLE_PREF, self.name());
+    }
+}
+
 /// What the screen shows around the tiles.
 #[derive(Clone, Copy)]
 pub(super) struct Screen {
-    /// More than one tile is on screen, so the active one needs telling apart.
-    pub many: bool,
+    /// The style that tells the active tile apart, while more than one tile is on screen.
+    pub marking: Option<FocusStyle>,
     pub zoomed: bool,
     pub focus: bool,
     /// The tile fills a window of its own, where it is the one the keyboard acts on.
@@ -61,8 +101,12 @@ impl Look {
         }
     }
 
+    fn marked(&self) -> Option<FocusStyle> {
+        self.screen.marking.filter(|_| self.active)
+    }
+
     fn spotlit(&self) -> bool {
-        self.active && self.screen.many
+        self.marked() == Some(FocusStyle::Spotlight)
     }
 
     fn dimmed(&self) -> bool {
@@ -129,47 +173,53 @@ impl Look {
         })
     }
 
-    /// The spotlight's corner marks, top left and bottom right. Like the Tauri app's, they
-    /// come and go at once.
+    /// The lines the style draws over the active tile: the rail down its left edge, or the
+    /// spotlight's corner marks, top left and bottom right. Like the Tauri app's, they come and
+    /// go at once.
     pub(super) fn marks(&self, key: &str, t: &Tokens) -> Vec<El> {
-        if !self.spotlit() {
-            return Vec::new();
-        }
-        let line = |side: &str, el: El| {
-            el.key(format!("{key}.spotlight.{side}"))
+        let line = |name: &str, el: El| {
+            el.key(format!("{key}.{name}"))
                 .paint_order(2)
                 .inert()
                 .fill(t.brand)
         };
         let (start, end) = (Some(0.0), Some(0.0));
-        vec![
-            line(
-                "top",
-                el().pin(start, start, None, None)
-                    .w(MARK_PX)
-                    .h(MARK_LINE_PX),
-            ),
-            line(
-                "left",
-                el().pin(start, start, None, None)
-                    .w(MARK_LINE_PX)
-                    .h(MARK_PX),
-            ),
-            line(
-                "bottom",
-                el().pin(None, None, end, end).w(MARK_PX).h(MARK_LINE_PX),
-            ),
-            line(
-                "right",
-                el().pin(None, None, end, end).w(MARK_LINE_PX).h(MARK_PX),
-            ),
-        ]
+        match self.marked() {
+            None | Some(FocusStyle::Dim) => Vec::new(),
+            Some(FocusStyle::Rail) => {
+                vec![line("rail", el().pin(start, start, None, end).w(RAIL_PX))]
+            }
+            Some(FocusStyle::Spotlight) => vec![
+                line(
+                    "spotlight.top",
+                    el().pin(start, start, None, None)
+                        .w(MARK_PX)
+                        .h(MARK_LINE_PX),
+                ),
+                line(
+                    "spotlight.left",
+                    el().pin(start, start, None, None)
+                        .w(MARK_LINE_PX)
+                        .h(MARK_PX),
+                ),
+                line(
+                    "spotlight.bottom",
+                    el().pin(None, None, end, end).w(MARK_PX).h(MARK_LINE_PX),
+                ),
+                line(
+                    "spotlight.right",
+                    el().pin(None, None, end, end).w(MARK_LINE_PX).h(MARK_PX),
+                ),
+            ],
+        }
     }
 
     /// An agent's name reads in full while it is active; any other tile's title, such as a
-    /// document's, reads quieter, as the Tauri app's `.desktop-dock-tile-title`.
+    /// document's, reads quieter, as the Tauri app's `.desktop-dock-tile-title`, unless rail or
+    /// spotlight marks the tile.
     pub(super) fn title(&self, t: &Tokens) -> Color {
-        if self.agent && !self.dimmed() {
+        let marked_in_full = self.marked().is_some_and(|style| style != FocusStyle::Dim);
+        if marked_in_full || (self.agent && !self.dimmed()) {
             t.text_primary
         } else {
             t.text_secondary

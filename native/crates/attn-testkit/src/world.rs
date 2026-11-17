@@ -220,6 +220,15 @@ impl World {
         World::start_with(daemon, VIEWPORT, prefs, INSTANCE)
     }
 
+    /// [`World::start_with_prefs`] with a window `size` points wide and tall.
+    pub fn start_sized_with_prefs(
+        daemon: Daemon,
+        size: (f32, f32),
+        prefs: rune::prefs::Prefs,
+    ) -> World {
+        World::start_with(daemon, size, prefs, INSTANCE)
+    }
+
     fn start_with(
         daemon: Daemon,
         size: (f32, f32),

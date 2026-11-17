@@ -57,6 +57,8 @@ macro_rules! actions {
             WakeSession { session: String },
             /// Store a daemon setting.
             SetSetting { key: String, value: String },
+            /// Mark the active tile among several in this style from now on.
+            SetTileFocus { style: crate::desktop::FocusStyle },
             /// Forget every column width dragged on a desktop.
             ClearDraggedWidths { desktop: String },
             /// Order a profile's desktops by number, then by name.
@@ -127,6 +129,7 @@ macro_rules! actions {
                     Action::ShowSessionSeeds { .. } => "session.showSeeds",
                     Action::WakeSession { .. } => "session.wake",
                     Action::SetSetting { .. } => "setting.set",
+                    Action::SetTileFocus { .. } => "tileFocus.set",
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
                     Action::SortDesktops { .. } => "desktop.sort",
                     Action::SetDesktopOrder { .. } => "desktop.setOrder",
@@ -171,6 +174,7 @@ macro_rules! actions {
                     Action::ShowSessionSeeds { .. } => "Show an agent's seeds",
                     Action::WakeSession { .. } => "Unsnooze an agent",
                     Action::SetSetting { .. } => "Change a setting",
+                    Action::SetTileFocus { .. } => "Change the tile focus style",
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",
                     Action::SortDesktops { .. } => "Sort desktops",
                     Action::SetDesktopOrder { .. } => "Restore an order of desktops",

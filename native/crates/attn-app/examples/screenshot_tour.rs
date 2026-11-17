@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use attn_app::desktop::FocusStyle;
 use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
@@ -640,6 +641,17 @@ fn tile_headers(dark: bool) {
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     write(&mut world, BOXES);
     snap(&mut world, "tile-headers", dark);
+}
+
+/// Agent `a` active beside a document tile, marked in each tile focus style.
+fn tile_focus(dark: bool) {
+    for style in FocusStyle::ALL {
+        let mut world = start(Daemon::scripted().state(tended_agent(dark)));
+        deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+        write(&mut world, BOXES);
+        run(&mut world, Action::SetTileFocus { style });
+        snap(&mut world, &format!("tile-focus-{}", style.name()), dark);
+    }
 }
 
 const BOXES: &str = "╭───────╮ ┌───────┐\r\n│ round │ │ box   │\r\n╰───────╯ └───────┘\r\n";
@@ -3124,6 +3136,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
     for dark in [true, false] {
         sidebar_and_terminal(dark);
         tile_headers(dark);
+        tile_focus(dark);
         shelf(dark);
         review_stop(dark);
         garden(dark);
