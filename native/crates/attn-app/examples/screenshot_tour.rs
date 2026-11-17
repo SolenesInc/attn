@@ -592,6 +592,20 @@ fn sidebar_and_terminal(dark: bool) {
 /// seed's state in a pill and its open ask's chip, beside the document's header and controls;
 /// the agent's terminal draws a rounded box beside a square one.
 fn tile_headers(dark: bool) {
+    let mut state = tended_agent(dark);
+    if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
+        desktop.active_pane_id = "m".into();
+    }
+    let mut world = start(Daemon::scripted().state(state));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    write(&mut world, BOXES);
+    snap(&mut world, "tile-headers", dark);
+}
+
+const BOXES: &str = "╭───────╮ ┌───────┐\r\n│ round │ │ box   │\r\n╰───────╯ └───────┘\r\n";
+
+/// Agent `a` tends a growing seed and has an open ask, beside a document tile.
+fn tended_agent(dark: bool) -> InitialStateMessage {
     let tended = Seed {
         claimed: true,
         tender: Some(PartyView {
@@ -610,16 +624,7 @@ fn tile_headers(dark: bool) {
         created_at: "2026-11-17T09:00:00Z".into(),
         ..Ask::default()
     }]);
-    if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
-        desktop.active_pane_id = "m".into();
-    }
-    let mut world = start(Daemon::scripted().state(state));
-    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
-    write(
-        &mut world,
-        "╭───────╮ ┌───────┐\r\n│ round │ │ box   │\r\n╰───────╯ └───────┘\r\n",
-    );
-    snap(&mut world, "tile-headers", dark);
+    state
 }
 
 fn review_stop(dark: bool) {
@@ -894,12 +899,18 @@ fn drag(world: &mut World, mods: Option<rune::Mods>, from: (u16, u16), to: (u16,
     world.gesture(|app| app.hold(rune::Mods::default()));
 }
 
+/// Agent `a` popped out into a window of its own, with its seed, its ask and a box in its
+/// terminal.
 fn tile_window(dark: bool) {
-    let mut popped = document_tile("m", "/repo/plan.md");
-    popped["window"] = json!({"x": 10.0, "y": 20.0, "width": 900.0, "height": 700.0});
-    let daemon = Daemon::scripted().state(initial(dark, popped, vec![]));
-    let mut world = start(daemon);
+    let mut state = tended_agent(dark);
+    let mut popped = pane("a");
+    popped["window"] = json!({"x": 10.0, "y": 20.0, "width": 600.0, "height": 868.0});
+    if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
+        desktop.tree_json = row(vec![popped, document_tile("m", "/repo/plan.md")]).to_string();
+    }
+    let mut world = start(Daemon::scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    write(&mut world, BOXES);
     snap_tile_window(&mut world, "tile-window", dark);
 }
 

@@ -418,7 +418,6 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
         .key("window")
         .w_full()
         .h_full()
-        .padding(4.0)
         .fill(t.bg_app)
         .on_layout(|state: &mut State, [_, _, w, _]: [f32; 4]| {
             if state.notebook.window_w != w {

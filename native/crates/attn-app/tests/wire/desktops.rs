@@ -3669,6 +3669,26 @@ fn an_agent_popped_again_into_another_reused_window_streams_to_that_window_alone
 }
 
 #[test]
+fn a_popped_out_agent_fills_its_window_to_the_edges() {
+    let world = start(vec![desktop(
+        1,
+        "b",
+        Some(row([popped(pane("a"), OUT), pane("b")])),
+    )]);
+    let key = only_window(&world).key;
+    let [x, y, width, height] = world
+        .tile_screen(&key)
+        .bounds(Target::key("terminal.r-a"))
+        .expect("the window draws terminal a");
+    assert!(y > 0.0, "the header sits above the terminal");
+    assert_eq!(
+        (x, x + width, y + height),
+        (0.0, OUT.2 as f32, OUT.3 as f32),
+        "the terminal touches the window's left, right and bottom edges"
+    );
+}
+
+#[test]
 fn an_agent_out_at_launch_attaches_in_its_window_and_takes_the_keyboard_there() {
     let mut world = start(vec![desktop(
         1,
