@@ -305,6 +305,31 @@ fn a_browser_tile_opens_its_page_at_the_stored_address_over_its_page_area() {
 }
 
 #[test]
+fn a_drawer_over_the_page_cuts_the_page_back_to_the_part_it_leaves_uncovered() {
+    let (mut world, engine) = start(START);
+    let rect = page_rect(&world);
+
+    press(&mut world, Action::DockAttention);
+    let drawer = world.screen().bounds(Target::key("attention")).unwrap();
+    let shown = engine
+        .shown()
+        .expect("the page still shows beside the drawer");
+    assert_eq!(
+        shown.frame, rect,
+        "the page keeps its size under the drawer"
+    );
+    assert_eq!(
+        shown.visible,
+        [rect[0], rect[1], drawer[0] - rect[0], rect[3]],
+        "only the part left of the drawer shows"
+    );
+
+    press(&mut world, Action::DockAttention);
+    assert_eq!(engine.shown().expect("the page shows").visible, rect);
+    rest(&mut world);
+}
+
+#[test]
 fn the_tile_points_the_open_page_at_a_new_address_in_place_and_closes_it_with_the_tile() {
     let (mut world, engine) = start("https://first.example/");
     engine.take();

@@ -887,7 +887,12 @@ fn the_preview_stays_closed_when_the_agent_asks_again_after_its_last_ask_closed_
 
 #[test]
 fn a_press_on_the_ask_chip_takes_the_keyboard_even_when_the_drawer_shows_that_ask() {
-    let mut world = start(vec![cache_store()], vec![api_working()]);
+    let beside = |id: &str| session(id, "working");
+    let mut world = start(
+        vec![cache_store()],
+        vec![api_working(), beside("b"), beside("c")],
+    );
+    world.resize((1600.0, 900.0));
     world.open_desktop();
     click(&mut world, "tile.p0.ask");
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));

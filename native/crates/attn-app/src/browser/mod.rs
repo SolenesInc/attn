@@ -326,11 +326,16 @@ fn place_pages(state: &mut State, tx: &mut Tx) {
     let elements = keys.iter().map(view::page_key).collect();
     tx.find_elements(elements, move |state: &mut State, found, tx| {
         let covered = crate::shell::covers_tiles(state);
+        let dock_left = state.window.width.window - crate::shell::dock_width(state);
         let zoom = crate::settings::text_scale(&state.facts.settings);
         let mut moved = false;
         for (key, info) in keys.into_iter().zip(found) {
             let at = info
                 .filter(|e| !covered && !e.inert && !e.exiting && e.opacity > 0.0)
+                .map(|mut e| {
+                    e.visible[2] = e.visible[2].min(dock_left - e.visible[0]);
+                    e
+                })
                 .filter(|e| e.visible[2] >= 1.0 && e.visible[3] >= 1.0)
                 .map(|e| Placement {
                     frame: e.rect.map(|v| v * zoom),

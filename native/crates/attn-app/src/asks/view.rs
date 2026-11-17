@@ -18,7 +18,6 @@ use crate::sidebar::queue;
 pub(super) const SNOOZE: &str = "asks.snooze";
 const OPEN_SEED: &str = "asks.open-seed";
 const LIST: &str = "asks.list";
-const WIDTH: f32 = 360.0;
 
 pub(super) fn choice_key(question: &str, i: usize) -> String {
     format!("asks.q.{question}.choice.{i}")
@@ -56,11 +55,8 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
         .label("Asks")
         .focusable(true)
         .on_key(drawer_key)
-        .w(WIDTH)
         .h_full()
         .min_h(0.0)
-        .fill(t.bg_panel)
-        .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
         .child(header(live, replied, asks.show_replied, t));
     let Some(at) = shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) else {
         return frame.child(empty(replied, t));
@@ -81,9 +77,10 @@ fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
         .key("asks.header")
         .w_full()
         .items_center()
-        .gap(space::S2)
-        .px(space::S3)
-        .py(space::S2)
+        .gap(10.0)
+        .px(18.0)
+        .pt(16.0)
+        .pb(12.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
             type_::upper("Asks", type_::DRAWER_TITLE)
@@ -444,8 +441,10 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .padding(space::S3)
-        .gap(space::S3)
+        .px(20.0)
+        .pt(16.0)
+        .pb(20.0)
+        .gap(14.0)
         .child(from)
         .children(seed)
         .child(
@@ -843,11 +842,13 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                 .px(14.0)
         }
     };
-    col()
+    row()
         .key("asks.footer")
         .w_full()
-        .gap(space::S2)
-        .padding(space::S3)
+        .items_center()
+        .gap(12.0)
+        .px(18.0)
+        .py(12.0)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
         .child(
             row()
@@ -859,6 +860,8 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                         .collect::<Vec<_>>()
                         .join(" · "),
                 )
+                .grow(1.0)
+                .min_w(0.0)
                 .flex_wrap()
                 .gaps(4.0, 14.0)
                 .children(hints.into_iter().map(|(keys, words)| {
@@ -874,15 +877,8 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                         .child(text(words).font(type_::LABEL).color(t.text_dimmed))
                 })),
         )
-        .child(
-            row()
-                .w_full()
-                .items_center()
-                .gap(space::S2)
-                .child(el().grow(1.0))
-                .children(accept)
-                .child(action),
-        )
+        .children(accept)
+        .child(action)
 }
 
 fn toggle_replied(state: &mut State, tx: &mut Tx) {

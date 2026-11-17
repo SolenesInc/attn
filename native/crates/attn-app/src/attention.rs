@@ -22,7 +22,6 @@ use crate::sidebar::model::AgentRow;
 use crate::sidebar::queue;
 
 pub(crate) const DRAWER: &str = "attention";
-const WIDTH: f32 = 360.0;
 const DONE_SHOWS_SECONDS: f64 = 1.5;
 
 /// Where a pull request row shows. Home's rows are the Tauri dashboard's: opening one marks it
@@ -372,19 +371,22 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
         .label("Needs Attention")
         .focusable(true)
         .on_key(drawer_key)
-        .w(WIDTH)
         .h_full()
         .min_h(0.0)
-        .fill(t.bg_panel)
-        .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
         .child(
             row()
                 .key("attention.header")
                 .w_full()
                 .items_center()
-                .gap(space::S2)
-                .px(space::S3)
-                .py(space::S2)
+                .gap(12.0)
+                .px(20.0)
+                .pt(20.0)
+                .pb(16.0)
+                .fill(if t.dark {
+                    t.shadow.alpha(0.2)
+                } else {
+                    rune::Color::TRANSPARENT
+                })
                 .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
                 .child(
                     type_::upper("Needs Attention", type_::DRAWER_TITLE)

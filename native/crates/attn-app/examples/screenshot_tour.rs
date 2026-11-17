@@ -511,6 +511,19 @@ fn garden(dark: bool) {
     snap(&mut world, "garden", dark);
 }
 
+fn garden_dock(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    snap(&mut world, "garden-dock", dark);
+}
+
+fn garden_dock_plot(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
+    snap(&mut world, "garden-dock-plot", dark);
+}
+
 fn settings_page(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::UiOpenSettings);
@@ -1432,6 +1445,8 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         sidebar_and_terminal(dark);
         review_stop(dark);
         garden(dark);
+        garden_dock(dark);
+        garden_dock_plot(dark);
         settings_page(dark);
         settings_agents(dark);
         shortcut_editor(dark);

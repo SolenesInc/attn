@@ -232,6 +232,7 @@ fn a_plot_tile_walks_to_a_child_in_place_and_opens_in_the_garden() {
         titled(&world, "garden.head.title").as_deref(),
         Some("Garden unit")
     );
+    world.advance(std::time::Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 

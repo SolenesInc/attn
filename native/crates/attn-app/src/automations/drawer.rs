@@ -8,17 +8,8 @@ use rune_kit::{Button, ButtonVariant, ControlSize, Switch, TextInput};
 use super::{Automations, DRAWER, form};
 use crate::State;
 
-const MIN_WIDTH: f32 = 420.0;
-const MAX_WIDTH: f32 = 640.0;
-
 pub(crate) fn pull_request_field(definition: i64) -> String {
     format!("automations.pr-url.{definition}")
-}
-
-/// The drawer's width: 42% of the window, between 420 and 640 points, as the Tauri app's
-/// `clamp(420px, 42vw, 640px)`.
-fn width(state: &State) -> f32 {
-    (state.window.width.window * 0.42).clamp(MIN_WIDTH, MAX_WIDTH)
 }
 
 pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
@@ -33,11 +24,8 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
         .label("Automations")
         .focusable(true)
         .on_key(drawer_key)
-        .w(width(state))
         .h_full()
         .min_h(0.0)
-        .fill(t.bg_panel)
-        .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
         .child(body)
 }
 

@@ -24,7 +24,11 @@ const COLUMNS_MIN: f32 = 1160.0;
 const THIRD_COLUMN_MIN: f32 = 1460.0;
 const FULL_INSET: f32 = 12.0;
 const ROW_HEIGHT: f32 = 44.0;
-const DOCK_WIDTH: f32 = 360.0;
+/// How far a row's content sits in from its highlight, so a list widened by it lines its
+/// content up with what stands above it, as the Tauri garden's `.garden-section .garden-list`.
+const ROW_INSET: f32 = space::S2;
+/// The stacked walk's side padding, the Tauri garden's `.garden-page`.
+const PAGE_INSET: f32 = 16.0;
 
 pub(super) fn row_key(id: &str) -> String {
     format!("{ROW_PREFIX}{id}")
@@ -51,7 +55,7 @@ impl Lookups for Look<'_> {
 fn frame_width(state: &State) -> f32 {
     match super::mode(state) {
         Mode::Full => (state.window.width.window - FULL_INSET * 2.0).max(0.0),
-        _ => DOCK_WIDTH,
+        _ => crate::shell::Drawer::Garden.width(state.window.width.window),
     }
 }
 
@@ -249,14 +253,11 @@ pub(super) fn press_row(state: &mut State, id: &str, tx: &mut Tx) {
     super::drill(state, id, tx);
 }
 
-/// The garden in the dock: the drawer's slot beside the work.
+/// The garden in the dock, over the work.
 pub(crate) fn panel(state: &State, t: &Tokens) -> El {
     col()
         .key("drawer")
-        .w(DOCK_WIDTH)
         .h_full()
-        .fill(t.bg_panel)
-        .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
         .child(super::zoomed(super::zoom(state), body(state, t)))
 }
 
@@ -374,7 +375,9 @@ fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
         .w_full()
         .items_center()
         .gap(space::S2)
-        .padding(space::S2)
+        .px(PAGE_INSET)
+        .pt(10.0)
+        .pb(9.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(trail_nav(state, place, t).grow(1.0));
     if full {
@@ -636,7 +639,10 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
         .w_full()
         .items_center()
         .gap(space::S2)
-        .padding(space::S2)
+        .pr(PAGE_INSET)
+        .pt(2.0)
+        .pb(6.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
             text("/")
                 .font(type_::MONO_CAPTION)
@@ -720,7 +726,7 @@ fn list(key: &str, role: &'static str, label: &str, specs: Vec<RowSpec>, t: &Tok
         .key(key.to_owned())
         .role(role)
         .label(label.to_owned())
-        .w_full()
+        .self_stretch()
         .growth(GrowthSpec::default())
         .virtual_rows(
             specs.len(),
@@ -852,12 +858,12 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
             .a11y_value(seed.status.clone())
             .focusable(true)
             .w_full()
-            .padding(space::S2)
+            .padding(ROW_INSET)
             .radius(4.0)
             .fill(if look.selected || look.active {
                 t.bg_selected
             } else {
-                t.bg_panel
+                rune::Color::TRANSPARENT
             })
             .hover(t.bg_elevated)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| match pick {
@@ -974,14 +980,20 @@ fn root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> El {
         .iter()
         .filter(|s| model::is_closed(s))
         .count();
-    let mut page = col().w_full().children(capped(state, place, t));
+    let stacked = pick == Pick::Drill;
+    let note = |key: &str, words: String| {
+        let note = note(key, words, t);
+        if stacked { note.padding(0.0) } else { note }
+    };
+    let mut page = col()
+        .w_full()
+        .children(capped(state, place, t).map(|c| if stacked { c.padding(0.0) } else { c }));
     if roots.is_empty() && closed > 0 {
-        page = page.child(note("garden.empty", hidden_closed_words(closed), t));
+        page = page.child(note("garden.empty", hidden_closed_words(closed)));
     } else if roots.is_empty() {
         page = page.child(note(
             "garden.empty",
-            "The garden is empty. attn seed plant \"what this is\" puts something in it.",
-            t,
+            "The garden is empty. attn seed plant \"what this is\" puts something in it.".into(),
         ));
     } else {
         let selected = place.trail.first().map_or("", String::as_str);
@@ -1015,7 +1027,10 @@ fn stack_view(state: &State, place: &Place, t: &Tokens) -> El {
             Some(here) => page(state, place, here, true, t),
         }
     };
-    scroll("garden.viewport", content.key("garden.page"))
+    scroll(
+        "garden.viewport",
+        content.key("garden.page").px(PAGE_INSET).pt(14.0).pb(40.0),
+    )
 }
 
 fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
@@ -1110,7 +1125,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
     };
     let mut page = col()
         .w_full()
-        .padding(space::S3)
+        .padding(if stacked { 0.0 } else { space::S3 })
         .gap(space::S2)
         .child(
             sheet.head(
@@ -1163,11 +1178,14 @@ fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> El {
             t,
         ));
     }
-    plot.child(list(
-        "garden.plot.list",
-        "list",
-        "Plot",
-        row_specs(&open, place, Pick::Drill, "", None),
-        t,
-    ))
+    plot.child(
+        list(
+            "garden.plot.list",
+            "list",
+            "Plot",
+            row_specs(&open, place, Pick::Drill, "", None),
+            t,
+        )
+        .mx(-ROW_INSET),
+    )
 }

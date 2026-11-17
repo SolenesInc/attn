@@ -16,6 +16,7 @@ mod wire {
     mod desktop_order;
     mod desktops;
     mod diagnostic_report;
+    mod dock;
     mod field_keys;
     mod garden;
     mod home;

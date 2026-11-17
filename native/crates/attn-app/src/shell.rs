@@ -23,7 +23,8 @@ pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
 pub struct Window {
     pub view: View,
     pub sidebar_hidden: bool,
-    /// The open drawers, oldest first: they stand side by side, and Escape closes the newest.
+    /// The open drawers, oldest first: they lie side by side over the content, the oldest at the
+    /// window's edge, and Escape closes the newest.
     pub drawers: Vec<Drawer>,
     pub layer: Option<Layer>,
     pub(crate) callout: Option<crate::callouts::Callout>,
@@ -105,6 +106,20 @@ pub enum Drawer {
     Automations,
     Asks,
     Garden,
+}
+
+impl Drawer {
+    /// How wide the drawer lies in a window `window` points wide: the Tauri dock's
+    /// `clamp(min, share of vw, max)` for its panel.
+    pub(crate) fn width(self, window: f32) -> f32 {
+        let (min, share, max) = match self {
+            Drawer::Attention => (360.0, 0.48, 600.0),
+            Drawer::Asks => (420.0, 0.46, 720.0),
+            Drawer::Automations => (420.0, 0.42, 640.0),
+            Drawer::Garden => (380.0, 0.34, 560.0),
+        };
+        (window * share).clamp(min, max)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -549,16 +564,67 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
             View::Home => crate::home::view(state, t),
             View::Desktop => crate::desktop::area(state, t, scale),
         })
-        .children(window.drawers.iter().filter_map(|drawer| match drawer {
-            Drawer::Garden if crate::garden::mode(state) == crate::garden::Mode::Full => None,
-            Drawer::Garden if window.shows(Drawer::Asks) => {
-                Some(crate::garden::panel(state, t).focus_return(crate::asks::DRAWER))
-            }
-            Drawer::Garden => Some(crate::garden::panel(state, t)),
-            Drawer::Asks => Some(crate::asks::drawer(state, t)),
-            Drawer::Attention => Some(crate::attention::drawer(state, t)),
-            Drawer::Automations => Some(crate::automations::drawer(state, t)),
-        }))
+        .children(dock(state, t))
+}
+
+/// The open drawers over the content, below the title bar, nothing behind them moving: the
+/// oldest against the window's right edge and each newer one to its left, as the Tauri app's
+/// dock lays its panels.
+fn dock(state: &State, t: &Tokens) -> Vec<El> {
+    let window = &state.window;
+    let mut right = 0.0;
+    docked(state)
+        .map(|(drawer, width)| {
+            let content = match drawer {
+                Drawer::Garden if window.shows(Drawer::Asks) => {
+                    crate::garden::panel(state, t).focus_return(crate::asks::DRAWER)
+                }
+                Drawer::Garden => crate::garden::panel(state, t),
+                Drawer::Asks => crate::asks::drawer(state, t),
+                Drawer::Attention => crate::attention::drawer(state, t),
+                Drawer::Automations => crate::automations::drawer(state, t),
+            };
+            let at = right;
+            right += width;
+            drawn_as_dock_panel(content, t)
+                .pin(None, Some(0.0), Some(at), Some(0.0))
+                .w(width)
+        })
+        .collect()
+}
+
+/// The drawers the dock lays out, oldest first, each with its width: all the open ones but
+/// a garden that holds the window.
+fn docked(state: &State) -> impl Iterator<Item = (Drawer, f32)> + '_ {
+    let window = &state.window;
+    window
+        .drawers
+        .iter()
+        .copied()
+        .filter(|&d| {
+            !(d == Drawer::Garden && crate::garden::mode(state) == crate::garden::Mode::Full)
+        })
+        .map(|d| (d, d.width(window.width.window)))
+}
+
+/// How much of the window's right side the open drawers cover.
+pub(crate) fn dock_width(state: &State) -> f32 {
+    docked(state).map(|(_, width)| width).sum()
+}
+
+/// The surface every dock panel has in the Tauri app, `.side-panel`: the panel color under a
+/// faint sheen, a rule on its left, and a shadow cast over the content.
+fn drawn_as_dock_panel(content: El, t: &Tokens) -> El {
+    content
+        .fill(t.bg_panel)
+        .gradient(t.highlight.alpha(0.03), t.highlight.alpha(0.01))
+        .border_sides([0.0, 0.0, 0.0, 1.0], t.border)
+        .box_shadow(rune::Shadow {
+            x: -24.0,
+            blur: 60.0,
+            color: t.shadow.alpha(0.4),
+            ..rune::Shadow::default()
+        })
 }
 
 impl Window {
