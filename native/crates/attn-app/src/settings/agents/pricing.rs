@@ -5,7 +5,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Select, SelectAppearance, TextInput};
+use rune_kit::{Select, SelectAppearance, TextInput};
 
 use super::super::autosave::{self, Codec, PLAIN};
 use super::super::pages::{CAPTION, S4, refusal_beside};
@@ -267,7 +267,7 @@ fn rate_input(
     col()
         .gap(space::S1)
         .child(text(name.clone()).font(CAPTION).color(t.text_secondary))
-        .child(
+        .child(crate::settings::pages::input(
             TextInput::new(edit)
                 .key(key)
                 .label(name)
@@ -275,9 +275,9 @@ fn rate_input(
                 .on_edit(on_edit)
                 .on_change(on_change)
                 .on_submit(on_submit)
-                .width(Some(110.0))
-                .build(crate::settings::pages::kit(t)),
-        )
+                .width(Some(110.0)),
+            t,
+        ))
 }
 
 fn card_typed(state: &mut State, model: &str) {
@@ -355,12 +355,12 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
                         .grow(1.0),
                 )
                 .child(
-                    Button::new("Remove")
-                        .variant(ButtonVariant::Danger)
+                    crate::settings::pages::Action::new("Remove")
+                        .look(crate::settings::pages::Look::Danger)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             autosave::apply(state, &remove, "", tx)
                         })
-                        .build(crate::settings::pages::kit(t))
+                        .build(t)
                         .key(format!("settings.price.{model}.remove")),
                 ),
         )
@@ -461,6 +461,7 @@ fn new_form(state: &State, t: &Tokens) -> El {
                 .gap(space::S1)
                 .child(text("Exact model ID").font(CAPTION).color(t.text_secondary))
                 .child(
+                    crate::settings::pages::input(
                     TextInput::new(&new.model)
                         .key(NEW_MODEL)
                         .label("Exact model ID")
@@ -469,8 +470,9 @@ fn new_form(state: &State, t: &Tokens) -> El {
                             &mut state.window.settings.agents.pricing.new.model
                         })
                         .on_submit(add)
-                        .width(Some(280.0))
-                        .build(crate::settings::pages::kit(t)),
+                        .width(Some(280.0)),
+                        t,
+                    ),
                 ),
         )
         .child(row().gap(space::S2).wrap().children(rates))

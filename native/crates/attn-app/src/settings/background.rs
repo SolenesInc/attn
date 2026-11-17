@@ -5,12 +5,14 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, TextInput};
+use rune_kit::TextInput;
 use serde::{Deserialize, Serialize};
 
 use super::autosave::{self, Codec};
 use super::harnesses;
-use super::pages::{CAPTION, NUMBER_FIELD, block, refusal_beside, row_card, setting_field};
+use super::pages::{
+    Action, CAPTION, Look, NUMBER_FIELD, block, refusal_beside, row_card, setting_field,
+};
 use super::route::{self, Route, Rules, Target};
 use crate::State;
 
@@ -359,8 +361,8 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
         })
         .on_change(intervals_typed)
         .on_submit(|state: &mut State, tx: &mut Tx| autosave::commit(state, ACTIVITY_INTERVALS, tx))
-        .width(Some(120.0))
-        .build(crate::settings::pages::kit(t));
+        .width(Some(120.0));
+    let input = crate::settings::pages::input(input, t);
     col()
         .gap(space::S1)
         .child(
@@ -376,7 +378,7 @@ fn session_activity(state: &State, t: &Tokens) -> El {
     let saved = parse_activity(settings.get(ACTIVITY_CONFIG).map(String::as_str));
     let enabled = crate::setting::on(settings, ACTIVITY_ENABLED);
     let blocked = !enabled && saved.agent.is_empty();
-    let mut toggle = Button::new(if enabled { "Disable" } else { "Enable" }).disabled(blocked);
+    let mut toggle = Action::new(if enabled { "Disable" } else { "Enable" }).disabled(blocked);
     if blocked {
         toggle = toggle.help("Choose an agent first");
     }
@@ -389,7 +391,7 @@ fn session_activity(state: &State, t: &Tokens) -> El {
                 tx,
             )
         })
-        .build(crate::settings::pages::kit(t))
+        .build(t)
         .key("settings.activity.toggle");
     let mut body = vec![row_card(
         "Generate activity lines",
@@ -404,7 +406,7 @@ fn session_activity(state: &State, t: &Tokens) -> El {
             t,
         ));
     }
-    body.extend(harnesses::failure_row(state, "activity", t));
+    body.extend(harnesses::failure_row(state, "activity", Look::Quiet, t));
     body.push(route::chip(
         state,
         t,
@@ -470,7 +472,12 @@ fn garden_advisor(state: &State, t: &Tokens) -> El {
             t,
         ));
     }
-    body.extend(harnesses::failure_row(state, "garden-advisor", t));
+    body.extend(harnesses::failure_row(
+        state,
+        "garden-advisor",
+        Look::Quiet,
+        t,
+    ));
     body.push(route::chip(
         state,
         t,

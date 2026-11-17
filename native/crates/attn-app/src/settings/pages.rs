@@ -88,11 +88,141 @@ pub(super) fn named_button(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Button::new(shown)
+    Action::new(shown)
         .on_press_tx(press)
-        .build(crate::settings::pages::kit(t))
+        .build(t)
         .key(key)
         .label(label.to_owned())
+}
+
+/// The modifiers of the Tauri app's `.settings-action`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Look {
+    #[default]
+    Plain,
+    /// `.primary`: the page's one main action, filled `warning`.
+    Primary,
+    /// `.quiet`: no fill or edge until the pointer is over it.
+    Quiet,
+    /// `.danger`: an action that removes or turns something off.
+    Danger,
+    /// Delegation's `.quiet.danger`: a quiet action in `error`.
+    QuietDanger,
+}
+
+/// The Tauri app's `.settings-action`, the button every settings page acts with: 38 points
+/// tall, a `border_hover` edge, a `bg_button` fill and a bold label in `text_secondary`.
+pub(super) struct Action {
+    shown: String,
+    look: Look,
+    disabled: bool,
+    height: f32,
+    ink: Option<rune::Color>,
+    button: Button,
+}
+
+/// A settings action's label and a switch's state word: native's 12 points, at the Tauri
+/// app's weight.
+const ACTION_LABEL: rune::TextStyle = rune::TextStyle::new(12.0, 700.0);
+
+impl Action {
+    pub(super) fn new(shown: impl Into<String>) -> Action {
+        let shown = shown.into();
+        Action {
+            button: Button::new(shown.clone()),
+            shown,
+            look: Look::Plain,
+            disabled: false,
+            height: 38.0,
+            ink: None,
+        }
+    }
+
+    /// The button's height, 38 points unless set.
+    pub(super) fn height(mut self, height: f32) -> Self {
+        self.height = height;
+        self
+    }
+
+    /// The label's color, the look's own unless set.
+    pub(super) fn ink(mut self, ink: rune::Color) -> Self {
+        self.ink = Some(ink);
+        self
+    }
+
+    pub(super) fn look(mut self, look: Look) -> Self {
+        self.look = look;
+        self
+    }
+
+    pub(super) fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self.button = self.button.disabled(disabled);
+        self
+    }
+
+    pub(super) fn help(mut self, help: impl Into<String>) -> Self {
+        self.button = self.button.help(help);
+        self
+    }
+
+    pub(super) fn on_press(mut self, press: impl Fn(&mut State) + 'static) -> Self {
+        self.button = self.button.on_press(press);
+        self
+    }
+
+    pub(super) fn on_press_tx(mut self, press: impl Fn(&mut State, &mut Tx) + 'static) -> Self {
+        self.button = self.button.on_press_tx(press);
+        self
+    }
+
+    pub(super) fn build(self, t: &Tokens) -> El {
+        let white = t.highlight;
+        let (fill, edge, ink, hover) = match self.look {
+            Look::Plain => (t.bg_button, t.border_hover, t.text_secondary, t.bg_panel),
+            Look::Primary => (
+                t.warning,
+                t.warning.alpha(0.8),
+                attn_ui::warning_ink(t),
+                attn_ui::colors::mix_srgb(t.warning, white, 0.3),
+            ),
+            Look::Quiet => (
+                rune::Color::TRANSPARENT,
+                rune::Color::TRANSPARENT,
+                t.text_secondary,
+                t.bg_button,
+            ),
+            Look::QuietDanger => (
+                rune::Color::TRANSPARENT,
+                rune::Color::TRANSPARENT,
+                t.error,
+                t.bg_button,
+            ),
+            Look::Danger => (
+                t.bg_button,
+                t.error.alpha(0.38),
+                attn_ui::colors::mix_srgb(t.error, white, 0.24),
+                t.bg_panel,
+            ),
+        };
+        let ink = self.ink.unwrap_or(ink);
+        let shown = self.shown;
+        let button = self
+            .button
+            .variant(rune_kit::ButtonVariant::Ghost)
+            .label_with(move |_, _| text(shown).font(ACTION_LABEL).color(ink))
+            .build(kit(t))
+            .h(self.height)
+            .px(14.0)
+            .radius(6.0)
+            .fill(fill)
+            .border(1.0, edge);
+        if self.disabled {
+            button
+        } else {
+            button.hover(hover)
+        }
+    }
 }
 
 /// The kit the settings pages build with: the Tauri app's settings paint primary actions in
@@ -145,7 +275,7 @@ pub(super) fn switch(
         .child(track)
         .children(show_state.then(|| {
             text(if on { "On" } else { "Off" })
-                .font(type_::LABEL)
+                .font(ACTION_LABEL)
                 .color(t.text_secondary)
                 .a11y_hidden()
         }))
@@ -203,6 +333,22 @@ pub(super) fn segment(key: String, name: &str, chosen: bool, t: &Tokens) -> El {
     option
 }
 
+/// The Tauri app's `.settings-input`: 38 points tall, monospace, on `bg_input`, with its
+/// placeholder in `text_dimmed`.
+pub(super) fn input(field: TextInput, t: &Tokens) -> El {
+    let dimmed_placeholder = attn_ui::kit(&Tokens {
+        brand: t.warning,
+        text_tertiary: t.text_dimmed,
+        ..*t
+    });
+    field
+        .text_style(dimmed_placeholder.ty.ui_compact.mono())
+        .height(38.0)
+        .build(dimmed_placeholder)
+        .fill(t.bg_input)
+        .pl(10.0)
+}
+
 /// The width of a field that holds a number.
 pub(super) const NUMBER_FIELD: f32 = 160.0;
 /// The width of a field that holds a path or a command.
@@ -221,16 +367,15 @@ pub(super) fn setting_field(
     let field_key = super::field_key(key);
     let field = state.window.settings.autosave.field(key);
     let empty = rune::TextEdit::default();
-    let input = TextInput::new(field.map_or(&empty, |f| &f.draft))
+    let draft = TextInput::new(field.map_or(&empty, |f| &f.draft))
         .key(field_key)
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
-        .text_style(attn_ui::kit(t).ty.ui_compact.mono())
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
-        .width(Some(width))
-        .build(crate::settings::pages::kit(t));
+        .width(Some(width));
+    let input = input(draft, t);
     let saved = state
         .window
         .settings

@@ -208,10 +208,10 @@ fn toggle(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Button::new(if on { "Disable" } else { "Enable" })
+    crate::settings::pages::Action::new(if on { "Disable" } else { "Enable" })
         .disabled(disabled)
         .on_press_tx(press)
-        .build(crate::settings::pages::kit(t))
+        .build(t)
         .key(key.to_owned())
         .role("switch")
         .label(name.to_owned())
@@ -267,8 +267,8 @@ fn field(
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(&edit))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
-        .width(Some(220.0))
-        .build(crate::settings::pages::kit(t));
+        .width(Some(220.0));
+    let input = super::pages::input(input, t);
     let saved = drafts.shows_saved_mark(&key).then(|| {
         text("Saved")
             .key(format!("settings.saved.{key}"))

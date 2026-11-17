@@ -8,7 +8,6 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
-use rune_kit::Button;
 
 use super::pages::CAPTION;
 use crate::State;
@@ -146,14 +145,14 @@ fn action(state: &State, t: &Tokens) -> El {
         .pt(space::S2)
         .child(
             row().child(
-                Button::new(if running {
+                crate::settings::pages::Action::new(if running {
                     "Updating…"
                 } else {
                     "Update attn"
                 })
                 .disabled(running)
                 .on_press_tx(start)
-                .build(crate::settings::pages::kit(t))
+                .build(t)
                 .key("settings.updates.start"),
             ),
         )

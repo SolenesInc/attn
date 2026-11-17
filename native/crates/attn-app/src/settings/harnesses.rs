@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 use attn_ui::Tokens;
 use rune::tok::space;
 use rune::{El, Tx, row, text};
-use rune_kit::Button;
 
 use super::pages::CAPTION;
 use super::route::RouteHarness;
@@ -447,7 +446,12 @@ pub(crate) fn headless_agents(
 }
 
 /// The harness list's failure with its Retry, as each block that lists harnesses shows it.
-pub(super) fn failure_row(state: &State, block: &str, t: &Tokens) -> Option<El> {
+pub(super) fn failure_row(
+    state: &State,
+    block: &str,
+    retry_look: super::pages::Look,
+    t: &Tokens,
+) -> Option<El> {
     let error = failure(state)?;
     Some(
         row()
@@ -458,9 +462,10 @@ pub(super) fn failure_row(state: &State, block: &str, t: &Tokens) -> Option<El> 
             .items_center()
             .child(text(error.to_owned()).font(CAPTION).color(t.error).wrap())
             .child(
-                Button::new("Retry")
+                super::pages::Action::new("Retry")
+                    .look(retry_look)
                     .on_press_tx(retry)
-                    .build(crate::settings::pages::kit(t))
+                    .build(t)
                     .key(format!("settings.{block}.harness-retry")),
             ),
     )

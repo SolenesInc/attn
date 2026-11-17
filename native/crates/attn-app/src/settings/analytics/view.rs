@@ -14,7 +14,7 @@ use rune_kit::{
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
 use super::{Analytics, Confirm, Records, SEND_VENTS, TOOL_VENTS};
 use crate::State;
-use crate::settings::pages::{CAPTION, S4, switch};
+use crate::settings::pages::{Action, CAPTION, Look, S4, switch};
 
 pub(super) const PAGE: &str = "settings.analytics";
 pub(super) const LIST: &str = "settings.analytics.list";
@@ -71,7 +71,7 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
             .color(t.text_tertiary)
             .wrap()
         }))
-        .children(page.machine.then(|| machine(state, page, sharing, t, k)))
+        .children(page.machine.then(|| machine(state, page, sharing, t)))
         .child(views(state, page.view, k))
         .child(
             row()
@@ -712,29 +712,29 @@ fn warning(said: &str, t: &Tokens) -> El {
     text(said.to_owned()).font(CAPTION).color(t.warning).wrap()
 }
 
-fn confirming(yes: &str, on_yes: fn(&mut State, &mut Tx), k: &Kit) -> El {
+fn confirming(yes: &str, on_yes: fn(&mut State, &mut Tx), t: &Tokens) -> El {
     row()
         .gap(space::S2)
         .child(
-            Button::new(yes)
-                .variant(ButtonVariant::Danger)
+            Action::new(yes)
+                .look(Look::Danger)
                 .on_press_tx(on_yes)
-                .build(k)
+                .build(t)
                 .key("settings.analytics.confirm.yes"),
         )
         .child(
-            Button::new("Keep")
+            Action::new("Keep")
                 .on_press(|state: &mut State| state.window.settings.analytics.confirm = None)
-                .build(k)
+                .build(t)
                 .key("settings.analytics.confirm.keep"),
         )
 }
 
-fn asking(label: &str, confirm: Confirm, k: &Kit) -> El {
-    Button::new(label)
-        .variant(ButtonVariant::Danger)
+fn asking(label: &str, confirm: Confirm, t: &Tokens) -> El {
+    Action::new(label)
+        .look(Look::Danger)
         .on_press(move |state: &mut State| state.window.settings.analytics.confirm = Some(confirm))
-        .build(k)
+        .build(t)
 }
 
 fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> El {
@@ -749,7 +749,7 @@ fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> 
     )
 }
 
-fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens, k: &Kit) -> El {
+fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> El {
     let status = page.status.as_ref();
     let send_vents = crate::setting::on(&state.facts.settings, SEND_VENTS);
     let tool_vents = crate::setting::on(&state.facts.settings, TOOL_VENTS);
@@ -787,7 +787,7 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens, k: &Kit) 
         })
     };
     let share_control = if offering_delete {
-        confirming("Delete from server", super::forget, k)
+        confirming("Delete from server", super::forget, t)
     } else {
         switch(
             "settings.analytics.switch.sharing".into(),
@@ -809,9 +809,9 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens, k: &Kit) 
             .unwrap_or_default()
     );
     let forget = if page.confirm == Some(Confirm::Forget) {
-        confirming("Delete from server", super::forget, k)
+        confirming("Delete from server", super::forget, t)
     } else {
-        asking("Forget…", Confirm::Forget, k).key("settings.analytics.forget")
+        asking("Forget…", Confirm::Forget, t).key("settings.analytics.forget")
     };
     let clear_copy = format!(
         "{} and dismissed vents, and what each outpost holds. An unreachable outpost clears when it reconnects.",
@@ -825,9 +825,9 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens, k: &Kit) 
         )
     );
     let clear = if page.confirm == Some(Confirm::Clear) {
-        confirming("Clear", super::clear, k)
+        confirming("Clear", super::clear, t)
     } else {
-        asking("Clear…", Confirm::Clear, k).key("settings.analytics.clear")
+        asking("Clear…", Confirm::Clear, t).key("settings.analytics.clear")
     };
     col()
         .key("settings.analytics.machine")

@@ -125,9 +125,9 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 .gap(space::S2)
                 .child(text(error.clone()).font(CAPTION).color(t.warning))
                 .child(
-                    Button::new("Try again")
+                    crate::settings::pages::Action::new("Try again")
                         .on_press_tx(read)
-                        .build(k)
+                        .build(t)
                         .key("settings.bus.try-again"),
                 ),
             None => text("Reading the event log…")
@@ -182,17 +182,17 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
     }
     page.push(summary(status, now_ms, t));
     page.extend(producers(bus, status, t, k));
-    page.extend(consumers(bus, status, now_ms, t, k));
+    page.extend(consumers(bus, status, now_ms, t));
     page.push(
         row()
             .key("settings.bus.footer")
             .gap(space::S3)
             .items_center()
             .child(
-                Button::new(if bus.loading { "Reading…" } else { "Refresh" })
+                crate::settings::pages::Action::new(if bus.loading { "Reading…" } else { "Refresh" })
                     .disabled(bus.loading)
                     .on_press_tx(read)
-                    .build(k)
+                    .build(t)
                     .key("settings.bus.refresh")
                     .label("Refresh"),
             )
@@ -413,13 +413,7 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
     out
 }
 
-fn consumers(
-    bus: &Bus,
-    status: &BusStatusResultMessage,
-    now_ms: i64,
-    t: &Tokens,
-    k: &Kit,
-) -> Vec<El> {
+fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> Vec<El> {
     let head = section_head(
         "Consumers",
         "Disabling stops delivery and releases retention. Enabling resumes from the saved cursor if it remains in the log.".into(),
@@ -484,18 +478,19 @@ fn consumers(
         label.extend(cells.iter().cloned());
         let consumer = c.name.clone();
         let enabled = c.enabled;
-        let action = Button::new(if enabled { "Disable" } else { "Enable" })
-            .variant(if enabled {
-                ButtonVariant::Danger
-            } else {
-                ButtonVariant::Neutral
-            })
-            .disabled(bus.switching.is_some())
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                switch(state, consumer.clone(), !enabled, tx)
-            })
-            .build(k)
-            .key(format!("settings.bus.consumer.{}.switch", c.name));
+        let action =
+            crate::settings::pages::Action::new(if enabled { "Disable" } else { "Enable" })
+                .look(if enabled {
+                    crate::settings::pages::Look::Danger
+                } else {
+                    crate::settings::pages::Look::Plain
+                })
+                .disabled(bus.switching.is_some())
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    switch(state, consumer.clone(), !enabled, tx)
+                })
+                .build(t)
+                .key(format!("settings.bus.consumer.{}.switch", c.name));
         let row = table_row(
             format!("settings.bus.consumer.{}", c.name),
             label.join(", "),

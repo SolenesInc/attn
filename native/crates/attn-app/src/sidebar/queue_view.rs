@@ -873,16 +873,22 @@ fn run_group(key: String, group: &RunGroup, t: &Tokens) -> El {
         .hover(t.bg_elevated)
 }
 
+/// The Tauri app's `.queue-agent-filter`: a framed field 25 points tall, inset 8 points from
+/// the sidebar's edges, its edge `brand` while it has the focus.
 fn filter(state: &State, key: String, t: &Tokens) -> El {
-    row()
-        .key(key)
+    let filter = &state.window.agent_filter;
+    let edge = if filter.focused { t.brand } else { t.border };
+    let frame = row()
         .w_full()
-        .h(ROW_HEIGHT)
+        .h(25.0)
+        .px(6.0)
         .items_center()
-        .gap(space::S1)
+        .gap(6.0)
+        .radius(5.0)
+        .border(1.0, edge)
         .child(rune::icon(&attn_ui::icon::SEARCH, 11.0).color(t.text_dimmed))
         .child(
-            TextInput::new(&state.window.agent_filter)
+            TextInput::new(filter)
                 .key(FILTER_FIELD)
                 .plain()
                 .text_style(type_::BODY)
@@ -894,7 +900,14 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
                 .on_key(super::actions::filter_key)
                 .build(attn_ui::kit(t))
                 .grow(1.0),
-        )
+        );
+    row()
+        .key(key)
+        .w_full()
+        .h(ROW_HEIGHT)
+        .px(8.0)
+        .items_center()
+        .child(frame)
 }
 
 fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens) -> El {

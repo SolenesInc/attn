@@ -14,7 +14,6 @@ use attn_ui::type_;
 use qrcodegen::{QrCode, QrCodeEcc, QrSegment, Version};
 use rune::tok::space;
 use rune::{El, Pixels, Tx, col, row, text};
-use rune_kit::Button;
 
 use super::pages::{CAPTION, block, warning};
 use crate::State;
@@ -313,11 +312,11 @@ fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> El {
                 ),
         )
         .child(
-            Button::new("Revoke")
+            crate::settings::pages::Action::new("Revoke")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     revoke(state, &device, &profile, tx)
                 })
-                .build(crate::settings::pages::kit(t))
+                .build(t)
                 .key(format!("{key}.revoke")),
         )
 }
@@ -368,9 +367,9 @@ fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &T
         )
         .child(
             row().child(
-                Button::new("Cancel")
+                crate::settings::pages::Action::new("Cancel")
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| cancel(state, &id, tx))
-                    .build(crate::settings::pages::kit(t))
+                    .build(t)
                     .key(format!("{key}.cancel")),
             ),
         )
@@ -415,17 +414,16 @@ fn profile_block(
     }
     let id = profile.id.clone();
     body.push(
-        row().child(
-            Button::new(if code.is_some() {
-                "Show a new pairing code"
-            } else {
-                "Pair a phone"
-            })
-            .disabled(phones.link.state == "off")
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| pair(state, &id, tx))
-            .build(crate::settings::pages::kit(t))
-            .key(format!("settings.phones.{}.pair", profile.id)),
-        ),
+        crate::settings::pages::Action::new(if code.is_some() {
+            "Show a new pairing code"
+        } else {
+            "Pair a phone"
+        })
+        .disabled(phones.link.state == "off")
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| pair(state, &id, tx))
+        .build(t)
+        .key(format!("settings.phones.{}.pair", profile.id))
+        .w_full(),
     );
     block(
         &format!("phones.{}", profile.id),

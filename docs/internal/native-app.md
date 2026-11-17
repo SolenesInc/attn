@@ -82,15 +82,15 @@ the 16 ANSI colors and a selection, a terminal with a comment mark, a seed id, a
 selected command block and find matches, a Markdown file with code and a Mermaid
 diagram, a review stop with its key line, the review's key sheet and file view,
 the Garden fullscreen and in the dock at its root and on a plot, the Chief's
-setup, Settings on Appearance, Agents, Analytics, Delegation, Outposts and
-Experimental, Quick Capture with a message typed and with
-its mailbox list open, the shortcut editor
+setup, Settings on Appearance, Agents, Analytics, Delegation, Outposts,
+Experimental, Phones, Plugins, Updates and Event bus, Quick Capture with a
+message typed and with its mailbox list open, the shortcut editor
 and the shortcuts sheet, What's New on its first and its queue step, the
 close-desktop dialog, the diagnostic report, the command and agent palettes, the profile switcher, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
 notebook empty, with a folder opened in its tree, with a note open and with its
 finder over the note, a popped-out tile window, the classic new-session picker, Launcher 2.0
-in its dialog, its Where list and on an empty desktop, a new automation's hour
+in its dialog, its Where list and on an empty desktop, a new automation's form, its hour
 picker and suggested time zones, each with a row reached by an arrow key, Home
 with the Chief and a crew member in the sidebar, Manage crew on each of its
 four tabs, the command palette offering

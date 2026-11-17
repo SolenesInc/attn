@@ -1179,10 +1179,10 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
                 .items_center()
                 .children(provider)
                 .child(
-                    Button::new(format!("Use “{query}”"))
+                    crate::settings::pages::Action::new(format!("Use “{query}”"))
                         .disabled(unsupported)
                         .on_press_tx(use_manual)
-                        .build(k)
+                        .build(t)
                         .key("settings.route-picker.manual"),
                 ),
         );

@@ -11,7 +11,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, TextInput};
+use rune_kit::TextInput;
 
 use super::pages::{CAPTION, PATH_FIELD, Tone, block, pill, warning};
 use crate::State;
@@ -346,10 +346,10 @@ fn action(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Button::new(label)
+    crate::settings::pages::Action::new(label)
         .disabled(disabled)
         .on_press_tx(press)
-        .build(crate::settings::pages::kit(t))
+        .build(t)
         .key(key)
 }
 
@@ -570,7 +570,6 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
 }
 
 fn add_form(state: &State, t: &Tokens) -> El {
-    let k = crate::settings::pages::kit(t);
     let page = &state.window.settings.outposts;
     let destination = page.destination.text.trim().to_owned();
     let name_placeholder = if destination.is_empty() {
@@ -592,25 +591,29 @@ fn add_form(state: &State, t: &Tokens) -> El {
         .gap(space::S2)
         .child(field(
             "Name",
-            TextInput::new(&page.name)
-                .key("settings.outposts.name")
-                .label("Name")
-                .placeholder(name_placeholder)
-                .on_edit(|state: &mut State| &mut panel(state).name)
-                .on_submit(add)
-                .width(Some(PATH_FIELD))
-                .build(k),
+            super::pages::input(
+                TextInput::new(&page.name)
+                    .key("settings.outposts.name")
+                    .label("Name")
+                    .placeholder(name_placeholder)
+                    .on_edit(|state: &mut State| &mut panel(state).name)
+                    .on_submit(add)
+                    .width(Some(PATH_FIELD)),
+                t,
+            ),
         ))
         .child(field(
             "ssh destination",
-            TextInput::new(&page.destination)
-                .key("settings.outposts.destination")
-                .label("ssh destination")
-                .placeholder("user@host")
-                .on_edit(|state: &mut State| &mut panel(state).destination)
-                .on_submit(add)
-                .width(Some(PATH_FIELD))
-                .build(k),
+            super::pages::input(
+                TextInput::new(&page.destination)
+                    .key("settings.outposts.destination")
+                    .label("ssh destination")
+                    .placeholder("user@host")
+                    .on_edit(|state: &mut State| &mut panel(state).destination)
+                    .on_submit(add)
+                    .width(Some(PATH_FIELD)),
+                t,
+            ),
         ))
         .child(row().child(action(
             "settings.outposts.submit".into(),

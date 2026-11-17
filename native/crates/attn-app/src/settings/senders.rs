@@ -7,7 +7,6 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
-use rune_kit::Button;
 
 use super::pages::{CAPTION, block, warning};
 use crate::State;
@@ -109,9 +108,9 @@ fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
                 ),
         )
         .child(
-            Button::new("Remove")
+            crate::settings::pages::Action::new("Remove")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| remove(state, &id, tx))
-                .build(crate::settings::pages::kit(t))
+                .build(t)
                 .key(format!("{key}.remove")),
         )
 }

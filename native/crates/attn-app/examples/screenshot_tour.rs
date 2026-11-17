@@ -11,17 +11,18 @@ use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
-    AutomationSchedulePreviewResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
-    CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
-    DelegationPreferencesResultMessage, Desktop, DesktopPane, DesktopTileContentMessage,
-    GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, InitialStateMessage,
-    NotificationListResultMessage, PartyView, Profile, RecentLocation,
-    RecentLocationsResultMessage, RecordCommandUsageResultMessage, RepoInfo, ReviewBundle,
-    ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
-    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
-    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    SessionUsage, SessionUsageModel, Worktree,
+    AutomationSchedulePreviewResultMessage, BusConsumerStatus, BusStatusResultMessage,
+    CrewCharterDocument, CrewCharterGetResultMessage, CrewHandoffsGetResultMessage, CrewMember,
+    DelegationPreferences, DelegationPreferencesResultMessage, DelegationRole, Desktop,
+    DesktopPane, DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage,
+    Harness, InitialStateMessage, NotificationListResultMessage, PartyView, PhoneLink,
+    PhonesUpdatedMessage, Profile, RecentLocation, RecentLocationsResultMessage,
+    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow,
+    ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
+    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
+    SessionUsageModel, Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -871,25 +872,31 @@ fn settings_analytics(dark: bool) {
     snap(&mut world, "settings-analytics", dark);
 }
 
-/// The settings page `section` opens, with delegation's preferences answered and Outposts and
-/// Launcher 2.0 turned on, so the pages show their on switches.
-fn settings_section(dark: bool, section: &str) {
+/// Outposts and Launcher 2.0 turned on, so their pages show their on switches.
+const SWITCHED_ON: &[(&str, &str)] = &[
+    ("outposts_enabled", "true"),
+    ("new_session_launcher_enabled", "true"),
+];
+
+/// A Settings page the Tauri audit compared, with its buttons, fields and switches: the
+/// settings `settings` set and the daemon answering as `answer` scripts it, reached through the
+/// settings search for `search`.
+fn settings_section(
+    dark: bool,
+    section: &str,
+    search: &str,
+    settings: &[(&str, &str)],
+    answer: impl FnOnce(&Daemon),
+) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), seeds());
-    if let Some(settings) = state.settings.as_mut() {
-        for key in ["outposts_enabled", "new_session_launcher_enabled"] {
-            settings.insert(key.into(), "true".into());
-        }
+    if let Some(set) = state.settings.as_mut() {
+        set.extend(settings.iter().map(|&(k, v)| (k.to_owned(), v.to_owned())));
     }
     let daemon = Daemon::scripted().state(state);
-    daemon.on("delegation_preferences_get", |_: &Request| {
-        message(DelegationPreferencesResultMessage {
-            success: true,
-            preferences: Some(DelegationPreferences::default()),
-            ..DelegationPreferencesResultMessage::new()
-        })
-    });
+    answer(&daemon);
     let mut world = start(daemon);
     press(&mut world, Action::UiOpenSettings);
+    world.gesture(|app| app.type_text(search));
     world.gesture(|app| app.click(Target::key(format!("settings.nav.{section}"))));
     snap(&mut world, &format!("settings-{section}"), dark);
 }
@@ -997,6 +1004,101 @@ fn notebook_finder(dark: bool) {
     let mut world = notebook_open(dark);
     run(&mut world, Action::FileOpen);
     snap(&mut world, "notebook-finder", dark);
+}
+
+/// Delegation with no roles yet and Attn's Builder to add: its Add Attn roles and + Custom
+/// role.
+fn settings_delegation(dark: bool) {
+    settings_section(dark, "delegation", "delegation", &[], |daemon| {
+        daemon.on("delegation_preferences_get", |r: &Request| {
+            message(DelegationPreferencesResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                preferences: Some(DelegationPreferences::default()),
+                templates: Some(vec![DelegationRole {
+                    id: "builder".into(),
+                    builtin: Some("builder".into()),
+                    ..DelegationRole::default()
+                }]),
+                expanded_roles: Some(Vec::new()),
+                harnesses: Some(Vec::new()),
+                workflow_skill_paths: Some(Vec::new()),
+                ..DelegationPreferencesResultMessage::new()
+            })
+        });
+    });
+}
+
+/// Phones on, with the profile's Pair a phone.
+fn settings_phones(dark: bool) {
+    settings_section(
+        dark,
+        "phones",
+        "phones",
+        &[("phone_access_enabled", "true")],
+        |daemon| {
+            daemon.on("phones_get", |_: &Request| {
+                message(PhonesUpdatedMessage {
+                    link: PhoneLink {
+                        state: "connected".into(),
+                        ..PhoneLink::default()
+                    },
+                    ..PhonesUpdatedMessage::new()
+                })
+            });
+        },
+    );
+}
+
+/// A release app with a newer release out, and its Update attn.
+fn settings_updates(dark: bool) {
+    settings_section(
+        dark,
+        "updates",
+        "updates",
+        &[
+            ("self_update_enabled", "true"),
+            ("update_install_kind", "release_app"),
+            ("update_current_version", "0.13.0"),
+            ("update_current_commit", "abcdef1234567"),
+            ("update_available_version", "0.14.0"),
+        ],
+        |_| {},
+    );
+}
+
+/// The event bus with one live consumer, its Disable, and the footer's Refresh.
+fn settings_event_bus(dark: bool) {
+    settings_section(dark, "eventBus", "event bus", &[], |daemon| {
+        daemon.on("bus_status_get", |r: &Request| {
+            message(BusStatusResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                earliest: 1,
+                head: 315_188,
+                rows: 315_188,
+                bytes: 23_815_114,
+                oldest_at: "2026-08-02T10:24:55Z".into(),
+                newest_at: "2026-08-10T19:28:01Z".into(),
+                delivering: true,
+                retention_seconds: 30.0 * 86400.0,
+                recent_window_seconds: 3600.0,
+                baseline_window_seconds: 86400.0,
+                surge_rate_per_hour: 1000.0,
+                pin_alarm_seconds: 3600.0,
+                consumers: vec![BusConsumerStatus {
+                    name: "projections".into(),
+                    cursor: 315_188,
+                    filter: "session.*".into(),
+                    enabled: true,
+                    updated_at: "2026-08-10T19:00:00Z".into(),
+                    live: true,
+                    ..BusConsumerStatus::default()
+                }],
+                ..BusStatusResultMessage::new()
+            })
+        });
+    });
 }
 
 /// The ledger with nothing in it: its header's Close and its status bar's keys.
@@ -1208,6 +1310,12 @@ fn automation_form(dark: bool) -> World {
         world.gesture(|app| app.click(Target::key(key)));
     }
     world
+}
+
+/// A new scheduled automation's form at its top: its name, prompt and repository fields.
+fn automation_new(dark: bool) {
+    let mut world = automation_form(dark);
+    snap(&mut world, "automation-new", dark);
 }
 
 /// The hour picker opened from the keyboard on its hour, with Up on the one before.
@@ -1715,9 +1823,14 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         session_seed_context(dark);
         notifications_empty(dark);
         desktop_overview(dark);
-        for section in ["delegation", "outposts", "experimental"] {
-            settings_section(dark, section);
-        }
+        settings_delegation(dark);
+        settings_section(dark, "outposts", "outposts", SWITCHED_ON, |_| {});
+        settings_section(dark, "experimental", "experimental", SWITCHED_ON, |_| {});
+        settings_phones(dark);
+        settings_section(dark, "plugins", "plugins", &[], |_| {});
+        settings_updates(dark);
+        settings_event_bus(dark);
+        automation_new(dark);
         diagnostic_report(dark);
         quick_capture(dark);
         quick_capture_mailboxes(dark);

@@ -106,6 +106,7 @@ fn input(
         })
         .on_submit(super::save)
         .build(kit(t))
+        .fill(t.bg_elevated)
         .w_full()
 }
 
@@ -421,6 +422,7 @@ fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
             true
         })
         .build(kit(t))
+        .fill(t.bg_elevated)
         .w_full();
     let errors = f
         .errors
@@ -550,6 +552,7 @@ fn prompt(f: &Form, t: &Tokens) -> El {
                     }
                 })
                 .build(kit(t))
+                .fill(t.bg_elevated)
                 .invalid(f.errors.contains_key(&Field::Prompt))
                 .w_full(),
         )
@@ -758,6 +761,7 @@ fn overrides(f: &Form, t: &Tokens) -> El {
                                     field_of(s, |f| &mut f.overrides[i].0)
                                 })
                                 .build(kit(t))
+                                .fill(t.bg_elevated)
                                 .grow(1.0),
                         )
                         .child(
@@ -771,6 +775,7 @@ fn overrides(f: &Form, t: &Tokens) -> El {
                                     field_of(s, |f| &mut f.overrides[i].1)
                                 })
                                 .build(kit(t))
+                                .fill(t.bg_elevated)
                                 .grow(1.0),
                         )
                         .child(
@@ -1425,6 +1430,7 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
                     })
                     .on_key(zone_keys)
                     .build(kit(t))
+                    .fill(t.bg_elevated)
                     .w(200.0),
             ),
     );
@@ -1518,6 +1524,7 @@ fn schedule(f: &Form, t: &Tokens) -> El {
                 }
             })
             .build(kit(t))
+            .fill(t.bg_elevated)
             .w_full(),
     );
     if let Some(why) = &f.preview.error {

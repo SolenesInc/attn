@@ -14,7 +14,7 @@ use super::table::{self, Field, NEW, Slot};
 use super::{Delegation, commit, commit_undoable, page_state, page_state_mut, persist};
 use crate::State;
 use crate::settings::harnesses;
-use crate::settings::pages::{CAPTION, switch, warning};
+use crate::settings::pages::{Action, CAPTION, Look, switch, warning};
 use crate::settings::route::{self, Route, RouteHarness, Rules, Target};
 use crate::settings::sections::Section;
 
@@ -174,15 +174,11 @@ pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
 
 fn button(
     label: impl Into<String>,
-    variant: ButtonVariant,
+    look: Look,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Button::new(label)
-        .variant(variant)
-        .control_size(ControlSize::Small)
-        .on_press_tx(press)
-        .build(crate::settings::pages::kit(t))
+    Action::new(label).look(look).on_press_tx(press).build(t)
 }
 
 fn harness_rules(state: &State) -> Rules {
@@ -304,7 +300,12 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         .a11y_hidden(),
                 )
                 .child(
-                    button("Undo", ButtonVariant::Ghost, t, super::undo)
+                    Action::new("Undo")
+                        .look(Look::Quiet)
+                        .height(30.0)
+                        .ink(t.warning)
+                        .on_press_tx(super::undo)
+                        .build(t)
                         .key("settings.delegation.undo.button"),
                 ),
         );
@@ -334,8 +335,7 @@ fn loading(d: &Delegation, t: &Tokens) -> El {
                 .a11y_hidden(),
         )
         .children((!d.error.is_empty()).then(|| {
-            button("Retry", ButtonVariant::Neutral, t, super::reload)
-                .key("settings.delegation.retry")
+            button("Retry", Look::Plain, t, super::reload).key("settings.delegation.retry")
         }))
 }
 
@@ -505,13 +505,12 @@ fn role_row(
     if !alts.is_empty() && !open {
         let n = alts.len();
         cell = cell.child(
-            button(
-                format!("+{n} alternative{}", if n == 1 { "" } else { "s" }),
-                ButtonVariant::Ghost,
-                t,
-                toggle(id.clone()),
-            )
-            .key(format!("{key}.alternatives")),
+            Button::new(format!("+{n} alternative{}", if n == 1 { "" } else { "s" }))
+                .variant(ButtonVariant::Ghost)
+                .control_size(ControlSize::Small)
+                .on_press_tx(toggle(id.clone()))
+                .build(crate::settings::pages::kit(t))
+                .key(format!("{key}.alternatives")),
         );
     }
     let mut out = col()
@@ -576,7 +575,7 @@ fn role_row(
     out = out.child(
         columns(
             row(),
-            button("+ Alternative model", ButtonVariant::Ghost, t, add)
+            button("+ Alternative model", Look::Quiet, t, add)
                 .key(format!("{key}.add-alternative")),
             row(),
             row(),
@@ -589,7 +588,7 @@ fn role_row(
         actions = actions.child(
             button(
                 "Make an editable copy",
-                ButtonVariant::Neutral,
+                Look::Plain,
                 t,
                 move |state: &mut State, tx: &mut Tx| {
                     let Some(preferences) = page_state(state).preferences.clone() else {
@@ -612,7 +611,7 @@ fn role_row(
         actions = actions.child(
             button(
                 turn,
-                ButtonVariant::Ghost,
+                Look::Quiet,
                 t,
                 move |state: &mut State, tx: &mut Tx| {
                     let Some(preferences) = page_state(state).preferences.clone() else {
@@ -628,7 +627,7 @@ fn role_row(
     actions = actions.child(
         button(
             "Delete",
-            ButtonVariant::Ghost,
+            Look::QuietDanger,
             t,
             move |state: &mut State, tx: &mut Tx| {
                 let Some(preferences) = page_state(state).preferences.clone() else {
@@ -954,7 +953,7 @@ fn alternative_row(
                     Some(DESCRIPTION_HINT),
                     t,
                 ))
-                .child(row().child(button("Make default", ButtonVariant::Ghost, t, make_default).key(format!("{key}.make-default")))),
+                .child(row().child(button("Make default", Look::Quiet, t, make_default).key(format!("{key}.make-default")))),
         ));
     }
     out
@@ -1083,15 +1082,14 @@ fn empty_panel(can_adopt: bool, t: &Tokens) -> El {
             row()
                 .gap(space::S2)
                 .child(
-                    Button::new("Add Attn roles")
-                        .variant(ButtonVariant::Submit)
-                        .control_size(ControlSize::Small)
+                    Action::new("Add Attn roles")
+                        .look(Look::Primary)
                         .disabled(!can_adopt)
                         .on_press_tx(adopt)
-                        .build(crate::settings::pages::kit(t))
+                        .build(t)
                         .key("settings.delegation.adopt"),
                 )
-                .child(button("+ Custom role", ButtonVariant::Neutral, t, add_role).key("settings.delegation.add")),
+                .child(button("+ Custom role", Look::Plain, t, add_role).key("settings.delegation.add")),
         )
 }
 
@@ -1109,13 +1107,12 @@ fn add_row(preferences: &DelegationPreferences, missing: &[String], t: &Tokens) 
         .gap(space::S2)
         .px(16.0)
         .py(space::S2)
-        .child(
-            button("+ Custom role", ButtonVariant::Ghost, t, add_role)
-                .key("settings.delegation.add"),
+        .child(button("+ Custom role", Look::Quiet, t, add_role).key("settings.delegation.add"))
+        .children(
+            (!missing.is_empty()).then(|| {
+                button(adopt_label, Look::Quiet, t, adopt).key("settings.delegation.adopt")
+            }),
         )
-        .children((!missing.is_empty()).then(|| {
-            button(adopt_label, ButtonVariant::Ghost, t, adopt).key("settings.delegation.adopt")
-        }))
 }
 
 fn foot(preferences: &DelegationPreferences, t: &Tokens) -> El {
@@ -1283,7 +1280,7 @@ fn adoption_panel(
             row()
                 .gap(space::S2)
                 .child(
-                    button("Cancel", ButtonVariant::Neutral, t, |state: &mut State, _: &mut Tx| {
+                    button("Cancel", Look::Plain, t, |state: &mut State, _: &mut Tx| {
                         let d = page_state_mut(state);
                         d.adoption = None;
                         d.adoption_open = None;
@@ -1291,11 +1288,10 @@ fn adoption_panel(
                     .key("settings.delegation.adoption.cancel"),
                 )
                 .child(
-                    Button::new("Add Attn roles")
-                        .variant(ButtonVariant::Submit)
-                        .control_size(ControlSize::Small)
+                    Action::new("Add Attn roles")
+                        .look(Look::Primary)
                         .on_press_tx(confirm_adoption)
-                        .build(k)
+                        .build(t)
                         .key("settings.delegation.adoption.confirm"),
                 ),
         )

@@ -13,7 +13,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, FileDialogOptions, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, TextInput};
+use rune_kit::TextInput;
 
 use super::pages::{CAPTION, NUMBER_FIELD, Tone, pill, warning};
 use crate::State;
@@ -427,12 +427,13 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
                 .child(pill(id("health"), health.clone(), health_tone(&health), t))
                 .child(row().grow(1.0))
                 .child(
-                    Button::new("Remove")
+                    crate::settings::pages::Action::new("Remove")
+                        .look(crate::settings::pages::Look::Danger)
                         .disabled(busy || !plugin.can_uninstall)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             remove(state, &removing, tx)
                         })
-                        .build(k)
+                        .build(t)
                         .key(id("remove")),
                 ),
         )
@@ -440,7 +441,6 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
-    let k = crate::settings::pages::kit(t);
     let plugins = &state.window.settings.plugins;
     let listed = &state.facts.plugins;
     let busy = plugins.busy.is_some();
@@ -449,28 +449,32 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
         .gap(space::S2)
         .items_center()
         .child(
-            TextInput::new(&plugins.source)
-                .key("settings.plugins.source")
-                .label("Plugin source")
-                .placeholder("git@host:team/my-attn-plugin.git or /Users/you/src/my-attn-plugin")
-                .disabled(busy)
-                .on_edit(|state: &mut State| &mut panel(state).source)
-                .width(None)
-                .build(k)
-                .grow(1.0),
+            super::pages::input(
+                TextInput::new(&plugins.source)
+                    .key("settings.plugins.source")
+                    .label("Plugin source")
+                    .placeholder(
+                        "git@host:team/my-attn-plugin.git or /Users/you/src/my-attn-plugin",
+                    )
+                    .disabled(busy)
+                    .on_edit(|state: &mut State| &mut panel(state).source)
+                    .width(None),
+                t,
+            )
+            .grow(1.0),
         )
         .child(
-            Button::new("Browse")
+            crate::settings::pages::Action::new("Browse")
                 .disabled(busy)
                 .on_press_tx(|_: &mut State, tx: &mut Tx| browse(tx))
-                .build(k)
+                .build(t)
                 .key("settings.plugins.browse"),
         )
         .child(
-            Button::new("Install Plugin")
+            crate::settings::pages::Action::new("Install Plugin")
                 .disabled(busy)
                 .on_press_tx(install)
-                .build(k)
+                .build(t)
                 .key("settings.plugins.install"),
         );
     let mut page = vec![form];

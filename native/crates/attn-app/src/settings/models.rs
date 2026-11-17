@@ -11,7 +11,7 @@ use rune_kit::RadioItem;
 use super::autosave::{self, Codec};
 use super::catalogs::{self, TIER_OVERRIDES};
 use super::harnesses;
-use super::pages::{CAPTION, S4, block, button, named_button, warning};
+use super::pages::{Action, CAPTION, Look, S4, block, warning};
 use super::route::{TierInfo, TierOverride, tier_label, tier_overrides};
 use crate::State;
 
@@ -189,7 +189,7 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
     }
     if own.is_some() {
         let model = model.clone();
-        controls = controls.child(named_button(
+        controls = controls.child(quiet(
             format!("{key}.reset"),
             &format!("Reset tier for {name}"),
             "Reset",
@@ -237,8 +237,9 @@ fn orphan_row(entry: &TierOverride, t: &Tokens) -> El {
                     t,
                 )),
         )
-        .child(button(
+        .child(quiet(
             format!("{key}.remove"),
+            "Remove",
             "Remove",
             t,
             move |state, tx| remove(state, &removed, tx),
@@ -286,8 +287,9 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
     );
     if harness.discovery {
         let id = harness.id.clone();
-        heading = heading.child(button(
+        heading = heading.child(quiet(
             format!("{key}.refresh"),
+            "Refresh",
             "Refresh",
             t,
             move |state, tx| {
@@ -407,8 +409,9 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
                         .color(t.text_primary)
                         .grow(1.0),
                 )
-                .child(button(
+                .child(quiet(
                     format!("{key}.remove"),
+                    "Remove",
                     "Remove",
                     t,
                     move |state, tx| remove(state, &removed, tx),
@@ -428,7 +431,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
     let listed = harnesses::listed(state);
     let entries = entries(state);
     let mut out = Vec::new();
-    out.extend(harnesses::failure_row(state, "models", t));
+    out.extend(harnesses::failure_row(state, "models", Look::Plain, t));
     if harnesses::first_loading(state) {
         out.push(
             caption(
@@ -442,4 +445,20 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
     out.extend(listed.iter().map(|h| harness_block(state, h, &entries, t)));
     out.extend(missing_harnesses(&listed, &entries, t));
     out
+}
+
+/// The Tauri app's `.settings-action.quiet`, as every model action is drawn.
+fn quiet(
+    key: String,
+    label: &str,
+    shown: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    Action::new(shown)
+        .look(Look::Quiet)
+        .on_press_tx(press)
+        .build(t)
+        .key(key)
+        .label(label.to_owned())
 }
