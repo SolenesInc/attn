@@ -77,11 +77,11 @@ fn rename(state: &mut State, tx: &mut Tx) {
     }
 }
 
-/// A reload with no terminal of a usable size asks for this one, as the Tauri app does, since
-/// the daemon needs a size to restart an agent that has no live worker.
 /// An item's mark: `.session-actions-popover button > span`, 13 px monospace.
 const MARK: rune::TextStyle = rune::TextStyle::new(13.0, 400.0).mono();
 
+/// A reload with no terminal of a usable size asks for this one, as the Tauri app does, since
+/// the daemon needs a size to restart an agent that has no live worker.
 const FALLBACK_SIZE: (u16, u16) = (80, 24);
 const MIN_COLS: u16 = 20;
 const MIN_ROWS: u16 = 8;

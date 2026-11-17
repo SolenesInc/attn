@@ -285,6 +285,7 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
         .child(
             GlyphButton::new(&attn_ui::icon::HOME, "Home")
+                .icon_size(16.0)
                 .on_press(|state: &mut State| state.window.go_home())
                 .build(attn_ui::kit(t))
                 .key("rail.home")
@@ -294,8 +295,7 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
                 .hover(t.bg_elevated),
         )
         .child(
-            GlyphButton::new("»", "Expand sidebar")
-                .font(type_::BODY)
+            GlyphButton::new(&attn_ui::icon::EXPAND, "Expand sidebar")
                 .on_press(|state: &mut State| state.window.sidebar_hidden = false)
                 .build(attn_ui::kit(t))
                 .key("rail.expand")

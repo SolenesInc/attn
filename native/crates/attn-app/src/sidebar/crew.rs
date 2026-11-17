@@ -212,7 +212,7 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
     let sun = {
         let (member, row_key) = (m.member.clone(), key.clone());
         let sun = GlyphButton::new(&attn_ui::icon::CREW_SUN, start_label.clone())
-            .icon_size(16.0)
+            .icon_size(14.0)
             .side(SUN_SIDE)
             .variant(sun_variant);
         let sun = match m.phase {
@@ -270,27 +270,33 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
                 .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary)
         }))
+        .child(sun)
+        .hover_group();
+    let controls = rune::row()
+        .key(format!("{key}.controls"))
+        .pin(
+            None,
+            Some(0.0),
+            Some(SUN_SIDE + space::S2 + space::S1),
+            Some(0.0),
+        )
+        .items_center()
+        .gap(2.0)
+        .pl(6.0)
+        .fill(t.bg_elevated)
+        .radius(4.0)
         .children(armed.then(|| {
             text("confirm")
                 .key(format!("{key}.confirm"))
                 .font(type_::LABEL)
                 .color(t.warning)
         }))
-        .child(sun)
-        .hover_group()
-        .child(
-            row()
-                .key(format!("{key}.controls"))
-                .pin(
-                    None,
-                    Some(0.0),
-                    Some(SUN_SIDE + space::S2 + space::S1),
-                    Some(0.0),
-                )
-                .items_center()
-                .group_opacity(0.0, 1.0)
-                .child(actions),
-        );
+        .child(actions);
+    row = row.child(if armed {
+        controls
+    } else {
+        controls.group_opacity(0.0, 1.0)
+    });
     if armed {
         row = row.on_press_outside(move |state: &mut State, _: &mut Tx| {
             if state

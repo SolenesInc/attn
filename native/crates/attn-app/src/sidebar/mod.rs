@@ -609,7 +609,7 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
         .children(
             agent
                 .chief
-                .then(|| mark(&key, "chief", attn_ui::glyph::BOLT, "Chief of staff", t)),
+                .then(|| mark(&key, "chief", &attn_ui::icon::CHIEF, "Chief of staff", t)),
         )
         .children(
             agent
@@ -641,13 +641,23 @@ fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> 
     )
 }
 
-fn mark(row_key: &str, name: &str, glyph: &str, label: &str, t: &Tokens) -> El {
-    text(glyph)
+fn mark(
+    row_key: &str,
+    name: &str,
+    glyph: impl Into<attn_ui::Glyph>,
+    label: &str,
+    t: &Tokens,
+) -> El {
+    rune::row()
         .key(format!("{row_key}.{name}"))
         .role("img")
         .label(label)
-        .font(type_::MONO_CAPTION)
-        .color(t.accent)
+        .items_center()
+        .child(
+            glyph
+                .into()
+                .draw(type_::MONO_CAPTION.size, type_::MONO_CAPTION, t.accent),
+        )
         .px(5.0)
         .radius(9.0)
         .fill(t.accent.alpha(0.14))

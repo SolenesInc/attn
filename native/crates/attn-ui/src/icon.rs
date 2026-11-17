@@ -324,7 +324,7 @@ seed!(
 );
 seed!(
     SEED_WITHERED,
-    r#"<path opacity="0.42" d="M6 28.5h12"/><path d="M14 27.5c.8-4.7 2.1-8.5 2.1-13.1 0-4.8 5.9-7.4 8.5-3.7"/><path fill="currentColor" fill-opacity="0.15" d="M15.4 21c-5 .2-8.2-2.8-8.1-6.9 4.9.3 7.6 2.7 8.1 6.9Z"/><path stroke-width="1.1" opacity="0.62" d="m10.4 17.3 4.8 3.5"/><path fill="currentColor" fill-opacity="0.15" d="M20 27.8c1.7-3.6 5.3-4.7 8.3-2.5-1.8 3.4-5.2 4.3-8.3 2.5Z"/><path stroke-width="1.1" opacity="0.62" d="m21 27.4 4.7-1.4"/>"#
+    r#"<path opacity="0.42" d="M6 28.5h12"/><path d="M14 27.5c.8-4.7 2.1-8.5 2.1-13.1 0-4.8 5.9-7.4 8.5-3.7"/><path fill="currentColor" fill-opacity="0.15" d="M15.4 21c-5 .2-8.2-2.8-8.1-6.9 4.9.3 7.6 2.7 8.1 6.9Z"/><path stroke-width="1.1" opacity="0.62" d="m10.4 17.3 4.8 3.5"/><path fill="currentColor" fill-opacity="0.15" d="M24.6 10.7c-4.1 1.1-5 4.1-1.4 7.2 3.7-1.8 4.3-4.8 1.4-7.2Z"/><path fill="currentColor" fill-opacity="0.15" d="M20 27.8c1.7-3.6 5.3-4.7 8.3-2.5-1.8 3.4-5.2 4.3-8.3 2.5Z"/><path stroke-width="1.1" opacity="0.62" d="m21 27.4 4.7-1.4"/>"#
 );
 seed!(
     SEED_PLOT,
