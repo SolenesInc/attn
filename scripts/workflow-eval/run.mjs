@@ -196,6 +196,7 @@ const cases = loadCases();
 if (!cases.length) throw new Error('no case matches --only and --level');
 for (const testCase of cases) checkGraders(testCase.graders);
 const history = historyFile();
+fs.mkdirSync(path.dirname(history), { recursive: true });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-eval-'));
 execFileSync('go', ['build', '-o', path.join(root, 'wsctl'), './scripts/wsctl'], { cwd: repository });
 const results = [];
