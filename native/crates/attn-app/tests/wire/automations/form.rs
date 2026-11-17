@@ -514,6 +514,28 @@ fn typing_part_of_a_zone_suggests_its_full_name_and_choosing_it_sets_the_schedul
 }
 
 #[test]
+fn an_old_name_of_a_zone_or_a_fixed_offset_suggests_the_zone_and_choosing_it_saves_it() {
+    for (typed, zone) in [
+        ("Calcutta", "Asia/Kolkata"),
+        ("Kiev", "Europe/Kyiv"),
+        ("Saigon", "Asia/Ho_Chi_Minh"),
+        ("Etc/GMT+5", "Etc/GMT+5"),
+    ] {
+        let mut world = open_schedule("0 9 * * 1-5");
+        fill(&mut world, "time-zone", typed);
+        assert_eq!(suggested_zones(&world), [zone], "typing {typed}");
+
+        world.gesture(|app| app.click(Target::role("list-box-option").name(zone)));
+        assert_eq!(last_preview(&world)["time_zone"], zone);
+        press(&mut world, "save");
+        assert_eq!(
+            applied(&world)[0].0["trigger"]["schedule"]["time_zone"],
+            zone
+        );
+    }
+}
+
+#[test]
 fn the_arrow_keys_walk_the_suggested_zones_return_chooses_one_and_escape_hides_them() {
     let mut world = open_schedule("0 9 * * 1-5");
     fill(&mut world, "time-zone", "america/new_");

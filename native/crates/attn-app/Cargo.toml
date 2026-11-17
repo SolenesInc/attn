@@ -11,6 +11,7 @@ attn-protocol = { path = "../../../cli/protocol" }
 attn-term = { path = "../attn-term" }
 attn-ui = { path = "../attn-ui" }
 base64 = "0.22"
+icu_time = { version = "2.4", default-features = false, features = ["compiled_data"] }
 libc = "0.2"
 percent-encoding = "2.3"
 qrcodegen = "1.8"

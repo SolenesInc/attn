@@ -13,6 +13,8 @@ use attn_protocol::{
     AutomationDefinitionResultMessage, AutomationDeleteMessage, AutomationSchedulePreviewMessage,
     AutomationSchedulePreviewResultMessage, AutomationSetEnabledMessage, LaunchDesktopSetting,
 };
+use icu_time::TimeZone;
+use icu_time::zone::iana::IanaParserExtended;
 use rune::{TextEdit, Tx};
 
 use super::DRAWER;
@@ -160,26 +162,32 @@ fn local_zone() -> String {
         .unwrap_or_else(|| "UTC".into())
 }
 
-/// The IANA zones the system's tz database names, UTC first, as `Intl.supportedValuesOf`
-/// gives the Tauri form.
-fn zones() -> &'static [String] {
-    static ZONES: OnceLock<Vec<String>> = OnceLock::new();
+/// Every IANA zone by the canonical name `Intl.supportedValuesOf` gives the Tauri form, UTC
+/// first, with each name that finds it in lower case: its own and the old ones linking to it.
+fn zones() -> &'static [(String, Vec<String>)] {
+    static ZONES: OnceLock<Vec<(String, Vec<String>)>> = OnceLock::new();
     ZONES.get_or_init(|| {
-        let table = std::fs::read_to_string("/usr/share/zoneinfo/zone.tab").unwrap_or_default();
-        let mut zones: Vec<String> = table
-            .lines()
-            .filter(|line| !line.starts_with('#'))
-            .filter_map(|line| line.split('\t').nth(2))
-            .map(str::to_owned)
-            .collect();
-        zones.sort();
-        zones.insert(0, "UTC".into());
-        zones
+        let mut zones: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for zone in IanaParserExtended::new().iter_all() {
+            if zone.time_zone == TimeZone::UNKNOWN {
+                continue;
+            }
+            let canonical = match zone.canonical {
+                "Etc/UTC" => "UTC",
+                canonical => canonical,
+            };
+            zones
+                .entry(canonical.to_owned())
+                .or_insert_with(|| vec![canonical.to_lowercase()])
+                .push(zone.normalized.to_lowercase());
+        }
+        let utc = zones.remove_entry("UTC");
+        utc.into_iter().chain(zones).collect()
     })
 }
 
-/// The zones whose name holds `typed`, ignoring case, as a datalist matches; none until
-/// something is typed.
+/// The zones that a name holding `typed`, ignoring case, finds, by their canonical name, as a
+/// datalist matches; none until something is typed.
 pub(crate) fn zones_matching(typed: &str) -> Vec<&'static str> {
     let typed = typed.trim().to_lowercase();
     if typed.is_empty() {
@@ -187,8 +195,8 @@ pub(crate) fn zones_matching(typed: &str) -> Vec<&'static str> {
     }
     zones()
         .iter()
-        .map(String::as_str)
-        .filter(|zone| zone.to_lowercase().contains(&typed))
+        .filter(|(_, names)| names.iter().any(|name| name.contains(&typed)))
+        .map(|(zone, _)| zone.as_str())
         .collect()
 }
 
