@@ -587,11 +587,11 @@ fn centered(t: &Tokens, content: El) -> El {
 }
 
 fn shell(state: &State, t: &Tokens, scale: f32) -> El {
-    let window = &state.window;
     row()
         .key("regions")
         .w_full()
         .grow(1.0)
+        .min_h(0.0)
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
             if state.window.width.window == w {
                 tx.live_only();
@@ -600,11 +600,21 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
             state.window.width.window = w;
         })
         .children(crate::sidebar::view(state, t))
-        .child(match window.view {
-            View::Home => crate::home::view(state, t),
-            View::Desktop => crate::desktop::area(state, t, scale),
-        })
-        .children(dock(state, t))
+        .children(main_area(state, t, scale))
+}
+
+/// What shows beside the sidebar: Manage crew while it is open, else home or the desktop with
+/// its open drawers.
+fn main_area(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
+    if crate::crew::is_open(state) {
+        return vec![crate::crew::page(state, t)];
+    }
+    std::iter::once(match state.window.view {
+        View::Home => crate::home::view(state, t),
+        View::Desktop => crate::desktop::area(state, t, scale),
+    })
+    .chain(dock(state, t))
+    .collect()
 }
 
 /// The open drawers over the content, below the title bar, nothing behind them moving: the
@@ -728,7 +738,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::WhatsNew) => crate::whats_new::dialog(state, t, &mut layers),
         Some(Layer::DiagnosticReport) => crate::diagnostic_report::dialog(state, t, &mut layers),
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
-        Some(Layer::Crew) => crate::crew::panel(state, t, &mut layers),
+        Some(Layer::Crew) => crate::crew::overlays(state, t, &mut layers),
         Some(Layer::SharedCodex) => crate::shared_codex::confirm(state, t, &mut layers),
         None => {}
     }

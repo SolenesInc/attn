@@ -2,8 +2,8 @@ use attn_protocol::{CrewMember, Seed};
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Dialog, TextArea, TextInput};
+use rune::{Color, El, Key, KeyEvent, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant, TextArea, TextInput};
 
 use super::autosave::Phase;
 use super::handoffs::Reading;
@@ -20,15 +20,31 @@ const CHARTER: &str = "crew.charter.editor";
 /// scrolls inside it.
 const CHARTER_HEIGHT: f32 = 390.0;
 const SEED_FIND: &str = "crew.seeds.find";
+pub(crate) const PAGE: &str = "crew.page";
+
+/// The Tauri app's small print in Manage crew, its 9–11 px regular text, at the native app's
+/// 12 px.
+const NOTE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
+const TITLE: rune::TextStyle = rune::TextStyle::new(16.0, 650.0).tracking(-0.3);
+const ROSTER_NAME: rune::TextStyle = rune::TextStyle::new(13.0, 580.0);
+const AVATAR: rune::TextStyle = rune::TextStyle::new(13.0, 650.0);
+const LARGE_AVATAR: rune::TextStyle = rune::TextStyle::new(19.0, 650.0);
+const RENAME_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
+const NAME: rune::TextStyle = rune::TextStyle::new(22.0, 650.0).tracking(-0.55);
+const SECTION: rune::TextStyle = rune::TextStyle::new(14.0, 620.0);
+const DOCUMENT: rune::TextStyle = rune::TextStyle::new(15.0, 620.0);
+const SEEDS: rune::TextStyle = rune::TextStyle::new(16.0, 620.0);
+/// The widest the launch card, the start row and the seeds run, as the Tauri app's
+/// `min(720px, 100%)`; the charter and the handoffs run to `WIDE`.
+const NARROW: f32 = 720.0;
+const WIDE: f32 = 900.0;
 
 fn caption(key: impl Into<String>, words: impl Into<String>, t: &Tokens) -> El {
     text(words.into())
         .key(key.into())
-        .font(type_::LABEL)
-        .color(t.text_tertiary)
+        .font(NOTE)
+        .color(t.text_muted)
 }
-
-const TITLE: rune::TextStyle = rune::TextStyle::new(16.0, 650.0).tracking(-0.3);
 
 fn kicker(words: &str, t: &Tokens) -> El {
     type_::caps(words).color(t.text_muted)
@@ -66,7 +82,7 @@ fn status(key: &str, words: impl Into<String>, color: rune::Color) -> El {
         .key(key.to_owned())
         .role("status")
         .label(words)
-        .font(type_::LABEL)
+        .font(NOTE)
         .color(color)
 }
 
@@ -82,36 +98,22 @@ fn alert(key: &str, words: impl Into<String>, t: &Tokens) -> El {
         .w_full()
 }
 
-fn button(
-    key: impl Into<String>,
-    label: &str,
-    disabled: bool,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    Button::new(label)
-        .control_size(ControlSize::Small)
-        .disabled(disabled)
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key.into())
-}
-
-/// The Manage crew panel, while it is open, with the model picker of its launch settings.
-pub(crate) fn panel(state: &State, t: &Tokens, layers: &mut Vec<El>) {
-    let k = attn_ui::kit(t);
-    Dialog::new("crew", "Manage crew")
-        .description("Crew")
-        .lead(
-            col()
-                .gap(1.0)
-                .child(kicker("Crew", t))
-                .child(text("Manage crew").font(TITLE).color(t.text_primary)),
-        )
-        .open(true)
-        .width(960.0)
-        .max_height(720.0)
-        .on_close_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx))
+/// Manage crew, while it is open: a page in place of the window's main area, beside the
+/// sidebar, that holds the keyboard until it closes, as the Tauri app's `.crew-panel`.
+pub(crate) fn page(state: &State, t: &Tokens) -> El {
+    col()
+        .key(PAGE)
+        .role("dialog")
+        .label("Manage crew")
+        .modal_tx(false, |state: &mut State, tx: &mut Tx| {
+            super::close(state, tx)
+        })
+        .grow(1.0)
+        .min_w(0.0)
+        .h_full()
+        .min_h(0.0)
+        .fill(t.bg_panel)
+        .child(bar(t))
         .child(
             row()
                 .key("crew.shell")
@@ -121,9 +123,106 @@ pub(crate) fn panel(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .child(roster(state, t))
                 .child(detail(state, t)),
         )
-        .build(k, layers);
+}
+
+/// The pickers Manage crew opens over itself.
+pub(crate) fn overlays(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     crate::settings::route_overlay(state, t, layers);
     crate::launch_desktop::overlay(state, t, layers);
+}
+
+fn bar(t: &Tokens) -> El {
+    row()
+        .key("crew.bar")
+        .w_full()
+        .min_h(53.0)
+        .items_center()
+        .gap(16.0)
+        .px(22.0)
+        .py(10.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+        .child(
+            col()
+                .grow(1.0)
+                .gap(1.0)
+                .child(kicker("Crew", t))
+                .child(text("Manage crew").font(TITLE).color(t.text_primary)),
+        )
+        .child(
+            bordered("crew.close-page", t)
+                .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx))
+                .label("Close")
+                .gap(7.0)
+                .px(9.0)
+                .py(6.0)
+                .radius(7.0)
+                .child(text("Close").font(type_::BODY).color(t.text_secondary))
+                .child(text("Esc").font(type_::MONO_CAPTION).color(t.text_muted)),
+        )
+}
+
+/// The Tauri app's small bordered buttons in Manage crew: the elevated fill, a hairline and
+/// secondary ink.
+fn bordered(key: impl Into<String>, t: &Tokens) -> El {
+    row()
+        .key(key.into())
+        .role("button")
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.brand)
+        .items_center()
+        .radius(6.0)
+        .fill(t.bg_elevated)
+        .hover(t.bg_button)
+        .border(1.0, t.border)
+}
+
+/// A [`bordered`] button that says `label`, unusable while `disabled`.
+fn button(
+    key: impl Into<String>,
+    label: &str,
+    disabled: bool,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    let shown = bordered(key, t)
+        .label(label.to_owned())
+        .px(8.0)
+        .py(5.0)
+        .child(text(label.to_owned()).font(NOTE).color(t.text_secondary));
+    if disabled {
+        shown.disabled(true).opacity(0.45)
+    } else {
+        shown.on_press_tx(press)
+    }
+}
+
+/// The member's initial on its green tile, as the Tauri app's `.crew-avatar`.
+fn avatar(name: &str, side: f32, corner: f32, font: rune::TextStyle, t: &Tokens) -> El {
+    let initial: String = name.chars().take(1).flat_map(char::to_uppercase).collect();
+    col()
+        .size(side, side)
+        .center()
+        .radius(corner)
+        .fill(attn_ui::colors::mix_srgb(t.bg_elevated, t.success, 0.14))
+        .border(1.0, t.text_primary.alpha(0.08))
+        .child(text(initial).font(font).color(attn_ui::colors::mix_srgb(
+            t.text_primary,
+            t.success,
+            0.72,
+        )))
+        .a11y_hidden()
+}
+
+fn presence_dot(member: &CrewMember, t: &Tokens) -> El {
+    rune::el()
+        .size(6.0, 6.0)
+        .radius(3.0)
+        .fill(if member.binding_session.is_some() {
+            t.success
+        } else {
+            t.text_dimmed
+        })
+        .a11y_hidden()
 }
 
 fn roster(state: &State, t: &Tokens) -> El {
@@ -141,18 +240,26 @@ fn roster(state: &State, t: &Tokens) -> El {
         .key("crew.roster")
         .role("complementary")
         .label("Crew roster")
-        .w(240.0)
+        .w(226.0)
         .h_full()
-        .gap(space::S2)
-        .padding(space::S3)
+        .gap(12.0)
+        .px(10.0)
+        .py(18.0)
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
         .child(
-            row().w_full().child(kicker("Members", t).grow(1.0)).child(
-                text(members.len().to_string())
-                    .key("crew.roster.count")
-                    .font(type_::CAPS)
-                    .color(t.text_muted),
-            ),
+            row()
+                .w_full()
+                .px(9.0)
+                .child(kicker("Members", t).grow(1.0))
+                .child(
+                    text(members.len().to_string())
+                        .key("crew.roster.count")
+                        .font(type_::CAPS)
+                        .color(t.text_muted),
+                ),
         );
     if members.len() > 5 {
         aside = aside.child(
@@ -175,7 +282,7 @@ fn roster(state: &State, t: &Tokens) -> El {
         .role("list")
         .label("Members")
         .w_full()
-        .gap(2.0)
+        .gap(5.0)
         .focusable(true)
         .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             let step = match ev.key {
@@ -213,45 +320,75 @@ fn roster_row(state: &State, member: &CrewMember, selected: Option<&str>, t: &To
     let is_selected = selected == Some(member.id.as_str());
     let save = launch::shown(state, &member.id)
         .filter(|s| !s.saved)
-        .map(|s| launch::status(&s));
-    let name = member.name.clone();
+        .map(|s| (launch::status(&s), s.error.is_some()));
     let desktop = member
         .launch_desktop
         .as_ref()
         .and_then(|d| d.label.clone())
-        .unwrap_or_default();
+        .filter(|d| !d.is_empty());
     let presence = presence(member);
-    let lines = if desktop.is_empty() { 1 } else { 2 };
-    let (primary, tertiary, warning) = (t.text_primary, t.text_tertiary, t.warning);
-    Button::new(format!("{name} {presence}"))
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |font, _| {
+    let identity = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(3.0)
+        .child(
+            text(member.name.clone())
+                .font(ROSTER_NAME)
+                .color(t.text_primary)
+                .single_line()
+                .truncate()
+                .mb(3.0),
+        )
+        .children(desktop.map(|d| text(d).font(NOTE).color(t.text_muted)))
+        .child(
             row()
-                .w_full()
-                .gap(space::S2)
+                .gap(6.0)
                 .items_center()
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .child(text(name).font(font).color(primary))
-                        .children(
-                            (!desktop.is_empty())
-                                .then(|| text(desktop).font(type_::LABEL).color(tertiary)),
-                        )
-                        .child(text(presence).font(type_::LABEL).color(tertiary)),
-                )
-                .children(save.map(|s| text(s).font(type_::LABEL).color(warning)))
-        })
+                .child(presence_dot(member, t))
+                .child(text(presence).font(NOTE).color(t.text_muted)),
+        );
+    let mut shown = row()
+        .key(format!("crew.roster.{}", member.id))
+        .role("button")
+        .label(format!("{} {presence}", member.name))
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.brand)
+        .w_full()
+        .items_start()
+        .gap(10.0)
+        .px(9.0)
+        .py(11.0)
+        .radius(7.0)
+        .border(1.0, Color::TRANSPARENT)
+        .child(avatar(&member.name, 30.0, 8.0, AVATAR, t))
+        .child(identity)
+        .children(save.map(|(words, failed)| {
+            rune::el()
+                .label(words)
+                .size(6.0, 6.0)
+                .mt(4.0)
+                .radius(3.0)
+                .fill(if failed { t.error } else { t.brand })
+        }))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::navigate(state, Nav::Member(id.clone()), tx)
         })
-        .build(attn_ui::kit(t))
-        .key(format!("crew.roster.{}", member.id))
-        .w_full()
-        .h(row_height(lines, t))
         .focus_selected(is_selected)
-        .checked(is_selected)
+        .checked(is_selected);
+    shown = if is_selected {
+        shown
+            .border(1.0, attn_ui::colors::mix_srgb(t.border, t.brand, 0.32))
+            .fill(attn_ui::colors::mix_srgb(t.bg_elevated, t.brand, 0.09))
+            .box_shadow(rune::Shadow {
+                x: 2.0,
+                color: t.brand,
+                inset: true,
+                ..rune::Shadow::default()
+            })
+    } else {
+        shown.hover(t.text_primary.alpha(0.05))
+    };
+    shown
 }
 
 fn detail(state: &State, t: &Tokens) -> El {
@@ -260,23 +397,35 @@ fn detail(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .gap(space::S3)
-        .padding(space::S3)
+        .min_h(0.0)
+        .fill(t.bg_app)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         });
     let Some(member) = super::selected(state) else {
-        return main.child(caption("crew.empty", "No crew members.", t));
+        return main.child(
+            caption("crew.empty", "No crew members.", t)
+                .px(28.0)
+                .py(40.0),
+        );
     };
     let tab = state.window.crew.place.tab;
     main.child(heading(state, member, t))
         .child(tabs(tab, t))
-        .children(match tab {
-            Tab::Launch => launch_tab(state, member, t),
-            Tab::Charter => vec![charter_tab(state, member, t)],
-            Tab::Handoffs => vec![handoffs_tab(state, member, t)],
-            Tab::Seeds => vec![seeds_tab(state, member, t)],
-        })
+        .child(
+            col()
+                .key("crew.tab")
+                .w_full()
+                .px(28.0)
+                .pt(22.0)
+                .pb(32.0)
+                .children(match tab {
+                    Tab::Launch => launch_tab(state, member, t),
+                    Tab::Charter => vec![charter_tab(state, member, t)],
+                    Tab::Handoffs => vec![handoffs_tab(state, member, t)],
+                    Tab::Seeds => vec![seeds_tab(state, member, t)],
+                }),
+        )
 }
 
 fn heading(state: &State, member: &CrewMember, t: &Tokens) -> El {
@@ -337,64 +486,182 @@ fn heading(state: &State, member: &CrewMember, t: &Tokens) -> El {
                         .key("crew.heading")
                         .role("heading")
                         .label(member.name.clone())
-                        .font(type_::TITLE)
+                        .font(NAME)
                         .color(t.text_primary),
                 )
                 .child(
-                    Button::new("Rename")
-                        .variant(ButtonVariant::Ghost)
-                        .control_size(ControlSize::Small)
+                    bordered(RENAME, t)
+                        .label("Rename")
+                        .ml(10.0)
+                        .px(7.0)
+                        .py(2.0)
+                        .child(text("Rename").font(RENAME_TYPE).color(t.text_secondary))
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             super::begin_rename(state, &id, tx)
-                        })
-                        .build(attn_ui::kit(t))
-                        .key(RENAME),
+                        }),
                 )
         }
     };
+    let in_session = member.binding_session.is_some();
+    let pill = row()
+        .key("crew.presence.pill")
+        .px(8.0)
+        .py(4.0)
+        .radius(999.0);
+    let pill = if in_session {
+        pill.fill(t.success.alpha(0.08))
+            .border(1.0, attn_ui::colors::mix_srgb(t.border, t.success, 0.35))
+            .child(text(presence(member)).font(NOTE).color(t.success))
+    } else {
+        pill.border(1.0, t.border)
+            .child(text(presence(member)).font(NOTE).color(t.text_muted))
+    };
     row()
+        .key("crew.member")
         .w_full()
         .items_center()
-        .gap(space::S3)
-        .child(
-            col()
-                .grow(1.0)
-                .child(name)
-                .child(caption("crew.presence", presence(member), t)),
+        .gap(18.0)
+        .px(28.0)
+        .pt(20.0)
+        .pb(18.0)
+        .fill(t.bg_app)
+        .linear_gradient(
+            110f32.to_radians(),
+            [
+                (0.0, attn_ui::colors::mix_srgb(t.bg_panel, t.brand, 0.05)),
+                (0.68, t.bg_app),
+            ],
         )
+        .child(
+            row()
+                .grow(1.0)
+                .min_w(0.0)
+                .items_center()
+                .gap(13.0)
+                .child(avatar(&member.name, 43.0, 11.0, LARGE_AVATAR, t))
+                .child(col().min_w(0.0).gap(4.0).child(name).child(caption(
+                    "crew.presence",
+                    presence(member),
+                    t,
+                ))),
+        )
+        .child(pill.a11y_hidden())
 }
 
+/// The member's details, as the Tauri app's `.crew-member-tabs`: underlined words on the panel,
+/// the open one in primary ink over the brand.
 fn tabs(shown: Tab, t: &Tokens) -> El {
     row()
         .key("crew.tabs")
         .role("navigation")
         .label("Member details")
-        .gap(space::S1)
+        .w_full()
+        .gap(24.0)
+        .px(28.0)
+        .fill(t.bg_panel)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .children(Tab::ALL.into_iter().map(|tab| {
-            Button::new(tab.label())
-                .variant(if tab == shown {
-                    ButtonVariant::Neutral
-                } else {
-                    ButtonVariant::Ghost
-                })
-                .control_size(ControlSize::Small)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::navigate(state, Nav::Tab(tab), tx)
-                })
-                .build(attn_ui::kit(t))
-                .key(format!("crew.tab.{}", tab.id()))
-                .checked(tab == shown)
+            underlined(
+                format!("crew.tab.{}", tab.id()),
+                tab.label().to_owned(),
+                None,
+                tab == shown,
+                [11.0, 12.0],
+                2.0,
+                t,
+            )
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                super::navigate(state, Nav::Tab(tab), tx)
+            })
         }))
 }
 
+/// One of the Tauri app's underline tabs: `words` and a dimmed `count`, muted until chosen,
+/// when primary ink sits over a `rule`-thick brand line. `pad` is its top and bottom padding.
+fn underlined(
+    key: String,
+    words: String,
+    count: Option<String>,
+    chosen: bool,
+    [top, bottom]: [f32; 2],
+    rule: f32,
+    t: &Tokens,
+) -> El {
+    let label = match &count {
+        Some(n) => format!("{words} {n}"),
+        None => words.clone(),
+    };
+    row()
+        .key(key)
+        .role("button")
+        .label(label)
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.brand)
+        .items_end()
+        .gap(4.0)
+        .pt(top)
+        .pb(bottom - rule)
+        .border_sides(
+            [0.0, 0.0, rule, 0.0],
+            if chosen { t.brand } else { Color::TRANSPARENT },
+        )
+        .mb(-1.0)
+        .child(
+            text(words)
+                .font(NOTE)
+                .color(if chosen { t.text_primary } else { t.text_muted }),
+        )
+        .children(count.map(|n| text(n).font(type_::MONO_CAPTION).color(t.text_dimmed)))
+        .checked(chosen)
+}
+
+/// A bordered card on the panel, as the Tauri app's `.crew-running`.
 fn card(key: &str, t: &Tokens) -> El {
     col()
         .key(key.to_owned())
         .w_full()
+        .max_w(NARROW)
         .gap(space::S2)
-        .padding(space::S3)
+        .px(16.0)
+        .py(13.0)
         .radius(8.0)
+        .fill(t.bg_panel)
         .border(1.0, t.border)
+}
+
+/// A row under a hairline: what it does on the left and its button on the right, as the
+/// Tauri app's `.crew-session-action`.
+fn action_row(key: &str, t: &Tokens) -> El {
+    row()
+        .key(key.to_owned())
+        .w_full()
+        .max_w(NARROW)
+        .items_center()
+        .gap(16.0)
+        .mt(16.0)
+        .pt(14.0)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+}
+
+/// The action row's button: the bordered button in primary ink.
+fn action_button(
+    key: &str,
+    label: &str,
+    disabled: bool,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    let shown = bordered(key, t)
+        .label(label.to_owned())
+        .px(10.0)
+        .py(7.0)
+        .radius(7.0)
+        .child(text(label.to_owned()).font(NOTE).color(t.text_primary));
+    if disabled {
+        shown.disabled(true).opacity(0.45)
+    } else {
+        shown.on_press_tx(press)
+    }
 }
 
 fn route_target(member: &str) -> RouteTarget {
@@ -456,20 +723,24 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
         } else {
             harness_name(state, &running)
         };
-        let words = format!(
-            "{harness} · Model not reported · Effort not reported · {}",
-            session.chars().take(8).collect::<String>()
-        );
+        let short: String = session.chars().take(8).collect();
+        let words = format!("{harness} · Model not reported · Effort not reported · {short}");
         tab.push(
             card("crew.running", t)
                 .role("group")
                 .label("Running now")
-                .child(kicker("Running now", t))
+                .mb(15.0)
+                .child(
+                    row()
+                        .w_full()
+                        .child(kicker("Running now", t).grow(1.0))
+                        .child(text(short).font(type_::MONO_CAPTION).color(t.text_muted)),
+                )
                 .child(
                     text(words.clone())
                         .key("crew.running.route")
                         .label(words)
-                        .font(type_::BODY)
+                        .font(NOTE)
                         .color(t.text_primary),
                 ),
         );
@@ -484,37 +755,57 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
         .clone()
         .or_else(|| unavailable.then(|| "This harness is unavailable on this daemon.".to_owned()));
     let id = member.id.clone();
-    let acknowledged = route_words(
-        state,
-        &shown.acknowledged.resolved_agent,
-        shown
-            .acknowledged
-            .resolved_model
-            .as_deref()
-            .unwrap_or_default(),
-        shown
-            .acknowledged
-            .resolved_effort
-            .as_deref()
-            .unwrap_or_default(),
+    let ack = &shown.acknowledged;
+    let (agent, model, effort) = (
+        ack.resolved_agent.as_str(),
+        ack.resolved_model.as_deref().unwrap_or_default(),
+        ack.resolved_effort.as_deref().unwrap_or_default(),
     );
+    let acknowledged = route_words(state, agent, model, effort);
+    let acknowledged_route = crate::settings::route::Route::stored(agent, model, effort);
     let save = launch::status(&shown);
-    let mut launch_card = card("crew.launch", t)
+    let save_ink = if shown.error.is_some() {
+        t.error
+    } else if shown.saving {
+        t.brand
+    } else {
+        t.text_muted
+    };
+    let mut launch_card = col()
+        .key("crew.launch")
         .role("group")
         .label("Launch settings")
+        .w_full()
+        .max_w(NARROW)
+        .radius(9.0)
+        .fill(t.bg_panel)
+        .border(1.0, attn_ui::colors::mix_srgb(t.border, t.brand, 0.25))
+        .box_shadow(rune::Shadow {
+            y: 5.0,
+            blur: 24.0,
+            color: t.shadow.alpha(0.08),
+            ..rune::Shadow::default()
+        })
         .child(
             row()
                 .w_full()
                 .items_center()
+                .gap(space::S2)
+                .px(17.0)
+                .pt(14.0)
                 .child(
-                    col().grow(1.0).child(kicker("Next session", t)).child(
-                        text("Launch settings")
-                            .role("heading")
-                            .font(type_::TITLE)
-                            .color(t.text_primary),
-                    ),
+                    col()
+                        .grow(1.0)
+                        .gap(3.0)
+                        .child(kicker("Next session", t))
+                        .child(
+                            text("Launch settings")
+                                .role("heading")
+                                .font(SECTION)
+                                .color(t.text_primary),
+                        ),
                 )
-                .child(status("crew.launch.status", save, t.text_secondary))
+                .child(status("crew.launch.status", save, save_ink))
                 .children(shown.error.is_some().then(|| {
                     let id = id.clone();
                     button("crew.launch.retry", "Retry", false, t, move |state, tx| {
@@ -522,34 +813,59 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
                     })
                 })),
         )
-        .child(crate::launch_desktop::field(
-            state,
-            t,
-            &crate::launch_desktop::Field {
-                key: format!("crew.launch.{}", member.id),
-                kind: "crew".into(),
-                item_id: member.id.clone(),
-                profile_id: member.profile_id.clone(),
-                default_name: if member.name.is_empty() {
-                    member.id.clone()
-                } else {
-                    member.name.clone()
-                },
-                value: shown.draft.launch_desktop.clone(),
-                disabled: false,
-                on_change: launch::choose_desktop,
-            },
-        ))
-        .child(crate::settings::route_chip(
-            state,
-            t,
-            route_target(&member.id),
-            "Crew launch model",
-        ));
+        .child(
+            row()
+                .key("crew.launch.fields")
+                .w_full()
+                .gap(13.0)
+                .px(17.0)
+                .py(16.0)
+                .items_start()
+                .child(
+                    col()
+                        .grow(1.0)
+                        .w(0.0)
+                        .min_w(0.0)
+                        .child(crate::launch_desktop::field(
+                            state,
+                            t,
+                            &crate::launch_desktop::Field {
+                                key: format!("crew.launch.{}", member.id),
+                                kind: "crew".into(),
+                                item_id: member.id.clone(),
+                                profile_id: member.profile_id.clone(),
+                                default_name: if member.name.is_empty() {
+                                    member.id.clone()
+                                } else {
+                                    member.name.clone()
+                                },
+                                value: shown.draft.launch_desktop.clone(),
+                                disabled: false,
+                                on_change: launch::choose_desktop,
+                            },
+                        )),
+                )
+                .child(
+                    col()
+                        .grow(1.0)
+                        .w(0.0)
+                        .min_w(0.0)
+                        .child(crate::settings::route_chip(
+                            state,
+                            t,
+                            route_target(&member.id),
+                            "Crew launch model",
+                        )),
+                )
+                .child(col().grow(1.0).w(0.0).min_w(0.0)),
+        );
     if let Some(warning) = warning {
         launch_card = launch_card.child(
             row()
-                .gap(space::S2)
+                .w_full()
+                .gap(12.0)
+                .px(17.0)
+                .pb(11.0)
                 .items_center()
                 .child(alert("crew.launch.warning", warning, t))
                 .children(catalog_error.is_some().then(|| {
@@ -569,23 +885,22 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
                 .key("crew.acknowledged")
                 .role("group")
                 .label(format!("Acknowledged next session {acknowledged}"))
-                .gap(space::S2)
-                .child(caption(
-                    "crew.acknowledged.title",
-                    "Acknowledged next session",
-                    t,
-                ))
-                .child(
-                    text(acknowledged)
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                ),
+                .w_full()
+                .items_center()
+                .gap(12.0)
+                .px(17.0)
+                .py(11.0)
+                .fill(t.bg_app.alpha(0.45))
+                .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+                .corners([0.0, 0.0, 9.0, 9.0])
+                .child(caption("crew.acknowledged.title", "Acknowledged next session", t).grow(1.0))
+                .child(crate::settings::route::badge(state, t, &acknowledged_route).a11y_hidden()),
         )
         .children(
             shown
                 .error
                 .clone()
-                .map(|why| alert("crew.launch.error", why, t)),
+                .map(|why| alert("crew.launch.error", why, t).px(17.0).pb(11.0)),
         );
     tab.push(launch_card);
     if in_session {
@@ -598,34 +913,40 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
             .filter(|a| a.member == member.id);
         let id = member.id.clone();
         tab.push(
-            card("crew.apply.section", t)
-                .child(text("Apply settings now").role("heading").font(type_::TITLE).color(t.text_primary))
+            action_row("crew.apply.section", t)
                 .child(
-                    text("The same harness reloads in place and keeps the conversation. A new harness starts after the member files its letter.")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .wrap()
-                        .w_full(),
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .gap(4.0)
+                        .child(text("Apply settings now").role("heading").font(SECTION).color(t.text_primary))
+                        .child(
+                            text("The same harness reloads in place and keeps the conversation. A new harness starts after the member files its letter.")
+                                .font(NOTE)
+                                .color(t.text_secondary)
+                                .wrap()
+                                .w_full(),
+                        )
+                        .children((member.switch_pending == Some(true)).then(|| {
+                            status(
+                                "crew.switch-pending",
+                                format!(
+                                    "Waiting for {}’s letter to continue on {}.",
+                                    if member.name.is_empty() { &member.id } else { &member.name },
+                                    member.resolved_agent
+                                ),
+                                t.text_secondary,
+                            )
+                        }))
+                        .children(applied.map(|a| {
+                            status(
+                                "crew.apply.outcome",
+                                a.text.clone(),
+                                if a.failed { t.error } else { t.text_secondary },
+                            )
+                        })),
                 )
-                .children((member.switch_pending == Some(true)).then(|| {
-                    status(
-                        "crew.switch-pending",
-                        format!(
-                            "Waiting for {}’s letter to continue on {}.",
-                            if member.name.is_empty() { &member.id } else { &member.name },
-                            member.resolved_agent
-                        ),
-                        t.text_secondary,
-                    )
-                }))
-                .children(applied.map(|a| {
-                    status(
-                        "crew.apply.outcome",
-                        a.text.clone(),
-                        if a.failed { t.error } else { t.text_secondary },
-                    )
-                }))
-                .child(button(
+                .child(action_button(
                     "crew.apply",
                     if applying { "Applying…" } else { "Apply" },
                     !connected || !shown.saved || applying,
@@ -641,7 +962,7 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
         ("crew.start", "Start", !connected || !shown.saved)
     };
     tab.push(
-        card("crew.session", t)
+        action_row("crew.session", t)
             .child(
                 text(if in_session {
                     "Close session"
@@ -649,10 +970,11 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
                     "Start session"
                 })
                 .role("heading")
-                .font(type_::TITLE)
-                .color(t.text_primary),
+                .font(SECTION)
+                .color(t.text_primary)
+                .grow(1.0),
             )
-            .child(button(key, label, disabled, t, move |state, tx| {
+            .child(action_button(key, label, disabled, t, move |state, tx| {
                 if in_session {
                     super::ask_to_close(state, &id, tx)
                 } else {
@@ -698,7 +1020,7 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
     let editor = TextArea::new(&field)
         .key(CHARTER)
         .label(format!("Charter for {}", member.name))
-        .rows(16)
+        .rows(usize::MAX)
         .max_height(CHARTER_HEIGHT)
         .spellcheck(true)
         .width(None)
@@ -708,26 +1030,22 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
             move |state: &mut State, tx: &mut Tx| charter::edited(state, &id, tx)
         })
         .build(attn_ui::kit(t));
-    let mut section = card("crew.charter", t)
+    let save_ink = match edit.phase {
+        Phase::Saving | Phase::Dirty => t.brand,
+        Phase::Error | Phase::Conflict => t.error,
+        Phase::Loading | Phase::Saved => t.text_muted,
+    };
+    let mut section = col()
+        .key("crew.charter")
         .role("group")
         .label("Charter editor")
-        .child(
-            row()
-                .w_full()
-                .items_center()
-                .child(
-                    text("Charter")
-                        .role("heading")
-                        .font(type_::TITLE)
-                        .color(t.text_primary)
-                        .grow(1.0),
-                )
-                .child(status(
-                    "crew.charter.status",
-                    charter::status(edit.phase),
-                    t.text_secondary,
-                )),
-        )
+        .w_full()
+        .max_w(WIDE)
+        .child(document_heading("Charter", t).child(status(
+            "crew.charter.status",
+            charter::status(edit.phase),
+            save_ink,
+        )))
         .child(col().w_full().child(charter_bar(t)).child(editor));
     if edit.phase == Phase::Error {
         let id = member.id.clone();
@@ -807,6 +1125,18 @@ pub(crate) fn leave_charter(state: &mut State, tx: &mut Tx) -> bool {
     true
 }
 
+/// A tab's document heading, as the Tauri app's `.crew-document-heading`: its title on the
+/// left and what goes with it on the right.
+fn document_heading(title: &str, t: &Tokens) -> El {
+    row().w_full().items_start().gap(18.0).mb(16.0).child(
+        text(title.to_owned())
+            .role("heading")
+            .font(DOCUMENT)
+            .color(t.text_primary)
+            .grow(1.0),
+    )
+}
+
 fn day_and_time(iso: &str) -> (String, String) {
     let (day, rest) = iso.split_once('T').unwrap_or((iso, ""));
     (day.to_owned(), rest.chars().take(5).collect())
@@ -836,61 +1166,90 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
             ));
     }
     let refresh_id = member.id.clone();
-    let head = row()
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .child(
-            text("Handoffs")
-                .role("heading")
-                .font(type_::TITLE)
-                .color(t.text_primary)
-                .grow(1.0),
-        )
-        .children(
-            (!history.handoffs.is_empty())
-                .then(|| caption("crew.handoffs.read-only", "Read only", t)),
-        )
-        .child(button(
-            "crew.handoffs.refresh",
-            "Refresh",
-            false,
-            t,
-            move |state, tx| handoffs::load(state, &refresh_id, true, tx),
-        ));
-    let section = col()
-        .key("crew.handoffs")
-        .w_full()
-        .gap(space::S2)
-        .child(head);
+    let head = document_heading("Handoffs", t).child(
+        row()
+            .gap(9.0)
+            .items_center()
+            .children((!history.handoffs.is_empty()).then(|| {
+                type_::caps("Read only")
+                    .key("crew.handoffs.read-only")
+                    .color(t.text_muted)
+            }))
+            .child(button(
+                "crew.handoffs.refresh",
+                "Refresh",
+                false,
+                t,
+                move |state, tx| handoffs::load(state, &refresh_id, true, tx),
+            )),
+    );
+    let section = col().key("crew.handoffs").w_full().max_w(WIDE).child(head);
     let Some(shown) = history.shown() else {
-        return section.child(caption("crew.handoffs.empty", "No handoffs recorded.", t));
+        return section.child(
+            col()
+                .key("crew.handoffs.none")
+                .w_full()
+                .items_center()
+                .px(15.0)
+                .py(60.0)
+                .radius(8.0)
+                .border(1.0, t.border)
+                .child(caption("crew.handoffs.empty", "No handoffs recorded.", t)),
+        );
     };
     let count = history.handoffs.len();
     let index = col()
         .key("crew.handoffs.index")
         .role("navigation")
         .label(format!("{} handoffs", member.name))
-        .w(180.0)
+        .w(150.0)
         .gap(2.0)
-        .child(caption(
-            "crew.handoffs.count",
-            format!("{count} {}", if count == 1 { "letter" } else { "letters" }),
-            t,
-        ))
+        .px(8.0)
+        .py(13.0)
+        .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
+        .child(
+            type_::upper(
+                &format!("{count} {}", if count == 1 { "letter" } else { "letters" }),
+                type_::MONO_CAPTION,
+            )
+            .key("crew.handoffs.count")
+            .color(t.text_muted)
+            .px(7.0)
+            .pb(8.0),
+        )
         .children(history.handoffs.iter().enumerate().map(|(at, h)| {
             let (day, time) = day_and_time(&h.occurred_at);
             let latest = if at == 0 { "Latest · " } else { "" };
             let (member, file) = (member.id.clone(), h.filename.clone());
-            Button::new(format!("{day} {latest}{time} UTC"))
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
+            let current = h.filename == shown.filename;
+            let entry = col()
+                .key(format!("crew.handoff.{at}"))
+                .role("button")
+                .label(format!("{day} {latest}{time} UTC"))
+                .focusable(true)
+                .focus_ring(2.0, 2.0, t.brand)
+                .w_full()
+                .gap(4.0)
+                .px(8.0)
+                .py(9.0)
+                .radius(6.0)
+                .child(text(day).font(NOTE).color(t.text_secondary))
+                .child(
+                    text(format!("{latest}{time} UTC"))
+                        .font(NOTE)
+                        .color(t.text_muted),
+                )
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     handoffs::select(state, &member, &file, tx)
                 })
-                .build(attn_ui::kit(t))
-                .key(format!("crew.handoff.{at}"))
-                .checked(h.filename == shown.filename)
+                .checked(current);
+            if current {
+                entry
+                    .fill(t.brand.alpha(0.08))
+                    .border(1.0, attn_ui::colors::mix_srgb(t.border, t.brand, 0.28))
+            } else {
+                entry.border(1.0, Color::TRANSPARENT)
+            }
         }));
     let letter = history
         .letter
@@ -945,18 +1304,32 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         .label(shown.filename.clone())
         .grow(1.0)
         .min_w(0.0)
-        .gap(space::S2)
-        .child(caption(
-            "crew.handoff.date",
-            format!("{day} {time} UTC · {}", shown.filename),
-            t,
-        ))
-        .child(body);
+        .child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .px(15.0)
+                .py(11.0)
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+                .child(
+                    caption(
+                        "crew.handoff.date",
+                        format!("{day} {time} UTC · {}", shown.filename),
+                        t,
+                    )
+                    .color(t.text_secondary),
+                ),
+        )
+        .child(col().w_full().padding(15.0).child(body));
     section.child(
         row()
+            .key("crew.handoffs.letters")
             .w_full()
-            .gap(space::S3)
-            .items_start()
+            .min_h(420.0)
+            .items_stretch()
+            .radius(8.0)
+            .fill(t.bg_panel)
+            .border(1.0, t.border)
             .child(index)
             .child(reader),
     )
@@ -986,7 +1359,9 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         .key("crew.seeds.filters")
         .role("group")
         .label("Seed ownership")
-        .gap(space::S1)
+        .w_full()
+        .gap(20.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .children(
             [
                 (SeedFilter::Tending, "tending", "Tending", tended.len()),
@@ -994,19 +1369,19 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
             ]
             .into_iter()
             .map(|(f, id, label, count)| {
-                Button::new(format!("{label} {count}{suffix}"))
-                    .variant(if f == filter {
-                        ButtonVariant::Neutral
-                    } else {
-                        ButtonVariant::Ghost
-                    })
-                    .control_size(ControlSize::Small)
-                    .on_press_tx(move |state: &mut State, _: &mut Tx| {
-                        state.window.crew.place.seed_filter = f
-                    })
-                    .build(attn_ui::kit(t))
-                    .key(format!("crew.seeds.{id}"))
-                    .checked(f == filter)
+                underlined(
+                    format!("crew.seeds.{id}"),
+                    label.to_owned(),
+                    Some(format!("{count}{suffix}")),
+                    f == filter,
+                    [8.0, 10.0],
+                    1.0,
+                    t,
+                )
+                .px(1.0)
+                .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                    state.window.crew.place.seed_filter = f
+                })
             }),
         );
     let mut section = col()
@@ -1014,48 +1389,68 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         .role("group")
         .label("Seeds")
         .w_full()
-        .gap(space::S2)
-        .child(kicker("Garden", t))
+        .max_w(NARROW)
         .child(
-            text("Seeds")
-                .role("heading")
-                .font(type_::TITLE)
-                .color(t.text_primary),
+            col()
+                .gap(3.0)
+                .mt(3.0)
+                .mb(12.0)
+                .child(kicker("Garden", t))
+                .child(
+                    text("Seeds")
+                        .role("heading")
+                        .font(SEEDS)
+                        .color(t.text_primary),
+                ),
         )
         .child(filters);
     if capped {
-        section = section.child(status(
-            "crew.seeds.cap",
-            format!(
-                "Showing matches in the newest {} of {} seeds.",
-                all.len(),
-                garden.total
-            ),
-            t.text_tertiary,
-        ));
+        section = section.child(
+            status(
+                "crew.seeds.cap",
+                format!(
+                    "Showing matches in the newest {} of {} seeds.",
+                    all.len(),
+                    garden.total
+                ),
+                t.warning,
+            )
+            .mt(10.0),
+        );
     }
     let rows = match filter {
         SeedFilter::Tending => &tended,
         SeedFilter::Planted => &planted,
     };
     if rows.is_empty() {
-        return section
-            .child(caption(
-                "crew.seeds.empty",
-                seeds::empty(&member.name, filter, capped),
-                t,
-            ))
-            .children(
-                (filter == SeedFilter::Tending && !planted.is_empty()).then(|| {
-                    button(
-                        "crew.seeds.see-planted",
-                        "See planted seeds",
-                        false,
-                        t,
-                        |state, _| state.window.crew.place.seed_filter = SeedFilter::Planted,
-                    )
-                }),
-            );
+        return section.child(
+            col()
+                .key("crew.seeds.none")
+                .w_full()
+                .items_center()
+                .gap(10.0)
+                .px(12.0)
+                .py(40.0)
+                .child(caption(
+                    "crew.seeds.empty",
+                    seeds::empty(&member.name, filter, capped),
+                    t,
+                ))
+                .children(
+                    (filter == SeedFilter::Tending && !planted.is_empty()).then(|| {
+                        text("See planted seeds")
+                            .key("crew.seeds.see-planted")
+                            .role("button")
+                            .label("See planted seeds")
+                            .focusable(true)
+                            .font(NOTE)
+                            .color(t.brand)
+                            .on_press_tx(|state: &mut State, _: &mut Tx| {
+                                state.window.crew.place.seed_filter = SeedFilter::Planted
+                            })
+                    }),
+                ),
+        );
     }
     let query = place.seed_query.text.clone();
     let visible: Vec<&&Seed> = rows.iter().filter(|s| seeds::matches(s, &query)).collect();

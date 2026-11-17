@@ -19,7 +19,7 @@ use crate::shell::Layer;
 use crate::{Action, State};
 
 pub(crate) use seeds::SeedFilter;
-pub(crate) use view::panel;
+pub(crate) use view::{overlays, page};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Tab {

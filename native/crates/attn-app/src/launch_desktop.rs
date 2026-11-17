@@ -300,22 +300,34 @@ fn cancel_name(state: &mut State, tx: &mut Tx) {
 /// The select as its owner lays it out, with why the desktops could not be read.
 pub(crate) fn field(state: &State, t: &Tokens, field: &Field) -> El {
     let mut unused = Vec::new();
-    let trigger = select(state, field).build(attn_ui::kit(t), &mut unused);
+    let trigger = select(state, field)
+        .build(attn_ui::kit(t), &mut unused)
+        .w_full();
     let error = state
         .window
         .launch_desktop
         .reads
         .get(&field.select_key())
         .and_then(|r| r.error.clone());
-    col().gap(4.0).child(trigger).children(error.map(|why| {
-        text(why.clone())
-            .key(format!("{}.error", field.select_key()))
-            .role("alert")
-            .label(why)
-            .font(type_::LABEL)
-            .color(t.error)
-            .wrap()
-    }))
+    col()
+        .w_full()
+        .gap(6.0)
+        .child(
+            text("Desktop")
+                .font(rune::TextStyle::new(12.0, 400.0))
+                .color(t.text_secondary)
+                .a11y_hidden(),
+        )
+        .child(trigger)
+        .children(error.map(|why| {
+            text(why.clone())
+                .key(format!("{}.error", field.select_key()))
+                .role("alert")
+                .label(why)
+                .font(type_::LABEL)
+                .color(t.error)
+                .wrap()
+        }))
 }
 
 /// The open select's list and the new desktop's name, over the owner's layer.

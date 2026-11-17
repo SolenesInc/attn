@@ -90,7 +90,7 @@ pub(crate) fn crew_poll(state: &mut State, tx: &mut Tx) -> bool {
         .and_then(|member| {
             let (value, rules) = crate::crew::launch::route(state, &member)?;
             let harness = if value.harness.is_empty() {
-                rules.follows.clone()?
+                rules.inherited.clone()?.harness
             } else {
                 value.harness
             };

@@ -260,10 +260,36 @@ pub(crate) fn followed_harness(shown: &Shown) -> String {
     }
 }
 
+/// What the member runs without a pin of its own: the harness it follows, and on it the
+/// launch default for a part the member pins, else the part it resolves to now.
+fn inherited(state: &State, shown: &Shown) -> Option<Route> {
+    let harness = followed_harness(shown);
+    if harness.is_empty() {
+        return None;
+    }
+    let member = &shown.acknowledged;
+    let part = |pinned: &Option<String>, setting: &str, resolved: &Option<String>| {
+        if pinned.as_deref().is_some_and(|p| !p.is_empty()) {
+            state
+                .facts
+                .settings
+                .get(&format!("{setting}_{harness}"))
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            resolved.clone().unwrap_or_default()
+        }
+    };
+    Some(Route::stored(
+        &harness,
+        &part(&member.model, "default_model", &member.resolved_model),
+        &part(&member.effort, "default_effort", &member.resolved_effort),
+    ))
+}
+
 /// The route chip's value and rules for `member`.
 pub(crate) fn route(state: &State, member: &str) -> Option<(Route, Rules)> {
     let shown = shown(state, member)?;
-    let follows = followed_harness(&shown);
     let rules = Rules {
         harnesses: crate::settings::listed_harnesses(state)
             .iter()
@@ -272,7 +298,7 @@ pub(crate) fn route(state: &State, member: &str) -> Option<(Route, Rules)> {
         allow_none: true,
         require_available: true,
         none_label: Some("Crew default"),
-        follows: (!follows.is_empty()).then_some(follows),
+        inherited: inherited(state, &shown),
         ..Rules::default()
     };
     let value = Route::stored(&shown.draft.agent, &shown.draft.model, &shown.draft.effort);

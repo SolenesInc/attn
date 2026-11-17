@@ -125,7 +125,7 @@ fn open(world: &mut World) {
 }
 
 fn is_open(world: &World) -> bool {
-    world.screen().find(Target::key("crew-dialog")).is_some()
+    world.screen().find(Target::key("crew.page")).is_some()
 }
 
 fn named(world: &World, key: &str) -> Option<String> {
@@ -277,6 +277,60 @@ fn the_palette_opens_manage_crew_on_the_profiles_first_member_and_escape_closes_
     press(&mut world, Key::Escape);
     assert!(!is_open(&world));
     rest(&mut world);
+}
+
+fn bounds(world: &World, key: &str) -> [f32; 4] {
+    world.screen().bounds(Target::key(key)).expect(key)
+}
+
+#[test]
+fn manage_crew_is_a_page_beside_the_sidebar_that_holds_the_pointer_until_closed() {
+    let mut world = start(vec![member("fern", 1)]);
+    let dock = shows(&world, "sidebar.dock.chips");
+    let toggle = bounds(&world, "sidebar.dock.toggle");
+    let sidebar = bounds(&world, "sidebar.frame");
+    open(&mut world);
+    let page = bounds(&world, "crew.page");
+    assert_eq!(
+        page[0],
+        sidebar[0] + sidebar[2],
+        "the page starts where the sidebar ends"
+    );
+    assert_eq!(
+        page[1], sidebar[1],
+        "the page sits under the title bar, beside the sidebar"
+    );
+
+    world.gesture(|app| app.click_at((toggle[0] + toggle[2] / 2.0, toggle[1] + toggle[3] / 2.0)));
+    assert!(
+        is_open(&world),
+        "a press on the sidebar leaves the page open"
+    );
+
+    click(&mut world, "crew.close-page");
+    assert!(!is_open(&world));
+    assert_eq!(
+        shows(&world, "sidebar.dock.chips"),
+        dock,
+        "the sidebar's dock toggle took no press while Manage crew showed"
+    );
+}
+
+#[test]
+fn a_member_without_pins_shows_what_the_crew_defaults_resolve_to() {
+    let alder = with(member("alder", 1), |m| {
+        m.resolved_model = Some("opus".into());
+        m.resolved_effort = Some("high".into());
+    });
+    let mut world = start(vec![alder]);
+    open(&mut world);
+    world.settle();
+    let route = route_shows(&world, "alder");
+    assert!(
+        route.starts_with("Crew default → Claude Code · Launch default → Opus 5.5"),
+        "{route}"
+    );
+    assert!(route.ends_with("high"), "{route}");
 }
 
 #[test]

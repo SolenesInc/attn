@@ -150,7 +150,7 @@ fn the_crew_block_draws_every_member_by_name_in_session_or_not_under_a_manage_li
     assert!(!shows(&world, &sun("keel")));
     assert!(shows(&world, "queue-crew.sess-keel.ask-close"));
     click(&mut world, "queue.rule.crew.manage");
-    assert!(shows(&world, "crew-dialog"));
+    assert!(shows(&world, "crew.page"));
 }
 
 #[test]
@@ -206,7 +206,7 @@ fn with_the_queue_off_members_between_sessions_sit_above_the_desktops() {
     assert!(shows(&world, "sidebar.crew.alder"));
     assert!(!shows(&world, "sidebar.crew.keel"));
     click(&mut world, "sidebar.rule.crew.manage");
-    assert!(shows(&world, "crew-dialog"));
+    assert!(shows(&world, "crew.page"));
 }
 
 #[test]

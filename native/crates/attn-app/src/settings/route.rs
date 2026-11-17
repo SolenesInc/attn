@@ -86,8 +86,9 @@ pub(crate) struct Rules {
     pub(crate) default_effort: Option<fn(&str) -> &'static str>,
     /// What the route without a harness is called, when not "None".
     pub(crate) none_label: Option<&'static str>,
-    /// The harness a route without one runs on, whose models it may still pin.
-    pub(crate) follows: Option<String>,
+    /// What the route without a harness runs, whose models it may still pin; its model and
+    /// effort are what the route without them runs on that harness.
+    pub(crate) inherited: Option<Route>,
 }
 
 impl Rules {
@@ -188,10 +189,12 @@ pub(crate) struct View<'a> {
 }
 
 pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> View<'a> {
-    let effective = match (&rules.follows, input.harness.is_empty()) {
-        (Some(follows), true) => follows.clone(),
+    let effective = match (&rules.inherited, input.harness.is_empty()) {
+        (Some(inherited), true) => inherited.harness.clone(),
         _ => input.harness.clone(),
     };
+    let inherited = rules.inherited.as_ref().filter(|i| i.harness == effective);
+    let inherited_model = inherited.map_or("", |i| i.model.as_str());
     let harness = rules.harnesses.iter().find(|h| h.id == effective);
     let discovered = harness.map_or_else(Discovered::default, |h| {
         catalogs::of(state, &h.id, h.discovery)
@@ -208,12 +211,17 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         value.model = m.id.clone();
         value.provider = m.provider.clone();
     }
-    let default_model = rules.tier.and_then(|tier| {
-        let id = catalog?.tier_default(tier)?;
-        models
+    let default_model = match (rules.tier, inherited) {
+        (Some(tier), _) => catalog.and_then(|c| c.tier_default(tier)).and_then(|id| {
+            models.iter().find(|m| {
+                m.id == id && m.tier.as_deref() == Some(tier) && m.access != "unsupported"
+            })
+        }),
+        (None, Some(i)) if !i.model.is_empty() => models
             .iter()
-            .find(|m| m.id == id && m.tier.as_deref() == Some(tier) && m.access != "unsupported")
-    });
+            .find(|m| m.id == i.model && m.provider == i.provider),
+        (None, _) => None,
+    };
     let runs = if !value.model.is_empty() {
         selected
     } else {
@@ -250,8 +258,11 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         .filter(|n| !n.is_empty())
         .or_else(|| (!effective.is_empty()).then(|| effective.clone()))
         .unwrap_or_else(|| rules.none_label().into());
-    let harness_name = if input.harness.is_empty() && rules.none_label.is_some() {
-        rules.none_label().to_owned()
+    let harness_name = if input.harness.is_empty() && !effective.is_empty() {
+        format!(
+            "{} → {effective_name}",
+            rules.none_label.unwrap_or("Default")
+        )
     } else {
         effective_name.clone()
     };
@@ -270,7 +281,16 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
             };
             format!("{} default → {runs}", tier_label(tier))
         }
-        None => format!("{effective_name} default"),
+        None => match inherited.filter(|i| !i.model.is_empty()) {
+            Some(i) => format!(
+                "Launch default → {}",
+                default_model
+                    .map(|m| m.name.clone())
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| i.stored_model())
+            ),
+            None => format!("{effective_name} default"),
+        },
     };
     let model_label = if value.model.is_empty() {
         unset_label.clone()
@@ -291,10 +311,11 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         || rules.effort.is_some_and(|takes| !takes(&effective))
     {
         EffortMode::Hidden
-    } else if (value.model.is_empty() && rules.tier.is_none())
+    } else if (value.model.is_empty() && rules.tier.is_none() && inherited_model.is_empty())
         || harness.is_none_or(|h| !h.discovery)
         || discovered.error.is_some()
         || missing
+        || (value.model.is_empty() && !inherited_model.is_empty() && default_model.is_none())
     {
         EffortMode::Free
     } else if effort_model.is_some_and(|m| m.effort_support == "unsupported") {
@@ -311,10 +332,11 @@ pub(crate) fn view<'a>(state: &'a State, input: &Route, rules: &'a Rules) -> Vie
         (Some(want), Some(got)) => tier_rank(got) > tier_rank(want),
         _ => false,
     };
-    let surface = rules
-        .default_effort
-        .map(|f| f(&effective))
-        .unwrap_or_default();
+    let surface = match (rules.default_effort, inherited) {
+        (Some(f), _) => f(&effective),
+        (None, Some(i)) => i.effort.as_str(),
+        (None, None) => "",
+    };
     let default_effort = if value.effort.is_empty()
         && (effort_levels.iter().any(|l| l == surface) || effort_mode == EffortMode::Free)
     {
@@ -585,6 +607,58 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
         .build(crate::settings::pages::kit(t))
         .key(key)
         .a11y_value(summary)
+}
+
+/// What a route runs, as the Tauri app's `.route-badge`: a pill of the harness, the model with
+/// its tier, and the effort when it has one.
+pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
+    let rules = Rules {
+        harnesses: crate::settings::listed_harnesses(state)
+            .iter()
+            .map(RouteHarness::from)
+            .collect(),
+        ..Rules::default()
+    };
+    let view = view(state, value, &rules);
+    let tier = view.tier.as_ref();
+    let mark = TierInfo::mark(tier, false);
+    let quiet = tier.is_some_and(|t| t.tier.is_some());
+    row()
+        .gap(7.0)
+        .items_end()
+        .px(9.0)
+        .py(5.0)
+        .radius(999.0)
+        .fill(t.bg_panel)
+        .border(1.0, t.border)
+        .child(
+            text(view.harness_name.clone())
+                .font(CAPTION)
+                .color(t.text_secondary),
+        )
+        .child(
+            text(view.model_label.clone())
+                .font(CAPTION)
+                .color(if view.missing {
+                    t.warning
+                } else {
+                    t.text_primary
+                }),
+        )
+        .children((!mark.is_empty()).then(|| {
+            text(mark)
+                .font(CAPTION)
+                .color(if quiet { t.text_tertiary } else { t.warning })
+        }))
+        .children((!value.effort.is_empty()).then(|| {
+            text(value.effort.clone())
+                .font(CAPTION)
+                .color(if view.effort_missing {
+                    t.warning
+                } else {
+                    t.accent
+                })
+        }))
 }
 
 /// The Tauri app's `.route-field`: harness and model on one line beside the caret, and the

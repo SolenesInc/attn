@@ -11,7 +11,8 @@ use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
-    AutomationSchedulePreviewResultMessage, CrewMember, DelegationPreferences,
+    AutomationSchedulePreviewResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
+    CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, Desktop, DesktopPane, DesktopTileContentMessage,
     GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, InitialStateMessage,
     NotificationListResultMessage, PartyView, Profile, RecentLocation,
@@ -1263,6 +1264,75 @@ fn home(dark: bool) {
     snap(&mut world, "home", dark);
 }
 
+/// Manage crew with the Chief and scout, open on `member` at `tab`: a daemon that lists Claude
+/// Code and Codex, and holds an empty charter and no handoffs.
+fn manage_crew(dark: bool, member: &str, tab: &str, name: &str) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.crew = Some(
+        crew()
+            .into_iter()
+            .map(|m| CrewMember {
+                resolved_model: Some("fable".into()),
+                ..m
+            })
+            .collect(),
+    );
+    if let Some(settings) = state.settings.as_mut() {
+        for (key, value) in [
+            ("claude_available", "true"),
+            ("codex_available", "true"),
+            ("default_model_claude", "fable"),
+        ] {
+            settings.insert(key.into(), value.into());
+        }
+    }
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("delegation_preferences_get", |_: &Request| {
+            message(DelegationPreferencesResultMessage {
+                success: true,
+                preferences: Some(DelegationPreferences::default()),
+                harnesses: Some(
+                    [("claude", "Claude Code"), ("codex", "Codex")]
+                        .iter()
+                        .map(|(id, name)| Harness {
+                            id: (*id).into(),
+                            name: (*name).into(),
+                            available: true,
+                            model_pin: true,
+                            effort_pin: true,
+                            ..Harness::default()
+                        })
+                        .collect(),
+                ),
+                ..DelegationPreferencesResultMessage::new()
+            })
+        })
+        .on("crew_charter_get", |r: &Request| {
+            message(CrewCharterGetResultMessage {
+                success: true,
+                member: r["member"].as_str().map(Into::into),
+                charter: Some(CrewCharterDocument {
+                    content: String::new(),
+                    token: "t1".into(),
+                }),
+                ..CrewCharterGetResultMessage::new()
+            })
+        })
+        .on("crew_handoffs_get", |r: &Request| {
+            message(CrewHandoffsGetResultMessage {
+                success: true,
+                member: r["member"].as_str().map(Into::into),
+                ..CrewHandoffsGetResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    run(&mut world, Action::OpenCrew);
+    world.gesture(|app| app.click(Target::key(format!("crew.roster.{member}"))));
+    world.gesture(|app| app.click(Target::key(format!("crew.tab.{tab}"))));
+    snap(&mut world, name, dark);
+}
+
 /// The palette offering to set up the Chief.
 fn palette_chief(dark: bool) {
     let mut world = with_crew(dark);
@@ -1628,6 +1698,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         chief_setup(dark);
         home(dark);
         palette_chief(dark);
+        manage_crew(dark, "chief", "launch", "crew-launch");
+        manage_crew(dark, "scout", "charter", "crew-charter");
+        manage_crew(dark, "scout", "handoffs", "crew-handoffs");
+        manage_crew(dark, "scout", "seeds", "crew-seeds");
         notifications(dark);
         attention(dark);
         session_menu(dark);

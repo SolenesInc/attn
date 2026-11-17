@@ -651,7 +651,7 @@ fn the_chief_offers_its_own_actions_in_session_and_between_sessions() {
         ["Harness and model…", "Edit charter", "Start Captain"]
     );
     click(&mut world, "crew-member-menu.details");
-    assert!(shows(&world, "crew-dialog"));
+    assert!(shows(&world, "crew.page"));
 }
 
 #[test]
@@ -1244,13 +1244,13 @@ fn edit_charter_opens_the_chiefs_charter_and_closing_crew_returns_the_focus_to_i
         click(&mut world, "crew.charter.editor");
         let close = world
             .screen()
-            .descendants(Target::key("crew-dialog"))
+            .descendants(Target::key("crew.page"))
             .into_iter()
             .find(|n| n.role == "button" && n.name.as_deref() == Some("Close"))
             .and_then(|n| n.key)
             .expect("Manage crew has a close button");
         click(&mut world, &close);
-        assert!(!shows(&world, "crew-dialog"), "in session={in_session}");
+        assert!(!shows(&world, "crew.page"), "in session={in_session}");
         assert_eq!(
             focused(&world).as_deref(),
             Some(trigger),
