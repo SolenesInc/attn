@@ -17,17 +17,44 @@ import './Markdown.css';
 const OVERSIZED_FIT_RATIO = 0.8;
 
 function resolveTheme(): MermaidTheme {
-  return document.documentElement.getAttribute('data-theme') === 'light' ? 'neutral' : 'dark';
+  const root = document.documentElement;
+  const color = (name: string) => root.style.getPropertyValue(`--color-${name}`);
+  return {
+    darkMode: root.getAttribute('data-theme') !== 'light',
+    themeVariables: {
+      background: color('bg-tile'),
+      primaryColor: color('bg-elevated'),
+      primaryTextColor: color('text-primary'),
+      primaryBorderColor: color('border-focus'),
+      secondaryColor: color('bg-selected'),
+      secondaryTextColor: color('text-primary'),
+      secondaryBorderColor: color('border-focus'),
+      tertiaryColor: color('bg-panel'),
+      tertiaryTextColor: color('text-primary'),
+      tertiaryBorderColor: color('border'),
+      lineColor: color('text-muted'),
+      textColor: color('text-primary'),
+      edgeLabelBackground: color('bg-panel'),
+      clusterBkg: color('bg-panel'),
+      clusterBorder: color('border'),
+      noteBkgColor: color('bg-selected'),
+      noteTextColor: color('text-primary'),
+      noteBorderColor: color('border-focus'),
+    },
+  };
 }
 
 function useMermaidTheme(): MermaidTheme {
   const [theme, setTheme] = useState<MermaidTheme>(resolveTheme);
 
   useEffect(() => {
-    const recompute = () => setTheme(resolveTheme());
+    const recompute = () => {
+      const next = resolveTheme();
+      setTheme((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
+    };
 
     const observer = new MutationObserver(recompute);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
 
     return () => observer.disconnect();
   }, []);
@@ -98,7 +125,7 @@ function scrollDiagram(viewport: HTMLDivElement, event: KeyboardEvent<HTMLDivEle
 
 export function MermaidDiagram(props: MermaidDiagramProps) {
   const theme = useMermaidTheme();
-  return <RenderedMermaidDiagram key={`${theme}:${props.code}`} {...props} theme={theme} />;
+  return <RenderedMermaidDiagram key={`${JSON.stringify(theme)}:${props.code}`} {...props} theme={theme} />;
 }
 
 function RenderedMermaidDiagram({

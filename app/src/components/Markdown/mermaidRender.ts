@@ -1,4 +1,7 @@
-export type MermaidTheme = 'dark' | 'neutral';
+export interface MermaidTheme {
+  darkMode: boolean;
+  themeVariables: Record<string, string>;
+}
 
 // Loaded lazily so mermaid (large) is code-split out of the main bundle and
 // only fetched when a document actually contains a mermaid fence.
@@ -13,7 +16,7 @@ function loadMermaid() {
 // Resolves to sanitized SVG markup (securityLevel: 'strict').
 export async function renderMermaid(id: string, code: string, theme: MermaidTheme): Promise<string> {
   const { default: mermaid } = await loadMermaid();
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme });
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: { ...theme.themeVariables, darkMode: theme.darkMode } });
   try {
     const { svg } = await mermaid.render(id, code);
     return svg;
