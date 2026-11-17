@@ -647,12 +647,16 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         if !form.harnesses.is_empty() {
             body = body.child(
                 col()
+                    .key(format!("{POP}.harness-field"))
                     .gap(space::S1)
                     .child(kicker("Harness", t))
                     .child(radios(Group::Harness, &form.harnesses, view.busy, t)),
             );
         }
-        let mut models = col().gap(space::S1).child(kicker("Model", t));
+        let mut models = col()
+            .key(format!("{POP}.model-field"))
+            .gap(space::S1)
+            .child(kicker("Model", t));
         match &form.model_error {
             Some(why) => {
                 models = models.child(alert(why, t)).child(link(
@@ -676,6 +680,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         if !form.efforts.is_empty() {
             body = body.child(
                 col()
+                    .key(format!("{POP}.effort-field"))
                     .gap(space::S1)
                     .child(kicker("Effort", t))
                     .child(radios(Group::Effort, &form.efforts, view.busy, t)),
@@ -684,6 +689,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         if first_run {
             body = body.child(
                 row()
+                    .key(format!("{POP}.folder-field"))
                     .gap(space::S2)
                     .items_center()
                     .child(kicker("Notebook", t))
@@ -738,7 +744,12 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         if !can_save {
             button = button.layer_opacity(0.45);
         }
-        body = body.child(row().justify_end().child(button));
+        body = body.child(
+            row()
+                .key(format!("{POP}.actions"))
+                .justify_end()
+                .child(button),
+        );
     }
     let frame = Frame {
         edge: t.border_hover,

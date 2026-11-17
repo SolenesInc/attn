@@ -1072,8 +1072,10 @@ fn a_focused_primary_stays_inert_while_the_models_are_read_again_and_works_once_
         bound(chief(true), "chief-day"),
         vec![chief_day()],
     ));
+    world.trail_focus();
     open_route(&mut world, true);
     assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    held_since_taken(&mut world, PRIMARY);
     world.daemon.on("harness_models", |r: &Request| {
         if r["harness"] == "claude" {
             Value::Null
@@ -1112,12 +1114,27 @@ fn a_focused_primary_stays_inert_while_the_models_are_read_again_and_works_once_
     );
     assert_eq!(value(&world, PRIMARY).as_deref(), Some("ready"));
     assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    held_since_taken(&mut world, PRIMARY);
     press(&mut world, Key::Enter);
     let set = sent(&world, "crew_set");
     assert_eq!(set.len(), 1);
     assert_eq!(
         (&set[0]["member"], &set[0]["model"]),
         (&json!("member:chief-key"), &json!("opus"))
+    );
+}
+
+/// Fails unless `key` kept the focus on every frame since it first took it: a focus that falls to
+/// nothing for a frame is lost for good when no frame follows.
+fn held_since_taken(world: &mut World, key: &str) {
+    let trail = world.focus_trail();
+    let taken = trail
+        .iter()
+        .position(|f| f.as_deref() == Some(key))
+        .unwrap_or(trail.len());
+    assert!(
+        trail[taken..].iter().all(|f| f.as_deref() == Some(key)),
+        "{key} let the focus go: {trail:?}"
     );
 }
 

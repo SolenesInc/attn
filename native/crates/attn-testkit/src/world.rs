@@ -52,6 +52,7 @@ pub struct World {
     capture: crate::capture::CaptureRuntime,
     /// The tile window that has the keyboard, by key; none while the main window has it.
     keyboard: Option<String>,
+    focus_trail: Option<Vec<Option<String>>>,
 }
 
 type OnKey = fn(&mut State, &KeyEvent, &mut Tx) -> bool;
@@ -344,6 +345,7 @@ impl World {
             tiles: Vec::new(),
             capture,
             keyboard: None,
+            focus_trail: None,
         };
         world.settle();
         world
@@ -431,7 +433,7 @@ impl World {
         match sampler {
             Some(sampler) => self.sample(sampler, 0.0),
             None => {
-                self.runtime.frame(0.0);
+                self.main_frame(0.0);
             }
         }
     }
@@ -440,14 +442,39 @@ impl World {
     fn land_motion(&mut self, sampler: &Option<&mut rune::motion_gate::Sampler>) {
         if sampler.is_none() && self.runtime.animating {
             self.runtime.settle_all();
-            self.runtime.frame(0.0);
+            self.main_frame(0.0);
         }
     }
 
     fn sample(&mut self, sampler: &mut rune::motion_gate::Sampler, dt: f64) {
         sampler.before(&mut self.runtime);
-        let awake = self.runtime.frame(dt);
+        let awake = self.main_frame(dt);
         sampler.frame(&mut self.runtime, awake);
+    }
+
+    fn main_frame(&mut self, dt: f64) -> bool {
+        let awake = self.runtime.frame(dt);
+        if let Some(mut trail) = self.focus_trail.take() {
+            trail.push(self.screen().focused().and_then(|n| n.key));
+            self.focus_trail = Some(trail);
+        }
+        awake
+    }
+
+    /// Starts noting the key of the element that has the focus after each frame the main
+    /// window draws, which [`World::focus_trail`] hands back: a focus that falls to nothing for
+    /// one frame and is taken back on the next shows in it, where a screen read at rest shows
+    /// it only when no frame happens to follow.
+    pub fn trail_focus(&mut self) {
+        self.focus_trail = Some(Vec::new());
+    }
+
+    /// The focus after each frame since [`World::trail_focus`] or the last call, and keeps noting.
+    pub fn focus_trail(&mut self) -> Vec<Option<String>> {
+        self.focus_trail
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
     }
 
     /// Delivers what each side sent until both are quiet, on frames that move no time. With no
@@ -500,7 +527,7 @@ impl World {
     pub fn advance(&mut self, by: Duration) {
         self.clock.advance(by);
         self.pulse.beat();
-        self.runtime.frame(by.as_secs_f64());
+        self.main_frame(by.as_secs_f64());
         for tile in &mut self.tiles {
             tile.advance(by);
         }
