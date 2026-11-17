@@ -4,6 +4,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{
     Button, ButtonVariant, Checkbox, ControlSize, PopupItem, PopupList, SegmentedControl, Select,
     TextArea, TextInput,
@@ -197,7 +198,8 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(body),
+                .child(body)
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
         );
     if f.load == Load::Ready {
         form_el = form_el.child(actions(f, t));

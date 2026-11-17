@@ -19,6 +19,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::{radius, space};
 use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
+use rune_kit::ScrollBar;
 use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
 
 use crate::State;
@@ -121,6 +122,7 @@ pub(crate) fn body(
                 }
             })
             .child(card)
+            .scroll_bar_styled(attn_ui::document_scroll_bar(t))
     };
     let card = |reading: El| {
         col()

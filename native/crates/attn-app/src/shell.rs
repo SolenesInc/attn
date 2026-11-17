@@ -4,6 +4,7 @@ use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::tok::space;
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::popover::raised;
 use rune_kit::{Button, ButtonVariant};
 
@@ -793,7 +794,8 @@ fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                         .pt(12.0)
                         .pb(20.0)
                         .children(crate::cheat_sheet::sections(&state.keymap, t)),
-                ),
+                )
+                .scroll_bar_styled(attn_ui::dialog_scroll_bar(t)),
         )
         .build(t, layers);
 }

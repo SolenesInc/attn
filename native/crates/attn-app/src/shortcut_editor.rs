@@ -12,6 +12,7 @@ use rune::{
     Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx, col, row,
     text,
 };
+use rune_kit::ScrollBar;
 use rune_kit::{
     Badge, BadgeVariant, Button, ButtonVariant, Kit, ShortcutRecorder, ShortcutRecorderState,
     TextInput, shortcut_error_message,
@@ -628,7 +629,8 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         })
         .children(capture)
         .children(sections)
-        .children(empty);
+        .children(empty)
+        .scroll_bar_styled(attn_ui::dialog_scroll_bar(t));
     let footer = row()
         .key("shortcut-editor.footer")
         .w_full()

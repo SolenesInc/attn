@@ -2,6 +2,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Dialog, TextInput};
 
 use super::pages::{CAPTION, S4};
@@ -67,58 +68,60 @@ fn nav(state: &State, t: &Tokens) -> El {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         });
-    if groups.is_empty() {
-        return nav.child(
+    let nav = if groups.is_empty() {
+        nav.child(
             text("No matching settings.")
                 .font(CAPTION)
                 .color(t.text_tertiary),
-        );
-    }
-    nav.children(groups.into_iter().map(|(label, items)| {
-        col()
-            .gap(space::S1)
-            .child(type_::upper(label, type_::BOLD_CAPS).color(t.text_dimmed))
-            .children(items.into_iter().map(|item| {
-                let section = item.section;
-                let active = dialog.section == section;
-                let off = item
-                    .feature
-                    .is_some_and(|key| !setting::on(&state.facts.settings, key));
-                row()
-                    .key(format!("settings.nav.{}", section.id()))
-                    .role("button")
-                    .label(item.label)
-                    .checked(active)
-                    .focusable(true)
-                    .w_full()
-                    .h(28.0)
-                    .px(space::S2)
-                    .items_center()
-                    .radius(6.0)
-                    .fill(if active {
-                        t.warning.alpha(0.12)
-                    } else {
-                        t.bg_elevated
-                    })
-                    .border_sides([0.0, 0.0, 0.0, if active { 3.0 } else { 0.0 }], t.warning)
-                    .hover(t.bg_selected)
-                    .child(
-                        text(item.label)
-                            .font(type_::BODY)
-                            .color(t.text_primary)
-                            .grow(1.0),
-                    )
-                    .children(off.then(|| {
-                        text("off")
-                            .key(format!("settings.nav-off.{}", section.id()))
-                            .font(CAPTION)
-                            .color(t.text_muted)
-                    }))
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        super::select(state, section, tx)
-                    })
-            }))
-    }))
+        )
+    } else {
+        nav.children(groups.into_iter().map(|(label, items)| {
+            col()
+                .gap(space::S1)
+                .child(type_::upper(label, type_::BOLD_CAPS).color(t.text_dimmed))
+                .children(items.into_iter().map(|item| {
+                    let section = item.section;
+                    let active = dialog.section == section;
+                    let off = item
+                        .feature
+                        .is_some_and(|key| !setting::on(&state.facts.settings, key));
+                    row()
+                        .key(format!("settings.nav.{}", section.id()))
+                        .role("button")
+                        .label(item.label)
+                        .checked(active)
+                        .focusable(true)
+                        .w_full()
+                        .h(28.0)
+                        .px(space::S2)
+                        .items_center()
+                        .radius(6.0)
+                        .fill(if active {
+                            t.warning.alpha(0.12)
+                        } else {
+                            t.bg_elevated
+                        })
+                        .border_sides([0.0, 0.0, 0.0, if active { 3.0 } else { 0.0 }], t.warning)
+                        .hover(t.bg_selected)
+                        .child(
+                            text(item.label)
+                                .font(type_::BODY)
+                                .color(t.text_primary)
+                                .grow(1.0),
+                        )
+                        .children(off.then(|| {
+                            text("off")
+                                .key(format!("settings.nav-off.{}", section.id()))
+                                .font(CAPTION)
+                                .color(t.text_muted)
+                        }))
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            super::select(state, section, tx)
+                        })
+                }))
+        }))
+    };
+    nav.scroll_bar_styled(attn_ui::scroll_bar(t).track_offset(0.0, 1.0))
 }
 
 fn body(state: &State, t: &Tokens) -> El {
@@ -190,6 +193,7 @@ fn body(state: &State, t: &Tokens) -> El {
         .child(head)
         .child(status(state, t))
         .child(content)
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 /// Saving…, Saved, or the refusals no field shows beside itself.

@@ -1360,3 +1360,50 @@ fn harness_logos_turn_off_from_the_palette() {
     );
     rest(&mut world);
 }
+
+/// Where the scroll bar of the scroll area `area` draws its thumb, and how visible it is; the
+/// bar is decoration, so it is not in the accessibility tree.
+fn thumb(world: &World, area: &str) -> Option<([f32; 4], f32)> {
+    let inside = format!("{area}-scroll-area/");
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("thumb") && e.path.contains(&inside))
+        .map(|e| (e.rect, e.opacity))
+}
+
+#[test]
+fn a_list_longer_than_the_palette_shows_its_scroll_bar_at_rest_and_one_that_fits_shows_none() {
+    let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));
+    press_action(&mut world, Action::UiCommandPalette);
+    world.settle();
+    rest(&mut world);
+
+    let list = world.screen().bounds(Target::key("palette.list")).unwrap();
+    let ([x, y, w, h], opacity) = thumb(&world, "palette.list").expect("the list draws a thumb");
+    assert_eq!(
+        opacity, 1.0,
+        "the thumb shows at rest, as the Tauri app's styled scroll bar does"
+    );
+    assert!(
+        h > 0.0 && h < list[3],
+        "the thumb is shorter than the list: {h} of {}",
+        list[3]
+    );
+    assert_eq!(w, 8.0);
+    assert_eq!(
+        x + w,
+        list[0] + list[2],
+        "the thumb runs down the list's right edge"
+    );
+    assert!(y >= list[1]);
+
+    world.gesture(|app| app.type_text("go to desk"));
+    rest(&mut world);
+    assert_eq!(titles(&world), ["Go to Desktop 1", "Go to Desktop 2"]);
+    assert!(
+        thumb(&world, "palette.list").is_none_or(|([.., h], _)| h == 0.0),
+        "a list that fits shows no thumb"
+    );
+}

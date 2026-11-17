@@ -3,7 +3,10 @@ use std::sync::RwLock;
 use rune::{Color, Shadow};
 
 pub mod colors;
+mod scroll_bar;
 pub mod type_;
+
+pub use scroll_bar::{dialog_scroll_bar, document_scroll_bar, scroll_bar};
 
 /// The interface's colors in one appearance, named by meaning. The surfaces, borders, text and
 /// status colors name the Tauri app's CSS variables they carry: `bg_app` is `--color-bg-app`.
@@ -22,6 +25,8 @@ pub struct Tokens {
     pub border_hover: Color,
     pub border_focus: Color,
     pub border_subtle: Color,
+    pub scrollbar_thumb: Color,
+    pub scrollbar_hover: Color,
     pub text_primary: Color,
     pub text_secondary: Color,
     pub text_tertiary: Color,

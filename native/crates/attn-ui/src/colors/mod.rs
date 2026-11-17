@@ -161,7 +161,7 @@ macro_rules! tokens {
 
 tokens!(
     bg_app bg_panel bg_elevated bg_selected bg_input bg_tile bg_button bg_overlay
-    border border_hover border_focus border_subtle
+    border border_hover border_focus border_subtle scrollbar_thumb scrollbar_hover
     text_primary text_secondary text_tertiary text_muted text_dimmed
     accent brand error warning success merged on_accent on_brand shadow highlight
     state_idle state_working state_waiting state_approval state_scheduled state_unknown

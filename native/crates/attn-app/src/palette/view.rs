@@ -4,6 +4,7 @@ use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::TextInput;
 
 use super::{Look, Mode, Row, Status};
@@ -83,7 +84,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                 .enumerate()
                 .map(|(i, r)| option(r, at == Some(i), t)),
         )
-        .children(empty);
+        .children(empty)
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     let hints: Vec<String> = match listing.mode {
         Mode::Agents => {
             let actions = super::row_actions(state, at.map(|i| &listing.rows[i]));
