@@ -80,8 +80,7 @@ try {
     const result = await spawned;
     runner.assert(result.success && result.pane_id, `spawn_session starts ${label}`, result);
     runner.registerCleanup(`unregister_${label}`, () => observer.unregisterSession(id));
-    const shown = await observer.waitForDesktopOf(id, (entry) => entry.panes.some((pane) => pane.pane_id === result.pane_id && pane.runtime_id), `${label} has a terminal`);
-    return { id, label, pane: result.pane_id, runtime: shown.panes.find((pane) => pane.pane_id === result.pane_id).runtime_id };
+    return { id, label, pane: result.pane_id, runtime: (await observer.waitForTerminalPane(id)).runtime_id };
   };
 
   const current = () => observer.desktop(desktop.id);

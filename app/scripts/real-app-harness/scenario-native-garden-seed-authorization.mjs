@@ -39,8 +39,7 @@ function seedTiles(desktop) {
 }
 
 async function typedInto(agent, words) {
-  const desktops = await driver.state('desktops');
-  const pane = desktops.flatMap((d) => d.panes ?? []).find((p) => p.session_id === agent);
+  const pane = await observer.waitForTerminalPane(agent);
   await driver.state(`terminal:${pane.runtime_id}`, { includes: words, timeoutMs: 30_000 });
 }
 

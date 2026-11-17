@@ -82,10 +82,6 @@ try {
     const window = await driver.state('window');
     runner.assert(window.keyboard?.pane !== pane, `the keyboard left tile ${pane}`, window);
   };
-  const runtimeOf = async (pane) => {
-    const desktops = await driver.state('desktops');
-    return desktops.flatMap((desktop) => desktop.panes ?? []).find((p) => p.pane_id === pane)?.runtime_id;
-  };
   const screen = async (shell, includes) => driver.state(`terminal:${shell.runtime}`, { includes, timeoutMs: 15_000 });
   const writeToken = async (shell, name) => {
     await driver.click({ key: `tile.${shell.pane}.header` });
@@ -109,7 +105,7 @@ try {
     runner.assert(result.success && result.pane_id, 'spawn_session starts the first shell', result);
     sessions.push(id);
     await driver.waitFor({ key: `tile.${result.pane_id}` });
-    first = { id, pane: result.pane_id, runtime: await runtimeOf(result.pane_id) };
+    first = { id, pane: result.pane_id, runtime: (await observer.waitForTerminalPane(id)).runtime_id };
     tokens.first = await writeToken(first, 'DESK_A');
 
     await driver.pressKey(keys.split);
@@ -119,7 +115,7 @@ try {
     }, 'the split shell on desktop A', 30_000);
     sessions.push(withSplit.session_id);
     await driver.waitFor({ key: `tile.${withSplit.pane_id}` });
-    split = { id: withSplit.session_id, pane: withSplit.pane_id, runtime: await runtimeOf(withSplit.pane_id) };
+    split = { id: withSplit.session_id, pane: withSplit.pane_id, runtime: (await observer.waitForTerminalPane(withSplit.session_id)).runtime_id };
     tokens.split = await writeToken(split, 'DESK_SPLIT');
   });
 

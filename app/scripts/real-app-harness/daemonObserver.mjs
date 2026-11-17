@@ -308,6 +308,12 @@ export class DaemonObserver {
     }, description || `desktop holding session ${sessionId}`, timeoutMs);
   }
 
+  async waitForTerminalPane(sessionId, timeoutMs = 20_000) {
+    const hasTerminal = (pane) => pane.session_id === sessionId && Boolean(pane.runtime_id);
+    const desktop = await this.waitForDesktopOf(sessionId, (entry) => entry.panes.some(hasTerminal), `session ${sessionId} has a terminal`, timeoutMs);
+    return desktop.panes.find(hasTerminal);
+  }
+
   async waitForUtilityPane(sessionId, timeoutMs = 20_000, excludePaneIds = new Set()) {
     const isNewSessionPane = (pane) => !excludePaneIds.has(pane.pane_id) && Boolean(pane.session_id);
     const desktop = await this.waitForDesktopOf(

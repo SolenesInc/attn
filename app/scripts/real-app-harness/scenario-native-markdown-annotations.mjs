@@ -55,10 +55,7 @@ try {
     const result = await spawned;
     runner.assert(result.success && result.pane_id, 'spawn_session starts the agent', result);
     runner.registerCleanup('unregister_agent', () => observer.unregisterSession(id));
-    const desktops = await driver.state('desktops');
-    const pane = desktops.flatMap((d) => d.panes ?? []).find((p) => p.session_id === id);
-    runner.assert(pane?.runtime_id, 'the desktop holds the agent with a terminal', desktops);
-    agent = { pane: result.pane_id, runtimeId: pane.runtime_id };
+    agent = { pane: result.pane_id, runtimeId: (await observer.waitForTerminalPane(id)).runtime_id };
     await driver.state(`terminal:${agent.runtimeId}`, { includes: 'OpenAI Codex', timeoutMs: 60_000 });
     await driver.click({ key: `terminal.${agent.runtimeId}` });
     await driver.typeInto(null, 'warm-up');

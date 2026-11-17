@@ -100,8 +100,7 @@ try {
     observer.send({ cmd: 'spawn_session', id, agent, cwd, profile_id: observer.profileId, placement: { desktop_id: desktopId }, label: `${label}-${runner.runId}`, cols: 100, rows: 30 });
     const result = await spawned;
     runner.assert(result.success && result.pane_id, `spawn_session starts ${label}`, result);
-    const desktop = await observer.waitForDesktopOf(id, (entry) => entry.panes.some((p) => p.pane_id === result.pane_id && p.runtime_id));
-    const pane = desktop.panes.find((p) => p.pane_id === result.pane_id);
+    const pane = await observer.waitForTerminalPane(id);
     return { session: id, pane: pane.pane_id, runtime: pane.runtime_id };
   };
 

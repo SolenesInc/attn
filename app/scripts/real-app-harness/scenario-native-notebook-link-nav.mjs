@@ -88,8 +88,7 @@ try {
     observer.send({ cmd: 'spawn_session', id, agent: 'shell', cwd, profile_id: observer.profileId, placement: { desktop_id: desktop.id }, label: 'links', cols: 80, rows: 24 });
     runner.assert((await spawned).success, 'spawn_session starts the shell');
     runner.registerCleanup('unregister_shell', () => observer.unregisterSession(id));
-    const desktops = await driver.state('desktops');
-    const pane = desktops.flatMap((d) => d.panes ?? []).find((p) => p.session_id === id);
+    const pane = await observer.waitForTerminalPane(id);
     await driver.click({ key: `terminal.${pane.runtime_id}` });
   });
 

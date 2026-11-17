@@ -47,10 +47,7 @@ try {
 
   let runtimeId;
   await runner.step('open_terminal', async () => {
-    const desktops = await driver.state('desktops');
-    const pane = desktops.flatMap((desktop) => desktop.panes ?? []).find((p) => p.session_id === id);
-    runner.assert(pane?.runtime_id, 'a desktop holds the agent as a pane with a terminal', desktops);
-    runtimeId = pane.runtime_id;
+    runtimeId = (await observer.waitForTerminalPane(id)).runtime_id;
     await driver.waitFor({ key: `sidebar.session.${id}` });
     await driver.click({ key: `sidebar.session.${id}` });
     await driver.waitFor({ key: `terminal.${runtimeId}` });

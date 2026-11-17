@@ -77,8 +77,7 @@ try {
     runner.registerCleanup('unregister_agent', () => observer.unregisterSession(id));
     await driver.waitFor({ key: `sidebar.session.${id}` });
     await driver.click({ key: `sidebar.session.${id}` });
-    const desktops = await driver.state('desktops', { includes: id });
-    const pane = desktops.flatMap((d) => d.panes ?? []).find((p) => p.session_id === id);
+    const pane = await observer.waitForTerminalPane(id);
     runtimeId = pane.runtime_id;
     leaf = pane.pane_id;
     await driver.waitFor({ key: `terminal.${runtimeId}` });
