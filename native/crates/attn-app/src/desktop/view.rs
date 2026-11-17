@@ -790,7 +790,11 @@ fn laid_out(
         .map(|s| (s.id.clone(), s.direction, s.divider, cx.dividers))
         .chain(held.map(|(id, direction, rect)| (id, direction, rect, true)))
         .map(|(id, direction, rect, live)| pinned(divider(id, direction, live), rect));
-    el().w_full().h_full().children(tiles).children(dividers)
+    el().w_full()
+        .h_full()
+        .fill(cx.t.bg_tile)
+        .children(tiles)
+        .children(dividers)
 }
 
 fn pinned(child: El, [x, y, w, h]: [f32; 4]) -> El {
@@ -896,6 +900,7 @@ pub(crate) fn session_of_leaf(desktop: &Desktop, id: &str) -> Option<String> {
     }
 }
 
+/// Tile `leaf` with its header.
 fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let t = cx.t;
     let desktop = cx.desktop;
@@ -1119,13 +1124,7 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
                 desktop: cx.desktop.id.clone(),
                 tile: leaf.id.clone(),
             })?;
-            if content
-                .message
-                .error
-                .as_deref()
-                .is_some_and(|e| !e.is_empty())
-                || content.message.path.is_empty()
-            {
+            if content.message.path.is_empty() {
                 return None;
             }
             let uri = crate::markdown::drafts::Source::File {
@@ -1344,7 +1343,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                         .truncate()
                         .grow(1.0),
                 })
-                .child(actions),
+                .children(pane.is_some().then_some(actions)),
         );
     let sub = cx
         .sublines

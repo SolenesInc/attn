@@ -20,6 +20,7 @@ use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::{radius, space};
 use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
 use rune_kit::ScrollBar;
+use rune_kit::syntax::Syntax;
 use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
 
 use crate::State;
@@ -82,6 +83,7 @@ pub(crate) fn body(
         return message(t, "This file is empty.", false);
     }
     let view = format!("tile.{tile}.document");
+    let gutter = format!("{view}.gutter");
     let outpost = (content.host.as_deref().filter(|h| !h.is_empty())).map(|host| links::Outpost {
         host: host.to_owned(),
         name: crate::desktop::outpost_name(host, outposts),
@@ -109,7 +111,7 @@ pub(crate) fn body(
         *t,
     );
     let scroll = |card: El| {
-        col()
+        let document = col()
             .key(view.clone())
             .role("document")
             .label(title)
@@ -119,16 +121,22 @@ pub(crate) fn body(
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
-            .padding(space::S3)
             .items_center()
+            .child(card)
+            .scroll_bar_styled(attn_ui::document_scroll_bar(t));
+        col()
+            .key(gutter.clone())
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .padding(space::S3)
             .on_layout_tx({
                 let view = view.clone();
                 move |state: &mut State, [_, _, w, _], tx: &mut Tx| {
                     state.readings.measured(&view, w, tx)
                 }
             })
-            .child(card)
-            .scroll_bar_styled(attn_ui::document_scroll_bar(t))
+            .child(document)
     };
     let card = |reading: El| {
         col()
@@ -200,7 +208,7 @@ pub(crate) fn body(
     }
     let read = |marking: Option<Marking>| read_source(&content.content, marking);
     if !annotates {
-        return memo(view.clone(), version, || scroll(card(read(None))));
+        return memo(gutter.clone(), version, || scroll(card(read(None))));
     }
     let root = annotating::root_key(tile);
     let reading = memo(root.clone(), version, || {
@@ -428,44 +436,77 @@ fn details_order(source: &str) -> Rc<dyn Fn(usize) -> usize> {
     Rc::new(move |at| starts.partition_point(|&start| start < at))
 }
 
-/// The Tauri reader's type and marks (MarkdownReader.css, at its 14 point rem): 15 point
-/// paragraphs, 19.25, 16.625 and 14 point headings, 14 point list items with their markers in
-/// the accent, 13 point code that keeps its lines whole and scrolls sideways, tables across the
-/// text with hairlines under their rows, round task checkboxes, and diagrams in mermaid's 16
-/// point labels.
+/// The Tauri reader's type, colours, marks and spacing (MarkdownReader.css, at its 14 point
+/// rem): 15 point paragraphs and 14 point list items at 90% of the text colour, headings
+/// stepping from the full colour down to 80%, list markers in the accent, ring checkboxes and
+/// struck finished tasks, italic quotes on an accent bar, 13 point code in GitHub's colours on
+/// a half-tinted card that scrolls sideways, tables across the text with 1 point rules, and
+/// diagrams in mermaid's 16 point labels. Blocks space by the stylesheet's margins.
 pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     let kit = attn_ui::kit(t);
+    let text = t.text_primary.alpha(0.9);
     let body = font(t, None);
     let small = TextStyle {
         size: 14.0,
         line_height: 22.75,
         ..body
     };
+    let code = attn_ui::colors::syntax(t.dark);
     MarkdownStyle::from_kit(kit)
+        .text(text)
         .body_font(body)
         .heading_font(1, font(t, Some(1)))
         .heading_font(2, font(t, Some(2)))
         .heading_font(3, font(t, Some(3)))
         .heading_font(4, font(t, Some(4)))
-        .text(t.text_primary.alpha(0.9))
         .heading_text(1, t.text_primary)
+        .heading_text(2, text)
         .heading_text(3, t.text_primary.alpha(0.8))
         .deep_heading(t.text_primary)
-        .syntax_theme(attn_ui::colors::syntax(t.dark))
+        .paragraph_margin(14.0)
+        .heading_margin(1, 21.0, 14.0)
+        .heading_margin(2, 28.0, 10.5)
+        .heading_margin(3, 21.0, 7.0)
+        .heading_margin(4, 14.0, 7.0)
+        .heading_margins_collapse(true)
         .list_font(small)
         .list_marker(t.accent.alpha(0.6))
-        .inline_code_font(12.25 / 15.0, 400.0)
+        .list(21.0, 5.25)
+        .list_margin(5.25, 5.25)
+        .list_markers_outside(true)
+        .list_marker_gap(9.0)
+        .list_tabular_figures(true)
+        .link_underline(Color::TRANSPARENT)
+        .inline_code_size(12.25)
+        .inline_code_font(1.0, 400.0)
         .inline_code_pad(5.25)
+        .inline_code_bg(t.bg_elevated)
         .code_block_font(TextStyle {
             size: 13.0,
-            line_height: 21.1,
+            line_height: 20.0,
             ..kit.ty.mono
         })
-        .table_font(small)
+        .code_block(t.bg_elevated.alpha(0.5), t.border.alpha(0.3))
+        .code_block_padding(16.0, 12.0)
+        .code_margin(17.5, 17.5)
+        .code_block_text(code.color(Syntax::Variable))
+        .syntax_theme(code)
+        .quote(t.accent.alpha(0.5), 2.0, 14.0, t.text_secondary)
+        .quote_italic(true)
+        .quote_margin(14.0, 14.0)
+        .rule(t.border.alpha(0.3))
+        .rule_margin(28.0, 28.0)
+        .lines(1.0)
+        .table_font(TextStyle {
+            line_height: 21.0,
+            ..small
+        })
         .table_outline(None)
         .table_header_rule(t.border)
         .table_rules(t.border.alpha(0.5))
         .table_header_fill(t.bg_elevated.alpha(0.3))
+        .table_header_text(text)
+        .table_text(t.text_primary.alpha(0.8))
         .table_header_weight(600.0)
         .table_cell_padding(10.5, 7.0)
         .table_margin(14.0, 14.0)
@@ -481,11 +522,14 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
             8.0,
             8.0,
             None,
+            Color::TRANSPARENT,
             t.success,
-            t.bg_app,
             Color::TRANSPARENT,
             t.text_secondary.alpha(0.5),
         )
+        .task_checked(Color::TRANSPARENT, t.success, t.success)
+        .task_ring(2.0, 11.0)
+        .task_done(t.text_secondary)
 }
 
 /// The reader's paragraph font, or its font for headings of `level`: the `h1` set tight.
@@ -693,14 +737,24 @@ fn leaves_out(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
         )
 }
 
+/// What the tile body says in place of a document, where the document's first line would
+/// start: the Tauri tile's italic quiet note, or its error in a softened red.
 fn message(t: &Tokens, message: &str, error: bool) -> El {
-    col()
-        .w_full()
-        .h_full()
-        .center()
-        .child(
-            text(message)
-                .font(type_::BODY)
-                .color(if error { t.error } else { t.text_tertiary }),
+    let (italic, color) = if error {
+        (
+            false,
+            attn_ui::colors::mix_srgb(t.error, Color::WHITE, 0.24),
         )
+    } else {
+        (true, t.text_tertiary)
+    };
+    col().w_full().h_full().pt(16.0).px(space::S3).child(
+        text(message)
+            .font(TextStyle {
+                italic,
+                ..type_::BODY
+            })
+            .color(color)
+            .wrap(),
+    )
 }

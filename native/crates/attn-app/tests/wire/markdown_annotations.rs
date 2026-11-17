@@ -1508,3 +1508,28 @@ fn a_seeds_marks_go_to_its_tender_or_onto_the_seed_as_a_note() {
     );
     assert_eq!(label_of(&world, "send").as_deref(), Some("Noted ✓"));
 }
+
+#[test]
+fn a_document_whose_file_went_missing_keeps_its_header_controls() {
+    let (mut world, _) = start();
+    world.daemon.emit(DesktopTileContentMessage {
+        error: Some(format!("file not found: {PLAN}")),
+        ..content("")
+    });
+    world.settle();
+    let screen = world.screen();
+    assert!(
+        screen
+            .find(Target::role("label").name(format!("file not found: {PLAN}").as_str()))
+            .is_some(),
+        "{screen}"
+    );
+    for part in ["overall", "notes", "send.to"] {
+        assert!(
+            screen
+                .find(Target::key(format!("tile.m.document.{part}")))
+                .is_some(),
+            "{part}: {screen}"
+        );
+    }
+}

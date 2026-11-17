@@ -54,6 +54,46 @@ const STATES: [&str; 8] = [
     "working",
 ];
 
+const NOTES: &str = r#"# Release notes
+
+A short document that exercises every block the reader draws.
+
+## Highlights
+
+- **Bold**, *italic*, `inline code` and a [link](https://example.com).
+- A nested list:
+  - second level
+  - with ~~strikethrough~~
+- [x] A finished task
+- [ ] An open task
+
+> A blockquote that runs long enough to wrap onto a second line when the tile
+> is narrow, so the bar and the indent show.
+
+### Code
+
+```rust
+fn main() {
+    let total: u32 = (1..=10).sum();
+    println!("total = {total}");
+}
+```
+
+### Table
+
+| Surface | State | Owner |
+| --- | --- | --- |
+| Sidebar | done | reviewer |
+| Garden | in progress | builder |
+
+1. First numbered item
+2. Second numbered item
+
+---
+
+Final paragraph with a seed id s-abc123 and a path `docs/plan.md`.
+"#;
+
 const DOCUMENT: &str = "# The plan
 
 Colors move into **one module**, and every view reads them from there.
@@ -2478,6 +2518,37 @@ fn session_seeds(dark: bool) {
 }
 
 /// A word of the document selected, with the annotation toolbar over it.
+/// The tour's world with desktop 1 holding document tile `m` alone, at `path`.
+fn document_alone(dark: bool, path: &str) -> World {
+    let mut state = initial(dark, document_tile("m", path), vec![]);
+    if let Some(first) = state.desktops.as_mut().and_then(|d| d.first_mut()) {
+        first.tree_json = document_tile("m", path).to_string();
+        first.panes.clear();
+        first.active_pane_id = "m".into();
+    }
+    start(Daemon::scripted().state(state))
+}
+
+fn markdown_reader(dark: bool) {
+    let mut world = document_alone(dark, "/repo/notes.md");
+    deliver(&mut world, "/repo/notes.md", NOTES, None);
+    snap(&mut world, "markdown-reader", dark);
+}
+
+fn markdown_missing(dark: bool) {
+    let mut world = document_alone(dark, "/repo/notes.md");
+    world.daemon.emit(DesktopTileContentMessage {
+        desktop_id: DESKTOP.into(),
+        tile_id: "m".into(),
+        tile_kind: "markdown".into(),
+        path: "/repo/notes.md".into(),
+        error: Some("file not found: /repo/notes.md".into()),
+        ..DesktopTileContentMessage::new()
+    });
+    world.settle();
+    snap(&mut world, "markdown-missing", dark);
+}
+
 fn markdown_selection(dark: bool) {
     let mut world = with_document(dark);
     world.gesture(|app| {
@@ -3001,6 +3072,8 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         annotation_comment(dark);
         annotation_saved_shot(dark);
         annotation_notes(dark);
+        markdown_reader(dark);
+        markdown_missing(dark);
         snooze_menu(dark);
         rename_session(dark);
         session_usage(dark);
