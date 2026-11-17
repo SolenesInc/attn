@@ -31,22 +31,23 @@ path = %q
 `, plugPluginName, plugVersion, plugAPIVersion, plugPluginName)
 
 type Kit struct {
-	t              testing.TB
-	cfg            config
-	binary         string
-	control        net.Listener
-	mu             sync.Mutex
-	launches       map[string]chan *Run
-	nextBoot       func()
-	nextServerBoot func()
-	fakes          []*fake
-	servers        []*fake
-	failures       []string
-	headless       chan *HeadlessTask
-	nextBootResult *bootingResult
-	nextLaunch     chan *Run
-	answerer       func(*HeadlessTask)
-	onTranscript   func()
+	t                testing.TB
+	cfg              config
+	binary           string
+	control          net.Listener
+	mu               sync.Mutex
+	launches         map[string]chan *Run
+	nextBoot         func()
+	nextServerBoot   func()
+	nextVersionProbe func()
+	fakes            []*fake
+	servers          []*fake
+	failures         []string
+	headless         chan *HeadlessTask
+	nextBootResult   *bootingResult
+	nextLaunch       chan *Run
+	answerer         func(*HeadlessTask)
+	onTranscript     func()
 }
 
 type fake struct {
@@ -266,8 +267,11 @@ func (k *Kit) HoldNextCodexServerBoot(hold func()) {
 func (k *Kit) awaitBoot(role string) {
 	k.mu.Lock()
 	next := &k.nextBoot
-	if role == roleCodexServer {
+	switch role {
+	case roleCodexServer:
 		next = &k.nextServerBoot
+	case roleCodexVersionProbe:
+		next = &k.nextVersionProbe
 	}
 	hold := *next
 	*next = nil

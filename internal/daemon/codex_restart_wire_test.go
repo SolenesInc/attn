@@ -247,6 +247,29 @@ func TestARestartBacksOffWhenATurnStartsWhileItPrepares(t *testing.T) {
 	})
 }
 
+func TestACodexInstalledWhileARestartPreparesGetsARestartOfItsOwn(t *testing.T) {
+	w, app, _, _ := sharedCodexOn(t, "0.162.1")
+
+	w.SetCodexVersion("0.163.0")
+	probe := w.HoldNextCodexVersionProbe()
+	cart := w.Spawn(app, fakeagent.Codex, w.Path("cart"))
+	probe.Await()
+	w.SetCodexVersion("0.164.0")
+	preflight := w.HoldNextCodexServerBoot()
+	probe.Release()
+	w.Launched(cart)
+	preflight.Await()
+
+	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("tax")))
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.162.1", "0.164.0", protocol.SharedCodexRestartRestarting)
+	})
+	preflight.Release()
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.164.0", "0.164.0", protocol.SharedCodexRestartNone)
+	})
+}
+
 func TestATerminalStillLaunchingHoldsTheRestartItsLaunchDiscovered(t *testing.T) {
 	w, app, _, _ := sharedCodexOn(t, "0.162.1")
 

@@ -58,7 +58,7 @@ func runCodex(cfg config) int {
 		return runNpmShim(native)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
-		return codexPrintVersion()
+		return codexPrintVersion(cfg)
 	}
 	if len(os.Args) > 2 && os.Args[1] == "doctor" && os.Args[2] == "--json" {
 		return codexDoctor(cfg)

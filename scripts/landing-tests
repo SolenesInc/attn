@@ -114,6 +114,8 @@ go ./cmd/attnd TestAnInstallPastItsLimitFailsAndNamesTheLimit
 go ./cmd/attnd TestTheCLIWarnsWhenItsProtocolDiffersFromTheRunningDaemons
 go ./cmd/attnd TestAnOutpostAgentsReviewTakesItsAnswerAndRecordsItsSendOnTheOutpost
 go ./internal/daemon TestACodexRunThroughAnApprovalIsOneRunRecord
+go ./cmd/attnd TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMovesToIt
+go ./internal/daemon TestACodexInstalledWhileARestartPreparesGetsARestartOfItsOwn
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal

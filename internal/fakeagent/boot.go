@@ -40,7 +40,7 @@ func (k *Kit) boot(params json.RawMessage) (any, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	result := bootingResult{}
-	if booting.Role == roleCodexServer {
+	if booting.Role == roleCodexServer || booting.Role == roleCodexVersionProbe {
 		return result, nil
 	}
 	if k.nextBootResult != nil {

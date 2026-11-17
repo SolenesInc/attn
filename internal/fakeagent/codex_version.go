@@ -1,6 +1,7 @@
 package fakeagent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ const (
 	codexStartErrorFile = "codex-start-error"
 	codexNpmNativeFile  = "codex-npm-native"
 	codexUpdateFailFile = "codex-update-error"
+	codexVersionHeld    = "codex-version-held"
 	codexBaseVersion    = "1.0.0"
 	miseName            = "mise"
 	miseVersion         = "2026.9.4 macos-arm64 (2026-09-30)"
@@ -62,9 +64,36 @@ func offerCodexUpdate(cfg config, term *terminal, overrides []string) error {
 	return nil
 }
 
-func codexPrintVersion() int {
-	fmt.Println("codex-cli " + installedCodexVersion())
+func codexPrintVersion(cfg config) int {
+	version := installedCodexVersion()
+	if os.Remove(filepath.Join(programDir(), codexVersionHeld)) == nil {
+		if err := awaitVersionProbeRelease(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "fake codex --version: %v\n", err)
+			return 1
+		}
+	}
+	fmt.Println("codex-cli " + version)
 	return 0
+}
+
+func awaitVersionProbeRelease(cfg config) error {
+	control, err := dialControl(cfg, func(*rpcPeer, string, json.RawMessage) (any, error) {
+		return nil, errors.New("a held codex --version takes no calls")
+	})
+	if err != nil {
+		return err
+	}
+	control.start()
+	defer control.close()
+	return control.call(context.Background(), methodBooting, bootingParams{Role: roleCodexVersionProbe}, nil)
+}
+
+func (k *Kit) HoldNextCodexVersionProbe(hold func()) {
+	k.t.Helper()
+	k.mu.Lock()
+	k.nextVersionProbe = hold
+	k.mu.Unlock()
+	k.writeVersion(filepath.Join(k.cfg.Bin, codexVersionHeld), "held")
 }
 
 func codexDoctor(cfg config) int {

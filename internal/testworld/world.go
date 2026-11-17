@@ -426,6 +426,16 @@ func (w *World) HoldNextCodexServerBoot() *Pause {
 	return pause
 }
 
+func (w *World) HoldNextCodexVersionProbe() *Pause {
+	w.T.Helper()
+	if w.outside == nil {
+		w.outside = newOutsideHolds(w.T)
+	}
+	name, pause := w.outside.arm("codex --version")
+	w.kit.HoldNextCodexVersionProbe(func() { w.outside.hold(name) })
+	return pause
+}
+
 func (w *World) LogDaemonTail() {
 	log, err := os.ReadFile(filepath.Join(w.Dir, "daemon.log"))
 	if err != nil {
