@@ -34,6 +34,7 @@ daemon:
   - 'Makefile'
   - 'scripts/**'
   - '.github/workflows/app-acceptance.yml'
+  - '.github/workflows/app-acceptance-matrix.yml'
   - '.github/workflows/ci.yml'
   - '.github/workflows/pty-upgrade.yml'
   - '.tool-versions'
@@ -130,6 +131,7 @@ native:
   - '.github/workflows/native.yml'
 app_acceptance:
   - 'app/**'
+  - 'native/**'
   - 'cli/**'
   - 'rust-toolchain.toml'
   - 'cmd/**'

@@ -15,7 +15,7 @@ setting that is off by default. The `land-on-main` skill is the
 procedure, from the working branch to the report after the push.
 
 After the push, these run without you. `main`'s CI runs the full test suites and
-the scenario matrix. When a landing breaks `main`, the sheriff gets `main` green
+the scenario matrices. When a landing breaks `main`, the sheriff gets `main` green
 again. The review automation reviews the commits and messages their author or
 dispatches a fixer. The release process writes release notes from the commits.
 
@@ -158,8 +158,8 @@ any other conflict stops the land before the push.
 
 Checks before landing are fast and local: targeted tests, the change on the
 surface it touches, and a review scaled to the change's risk. The full Go
-suite, the Playwright specs and the Linux scenario matrix run in CI on every
-push to `main` after landing, and so do the combinations of changes that
+suite, the Playwright specs and the Linux scenario matrices of both app
+shells, Tauri and native, run in CI on every push to `main` after landing, and so do the combinations of changes that
 landed together. The macOS jobs run in their own workflow, `CI macOS`, so
 waiting for a macOS runner never holds up Linux's Acceptance. `CI macOS` runs
 each macOS job on a push only when the commits since its last green push run

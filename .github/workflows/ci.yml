@@ -511,175 +511,42 @@ jobs:
     with:
       os: ubuntu-24.04
 
-  app-acceptance-build:
-    name: App acceptance build
+  app-acceptance-tauri:
+    name: App acceptance (tauri)
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
-    permissions:
-      contents: read
-    runs-on: ubuntu-24.04
-    # 202s on run 34060183460; 30m leaves room for a cold Rust cache.
-    timeout-minutes: 30
-    env:
-      ATTN_INSTANCE: app-acceptance
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Report runner class
-        run: ./scripts/ci-runner-class.sh
-
-      - name: Build the App acceptance tree
-        id: build-app
-        uses: ./.github/actions/build-app-acceptance
-        with:
-          instance: ${{ env.ATTN_INSTANCE }}
-
-      - name: Upload the app tree
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-acceptance-tree
-          path: ${{ steps.build-app.outputs.archive }}
-          retention-days: 1
-          compression-level: 0
-          overwrite: true
-
-  app-acceptance-shard:
-    name: App acceptance shard ${{ matrix.shard }}/${{ strategy.job-total }}
-    needs: [changes, app-acceptance-build]
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
     permissions:
       actions: read
       contents: read
       pull-requests: read
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-    # No concurrency group: a shared one cancels unrelated waiting checks.
-    runs-on: ubuntu-24.04
-    # Planned heaviest shard 106s of a 1453s matrix in 14 shards (scenario-durations.json, CI receipts to 2026-11-16); the slowest 10-shard receipt took 199s at p90. 40m is slack.
-    timeout-minutes: 40
-    env:
-      ATTN_INSTANCE: app-acceptance
-      ATTN_HARNESS_INSTANCE: app-acceptance
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    uses: ./.github/workflows/app-acceptance-matrix.yml
+    with:
+      app: tauri
+      shards: '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]'
 
-      - name: Report runner class
-        run: ./scripts/ci-runner-class.sh
-
-      - name: Download the app tree
-        uses: actions/download-artifact@v4
-        with:
-          name: app-acceptance-tree
-          path: ${{ runner.temp }}
-
-      - name: Install the App acceptance tree
-        uses: ./.github/actions/install-app-acceptance
-        with:
-          instance: ${{ env.ATTN_INSTANCE }}
-          archive: ${{ runner.temp }}/app-tree.tar.gz
-
-      - name: Run serial matrix shard
-        id: matrix
-        continue-on-error: true
-        env:
-          ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
-        run: >-
-          xvfb-run -a -s '-noreset -screen 0 1600x1000x24'
-          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/${{ strategy.job-total }}
-
-      - name: Upload test receipts
-        if: always()
-        uses: ./.github/actions/upload-test-receipts
-        with:
-          name: app-acceptance-shard-${{ matrix.shard }}
-
-      - name: Collect daemon and worker logs
-        if: always()
-        env:
-          EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
-        run: |
-          data_dir="$(./attn instance resolve --field dataDir 2>/dev/null || true)"
-          mkdir -p "$EVIDENCE_DIR/daemon"
-          if [ -f "$data_dir/daemon.log" ]; then
-            cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon/daemon.log"
-          fi
-          if [ -d "$data_dir/workers" ]; then
-            find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
-          fi
-          if [ -d "$data_dir/pty-hosts" ]; then
-            find "$data_dir/pty-hosts" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
-          fi
-          ls "$EVIDENCE_DIR/daemon"
-          app_debug_dir="$(./attn instance resolve --field appLocalDataDir 2>/dev/null || true)/debug"
-          mkdir -p "$EVIDENCE_DIR/app"
-          for file in ui-automation-server.log ui-diagnostics.jsonl; do
-            if [ -f "$app_debug_dir/$file" ]; then
-              cp "$app_debug_dir/$file" "$EVIDENCE_DIR/app/"
-            fi
-          done
-          ls "$EVIDENCE_DIR/app"
-
-      - name: Upload app acceptance evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-acceptance-evidence-${{ github.run_attempt }}-shard-${{ matrix.shard }}
-          if-no-files-found: warn
-          path: |
-            ${{ runner.temp }}/attn-real-app-harness/matrix-digest.txt
-            ${{ runner.temp }}/attn-real-app-harness/**/*.txt
-            ${{ runner.temp }}/attn-real-app-harness/**/*.png
-            ${{ runner.temp }}/attn-real-app-harness/**/*.json
-            ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
-            ${{ runner.temp }}/attn-real-app-harness/**/native-*.log
-            ${{ runner.temp }}/attn-real-app-harness/**/fixture.log
-            ${{ runner.temp }}/attn-real-app-harness/**/other-fixture.log
-            ${{ runner.temp }}/attn-real-app-harness/**/*idle*.txt
-            ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
-            ${{ runner.temp }}/attn-real-app-harness/app/*
-
-      - name: Upload shard result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-acceptance-result-shard-${{ matrix.shard }}
-          if-no-files-found: error
-          path: ${{ runner.temp }}/attn-real-app-harness/last-matrix.json
-          overwrite: true
-
-      - name: Clean instance
-        if: always()
-        run: ./attn instance clean "$ATTN_INSTANCE"
-
-      - name: Report the shard verdict
-        if: always()
-        env:
-          MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
-        run: |
-          if [ "$MATRIX_OUTCOME" = success ]; then
-            exit 0
-          fi
-          echo "shard ${{ matrix.shard }}/${{ strategy.job-total }}: the serial matrix is $MATRIX_OUTCOME;" \
-            "the App acceptance job aggregates every shard's digest" >&2
-          exit 1
+  app-acceptance-native:
+    name: App acceptance (native)
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/app-acceptance-matrix.yml
+    with:
+      app: native
+      shards: '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]'
 
   app-acceptance:
     name: App acceptance
-    needs: [changes, app-acceptance-build, app-acceptance-shard]
-    # !cancelled() so a red shard still reaches the aggregate instead of skipping.
+    needs: [changes, app-acceptance-tauri, app-acceptance-native]
+    # !cancelled() so a red matrix still reaches the gate instead of skipping.
     if: >-
       !cancelled() &&
       (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true')
     permissions:
       actions: read
       contents: read
-      pull-requests: read
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -687,47 +554,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Set up Node.js
-        uses: ./.github/actions/setup-toolchains
-        with:
-          node: 'true'
-
-      - name: Download shard results
-        if: needs.app-acceptance-build.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          pattern: app-acceptance-result-shard-*
-          path: ${{ runner.temp }}/shard-results
-
-      - name: Aggregate the shard digests
-        id: matrix
-        if: needs.app-acceptance-build.result == 'success'
-        continue-on-error: true
-        run: >-
-          node app/scripts/real-app-harness/aggregate-shards.mjs
-          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 14
-          --out "$RUNNER_TEMP/matrix-digest.txt"
-
-      - name: Upload the aggregated digest
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-acceptance-digest-${{ github.run_attempt }}
-          if-no-files-found: warn
-          path: ${{ runner.temp }}/matrix-digest.txt
-
       - name: Gate app acceptance
-        if: always()
         env:
-          BUILD_RESULT: ${{ needs.app-acceptance-build.result }}
           EVENT_NAME: ${{ github.event_name }}
           HEAD_BRANCH: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
-          SHARD_RESULT: ${{ needs.app-acceptance-shard.result }}
+          TAURI_RESULT: ${{ needs.app-acceptance-tauri.result }}
+          NATIVE_RESULT: ${{ needs.app-acceptance-native.result }}
         run: |
-          if [ "$MATRIX_OUTCOME" = success ] && [ "$SHARD_RESULT" = success ]; then
-            echo "app acceptance: Linux serial matrix is green for $HEAD_SHA"
+          if [ "$TAURI_RESULT" = success ] && [ "$NATIVE_RESULT" = success ]; then
+            echo "app acceptance: the tauri and native Linux serial matrices are green for $HEAD_SHA"
             exit 0
           fi
           if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/release/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
@@ -737,18 +573,8 @@ jobs:
             echo "app acceptance: manual receipt covers $HEAD_SHA"
             exit 0
           fi
-          if [ "$BUILD_RESULT" != success ]; then
-            echo "app acceptance: the app tree failed to build for $HEAD_SHA ($BUILD_RESULT);" \
-              "no shard ran, so this is setup or build, not a scenario verdict" >&2
-          elif [ -z "$MATRIX_OUTCOME" ]; then
-            echo "app acceptance: the aggregate never ran for $HEAD_SHA;" \
-              "this is setup, not a scenario verdict" >&2
-          elif [ "$MATRIX_OUTCOME" = success ]; then
-            echo "app acceptance: every scenario passed for $HEAD_SHA, but a shard job ended" \
-              "$SHARD_RESULT; open the shard jobs, this is not a scenario verdict" >&2
-          else
-            echo "app acceptance: the aggregated Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
-          fi
+          echo "app acceptance: for $HEAD_SHA the tauri matrix is $TAURI_RESULT and the native matrix is" \
+            "$NATIVE_RESULT; each matrix's Matrix job says why" >&2
           exit 1
 
   release-preflight:
@@ -776,8 +602,8 @@ jobs:
       - rust
       - native
       - attn-cli
-      - app-acceptance-build
-      - app-acceptance-shard
+      - app-acceptance-tauri
+      - app-acceptance-native
       - app-acceptance
       - release-preflight
     permissions:
@@ -811,8 +637,8 @@ jobs:
       - rust
       - native
       - attn-cli
-      - app-acceptance-build
-      - app-acceptance-shard
+      - app-acceptance-tauri
+      - app-acceptance-native
       - app-acceptance
       - release-preflight
     permissions:

@@ -318,8 +318,8 @@ def ci_chains(run, jobs):
     named = lambda prefix: [job for job in jobs if job["name"] == prefix or job["name"].startswith(prefix + " (")]
     go_tests = named("Daemon")
     go_lint = named("Go vet and lint") or go_tests
-    shards = [job for job in jobs if job["name"].startswith("App acceptance shard ")]
-    build = next((job for job in jobs if job["name"] == "App acceptance build"), None)
+    shards = [job for job in jobs if job["name"].startswith("App acceptance (tauri) / App acceptance shard ")]
+    build = next((job for job in jobs if job["name"] == "App acceptance (tauri) / Build"), None)
     macos = named("App acceptance macOS")
     chain = [*go_tests, *go_lint, build, *macos, *shards]
     if not go_tests or not shards or not macos or any(job is None or job["conclusion"] != "success" for job in chain):
