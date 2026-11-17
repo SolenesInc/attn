@@ -99,7 +99,7 @@ fn header(logo: Option<&Image>, t: &Tokens) -> El {
                     text("attn")
                         .font(rune::TextStyle {
                             weight: 700.0,
-                            ..type_::TITLE
+                            ..type_::TITLE.mono()
                         })
                         .color(t.brand),
                 )
