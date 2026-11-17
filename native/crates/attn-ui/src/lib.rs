@@ -89,7 +89,7 @@ impl Appearance {
 }
 
 /// rune-kit's tokens, painted with `t`, for the kit's components. Each set of tokens' kit is
-/// made once, so there are at most two per color scheme: every button of every view reads it.
+/// made once: every button of every view reads it.
 pub fn kit(t: &Tokens) -> &'static rune_kit::Kit {
     static KITS: RwLock<Vec<(Tokens, &'static rune_kit::Kit)>> = RwLock::new(Vec::new());
     let made = |kits: &[(Tokens, &'static rune_kit::Kit)]| {

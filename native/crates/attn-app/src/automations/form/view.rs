@@ -153,6 +153,7 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
                 .label(word)
                 .checked(enabled)
                 .focusable(true)
+                .focus_ring(2.0, 2.0, t.brand)
                 .px(10.0)
                 .py(3.0)
                 .radius(999.0)
