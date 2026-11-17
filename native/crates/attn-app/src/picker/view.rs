@@ -29,11 +29,15 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
                         tx,
                     );
                 });
-            rune_kit::popover::raised(
-                attn_ui::kit(t),
-                frame.w_full().max_w(DIALOG_W).padding(space::S3),
-                8.0,
+            surface(
+                frame,
+                RADIUS,
+                t.border_subtle,
+                t,
+                &dialog_shadows(t, 20.0, 50.0, 0.8),
             )
+            .w_full()
+            .max_w(DIALOG_W)
         }
         Opened::Launcher(launcher) => crate::launcher::framed(state, launcher, t)
             .key("new-session")
@@ -80,13 +84,15 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
         );
     }
     let frame = match launching.shown_inline()? {
-        Opened::Classic(picker) => frame(state, picker, t)
-            .w_full()
-            .max_w(640.0)
-            .radius(8.0)
-            .fill(t.bg_panel)
-            .border(1.0, t.border_subtle)
-            .padding(space::S3),
+        Opened::Classic(picker) => surface(
+            frame(state, picker, t),
+            RADIUS,
+            t.border_subtle,
+            t,
+            &dialog_shadows(t, 20.0, 50.0, 0.45)[..2],
+        )
+        .w_full()
+        .max_w(DIALOG_W),
         Opened::Launcher(launcher) => crate::launcher::framed(state, launcher, t),
     };
     Some(
@@ -113,7 +119,6 @@ fn frame(state: &State, picker: &Picker, t: &Tokens) -> El {
         None => path_view(state, picker, t),
     };
     col()
-        .gap(space::S3)
         .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
             super::on_key(state, which, ev, tx)
         })
@@ -298,7 +303,8 @@ pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El
     }
 }
 
-/// The classic picker's harness toggle and YOLO switch.
+/// The classic picker's two bars, Tauri's `.picker-agent-bar` and `.picker-chief-bar`: each
+/// names its control at the left and holds it at the right edge.
 fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tokens) -> El {
     let w = which.key();
     let options = agent_options(state, choice, offer)
@@ -318,12 +324,7 @@ fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tok
             } else {
                 name
             };
-            agent_option(which, &option)
-                .gap(space::S2)
-                .px(12.0)
-                .py(6.0)
-                .radius(999.0)
-                .fill(if option.chosen { t.brand } else { t.bg_input })
+            pill(agent_option(which, &option), option.chosen, t)
                 .child(name)
                 .children(checking_mark(which, &option, t))
                 .children(option.key.as_ref().map(|k| {
@@ -336,48 +337,73 @@ fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tok
                 }))
         });
     let yolo = yolo(state, choice, offer);
+    let switch = pill(yolo_switch(which, &yolo), yolo.on, t)
+        .child(
+            text(if yolo.on { "On" } else { "Off" })
+                .font(OPTION_TYPE)
+                .color(if yolo.on {
+                    t.bg_app
+                } else if yolo.supported {
+                    t.text_tertiary
+                } else {
+                    t.text_muted
+                }),
+        )
+        .children(
+            yolo.supported
+                .then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", yolo.on, t)),
+        );
     col()
-        .gap(space::S2)
+        .w_full()
         .child(
-            row()
-                .key(format!("{w}.agents"))
-                .role("radiogroup")
-                .label("Session agent")
-                .gap(space::S2)
-                .items_center()
-                .child(section("SESSION AGENT", t))
-                .child(toggle(options, t))
-                .children(catalog_note(state, which, t)),
+            bar("SESSION AGENT", 0.02, t).child(
+                row()
+                    .key(format!("{w}.agents"))
+                    .role("radiogroup")
+                    .label("Session agent")
+                    .gap(space::S2)
+                    .items_center()
+                    .shrink()
+                    .children(catalog_note(state, which, t))
+                    .child(toggle(options, t)),
+            ),
         )
-        .child(
-            row()
-                .gap(space::S2)
-                .items_center()
-                .child(section("YOLO", t))
-                .child(
-                    yolo_switch(which, &yolo)
-                        .gap(space::S2)
-                        .px(12.0)
-                        .py(6.0)
-                        .radius(999.0)
-                        .fill(if yolo.on { t.brand } else { t.bg_input })
-                        .child(
-                            text(if yolo.on { "On" } else { "Off" })
-                                .font(OPTION_TYPE)
-                                .color(if yolo.on {
-                                    t.bg_app
-                                } else if yolo.supported {
-                                    t.text_tertiary
-                                } else {
-                                    t.text_muted
-                                }),
-                        )
-                        .children(
-                            yolo.supported
-                                .then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", yolo.on, t)),
-                        ),
-                ),
-        )
+        .child(bar("YOLO", 0.015, t).child(toggle([switch], t)))
+}
+
+/// A band of the classic picker: its label at the left, `wash` of white over the panel, a
+/// hairline under it.
+fn bar(label: &str, wash: f32, t: &Tokens) -> El {
+    row()
+        .w_full()
+        .items_center()
+        .justify_between()
+        .gap(space::S3)
+        .px(16.0)
+        .pt(10.0)
+        .pb(10.0 + HAIRLINE)
+        .fill(t.highlight.alpha(wash))
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+        .child(section(label, t))
+}
+
+/// Tauri's `.agent-option`: a pill in the toggle's track, the chosen one a brand gradient that
+/// glows under it.
+fn pill(option: El, chosen: bool, t: &Tokens) -> El {
+    let option = option.gap(space::S2).px(12.0).py(6.0).radius(999.0);
+    if chosen {
+        option
+            .fill(t.brand)
+            .gradient(t.brand, mix_srgb(t.brand, t.highlight, 0.15))
+            .box_shadow(rune::Shadow {
+                y: 6.0,
+                blur: 16.0,
+                color: t.brand.alpha(0.25),
+                ..rune::Shadow::default()
+            })
+    } else {
+        option
+    }
 }
 
 /// Tauri's agent toggle: a pill track holding the options.
@@ -388,7 +414,7 @@ fn toggle(options: impl IntoIterator<Item = El>, t: &Tokens) -> El {
         .shrink()
         .gap(4.0)
         .padding(3.0)
-        .radius(16.0)
+        .radius(999.0)
         .fill(t.bg_input)
         .border(1.0, t.border)
         .children(options)
@@ -436,12 +462,18 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
     let field = row()
         .w_full()
         .items_center()
+        .px(FIELD_PAD_X)
+        .py(12.0 + HAIRLINE)
+        .radius(4.0)
+        .fill(t.bg_input)
+        .border(1.0, t.border)
+        .focus_within_ring(1.0, -1.0, t.brand)
         .child(
             TextInput::new(&picker.input)
                 .key(field_key)
                 .plain()
-                .text_style(type_::BODY)
-                .height(type_::BODY.line_px())
+                .text_style(FIELD)
+                .height(FIELD.line_px())
                 .width(None)
                 .label("Path")
                 .placeholder("Type path (e.g., ~/projects) or search...")
@@ -454,38 +486,52 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
                 .grow(1.0),
         )
         .children(ghost.map(|g| {
-            text(g)
-                .key(format!("{w}.ghost"))
-                .font(type_::BODY)
-                .color(t.text_muted)
+            ghost_text(
+                format!("{w}.ghost"),
+                &picker.input.text,
+                g,
+                FIELD,
+                FIELD_PAD_X + PLAIN_INSET,
+                t.text_dimmed.alpha(0.7),
+            )
         }));
-    let mut out = vec![
-        text(title.to_uppercase())
-            .key(format!("{w}.title"))
-            .role("heading")
-            .label(title.clone())
-            .font(TITLE)
-            .color(t.brand)
-            .single_line()
-            .truncate()
-            .w_full()
-            .help_when_truncated(title),
-        field,
-    ];
+    let mut header = col()
+        .w_full()
+        .px(16.0)
+        .pt(16.0)
+        .pb(12.0 + HAIRLINE)
+        .fill(t.highlight.alpha(0.01))
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+        .child(
+            text(title.to_uppercase())
+                .key(format!("{w}.title"))
+                .role("heading")
+                .label(title.clone())
+                .font(TITLE)
+                .color(t.brand)
+                .single_line()
+                .truncate()
+                .w_full()
+                .help_when_truncated(title)
+                .mb(12.0),
+        )
+        .child(field);
     if let Some(dir) = &picker.browsing {
-        out.push(
+        header = header.child(
             text(format!("Browsing: {dir}"))
                 .key(format!("{w}.browsing"))
                 .font(type_::LABEL)
-                .color(t.text_tertiary),
+                .color(t.text_tertiary)
+                .pt(8.0),
         );
     }
     if let Some((operation, path)) = &picker.operation {
-        out.push(
+        header = header.child(
             row()
                 .key(format!("{w}.operation"))
                 .role("status")
                 .label(operation.label())
+                .mt(10.0)
                 .gap(space::S1)
                 .child(
                     text(operation.label())
@@ -496,13 +542,14 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
         );
     }
     if let Some(error) = &picker.error {
-        out.push(
+        header = header.child(
             text(error.clone())
                 .key(format!("{w}.error"))
                 .role("alert")
                 .label(error.clone())
                 .font(type_::BODY)
-                .color(t.error),
+                .color(t.error)
+                .mt(10.0),
         );
     }
     let recents: Vec<El> = rows
@@ -523,11 +570,14 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
         } else {
             "No matches. Press Enter to use path directly."
         };
-        text(message)
-            .key(format!("{w}.empty"))
-            .label(message)
-            .font(type_::BODY)
-            .color(t.text_tertiary)
+        row().w_full().justify_center().px(20.0).py(48.0).child(
+            text(message)
+                .key(format!("{w}.empty"))
+                .label(message)
+                .font(FIELD)
+                .color(t.text_dimmed)
+                .wrap(),
+        )
     });
     let group = |name: &str, title: &str, rows: Vec<El>| {
         (!rows.is_empty()).then(|| {
@@ -536,54 +586,48 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
                 .role("group")
                 .label(name)
                 .gap(2.0)
-                .child(section(title, t))
+                .mb(4.0)
+                .child(section(title, t).px(10.0).pt(10.0).pb(6.0))
                 .children(rows)
         })
     };
-    out.push(
+    let mut hints = vec![
+        ("↑↓", "navigate"),
+        ("Tab", "autocomplete"),
+        ("Enter", "select"),
+    ];
+    if which == Which::Dialog {
+        hints.push(("Esc", "cancel"));
+    }
+    vec![
+        header,
         col()
             .key(format!("{w}.locations"))
             .role("listbox")
             .label("Locations")
             .w_full()
-            .max_h(360.0)
+            .max_h(340.0)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
-            .gap(space::S2)
+            .padding(8.0)
             .children(group("Recent", "RECENT", recents))
             .children(group("Directories", "DIRECTORIES", directories))
             .children(empty),
-    );
-    out.push(footer(
-        &[
-            ("↑↓", "navigate"),
-            ("Tab", "autocomplete"),
-            ("Enter", "select"),
-            ("Esc", "cancel"),
-        ],
-        t,
-    ));
-    out
+        footer(w, &hints, t),
+    ]
 }
 
 fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Tokens) -> El {
     let which = picker.which;
     let highlighted = picker.highlight.is_some_and(|h| h.index == i);
     let path = r.path.clone();
-    let mut option = col()
+    let option = col()
         .key(format!("{}.row.{i}", which.key()))
         .role("option")
         .label(r.name.clone())
-        .focus_selected(highlighted)
-        .w_full()
-        .padding(space::S1)
-        .radius(4.0)
-        .fill(if highlighted {
-            t.bg_selected
-        } else {
-            t.bg_elevated
-        })
+        .focus_selected(highlighted);
+    let mut option = item(option, highlighted, t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::open_path(state, which, &path, tx)
         })
@@ -596,7 +640,8 @@ fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Toke
                     } else {
                         glyph::FOLDER
                     })
-                    .font(type_::BODY),
+                    .font(type_::BODY)
+                    .color(t.text_tertiary),
                 )
                 .child(text(r.name.clone()).font(type_::BODY).color(t.text_primary)),
         );
@@ -608,6 +653,24 @@ fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Toke
         );
     }
     option
+}
+
+/// Tauri's `.picker-item`: a bare row that a faint wash marks under the pointer, and a brand
+/// tint and edge while it is highlighted.
+fn item(option: El, highlighted: bool, t: &Tokens) -> El {
+    let option = option.w_full().px(12.0).py(10.0).radius(4.0).border(
+        1.0,
+        if highlighted {
+            t.brand.alpha(0.2)
+        } else {
+            rune::Color::TRANSPARENT
+        },
+    );
+    if highlighted {
+        option.fill(t.brand.alpha(0.08))
+    } else {
+        option.hover(t.highlight.alpha(0.03))
+    }
 }
 
 fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
@@ -629,20 +692,13 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
             d.branch.clone()
         };
         let detail = repo::row_detail(chooser, d, now);
-        col()
+        let option = col()
             .key(format!("{w}.repo.row.{i}"))
             .role("option")
             .label(name.clone())
             .description(detail.clone())
-            .focus_selected(committed)
-            .w_full()
-            .padding(space::S1)
-            .radius(4.0)
-            .fill(if committed {
-                t.bg_selected
-            } else {
-                t.bg_elevated
-            })
+            .focus_selected(committed);
+        item(option, committed, t)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| repo::activate(state, which, i, tx))
             .child(match prompt {
                 Some(prompt) => prompt,
@@ -654,7 +710,8 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                         } else {
                             glyph::CIRCLE_DOT
                         })
-                        .font(type_::BODY),
+                        .font(type_::BODY)
+                        .color(t.text_tertiary),
                     )
                     .child(text(name).font(type_::BODY).color(t.text_primary).grow(1.0))
                     .child(
@@ -790,6 +847,8 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
             .role("group")
             .label("Repository options")
             .focusable(true)
+            .w_full()
+            .padding(16.0)
             .gap(space::S2)
             .children(refreshing)
             .child(section("NEW WORKTREE", t))
@@ -803,7 +862,7 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                     .gap(2.0)
                     .children(rows),
             ),
-        footer(&hints, t),
+        footer(w, &hints, t),
     ]
 }
 
@@ -1014,16 +1073,16 @@ fn section(title: &str, t: &Tokens) -> El {
 
 /// Tauri's `.picker-footer`: a darker band across the frame's foot, under a hairline, each
 /// hint a keycap and its word.
-fn footer(hints: &[(&str, &str)], t: &Tokens) -> El {
+fn footer(w: &str, hints: &[(&str, &str)], t: &Tokens) -> El {
     row()
-        .mx(-space::S3)
-        .mb(-space::S3)
+        .key(format!("{w}.hints"))
+        .w_full()
         .px(16.0)
-        .py(10.0)
+        .pt(10.0 + HAIRLINE)
+        .pb(10.0)
         .gap(20.0)
         .items_center()
         .flex_wrap()
-        .corners([0.0, 0.0, 8.0, 8.0])
         .fill(t.shadow.alpha(0.3))
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
         .children(hints.iter().map(|&(key, word)| {
@@ -1144,6 +1203,94 @@ fn link(
         .h(font.line_px())
         .px(0.0)
 }
+
+/// A launcher's panel, Tauri's `.location-picker`: the app's background inside an `edge`,
+/// floating on `shadows`. The shadows sit on an outer box, since the clip that rounds the bands'
+/// corners would cut them off. A border takes no room here, where CSS gives it its width, so
+/// the bands start a point in.
+pub(crate) fn surface(
+    frame: El,
+    radius: f32,
+    edge: rune::Color,
+    t: &Tokens,
+    shadows: &[rune::Shadow],
+) -> El {
+    shadows.iter().fold(
+        col().radius(radius).child(
+            frame
+                .w_full()
+                .padding(1.0)
+                .radius(radius)
+                .fill(t.bg_app)
+                .border(1.0, edge)
+                .clip_rounded(radius),
+        ),
+        |surface, shadow| surface.box_shadow(*shadow),
+    )
+}
+
+/// Tauri's launcher shadows: a faint white ring, a drop of `y` and `blur` at `alpha` black, and
+/// a wide brand glow.
+pub(crate) fn dialog_shadows(t: &Tokens, y: f32, blur: f32, alpha: f32) -> [rune::Shadow; 3] {
+    [
+        rune::Shadow {
+            spread: 1.0,
+            color: t.highlight.alpha(0.03),
+            ..rune::Shadow::default()
+        },
+        rune::Shadow {
+            y,
+            blur,
+            color: t.shadow.alpha(alpha),
+            ..rune::Shadow::default()
+        },
+        rune::Shadow {
+            blur: 100.0,
+            color: t.brand.alpha(0.03),
+            ..rune::Shadow::default()
+        },
+    ]
+}
+
+/// Tauri's `.path-ghost`: the rest of a completion, set right after the text typed into a
+/// field whose text starts `inset` points in.
+pub(crate) fn ghost_text(
+    key: String,
+    typed: &str,
+    rest: String,
+    font: TextStyle,
+    inset: f32,
+    ink: rune::Color,
+) -> El {
+    row()
+        .pin(
+            Some(inset + rune::text::advance(typed, font)),
+            Some(0.0),
+            Some(0.0),
+            Some(0.0),
+        )
+        .items_center()
+        .clip_rounded(0.0)
+        .child(
+            text(rest.clone())
+                .key(key)
+                .label(rest)
+                .font(font)
+                .color(ink)
+                .single_line(),
+        )
+}
+
+/// The width of a band's dividing line, which sits inside the band where CSS adds it outside.
+pub(crate) const HAIRLINE: f32 = 1.0;
+
+/// How far a plain `TextInput` sets its text in from its own edge.
+pub(crate) const PLAIN_INSET: f32 = 2.0;
+
+const FIELD: TextStyle = type_::BODY.mono();
+/// `.path-input`'s 14 points and its border, less the plain field's own inset.
+const FIELD_PAD_X: f32 = 14.0 + HAIRLINE - PLAIN_INSET;
+const RADIUS: f32 = 8.0;
 
 pub(crate) const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();
 

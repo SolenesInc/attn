@@ -2237,3 +2237,72 @@ fn a_new_agent_lands_beside_the_tile_shown_alone_while_another_window_selects_an
     assert_eq!(spawned[0]["placement"]["anchor_pane_id"], "p1");
     assert_eq!(spawned[0]["spawned_from"], "s-p1");
 }
+
+fn hints(world: &World, which: &str) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::key(format!("{which}.hints")))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+#[test]
+fn only_the_dialog_offers_escape_since_an_empty_desktop_has_nothing_to_cancel() {
+    let mut world = empty_desktop();
+    assert_eq!(
+        hints(&world, "launcher"),
+        ["↑↓ navigate", "Tab autocomplete", "Enter select"]
+    );
+    rest(&mut world);
+
+    let mut world = busy_desktop(&[]);
+    open_dialog(&mut world);
+    assert_eq!(
+        hints(&world, "new-session"),
+        [
+            "↑↓ navigate",
+            "Tab autocomplete",
+            "Enter select",
+            "Esc cancel"
+        ]
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn the_ghost_completion_follows_the_typed_text() {
+    let mut world = busy_desktop(&[]);
+    world
+        .daemon
+        .on("browse_directory", |_| listing("/srv/", &["alpha"]));
+    open_dialog(&mut world);
+    let field = world
+        .screen()
+        .bounds(Target::key("new-session.path.field"))
+        .expect("the field shows");
+    let ghost_x = |world: &World| {
+        world
+            .screen()
+            .bounds(Target::key("new-session.ghost"))
+            .expect("the ghost shows")[0]
+            - field[0]
+    };
+
+    type_path(&mut world, "/srv/a");
+    let after_six = ghost_x(&world);
+    world.gesture(|app| app.type_text("l"));
+    world.advance(Duration::from_millis(200));
+    let after_seven = ghost_x(&world);
+
+    assert!(
+        after_six > 0.0 && after_six < field[2] / 4.0,
+        "the ghost starts right after six typed characters, {after_six} points into a {} point field",
+        field[2]
+    );
+    assert!(
+        after_seven > after_six,
+        "one more typed character moves the ghost on: {after_six} then {after_seven}"
+    );
+    rest(&mut world);
+}

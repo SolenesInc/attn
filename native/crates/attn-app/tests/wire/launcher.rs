@@ -923,6 +923,17 @@ fn on_empty_desktop(settings: &[(String, String)]) -> World {
     world
 }
 
+/// What the empty desktop's launcher hints: the classic picker selects, Launcher 2.0 starts.
+fn inline_hints(world: &World) -> String {
+    world
+        .screen()
+        .descendants(Target::key("launcher.hints"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
 fn launcher_focused(world: &World) -> bool {
     world
         .screen()
@@ -933,7 +944,7 @@ fn launcher_focused(world: &World) -> bool {
 #[test]
 fn the_empty_desktops_launcher_follows_the_setting_keeps_the_keyboard_and_never_goes_on_escape() {
     let mut world = on_empty_desktop(&[("new_session_agent".to_owned(), "claude".to_owned())]);
-    assert!(world.screen().find(Target::key("launcher.hints")).is_none());
+    assert!(inline_hints(&world).contains("Enter select"));
     world.daemon.emit(SettingsUpdatedMessage {
         settings: Some(BTreeMap::from([(
             LAUNCHER.0.to_owned(),
@@ -942,7 +953,7 @@ fn the_empty_desktops_launcher_follows_the_setting_keeps_the_keyboard_and_never_
         ..SettingsUpdatedMessage::new()
     });
     world.settle();
-    assert!(world.screen().find(Target::key("launcher.hints")).is_some());
+    assert!(inline_hints(&world).contains("Enter start"));
 
     type_path(&mut world, "launcher", REPO);
     press(&mut world, Key::Tab);
@@ -1040,5 +1051,42 @@ fn a_start_under_way_finishes_though_a_tab_answered_after_it() {
 
     assert_eq!(launched(&world), [("/srv/shop".into(), "claude".into())]);
     assert!(!dialog_open(&world));
+    rest(&mut world);
+}
+
+#[test]
+fn the_ghost_completion_follows_the_typed_text() {
+    let mut world = open("main_repo");
+    let field = world
+        .screen()
+        .bounds(Target::key("new-session.path.field"))
+        .expect("the field shows");
+    let ghost = |world: &World| {
+        let node = world.screen().get(Target::key("new-session.ghost"));
+        let x = world
+            .screen()
+            .bounds(Target::key("new-session.ghost"))
+            .expect("the ghost shows")[0];
+        (node.name.unwrap_or_default(), x - field[0])
+    };
+
+    type_path(&mut world, "new-session", "~/projects/s");
+    world.advance(Duration::from_millis(200));
+    let (shown, after_s) = ghost(&world);
+    assert_eq!(shown, "hop/");
+    letter(&mut world, "h");
+    world.advance(Duration::from_millis(200));
+    let (shown, after_sh) = ghost(&world);
+    assert_eq!(shown, "op/");
+
+    assert!(
+        after_s > 0.0 && after_s < field[2] / 4.0,
+        "the ghost starts right after the typed path, {after_s} points into a {} point field",
+        field[2]
+    );
+    assert!(
+        after_sh > after_s,
+        "one more typed character moves the ghost on: {after_s} then {after_sh}"
+    );
     rest(&mut world);
 }

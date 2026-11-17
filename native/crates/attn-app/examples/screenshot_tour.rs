@@ -13,20 +13,22 @@ use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionResultMessage,
     AutomationDefinitionSummary, AutomationDefinitionsResultMessage, AutomationProvenance,
     AutomationRunSummary, AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
-    BusConsumerStatus, BusStatusResultMessage, CreateWorktreeResultMessage, CrewCharterDocument,
-    CrewCharterGetResultMessage, CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
+    BrowseDirectoryResultMessage, BusConsumerStatus, BusStatusResultMessage,
+    CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
+    CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
-    DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
-    HarnessModel, HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
-    LaunchDesktopResultMessage, LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView,
-    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RecentLocation,
-    RecentLocationsResultMessage, RecordCommandUsageResultMessage, RepoInfo, ReviewBundle,
-    ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
-    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
-    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
-    WorktreeListResult, WorktreeListResultEvent,
+    DesktopTileContentMessage, DirectoryEntry, GetCommandUsageResultMessage,
+    GetRepoInfoResultMessage, Harness, HarnessModel, HarnessModelsResultMessage,
+    InitialStateMessage, InspectPathResultMessage, LaunchDesktopResultMessage,
+    LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView, PathInspection, PhoneLink,
+    PhonesUpdatedMessage, Profile, RecentLocation, RecentLocationsResultMessage,
+    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow,
+    ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
+    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
+    SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree, WorktreeListResult,
+    WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -852,6 +854,23 @@ fn launcher_daemon_with(dark: bool, empty: bool, launcher_2: bool) -> Daemon {
                 ..RecentLocationsResultMessage::new()
             })
         })
+        .on("browse_directory", |_: &Request| {
+            message(BrowseDirectoryResultMessage {
+                success: true,
+                directory: "/home/me/projects".into(),
+                home_path: Some("/home/me".into()),
+                entries: ["shop", "site"]
+                    .iter()
+                    .map(|name| DirectoryEntry {
+                        name: (*name).into(),
+                        path: format!("/home/me/projects/{name}"),
+                        is_dir: true,
+                        is_repo: Some(*name == "shop"),
+                    })
+                    .collect(),
+                ..BrowseDirectoryResultMessage::new()
+            })
+        })
         .on("get_repo_info", |_: &Request| {
             message(GetRepoInfoResultMessage {
                 success: true,
@@ -894,11 +913,27 @@ fn launcher_where(dark: bool) {
     snap(&mut world, "launcher-where", dark);
 }
 
+/// Launcher 2.0 browsing the projects folder, with the rest of its first folder ghosted after
+/// what was typed.
+fn launcher_browse(dark: bool) {
+    let mut world = start(launcher_daemon(dark, false));
+    press(&mut world, Action::SessionNew);
+    world.gesture(|app| app.type_text("~/projects/s"));
+    world.advance(std::time::Duration::from_millis(200));
+    snap(&mut world, "launcher-browse", dark);
+}
+
 /// The classic new-session picker, Launcher 2.0 off: its harness toggle and its key footer.
 fn picker_dialog(dark: bool) {
     let mut world = start(launcher_daemon_with(dark, false, false));
     press(&mut world, Action::SessionNew);
     snap(&mut world, "picker-dialog", dark);
+}
+
+/// The classic picker an empty desktop shows in place of its tiles: no Esc hint.
+fn picker_empty_desktop(dark: bool) {
+    let mut world = start(launcher_daemon_with(dark, true, false));
+    snap(&mut world, "picker-empty-desktop", dark);
 }
 
 fn shortcuts(dark: bool) {
@@ -2614,9 +2649,11 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         launcher_dialog(dark);
         launcher_where(dark);
         launcher_empty_desktop(dark);
+        launcher_browse(dark);
         automation_hour(dark);
         automation_time_zones(dark);
         picker_dialog(dark);
+        picker_empty_desktop(dark);
         shortcuts(dark);
         agent_palette(dark);
         profile_switcher(dark);

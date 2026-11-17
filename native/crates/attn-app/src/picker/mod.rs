@@ -20,8 +20,9 @@ pub(crate) use agents::{Agents, TERMINAL};
 pub(crate) use paths::display as display_path;
 pub(crate) use repo::{Memory, remember, remembered};
 pub(crate) use view::{
-    DIALOG_W, agent_option, agent_options, catalog_note, checking_mark, desktop_label, dialog,
-    inline, worktree_setup, yolo, yolo_switch,
+    DIALOG_W, HAIRLINE, PLAIN_INSET, agent_option, agent_options, catalog_note, checking_mark,
+    desktop_label, dialog, dialog_shadows, ghost_text, inline, surface, worktree_setup, yolo,
+    yolo_switch,
 };
 
 /// How long typing settles before the picker browses the typed folder, as in the Tauri app.

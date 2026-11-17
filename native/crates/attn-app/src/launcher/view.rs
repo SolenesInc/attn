@@ -9,11 +9,12 @@ use super::{
 };
 use crate::State;
 use crate::picker::{
-    DIALOG_W, TERMINAL, Which, agent_option, agent_options, catalog_note, checking_mark,
-    desktop_label, paths, yolo, yolo_switch,
+    DIALOG_W, HAIRLINE, PLAIN_INSET, TERMINAL, Which, agent_option, agent_options, catalog_note,
+    checking_mark, desktop_label, dialog_shadows, ghost_text, paths, surface, yolo, yolo_switch,
 };
 
-const TITLE: TextStyle = TextStyle::new(10.0, 500.0).mono().tracking(1.5);
+/// `.new-session-launcher .picker-title`, 11 points a line as the Tauri app sets it.
+const TITLE: TextStyle = TextStyle::new(10.0, 500.0).mono().tracking(1.5).lh(11.0);
 const FIELD: TextStyle = TextStyle::new(14.0, 400.0).mono();
 const CHIP: TextStyle = TextStyle::new(12.0, 400.0).mono();
 const SECTION: TextStyle = TextStyle::new(10.0, 600.0).mono().tracking(1.2);
@@ -31,6 +32,12 @@ const HINT: TextStyle = TextStyle::new(11.5, 400.0);
 const MESSAGE: TextStyle = TextStyle::new(12.5, 400.0);
 const STATUS: TextStyle = TextStyle::new(11.0, 400.0).mono();
 const ICON_SIZE: f32 = 14.0;
+const FIELD_PAD_X: f32 = 12.0;
+/// A harness option's height, which makes the toggle group `.launcher-controls .agent-toggle`'s
+/// 28 points with its padding: its border takes no room.
+const OPTION_H: f32 = 24.0;
+/// The height of a hint's keycap, `.new-session-launcher .picker-footer kbd`.
+const CAP_H: f32 = 16.0;
 const RADIUS: f32 = 10.0;
 
 /// The launcher's own shades of the color scheme, as Tauri's `--launcher-*` variables mix them.
@@ -135,12 +142,20 @@ fn combo(spec: &str) -> String {
 /// Launcher 2.0 in the box the dialog and the empty desktop show it in.
 pub(crate) fn framed(state: &State, launcher: &Launcher, t: &Tokens) -> El {
     let look = Look::of(t);
-    rune_kit::popover::raised(attn_ui::kit(t), frame(state, launcher, t, &look), RADIUS)
-        .w_full()
-        .max_w(DIALOG_W)
-        .fill(t.bg_app)
-        .border(1.0, look.frame)
-        .clip_rounded(RADIUS)
+    let shadows = dialog_shadows(t, 24.0, 60.0, 0.72);
+    let shadows = match launcher.which {
+        Which::Dialog => &shadows[..],
+        Which::Inline => &dialog_shadows(t, 20.0, 50.0, 0.45)[..2],
+    };
+    surface(
+        frame(state, launcher, t, &look),
+        RADIUS,
+        look.frame,
+        t,
+        shadows,
+    )
+    .w_full()
+    .max_w(DIALOG_W)
 }
 
 fn frame(state: &State, launcher: &Launcher, t: &Tokens, look: &Look) -> El {
@@ -208,7 +223,7 @@ fn controls(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look
             agent_option(which, &option)
                 .gap(7.0)
                 .px(10.0)
-                .py(4.0)
+                .h(OPTION_H)
                 .radius(6.0)
                 .fill(if option.chosen {
                     look.accent
@@ -279,7 +294,8 @@ fn controls(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look
         .flex_wrap()
         .gaps(8.0, 14.0)
         .px(16.0)
-        .py(10.0)
+        .pt(10.0)
+        .pb(10.0 + HAIRLINE)
         .fill(t.highlight.alpha(0.015))
         .border_sides([0.0, 0.0, 1.0, 0.0], look.hairline)
         .child(agents)
@@ -376,7 +392,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
     let field = row()
         .w_full()
         .h(44.0)
-        .px(12.0)
+        .px(FIELD_PAD_X)
         .items_center()
         .gap(8.0)
         .radius(8.0)
@@ -386,11 +402,14 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
         .children(chip)
         .child(input.build(attn_ui::kit(t)).grow(1.0))
         .children(ghost.map(|g| {
-            text(g.clone())
-                .key(format!("{w}.ghost"))
-                .label(g)
-                .font(FIELD)
-                .color(t.text_muted)
+            ghost_text(
+                format!("{w}.ghost"),
+                &launcher.query.text,
+                g,
+                FIELD,
+                FIELD_PAD_X + PLAIN_INSET,
+                t.text_muted,
+            )
         }));
     let address = launcher.address(state);
     let status = launcher
@@ -402,7 +421,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
         .w_full()
         .px(16.0)
         .pt(14.0)
-        .pb(12.0)
+        .pb(12.0 + HAIRLINE)
         .border_sides([0.0, 0.0, 1.0, 0.0], look.hairline)
         .child(
             text(title.clone())
@@ -1005,7 +1024,8 @@ fn hints(state: &State, launcher: &Launcher, terminal: bool, look: &Look) -> El 
         .flex_wrap()
         .gaps(6.0, 16.0)
         .px(16.0)
-        .py(9.0)
+        .pt(9.0 + HAIRLINE)
+        .pb(10.0)
         .fill(look.footer)
         .border_sides([1.0, 0.0, 0.0, 0.0], look.hairline)
         .children(hints.into_iter().map(|pieces| hint(pieces, look)))
@@ -1027,14 +1047,14 @@ fn hint(pieces: Vec<Piece>, look: &Look) -> El {
         .gap(5.0)
         .children(pieces.into_iter().map(|piece| {
             match piece {
-                Piece::Key(key) => text(key)
-                    .font(CAP)
-                    .color(look.text_quiet)
+                Piece::Key(key) => row()
+                    .h(CAP_H)
                     .px(5.0)
-                    .py(1.0)
+                    .items_center()
                     .radius(4.0)
                     .fill(look.bg_tile)
                     .border_sides([1.0, 1.0, 2.0, 1.0], look.border_input)
+                    .child(text(key).font(CAP).color(look.text_quiet))
                     .a11y_hidden(),
                 Piece::Words(words) => text(words).font(HINT).color(look.text_faint).a11y_hidden(),
             }

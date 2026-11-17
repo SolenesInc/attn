@@ -92,8 +92,9 @@ close-desktop dialog, the diagnostic report, the command and agent palettes, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
 notebook empty, with a folder opened in its tree, with a note open, with its
 finder over the note and with a note that links to a missing one, an editor tile
-empty, with that note open and with its finder over it, a popped-out tile window, the classic new-session picker, Launcher 2.0
-in its dialog, its Where list and on an empty desktop, the automations drawer empty,
+empty, with that note open and with its finder over it, a popped-out tile window, the classic new-session picker in its
+dialog and on an empty desktop, Launcher 2.0 in its dialog, browsing a folder with a completion
+ghosted, its Where list and on an empty desktop, the automations drawer empty,
 listing two automations and with one selected over its runs, a new automation's form on
 its schedule, on a pull request trigger and with Advanced open, an automation's edit form,
 the form's hour picker and suggested time zones, each with a row reached by an arrow key, Home
