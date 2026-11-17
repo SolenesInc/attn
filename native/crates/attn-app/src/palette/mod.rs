@@ -155,7 +155,7 @@ pub(crate) enum Look {
     Command {
         icon: Option<Icon>,
         description: Option<String>,
-        shortcut: Option<String>,
+        shortcut: Option<Vec<String>>,
     },
     Agent {
         agent: Box<AgentRow>,
@@ -625,6 +625,13 @@ pub(crate) fn open_peeked(state: &mut State, key: &str, tx: &mut Tx) {
 /// The keys bound to `action`, as the user reads them.
 pub(crate) fn label_of(state: &State, action: &Action) -> Option<String> {
     state.keymap.binding(action).map(|b| state.keymap.label(b))
+}
+
+fn keycaps_of(state: &State, action: &Action) -> Option<Vec<String>> {
+    state
+        .keymap
+        .binding(action)
+        .map(|b| state.keymap.keycaps(b))
 }
 
 /// The palette's badge: the keys that open what it shows.

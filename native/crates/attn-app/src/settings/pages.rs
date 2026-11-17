@@ -4,6 +4,7 @@ use std::cell::RefCell;
 
 use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
@@ -379,11 +380,9 @@ pub(super) fn feature_lines(state: &State, key: &str, t: &Tokens) -> Vec<El> {
     let shortcut = (key == "asks_enabled")
         .then(|| state.keymap.binding(&crate::Action::DockAsks))
         .flatten()
-        .map(|binding| format!("Open it with {}.", state.keymap.label(binding)));
-    let note: Vec<&str> = shortcut
-        .as_deref()
+        .map(|binding| state.keymap.label(binding));
+    let rest: Vec<&str> = [feature.note, feature.timing]
         .into_iter()
-        .chain([feature.note, feature.timing])
         .filter(|s| !s.is_empty())
         .collect();
     let mut lines = vec![
@@ -392,14 +391,34 @@ pub(super) fn feature_lines(state: &State, key: &str, t: &Tokens) -> Vec<El> {
             .color(t.text_secondary)
             .wrap(),
     ];
-    if !note.is_empty() {
-        lines.push(
-            text(note.join(" "))
-                .key(format!("settings.feature-note.{key}"))
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .wrap(),
-        );
+    let words = |s: String| text(s).font(CAPTION).color(t.text_tertiary);
+    let key = format!("settings.feature-note.{key}");
+    match shortcut {
+        Some(chord) => {
+            let sentence = format!("Open it with {chord}.");
+            let said = [sentence.as_str()]
+                .into_iter()
+                .chain(rest.iter().copied())
+                .collect::<Vec<_>>()
+                .join(" ");
+            lines.push(
+                row()
+                    .key(key)
+                    .label(said)
+                    .flex_wrap()
+                    .items_center()
+                    .gaps(2.0, 4.0)
+                    .child(words("Open it with".into()).a11y_hidden())
+                    .child(keycap::Keys::ledged(&[chord]).build(t).a11y_hidden())
+                    .child(words(".".into()).ml(-4.0).a11y_hidden())
+                    .children(
+                        (!rest.is_empty())
+                            .then(|| words(rest.join(" ")).wrap().shrink().a11y_hidden()),
+                    ),
+            );
+        }
+        None if !rest.is_empty() => lines.push(words(rest.join(" ")).key(key).wrap()),
+        None => {}
     }
     lines
 }

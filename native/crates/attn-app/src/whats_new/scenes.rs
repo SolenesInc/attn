@@ -436,7 +436,7 @@ impl Paint<'_> {
 }
 
 /// `scene` as it rests, with `press` drawn as the keys that made it happen.
-pub(super) fn scene(scene: Scene, press: Option<String>, t: &Tokens) -> El {
+pub(super) fn scene(scene: Scene, press: Option<super::Combos>, t: &Tokens) -> El {
     let mut paint = Paint { t, out: Vec::new() };
     paint.rect(8.0, 8.0, 504.0, 234.0, 10.0, t.bg_app, Some(t.border));
     for cx in [22.0, 34.0, 46.0] {
@@ -446,19 +446,14 @@ pub(super) fn scene(scene: Scene, press: Option<String>, t: &Tokens) -> El {
     let press = press.map(|keys| {
         rune::el()
             .key("whats-new.scene.press")
-            .label(keys.clone())
+            .label(keys.said.clone())
             .pin(None, None, Some(14.0), Some(12.0))
             .px(10.0)
             .py(6.0)
             .radius(9.0)
             .fill(t.bg_elevated)
             .border(1.0, t.border)
-            .child(
-                text(keys)
-                    .font(attn_ui::type_::MONO_CAPTION)
-                    .color(t.text_primary)
-                    .a11y_hidden(),
-            )
+            .child(super::keycaps(&keys, t).a11y_hidden())
     });
     rune::el()
         .key("whats-new.scene")

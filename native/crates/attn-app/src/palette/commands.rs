@@ -792,7 +792,7 @@ pub(crate) fn ranked(state: &State, query: &str, history: &[CommandUsage]) -> Ve
             look: Look::Command {
                 icon: icon_of(&c.id),
                 description: c.description,
-                shortcut: super::label_of(state, c.shortcut.as_ref().unwrap_or(&c.action)),
+                shortcut: super::keycaps_of(state, c.shortcut.as_ref().unwrap_or(&c.action)),
             },
             label: c.title,
             pick: Some(Pick::Command {

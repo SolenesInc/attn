@@ -15,6 +15,7 @@ use crate::settings::{EffortMode, Route, RouteHarness, Rules};
 
 pub(crate) const POP: &str = "chief-setup";
 const PRIMARY: &str = "chief-setup.primary";
+const ESC_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
 const RECHECK: &str = "chief-setup.recheck";
 
 /// The setup while it shows: the route it would save, the folder the user chose, and the
@@ -587,6 +588,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         format!("{}'s harness", view.name)
     };
     let k = attn_ui::kit(t);
+    let dimmed = t.text_dimmed;
     let head = row()
         .items_center()
         .gap(space::S2)
@@ -603,9 +605,12 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .variant(ButtonVariant::GhostMuted)
                 .control_size(ControlSize::Small)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::dismiss(state, true, tx))
+                .label_with(move |_, _| text("esc").font(ESC_TYPE).color(dimmed))
                 .build(k)
                 .key(format!("{POP}.close"))
-                .label("Close Chief setup"),
+                .label("Close Chief setup")
+                .px(0.0)
+                .h(ESC_TYPE.line_px()),
         );
     let mut body = col().gap(space::S3);
     if form.checking {

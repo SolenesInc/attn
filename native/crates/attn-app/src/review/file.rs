@@ -8,7 +8,7 @@ use attn_protocol::{ReviewFileMessage, ReviewFileResultMessage, ReviewNote, Revi
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::{radius, space};
-use rune::{Color, El, GrowthSpec, Live, ScrollPos, ScrollSpec, Tx, col, row, text};
+use rune::{Color, El, GrowthSpec, Live, ScrollPos, ScrollSpec, TextStyle, Tx, col, row, text};
 
 use super::stop::{Colors, code_row};
 use crate::State;
@@ -239,19 +239,24 @@ pub(super) fn view(
     (colors, asking): (Option<Rc<Colors>>, &super::stop::Asking),
     t: &Tokens,
 ) -> El {
-    let back = text(if depth > 1 {
-        "← back ⌃o"
-    } else {
-        "← back"
-    })
-    .font(type_::LABEL)
-    .color(if depth > 1 {
-        t.text_secondary
-    } else {
-        t.text_tertiary
-    })
-    .role("button")
-    .key(format!("{prefix}.view.back"));
+    let can_go_back = depth > 1;
+    let back = row()
+        .role("button")
+        .label(if can_go_back {
+            "← back ⌃o"
+        } else {
+            "← back"
+        })
+        .key(format!("{prefix}.view.back"))
+        .gap(4.0)
+        .items_center()
+        .child(
+            text("← back")
+                .font(type_::LABEL)
+                .color(t.text_muted)
+                .a11y_hidden(),
+        )
+        .child(super::keys::caps("⌃o", t).a11y_hidden());
     let back = super::file_view_press(back, tile, stage, false);
     let lines = file
         .rows
@@ -259,6 +264,7 @@ pub(super) fn view(
         .map(|rows| format!("{} lines", rows.iter().filter(|r| r.now.is_some()).count()));
     let header = row()
         .w_full()
+        .items_center()
         .gap(space::S3)
         .px(space::S3)
         .py(space::S1)
@@ -266,7 +272,13 @@ pub(super) fn view(
         .child(back)
         .child(
             text(file.target.path.clone())
-                .font(type_::LABEL)
+                .font(
+                    TextStyle {
+                        weight: 400.0,
+                        ..type_::LABEL
+                    }
+                    .mono(),
+                )
                 .color(t.text_primary),
         )
         .children(file.target.outside.then(|| {
@@ -274,14 +286,22 @@ pub(super) fn view(
                 .font(type_::LABEL)
                 .color(t.warning)
         }))
-        .children(lines.map(|l| text(l).font(type_::LABEL).color(t.text_tertiary)))
+        .children(lines.map(|l| text(l).font(type_::LABEL).color(t.text_muted)))
         .child(col().grow(1.0))
         .children((!stage).then(|| {
-            let close = text("close esc")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
+            let close = row()
                 .role("button")
-                .key(format!("{prefix}.view.close"));
+                .label("close esc")
+                .key(format!("{prefix}.view.close"))
+                .gap(4.0)
+                .items_center()
+                .child(
+                    text("close")
+                        .font(type_::LABEL)
+                        .color(t.text_muted)
+                        .a11y_hidden(),
+                )
+                .child(super::keys::caps("esc", t).a11y_hidden());
             super::file_view_press(close, tile, stage, true)
         }));
     let problem = file.problem.clone().map(|p| {

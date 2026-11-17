@@ -1,4 +1,4 @@
-use rune::{Color, El, TextStyle, Tx, text};
+use rune::{Color, El, TextStyle, Tx, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
 /// An icon button whose icon is a glyph of [`crate::icon`], or a short mark such as `×` or
@@ -10,6 +10,7 @@ pub struct GlyphButton {
     side: f32,
     font: Option<TextStyle>,
     color: Option<Color>,
+    trailing: Option<El>,
 }
 
 impl GlyphButton {
@@ -20,6 +21,7 @@ impl GlyphButton {
             side: 22.0,
             font: None,
             color: None,
+            trailing: None,
         }
     }
 
@@ -46,6 +48,12 @@ impl GlyphButton {
         self
     }
 
+    /// Something drawn after the glyph, such as the keycap of the button's key.
+    pub fn trailing(mut self, trailing: El) -> Self {
+        self.trailing = Some(trailing);
+        self
+    }
+
     pub fn help(mut self, help: impl Into<String>) -> Self {
         self.button = self.button.help(help);
         self
@@ -68,16 +76,22 @@ impl GlyphButton {
             side,
             font,
             color,
+            trailing,
         } = self;
+        let padding = if trailing.is_some() { 4.0 } else { 0.0 };
         button
             .label_with(move |style, ink| {
-                text(glyph)
+                let glyph = text(glyph)
                     .font(font.unwrap_or(style))
-                    .color(color.unwrap_or(ink))
+                    .color(color.unwrap_or(ink));
+                match trailing {
+                    Some(trailing) => row().gap(4.0).items_center().child(glyph).child(trailing),
+                    None => glyph,
+                }
             })
             .build(k)
             .h(side)
             .min_w(side)
-            .px(0.0)
+            .px(padding)
     }
 }

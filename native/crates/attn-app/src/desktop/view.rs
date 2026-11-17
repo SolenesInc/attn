@@ -375,7 +375,7 @@ fn settles(desktop: &Desktop, facts: &attn_client::Facts) -> Vec<(String, Settle
         .collect()
 }
 
-/// The keys a tile header names beside the buttons that do the same.
+/// The keys a tile names beside the buttons that do the same.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct HeaderKeys {
     keep: Option<String>,
@@ -383,6 +383,7 @@ struct HeaderKeys {
     focus: Option<String>,
     send_annotations: Option<String>,
     send_marks: Option<String>,
+    find_note: Option<String>,
 }
 
 fn header_keys(state: &State) -> HeaderKeys {
@@ -395,6 +396,7 @@ fn header_keys(state: &State) -> HeaderKeys {
         send_marks: key_of(&crate::action::Action::MarkdownSendAnnotations),
         focus: key_of(&crate::action::Action::TerminalToggleMaximize),
         send_annotations: key_of(&crate::action::Action::TerminalSendAnnotations),
+        find_note: key_of(&crate::action::Action::FileOpen),
     }
 }
 
@@ -894,7 +896,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             t,
         ),
         (LeafKind::Tile { kind, .. }, _) if kind == "notebook" => {
-            crate::notebook::tile_body(cx.notebook, &leaf.id, t)
+            crate::notebook::tile_body(cx.notebook, &leaf.id, cx.keys.find_note.clone(), t)
         }
         (LeafKind::Tile { kind, .. }, _) if kind == crate::browser::KIND => {
             crate::browser::page_area(&browser_page(desktop, leaf), leaf.window.is_some(), t)

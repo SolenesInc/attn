@@ -711,8 +711,7 @@ fn each_harness_and_yolo_shows_its_keys_as_keycaps() {
     let spoken = |spec: &str| {
         rune::Chord::parse(spec)
             .unwrap()
-            .keycaps_on(KeyPlatform::current())
-            .join(" ")
+            .label_on(KeyPlatform::current())
     };
     for (key, spec) in [
         ("new-session.agent.shell.keys", "alt+t"),

@@ -204,6 +204,7 @@ pub const FAMILIES: (&str, &str) = (
 
 mod glyph_button;
 pub mod icon;
+pub mod keycap;
 pub use glyph_button::GlyphButton;
 mod stories;
 pub use stories::{STORIES, Showcase, playground};

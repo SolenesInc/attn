@@ -1,3 +1,5 @@
+use attn_ui::colors::mix_srgb;
+use attn_ui::keycap;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::space;
@@ -391,42 +393,25 @@ fn toggle(options: impl IntoIterator<Item = El>, t: &Tokens) -> El {
         .children(options)
 }
 
-/// The chord `spec` that picks an option, as this platform's keycaps: light on the chosen
-/// orange pill, as Tauri's active `.agent-shortcut`.
+/// The chord `spec` that picks an option, as one chip, Tauri's `.agent-shortcut`: muted on a
+/// resting option, dark ink on a pale chip on the chosen orange pill.
 fn keycaps(key: String, spec: &str, chosen: bool, t: &Tokens) -> El {
-    let caps = rune::Chord::parse(spec)
+    let chord = rune::Chord::parse(spec)
         .expect("a picker chord parses")
-        .keycaps_on(rune::KeyPlatform::current());
-    if !chosen {
-        return rune_kit::Keybind::new(&caps)
-            .build(attn_ui::kit(t))
-            .key(key);
-    }
-    row()
+        .label_on(rune::KeyPlatform::current());
+    let (ink, edge, fill) = if chosen {
+        (
+            mix_srgb(t.brand, rune::Color::BLACK, 0.77),
+            t.shadow.alpha(0.2),
+            t.highlight.alpha(0.45),
+        )
+    } else {
+        (t.text_muted, t.border, t.highlight.alpha(0.04))
+    };
+    keycap::Keys::outlined(&[chord])
+        .colors(ink, edge, fill)
+        .build(t)
         .key(key)
-        .role("group")
-        .label(caps.join(" "))
-        .gap(2.0)
-        .items_center()
-        .children(caps.into_iter().map(|cap| {
-            row()
-                .min_w(14.0)
-                .h(14.0)
-                .px(4.0)
-                .center()
-                .radius(2.0)
-                .fill(t.text_primary.alpha(0.45))
-                .child(
-                    text(if cap.chars().count() == 1 {
-                        cap.to_uppercase()
-                    } else {
-                        cap
-                    })
-                    .font(CAP_TYPE)
-                    .color(t.bg_app),
-                )
-                .a11y_hidden()
-        }))
 }
 
 fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
@@ -571,10 +556,10 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
     );
     out.push(footer(
         &[
-            "↑↓ navigate",
-            "Tab autocomplete",
-            "Enter select",
-            "Esc cancel",
+            ("↑↓", "navigate"),
+            ("Tab", "autocomplete"),
+            ("Enter", "select"),
+            ("Esc", "cancel"),
         ],
         t,
     ));
@@ -768,19 +753,26 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
             .color(t.text_tertiary)
     });
     let on_worktree = destinations.get(chooser.committed).is_some_and(|d| !d.main);
-    let hints: Vec<&str> = match chooser.zone {
-        Zone::Create => vec!["Enter Create worktree", "↓ Open existing", "Esc Back"],
+    let hints: Vec<(&str, &str)> = match chooser.zone {
+        Zone::Create => vec![
+            ("Enter", "Create worktree"),
+            ("↓", "Open existing"),
+            ("Esc", "Back"),
+        ],
         Zone::Destinations => {
-            let mut hints = vec!["↑↓ Navigate", "Enter Open"];
+            let mut hints = vec![("↑↓", "Navigate"), ("Enter", "Open")];
             if on_worktree {
-                hints.push("D Delete worktree");
+                hints.push(("D", "Delete worktree"));
             }
-            hints.push(if chooser.refreshing {
-                "R Refresh ..."
-            } else {
-                "R Refresh"
-            });
-            hints.push("Esc Back");
+            hints.push((
+                "R",
+                if chooser.refreshing {
+                    "Refresh ..."
+                } else {
+                    "Refresh"
+                },
+            ));
+            hints.push(("Esc", "Back"));
             hints
         }
     };
@@ -1007,12 +999,33 @@ fn section(title: &str, t: &Tokens) -> El {
     type_::upper(title, SECTION).color(t.text_dimmed)
 }
 
-fn footer(hints: &[&str], t: &Tokens) -> El {
-    row().gap(space::S3).children(
-        hints
-            .iter()
-            .map(|h| text(*h).font(type_::LABEL).color(t.text_tertiary)),
-    )
+/// Tauri's `.picker-footer`: a darker band across the frame's foot, under a hairline, each
+/// hint a keycap and its word.
+fn footer(hints: &[(&str, &str)], t: &Tokens) -> El {
+    row()
+        .mx(-space::S3)
+        .mb(-space::S3)
+        .px(16.0)
+        .py(10.0)
+        .gap(20.0)
+        .items_center()
+        .flex_wrap()
+        .corners([0.0, 0.0, 8.0, 8.0])
+        .fill(t.shadow.alpha(0.3))
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+        .children(hints.iter().map(|&(key, word)| {
+            row()
+                .label(format!("{key} {word}"))
+                .gap(4.0)
+                .items_center()
+                .child(keycap::Keys::outlined(&[key]).build(t).a11y_hidden())
+                .child(
+                    text(word)
+                        .font(type_::LABEL)
+                        .color(t.text_dimmed)
+                        .a11y_hidden(),
+                )
+        }))
 }
 
 /// A word in the accent colour that is pressed as a button named by it.
@@ -1036,5 +1049,3 @@ pub(crate) const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0
 
 /// Tauri's `.location-picker` width.
 pub(crate) const DIALOG_W: f32 = 760.0;
-
-const CAP_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 500.0);

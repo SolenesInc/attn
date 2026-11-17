@@ -1,5 +1,6 @@
 use attn_protocol::SessionLedgerEntry;
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
@@ -207,8 +208,7 @@ fn header(state: &State, t: &Tokens) -> El {
                 })),
         )
         .child(
-            button("ledger.close", "Close  esc", t)
-                .label("Close")
+            keyed("ledger.close", "Close", "esc", Ink::Quiet, t)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx)),
         )
 }
@@ -712,11 +712,9 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     if r.live {
         let id = entry.id.clone();
         fields.push(
-            button("ledger.inspector.focus", "↵  Focus", t)
-                .label("Focus")
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::run(state, &id, Verb::Focus, tx)
-                }),
+            keyed("ledger.inspector.focus", "Focus", "↵", Ink::Primary, t).on_press_tx(
+                move |state: &mut State, tx: &mut Tx| super::run(state, &id, Verb::Focus, tx),
+            ),
         );
     }
     aside
@@ -888,7 +886,7 @@ fn status(state: &State, counts: Vec<El>, t: &Tokens) -> El {
         .child(el().grow(1.0))
         .children(legend)
         .child(
-            button("ledger.keys", "?  keys", t)
+            keyed("ledger.keys", "keys", "?", Ink::Mono, t)
                 .label("Keys")
                 .a11y_value(if ledger.legend { "expanded" } else { "" })
                 .on_press_tx(|state: &mut State, _: &mut Tx| {
@@ -914,9 +912,18 @@ fn legend(t: &Tokens) -> El {
         .label("Keys")
         .gap(space::S3)
         .children(KEYS.map(|(keys, does)| {
-            text(format!("{keys} {does}"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
+            let caps: Vec<&str> = keys.split(' ').collect();
+            row()
+                .label(format!("{keys} {does}"))
+                .gap(4.0)
+                .items_center()
+                .child(keycap::Keys::ledged(&caps).build(t).a11y_hidden())
+                .child(
+                    text(does)
+                        .font(type_::LABEL)
+                        .color(t.text_tertiary)
+                        .a11y_hidden(),
+                )
         }))
 }
 
@@ -1085,6 +1092,66 @@ pub(super) fn button(key: &str, words: &str, t: &Tokens) -> El {
         .control_size(ControlSize::Small)
         .build(attn_ui::kit(t))
         .key(key.to_owned())
+}
+
+/// How a [`keyed`] button reads: Close's quiet word after which its key sits, the status bar's
+/// monospace word, or the inspector's primary verb, raised on its own frame.
+#[derive(Clone, Copy, PartialEq)]
+enum Ink {
+    Quiet,
+    Mono,
+    Primary,
+}
+
+/// A button that shows its key as a keycap beside its word, as Tauri's ledger buttons do: the
+/// key first for a verb, after the word otherwise.
+fn keyed(key: &str, word: &'static str, cap: &'static str, ink: Ink, t: &Tokens) -> El {
+    let t = *t;
+    let button = Button::new(word)
+        .variant(ButtonVariant::GhostMuted)
+        .control_size(ControlSize::Small)
+        .label_with(move |font, _| {
+            let (font, color) = match ink {
+                Ink::Quiet => (
+                    rune::TextStyle {
+                        weight: 400.0,
+                        ..font
+                    },
+                    t.text_tertiary,
+                ),
+                Ink::Mono => (
+                    rune::TextStyle {
+                        weight: 400.0,
+                        ..font
+                    }
+                    .mono(),
+                    t.text_tertiary,
+                ),
+                Ink::Primary => (
+                    rune::TextStyle {
+                        weight: 400.0,
+                        ..font
+                    },
+                    t.text_primary,
+                ),
+            };
+            let cap = keycap::Keys::ledged(&[cap]).build(&t).a11y_hidden();
+            let word = text(word).font(font).color(color);
+            if ink == Ink::Quiet {
+                row().gap(6.0).items_center().child(word).child(cap)
+            } else {
+                row().gap(6.0).items_center().child(cap).child(word)
+            }
+        })
+        .build(attn_ui::kit(&t))
+        .key(key.to_owned());
+    match ink {
+        Ink::Primary => button
+            .self_start()
+            .fill(t.bg_elevated)
+            .border(1.0, t.border),
+        Ink::Quiet | Ink::Mono => button,
+    }
 }
 
 /// The width the filter field keeps beside its chips, as Tauri's ledger keeps for its input.

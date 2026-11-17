@@ -5,9 +5,10 @@ use std::collections::HashSet;
 
 use attn_protocol::{ReviewBundle, ReviewFile};
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::{radius, space};
-use rune::{El, col, row, text};
+use rune::{El, TextStyle, col, row, text};
 
 use super::frames::Frame;
 use super::{Review, Spot, cursor_frame, frame_press, place_press, prefix};
@@ -51,7 +52,7 @@ pub(super) fn summary(
         Some(base) => format!("base {} → head {}", short(base), short(&bundle.head)),
         None => format!("a tour at head {}", short(&bundle.head)),
     };
-    let mut facts = vec![
+    let facts = [
         commits,
         plural(bundle.files.len(), "file", "files"),
         format!("+{added} −{removed}"),
@@ -62,17 +63,34 @@ pub(super) fn summary(
             added + removed
         ),
     ];
-    if !bundle.files.is_empty() {
-        let toggle = if review.files_shown { "hide" } else { "show" };
-        facts.push(format!("↵ {toggle} the files"));
-    }
-    let line = facts.join(" · ");
+    let toggle = (!bundle.files.is_empty()).then(|| {
+        format!(
+            "{} the files",
+            if review.files_shown { "hide" } else { "show" }
+        )
+    });
+    let shown = facts.join(" · ");
+    let said = match &toggle {
+        Some(toggle) => format!("{shown} · ↵ {toggle}"),
+        None => shown.clone(),
+    };
     let mut meta = row()
         .key(format!("{prefix}.facts"))
         .role("button")
-        .label(line.clone())
+        .label(said)
         .w_full()
-        .child(text(line).font(type_::LABEL).color(t.text_secondary).wrap());
+        .items_center()
+        .gap(space::S3)
+        .child(
+            text(shown)
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .wrap()
+                .grow(1.0)
+                .shrink()
+                .a11y_hidden(),
+        )
+        .children(toggle.map(|toggle| hint("↵", toggle, t).a11y_hidden()));
     if !bundle.files.is_empty() {
         meta = meta.expanded(review.files_shown);
     }
@@ -273,11 +291,7 @@ pub(super) fn key_line(
     t: &Tokens,
 ) -> El {
     let prefix = &prefix(tile);
-    let entry = |keys: &str, what: &str| {
-        text(format!("{keys} {what}"))
-            .font(type_::LABEL)
-            .color(t.text_secondary)
-    };
+    let entry = |keys: &str, what: &str| hint(keys, what.to_owned(), t);
     let keys = keys_for(frame, file_open, sides, marking);
     let tabs = (offered.len() > 1).then(|| {
         row()
@@ -316,6 +330,31 @@ pub(super) fn key_line(
         .children(servers)
         .child(col().grow(1.0))
         .child(entry("?", "all keys"))
+}
+
+/// `keys` as the review draws them, one keycap per key: "f r h" is three caps.
+pub(super) fn caps(keys: &str, t: &Tokens) -> El {
+    keycap::Keys::outlined(&keys.split(' ').collect::<Vec<_>>())
+        .colors(t.text_secondary, t.border, rune::Color::TRANSPARENT)
+        .build(t)
+}
+
+/// A key and what it does, as the review's key line names them.
+fn hint(keys: &str, what: String, t: &Tokens) -> El {
+    row()
+        .label(format!("{keys} {what}"))
+        .gap(4.0)
+        .items_center()
+        .child(caps(keys, t).a11y_hidden())
+        .child(
+            text(what)
+                .font(TextStyle {
+                    weight: 400.0,
+                    ..type_::LABEL
+                })
+                .color(t.text_muted)
+                .a11y_hidden(),
+        )
 }
 
 const ALL_KEYS: &[(&str, &str)] = &[
@@ -441,7 +480,7 @@ pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
                 .role("row")
                 .label(format!("{keys}: {what}"))
                 .gap(space::S3)
-                .child(text(keys).font(type_::LABEL).color(t.text_primary).w(64.0))
+                .child(row().min_w(80.0).child(caps(&keys, t)).a11y_hidden())
                 .child(
                     text(*what)
                         .font(type_::BODY)

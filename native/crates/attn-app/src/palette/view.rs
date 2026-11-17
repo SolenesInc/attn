@@ -1,5 +1,6 @@
 use attn_ui::Tokens;
 use attn_ui::colors::mix_srgb;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
@@ -43,12 +44,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .w_full()
         .items_center()
         .gap(space::S2)
-        .children(super::badge(state, &listing.mode).map(|b| {
-            text(b)
-                .key("palette.badge")
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-        }))
+        .children(
+            super::badge(state, &listing.mode)
+                .map(|b| keycap::Keys::outlined(&[b]).build(t).key("palette.badge")),
+        )
         .child(field)
         .children(listing.count.clone().map(|c| {
             text(c)
@@ -199,6 +198,11 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
             .font(type_::MONO_CAPTION)
             .color(t.text_tertiary)
     };
+    let chip = |s: String, part: &str| {
+        keycap::Keys::outlined(&[s])
+            .build(t)
+            .key(format!("{key}.{part}"))
+    };
     let title = text(r.label.clone())
         .font(type_::BODY)
         .color(t.text_primary)
@@ -213,6 +217,7 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
         .gap(space::S2)
         .px(space::S2)
         .py(space::S1)
+        .min_h(keycap::RAISED_H + 2.0 * space::S1)
         .radius(4.0);
     match &r.look {
         Look::Command {
@@ -236,7 +241,11 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
                         .w(16.0)
                 }))
                 .child(name)
-                .children(shortcut.clone().map(|s| caption(s, "shortcut")))
+                .children(shortcut.as_ref().map(|caps| {
+                    keycap::Keys::raised(caps)
+                        .build(t)
+                        .key(format!("{key}.shortcut"))
+                }))
         }
         Look::Agent {
             agent,
@@ -262,10 +271,10 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
                 .a11y_value(status.word())
                 .child(status_dot(&key, *status, t))
                 .child(name)
-                .child(caption(slot.clone(), "slot"))
+                .child(chip(slot.clone(), "slot"))
                 .child(status_pill(&key, *status, t))
                 .child(caption(age.clone(), "age"))
-                .children(tag.clone().map(|tag| caption(tag, "tag")))
+                .children(tag.clone().map(|tag| chip(tag, "tag")))
         }
         Look::Member {
             chief,
@@ -303,7 +312,7 @@ pub(crate) fn row_face(r: &Row, key: String, t: &Tokens) -> El {
         Look::Tile { word, slot } => option
             .child(caption(word.to_string(), "kind"))
             .child(row().grow(1.0).child(title))
-            .child(caption(slot.clone(), "slot")),
+            .child(chip(slot.clone(), "slot")),
         Look::Choice { detail } => option
             .child(row().grow(1.0).child(title))
             .child(caption(detail.clone(), "detail")),

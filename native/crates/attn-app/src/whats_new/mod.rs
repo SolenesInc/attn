@@ -2,6 +2,7 @@
 //! launch of a release, replayable from the command palette and from Home's banner.
 
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Mods, Tx, col, row, text};
@@ -48,24 +49,51 @@ pub(crate) struct Tour {
 struct Step {
     title: &'static str,
     body: &'static str,
-    keys: Vec<(&'static str, String)>,
+    keys: Vec<(&'static str, Combos)>,
     scene: Scene,
-    press: Option<String>,
+    press: Option<Combos>,
+}
+
+/// The keys of one entry: as a screen reader says them, and as keycaps, one group per
+/// alternative.
+#[derive(Clone)]
+pub(super) struct Combos {
+    pub said: String,
+    pub caps: Vec<Vec<String>>,
 }
 
 /// The tour's steps, with keys as the user's bindings draw them.
 fn steps(keymap: &Keymap) -> Vec<Step> {
-    let label = |action: Action| keymap.binding(&action).map(|b| keymap.label(b));
-    let digits =
-        |action: Action| label(action).map(|l| format!("{}1–9", l.strip_suffix('1').unwrap_or(&l)));
-    let keys = |entries: Vec<(&'static str, Option<String>)>| {
+    let label = |action: Action| {
+        keymap.binding(&action).map(|b| Combos {
+            said: keymap.label(b),
+            caps: vec![keymap.keycaps(b)],
+        })
+    };
+    let digits = |action: Action| {
+        label(action).map(|mut combos| {
+            combos.said = format!(
+                "{}1–9",
+                combos.said.strip_suffix('1').unwrap_or(&combos.said)
+            );
+            for caps in &mut combos.caps {
+                caps.pop();
+                caps.push("1–9".into());
+            }
+            combos
+        })
+    };
+    let keys = |entries: Vec<(&'static str, Option<Combos>)>| {
         entries
             .into_iter()
             .filter_map(|(name, keys)| Some((name, keys?)))
             .collect()
     };
     let either = |a: Action, b: Action| match (label(a), label(b)) {
-        (Some(a), Some(b)) => Some(format!("{a}/{b}")),
+        (Some(a), Some(b)) => Some(Combos {
+            said: format!("{}/{}", a.said, b.said),
+            caps: [a.caps, b.caps].concat(),
+        }),
         (a, b) => a.or(b),
     };
     vec![
@@ -301,20 +329,15 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .label("Keys")
         .w_full()
         .flex_wrap()
-        .gap(space::S3)
+        .gaps(8.0, 18.0)
         .children(step.keys.iter().map(|(name, keys)| {
             row()
                 .key(format!("whats-new.key.{name}"))
                 .role("listitem")
-                .label(format!("{keys} {name}"))
+                .label(format!("{} {name}", keys.said))
                 .items_center()
-                .gap(space::S2)
-                .child(
-                    text(keys.clone())
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_primary)
-                        .a11y_hidden(),
-                )
+                .gap(8.0)
+                .child(keycaps(keys, t).a11y_hidden())
                 .child(
                     text(*name)
                         .font(type_::BODY)
@@ -413,4 +436,14 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .on_close_tx(dismiss)
         .child(body)
         .build(k, layers);
+}
+
+pub(super) fn keycaps(keys: &Combos, t: &Tokens) -> El {
+    keycap::alternatives(
+        keys.caps
+            .iter()
+            .map(|caps| keycap::Keys::raised(caps))
+            .collect(),
+        t,
+    )
 }

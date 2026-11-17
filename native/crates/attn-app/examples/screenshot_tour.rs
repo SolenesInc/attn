@@ -10,14 +10,15 @@ use std::path::PathBuf;
 use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap, State};
 use attn_protocol::{
-    ActorView, AutomationDefinitionsResultMessage, AutomationSchedulePreviewResultMessage,
-    DelegationPreferences, DelegationPreferencesResultMessage, Desktop, DesktopPane,
-    DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
-    InitialStateMessage, Profile, RecentLocation, RecentLocationsResultMessage, RepoInfo,
-    ReviewBundle, ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
-    SeedDocumentGetResultMessage, SeedEdge, SeedPlotProgress, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionMessage,
-    SessionMessagesGetResultMessage, Worktree,
+    ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
+    AutomationSchedulePreviewResultMessage, DelegationPreferences,
+    DelegationPreferencesResultMessage, Desktop, DesktopPane, DesktopTileContentMessage,
+    GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, InitialStateMessage, Profile,
+    RecentLocation, RecentLocationsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote,
+    ReviewRow, ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge,
+    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -529,12 +530,6 @@ fn shortcut_editor(dark: bool) {
     snap(&mut world, "shortcut-editor", dark);
 }
 
-fn whats_new(dark: bool) {
-    let mut world = with_document(dark);
-    run(&mut world, Action::OpenWhatsNew);
-    snap(&mut world, "whats-new", dark);
-}
-
 fn close_desktop(dark: bool) {
     let mut world = with_document(dark);
     run(
@@ -668,6 +663,10 @@ const SHOP: &str = "/home/me/projects/shop";
 /// Launcher 2.0 on: Claude picked, the shop repository last started in its main checkout, and
 /// its two recents, shop first. Desktop 1 is empty when `empty`, else it holds terminal `a`.
 fn launcher_daemon(dark: bool, empty: bool) -> Daemon {
+    launcher_daemon_with(dark, empty, true)
+}
+
+fn launcher_daemon_with(dark: bool, empty: bool, launcher_2: bool) -> Daemon {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     if let Some(desktops) = state.desktops.as_mut() {
         desktops[0].tree_json = pane("a").to_string();
@@ -679,7 +678,10 @@ fn launcher_daemon(dark: bool, empty: bool) -> Daemon {
     }
     if let Some(settings) = state.settings.as_mut() {
         for (key, value) in [
-            ("new_session_launcher_enabled", "true"),
+            (
+                "new_session_launcher_enabled",
+                if launcher_2 { "true" } else { "false" },
+            ),
             ("new_session_agent", "claude"),
             ("claude_cap_yolo", "true"),
             ("projects_directory", "/home/me/projects"),
@@ -770,6 +772,175 @@ fn launcher_where(dark: bool) {
     snap(&mut world, "launcher-where", dark);
 }
 
+/// The classic new-session picker, Launcher 2.0 off: its harness toggle and its key footer.
+fn picker_dialog(dark: bool) {
+    let mut world = start(launcher_daemon_with(dark, false, false));
+    press(&mut world, Action::SessionNew);
+    snap(&mut world, "picker-dialog", dark);
+}
+
+fn shortcuts(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::UiShowShortcuts);
+    snap(&mut world, "shortcuts", dark);
+}
+
+fn agent_palette(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::UiActionMenu);
+    snap(&mut world, "agent-palette", dark);
+}
+
+fn profile_switcher(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::ProfileSwitch);
+    snap(&mut world, "profile-switcher", dark);
+}
+
+/// What's new from the palette, `steps` steps in: the first, and the queue's, whose keys have
+/// alternatives. Each snap has a world of its own, as a world's second snap lacks the glyphs
+/// the first one uploaded.
+fn whats_new(dark: bool, steps: usize, name: &str) {
+    let mut world = with_document(dark);
+    run(&mut world, Action::OpenWhatsNew);
+    for _ in 0..steps {
+        tap(&mut world, Key::Right);
+    }
+    world.advance(std::time::Duration::from_secs(2));
+    snap(&mut world, name, dark);
+}
+
+fn tap(world: &mut World, key: Key) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key,
+            mods: Mods::default(),
+        })
+    });
+}
+
+fn settings_analytics(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), seeds());
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("analytics.enabled".into(), "true".into());
+    }
+    let mut world = start(Daemon::scripted().state(state));
+    press(&mut world, Action::UiOpenSettings);
+    world.gesture(|app| app.type_text("analytics"));
+    world.gesture(|app| app.click(Target::key("settings.nav.analytics")));
+    snap(&mut world, "settings-analytics", dark);
+}
+
+/// The ledger with nothing in it: its header's Close and its status bar's keys.
+fn ledger(dark: bool) {
+    let daemon =
+        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    daemon.on("session_list", |r: &Request| {
+        message(SessionListResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            result: Some(SessionListResult::default()),
+            ..SessionListResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionsOpen);
+    snap(&mut world, "ledger", dark);
+}
+
+/// The ledger with one live agent selected, whose inspector offers Focus.
+fn ledger_seeded(dark: bool) {
+    let daemon =
+        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    daemon.on("session_list", |r: &Request| {
+        message(SessionListResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            result: Some(SessionListResult {
+                entries: vec![SessionLedgerEntry {
+                    id: "s1".into(),
+                    label: "API work".into(),
+                    agent: "claude".into(),
+                    directory: "/home/me/projects/api".into(),
+                    profile_id: PROFILE.into(),
+                    profile_name: "Work".into(),
+                    state: "waiting_input".into(),
+                    last_seen: "2026-11-17T09:00:00Z".into(),
+                    ..SessionLedgerEntry::default()
+                }],
+                ..SessionListResult::default()
+            }),
+            ..SessionListResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionsOpen);
+    world.gesture(|app| app.click(Target::key("ledger.row.s1")));
+    snap(&mut world, "ledger-seeded", dark);
+}
+
+/// The asks drawer showing one ask from the waiting agent, with its footer's keys and Send.
+fn asks(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.asks = Some(vec![Ask {
+        id: "a-cache".into(),
+        session_id: "s1".into(),
+        subject: "Cache store".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        parts: vec![
+            AskPart {
+                markdown: Some("Deploys empty the cache.".into()),
+                ..AskPart::default()
+            },
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "text".into(),
+                    prompt: "What should the banner say?".into(),
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
+        ..Ask::default()
+    }]);
+    let mut world = start(Daemon::scripted().state(state));
+    press(&mut world, Action::DockAsks);
+    snap(&mut world, "asks", dark);
+}
+
+fn notebook(dark: bool) {
+    let mut world = with_document(dark);
+    world
+        .automate("run", json!({ "name": "notebook.openFullscreen" }))
+        .unwrap();
+    world.settle();
+    snap(&mut world, "notebook", dark);
+}
+
+/// The review's file view, opened from the brief's stop: its back bar and its keys.
+fn review_file(dark: bool) {
+    let daemon =
+        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    tap(&mut world, Key::Right);
+    tap(&mut world, Key::Enter);
+    snap(&mut world, "review-file", dark);
+}
+
+fn review_keys(dark: bool) {
+    let daemon =
+        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    world.gesture(|app| app.type_text("?"));
+    snap(&mut world, "review-keys", dark);
+}
+
 fn launcher_empty_desktop(dark: bool) {
     let mut world = start(launcher_daemon(dark, true));
     snap(&mut world, "launcher-empty-desktop", dark);
@@ -845,7 +1016,6 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         settings_page(dark);
         settings_agents(dark);
         shortcut_editor(dark);
-        whats_new(dark);
         close_desktop(dark);
         palette(dark);
         terminal_overlays(dark);
@@ -855,6 +1025,19 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         launcher_empty_desktop(dark);
         automation_hour(dark);
         automation_time_zones(dark);
+        picker_dialog(dark);
+        shortcuts(dark);
+        agent_palette(dark);
+        profile_switcher(dark);
+        whats_new(dark, 0, "whats-new");
+        whats_new(dark, 3, "whats-new-queue");
+        settings_analytics(dark);
+        ledger(dark);
+        asks(dark);
+        notebook(dark);
+        review_keys(dark);
+        review_file(dark);
+        ledger_seeded(dark);
     }
 }
 

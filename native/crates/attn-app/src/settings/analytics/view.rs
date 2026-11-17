@@ -2,12 +2,13 @@
 
 use attn_protocol::{GetAnalyticsStatusResultMessage, Seed, Vent};
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::{
-    Badge, BadgeVariant, Button, ButtonVariant, ControlSize, Keybind, Kit, List, ListItem,
-    SegmentedControl, Toast, ToastRegion,
+    Badge, BadgeVariant, Button, ButtonVariant, ControlSize, Kit, List, ListItem, SegmentedControl,
+    Toast, ToastRegion,
 };
 
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
@@ -99,7 +100,7 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         .children(inspector(state, page, current, sharing, t, k)),
                 ),
         )
-        .child(hints(page.view, sharing, t, k));
+        .child(hints(page.view, sharing, t));
     vec![root]
 }
 
@@ -127,6 +128,8 @@ pub(in crate::settings) fn toast(state: &State, t: &Tokens) -> Option<El> {
 
 fn stat(id: &str, label: &str, value: String, tone: Option<rune::Color>, t: &Tokens) -> El {
     col()
+        .grow(1.0)
+        .w(0.0)
         .gap(2.0)
         .child(text(label.to_owned()).font(CAPTION).color(t.text_tertiary))
         .child(
@@ -199,19 +202,35 @@ fn strip(
                 t,
             )
         }))
-        .child(el().grow(1.0))
-        .child(
-            Button::new(if page.machine {
+        .child({
+            let word = if page.machine {
                 "Done"
             } else {
                 "Machine settings"
-            })
-            .expanded(page.machine)
-            .shortcut("m")
-            .on_press(super::toggle_machine)
-            .build(k)
-            .key("settings.analytics.machine-toggle"),
-        )
+            };
+            let t = *t;
+            let button = Button::new(word)
+                .expanded(page.machine)
+                .shortcut("m")
+                .on_press(super::toggle_machine)
+                .label_with(move |font, ink| {
+                    row()
+                        .gap(4.0)
+                        .items_center()
+                        .child(text(word).font(font).color(ink))
+                        .child(keycap::Keys::ledged(&["m"]).build(&t).a11y_hidden())
+                })
+                .build(k)
+                .key("settings.analytics.machine-toggle")
+                .self_stretch()
+                .min_h(38.0)
+                .border(1.0, t.border_hover);
+            if outposts > 0 {
+                button
+            } else {
+                button.grow(1.0).w(0.0)
+            }
+        })
 }
 
 fn sharing_stat(sharing: bool, status: Option<&GetAnalyticsStatusResultMessage>) -> String {
@@ -875,7 +894,7 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens, k: &Kit) 
         ))
 }
 
-fn hints(view: usize, sharing: bool, t: &Tokens, k: &Kit) -> El {
+fn hints(view: usize, sharing: bool, t: &Tokens) -> El {
     let mut keys: Vec<(&[&str], &str)> = vec![(&["j", "k"], "move"), (&["[", "]"], "switch list")];
     if view != VENTS {
         keys.extend([
@@ -908,7 +927,7 @@ fn hints(view: usize, sharing: bool, t: &Tokens, k: &Kit) -> El {
             row()
                 .gap(space::S1)
                 .items_center()
-                .child(Keybind::new(keys).build(k))
-                .child(text(label).font(CAPTION).color(t.text_tertiary))
+                .child(keycap::Keys::ledged(keys).build(t))
+                .child(text(label).font(CAPTION).color(t.text_muted))
         }))
 }

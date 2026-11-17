@@ -6,6 +6,7 @@ use attn_protocol::{
     Profile, ProfileActionResultMessage, ProfileCreateMessage, ProfileDeleteMessage,
     ProfileRenameMessage, ProfileSelectMessage,
 };
+use attn_ui::keycap;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
@@ -442,8 +443,20 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                     .variant(ButtonVariant::Ghost)
                     .shortcut("N")
                     .on_press_tx(start_new)
+                    .label_with({
+                        let cap = keycap::Keys::outlined(&["N"]).build(t).a11y_hidden();
+                        move |font, ink| {
+                            row()
+                                .grow(1.0)
+                                .gap(space::S2)
+                                .items_center()
+                                .child(text("New profile").font(font).color(ink).grow(1.0))
+                                .child(cap)
+                        }
+                    })
                     .build(k)
-                    .key("profile-switcher.new"),
+                    .key("profile-switcher.new")
+                    .grow(1.0),
             ),
         );
     }
@@ -501,6 +514,7 @@ fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens, k: &Kit)
         .justify_start();
     let rename = GlyphButton::new(attn_ui::icon::PENCIL, format!("Rename {name}"))
         .help("Rename  R")
+        .trailing(keycap::Keys::outlined(&["R"]).build(t).a11y_hidden())
         .on_press_tx({
             let id = id.clone();
             move |state: &mut State, tx: &mut Tx| start_rename(state, &id, tx)
@@ -510,6 +524,7 @@ fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens, k: &Kit)
     let delete = GlyphButton::new(attn_ui::icon::TRASH, format!("Delete {name}"))
         .variant(ButtonVariant::Ghost)
         .help("Delete  ⌫")
+        .trailing(keycap::Keys::outlined(&["⌫"]).build(t).a11y_hidden())
         .on_press_tx({
             let id = id.clone();
             move |state: &mut State, tx: &mut Tx| start_delete(state, &id, tx)

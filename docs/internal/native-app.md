@@ -80,11 +80,15 @@ A view in `attn-app` takes its colors from `crate::colors` or
 light, one PNG each: the sidebar with an agent in every state, a terminal with
 the 16 ANSI colors and a selection, a terminal with a comment mark, a seed id, a
 selected command block and find matches, a Markdown file with code and a Mermaid
-diagram, a review stop, the Garden, Settings on Appearance and on Agents, the
-shortcut editor, What's New, the close-desktop dialog, the command palette, a
-popped-out tile window, Launcher 2.0 in its dialog, its Where list and on an
-empty desktop, and a new automation's hour picker and suggested time zones, each
-with a row reached by an arrow key. The `screenshot_tour` example of `attn-app`
+diagram, a review stop with its key line, the review's key sheet and file view,
+the Garden, Settings on Appearance, Agents and Analytics, the shortcut editor
+and the shortcuts sheet, What's New on its first and its queue step, the
+close-desktop dialog, the command and agent palettes, the profile switcher, the
+ledger empty and with a live agent selected, the asks drawer, the fullscreen
+notebook, a popped-out tile window, the classic new-session picker, Launcher 2.0
+in its dialog, its Where list and on an empty desktop, and a new automation's
+hour picker and suggested time zones, each with a row reached by an arrow key.
+The `screenshot_tour` example of `attn-app`
 sets each one up on the wire-test world and draws it on Rune's offscreen GPU
 renderer, so it needs no window and no VM, and two runs of the same source match
 pixel for pixel.

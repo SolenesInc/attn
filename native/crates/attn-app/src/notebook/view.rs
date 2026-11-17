@@ -2,9 +2,10 @@
 //! rail with the note's outline and the notes that link to it.
 
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, ScrollSpec, TextStyle, Tx, col, el, row, text, text_input};
+use rune::{Color, El, ScrollSpec, TextStyle, Tx, col, el, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use super::file_kind::FileKind;
@@ -34,7 +35,13 @@ pub(super) fn key(id: &SurfaceId, part: &str) -> String {
 pub(crate) fn fullscreen(state: &State, t: &Tokens) -> El {
     let id = SurfaceId::Fullscreen;
     let body = match state.notebook.fullscreen.as_ref() {
-        Some(surface) => surface_view(&state.notebook, &id, surface, t),
+        Some(surface) => {
+            let find = state
+                .keymap
+                .binding(&crate::Action::FileOpen)
+                .map(|b| state.keymap.label(b));
+            surface_view(&state.notebook, &id, surface, find, t)
+        }
         None => col(),
     };
     let panel = col()
@@ -109,8 +116,9 @@ fn header(state: &State, t: &Tokens) -> El {
         .children(pulse)
         .child(
             Button::new("Close")
+                .variant(ButtonVariant::GhostMuted)
                 .control_size(ControlSize::Small)
-                .help("Close (Esc)")
+                .label_with(word_and_key("Close", Some("esc".into()), *t))
                 .build(attn_ui::kit(t))
                 .key("notebook.close")
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::close_fullscreen(state, tx)),
@@ -128,16 +136,27 @@ fn chief(state: &State) -> Option<bool> {
         .map(|s| s.state == "working")
 }
 
-/// An editor tile's body.
-pub(crate) fn tile_body(notebook: &super::Notebook, tile: &str, t: &Tokens) -> El {
+/// A notebook tile's body; `find` is the key that opens the finder, which its empty page names.
+pub(crate) fn tile_body(
+    notebook: &super::Notebook,
+    tile: &str,
+    find: Option<String>,
+    t: &Tokens,
+) -> El {
     let id = SurfaceId::Tile(tile.to_owned());
     match notebook.tiles.get(tile) {
-        Some(surface) => surface_view(notebook, &id, surface, t),
+        Some(surface) => surface_view(notebook, &id, surface, find, t),
         None => col().w_full().h_full().child(message("Loading…", t)),
     }
 }
 
-fn surface_view(notebook: &super::Notebook, id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
+fn surface_view(
+    notebook: &super::Notebook,
+    id: &SurfaceId,
+    surface: &Surface,
+    find: Option<String>,
+    t: &Tokens,
+) -> El {
     let (tree_fits, rail_fits) = fits(id, surface.width);
     let tree_open = surface.folds.tree.unwrap_or(tree_fits);
     let rail = rail(id, surface, t);
@@ -159,7 +178,7 @@ fn surface_view(notebook: &super::Notebook, id: &SurfaceId, surface: &Surface, t
         .min_h(0.0)
         .children(tree_open.then(|| tree(id, surface, t)))
         .child(fold_button(id, Pane::Tree, tree_open, t))
-        .child(document(id, surface, t))
+        .child(document(id, surface, find, t))
         .children(
             rail.is_some()
                 .then(|| fold_button(id, Pane::Rail, rail_open, t)),
@@ -334,9 +353,9 @@ fn toggle_folder(state: &mut State, id: &SurfaceId, path: &str, tx: &mut Tx) {
     }
 }
 
-fn document(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
+fn document(id: &SurfaceId, surface: &Surface, find: Option<String>, t: &Tokens) -> El {
     let body = match &surface.doc {
-        Doc::Empty => empty(id, t),
+        Doc::Empty => empty(id, find, t),
         Doc::Loading { shown: None, .. } => message("Loading…", t),
         Doc::Loading {
             shown: Some(open), ..
@@ -360,7 +379,7 @@ fn document(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
         .child(body)
 }
 
-fn empty(id: &SurfaceId, t: &Tokens) -> El {
+fn empty(id: &SurfaceId, find: Option<String>, t: &Tokens) -> El {
     let id = id.clone();
     col()
         .gap(space::S2)
@@ -373,9 +392,14 @@ fn empty(id: &SurfaceId, t: &Tokens) -> El {
         )
         .child(
             Button::new("Find a note")
+                .variant(ButtonVariant::GhostMuted)
                 .control_size(ControlSize::Small)
+                .label_with(word_and_key("Find a note", find, *t))
                 .build(attn_ui::kit(t))
                 .key(key(&id, "find"))
+                .self_start()
+                .fill(t.bg_elevated)
+                .border(1.0, t.border)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     super::finder::open(state, id.clone(), tx)
                 }),
@@ -785,4 +809,27 @@ fn kind_badge(kind: &str, ink: rune::Color, t: &Tokens) -> El {
 
 fn basename(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
+}
+
+/// A button's word in the secondary ink, then its key as a keycap, as Tauri's notebook
+/// buttons carry their shortcut.
+fn word_and_key(
+    word: &'static str,
+    keys: Option<String>,
+    t: Tokens,
+) -> impl FnOnce(TextStyle, Color) -> El {
+    move |font, _| {
+        row()
+            .gap(8.0)
+            .items_center()
+            .child(
+                text(word)
+                    .font(TextStyle {
+                        weight: 400.0,
+                        ..font
+                    })
+                    .color(t.text_secondary),
+            )
+            .children(keys.map(|keys| keycap::Keys::outlined(&[keys]).build(&t).a11y_hidden()))
+    }
 }

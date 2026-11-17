@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, Session};
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Image, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
@@ -772,18 +773,18 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
         .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
     let snoozed = snoozable
         .is_some_and(|s| queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms));
-    let mut hints = Vec::new();
+    let mut hints: Vec<(&[&str], &str)> = Vec::new();
     if several {
-        hints.push("j k next · previous");
+        hints.push((&["j", "k"], "next · previous"));
     }
     if item.holder.is_some() {
-        hints.push("o open agent");
+        hints.push((&["o"], "open agent"));
     }
     if snoozable.is_some() {
-        hints.push(if snoozed { "s wake" } else { "s snooze" });
+        hints.push((&["s"], if snoozed { "wake" } else { "snooze" }));
     }
-    hints.push("r replied");
-    hints.push("esc close");
+    hints.push((&["r"], "replied"));
+    hints.push((&["esc"], "close"));
     let sending = state.window.asks.sending.is_some();
     let accept =
         (ask.reply.is_none() && super::recommended(ask).len() > 1 && !sending).then(|| {
@@ -806,6 +807,7 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                 .color(t.text_tertiary)
         }
         None => {
+            let tokens = *t;
             let sendable = !sending
                 && state
                     .window
@@ -813,15 +815,23 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                     .drafts
                     .get(&ask.id)
                     .is_some_and(|d| d.sendable(ask));
-            let words = format!(
-                "{} {}",
-                if sending { "Sending…" } else { "Send" },
-                send_chord()
-            );
-            Button::new(words)
+            let word = if sending { "Sending…" } else { "Send" };
+            let edge = t.bg_app.alpha(0.4);
+            Button::new(format!("{word} {}", send_chord()))
                 .variant(ButtonVariant::Submit)
                 .disabled(!sendable)
                 .on_press_tx(super::send)
+                .label_with(move |font, ink| {
+                    row()
+                        .gap(4.0)
+                        .items_center()
+                        .child(text(word).font(font).color(ink))
+                        .child(
+                            keycap::Keys::outlined(&[send_chord()])
+                                .colors(ink, edge, rune::Color::TRANSPARENT)
+                                .build(&tokens),
+                        )
+                })
                 .build(attn_ui::kit(t))
                 .key("asks.send")
         }
@@ -833,11 +843,29 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
         .padding(space::S3)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
         .child(
-            text(hints.join("  ·  "))
+            row()
                 .key("asks.hints")
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .wrap(),
+                .label(
+                    hints
+                        .iter()
+                        .map(|(keys, words)| format!("{} {words}", keys.join(" ")))
+                        .collect::<Vec<_>>()
+                        .join(" · "),
+                )
+                .flex_wrap()
+                .gaps(4.0, 14.0)
+                .children(hints.into_iter().map(|(keys, words)| {
+                    row()
+                        .gap(4.0)
+                        .items_center()
+                        .a11y_hidden()
+                        .child(
+                            keycap::Keys::outlined(keys)
+                                .colors(t.text_dimmed, t.border, rune::Color::TRANSPARENT)
+                                .build(t),
+                        )
+                        .child(text(words).font(type_::LABEL).color(t.text_dimmed))
+                })),
         )
         .child(
             row()

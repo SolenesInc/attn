@@ -3,10 +3,9 @@
 //! carry a note. The keys come from the user's keymap.
 
 use attn_ui::Tokens;
+use attn_ui::keycap;
 use attn_ui::type_;
-use rune::tok::space;
 use rune::{El, KeyPlatform, col, el, row, text};
-use rune_kit::Keybind;
 
 use crate::Action;
 use crate::keymap::{Binding, Keymap};
@@ -273,12 +272,12 @@ fn row_of(keymap: &Keymap, line: &Line, t: &Tokens) -> El {
         .collect::<Vec<_>>()
         .join(" / ");
     let note = line.note.map(|note| note(keymap));
-    let kit = attn_ui::kit(t);
-    let mut label = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(2.0)
-        .child(text(line.label).font(type_::BODY).color(t.text_primary));
+    let mut label = col().grow(1.0).min_w(0.0).gap(2.0).child(
+        text(line.label)
+            .font(type_::BODY)
+            .color(t.text_primary)
+            .wrap(),
+    );
     if let Some(note) = &note {
         label = label.child(text(note.clone()).font(type_::LABEL).color(t.text_tertiary));
     }
@@ -291,13 +290,13 @@ fn row_of(keymap: &Keymap, line: &Line, t: &Tokens) -> El {
         .gap(16.0)
         .py(7.0)
         .child(label)
-        .child(
-            row().gap(space::S1).items_center().children(
-                combos
-                    .into_iter()
-                    .map(|caps| Keybind::new(&caps).build(kit)),
-            ),
-        );
+        .child(keycap::alternatives(
+            combos
+                .iter()
+                .map(|caps| keycap::Keys::raised(caps))
+                .collect(),
+            t,
+        ));
     match note {
         Some(note) => item.description(note),
         None => item,
