@@ -19,6 +19,8 @@ const CHARTER: &str = "crew.charter.editor";
 /// The charter editor's height, as the Tauri app's `.crew-charter-editor`; a longer charter
 /// scrolls inside it.
 const CHARTER_HEIGHT: f32 = 390.0;
+/// The Tauri app's `.crew-launch-fields select { height: 38px }`.
+const LAUNCH_FIELD_HEIGHT: f32 = 38.0;
 const SEED_FIND: &str = "crew.seeds.find";
 pub(crate) const PAGE: &str = "crew.page";
 
@@ -841,6 +843,7 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
                                 },
                                 value: shown.draft.launch_desktop.clone(),
                                 disabled: false,
+                                height: LAUNCH_FIELD_HEIGHT,
                                 on_change: launch::choose_desktop,
                             },
                         )),

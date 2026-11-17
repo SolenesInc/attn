@@ -38,6 +38,8 @@ const MONTHS: [&str; 12] = [
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /// The prompt's least height, the Tauri app's `.automation-form__textarea { min-height: 120px }`.
 const PROMPT_HEIGHT: f32 = 120.0;
+/// The Tauri form's unstyled Desktop `<select>`: a macOS pop-up button, 20 points tall.
+const DESKTOP_SELECT_HEIGHT: f32 = 20.0;
 /// The width `attn_ui::scroll_bar` takes beside the content, as WebKit's styled scroll bar does.
 const SCROLL_BAR: f32 = 8.0;
 /// attn checks schedules once a minute.
@@ -571,6 +573,7 @@ fn launch(state: &State, f: &Form, t: &Tokens) -> El {
         default_name: f.name.text.clone(),
         value: f.launch_desktop.clone(),
         disabled: f.saving,
+        height: DESKTOP_SELECT_HEIGHT,
         on_change: super::choose_desktop,
     };
     let mut s = section("Runs as", t)

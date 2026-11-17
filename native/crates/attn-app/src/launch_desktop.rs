@@ -30,6 +30,8 @@ pub(crate) struct Field {
     pub(crate) default_name: String,
     pub(crate) value: Option<LaunchDesktopSetting>,
     pub(crate) disabled: bool,
+    /// The select's height in points, as the owner's Tauri form draws it.
+    pub(crate) height: f32,
     pub(crate) on_change: Change,
 }
 
@@ -178,6 +180,7 @@ fn select(state: &State, field: &Field) -> Select {
     Select::new(field.select_key(), &labels)
         .label("Desktop")
         .appearance(SelectAppearance::Field)
+        .height(field.height)
         .current(current.as_deref())
         .disabled(field.disabled)
         .open(is_open(state, field))
