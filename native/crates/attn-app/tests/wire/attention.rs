@@ -119,6 +119,15 @@ fn the_palette_opens_the_drawer_on_the_agents_waiting_for_the_user() {
     assert!(!has(&world, DRAWER));
 
     world.gesture(|app| app.key(chord(Action::UiCommandPalette)));
+    world.gesture(|app| app.key(chord(Action::SessionNew)));
+    assert!(
+        has(&world, "palette"),
+        "the New Session key closed the palette"
+    );
+    assert!(
+        !has(&world, "new-session"),
+        "the New Session key ran over the palette"
+    );
     world.gesture(|app| app.type_text("attention"));
     world.gesture(|app| {
         app.key(KeyEvent {

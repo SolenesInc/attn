@@ -1104,6 +1104,40 @@ fn escape_closes_the_snooze_menu_and_snoozes_nothing() {
 }
 
 #[test]
+fn the_snooze_menu_holds_every_shortcut_until_it_closes() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.click(Target::role("button").name("Snooze t-old")));
+    let sent = world.daemon.sent().len();
+
+    for action in [
+        Action::SessionNew,
+        Action::UiCommandPalette,
+        Action::SessionSnooze,
+        Action::AppQuit,
+    ] {
+        assert!(
+            !world.press_menu_key(chord(action.clone())),
+            "{} reached the menu bar",
+            action.id()
+        );
+    }
+
+    assert_eq!(world.daemon.sent().len(), sent);
+    assert_eq!(
+        world
+            .screen()
+            .all(Target::role("menu"))
+            .into_iter()
+            .filter_map(|n| n.name)
+            .collect::<Vec<_>>(),
+        ["Snooze t-old"]
+    );
+    assert!(world.screen().find(Target::role("dialog")).is_none());
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+    assert!(world.screen().find(Target::role("menu")).is_none());
+}
+
+#[test]
 fn the_snooze_key_opens_the_menu_for_the_agent_on_screen_and_the_arrows_choose() {
     let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
         turn("t-old", 120),

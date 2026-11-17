@@ -320,6 +320,26 @@ impl Action {
         )
     }
 
+    /// Whether an overlay that captures navigation holds the action's keys: the Tauri app's
+    /// app shortcuts, which `appOverlayPolicy` turns off under one. The palettes, Settings,
+    /// Keyboard shortcuts, font size, the sessions list, Quit, the sidebar's width and every
+    /// pane, markdown and annotation key go on acting.
+    pub fn yields_to_overlays(&self) -> bool {
+        match self.category() {
+            Category::Sessions | Category::Review => {
+                !matches!(self, Action::SidebarWider | Action::SidebarNarrower)
+            }
+            Category::App => matches!(
+                self,
+                Action::FileOpen
+                    | Action::NotebookOpenTile
+                    | Action::NotebookOpenFullscreen
+                    | Action::BoardOpen
+            ),
+            Category::Panes | Category::Markdown => false,
+        }
+    }
+
     /// Whether the action only acts on a terminal, so its keys do nothing without one open.
     pub fn requires_terminal(&self) -> bool {
         matches!(

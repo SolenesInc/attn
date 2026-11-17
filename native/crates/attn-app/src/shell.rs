@@ -163,6 +163,42 @@ pub enum Layer {
     SharedCodex,
 }
 
+impl Layer {
+    /// Whether the layer keeps `action`'s keys from acting while it is open, as the Tauri app's
+    /// overlays that capture navigation hold its app shortcuts. A layer keeps its own keys: the
+    /// agents key toggles the palette and its turn keys act on its highlighted agent; the keys
+    /// that open the markdown opener, the overview and the profile switcher close them; the
+    /// notebook's file key finds a note.
+    pub(crate) fn holds(self, action: &Action) -> bool {
+        let captures_navigation = matches!(
+            self,
+            Layer::Palette(_)
+                | Layer::ShortcutEditor
+                | Layer::Overview
+                | Layer::Ledger
+                | Layer::ProfileSwitcher
+                | Layer::WhatsNew
+                | Layer::Notebook
+                | Layer::Crew
+        );
+        let own = matches!(
+            (self, action),
+            (
+                Layer::Palette(Palette::Search),
+                Action::SidebarAgentList
+                    | Action::SessionSettle
+                    | Action::SessionPriority
+                    | Action::SessionSnooze
+            ) | (
+                Layer::Palette(Palette::Files) | Layer::Notebook,
+                Action::FileOpen
+            ) | (Layer::Overview, Action::DesktopOverview)
+                | (Layer::ProfileSwitcher, Action::ProfileSwitch)
+        );
+        captures_navigation && action.yields_to_overlays() && !own
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Palette {
     /// Agents, or commands behind a leading `>`.

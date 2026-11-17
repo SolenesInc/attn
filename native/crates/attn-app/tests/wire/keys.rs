@@ -889,3 +889,139 @@ fn the_cheat_sheet_lists_the_tauri_rows_with_paired_keys_and_notes() {
         "the four focus keys share one row"
     );
 }
+
+/// The dialogs and menus in front, by name.
+fn fronts(world: &World) -> Vec<String> {
+    let screen = world.screen();
+    ["dialog", "menu"]
+        .into_iter()
+        .flat_map(|role| screen.all(Target::role(role)))
+        .map(|n| n.name.unwrap_or_default())
+        .collect()
+}
+
+/// A desktop with two terminals, analytics counting shortcuts.
+fn counting() -> World {
+    let settings = [("analytics.enabled", "true")];
+    let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &settings)));
+    world.open_desktop();
+    world
+}
+
+/// Opens `open`'s layer in front.
+fn open_layer(world: &mut World, open: &Action) {
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(state, open.clone(), tx);
+        })
+    });
+    assert!(!fronts(world).is_empty(), "{} opened nothing", open.id());
+}
+
+/// Presses `action`'s keys and checks they did nothing: no action ran, nothing opened or
+/// closed, nothing reached the daemon or a terminal, and the menu bar never heard them unless
+/// a focused field keeps them.
+fn held(world: &mut World, layer: &Action, action: &Action) {
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let front = fronts(world);
+    let records = shortcut_records(world).len();
+    let sent = world.daemon.sent().len();
+    let typed_before = typed(world).len();
+    let left = world.press_menu_key(chord(action));
+    let what = format!("{} under {}", action.id(), layer.id());
+    assert!(
+        !left || keymap.kept_by_fields(action),
+        "{what} reached the menu bar"
+    );
+    assert_eq!(shortcut_records(world).len(), records, "{what} ran");
+    assert_eq!(fronts(world), front, "{what}");
+    assert_eq!(world.daemon.sent().len(), sent, "{what} reached the daemon");
+    assert_eq!(
+        typed(world).len(),
+        typed_before,
+        "{what} reached a terminal"
+    );
+}
+
+#[test]
+fn every_overlay_that_captures_navigation_holds_the_app_shortcuts_but_not_quit() {
+    let layers = [
+        Action::UiCommandPalette,
+        Action::UiActionMenu,
+        Action::FileOpen,
+        Action::OpenShortcutEditor,
+        Action::DesktopOverview,
+        Action::SessionsOpen,
+        Action::ProfileSwitch,
+        Action::OpenWhatsNew,
+        Action::NotebookOpenFullscreen,
+        Action::OpenCrew,
+    ];
+    let mut world = counting();
+    for layer in layers {
+        open_layer(&mut world, &layer);
+        for action in [
+            Action::SessionNew,
+            Action::DesktopSelect1,
+            Action::BoardOpen,
+        ] {
+            held(&mut world, &layer, &action);
+        }
+        world.press_menu_key(chord(&Action::AppQuit));
+        assert_eq!(
+            shortcut_records(&world).last().map(String::as_str),
+            Some("app.quit"),
+            "Quit was held under {}",
+            layer.id()
+        );
+        world.gesture(|app| {
+            app.key(KeyEvent {
+                key: Key::Escape,
+                mods: Mods::default(),
+            })
+        });
+        assert!(fronts(&world).is_empty(), "Escape left {} open", layer.id());
+    }
+}
+
+#[test]
+fn the_palette_holds_every_app_shortcut_tauri_turns_off_under_it() {
+    let kept = [
+        Action::AppQuit,
+        Action::UiActionMenu,
+        Action::UiCommandPalette,
+        Action::UiOpenSettings,
+        Action::UiShowShortcuts,
+        Action::UiIncreaseFontSize,
+        Action::UiDecreaseFontSize,
+        Action::UiResetFontSize,
+        Action::SessionsOpen,
+        Action::SidebarWider,
+        Action::SidebarNarrower,
+        Action::SidebarAgentList,
+        Action::SessionSettle,
+        Action::SessionPriority,
+        Action::SessionSnooze,
+    ];
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let layer = Action::UiCommandPalette;
+    let mut world = counting();
+    open_layer(&mut world, &layer);
+    let mut pressed = 0;
+    for action in Action::ALL.iter().filter(|a| {
+        !kept.contains(a)
+            && !matches!(a.category(), Category::Panes | Category::Markdown)
+            && matches!(keymap.binding(a), Some(Binding::Chord(_)))
+    }) {
+        held(&mut world, &layer, action);
+        pressed += 1;
+    }
+    assert!(pressed > 40, "only {pressed} held keys pressed");
+
+    world.press_menu_key(chord(&Action::UiOpenSettings));
+    assert_eq!(
+        shortcut_records(&world).last().map(String::as_str),
+        Some("ui.openSettings"),
+        "Settings was held under the palette"
+    );
+}

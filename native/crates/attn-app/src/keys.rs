@@ -12,7 +12,7 @@ use crate::terminal::Typed;
 
 /// A key the window hears: from Rune when nothing has focus, or after a focused control
 /// passed it on. A focused text field has already offered it to `on_field_key` and taken
-/// typing and its edit commands.
+/// typing and its edit commands. A layer that captures navigation holds the app's shortcuts.
 ///
 /// Escape first lets go of an armed crew row and a header popover, then goes on as any key.
 /// The order: a pending sequence takes the next key; the terminal holding the keyboard keeps
@@ -42,6 +42,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
         if let Some(action) = second
+            && !held(state, &action)
             && !crate::browser::press_page_key(state, &action, tx)
         {
             run_shortcut(state, action, tx);
@@ -109,7 +110,8 @@ fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => {
-            crate::browser::press_page_key(state, &action, tx)
+            held(state, &action)
+                || crate::browser::press_page_key(state, &action, tx)
                 || run_shortcut(state, action, tx)
                 || send_to_terminal(state, terminal, ev, tx)
         }
@@ -351,17 +353,25 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
         ..Focus::default()
     };
     match state.keymap.press(ev, tx, focus) {
-        Press::Action(action) => run_shortcut(state, action, tx),
+        Press::Action(action) => held(state, &action) || run_shortcut(state, action, tx),
         Press::Leader { .. } | Press::Unbound => false,
     }
 }
 
+/// A modal dialog, or the snooze menu, which the Tauri app holds every shortcut under.
 fn modal(state: &State) -> bool {
     use crate::shell::Layer;
-    matches!(
-        state.window.layer,
-        Some(Layer::NewSession | Layer::CloseDesktop | Layer::SharedCodex)
-    )
+    state.window.snooze.is_some()
+        || matches!(
+            state.window.layer,
+            Some(Layer::NewSession | Layer::CloseDesktop | Layer::SharedCodex)
+        )
+}
+
+/// Whether the open layer holds the action's key, which then acts on nothing, not even the
+/// menu bar.
+fn held(state: &State, action: &Action) -> bool {
+    state.window.layer.is_some_and(|layer| layer.holds(action))
 }
 
 fn bound(state: &State, ev: &KeyEvent, tx: &Tx) -> bool {
