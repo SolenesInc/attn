@@ -101,6 +101,46 @@ fn home_says_so_when_there_are_no_sessions() {
 }
 
 #[test]
+fn home_cards_take_their_contents_height_and_the_cards_scroll_together_when_they_outgrow_home() {
+    let mut world = home(vec![], &[]);
+    let screen = world.screen();
+    let home = screen.bounds(Target::key("home")).unwrap();
+    let sessions = screen.bounds(Target::key("home.sessions")).unwrap();
+    let prs = screen.bounds(Target::key("home.prs")).unwrap();
+    assert_eq!(sessions[3], prs[3], "one row of cards, one height");
+    assert!(
+        sessions[3] == 200.0 && sessions[1] + sessions[3] + 200.0 < home[1] + home[3],
+        "an empty card keeps its 200-point floor and leaves the page below it empty: {sessions:?} in {home:?}"
+    );
+
+    world.daemon.emit(one_desktop(
+        (0..40)
+            .map(|n| agent(&format!("s{n}"), "working"))
+            .collect(),
+    ));
+    world.settle();
+    let cards = Target::key("home.cards.scroll");
+    let last = Target::key("home.session.s39");
+    let screen = world.screen();
+    let [x, y, w, h] = screen.bounds(cards.clone()).unwrap();
+    let hidden = screen.bounds(last.clone()).unwrap();
+    assert!(
+        hidden[1] > y + h,
+        "the 40th agent starts below the fold: {hidden:?}"
+    );
+    world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, -4000.0));
+    world.settle();
+    let screen = world.screen();
+    assert!(screen.scrolled(cards).unwrap() > 0.0);
+    let shown = screen.bounds(last).unwrap();
+    assert!(
+        shown[1] + shown[3] <= y + h,
+        "scrolling the cards brings the 40th agent into view: {shown:?} in {:?}",
+        [x, y, w, h]
+    );
+}
+
+#[test]
 fn an_activity_line_shows_beside_the_name_and_turns_stale_once_it_stops_being_refreshed() {
     let mut world = home(vec![with_activity("s1", 0)], &[]);
     assert_eq!(

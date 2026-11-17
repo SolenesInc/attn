@@ -12,7 +12,7 @@ use attn_protocol::{
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, el, memo, row, text};
+use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use crate::State;
@@ -749,28 +749,12 @@ fn pr_card(state: &State, t: &Tokens) -> El {
             None => repos.push((&pr.repo, vec![pr])),
         }
     }
-    let mut body = col()
-        .key("home.prs.body")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .gap(space::S3)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        });
-    let empty = |said: String| {
-        text(said)
-            .key("home.prs.empty")
-            .role("status")
-            .font(type_::BODY)
-            .color(t.text_muted)
-            .wrap()
-            .w_full()
-    };
+    let mut body = col().key("home.prs.body").w_full().gap(14.0);
+    let empty = |said: &str| crate::home::card_empty("home.prs.empty", said, t).role("status");
     if let Some(reason) = &facts.github.polling_off_reason {
-        body = body.child(empty(reason.clone()));
+        body = body.child(empty(reason));
     } else if active.is_empty() {
-        body = body.child(empty("No PRs need attention".into()));
+        body = body.child(empty("No PRs need attention"));
     } else {
         if !yours.is_empty() {
             body = body.child(section(
@@ -813,49 +797,25 @@ fn pr_card(state: &State, t: &Tokens) -> El {
         Some(keys) => format!("Refresh PRs ({keys})"),
         None => "Refresh PRs".to_owned(),
     };
-    col()
-        .key("home.prs")
-        .role("region")
-        .label("Pull Requests")
-        .grow(1.0)
-        .min_w(300.0)
-        .min_h(0.0)
-        .padding(space::S3)
-        .gap(space::S3)
-        .radius(8.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            row()
-                .w_full()
-                .items_center()
-                .gap(space::S2)
-                .child(
-                    type_::caps("Pull Requests")
-                        .role("heading")
-                        .color(t.text_dimmed)
-                        .grow(1.0),
-                )
-                .child(
-                    GlyphButton::new(&icon::REFRESH, "Refresh PRs")
-                        .icon_size(12.0)
-                        .color(t.text_dimmed)
-                        .side(20.0)
-                        .help(refresh_help)
-                        .on_press_tx(refresh)
-                        .build(k)
-                        .key("home.prs.refresh"),
-                )
-                .children(facts.github.polling_off_reason.is_none().then(|| {
-                    text(needing.to_string())
-                        .key("home.prs.count")
-                        .role("status")
-                        .label(format!("{needing} need attention"))
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                })),
+    let actions = [GlyphButton::new(&icon::REFRESH, "Refresh PRs")
+        .icon_size(12.0)
+        .color(t.text_dimmed)
+        .side(20.0)
+        .help(refresh_help)
+        .on_press_tx(refresh)
+        .build(k)
+        .key("home.prs.refresh")]
+    .into_iter()
+    .chain(facts.github.polling_off_reason.is_none().then(|| {
+        crate::home::card_count(
+            "home.prs.count",
+            needing,
+            format!("{needing} need attention"),
+            t,
         )
-        .child(body)
+    }))
+    .collect();
+    crate::home::card("home.prs", "Pull Requests", actions, body, t)
 }
 
 fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {

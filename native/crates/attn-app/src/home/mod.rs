@@ -13,9 +13,9 @@ use model::{Group, Home, HomeAgent};
 
 pub(crate) use model::next_change;
 
-/// attn's cat head, cropped to its outline, at twice the largest size the header draws it.
-pub(crate) const LOGO: &[u8] = include_bytes!("logo.png");
-const LOGO_SIZE: [f32; 2] = [36.0, 32.0];
+/// attn's app icon, the cat on its tile, at twice the size the header draws it.
+pub(crate) const LOGO: &[u8] = include_bytes!("../../../../../app/src/assets/icon.png");
+const LOGO_SIDE: f32 = 64.0;
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
@@ -41,13 +41,12 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         let home = model::home(facts, window.now_ms);
         col()
             .w_full()
-            .gap(space::S3)
-            .child(header(state.pictures.logo(), t))
-            .children(crate::whats_new::banner(state, t))
+            .child(header(state.pictures.logo(), t).mb(24.0))
+            .children(crate::whats_new::banner(state, t).map(|banner| banner.mb(20.0)))
             .children(
                 home.all_settled
                     .as_ref()
-                    .map(|running| all_settled(running, window.follow_next_turn, t)),
+                    .map(|running| all_settled(running, window.follow_next_turn, t).mb(20.0)),
             )
     });
     let sessions = memo("home.sessions", reads, || {
@@ -62,20 +61,28 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .h_full()
         .min_w(0.0)
-        .padding(space::S6)
-        .gap(space::S3)
+        .py(24.0)
+        .px(28.0)
         .fill(t.bg_app)
         .child(top)
         .child(
-            row()
-                .key("home.cards")
+            col()
+                .key("home.cards.scroll")
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                .gap(16.0)
-                .flex_wrap()
-                .child(sessions)
-                .child(crate::attention::home_card(state, t)),
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(
+                    row()
+                        .key("home.cards")
+                        .w_full()
+                        .gap(16.0)
+                        .flex_wrap()
+                        .child(sessions)
+                        .child(crate::attention::home_card(state, t)),
+                ),
         )
 }
 
@@ -84,12 +91,12 @@ fn header(logo: Option<&Image>, t: &Tokens) -> El {
         .key("home.header")
         .w_full()
         .items_center()
-        .gap(space::S2)
+        .gap(10.0)
         .children(logo.map(|logo| {
             el().key("home.logo")
                 .role("image")
                 .label("attn")
-                .size(LOGO_SIZE[0], LOGO_SIZE[1])
+                .size(LOGO_SIDE, LOGO_SIDE)
                 .pixels(logo.pixels())
         }))
         .child(
@@ -97,10 +104,7 @@ fn header(logo: Option<&Image>, t: &Tokens) -> El {
                 .grow(1.0)
                 .child(
                     text("attn")
-                        .font(rune::TextStyle {
-                            weight: 700.0,
-                            ..type_::TITLE.mono()
-                        })
+                        .font(rune::TextStyle::new(24.0, 700.0).mono())
                         .color(t.brand),
                 )
                 .child(type_::sans_caps("attention hub").color(t.text_dimmed)),
@@ -115,6 +119,7 @@ fn header(logo: Option<&Image>, t: &Tokens) -> El {
                 })
                 .build(attn_ui::kit(t))
                 .key("home.settings")
+                .self_start()
                 .radius(6.0)
                 .hover(t.bg_elevated),
         )
@@ -178,15 +183,7 @@ fn follow_check(follow: bool, t: &Tokens) -> El {
 }
 
 fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Tokens) -> El {
-    let mut body = col()
-        .key("home.sessions.body")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .gap(space::S3)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        });
+    let mut body = col().key("home.sessions.body").w_full().gap(16.0);
     if !asks.is_empty() {
         body = body.child(
             col()
@@ -202,12 +199,7 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
         );
     }
     if home.empty {
-        body = body.child(
-            text("No active sessions")
-                .key("home.empty")
-                .font(type_::BODY)
-                .color(t.text_muted),
-        );
+        body = body.child(card_empty("home.empty", "No active sessions", t));
     } else {
         if !home.turns.is_empty() {
             let unreachable = home.turns.iter().filter(|a| a.agent.offline).count();
@@ -246,39 +238,106 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
             body = body.child(snoozed(&home.snoozed, snoozed_open, t));
         }
     }
+    card(
+        "home.sessions",
+        "Sessions",
+        vec![card_action(
+            "home.new",
+            "New session",
+            "+ New",
+            t,
+            |state, tx| {
+                crate::dispatch(state, Action::SessionNew, tx);
+            },
+        )],
+        body,
+        t,
+    )
+}
+
+/// A Home card, as the Tauri app's `.dashboard-card`: a header band holding the heading and
+/// `actions`, ruled off from `body`. The cards share a row of the grid, so each is as tall as
+/// the taller one's content, and never under 200 points.
+pub(crate) fn card(key: &str, heading: &str, actions: Vec<El>, body: El, t: &Tokens) -> El {
     col()
-        .key("home.sessions")
+        .key(key.to_owned())
         .role("region")
-        .label("Sessions")
+        .label(heading.to_owned())
         .grow(1.0)
         .min_w(300.0)
-        .min_h(0.0)
-        .padding(space::S3)
-        .gap(space::S3)
+        .min_h(200.0)
         .radius(8.0)
         .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
+        .border(1.0, t.border)
         .child(
             row()
+                .key(format!("{key}.header"))
                 .w_full()
                 .items_center()
+                .gap(space::S2)
+                .padding(16.0)
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
                 .child(
-                    type_::caps("Sessions")
+                    type_::caps(heading)
                         .role("heading")
                         .color(t.text_dimmed)
                         .grow(1.0),
                 )
-                .child(button(
-                    "home.new",
-                    "New session",
-                    "+ New",
-                    t,
-                    |state, tx| {
-                        crate::dispatch(state, Action::SessionNew, tx);
-                    },
-                )),
+                .children(actions),
         )
-        .child(body)
+        .child(body.padding(12.0))
+}
+
+/// What a card says when it has nothing to list, as the Tauri app's `.card-empty`.
+pub(crate) fn card_empty(key: &str, said: &str, t: &Tokens) -> El {
+    text(said.to_owned())
+        .key(key.to_owned())
+        .font(type_::BODY)
+        .color(t.text_dimmed)
+        .align(rune::Align::Center)
+        .wrap()
+        .w_full()
+        .padding(20.0)
+}
+
+/// A card's count, as the Tauri app's `.card-count`: a brand pill.
+pub(crate) fn card_count(key: &str, count: usize, label: String, t: &Tokens) -> El {
+    text(count.to_string())
+        .key(key.to_owned())
+        .role("status")
+        .label(label)
+        .font(rune::TextStyle {
+            weight: 700.0,
+            ..type_::CAPTION
+        })
+        .color(t.on_brand)
+        .py(2.0)
+        .px(8.0)
+        .radius(10.0)
+        .fill(t.brand)
+}
+
+/// A bordered button in a card's header, as the Tauri app's `.card-action`.
+fn card_action(
+    key: &str,
+    label: &str,
+    shown: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    let (shown, ink) = (shown.to_owned(), t.text_tertiary);
+    Button::new(label)
+        .variant(ButtonVariant::Ghost)
+        .label_with(move |_, _| text(shown).font(type_::CAPTION).color(ink))
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
+        .key(key.to_owned())
+        .h(22.0)
+        .px(10.0)
+        .radius(4.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .hover(t.border)
 }
 
 /// A group of agents under its label, its count and what that count leaves out.

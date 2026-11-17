@@ -2184,6 +2184,23 @@ fn home(dark: bool) {
     snap(&mut world, "home", dark);
 }
 
+/// Home with no agents and GitHub polling off: both cards empty, the reason wrapping in its own.
+fn home_empty(dark: bool) {
+    let state = InitialStateMessage {
+        sessions: Some(vec![]),
+        desktops: Some(vec![]),
+        github_polling_off_reason: Some(
+            "GitHub polling is off for instance tour. Start its daemon with \
+             ATTN_GITHUB_POLLING=on to poll with your gh credentials."
+                .into(),
+        ),
+        ..initial(dark, pane("b"), vec![])
+    };
+    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    press(&mut world, Action::SessionGoToDashboard);
+    snap(&mut world, "home-empty", dark);
+}
+
 /// Manage crew with the Chief and scout, open on `member` at `tab`: a daemon that lists Claude
 /// Code and Codex, and holds an empty charter and no handoffs.
 fn manage_crew(dark: bool, member: &str, tab: &str, name: &str) {
@@ -2962,6 +2979,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         ledger_worktrees(dark);
         chief_setup(dark);
         home(dark);
+        home_empty(dark);
         palette_chief(dark);
         manage_crew(dark, "chief", "launch", "crew-launch");
         manage_crew(dark, "scout", "charter", "crew-charter");

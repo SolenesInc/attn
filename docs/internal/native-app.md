@@ -101,7 +101,7 @@ ghosted, its Where list and on an empty desktop, the automations drawer empty,
 listing two automations and with one selected over its runs, a new automation's form on
 its schedule, on a pull request trigger and with Advanced open, an automation's edit form,
 the form's hour picker and suggested time zones, each with a row reached by an arrow key, Home
-with the Chief and a crew member in the sidebar, the queue flow with two turns
+with the Chief and a crew member in the sidebar, Home with no agents and GitHub polling off, the queue flow with two turns
 owed and an open ask at Home and on the asking agent's desktop, the queue sidebar with
 the Chief between sessions and two automation runs that need the user, the queue bar
 with the sidebar collapsed, the desktop flow's rail, Manage crew on each of its

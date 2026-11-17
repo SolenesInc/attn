@@ -1800,8 +1800,8 @@ fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_s
         "# Pictures\n\n![a cat](img/cat.png)\n\n![gone](missing.png)\n\n![badge](https://example.com/b.png)\n",
     )]);
     let mut world = start(&disk);
-    let png =
-        base64::engine::general_purpose::STANDARD.encode(include_bytes!("../../src/home/logo.png"));
+    let png = base64::engine::general_purpose::STANDARD
+        .encode(include_bytes!("../../../../../app/src/assets/icon.png"));
     world.daemon.on("fs_read_asset", move |req| {
         if req["path"] == "knowledge/img/cat.png" {
             json!({ "event": "fs_read_asset_result", "success": true,
@@ -2025,8 +2025,8 @@ fn an_image_written_after_the_note_opened_shows_once_its_folder_changes() {
     let mut world = start(&disk);
     let written = Arc::new(Mutex::new(false));
     let there = written.clone();
-    let png =
-        base64::engine::general_purpose::STANDARD.encode(include_bytes!("../../src/home/logo.png"));
+    let png = base64::engine::general_purpose::STANDARD
+        .encode(include_bytes!("../../../../../app/src/assets/icon.png"));
     world.daemon.on("fs_read_asset", move |req| {
         if *there.lock().unwrap() {
             json!({ "event": "fs_read_asset_result", "success": true,
