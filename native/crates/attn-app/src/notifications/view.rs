@@ -128,6 +128,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         .gap(space::S2)
         .px(space::S3)
         .py(11.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
             type_::upper("Notifications", type_::BOLD_CAPS)
                 .color(t.text_primary)
@@ -135,12 +136,18 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         )
         .child(
             Button::new("Mark all read")
-                .variant(ButtonVariant::GhostMuted)
+                .variant(ButtonVariant::Ghost)
                 .control_size(ControlSize::Small)
+                .label_with({
+                    let ink = t.text_secondary;
+                    move |_, _| text("Mark all read").font(type_::CAPTION).color(ink)
+                })
                 .disabled(unread == 0)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::mark_all_read(state, tx))
                 .build(k)
-                .key("notifications.mark-all"),
+                .key("notifications.mark-all")
+                .radius(6.0)
+                .border(1.0, t.border),
         )
         .child(
             GlyphButton::new(glyph::TIMES, "Close")
@@ -160,8 +167,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
                 .role("list")
                 .label("Notifications")
                 .w_full()
-                .px(space::S2)
-                .pb(space::S2)
+                .padding(space::S2)
                 .gap(space::S1)
                 .children(body(state, k, t)),
         ));

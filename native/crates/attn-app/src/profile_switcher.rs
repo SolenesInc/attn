@@ -465,12 +465,14 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                     .on_press_tx(start_new)
                     .label_with({
                         let cap = keycap::Keys::outlined(&["N"]).build(t).a11y_hidden();
-                        move |font, ink| {
+                        let ink = t.text_secondary;
+                        move |_, _| {
                             row()
                                 .grow(1.0)
-                                .gap(space::S2)
+                                .gap(4.0)
                                 .items_center()
-                                .child(text("New profile").font(font).color(ink).grow(1.0))
+                                .child(rune::icon(&attn_ui::icon::PLUS, 13.0).color(ink))
+                                .child(text("New profile").font(type_::BODY).color(ink).grow(1.0))
                                 .child(cap)
                         }
                     })

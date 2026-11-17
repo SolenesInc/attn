@@ -8,7 +8,7 @@ use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, FileDialogOptions, Tx, col, el, row, text};
 use rune_kit::popover::anchored;
-use rune_kit::{Button, ButtonVariant, ControlSize, Placement, RadioItem};
+use rune_kit::{Button, ButtonVariant, ControlSize, Placement};
 
 use super::{Phase, View};
 use crate::State;
@@ -523,26 +523,118 @@ fn choose_folder(state: &mut State, tx: &mut Tx) {
     });
 }
 
-/// Arrows walk the focused radio's group, picking as they go, and Enter on a radio saves.
+/// Arrows walk the focused radio's group, picking as they go, and Enter on a radio saves. The
+/// harness and the effort are the Tauri app's `.chief-seg` segments; the models are its
+/// `.chief-pop-models` rows.
 fn radios(group: Group, choices: &[Choice], busy: bool, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
-    col()
+    let group_el = match group {
+        Group::Model => col().w_full().gap(1.0),
+        Group::Harness | Group::Effort => row()
+            .w_full()
+            .equal_columns(choices.len())
+            .padding(2.0)
+            .radius(7.0)
+            .fill(t.bg_elevated),
+    };
+    group_el
         .key(format!("{POP}.{}", group.id()))
         .role("radiogroup")
         .label(group.label())
         .focus_group()
-        .gap(space::S1)
         .children(choices.iter().map(|c| {
+            let choice = match group {
+                Group::Model => model_row(c, t),
+                Group::Harness | Group::Effort => segment(c, t),
+            };
             let label = match &c.mark {
                 Some(mark) => format!("{} · {mark}", c.label),
                 None => c.label.clone(),
             };
-            let mut item = RadioItem::new(label, c.checked).disabled(busy);
-            if let Some(p) = c.pick.clone() {
-                item = item.on_select(move |state: &mut State| pick(state, &p));
+            let mut choice = choice
+                .key(c.key.clone())
+                .role("radio")
+                .label(label)
+                .checked(c.checked)
+                .focusable(!busy)
+                .focus_selected(c.checked)
+                .focus_ring(2.0, -2.0, t.brand)
+                .disabled(busy);
+            if busy {
+                choice = choice.layer_opacity(0.45);
+            } else if let Some(p) = c.pick.clone() {
+                choice = choice.on_press(move |state: &mut State| pick(state, &p));
             }
-            item.build(k).key(c.key.clone())
+            choice
         }))
+}
+
+/// One of `.chief-seg`'s buttons: the chosen one raised on the button tone.
+fn segment(c: &Choice, t: &Tokens) -> El {
+    let (fill, ink) = if c.checked {
+        (t.bg_button, t.text_primary)
+    } else {
+        (rune::Color::TRANSPARENT, t.text_secondary)
+    };
+    let mut segment = row()
+        .min_w(0.0)
+        .center()
+        .px(6.0)
+        .py(4.0)
+        .radius(5.0)
+        .fill(fill)
+        .child(
+            text(c.label.clone())
+                .font(type_::CAPTION)
+                .color(ink)
+                .single_line()
+                .truncate()
+                .a11y_hidden(),
+        );
+    if c.checked {
+        segment = segment.box_shadow(rune::Shadow {
+            y: 1.0,
+            color: rune::Color::BLACK.alpha(0.25),
+            ..rune::Shadow::default()
+        });
+    }
+    segment
+}
+
+/// One of `.chief-pop-models`' rows: the chosen one tinted and outlined in brand.
+fn model_row(c: &Choice, t: &Tokens) -> El {
+    let mark_ink = if c.checked { t.brand } else { t.text_tertiary };
+    let line = row()
+        .w_full()
+        .items_start()
+        .gap(space::S2)
+        .px(8.0)
+        .py(6.0)
+        .radius(6.0)
+        .child(
+            text(c.label.clone())
+                .font(type_::CAPTION)
+                .color(t.text_primary)
+                .grow(1.0)
+                .min_w(0.0)
+                .wrap()
+                .a11y_hidden(),
+        )
+        .children(c.mark.clone().map(|mark| {
+            text(mark)
+                .font(type_::CAPTION)
+                .color(mark_ink)
+                .a11y_hidden()
+        }));
+    if c.checked {
+        line.fill(t.brand.alpha(0.12)).box_shadow(rune::Shadow {
+            spread: 1.0,
+            color: t.brand.alpha(0.45),
+            inset: true,
+            ..rune::Shadow::default()
+        })
+    } else {
+        line.hover(t.bg_elevated)
+    }
 }
 
 fn kicker(label: &str, t: &Tokens) -> El {
@@ -556,6 +648,27 @@ fn link(key: &str, label: &str, t: &Tokens, press: fn(&mut State, &mut Tx)) -> E
         .on_press_tx(press)
         .build(attn_ui::kit(t))
         .key(key.to_owned())
+}
+
+/// `.chief-folder-choose`: underlined words with no box.
+fn choose_link(busy: bool, t: &Tokens) -> El {
+    let words = "Choose…";
+    let link = text(words)
+        .key(format!("{POP}.folder.choose"))
+        .role("button")
+        .label("Choose the Notebook folder")
+        .font(type_::CAPTION)
+        .color(t.text_secondary)
+        .spans([rune::Span::new(0, words.len()).underline(t.border_hover)])
+        .single_line()
+        .focusable(!busy)
+        .focus_ring(2.0, -2.0, t.brand)
+        .disabled(busy);
+    if busy {
+        link.layer_opacity(0.45)
+    } else {
+        link.on_press_tx(choose_folder)
+    }
 }
 
 fn alert(text_: &str, t: &Tokens) -> El {
@@ -691,8 +804,8 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 row()
                     .key(format!("{POP}.folder-field"))
                     .gap(space::S2)
-                    .items_center()
-                    .child(kicker("Notebook", t))
+                    .items_start()
+                    .child(text("Notebook").font(type_::CAPTION).color(t.text_tertiary))
                     .child(
                         text(form.folder.clone())
                             .key(format!("{POP}.folder"))
@@ -702,16 +815,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                             .grow(1.0)
                             .min_w(0.0),
                     )
-                    .child(
-                        Button::new("Choose…")
-                            .variant(ButtonVariant::Neutral)
-                            .control_size(ControlSize::Small)
-                            .disabled(view.busy)
-                            .on_press_tx(choose_folder)
-                            .build(k)
-                            .key(format!("{POP}.folder.choose"))
-                            .label("Choose the Notebook folder"),
-                    ),
+                    .child(choose_link(view.busy, t)),
             );
         }
         if let Some(why) = super::setup_error(state) {

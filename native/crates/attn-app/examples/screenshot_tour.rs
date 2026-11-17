@@ -1797,7 +1797,9 @@ fn ledger_worktrees(dark: bool) {
     snap(&mut world, "ledger-worktrees", dark);
 }
 
-/// The Chief's setup, opened from its row while it has no harness yet.
+/// The Chief's setup, opened from its row while it has no harness yet: Claude Code and Codex
+/// to choose from, Claude Code's models with the deep one recommended, its efforts and the
+/// Notebook folder.
 fn chief_setup(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.crew = Some(vec![CrewMember {
@@ -1817,11 +1819,64 @@ fn chief_setup(dark: bool) {
             ("codex_cap_launch_instructions", "true"),
             ("new_session_agent", "claude"),
             ("queue_mode_enabled", "true"),
+            ("notebook.root.effective", "/home/me/attn-notebook"),
         ] {
             settings.insert(key.into(), value.into());
         }
     }
-    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    let daemon = Daemon::scripted().state(state);
+    daemon.on("delegation_preferences_get", |r: &Request| {
+        let harness = |id: &str, name: &str| Harness {
+            id: id.into(),
+            name: name.into(),
+            available: true,
+            model_pin: true,
+            effort_pin: true,
+            discovery: true,
+        };
+        message(DelegationPreferencesResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            preferences: Some(DelegationPreferences::default()),
+            harnesses: Some(vec![
+                harness("claude", "Claude Code"),
+                harness("codex", "Codex"),
+            ]),
+            templates: Some(Vec::new()),
+            expanded_roles: Some(Vec::new()),
+            ..DelegationPreferencesResultMessage::new()
+        })
+    });
+    daemon.on("harness_models", |r: &Request| {
+        let model = |id: &str, name: &str, tier: &str| HarnessModel {
+            harness: "claude".into(),
+            id: id.into(),
+            name: name.into(),
+            access: "unknown".into(),
+            effort_support: "supported".into(),
+            effort_levels: ["low", "medium", "high"].map(String::from).to_vec(),
+            tier: Some(tier.into()),
+            shipped_tier: Some(tier.into()),
+            tier_source: "shipped".into(),
+            ..HarnessModel::default()
+        };
+        message(HarnessModelsResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            models: vec![
+                model("opus", "Opus 5.5", "deep"),
+                model("sonnet", "Sonnet 5.5", "standard"),
+            ],
+            tier_defaults: attn_protocol::TierDefaults {
+                deep: Some("opus".into()),
+                standard: Some("sonnet".into()),
+                light: None,
+            },
+            ..HarnessModelsResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, SIZE);
+    world.settle();
     world.gesture(|app| app.click(Target::key("chief-slot")));
     snap(&mut world, "chief-setup", dark);
 }
