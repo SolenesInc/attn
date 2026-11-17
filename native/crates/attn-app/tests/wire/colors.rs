@@ -111,3 +111,27 @@ fn a_standard_menu_fills_with_the_scheme_s_panel_and_its_override_as_they_arrive
     );
     assert_eq!(menu_fill(&world, MENU), "#2a2b3c");
 }
+
+fn label_ink(world: &World, label: &str) -> String {
+    let text = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.text.as_deref() == Some(label))
+        .unwrap_or_else(|| panic!("no {label} on screen"));
+    text.text_color.expect("a label has ink").hex()[..7].to_owned()
+}
+
+#[test]
+fn a_standard_menu_draws_the_row_the_keys_reach_in_primary_ink_and_the_rest_in_secondary() {
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![turn("t-old", 30)]))));
+    world.gesture(|app| app.click(Target::role("button").name("Snooze t-old")));
+    let (primary, secondary) = (attn("ui", "text_primary"), attn("ui", "text_secondary"));
+    assert_eq!(label_ink(&world, "For 30 minutes"), primary);
+    assert_eq!(label_ink(&world, "For an hour"), secondary);
+
+    world.gesture(|app| app.key(super::queue::plain(rune::Key::Down)));
+    assert_eq!(label_ink(&world, "For 30 minutes"), secondary);
+    assert_eq!(label_ink(&world, "For an hour"), primary);
+}

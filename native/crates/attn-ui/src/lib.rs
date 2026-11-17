@@ -158,6 +158,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
             ..kit.ty.text_small_medium
         },
         ink: t.text_secondary,
+        focused_ink: t.text_primary,
     });
     kit
 }
