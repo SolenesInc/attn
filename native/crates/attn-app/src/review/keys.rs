@@ -192,7 +192,6 @@ pub(super) fn not_shown(
                 .label(format!("{} {}", entry.path, entry.reason))
                 .w_full()
                 .gap(space::S2)
-                .pl(6.0)
                 .child(
                     text(entry.path.clone())
                         .font(type_::MONO_CAPTION)
@@ -204,7 +203,7 @@ pub(super) fn not_shown(
                         .color(t.text_secondary)
                         .wrap(),
                 );
-            let el = cursor_frame(el, current, t);
+            let el = cursor_frame(el, current, t).pl(space::S2 + 6.0);
             match tile {
                 Some(tile) => place_press(el, tile, format!("{key}.entry.{j}")),
                 None => el,

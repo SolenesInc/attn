@@ -226,11 +226,16 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
         }
         if home.settled_heading {
             body = body.child(
-                text("Settled")
-                    .key("home.settled")
-                    .role("heading")
-                    .font(type_::SECTION)
-                    .color(t.text_secondary),
+                type_::upper(
+                    "Settled",
+                    rune::TextStyle {
+                        weight: 600.0,
+                        ..type_::SANS_CAPS
+                    },
+                )
+                .key("home.settled")
+                .role("heading")
+                .color(t.text_muted),
             );
         }
         body = body.children(home.groups.iter().map(|Group { key, label, rows }| {

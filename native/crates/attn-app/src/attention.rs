@@ -124,6 +124,12 @@ impl<'a> Lists<'a> {
     }
 }
 
+const SECTION_TITLE: rune::TextStyle = rune::TextStyle {
+    weight: 500.0,
+    tracking: 1.4,
+    ..type_::CAPS
+};
+
 /// The pull requests nobody muted, not the pull request, its repository or its author, and not
 /// merged here.
 fn active<'a>(facts: &'a Facts, attention: &Attention) -> Vec<&'a PR> {
@@ -416,7 +422,7 @@ fn section(key: &str, title: &str, count: usize, rows: Vec<El>, t: &Tokens) -> E
         .child(
             row()
                 .gap(space::S2)
-                .child(type_::caps(title).color(t.text_dimmed))
+                .child(type_::upper(title, SECTION_TITLE).color(t.text_dimmed))
                 .child(
                     text(count.to_string())
                         .font(type_::LABEL)

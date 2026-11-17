@@ -691,6 +691,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                             .key(format!("{POP}.folder"))
                             .font(type_::MONO_CAPTION)
                             .color(t.text_secondary)
+                            .wrap_anywhere()
                             .grow(1.0)
                             .min_w(0.0),
                     )

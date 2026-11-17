@@ -6,7 +6,7 @@ use attn_protocol::HarnessModel;
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use rune::{Color, El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::popover::{anchored, raised};
 use rune_kit::{Button, ButtonVariant, ControlSize, Placement, TextInput};
 use serde::{Deserialize, Serialize};
@@ -541,65 +541,8 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
         .map(|(_, v)| v.as_str())
         .collect::<Vec<_>>()
         .join(" · ");
-    let shown = parts.clone();
-    let tokens = *t;
     let warning = view.missing.then_some(t.warning);
     let opener = target.clone();
-    let button = Button::new(label)
-        .label_with(move |font, ink| {
-            let part =
-                |name: &str, v: String| {
-                    let color = match (name, warning) {
-                        ("Model", Some(warning)) => warning,
-                        ("Harness", _) if field => tokens.text_secondary,
-                        ("Effort", _) if field => tokens.accent,
-                        _ => ink,
-                    };
-                    col()
-                        .gap(4.0)
-                        .children(field.then(|| {
-                            type_::upper(name, type_::BOLD_CAPS).color(tokens.text_tertiary)
-                        }))
-                        .child(text(v).font(font).color(color))
-                };
-            if !field {
-                return row()
-                    .gap(space::S3)
-                    .items_center()
-                    .children(shown.into_iter().map(|(name, v)| part(name, v)));
-            }
-            let (effort, line): (Vec<_>, Vec<_>) =
-                shown.into_iter().partition(|(name, _)| *name == "Effort");
-            col()
-                .w_full()
-                .gap(space::S2)
-                .child(
-                    row()
-                        .w_full()
-                        .gap(16.0)
-                        .items_start()
-                        .children(line.into_iter().map(|(name, v)| {
-                            let grow = if name == "Model" { 2.0 } else { 1.0 };
-                            part(name, v).grow(grow).min_w(0.0)
-                        }))
-                        .child(
-                            text(attn_ui::glyph::CARET_DOWN)
-                                .font(font)
-                                .color(tokens.text_tertiary),
-                        ),
-                )
-                .children(effort.into_iter().map(|(name, v)| {
-                    part(name, v)
-                        .w_full()
-                        .pt(space::S2)
-                        .border_sides([1.0, 0.0, 0.0, 0.0], tokens.border_subtle)
-                }))
-        })
-        .expanded(open)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx))
-        .build(crate::settings::pages::kit(t))
-        .key(key.clone())
-        .a11y_value(summary);
     let recommended = (field && view.above_tier)
         .then_some(rules.tier)
         .flatten()
@@ -609,11 +552,94 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
                 .font(CAPTION)
                 .color(t.warning)
         });
-    row()
-        .gap(space::S2)
-        .items_center()
-        .child(button)
-        .children(recommended)
+    if field {
+        return col()
+            .w_full()
+            .gap(6.0)
+            .child(
+                route_field(parts, warning, t)
+                    .key(key)
+                    .label(label.to_owned())
+                    .a11y_value(summary)
+                    .expanded(open)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        toggle(state, opener.clone(), tx)
+                    }),
+            )
+            .children(recommended);
+    }
+    let ink_of = move |name: &str, ink: Color| match (name, warning) {
+        ("Model", Some(warning)) => warning,
+        _ => ink,
+    };
+    Button::new(label)
+        .label_with(move |font, ink| {
+            row().gap(space::S3).items_center().children(
+                parts
+                    .into_iter()
+                    .map(|(name, v)| text(v).font(font).color(ink_of(name, ink))),
+            )
+        })
+        .expanded(open)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx))
+        .build(crate::settings::pages::kit(t))
+        .key(key)
+        .a11y_value(summary)
+}
+
+/// The Tauri app's `.route-field`: harness and model on one line beside the caret, and the
+/// effort under a hairline, each under its label.
+fn route_field(parts: Vec<(&str, String)>, warning: Option<Color>, t: &Tokens) -> El {
+    let font = crate::settings::pages::kit(t).ty.ui;
+    let part = |name: &str, value: String| {
+        let ink = match (name, warning) {
+            ("Model", Some(warning)) => warning,
+            ("Harness", _) => t.text_secondary,
+            ("Effort", _) => t.accent,
+            _ => t.text_primary,
+        };
+        col()
+            .gap(4.0)
+            .min_w(0.0)
+            .child(type_::upper(name, type_::BOLD_CAPS).color(t.text_tertiary))
+            .child(text(value).font(font).color(ink).wrap_anywhere())
+    };
+    let (effort, line): (Vec<_>, Vec<_>) =
+        parts.into_iter().partition(|(name, _)| *name == "Effort");
+    col()
+        .role("button")
+        .focusable(true)
+        .focus_ring(2.0, -2.0, t.accent)
+        .w_full()
+        .gap(10.0)
+        .px(13.0)
+        .py(11.0)
+        .radius(7.0)
+        .fill(t.bg_elevated)
+        .hover(t.bg_button)
+        .border(1.0, t.border)
+        .child(
+            row()
+                .w_full()
+                .gap(16.0)
+                .items_start()
+                .children(line.into_iter().map(|(name, v)| {
+                    let grow = if name == "Model" { 2.0 } else { 1.0 };
+                    part(name, v).grow(grow)
+                }))
+                .child(
+                    text(attn_ui::glyph::CARET_DOWN)
+                        .font(font)
+                        .color(t.text_tertiary)
+                        .a11y_hidden(),
+                ),
+        )
+        .children(effort.into_iter().map(|(name, v)| {
+            part(name, v)
+                .w_full()
+                .pt(8.0)
+                .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+        }))
 }
 
 /// The harnesses whose models the page's chips and the open picker want discovered.

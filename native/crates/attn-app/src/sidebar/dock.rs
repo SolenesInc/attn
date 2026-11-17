@@ -208,7 +208,7 @@ fn chip_view(chip: &Chip, t: &Tokens) -> El {
         .items_center()
         .gap(4.0)
         .radius(999.0)
-        .child(text(chip.keys.clone()).font(KEYS).color(t.text_secondary))
+        .child(text(chip.keys.clone()).font(KEYS).color(t.text_muted))
         .child(
             text(chip.label)
                 .font(type_::MONO_CAPTION)

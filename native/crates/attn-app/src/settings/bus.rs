@@ -259,6 +259,12 @@ fn section_head(title: &str, hint: String, t: &Tokens) -> El {
 }
 
 /// A table's header row: the columns' names, uppercase and quiet.
+const HEAD: rune::TextStyle = rune::TextStyle {
+    weight: 400.0,
+    tracking: 0.7,
+    ..type_::CAPS
+};
+
 fn head_row(key: &str, name: &str, columns: Vec<String>, t: &Tokens) -> El {
     table_row(
         key.into(),
@@ -266,7 +272,7 @@ fn head_row(key: &str, name: &str, columns: Vec<String>, t: &Tokens) -> El {
         type_::sans_caps(name).color(t.text_tertiary),
         columns
             .iter()
-            .map(|c| type_::caps(c).color(t.text_tertiary))
+            .map(|c| type_::upper(c, HEAD).color(t.text_tertiary))
             .collect(),
         t,
     )
