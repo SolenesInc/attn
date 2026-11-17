@@ -22,7 +22,7 @@ dispatches a fixer. The release process writes release notes from the commits.
 ### What land.sh does
 
 `scripts/land.sh` rebases onto `origin/main`, runs the catalog scenarios the
-landing selects on CI's Linux, runs a fast gate for the paths the landing
+landing selects on CI's Linux beside a fast gate for the paths the landing
 changes, and pushes.
 
 A landing selects two kinds of scenario:
@@ -37,6 +37,17 @@ A landing selects two kinds of scenario:
 `land.sh` starts the Acceptance soak workflow for them on a temporary
 `land-scenarios/` branch, waits for it, and deletes the branch. Every machine
 lands through this one path. Scenarios skipped on Linux are not run.
+
+A scenario that passed for the landing's diff does not run again. The diff is
+`git diff origin/main...HEAD`, identified by `git patch-id --verbatim`, so it
+survives a rebase that leaves the landing's own change as it was. Each pass
+adds a line `<scenario> github <run URL>` to
+`<git common dir>/attn-land-scenarios/<patch-id>`, which every worktree of the
+clone shares, and `land.sh` names the earlier run when it skips one. Of 201
+passed runs followed by another run of the same change from 6 to 17 November
+2026, 65 had an identical diff. `land.sh` deletes records older than 7 days
+after a push. A pass record ignores what `main` gained since the pass, as a
+rebase under the queue already does.
 
 Over 884 `main` commits ending at 582e27999, this selection runs a scenario for
 17% of landings, up from 8% for changed scenarios alone, with a median of 3
@@ -114,12 +125,17 @@ undoes, and one whose lines a later commit changed.
 After the push, `land.sh` runs `scripts/native-build-clean`, which removes old
 Rust build output. [Native app](native-app.md#build-output) says what it removes.
 
-Lands run their scenarios and their gate side by side, once each. Only the
-push waits: `land.sh` then takes the clone's land queue, a lock that every
-worktree of the clone shares, fetches, rebases onto `origin/main` and pushes.
-The queue keeps two lands of one clone from fetching into the shared
-`origin/main` ref at once, and a land that finds it taken prints the holder's
-PID, worktree and start time, waits, and says when it takes the queue. The lock
+The scenarios and the gate run side by side, once each. From 6 to 17 November
+2026 the rest of `land.sh` after the scenarios took 145 s at the median, against
+291 s for one scenario on CI, so a gate failure stops the landing minutes before
+the scenarios finish: `land.sh` cancels the scenario run and deletes its
+branch. A scenario failure stops the push once the gate is done. Lands of one
+clone also run side by side. Only the push waits: `land.sh` then takes the
+clone's land queue, a lock that every worktree of the clone shares, fetches,
+rebases onto `origin/main` and pushes. The queue keeps two lands of one clone
+from fetching into the shared `origin/main` ref at once, and a land that finds
+it taken prints the holder's PID, worktree and start time, waits, and says when
+it takes the queue. The lock
 dies with its process, so a land that crashes or is killed holds nothing.
 
 When `main` moved after the checks, `land.sh` says so, naming the commit the

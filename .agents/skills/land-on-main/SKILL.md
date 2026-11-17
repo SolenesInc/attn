@@ -123,7 +123,7 @@ scripts/land.sh
 ```
 
 Push with `scripts/land.sh`. It rebases onto `origin/main`, runs the scenarios
-your change selects on CI's Linux, runs a fast gate for the changed paths, and
+your change selects on CI's Linux beside a fast gate for the changed paths, and
 pushes. `.githooks/pre-push` refuses a plain
 `git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
 after you run its checks yourself.
@@ -151,11 +151,15 @@ running its checks again, and prints `land: main moved after the checks ran on
 run `scripts/land.sh` again.
 
 One selected scenario adds about five minutes, and 23 added about 17. The land
-prints the run's URL while it waits. When a scenario fails there, the land stops before the
+prints the run's URL while the gate runs. When the gate fails, the land cancels
+the scenario run. When a scenario fails there, the land stops before the
 push and prints how to read the failure. Fix it and land again: when your change
 meant to alter what the scenario expects, update the scenario in this landing. A
 product failure on Linux is a finding, as `app/scripts/real-app-harness/AGENTS.md`
 says.
+
+A scenario that passed for the same diff in an earlier land, one that stopped
+after the pass, does not run again. The land prints the run that passed.
 
 The landing tests of the gate come from the shared test history. They are the
 groups of `scripts/landing-tests` that the changed paths match, which include

@@ -4,10 +4,13 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-test.XXXXXX")"
 release_held_checks() {
-  [ -p "$work/hold/release" ] || return 0
-  exec 4<>"$work/hold/release"
-  echo release >&4
-  exec 4>&-
+  local fifo
+  for fifo in "$work/hold/release" "$work/soak-release"; do
+    [ -p "$fifo" ] || continue
+    exec 4<>"$fifo"
+    echo release >&4
+    exec 4>&-
+  done
 }
 trap 'release_held_checks; rm -rf "$work"' EXIT
 
@@ -23,6 +26,10 @@ if [ -e "$LAND_MOVE_MAIN" ]; then
   git -C "$LAND_OTHER" pull -q origin main
   git -C "$LAND_OTHER" commit -q --allow-empty -m 'Landed during the gate'
   git -C "$LAND_OTHER" push -q origin HEAD:main
+fi
+if [ -p "${LAND_GATE_AWAITS_SOAK:-}" ]; then
+  read -r _ <"$LAND_GATE_AWAITS_SOAK"
+  rm "$LAND_GATE_AWAITS_SOAK"
 fi
 if [ -n "${LAND_HOLD:-}" ]; then
   echo started >"$LAND_HOLD/started"
@@ -67,7 +74,14 @@ case "$1 $2" in
     ;;
   "run list") echo 7 ;;
   "run view") echo https://example.invalid/runs/7 ;;
-  "run watch") exit "${LAND_SOAK_EXIT:-0}" ;;
+  "run watch")
+    if [ -n "${LAND_SOAK_HOLD:-}" ]; then
+      echo watching >"$LAND_SOAK_HOLD/watching"
+      read -r _ <"$LAND_SOAK_HOLD/release"
+    fi
+    exit "${LAND_SOAK_EXIT:-0}"
+    ;;
+  "run cancel") printf 'soak %s\n' "$*" >>"$LAND_CHECK_LOG" ;;
   *) echo "unexpected gh $*" >&2; exit 2 ;;
 esac
 EOF
@@ -81,12 +95,22 @@ unset ATTN_FREEZE_EXCEPTION
 export PATH="$work/bin:$PATH"
 export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
-export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs"
+export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs" LAND_REJECT_MAIN="$work/reject-main"
 export selected=$'go ./internal/example TestExample\nvitest src/example.test.ts'
 selected_units="--unit go ./internal/example TestExample --unit vitest src/example.test.ts"
 go_choice=('land --group go --group prompts' "landing-tests --no-go-vet $selected_units")
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare "$work/remote"
+cat >"$work/remote/hooks/pre-receive" <<'EOF'
+#!/usr/bin/env bash
+while read -r _ _ ref; do
+  if [ "$ref" = refs/heads/main ] && [ -e "$LAND_REJECT_MAIN" ]; then
+    echo 'main rejects pushes for this test' >&2
+    exit 1
+  fi
+done
+EOF
+chmod +x "$work/remote/hooks/pre-receive"
 cd "$work/repo"
 git init -q
 git config user.name 'Landing Test'
@@ -315,7 +339,7 @@ printf '// changed\n' >app/scripts/real-app-harness/scenario-shelf-moves.mjs
 land 'Change a scenario, named through a package script'
 grep -qF 'soak workflow run acceptance-soak.yml' "$LAND_CHECK_LOG" || { echo 'a changed scenario did not run before the push' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the changed scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-[ "$(sed -n 1p "$LAND_CHECK_LOG" | cut -d' ' -f1)" = soak ] || { echo 'the scenario did not run first' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF 'check-frontend' "$LAND_CHECK_LOG" || { echo 'the gate did not run beside the scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF refs/heads/land-scenarios/ "$LAND_SOAK_REFS" || { echo 'the soak ran before its ref reached the remote' >&2; exit 1; }
 no_land_scenario_refs
 expect_output 'passed on CI'
@@ -397,6 +421,55 @@ refuses 'a changed scenario that fails on CI' LAND_SOAK_EXIT=1 app/scripts/real-
 grep -qF 'gh run view 7 --log-failed' "$work/failure" || { echo 'the failed scenario did not say how to read it' >&2; cat "$work/failure" >&2; exit 1; }
 no_land_scenario_refs
 refuses 'a failed Go compile' LAND_COMPILE_EXIT=1 internal/example/example.go
+
+records="$(git rev-parse --git-common-dir)/attn-land-scenarios"
+record_for_landing() {
+  printf '%s/%s' "$records" "$(git diff origin/main...HEAD | git patch-id --verbatim | cut -d' ' -f1)"
+}
+
+mkdir "$work/soak-hold"
+mkfifo "$work/soak-hold/watching" "$work/soak-release"
+ln -s "$work/soak-release" "$work/soak-hold/release"
+printf '// gate fails\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+git add -A
+git commit -qm 'Scenario change whose gate fails while its scenario runs'
+: >"$LAND_CHECK_LOG"
+before="$(git --git-dir="$work/remote" rev-parse main)"
+if env LAND_SOAK_HOLD="$work/soak-hold" LAND_GATE_AWAITS_SOAK="$work/soak-hold/watching" LAND_CHECK_EXIT=1 bash "$root/scripts/land.sh" >"$work/output" 2>&1; then
+  echo 'a landing whose gate failed pushed' >&2
+  exit 1
+fi
+[ "$before" = "$(git --git-dir="$work/remote" rev-parse main)" ]
+grep -qxF 'soak run cancel 7' "$LAND_CHECK_LOG" || { echo 'a failed gate did not cancel the running scenarios' >&2; cat "$LAND_CHECK_LOG" "$work/output" >&2; exit 1; }
+expect_output 'stopped the scenario step'
+no_land_scenario_refs
+[ ! -e "$(record_for_landing)" ] || { echo 'a stopped scenario step recorded a pass' >&2; exit 1; }
+
+touch "$LAND_REJECT_MAIN"
+: >"$LAND_CHECK_LOG"
+if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'main accepted a push it rejects' >&2; exit 1; fi
+grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'the scenario did not run' >&2; cat "$work/output" >&2; exit 1; }
+grep -qxF 'shelf-moves github https://example.invalid/runs/7' "$(record_for_landing)" || { echo 'a passed scenario left no pass record' >&2; exit 1; }
+git -C "$LAND_OTHER" pull -q origin main
+printf 'moved\n' >"$LAND_OTHER/moved.md"
+git -C "$LAND_OTHER" add -A
+git -C "$LAND_OTHER" commit -qm 'Main moves before the landing runs again'
+rm "$LAND_REJECT_MAIN"
+git -C "$LAND_OTHER" push -q origin HEAD:main
+touch "$LAND_REJECT_MAIN"
+: >"$LAND_CHECK_LOG"
+if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'main accepted a push it rejects' >&2; exit 1; fi
+if grep -qF soak "$LAND_CHECK_LOG"; then echo 'an unchanged diff ran its scenario again after a rebase' >&2; cat "$work/output" >&2; exit 1; fi
+expect_output 'scenario shelf-moves passed on this diff already: https://example.invalid/runs/7'
+grep -qF 'check-frontend' "$LAND_CHECK_LOG" || { echo 'a landing with recorded scenarios skipped its gate' >&2; exit 1; }
+rm "$LAND_REJECT_MAIN"
+printf 'changed diff\n' >>README.md
+git add -A
+git commit -q --amend --no-edit
+: >"$LAND_CHECK_LOG"
+bash "$root/scripts/land.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
+[ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
+grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'a changed diff did not run its scenario again' >&2; cat "$work/output" >&2; exit 1; }
 
 hold="$work/hold" second="$work/second"
 mkdir "$hold"

@@ -238,7 +238,7 @@ native_clippy_scope() {
 }
 
 run_go_checks_beside_landing_tests() {
-  local go_checks_log go_checks_job choosing_job status=0 units_file
+  local go_checks_log go_checks_job choosing_job="" status=0 units_file
   units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
   if [ "${#landing_groups[@]}" -gt 0 ]; then
     choose_landing_tests "$units_file" &
@@ -247,7 +247,7 @@ run_go_checks_beside_landing_tests() {
   if [ "${#go_checks[@]}" -gt 0 ]; then
     make -s compile-go "GO_PACKAGES=$packages $(landing_test_packages)" || status=$?
     if [ "$status" -ne 0 ]; then
-      wait
+      [ -z "${choosing_job:-}" ] || wait "$choosing_job" || true
       rm -f "$units_file"
       return "$status"
     fi
@@ -350,6 +350,12 @@ take_land_queue() {
   echo "pid $$ ($(basename "$PWD")) since $(date +%H:%M:%S)" >"$queue"
 }
 
+forget_old_scenario_passes() {
+  local records
+  records="$(git rev-parse --git-common-dir)/attn-land-scenarios"
+  [ ! -d "$records" ] || find "$records" -type f -mtime +7 -delete 2>/dev/null || true
+}
+
 clean_native_builds() {
   [ -x scripts/native-build-clean ] || return 0
   scripts/native-build-clean || echo "land: scripts/native-build-clean failed; old native build output stays until the next land" >&2
@@ -385,9 +391,7 @@ EOF
 
 land() {
   local undone checked
-  [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
-  rebase_onto_main
-  run_checks
+  check_beside_scenarios
   checked="$(git rev-parse --short HEAD)"
   take_land_queue
   for _ in $(seq "$max_attempts"); do
@@ -399,6 +403,7 @@ land() {
       echo "land: main is at $(git rev-parse --short HEAD)"
       sync_history "this landing's test receipts upload at the next sync"
       clean_native_builds
+      forget_old_scenario_passes
       warn_about_undone_commits "$undone"
       exit 0
     fi
@@ -436,9 +441,25 @@ $others
 See which config set the identity with git config --show-origin user.email. If it is not yours, remove it. Then fix these commits with git rebase origin/main --exec 'git commit --amend --no-edit --reset-author' and run scripts/land.sh again."
 }
 
-run_landing_scenarios() {
+scenario_step=""
+stop_scenario_step() {
+  [ -n "$scenario_step" ] || return 0
+  kill -TERM "$scenario_step" 2>/dev/null || return 0
+  wait "$scenario_step" 2>/dev/null || true
+  echo "land: stopped the scenario step, because the checks failed or the land was interrupted" >&2
+}
+
+check_beside_scenarios() {
   rebase_onto_main
-  scripts/land-scenarios.sh origin/main
+  [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
+  scripts/land-scenarios.sh origin/main &
+  scenario_step=$!
+  trap stop_scenario_step EXIT
+  trap 'exit 130' INT TERM
+  run_checks
+  local step="$scenario_step"
+  scenario_step=""
+  wait "$step"
 }
 
 # GOGC=400 cut staticcheck on internal/daemon from 19.4 to 15.3 CPU-s and added
@@ -447,5 +468,4 @@ export GOGC="${GOGC:-400}"
 git fetch --quiet origin main
 refuse_commits_by_another_author
 refuse_frozen_changes
-run_landing_scenarios
 land
