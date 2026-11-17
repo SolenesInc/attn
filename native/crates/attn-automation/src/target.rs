@@ -33,6 +33,10 @@ pub struct Found {
     pub(crate) index: usize,
     #[serde(skip)]
     pub(crate) path: String,
+    /// The path of the node that draws it: its own, or for a part of a text that Rune
+    /// reports as its own element, as a link, that text's.
+    #[serde(skip)]
+    pub(crate) drawn_by: String,
     #[serde(skip)]
     pub(crate) visible: [f32; 4],
     #[serde(skip)]
@@ -65,6 +69,16 @@ impl Target {
             moving |= elements[p].moving;
             parent = elements[p].parent;
         }
+        let drawn_by = e
+            .parent
+            .map(|p| &elements[p].path)
+            .filter(|text| {
+                e.path
+                    .strip_prefix(text.as_str())
+                    .is_some_and(|rest| rest.starts_with('#'))
+            })
+            .unwrap_or(&e.path)
+            .clone();
         Some(Found {
             key: e.key.clone(),
             role: e.role,
@@ -72,6 +86,7 @@ impl Target {
             rect: e.rect,
             index,
             path: e.path.clone(),
+            drawn_by,
             visible: e.visible,
             moving,
         })
@@ -89,18 +104,16 @@ impl Target {
         let Some(picked) = rt.element_at(x, y) else {
             return (None, false);
         };
-        if inert_over(rt, picked.path(), &found.path)
-            && rt.contains(found.key.as_deref().unwrap_or(&found.path), x, y)
-        {
+        if inert_over(rt, picked.path(), &found.drawn_by) && found.drawn_at(rt, (x, y)) {
             return (
                 Some(found.key.clone().unwrap_or_else(|| found.path.clone())),
                 true,
             );
         }
-        let inside = picked.path() == found.path
+        let inside = picked.path() == found.drawn_by
             || picked
                 .path()
-                .strip_prefix(found.path.as_str())
+                .strip_prefix(found.drawn_by.as_str())
                 .is_some_and(|rest| rest.starts_with('/'));
         (
             Some(picked.key().unwrap_or(picked.path()).to_owned()),
@@ -146,6 +159,13 @@ fn accessible_name(e: &ElementInfo) -> Option<&String> {
 impl Found {
     /// The point `at` (fractions of the box, from its top left) inside the part of it its
     /// ancestors' clips leave visible; none when nothing of it shows.
+    /// Whether window point `(x, y)` is inside its drawn, clipped box, whatever is drawn above.
+    /// A part of a text has no box of its own, and its visible part is already clipped to the
+    /// text's.
+    pub(crate) fn drawn_at<S>(&self, rt: &Runtime<S>, (x, y): (f32, f32)) -> bool {
+        self.drawn_by != self.path || rt.contains(self.key.as_deref().unwrap_or(&self.path), x, y)
+    }
+
     pub(crate) fn point(&self, at: (f32, f32)) -> Option<(f32, f32)> {
         let [x, y, w, h] = self.visible;
         (w > 0.0 && h > 0.0).then_some((x + w * at.0, y + h * at.1))

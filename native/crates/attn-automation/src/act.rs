@@ -318,11 +318,7 @@ fn pointer<S: 'static>(
     let Some(point) = found.point(aimed.at) else {
         return scroll_into_view(rt, &found);
     };
-    if !rt.contains(
-        found.key.as_deref().unwrap_or(&found.path),
-        point.0,
-        point.1,
-    ) {
+    if !found.drawn_at(rt, point) {
         return Attempt::Wait(format!("{:?} to show", aimed.target));
     }
     let (landed, matched) = Target::landed(rt, &found, point);
@@ -364,7 +360,7 @@ fn scroll_into_view<S: 'static>(rt: &mut Runtime<S>, found: &Found) -> Attempt {
 
 #[cfg(test)]
 mod tests {
-    use rune::{Cx, El, Env, Spring, el};
+    use rune::{Cx, El, Env, Link, Spring, el, text};
 
     use super::*;
 
@@ -420,5 +416,29 @@ mod tests {
             panic!("the press did not land once the cover stopped");
         };
         assert_eq!(receipt["matched"], true, "{receipt}");
+    }
+
+    fn letter(_: &bool, _: &mut Cx<bool>) -> El {
+        const LETTER: &str = "Continue from the receipt.";
+        el().w(300.0).h(40.0).child(
+            text(LETTER)
+                .key("letter")
+                .link(Link::new(14..25, "s-receipt"))
+                .on_link(|followed: &mut bool, _: &str, _: &mut Tx| *followed = true),
+        )
+    }
+
+    #[test]
+    fn a_press_on_a_link_in_a_text_lands_on_the_link_and_follows_it() {
+        let mut rt = Runtime::new(false, letter, (300.0, 40.0), Env::default());
+        rt.frame(0.0);
+        let press = json!({"target": {"role": "link", "name": "the receipt"}});
+
+        let Attempt::Done(receipt) = act(&mut rt, &Hooksless, "press", &press) else {
+            panic!("the press did not reach the link");
+        };
+        rt.frame(0.016);
+        assert_eq!(receipt["matched"], true, "{receipt}");
+        assert!(*rt.state(), "the link was followed");
     }
 }
