@@ -117,6 +117,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.bg_deep = t.bg_app;
     p.layer_01 = t.bg_elevated;
     p.surface_raised = t.bg_elevated;
+    p.surface_menu = t.bg_panel;
     p.surface_raised_hover = t.bg_selected;
     p.bg_button_neutral = t.bg_button;
     p.layer_04 = t.border_hover;
@@ -146,6 +147,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     kit.elevation.floating = vec![popover_shadow(t)];
     kit.elevation.md = vec![popover_shadow(t)];
     kit.elevation.overlay = vec![popover_shadow(t)];
+    kit.standard_menu = standard_menu(&kit, t);
     kit
 }
 
@@ -162,6 +164,20 @@ pub fn brand_ink(t: &Tokens) -> Color {
 /// The Tauri app's ink on a warning fill, `color-mix(in srgb, var(--color-warning) 10%, black)`.
 pub fn warning_ink(t: &Tokens) -> Color {
     colors::mix_srgb(t.warning, t.shadow, 0.9)
+}
+
+/// The Tauri app's menus, `.session-actions-popover` and `.snooze-menu`, with rows 29 points
+/// high in the kit's own row text.
+fn standard_menu(kit: &rune_kit::Kit, t: &Tokens) -> rune_kit::StandardMenu {
+    const ROW_HEIGHT: f32 = 29.0;
+    let line = kit.ty.text_small_medium.line_height;
+    rune_kit::StandardMenu {
+        edge_alpha: 1.0,
+        radius: Frame::menu(t).radius,
+        inset: 5.0,
+        row_padding: (9.0, (ROW_HEIGHT - line) / 2.0),
+        row_radius: 5.0,
+    }
 }
 
 /// The Tauri app's field outline, `border: 1px solid var(--color-border)`.

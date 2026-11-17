@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
 use attn_protocol::SettingsUpdatedMessage;
-use attn_testkit::World;
+use attn_testkit::{Daemon, Target, World};
 use serde_json::Value;
 
+use super::queue::{one_desktop, queue, turn};
 use super::terminal::one_terminal;
 
 const CATPPUCCIN: &str = include_str!("../../../../../internal/colors/schemes/catppuccin.json");
@@ -64,4 +65,40 @@ fn a_scheme_and_an_override_recolor_the_window_and_its_terminals_as_they_arrive(
     update(&mut world, &[]);
     assert_eq!(window_background(&world), "#0d0d0f");
     assert_eq!(terminal_background(&world), "#1e1e1e");
+}
+
+fn menu_fill(world: &World, key: &str) -> String {
+    let menu = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("no {key} on screen"));
+    menu.fill.hex()[..7].to_owned()
+}
+
+#[test]
+fn a_standard_menu_fills_with_the_scheme_s_panel_and_its_override_as_they_arrive() {
+    const MENU: &str = "snooze.menu.snooze-menu";
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![turn("t-old", 30)]))));
+    world.gesture(|app| app.click(Target::role("button").name("Snooze t-old")));
+    assert_eq!(menu_fill(&world, MENU), "#111113");
+
+    let queue_mode = ("queue_mode_enabled", "true");
+    update(&mut world, &[queue_mode, ("color_scheme", "catppuccin")]);
+    assert_eq!(menu_fill(&world, MENU), catppuccin("ui", "bg_panel"));
+
+    update(
+        &mut world,
+        &[
+            queue_mode,
+            ("color_scheme", "catppuccin"),
+            (
+                "color_overrides",
+                r##"{"dark":{"ui":{"bg_panel":"#2a2b3c"}}}"##,
+            ),
+        ],
+    );
+    assert_eq!(menu_fill(&world, MENU), "#2a2b3c");
 }
