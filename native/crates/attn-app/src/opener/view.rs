@@ -1,7 +1,6 @@
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, row, text};
+use attn_ui::finder;
+use rune::{El, Tx, col};
 use rune_kit::TextInput;
 
 use super::Row;
@@ -17,8 +16,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let field = TextInput::new(&state.opener.query)
         .key(super::FIELD)
         .plain()
-        .text_style(type_::BODY)
-        .height(type_::BODY.line_px())
+        .text_style(finder::FIELD_TEXT)
+        .height(finder::FIELD_TEXT.line_px())
         .width(None)
         .label(LABEL)
         .placeholder("Open a markdown file…")
@@ -30,8 +29,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .key("opener.list")
         .role("listbox")
         .label(LABEL)
-        .w_full()
-        .max_h(520.0)
+        .max_h(finder::LIST_MAX)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
@@ -41,59 +39,24 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                 .enumerate()
                 .map(|(i, r)| option(r, at == Some(i), t)),
         )
-        .children(rows.is_empty().then(|| {
-            text(empty)
-                .key("opener.empty")
-                .font(type_::BODY)
-                .color(t.text_tertiary)
-        }));
-    let panel = col()
+        .children(
+            rows.is_empty()
+                .then(|| finder::empty(t, empty).key("opener.empty")),
+        );
+    let panel = finder::panel(t, field, list)
         .key("opener.dialog")
         .role("dialog")
         .label(LABEL)
-        .modal_tx(true, super::close)
-        .padding(space::S3)
-        .gap(space::S2)
-        .child(field)
-        .child(list);
-    attn_ui::finder::layer(
-        t,
-        "opener",
-        rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0),
-    )
+        .modal_tx(true, super::close);
+    finder::layer(t, "opener", panel)
 }
 
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     let picked = r.key.clone();
-    row()
+    finder::option(t, r.title.clone(), r.detail.clone(), highlighted)
         .key(format!("opener.row.{}", r.key))
         .role("option")
         .label(format!("{} {}", r.title, r.detail))
         .focus_selected(highlighted)
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .px(space::S2)
-        .py(space::S1)
-        .radius(4.0)
-        .fill(if highlighted {
-            t.bg_selected
-        } else {
-            t.bg_elevated
-        })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &picked, tx))
-        .child(
-            text(r.title.clone())
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .single_line(),
-        )
-        .child(
-            text(r.detail.clone())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-                .single_line()
-                .truncate()
-                .shrink(),
-        )
 }

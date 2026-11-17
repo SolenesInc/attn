@@ -3,10 +3,8 @@
 
 use attn_protocol::{FsIndexMessage, FsIndexResultMessage};
 use attn_ui::Tokens;
-use attn_ui::colors::mix_srgb;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use attn_ui::finder;
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col};
 use rune_kit::TextInput;
 
 use super::io;
@@ -125,8 +123,8 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
     let field = TextInput::new(&finder.query)
         .key(FIELD)
         .plain()
-        .text_style(type_::BODY)
-        .height(type_::BODY.line_px())
+        .text_style(finder::FIELD_TEXT)
+        .height(finder::FIELD_TEXT.line_px())
         .width(None)
         .label(LABEL)
         .placeholder("Find a note…")
@@ -154,8 +152,7 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         .key("notebook.finder.list")
         .role("listbox")
         .label(LABEL)
-        .w_full()
-        .max_h(520.0)
+        .max_h(finder::LIST_MAX)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
@@ -165,59 +162,24 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
                 .enumerate()
                 .map(|(i, path)| option(path, i == finder.highlighted, t)),
         )
-        .children(
-            rows.is_empty()
-                .then(|| text(empty).font(type_::BODY).color(t.text_tertiary)),
-        );
-    let panel = col()
+        .children(rows.is_empty().then(|| finder::empty(t, empty)));
+    let panel = finder::panel(t, field, list)
         .key("notebook.finder")
         .role("dialog")
         .label(LABEL)
-        .on_press_outside(close)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .padding(space::S3)
-        .gap(space::S2)
-        .child(field)
-        .child(list);
-    Some(attn_ui::finder::layer(t, "notebook.finder.layer", panel))
+        .on_press_outside(close);
+    Some(finder::layer(t, "notebook.finder.layer", panel))
 }
 
 fn option(path: &str, highlighted: bool, t: &Tokens) -> El {
     let name = path.rsplit('/').next().unwrap_or(path).to_owned();
     let picked = path.to_owned();
-    row()
+    finder::option(t, name.clone(), path.to_owned(), highlighted)
         .key(format!("notebook.finder.row.{path}"))
         .role("option")
         .label(format!("{name} {path}"))
         .focus_selected(highlighted)
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .px(space::S2)
-        .py(space::S1)
-        .radius(8.0)
-        .fill(if highlighted {
-            mix_srgb(t.bg_elevated, t.brand, 0.18)
-        } else {
-            t.bg_elevated
-        })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, picked.clone(), tx))
-        .child(
-            text(name)
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .single_line(),
-        )
-        .child(
-            text(path.to_owned())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-                .single_line()
-                .truncate()
-                .shrink(),
-        )
 }
 
 /// The surface ⌘P finds a note in: the fullscreen notebook while it shows, else the editor

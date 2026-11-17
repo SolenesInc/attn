@@ -20,10 +20,17 @@ pub(crate) use view::view;
 
 use markdown::{LineKind, Shown};
 
-/// The note's body type, and the size of each heading level as a multiple of it, as the Tauri
-/// editor sizes them.
-pub(crate) const BODY: TextStyle = TextStyle::new(14.0, 400.0).lh(23.0);
+/// The note's body type, and the size and weight of each heading level, as the Tauri editor
+/// sets them: a serif, drawing `-->` as written rather than as an arrow. The Tauri app's
+/// `ui-serif, Georgia, 'Times New Roman', serif`, with Linux's usual serifs for `serif`.
+pub(crate) const BODY: TextStyle = TextStyle::new(14.0, 400.0)
+    .lh(23.0)
+    .family(rune::Family::Named(
+        "New York, Georgia, Times New Roman, Noto Serif, DejaVu Serif, Liberation Serif",
+    ))
+    .features("'liga' 0, 'calt' 0");
 const HEADING_SCALE: [f32; 6] = [1.7, 1.4, 1.2, 1.08, 1.0, 1.0];
+const HEADING_WEIGHT: [f32; 6] = [650.0, 630.0, 600.0, 600.0, 600.0, 600.0];
 
 #[derive(Clone, Debug)]
 pub(crate) struct Editor {
@@ -40,6 +47,8 @@ pub(crate) struct Editor {
     /// The notes the links point at that the daemon said are missing, the ones it said exist,
     /// and every note asked about since files last changed, by path from the root.
     pub(crate) missing: std::collections::BTreeSet<String>,
+    /// The note's folder, which its links resolve from.
+    dir: String,
     pub(crate) found: std::collections::BTreeSet<String>,
     pub(crate) checked: std::collections::BTreeSet<String>,
     /// The document revision whose links were last looked at.
@@ -64,6 +73,7 @@ impl Editor {
             preedit: None,
             toggling: false,
             missing: Default::default(),
+            dir: String::new(),
             found: Default::default(),
             checked: Default::default(),
             links_revision: None,
@@ -71,6 +81,12 @@ impl Editor {
             find: None,
             kinds,
         }
+    }
+
+    /// The editor of a note in folder `dir`.
+    pub(crate) fn in_folder(mut self, dir: &str) -> Editor {
+        self.dir = dir.to_owned();
+        self
     }
 
     pub(crate) fn text(&self) -> String {
@@ -94,16 +110,34 @@ impl Editor {
         self.focused && a.line <= i && i <= b.line
     }
 
+    /// How line `i` shows, a link to a missing note marked broken unless the line shows its
+    /// source.
     pub(crate) fn shown(&self, i: usize) -> Shown {
-        markdown::shown(self.doc.line(i), self.active(i))
+        let active = self.active(i);
+        let mut shown = markdown::shown(self.doc.line(i), active);
+        if !active {
+            for link in 0..shown.links.len() {
+                let (range, href) = shown.links[link].clone();
+                if Editor::note_of(&href, &self.dir).is_some_and(|p| self.missing.contains(&p)) {
+                    shown.mark_broken(range);
+                }
+            }
+        }
+        shown
     }
 
     /// The line's text, spans and type, as its row draws it.
     pub(crate) fn styled(&self, shown: &Shown) -> (Vec<Span>, TextStyle) {
         let style = match shown.heading {
             Some(level) => {
-                let size = BODY.size * HEADING_SCALE[(level as usize).clamp(1, 6) - 1];
-                TextStyle::new(size, 600.0).lh(size * 1.45)
+                let at = (level as usize).clamp(1, 6) - 1;
+                let size = BODY.size * HEADING_SCALE[at];
+                TextStyle {
+                    size,
+                    weight: HEADING_WEIGHT[at],
+                    line_height: size * if at < 2 { 1.3 } else { 1.65 },
+                    ..BODY
+                }
             }
             None => BODY,
         };
@@ -298,23 +332,23 @@ impl Editor {
     }
 
     /// The image files the note shows on lines of their own, by path from its folder.
-    pub(crate) fn images(&self, dir: &str) -> Vec<String> {
+    pub(crate) fn images(&self) -> Vec<String> {
         self.kinds()
             .iter()
             .filter_map(|k| match k {
-                LineKind::Image { src, .. } => Editor::note_of(src, dir),
+                LineKind::Image { src, .. } => Editor::note_of(src, &self.dir),
                 _ => None,
             })
             .collect()
     }
 
     /// The notes the document's links point at that nobody asked about yet.
-    pub(crate) fn unchecked_links(&self, dir: &str) -> Vec<String> {
+    pub(crate) fn unchecked_links(&self) -> Vec<String> {
         let mut paths = std::collections::BTreeSet::new();
         for line in self.doc.lines().iter().filter(|l| l.contains("](")) {
             for (_, href) in markdown::shown(line, true).links {
                 if let Some(path) =
-                    Editor::note_of(&href, dir).filter(|p| !self.checked.contains(p))
+                    Editor::note_of(&href, &self.dir).filter(|p| !self.checked.contains(p))
                 {
                     paths.insert(path);
                 }

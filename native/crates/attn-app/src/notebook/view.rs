@@ -14,16 +14,32 @@ use super::model::{Backlinks, Doc, Draft, Listing, Open, Surface, SurfaceId};
 use super::outline::outline;
 use crate::State;
 
-const TREE_WIDTH: f32 = 220.0;
+const TREE_WIDTH: f32 = 280.0;
 /// A tile narrower than these folds its file tree and its rail, as the Tauri tile does.
 const TREE_FOLDS_BELOW: f32 = 620.0;
 const RAIL_FOLDS_BELOW: f32 = 900.0;
-const RAIL_WIDTH: f32 = 240.0;
-const INDENT: f32 = 12.0;
+const RAIL_WIDTH: f32 = 280.0;
+const TREE_INDENT: f32 = 14.0;
+const TREE_ROW: f32 = 30.0;
 const NOTE: TextStyle = TextStyle::new(14.0, 400.0).lh(23.0);
-const HEADING: TextStyle = TextStyle::new(18.0, 600.0);
+const TITLE: TextStyle = TextStyle::new(15.0, 650.0).tracking(-0.225);
+const NOTE_TITLE: TextStyle = TextStyle::new(24.0, 680.0).tracking(-0.84);
+const STATE_TITLE: TextStyle = TextStyle::new(15.0, 600.0);
 const INSET: f32 = 24.0;
 const SHELL_INSET: f32 = 12.0;
+const RADIUS: f32 = 14.0;
+const FOLD: [f32; 2] = [16.0, 46.0];
+
+/// How far a note and its header sit in from the note pane's sides, as the Tauri app's
+/// `clamp(28px, 6vw, 90px)`.
+fn page_inset(window_w: f32) -> f32 {
+    (window_w * 0.06).clamp(28.0, 90.0)
+}
+
+/// The file tree's and the rail's ground: the app's background at 58% over what is behind.
+fn pane_fill(t: &Tokens) -> Color {
+    t.bg_app.alpha(0.58)
+}
 
 pub(super) fn key(id: &SurfaceId, part: &str) -> String {
     match id {
@@ -45,7 +61,9 @@ pub(crate) fn fullscreen(state: &State, t: &Tokens) -> El {
         }
         None => col(),
     };
-    let panel = col()
+    let [w, h] = state.notebook.panel;
+    let glow = 0.32 * (0.8 * w).hypot(h);
+    let mut panel = col()
         .key("notebook.panel")
         .role("dialog")
         .labelled_by("notebook.title")
@@ -53,11 +71,27 @@ pub(crate) fn fullscreen(state: &State, t: &Tokens) -> El {
             super::close_fullscreen(state, tx)
         })
         .on_paste_content(crate::keys::on_paste)
+        .on_layout(|state: &mut State, r: [f32; 4]| {
+            if state.notebook.panel != [r[2], r[3]] {
+                state.notebook.panel = [r[2], r[3]];
+                state.notebook.revision += 1;
+            }
+        })
         .w_full()
         .h_full()
-        .radius(8.0)
+        .radius(RADIUS)
+        .clip_rounded(RADIUS)
         .fill(t.bg_panel)
         .border(1.0, t.border)
+        .box_shadow(attn_ui::frame::shadow(t, 24.0, 80.0, 0.42));
+    if glow > 0.0 {
+        panel = panel.radial_gradient(
+            [0.8, 0.0],
+            glow,
+            [(0.0, t.brand.alpha(0.08)), (1.0, t.brand.alpha(0.0))],
+        );
+    }
+    let panel = panel
         .child(header(state, t))
         .child(body.grow(1.0).min_h(0.0));
     crate::shell::under_title_bar("notebook", SHELL_INSET, panel, t)
@@ -77,22 +111,30 @@ fn header(state: &State, t: &Tokens) -> El {
     });
     row()
         .w_full()
+        .min_h(72.0)
         .items_center()
-        .gap(space::S3)
-        .px(space::S3)
+        .gap(space::S6)
+        .px(18.0)
         .py(space::S3)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
-            col()
+            row()
                 .grow(1.0)
-                .child(type_::upper("Knowledge base", type_::BOLD_CAPS).color(t.brand))
+                .items_center()
+                .gap(11.0)
+                .child(rune::icon(&attn_ui::icon::NOTEBOOK, 25.0).color(t.brand))
                 .child(
-                    text("Notebook")
-                        .key("notebook.title")
-                        .role("heading")
-                        .level(1)
-                        .font(HEADING)
-                        .color(t.text_primary),
+                    col()
+                        .gap(2.0)
+                        .child(type_::upper("Knowledge base", type_::BOLD_CAPS).color(t.brand))
+                        .child(
+                            text("Notebook")
+                                .key("notebook.title")
+                                .role("heading")
+                                .level(1)
+                                .font(TITLE)
+                                .color(t.text_primary),
+                        ),
                 ),
         )
         .children(pulse)
@@ -128,7 +170,11 @@ pub(crate) fn tile_body(
     let id = SurfaceId::Tile(tile.to_owned());
     match notebook.tiles.get(tile) {
         Some(surface) => surface_view(notebook, &id, surface, find, t),
-        None => col().w_full().h_full().child(message("Loading…", t)),
+        None => col()
+            .w_full()
+            .h_full()
+            .fill(t.bg_panel)
+            .child(message("Loading…", t)),
     }
 }
 
@@ -144,8 +190,18 @@ fn surface_view(
     let rail = rail(id, surface, t);
     let rail_open = surface.folds.rail.unwrap_or(rail_fits);
     let sized = id.clone();
-    row()
-        .key(key(id, "surface"))
+    let inset = page_inset(notebook.window_w);
+    let folds = (
+        fold_button(id, Pane::Tree, tree_open, t),
+        rail.is_some()
+            .then(|| fold_button(id, Pane::Rail, rail_open, t)),
+    );
+    let surface_el = row().key(key(id, "surface"));
+    let surface_el = match id {
+        SurfaceId::Tile(_) => surface_el.fill(t.bg_panel),
+        SurfaceId::Fullscreen => surface_el,
+    };
+    surface_el
         .on_layout(move |state: &mut State, r: [f32; 4]| {
             let moved = state
                 .notebook
@@ -159,12 +215,7 @@ fn surface_view(
         .h_full()
         .min_h(0.0)
         .children(tree_open.then(|| tree(id, surface, t)))
-        .child(fold_button(id, Pane::Tree, tree_open, t))
-        .child(document(id, surface, find, t))
-        .children(
-            rail.is_some()
-                .then(|| fold_button(id, Pane::Rail, rail_open, t)),
-        )
+        .child(document(id, surface, find, inset, folds, t))
         .children(rail.filter(|_| rail_open))
         .children(super::finder::view(notebook, id, t))
 }
@@ -193,11 +244,7 @@ fn fold_button(id: &SurfaceId, pane: Pane, open: bool, t: &Tokens) -> El {
         (Pane::Rail, false) => ("Show context rail", "‹"),
     };
     let id = id.clone();
-    Button::new(glyph)
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Mini)
-        .help(label)
-        .build(attn_ui::kit(t))
+    let pill = col()
         .key(key(
             &id,
             match pane {
@@ -205,8 +252,18 @@ fn fold_button(id: &SurfaceId, pane: Pane, open: bool, t: &Tokens) -> El {
                 Pane::Rail => "fold.rail",
             },
         ))
+        .role("button")
         .label(label)
+        .help(label)
+        .focusable(true)
         .expanded(open)
+        .size(FOLD[0], FOLD[1])
+        .center()
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .radius(7.0)
+        .group_opacity(0.5, 1.0)
+        .child(text(glyph).font(type_::LABEL).color(t.text_muted))
         .on_press(move |state: &mut State| {
             if let Some(surface) = state.notebook.surface_mut(&id) {
                 let fold = match pane {
@@ -215,7 +272,17 @@ fn fold_button(id: &SurfaceId, pane: Pane, open: bool, t: &Tokens) -> El {
                 };
                 *fold = Some(!open);
             }
-        })
+        });
+    let (left, right) = match pane {
+        Pane::Tree => (Some(4.0), None),
+        Pane::Rail => (None, Some(4.0)),
+    };
+    col()
+        .pin(left, Some(0.0), right, Some(0.0))
+        .w(FOLD[0])
+        .justify_center()
+        .hover_group()
+        .child(pill)
 }
 
 fn tree(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
@@ -228,7 +295,9 @@ fn tree(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
         .w(TREE_WIDTH)
         .h_full()
         .min_h(0.0)
-        .py(space::S2)
+        .px(10.0)
+        .py(14.0)
+        .fill(pane_fill(t))
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
         .scroll(ScrollSpec {
             stick_bottom: false,
@@ -292,16 +361,22 @@ fn tree_row(
         .role(if folder { "treeitem" } else { "link" })
         .label(entry.name.clone())
         .w_full()
-        .pl(space::S3 + depth as f32 * INDENT)
-        .pr(space::S2)
-        .py(3.0)
+        .h(TREE_ROW)
+        .pl(8.0 + depth as f32 * TREE_INDENT)
+        .pr(10.0)
         .items_center()
-        .gap(space::S1)
+        .gap(6.0)
+        .radius(6.0)
+        .border(1.0, Color::TRANSPARENT)
+        .hover(t.bg_elevated.alpha(0.6))
         .children(chevron)
         .child(
             text(entry.name.clone())
-                .font(type_::BODY)
-                .color(if open { t.brand } else { t.text_secondary })
+                .font(TextStyle {
+                    weight: if folder { 550.0 } else { 400.0 },
+                    ..type_::BODY
+                })
+                .color(if open { t.brand } else { t.text_primary })
                 .truncate(),
         )
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -318,7 +393,6 @@ fn tree_row(
         row_el = row_el
             .fill(t.bg_elevated)
             .border(1.0, t.border)
-            .radius(8.0)
             .a11y_value("open");
     }
     row_el
@@ -336,13 +410,20 @@ fn toggle_folder(state: &mut State, id: &SurfaceId, path: &str, tx: &mut Tx) {
     }
 }
 
-fn document(id: &SurfaceId, surface: &Surface, find: Option<String>, t: &Tokens) -> El {
+fn document(
+    id: &SurfaceId,
+    surface: &Surface,
+    find: Option<String>,
+    inset: f32,
+    (tree_fold, rail_fold): (El, Option<El>),
+    t: &Tokens,
+) -> El {
     let body = match &surface.doc {
         Doc::Empty => empty(id, find, t),
         Doc::Loading { shown: None, .. } => message("Loading…", t),
         Doc::Loading {
             shown: Some(open), ..
-        } => open_view(id, open, t),
+        } => open_view(id, open, inset, t),
         Doc::Failed { error, .. } => notice("File unavailable", error, None, t),
         Doc::Binary { path } => notice(
             "Preview not available",
@@ -350,7 +431,7 @@ fn document(id: &SurfaceId, surface: &Surface, find: Option<String>, t: &Tokens)
             Some(path),
             t,
         ),
-        Doc::Open(open) => open_view(id, open, t),
+        Doc::Open(open) => open_view(id, open, inset, t),
     };
     col()
         .key(key(id, "document"))
@@ -360,18 +441,40 @@ fn document(id: &SurfaceId, surface: &Surface, find: Option<String>, t: &Tokens)
         .h_full()
         .min_h(0.0)
         .child(body)
+        .child(tree_fold)
+        .children(rail_fold)
+}
+
+/// A document pane with nothing to edit, as the Tauri app's `.notebook-browser-document-state`:
+/// the notebook's mark, a title and what to do, centered in the pane.
+fn state_view(title: &str, t: &Tokens) -> El {
+    col()
+        .w_full()
+        .h_full()
+        .min_h(0.0)
+        .center()
+        .child(
+            rune::icon(&attn_ui::icon::NOTEBOOK, 34.0)
+                .color(t.text_dimmed)
+                .mb(18.0),
+        )
+        .child(
+            text(title.to_owned())
+                .role("heading")
+                .level(2)
+                .font(STATE_TITLE)
+                .color(t.text_secondary)
+                .mb(7.0),
+        )
 }
 
 fn empty(id: &SurfaceId, find: Option<String>, t: &Tokens) -> El {
     let id = id.clone();
-    col()
-        .gap(space::S2)
-        .padding(INSET)
-        .child(heading("Nothing selected", t))
+    state_view("Nothing selected", t)
         .child(
             text("Find a note, or pick one from the tree.")
-                .font(type_::BODY)
-                .color(t.text_secondary),
+                .font(type_::LABEL)
+                .color(t.text_muted),
         )
         .child(
             Button::new("Find a note")
@@ -380,9 +483,10 @@ fn empty(id: &SurfaceId, find: Option<String>, t: &Tokens) -> El {
                 .label_with(word_and_key("Find a note", find, *t))
                 .build(attn_ui::kit(t))
                 .key(key(&id, "find"))
-                .self_start()
+                .mt(space::S3)
                 .fill(t.bg_elevated)
                 .border(1.0, t.border)
+                .radius(7.0)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     super::finder::open(state, id.clone(), tx)
                 }),
@@ -390,25 +494,20 @@ fn empty(id: &SurfaceId, find: Option<String>, t: &Tokens) -> El {
 }
 
 fn notice(title: &str, detail: &str, path: Option<&str>, t: &Tokens) -> El {
-    col()
-        .gap(space::S2)
-        .padding(INSET)
-        .child(heading(title, t))
+    state_view(title, t)
         .child(
             text(detail.to_owned())
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap(),
+                .font(type_::LABEL)
+                .color(t.text_muted)
+                .wrap()
+                .max_w(360.0),
         )
-        .children(path.map(|p| text(p.to_owned()).font(type_::LABEL).color(t.text_tertiary)))
-}
-
-fn heading(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .role("heading")
-        .level(2)
-        .font(HEADING)
-        .color(t.text_primary)
+        .children(path.map(|p| {
+            text(p.to_owned())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_dimmed)
+                .mt(space::S1)
+        }))
 }
 
 fn message(words: &str, t: &Tokens) -> El {
@@ -418,7 +517,7 @@ fn message(words: &str, t: &Tokens) -> El {
         .padding(INSET)
 }
 
-fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
+fn open_view(id: &SurfaceId, open: &Open, inset: f32, t: &Tokens) -> El {
     let title = open.path.rsplit('/').next().unwrap_or(&open.path);
     let title = title.strip_suffix(".md").unwrap_or(title).to_owned();
     let (badge, journal) = match open.kind {
@@ -458,14 +557,22 @@ fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
         .child(
             col()
                 .gap(space::S1)
-                .px(INSET)
-                .pt(space::S3)
-                .pb(space::S2)
+                .px(inset)
+                .pt(28.0)
+                .pb(18.0)
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
                 .child(
                     row()
                         .items_center()
-                        .gap(space::S2)
-                        .child(heading(&title, t).key(key(id, "document.title")))
+                        .gap(10.0)
+                        .child(
+                            text(title)
+                                .key(key(id, "document.title"))
+                                .role("heading")
+                                .level(2)
+                                .font(NOTE_TITLE)
+                                .color(t.text_primary),
+                        )
                         .child(
                             kind_badge(&badge, if journal { t.accent } else { t.brand }, t)
                                 .key(key(id, "document.kind")),
@@ -498,7 +605,8 @@ fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                .px(INSET)
+                .px(inset)
+                .pt(18.0)
                 .pb(INSET)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
@@ -625,13 +733,28 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
     let note = open.draft.text();
     let headings = outline(&note);
     let folds = surface.folds;
+    let outline_count = headings.len();
     let outline_items = headings.into_iter().enumerate().map(|(i, h)| {
+        let (indent, weight, ink) = match h.level {
+            1 => (8.0, 620.0, t.text_primary),
+            2 => (18.0, 400.0, t.text_secondary),
+            3 => (30.0, 400.0, t.text_secondary),
+            _ => (42.0, 400.0, t.text_muted),
+        };
         text(h.text.clone())
             .key(key(id, &format!("outline.{i}")))
-            .font(type_::BODY)
-            .color(t.text_secondary)
+            .font(TextStyle {
+                weight,
+                ..type_::BODY
+            })
+            .color(ink)
             .truncate()
-            .pl(space::S2 + (h.level.saturating_sub(1)) as f32 * INDENT)
+            .w_full()
+            .pl(indent)
+            .pr(8.0)
+            .py(4.0)
+            .radius(6.0)
+            .hover(t.bg_elevated.alpha(0.6))
             .role("button")
             .label(h.text)
             .focusable(true)
@@ -640,7 +763,6 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
                 move |state: &mut State, tx: &mut Tx| super::reveal_heading(state, &id, i, tx)
             })
     });
-    let outline_count = outline(&note).len();
     let backlinks: Vec<El> = match &surface.backlinks {
         Backlinks::Listed(entries) => entries
             .iter()
@@ -655,18 +777,23 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
                     .key(key(&id, &format!("backlink.{path}")))
                     .role("button")
                     .label(name.clone())
-                    .px(space::S2)
-                    .py(3.0)
+                    .w_full()
+                    .gap(2.0)
+                    .px(10.0)
+                    .py(7.0)
+                    .fill(t.bg_elevated)
+                    .border(1.0, t.border_subtle)
+                    .radius(7.0)
                     .child(
                         text(name)
-                            .font(type_::BODY)
+                            .font(type_::LABEL)
                             .color(t.text_secondary)
                             .truncate(),
                     )
                     .child(
                         text(e.path.clone())
                             .font(type_::MONO_CAPTION)
-                            .color(t.text_tertiary)
+                            .color(t.brand)
                             .truncate(),
                     )
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -682,6 +809,23 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
         Backlinks::Listed(e) if e.is_empty() => Some("No other note links here."),
         _ => None,
     };
+    let outline_body = (!folds.outline_closed).then(|| {
+        if outline_count == 0 {
+            rail_empty("No headings.", t)
+        } else {
+            col()
+                .key(key(id, "outline.headings"))
+                .role("list")
+                .label("Headings")
+                .focus_group()
+                .px(2.0)
+                .children(outline_items)
+        }
+    });
+    let backlinks_body = (!folds.backlinks_closed).then(|| match backlinks_empty {
+        Some(words) => rail_empty(words, t),
+        None => col().px(2.0).gap(6.0).children(backlinks),
+    });
     Some(
         col()
             .key(key(id, "context"))
@@ -690,56 +834,53 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
             .w(RAIL_WIDTH)
             .h_full()
             .min_h(0.0)
-            .py(space::S3)
-            .gap(space::S3)
+            .px(space::S3)
+            .py(16.0)
+            .fill(pane_fill(t))
             .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
-            .child(section(
-                id,
-                Section::Outline,
-                !folds.outline_closed,
-                outline_count,
-                t,
-            ))
-            .children((!folds.outline_closed).then(|| {
-                if outline_count == 0 {
-                    col().child(
-                        text("No headings.")
-                            .font(type_::BODY)
-                            .color(t.text_tertiary)
-                            .px(space::S3),
-                    )
-                } else {
-                    col()
-                        .key(key(id, "outline.headings"))
-                        .role("list")
-                        .label("Headings")
-                        .focus_group()
-                        .px(space::S2)
-                        .children(outline_items)
-                }
-            }))
-            .child(section(
-                id,
-                Section::Backlinks,
-                !folds.backlinks_closed,
-                backlinks_count,
-                t,
-            ))
-            .children((!folds.backlinks_closed).then(|| {
-                match backlinks_empty {
-                    Some(words) => col().child(
-                        text(words)
-                            .font(type_::BODY)
-                            .color(t.text_tertiary)
-                            .px(space::S3),
-                    ),
-                    None => col().px(space::S1).children(backlinks),
-                }
-            })),
+            .child(
+                col()
+                    .w_full()
+                    .child(section(
+                        id,
+                        Section::Outline,
+                        !folds.outline_closed,
+                        outline_count,
+                        t,
+                    ))
+                    .children(outline_body),
+            )
+            .child(
+                col()
+                    .w_full()
+                    .mt(16.0)
+                    .pt(space::S3)
+                    .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+                    .child(section(
+                        id,
+                        Section::Backlinks,
+                        !folds.backlinks_closed,
+                        backlinks_count,
+                        t,
+                    ))
+                    .children(backlinks_body),
+            ),
     )
+}
+
+fn rail_empty(words: &str, t: &Tokens) -> El {
+    text(words.to_owned())
+        .font(TextStyle {
+            weight: 400.0,
+            ..type_::LABEL
+        })
+        .color(t.text_dimmed)
+        .px(6.0)
+        .pt(2.0)
+        .pb(4.0)
 }
 
 #[derive(Clone, Copy)]
@@ -748,26 +889,46 @@ enum Section {
     Backlinks,
 }
 
+/// A rail section's toggle, as the Tauri app's `.notebook-browser-rail-toggle`: a caret, the
+/// title, and while open a pill with how many the section lists.
 fn section(id: &SurfaceId, section: Section, open: bool, count: usize, t: &Tokens) -> El {
     let title = match section {
         Section::Outline => "Outline",
         Section::Backlinks => "Backlinks",
     };
-    let words = if open && count > 0 {
-        format!("{title} {count}")
-    } else {
-        title.to_owned()
-    };
     let id = id.clone();
-    let ink = t.text_muted;
-    Button::new(words.clone())
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .label_with(move |_, _| type_::upper(&words, type_::BOLD_CAPS).color(ink))
-        .build(attn_ui::kit(t))
+    let caret = if open {
+        &attn_ui::icon::DISCLOSE_OPEN
+    } else {
+        &attn_ui::icon::DISCLOSE_CLOSED
+    };
+    row()
         .key(key(&id, &title.to_lowercase()))
+        .role("button")
         .label(title)
+        .focusable(true)
         .expanded(open)
+        .w_full()
+        .items_center()
+        .gap(7.0)
+        .px(6.0)
+        .pt(2.0)
+        .pb(space::S2)
+        .child(rune::icon(caret, 10.0).color(t.text_muted))
+        .child(
+            type_::upper(title, type_::BOLD_CAPS)
+                .color(t.text_muted)
+                .grow(1.0),
+        )
+        .children((open && count > 0).then(|| {
+            text(count.to_string())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary)
+                .px(6.0)
+                .py(1.0)
+                .radius(8.0)
+                .fill(t.bg_elevated)
+        }))
         .on_press(move |state: &mut State| {
             if let Some(surface) = state.notebook.surface_mut(&id) {
                 let closed = match section {

@@ -4,7 +4,7 @@
 
 use attn_ui::Tokens;
 use rune::{El, FileDialogOptions, Tx};
-use rune_kit::Select;
+use rune_kit::{Select, SelectAppearance};
 
 use super::io;
 use super::model::SurfaceId;
@@ -16,6 +16,8 @@ use super::Notebook;
 
 const NOTEBOOK: &str = "Notebook";
 const BROWSE: &str = "Browse…";
+/// `.desktop-dock-tile-root-picker`'s `max-width`.
+const PICKER_WIDTH: f32 = 140.0;
 
 fn select_key(tile: &str) -> String {
     format!("notebook.tile.{tile}.root")
@@ -71,6 +73,8 @@ fn select(facts: &Facts, notebook: &Notebook, tile: &str, params: &str) -> Selec
     let (toggled, closed) = (tile.clone(), tile.clone());
     Select::new(select_key(&tile), &labels)
         .label("Editor root")
+        .appearance(SelectAppearance::Field)
+        .width(PICKER_WIDTH)
         .current(current.as_deref())
         .open(notebook.root_picker.as_deref() == Some(tile.as_str()))
         .on_toggle(move |state: &mut State| {

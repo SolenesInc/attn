@@ -604,6 +604,8 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
                 return;
             }
             state.window.width.window = w;
+            state.notebook.window_w = w;
+            state.notebook.revision += 1;
         })
         .children(crate::sidebar::view(state, t))
         .children(main_area(state, t, scale))

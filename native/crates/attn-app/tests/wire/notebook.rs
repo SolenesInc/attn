@@ -1222,6 +1222,7 @@ fn an_outline_heading_in_an_editor_tile_on_the_notebook_scrolls_that_tile_to_it(
     let mut world = start_with(&disk, Some(row(vec![pane("a"), editor_tile("n", params)])));
     let viewport = top_of(&world, "notebook.tile.n.scroll");
 
+    world.gesture(|d| d.click(Target::key("notebook.tile.n.fold.tree")));
     world.gesture(|d| d.click(Target::key("notebook.tile.n.fold.rail")));
     world.gesture(|d| d.click(Target::key("notebook.tile.n.outline.2")));
 
@@ -1730,6 +1731,36 @@ fn a_popped_out_editor_tile_opens_its_note_saves_while_the_window_shows_another_
     );
     world.advance(Duration::from_secs(3));
     assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn a_link_to_a_missing_note_shows_a_warning_after_it_that_the_note_never_holds() {
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        "See [gone](gone.md) and [here](/index.md).\n",
+    )]);
+    let mut world = start(&disk);
+    world.daemon.on("fs_exists", |req| {
+        json!({ "event": "fs_exists_result", "success": true,
+            "result": { "path": req["path"], "exists": req["path"] != "knowledge/gone.md" } })
+    });
+    open_fullscreen(&mut world);
+
+    assert!(
+        shows_line(&world, "See gone ⚠ and here."),
+        "{}",
+        world.screen()
+    );
+
+    world.gesture(|d| d.click(Target::key("notebook.editor.line.0")));
+    assert!(shows_line(
+        &world,
+        "See [gone](gone.md) and [here](/index.md)."
+    ));
+    assert_eq!(
+        editor_text(&world, "notebook.editor"),
+        "See [gone](gone.md) and [here](/index.md).\n"
+    );
 }
 
 #[test]
@@ -2300,6 +2331,7 @@ fn a_press_on_an_outline_heading_in_an_inactive_editor_tile_takes_the_tile_and_i
     let disk = Disk::with(&[("knowledge/plan.md", &twice_titled_note())]);
     let params = r#"{"path":"knowledge/plan.md"}"#;
     let mut world = start_with(&disk, Some(row(vec![pane("a"), editor_tile("n", params)])));
+    world.gesture(|d| d.click(Target::key("notebook.tile.n.fold.tree")));
     world.gesture(|d| d.click(Target::key("notebook.tile.n.fold.rail")));
     world.gesture(|d| d.click(Target::key("tile.a")));
     let keyboard = |world: &mut World| {

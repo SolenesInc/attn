@@ -26,6 +26,10 @@ pub struct Notebook {
     pub(crate) after_save: BTreeMap<SurfaceId, super::io::Then>,
     /// The editor tile whose "Editor root" list is open.
     pub(crate) root_picker: Option<String>,
+    /// The window's width, which sets how far a note sits in from its pane's sides.
+    pub(crate) window_w: f32,
+    /// The fullscreen notebook's size as last laid out, which sizes its glow.
+    pub(crate) panel: [f32; 2],
     /// Rises with every change a view could show, for the memos that read the notebook.
     pub(crate) revision: u64,
     next_write: u64,
@@ -183,7 +187,7 @@ impl Open {
         content: String,
         hash: String,
     ) -> Open {
-        let draft = Draft::of(kind, &content);
+        let draft = Draft::of(kind, &content, &path);
         Open {
             home,
             path,
@@ -239,7 +243,7 @@ impl Open {
 impl Handed {
     pub(crate) fn open(self) -> Open {
         Open {
-            draft: Draft::of(self.kind, &self.text),
+            draft: Draft::of(self.kind, &self.text, &self.path),
             home: self.home,
             path: self.path,
             kind: self.kind,
@@ -377,9 +381,11 @@ pub(crate) enum Draft {
 }
 
 impl Draft {
-    pub(crate) fn of(kind: FileKind, content: &str) -> Draft {
+    pub(crate) fn of(kind: FileKind, content: &str, path: &str) -> Draft {
         match kind {
-            FileKind::Markdown => Draft::Note(Box::new(super::editor::Editor::new(content))),
+            FileKind::Markdown => Draft::Note(Box::new(
+                super::editor::Editor::new(content).in_folder(super::links::note_dir(path)),
+            )),
             _ => Draft::Field(Box::new(TextEdit::new(content))),
         }
     }

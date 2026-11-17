@@ -1082,6 +1082,108 @@ fn notebook_file(dark: bool) {
     snap(&mut world, "notebook-file", dark);
 }
 
+/// The note the notebook screens open: a heading, a list with inline code, a link to a note
+/// that is missing, and an HTML comment.
+const NOTE: &str = "---\ntype: note\n---\n# Notebook\n\nThis folder is the journal attn writes on your behalf, and the knowledge it keeps.\n\n- `journal/` holds one `log.md` per day.\n- `knowledge/` holds a note per area, each with a `type`.\n\nLink to [an area note](knowledge/area.md) — not wikilinks.\n\n<!-- okf_version: 0.1 -->\n";
+
+/// A daemon serving a notebook of three folders and `index.md`, which links to a note that is
+/// missing, on a desktop that holds `tile` beside an agent, or the editor tile `n` alone.
+fn notebook_daemon(dark: bool, tile: Option<Value>) -> Daemon {
+    let alone = tile.is_none();
+    let mut state = initial(dark, tile.unwrap_or_else(notebook_tile), vec![]);
+    if let Some(desktops) = state.desktops.as_mut().filter(|_| alone) {
+        desktops[0].tree_json = notebook_tile().to_string();
+        desktops[0].panes.clear();
+        desktops[0].active_pane_id = "n".into();
+    }
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert(
+            "notebook.root.effective".to_owned(),
+            "/home/me/notebook".to_owned(),
+        );
+    }
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("fs_list", |req: &Request| {
+            let entry = |path: &str, is_dir: bool| {
+                let name = path.rsplit('/').next().unwrap_or(path);
+                json!({ "path": path, "name": name, "is_dir": is_dir, "size": 1 })
+            };
+            let entries = match req["path"].as_str().unwrap_or("") {
+                "" => vec![
+                    entry("crew", true),
+                    entry("journal", true),
+                    entry("knowledge", true),
+                    entry("index.md", false),
+                ],
+                _ => vec![],
+            };
+            json!({ "event": "fs_list_result", "success": true, "entries": entries })
+        })
+        .on("fs_read", |req: &Request| {
+            json!({ "event": "fs_read_result", "success": true,
+                "result": { "path": req["path"], "content": NOTE, "hash": "h1" } })
+        })
+        .on("fs_exists", |req: &Request| {
+            json!({ "event": "fs_exists_result", "success": true,
+                "result": { "path": req["path"], "exists": false } })
+        })
+        .on("notebook_backlinks", |_: &Request| {
+            json!({ "event": "notebook_backlinks_result", "success": true, "entries": [] })
+        })
+        .on("fs_index", |_: &Request| {
+            json!({ "event": "fs_index_result", "success": true, "root": "/home/me/notebook",
+                "files": ["index.md", "journal/2026-11-14.md", "knowledge/attn.md"],
+                "truncated": false })
+        });
+    daemon
+}
+
+fn notebook_tile() -> Value {
+    json!({ "type": "tile", "tile_id": "n", "tile_kind": "notebook", "tile_params": "" })
+}
+
+/// An editor tile with nothing open in it, its finder closed.
+fn notebook_tile_empty(dark: bool) {
+    let mut world = start(notebook_daemon(dark, None));
+    world.gesture(|app| app.press("escape"));
+    snap(&mut world, "notebook-tile-empty", dark);
+}
+
+/// An editor tile with `index.md` open from its tree.
+fn notebook_tile_open(dark: bool) -> World {
+    let mut world = start(notebook_daemon(dark, None));
+    world.gesture(|app| app.press("escape"));
+    world.gesture(|app| app.click(Target::key("notebook.tile.n.file.index.md")));
+    world
+}
+
+fn notebook_tile_note(dark: bool) {
+    let mut world = notebook_tile_open(dark);
+    snap(&mut world, "notebook-tile-note", dark);
+}
+
+/// The editor tile's finder over its open note.
+fn notebook_tile_finder(dark: bool) {
+    let mut world = notebook_tile_open(dark);
+    run(&mut world, Action::FileOpen);
+    snap(&mut world, "notebook-tile-finder", dark);
+}
+
+/// The fullscreen notebook with `index.md` open.
+fn notebook_note(dark: bool) {
+    let mut world = start(notebook_daemon(
+        dark,
+        Some(document_tile("m", "/repo/plan.md")),
+    ));
+    world
+        .automate("run", json!({ "name": "notebook.openFullscreen" }))
+        .unwrap();
+    world.settle();
+    world.gesture(|app| app.click(Target::key("notebook.file.index.md")));
+    snap(&mut world, "notebook-note", dark);
+}
+
 /// The notebook's finder over the open note.
 fn notebook_finder(dark: bool) {
     let mut world = notebook_open(dark);
@@ -2297,6 +2399,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         quick_capture_mailboxes(dark);
         notebook_file(dark);
         notebook_finder(dark);
+        notebook_note(dark);
+        notebook_tile_empty(dark);
+        notebook_tile_note(dark);
+        notebook_tile_finder(dark);
         merge_confirmation(dark);
         desktop_naming(dark);
         shared_codex_restart(dark);

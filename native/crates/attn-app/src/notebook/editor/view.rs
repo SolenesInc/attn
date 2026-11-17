@@ -175,7 +175,7 @@ fn line_row(
         _ => {
             let shown = editor.shown(i);
             let (_, style) = editor.styled(&shown);
-            let spans = with_theme(editor, &shown, &place.1, t);
+            let spans = with_theme(&shown, t);
             text_row(
                 editor,
                 key,
@@ -188,7 +188,7 @@ fn line_row(
                 t,
             )
             .key(row_key)
-            .description(if editor.broken_on(&shown, &place.1) {
+            .description(if !shown.broken.is_empty() {
                 "Link target not found in the notebook"
             } else {
                 ""
@@ -211,7 +211,13 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
         let span = match style {
             Style::Strong => span.bold(),
             Style::Emphasis => span.italic(),
-            Style::Code => span.mono(),
+            Style::Code => match t {
+                Some(t) => span
+                    .mono()
+                    .size(super::BODY.size * 0.92)
+                    .bg(t.bg_elevated, 2.0),
+                None => span.mono().size(super::BODY.size * 0.92),
+            },
             Style::Strike => span,
             Style::Link => match t {
                 Some(t) => span.color(t.accent).underline(t.accent),
@@ -228,27 +234,20 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
     spans
 }
 
-impl Editor {
-    /// Whether a link the line shows points at a note the daemon said is missing.
-    fn broken_on(&self, shown: &Shown, dir: &str) -> bool {
-        shown
-            .links
-            .iter()
-            .any(|(_, href)| Editor::note_of(href, dir).is_some_and(|p| self.missing.contains(&p)))
-    }
-}
-
-/// The line's spans in the window's colours, with a link to a missing note marked broken.
-fn with_theme(editor: &Editor, shown: &Shown, dir: &str, t: &Tokens) -> Vec<Span> {
+/// The line's spans in the window's colours: its bullet in the brand colour, and a link to a
+/// missing note in it too, underlined in the error colour and followed by its warning.
+fn with_theme(shown: &Shown, t: &Tokens) -> Vec<Span> {
     let mut out = spans(shown, Some(t));
-    for (range, href) in &shown.links {
-        if Editor::note_of(href, dir).is_some_and(|p| editor.missing.contains(&p)) {
-            out.push(
-                Span::new(range.start, range.end)
-                    .color(t.error)
-                    .underline(t.error),
-            );
-        }
+    if let Some(bullet) = &shown.bullet {
+        out.push(Span::new(bullet.start, bullet.end).color(t.brand));
+    }
+    for (link, mark) in &shown.broken {
+        out.push(
+            Span::new(link.start, link.end)
+                .color(t.brand)
+                .underline(t.error.alpha(0.5)),
+        );
+        out.push(Span::new(mark.start, mark.end).color(t.error));
     }
     out
 }

@@ -181,6 +181,10 @@ pub(crate) struct Shown {
     pub(crate) task: Option<(Range<usize>, bool)>,
     /// Where the task box's glyph shows.
     pub(crate) task_glyph: Option<Range<usize>>,
+    /// Where the list item's bullet shows.
+    pub(crate) bullet: Option<Range<usize>>,
+    /// Links to a note that is missing, each with the warning put after it.
+    pub(crate) broken: Vec<(Range<usize>, Range<usize>)>,
     pub(crate) heading: Option<u8>,
     pub(crate) quote: bool,
 }
@@ -199,6 +203,7 @@ pub(crate) enum Style {
 pub(crate) const CHECKED: &str = attn_ui::glyph::CHECKED;
 pub(crate) const UNCHECKED: &str = attn_ui::glyph::UNCHECKED;
 pub(crate) const BULLET: &str = "•";
+pub(crate) const BROKEN: &str = " ⚠";
 
 impl Shown {
     /// A line shown as written, without styles: code and front matter.
@@ -223,6 +228,40 @@ impl Shown {
             last = d + n;
         }
         last.max(self.text.len().min(last))
+    }
+
+    /// Puts [`BROKEN`] after the link shown at `link`, as the Tauri editor marks a link to a
+    /// missing note: the text after it moves along. A link's text always ends a run, since
+    /// its `](…)` is hidden after it.
+    pub(crate) fn mark_broken(&mut self, link: Range<usize>) {
+        let (at, n) = (link.end, BROKEN.len());
+        self.text.insert_str(at, BROKEN);
+        for run in &mut self.runs {
+            if run.0 >= at {
+                run.0 += n;
+            }
+        }
+        let shift = |r: &mut Range<usize>| {
+            if r.start >= at {
+                r.start += n;
+            }
+            if r.end > at {
+                r.end += n;
+            }
+        };
+        self.styles.iter_mut().for_each(|(r, _)| shift(r));
+        self.links.iter_mut().for_each(|(r, _)| shift(r));
+        for (r, mark) in &mut self.broken {
+            shift(r);
+            shift(mark);
+        }
+        if let Some(r) = self.task_glyph.as_mut() {
+            shift(r);
+        }
+        if let Some(r) = self.bullet.as_mut() {
+            shift(r);
+        }
+        self.broken.push((link, at..at + n));
     }
 
     /// The source byte of display offset `at`.
@@ -393,9 +432,11 @@ pub(crate) fn shown(line: &str, active: bool) -> Shown {
         for (start, end, glyph) in cuts {
             b.keep(start);
             if let Some(glyph) = glyph {
+                let at = b.shown.text.len();
                 if glyph == CHECKED || glyph == UNCHECKED {
-                    let at = b.shown.text.len();
                     b.shown.task_glyph = Some(at..at + glyph.len());
+                } else if glyph == BULLET {
+                    b.shown.bullet = Some(at..at + glyph.len());
                 }
                 b.put(glyph);
             }
@@ -594,5 +635,32 @@ mod tests {
         let task = shown("- [ ] todo", false);
         assert_eq!(task.task, Some((2..5, false)));
         assert_eq!(shown("## Title", true).heading, Some(2));
+    }
+
+    #[test]
+    fn a_warning_after_a_broken_link_moves_what_follows_and_maps_to_no_source() {
+        let line = "a [gone](g.md) b [x](x.md) c";
+        for (links, text) in [
+            (vec![0], "a gone ⚠ b x c"),
+            (vec![1], "a gone b x ⚠ c"),
+            (vec![0, 1], "a gone ⚠ b x ⚠ c"),
+        ] {
+            let mut quiet = shown(line, false);
+            for i in links {
+                quiet.mark_broken(quiet.links[i].0.clone());
+            }
+            assert_eq!(quiet.text, text);
+            for (r, _) in &quiet.links {
+                assert!(matches!(&quiet.text[r.clone()], "gone" | "x"), "{text}");
+            }
+            for word in ["a", "gone", "b", "x", "c"] {
+                let at = quiet
+                    .text
+                    .find(&format!("{word} "))
+                    .unwrap_or(quiet.text.len() - 1);
+                assert_eq!(&line[quiet.to_source(at)..][..word.len()], word, "{text}");
+                assert_eq!(quiet.to_display(quiet.to_source(at)), at, "{text}");
+            }
+        }
     }
 }

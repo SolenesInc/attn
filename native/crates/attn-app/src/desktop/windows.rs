@@ -420,6 +420,12 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
         .h_full()
         .padding(4.0)
         .fill(t.bg_app)
+        .on_layout(|state: &mut State, [_, _, w, _]: [f32; 4]| {
+            if state.notebook.window_w != w {
+                state.notebook.window_w = w;
+                state.notebook.revision += 1;
+            }
+        })
         .children(shown);
     crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
 }

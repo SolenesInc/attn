@@ -827,7 +827,7 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
     if editor.links_revision == Some(editor.doc.revision) {
         return;
     }
-    let (asked, note) = (editor.unchecked_links(links::note_dir(note)), note.clone());
+    let (asked, note) = (editor.unchecked_links(), note.clone());
     let generation = editor.links_generation;
     if let Some(model::Open {
         draft: model::Draft::Note(editor),
@@ -887,11 +887,9 @@ pub(crate) fn images(state: &State) -> Vec<(Option<String>, String, u64)> {
         .filter_map(|s| {
             let open = s.open()?;
             match &open.draft {
-                model::Draft::Note(editor) => Some((
-                    io::root(state, s),
-                    editor.images(links::note_dir(&open.path)),
-                    s.changes,
-                )),
+                model::Draft::Note(editor) => {
+                    Some((io::root(state, s), editor.images(), s.changes))
+                }
                 model::Draft::Field(_) => None,
             }
         })

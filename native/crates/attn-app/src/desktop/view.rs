@@ -24,6 +24,10 @@ pub(super) const ALONE_INSET: f32 = 10.0;
 const HEADER_PX: f32 = 2.0 * space::S1 + 18.0;
 const SUBLINE_PX: f32 = 15.0;
 const AGENT_HEADER_PX: f32 = HEADER_PX + SUBLINE_PX;
+/// A document or browser tile's header: `.desktop-dock-tile-header`, a 24 point control and
+/// 6 points above and below it.
+const TILE_HEADER_PX: f32 = 36.0;
+const TILE_TITLE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
 const SUBLINE_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 400.0);
 const SETTLING_TRACK_PX: f32 = 2.0;
 
@@ -1030,7 +1034,11 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
 }
 
 fn header_height(agent: bool) -> f32 {
-    if agent { AGENT_HEADER_PX } else { HEADER_PX }
+    if agent {
+        AGENT_HEADER_PX
+    } else {
+        TILE_HEADER_PX
+    }
 }
 
 /// The spring the Tauri app moves a row's tiles on.
@@ -1139,13 +1147,17 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
     let session = pane.and_then(|p| cx.sessions.iter().find(|s| s.id == p.session_id));
     let focused = cx.focused == Some(leaf.id.as_str());
     let popped = leaf.window.is_some();
+    let header_fill = match pane {
+        Some(_) => look.header_fill(t),
+        None => Some(look.header_fill(t).unwrap_or(t.bg_elevated)),
+    };
     let actions = row()
         .key(format!("{key}.actions"))
         .pin(None, Some(0.0), Some(0.0), Some(0.0))
         .items_center()
         .gap(2.0)
         .pl(space::S1)
-        .fill(look.header_fill(t).unwrap_or(t.bg_tile))
+        .fill(header_fill.unwrap_or(t.bg_tile))
         .group_opacity(0.0, 1.0)
         .children(session.map(|s| rename_button(&key, s, title, t)))
         .children(
@@ -1163,10 +1175,15 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         }));
     let headline = row()
         .w_full()
-        .h(HEADER_PX)
+        .h(if pane.is_some() {
+            HEADER_PX
+        } else {
+            TILE_HEADER_PX
+        })
         .items_center()
         .gap(space::S2)
-        .px(space::S2)
+        .pl(if pane.is_some() { space::S2 } else { space::S3 })
+        .pr(space::S2)
         .children(session.map(|s| {
             crate::sidebar::state_mark(
                 &key,
@@ -1191,6 +1208,12 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                             t,
                         )
                     }
+                    _ if pane.is_none() => text(title.to_owned())
+                        .font(TILE_TITLE)
+                        .color(t.text_secondary)
+                        .single_line()
+                        .truncate()
+                        .grow(1.0),
                     _ => text(title.to_owned())
                         .font(type_::LABEL)
                         .color(look.title(t))
@@ -1278,10 +1301,15 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         ),
         _ => None,
     };
-    col()
+    let header = col()
         .key(format!("{key}.header"))
         .keeps_press_from_within()
-        .fill(look.header_fill(t).unwrap_or(rune::Color::TRANSPARENT))
+        .fill(header_fill.unwrap_or(rune::Color::TRANSPARENT));
+    let header = match pane {
+        Some(_) => header,
+        None => header.border_sides([0.0, 0.0, 1.0, 0.0], t.border),
+    };
+    header
         .w_full()
         .h(height)
         .pl(cx.chrome_leading)
