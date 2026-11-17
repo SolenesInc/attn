@@ -48,8 +48,19 @@ func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
 	defer resp.Body.Close()
 	if external := firstNonLoopbackIPv4ForDiag(t); external == nil {
 		t.Log("the host has no non-loopback IPv4 address, so the loopback-only bind cannot be shown")
-	} else if addr := net.JoinHostPort(external.String(), port); !errors.Is(dial(addr), syscall.ECONNREFUSED) {
-		t.Errorf("with ATTN_PPROF asking for every interface, %s was not refused; the diagnostics server must bind loopback only", addr)
+	} else {
+		addr := net.JoinHostPort(external.String(), port)
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		var netErr net.Error
+		switch {
+		case err == nil:
+			conn.Close()
+			t.Errorf("with ATTN_PPROF asking for every interface, %s accepted a connection; the diagnostics server must bind loopback only", addr)
+		case errors.As(err, &netErr) && netErr.Timeout():
+			t.Logf("%s timed out instead of refusing, so this host's firewall hides whether the bind is loopback only", addr)
+		case !errors.Is(err, syscall.ECONNREFUSED):
+			t.Errorf("with ATTN_PPROF asking for every interface, dialing %s failed with %v, not a refusal", addr, err)
+		}
 	}
 	var reported struct {
 		PtyBackend string `json:"pty_backend"`
