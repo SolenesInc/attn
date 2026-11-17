@@ -1069,6 +1069,11 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("sendFsExistsWSResult", func() {
 			d.sendFsExistsWSResult(client, protocol.Deref(fsExists.RequestID), fsExists.Path, protocol.Deref(fsExists.Root))
 		})
+	case protocol.CmdFsExistsMany:
+		fsExistsMany := msg.(*protocol.FsExistsManyMessage)
+		d.life.Go("sendFsExistsManyWSResult", func() {
+			d.sendFsExistsManyWSResult(client, protocol.Deref(fsExistsMany.RequestID), fsExistsMany.Paths, protocol.Deref(fsExistsMany.Root))
+		})
 	case protocol.CmdFsWatch:
 		fsWatch := msg.(*protocol.FsWatchMessage)
 		d.life.Go("handleFsWatch", func() { d.handleFsWatch(client, protocol.Deref(fsWatch.RequestID), protocol.Deref(fsWatch.Root)) })

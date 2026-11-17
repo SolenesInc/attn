@@ -326,6 +326,25 @@ func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path, rawRoot
 	d.sendToClient(client, msg)
 }
 
+func (d *Daemon) sendFsExistsManyWSResult(client *wsClient, requestID string, paths []string, rawRoot string) {
+	msg := protocol.FsExistsManyResultMessage{Event: protocol.EventFsExistsManyResult, RequestID: requestID}
+	store, _, err := d.fsStoreFor(client, rawRoot)
+	if err != nil {
+		msg.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, msg)
+		return
+	}
+	results := make([]protocol.FsExistsResult, 0, len(paths))
+	for _, path := range paths {
+		if exists, err := store.Exists(path); err == nil {
+			results = append(results, protocol.FsExistsResult{Path: path, Exists: exists})
+		}
+	}
+	msg.Success = true
+	msg.Results = results
+	d.sendToClient(client, msg)
+}
+
 func (d *Daemon) isNotebookRoot(root string) bool {
 	_, ok := d.notebookRoots()[root]
 	return ok

@@ -814,8 +814,8 @@ pub(crate) fn ime(state: &mut State, ime: &rune::Ime, tx: &mut Tx) -> bool {
     true
 }
 
-/// Asks whether each note the open note links to exists, once per note, after the note
-/// changes; a link to a missing note shows as broken, as the Tauri editor marks it.
+/// Asks in one request whether each note the open note links to exists, once per note,
+/// after the note changes; a link to a missing note shows as broken, as the Tauri editor marks it.
 fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
     let root = state.notebook.surface(id).and_then(|s| io::root(state, s));
     let Some(model::Open {
@@ -839,41 +839,48 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
         editor.links_revision = Some(editor.doc.revision);
         editor.checked.extend(asked.iter().cloned());
     }
-    for path in asked {
-        let (id, note, root, asked) = (id.clone(), note.clone(), root.clone(), path.clone());
-        state.ask(
-            move |request_id| attn_protocol::FsExistsMessage {
-                path: asked,
-                root,
-                request_id: Some(request_id),
-                ..attn_protocol::FsExistsMessage::new()
-            },
-            move |state, answer, _| {
-                let missing = answer
-                    .parse::<attn_protocol::FsExistsResultMessage>()
-                    .filter(|r| r.success)
-                    .and_then(|r| r.result)
-                    .is_some_and(|r| !r.exists);
-                if let Some(model::Open {
-                    draft: model::Draft::Note(editor),
-                    ..
-                }) = state
-                    .notebook
-                    .surface_mut(&id)
-                    .and_then(Surface::open_mut)
-                    .filter(|o| o.path == note)
-                    && editor.links_generation == generation
-                {
-                    if missing {
+    if asked.is_empty() {
+        return;
+    }
+    let (id, paths) = (id.clone(), asked.clone());
+    state.ask(
+        move |request_id| attn_protocol::FsExistsManyMessage {
+            paths,
+            root,
+            request_id: Some(request_id),
+            ..attn_protocol::FsExistsManyMessage::new()
+        },
+        move |state, answer, _| {
+            let missing: std::collections::BTreeSet<String> = answer
+                .parse::<attn_protocol::FsExistsManyResultMessage>()
+                .filter(|r| r.success)
+                .and_then(|r| r.results)
+                .into_iter()
+                .flatten()
+                .filter(|r| !r.exists)
+                .map(|r| r.path)
+                .collect();
+            if let Some(model::Open {
+                draft: model::Draft::Note(editor),
+                ..
+            }) = state
+                .notebook
+                .surface_mut(&id)
+                .and_then(Surface::open_mut)
+                .filter(|o| o.path == note)
+                && editor.links_generation == generation
+            {
+                for path in asked {
+                    if missing.contains(&path) {
                         editor.missing.insert(path);
                     } else {
                         editor.missing.remove(&path);
                     }
                 }
-            },
-            tx,
-        );
-    }
+            }
+        },
+        tx,
+    );
 }
 
 /// The images the open notes show, with the folder each is read from and how many times files

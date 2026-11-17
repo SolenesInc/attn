@@ -118,6 +118,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdFsRename:                      decodeInto[FsRenameMessage],
 	CmdFsDelete:                      decodeInto[FsDeleteMessage],
 	CmdFsExists:                      decodeInto[FsExistsMessage],
+	CmdFsExistsMany:                  decodeInto[FsExistsManyMessage],
 	CmdFsWatch:                       decodeInto[FsWatchMessage],
 	CmdFsUnwatch:                     decodeInto[FsUnwatchMessage],
 	CmdFsIndex:                       decodeInto[FsIndexMessage],

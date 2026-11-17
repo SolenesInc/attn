@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "6068891eddc4";
+pub const PROTOCOL_VERSION: &str = "77b2d3aadf8a";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4889,6 +4889,46 @@ pub struct FsEntry {
     pub name: String,
     pub path: String,
     pub size: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FsExistsManyMessage {
+    pub cmd: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub paths: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
+}
+
+impl FsExistsManyMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "fs_exists_many".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FsExistsManyResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub results: Option<Vec<FsExistsResult>>,
+    pub success: bool,
+}
+
+impl FsExistsManyResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "fs_exists_many_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FsExistsMessage {

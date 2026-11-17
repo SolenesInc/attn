@@ -190,6 +190,13 @@ func TestNotebookFileCommandsRoundTripThroughTheApp(t *testing.T) {
 		}
 	}
 
+	many := fsRequest[protocol.FsExistsManyResultMessage](app, protocol.EventFsExistsManyResult, func(id *string) any {
+		return protocol.FsExistsManyMessage{Cmd: protocol.CmdFsExistsMany, RequestID: id, Paths: []string{"/notes/todo.txt", "/notes/missing.txt", ".secret"}}
+	})
+	if want := []protocol.FsExistsResult{{Path: "/notes/todo.txt", Exists: true}, {Path: "/notes/missing.txt", Exists: false}}; !many.Success || !slices.Equal(many.Results, want) {
+		t.Errorf("exists many = %+v (%s), want %+v with the hidden path left out", many.Results, protocol.Deref(many.Error), want)
+	}
+
 	if stale := fsAskWrite(app, "", "notes/todo.txt", "oat milk", "deadbeef"); !stale.Success || stale.Result == nil || !stale.Result.Conflict || protocol.Deref(stale.Result.CurrentHash) != hash {
 		t.Fatalf("a write against a stale hash = %+v, want a conflict naming the current hash %s", stale.Result, hash)
 	}

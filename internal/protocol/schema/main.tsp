@@ -1534,6 +1534,15 @@ model TaskListMessage {
   request_id?: string; // set by the WS frontend to correlate the result event
 }
 
+// Check whether each of several paths exists under the root, in one round trip,
+// so a note asks about all of its links at once.
+model FsExistsManyMessage {
+  cmd: "fs_exists_many";
+  paths: string[];
+  root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
+  request_id?: string;
+}
+
 model TaskRetryMessage {
   cmd: "task_retry";
   request_id?: string; // set by the WS frontend for result correlation
@@ -9020,6 +9029,16 @@ model FsExistsResultMessage {
   result?: FsExistsResult;
 }
 
+// One answer per path that could be checked; a path that cannot be, such as one
+// outside the root, is left out.
+model FsExistsManyResultMessage {
+  event: "fs_exists_many_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  results?: FsExistsResult[];
+}
+
 // Result of fs_watch. root is the resolved absolute root on success, so the
 // frontend can key its subscription state on the same value fs_changed.root
 // carries.
@@ -9519,6 +9538,7 @@ alias DaemonEvent =
   | FsRenameResultMessage
   | FsDeleteResultMessage
   | FsExistsResultMessage
+  | FsExistsManyResultMessage
   | FsWatchResultMessage
   | FsUnwatchResultMessage
   | FsIndexResultMessage

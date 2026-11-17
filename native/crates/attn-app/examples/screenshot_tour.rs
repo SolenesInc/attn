@@ -1534,9 +1534,14 @@ fn notebook_daemon(dark: bool, tile: Option<Value>) -> Daemon {
             json!({ "event": "fs_read_result", "success": true,
                 "result": { "path": req["path"], "content": NOTE, "hash": "h1" } })
         })
-        .on("fs_exists", |req: &Request| {
-            json!({ "event": "fs_exists_result", "success": true,
-                "result": { "path": req["path"], "exists": false } })
+        .on("fs_exists_many", |req: &Request| {
+            let results: Vec<Value> = req["paths"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|path| json!({ "path": path, "exists": false }))
+                .collect();
+            json!({ "event": "fs_exists_many_result", "success": true, "results": results })
         })
         .on("notebook_backlinks", |_: &Request| {
             json!({ "event": "notebook_backlinks_result", "success": true, "entries": [] })

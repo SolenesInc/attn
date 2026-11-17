@@ -5192,6 +5192,37 @@ type FsEntry struct {
 	Size int `json:"size"`
 }
 
+type FsExistsManyMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Paths corresponds to the JSON schema field "paths".
+	Paths []string `json:"paths"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Root corresponds to the JSON schema field "root".
+	Root *string `json:"root,omitempty,omitzero"`
+}
+
+type FsExistsManyResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Results corresponds to the JSON schema field "results".
+	Results []FsExistsResult `json:"results,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type FsExistsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

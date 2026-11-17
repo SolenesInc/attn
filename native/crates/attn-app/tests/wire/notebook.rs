@@ -1148,6 +1148,16 @@ fn the_notebook_shows_whether_the_selected_profile_s_chief_works_and_nothing_wit
     assert!(world.runtime_is_at_rest());
 }
 
+fn exists_many(req: &Value, exists: impl Fn(&str) -> bool) -> Value {
+    let results: Vec<Value> = req["paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| json!({ "path": p, "exists": exists(p.as_str().unwrap()) }))
+        .collect();
+    json!({ "event": "fs_exists_many_result", "success": true, "results": results })
+}
+
 fn editor_text(world: &World, key: &str) -> String {
     world
         .screen()
@@ -1846,9 +1856,8 @@ fn a_link_to_a_missing_note_shows_a_warning_after_it_that_the_note_never_holds()
         "See [gone](gone.md) and [here](/index.md).\n",
     )]);
     let mut world = start(&disk);
-    world.daemon.on("fs_exists", |req| {
-        json!({ "event": "fs_exists_result", "success": true,
-            "result": { "path": req["path"], "exists": req["path"] != "knowledge/gone.md" } })
+    world.daemon.on("fs_exists_many", |req| {
+        exists_many(req, |p| p != "knowledge/gone.md")
     });
     open_fullscreen(&mut world);
 
@@ -1870,25 +1879,22 @@ fn a_link_to_a_missing_note_shows_a_warning_after_it_that_the_note_never_holds()
 }
 
 #[test]
-fn a_link_to_a_missing_note_is_marked_and_each_note_is_asked_about_once() {
+fn a_link_to_a_missing_note_is_marked_and_each_note_is_asked_about_once_in_one_request() {
     let disk = Disk::with(&[(
         "knowledge/index.md",
         "[here](/journal/2026-11-14.md) [gone](gone.md) [again](gone.md) [web](https://example.com)\n",
     )]);
     let mut world = start(&disk);
-    world.daemon.on("fs_exists", |req| {
-        json!({ "event": "fs_exists_result", "success": true,
-            "result": { "path": req["path"], "exists": req["path"] != "knowledge/gone.md" } })
+    world.daemon.on("fs_exists_many", |req| {
+        exists_many(req, |p| p != "knowledge/gone.md")
     });
     open_fullscreen(&mut world);
-    let mut asked: Vec<String> = world
-        .daemon
-        .sent_of("fs_exists")
-        .iter()
-        .map(|r| r["path"].as_str().unwrap().to_owned())
-        .collect();
-    asked.sort();
-    assert_eq!(asked, ["journal/2026-11-14.md", "knowledge/gone.md"]);
+    let asked = world.daemon.sent_of("fs_exists_many");
+    assert_eq!(asked.len(), 1);
+    assert_eq!(
+        asked[0]["paths"],
+        json!(["journal/2026-11-14.md", "knowledge/gone.md"])
+    );
     let row = world.screen().get(Target::key("notebook.editor.line.0"));
     assert_eq!(
         row.description.as_deref(),
@@ -2036,17 +2042,13 @@ fn a_broken_mark_stays_while_a_disk_change_asks_again_and_clears_when_the_note_a
         "[here](/journal/2026-11-14.md) [gone](gone.md)\n",
     )]);
     let mut world = start(&disk);
-    let exists = |path: &str, exists: bool| {
-        Answer::Reply(
-            json!({ "event": "fs_exists_result", "success": true, "result": { "path": path, "exists": exists } }),
-        )
-    };
     world.daemon.answer_in_turn(
-        "fs_exists",
+        "fs_exists_many",
         [
-            exists("journal/2026-11-14.md", true),
-            exists("knowledge/gone.md", false),
-            Answer::Hold,
+            Answer::Reply(exists_many(
+                &json!({ "paths": ["journal/2026-11-14.md", "knowledge/gone.md"] }),
+                |p| p != "knowledge/gone.md",
+            )),
             Answer::Hold,
         ],
     );
@@ -2068,19 +2070,24 @@ fn a_broken_mark_stays_while_a_disk_change_asks_again_and_clears_when_the_note_a
         ..FsChangedMessage::new()
     });
     world.settle();
-    let asked = world.daemon.sent_of("fs_exists");
-    assert_eq!(asked.len(), 4, "every linked note is asked about again");
-    assert_eq!(asked[3]["path"], "knowledge/gone.md");
+    let asked = world.daemon.sent_of("fs_exists_many");
+    assert_eq!(
+        asked.len(),
+        2,
+        "every linked note is asked about again, at once"
+    );
+    assert_eq!(
+        asked[1]["paths"],
+        json!(["journal/2026-11-14.md", "knowledge/gone.md"])
+    );
     assert!(
         broken(&world),
         "the mark stays while the answer is on its way"
     );
 
-    world.daemon.reply_to(
-        &asked[3],
-        json!({ "event": "fs_exists_result", "success": true,
-        "result": { "path": "knowledge/gone.md", "exists": true } }),
-    );
+    world
+        .daemon
+        .reply_to(&asked[1], exists_many(&asked[1], |_| true));
     world.settle();
     assert!(!broken(&world), "the note now exists");
     world.advance(Duration::from_secs(1));
@@ -2096,9 +2103,8 @@ fn a_linked_note_deleted_while_the_note_is_open_is_marked_missing() {
     let mut world = start(&disk);
     let gone = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let deleted = gone.clone();
-    world.daemon.on("fs_exists", move |req| {
-        json!({ "event": "fs_exists_result", "success": true,
-            "result": { "path": req["path"], "exists": !deleted.load(std::sync::atomic::Ordering::Relaxed) } })
+    world.daemon.on("fs_exists_many", move |req| {
+        exists_many(req, |_| !deleted.load(std::sync::atomic::Ordering::Relaxed))
     });
     open_fullscreen(&mut world);
     let broken = |world: &World| {
@@ -2120,7 +2126,7 @@ fn a_linked_note_deleted_while_the_note_is_open_is_marked_missing() {
     });
     world.settle();
     assert!(broken(&world), "{}", world.screen());
-    assert_eq!(world.daemon.sent_of("fs_exists").len(), 2);
+    assert_eq!(world.daemon.sent_of("fs_exists_many").len(), 2);
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
@@ -2131,7 +2137,7 @@ fn a_link_asked_about_when_files_change_is_asked_again_and_marked_missing() {
     let mut world = start(&disk);
     world
         .daemon
-        .answer_in_turn("fs_exists", [Answer::Hold, Answer::Hold]);
+        .answer_in_turn("fs_exists_many", [Answer::Hold, Answer::Hold]);
     open_fullscreen(&mut world);
     world.daemon.emit(FsChangedMessage {
         paths: vec!["knowledge/other.md".into()],
@@ -2140,14 +2146,13 @@ fn a_link_asked_about_when_files_change_is_asked_again_and_marked_missing() {
         ..FsChangedMessage::new()
     });
     world.settle();
-    let asked = world.daemon.sent_of("fs_exists");
+    let asked = world.daemon.sent_of("fs_exists_many");
     assert_eq!(
         asked.len(),
         2,
         "an answer asked before the change is not trusted, so the note is asked about again"
     );
-    let missing = json!({ "event": "fs_exists_result", "success": true,
-        "result": { "path": "knowledge/gone.md", "exists": false } });
+    let missing = exists_many(&asked[0], |_| false);
     world.daemon.reply_to(&asked[0], missing.clone());
     world.daemon.reply_to(&asked[1], missing);
     world.settle();
