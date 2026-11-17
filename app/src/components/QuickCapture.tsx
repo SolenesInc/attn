@@ -25,12 +25,14 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue }: Q
   const [bridge, setBridge] = useState<ReturnType<typeof createQuickCaptureBridge>>();
   useEffect(() => {
     if (suppliedClient) return;
-    const connection = createQuickCaptureBridge(setHost);
+    const connection = createQuickCaptureBridge(state => {
+      if (state.colors) applyColors(state.colors);
+      setHost(state);
+    });
     setBridge(connection);
     return () => connection.dispose();
   }, [suppliedClient]);
   useEffect(() => { if (hostState) setHost(hostState); }, [hostState]);
-  useLayoutEffect(() => { if (host.colors) applyColors(host.colors); }, [host.colors]);
   const client = useMemo(() => suppliedClient ?? bridge?.forProfile(host.profileId), [suppliedClient, bridge, host.profileId]);
   if (!client || !host.profileId) return <main className="capture" aria-busy="true">Connecting Quick Capture…</main>;
   return <QuickCaptureForProfile key={host.profileId} client={client} hostState={host} workQueue={workQueue} refresh={bridge?.refresh} />;
