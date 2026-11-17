@@ -21,7 +21,7 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 	active := filepath.Join(w.Dir, "bin")
 	t.Setenv("PATH", stale+string(os.PathListSeparator)+os.Getenv("PATH"))
 	for key, value := range map[string]string{
-		"NO_COLOR": "1", "TERM_PROGRAM": "vscode", "TERM_PROGRAM_VERSION": "1.0.0",
+		"NO_COLOR": "1", "TERM_PROGRAM": "vscode", "TERM_PROGRAM_VERSION": "1.0.0", "COLORTERM": "",
 		"ATTN_SESSION_ID": "inherited-session", "ATTN_AGENT": "inherited-agent",
 		"CLAUDE_CODE_SESSION_ID": "inherited-claude-session", "ATTN_CLAUDE_MOD_SOCKET": "/inherited/claude-mod.sock",
 	} {
@@ -52,7 +52,7 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	common := map[string]string{"TERM_PROGRAM": "ghostty", "TERM": "xterm-256color", "NO_COLOR": "", "TERM_PROGRAM_VERSION": "", "ATTN_SESSION_HOME": sessionHome, "ATTN_SESSION_BINARY": daemonBinary}
+	common := map[string]string{"TERM_PROGRAM": "ghostty", "TERM": "xterm-256color", "COLORTERM": "truecolor", "NO_COLOR": "", "TERM_PROGRAM_VERSION": "", "ATTN_SESSION_HOME": sessionHome, "ATTN_SESSION_BINARY": daemonBinary}
 	for name, launched := range map[string]struct {
 		env  []string
 		want map[string]string
