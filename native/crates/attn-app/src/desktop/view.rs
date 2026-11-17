@@ -188,6 +188,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
+        .clip_rounded(0.0)
         .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| {
             let area = Some(Area::at(rect, state.terminals.metrics().cell_w));
             if state.window.desk.reported_area == area {

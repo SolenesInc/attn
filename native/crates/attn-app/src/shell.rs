@@ -489,6 +489,11 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .into_iter()
         .chain(middle)
         .chain([crate::desktop::shelf_slot(state, t)])
+        .chain(
+            connected
+                .then(|| crate::sidebar::title_desktops(state, t))
+                .flatten(),
+        )
         .chain(connected.then(|| crate::notifications::title_button(state, t)))
         .chain(
             connected

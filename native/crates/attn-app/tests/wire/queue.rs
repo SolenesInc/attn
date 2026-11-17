@@ -432,7 +432,7 @@ fn hovering_the_waiting_pill_peeks_at_the_agents_and_a_row_opens_its_agent() {
 }
 
 #[test]
-fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
+fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_every_desktop_by_its_number() {
     let mut message = one_desktop(vec![turn("t1", 5)]);
     message.desktops.as_mut().unwrap().extend([
         slotted(desktop("d2", "b", "Review", vec![]), 2),
@@ -451,9 +451,12 @@ fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
         name(&world, "rail.desktop.2"),
         format!("Review ({})", keys_of(Action::DesktopSelect2))
     );
-    assert_eq!(
-        name(&world, "rail.desktop-extras"),
-        "1 more desktop without a shortcut"
+    assert_eq!(name(&world, "rail.desktop.10"), "Loose");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("rail.desktop-extras"))
+            .is_none()
     );
 
     world.gesture(|app| app.click(Target::key("rail.desktop.2")));
@@ -483,7 +486,7 @@ fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
             .is_some()
     );
 
-    world.gesture(|app| app.click(Target::role("button").name("Expand sidebar")));
+    world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
     assert!(world.screen().find(Target::key("rail")).is_none());
     assert!(
         world
@@ -491,6 +494,34 @@ fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_the_desktops() {
             .find(Target::key("sidebar.desktops"))
             .is_some()
     );
+}
+
+#[test]
+fn the_rail_scrolls_to_a_desktop_below_the_window_s_edge_and_selects_it() {
+    let mut message = one_desktop(vec![session("s1", "idle")]);
+    message.desktops.as_mut().unwrap().extend((2..=30).map(|n| {
+        desktop(
+            &format!("d{n}"),
+            &format!("b{n:03}"),
+            &format!("Desk {n}"),
+            vec![],
+        )
+    }));
+    let mut world = World::start(Daemon::scripted().state(message));
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+
+    let last = world.screen().get(Target::key("rail.desktop.38"));
+    assert_eq!(last.name.as_deref(), Some("Desk 30"));
+    world
+        .automate(
+            "scroll",
+            serde_json::json!({"target": {"key": "rail.desktops"}, "dy": 2000}),
+        )
+        .unwrap();
+    world.settle();
+    world.gesture(|app| app.click(Target::key("rail.desktop.38")));
+    let set = world.daemon.sent_of("desktop_set_current");
+    assert_eq!(set.last().unwrap()["desktop_id"], "d30");
 }
 
 #[test]
@@ -663,6 +694,7 @@ fn the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them()
             ),
             format!("Review ({})", keys_of(Action::DesktopSelect2)),
             "1 more desktop without a shortcut, has turns waiting".to_owned(),
+            format!("Desktop overview ({})", keys_of(Action::DesktopOverview)),
         ]
     );
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
@@ -691,6 +723,41 @@ fn the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them()
     world.gesture(|app| app.click(Target::key("queue.desktop.2")));
     let set = world.daemon.sent_of("desktop_set_current");
     assert_eq!(set.last().unwrap()["desktop_id"], "d2");
+}
+
+#[test]
+fn the_desktop_strip_names_the_window_s_desktop_at_home_too_and_its_last_chip_opens_the_overview() {
+    let mut message = queue(one_desktop(vec![turn("t1", 5)]));
+    message.desktops.as_mut().unwrap()[0].name = "Sidebar refinement".into();
+    message
+        .desktops
+        .as_mut()
+        .unwrap()
+        .push(slotted(desktop("d2", "b", "Review", vec![]), 2));
+    let mut world = World::start(Daemon::scripted().state(message));
+    world.gesture(|app| app.key(chord(Action::SessionGoToDashboard)));
+
+    let current = world
+        .screen()
+        .children(Target::key("queue.desktop-current"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        current,
+        [
+            "Sidebar refinement".to_owned(),
+            keys_of(Action::DesktopOverview)
+        ]
+    );
+
+    world.gesture(|app| app.click(Target::key("queue.desktop-overview")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_some()
+    );
 }
 
 #[test]

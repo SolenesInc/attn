@@ -4,7 +4,6 @@
 use attn_protocol::CrewMember;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
 use rune::{El, Tx, el, row, text};
 use rune_kit::{ButtonVariant, MenuItem, Placement};
 
@@ -197,7 +196,7 @@ pub(crate) const QUEUE_ROW: &str = "queue-crew.member";
 pub(crate) const CLASSIC_ROW: &str = "sidebar.crew";
 
 /// A member between sessions: pressing the row or its sun starts the member in two clicks.
-pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El {
+pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
     let armed = m.phase == Some(Phase::Armed);
     let start_label = if armed {
         format!("Start {} — click again to confirm", m.name)
@@ -236,24 +235,20 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
             move |state, tx| open_menu(state, &member, &under, tx),
         )
     };
-    let mut row = row()
-        .key(key.clone())
+    let mut row = super::leaf_row(key.clone(), false, t)
         .role("listitem")
         .label(start_label)
         .a11y_value(if armed { "armed" } else { "between sessions" })
-        .w_full()
-        .h(height)
-        .items_center()
-        .gap(space::S2)
-        .px(space::S1)
-        .radius(4.0)
-        .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &pressed, &member, tx))
         .child(idle_lead(m.harness.as_deref(), t))
         .child(
             text(m.name.clone())
                 .font(type_::BODY)
-                .color(t.text_secondary)
+                .color(if m.chief {
+                    t.text_primary
+                } else {
+                    t.text_tertiary
+                })
                 .single_line()
                 .truncate()
                 .grow(1.0),
@@ -274,12 +269,7 @@ pub(crate) fn row_view(key: String, m: &Resting, height: f32, t: &Tokens) -> El 
         .hover_group();
     let controls = rune::row()
         .key(format!("{key}.controls"))
-        .pin(
-            None,
-            Some(0.0),
-            Some(SUN_SIDE + space::S2 + space::S1),
-            Some(0.0),
-        )
+        .pin(None, Some(0.0), Some(SUN_SIDE + 14.0), Some(0.0))
         .items_center()
         .gap(2.0)
         .pl(6.0)
@@ -332,17 +322,11 @@ pub(crate) fn chief_setup_row(
         Phase::Configuring => "configuring",
         _ => "starting",
     };
-    let mut row = row()
-        .key(key.clone())
+    let mut row = super::leaf_row(key.clone(), false, t)
         .role("button")
         .label(format!("Set up {}", chief.name))
         .a11y_value(phase)
-        .w_full()
-        .h(super::ROW_HEIGHT)
-        .items_center()
-        .gap(space::S2)
-        .px(space::S1)
-        .radius(4.0)
+        .hover(rune::Color::TRANSPARENT)
         .child(idle_lead(
             logos.then_some(chief.agent.as_deref().unwrap_or_default()),
             t,
@@ -350,7 +334,7 @@ pub(crate) fn chief_setup_row(
         .child(
             text(chief.name.clone())
                 .font(type_::BODY)
-                .color(t.text_secondary)
+                .color(t.text_primary)
                 .single_line()
                 .truncate()
                 .grow(1.0),

@@ -195,7 +195,7 @@ pub(crate) fn view(dock: &Dock, t: &Tokens) -> El {
         .w_full()
         .gap(space::S2)
         .padding(space::S3)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
         .child(head)
         .children(chips)
 }

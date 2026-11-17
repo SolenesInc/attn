@@ -951,14 +951,25 @@ pub(crate) fn marker(row_key: &str, count: usize, t: &Tokens) -> Option<El> {
         "?".to_owned()
     };
     Some(
-        text(glyph)
+        row()
             .key(format!("{row_key}.ask"))
             .role("img")
             .label(words)
-            .font(type_::MONO_CAPTION)
-            .color(t.accent),
+            .h(16.0)
+            .min_w(18.0)
+            .px(6.0)
+            .center()
+            .radius(10.0)
+            .fill(t.accent)
+            .child(text(glyph).font(MARKER_TYPE).color(t.bg_app)),
     )
 }
+
+/// The Tauri app's `.title-bar-count-badge`: the open asks' count over the button's corner.
+const BADGE_TYPE: rune::TextStyle = rune::TextStyle::new(9.5, 700.0).mono();
+
+/// The Tauri app's `.ask-marker`: bold monospace on the accent pill.
+const MARKER_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 700.0).mono();
 
 /// The agent's open-ask chip in its tile header: the oldest ask's subject and how many more, at
 /// the level the tile's width leaves it. Resting the pointer on it previews the asks; a press
@@ -1156,13 +1167,23 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
             .label_with(move |_, _| {
                 row()
-                    .gap(2.0)
                     .items_center()
                     .child(rune::icon(&attn_ui::icon::ASKS, 13.0).color(tokens.text_secondary))
                     .children((count > 0).then(|| {
-                        text(count.to_string())
-                            .font(type_::MONO_CAPTION)
-                            .color(tokens.accent)
+                        row()
+                            .pin(None, Some(-6.0), Some(-6.0), None)
+                            .min_w(15.0)
+                            .h(15.0)
+                            .px(4.0)
+                            .center()
+                            .radius(999.0)
+                            .fill(tokens.accent)
+                            .inert()
+                            .child(
+                                text(count.to_string())
+                                    .font(BADGE_TYPE)
+                                    .color(tokens.bg_app),
+                            )
                     }))
             })
             .build(attn_ui::kit(t))

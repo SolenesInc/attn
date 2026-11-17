@@ -92,7 +92,9 @@ notebook empty, with a folder opened in its tree, with a note open and with its
 finder over the note, a popped-out tile window, the classic new-session picker, Launcher 2.0
 in its dialog, its Where list and on an empty desktop, a new automation's form, its hour
 picker and suggested time zones, each with a row reached by an arrow key, Home
-with the Chief and a crew member in the sidebar, Manage crew on each of its
+with the Chief and a crew member in the sidebar, the queue flow with two turns
+owed and an open ask at Home and on the asking agent's desktop, the queue bar
+with the sidebar collapsed, the desktop flow's rail, Manage crew on each of its
 four tabs, naming a new desktop from its launch settings, Home's merge confirmation, the shared
 Codex restart prompt, the dialog for a worktree that could not be made, the command palette offering
 the Chief's setup, the notifications panel, also with no notifications, the PRs drawer, an

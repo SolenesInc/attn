@@ -1273,7 +1273,10 @@ const SIDEBAR_GOES: &str = "an agent shown alone hides the sidebar and gives the
 const SPOTLIGHT_MARKS: &str =
     "the spotlight's corner marks come and go at once, as in the Tauri app";
 
+const IN_VIEW_BAR: &str = "the brand bar of the row in view comes and goes at once, as the Tauri app's `.sidebar-leaf-row.selected::before`";
+
 const LANDS_AT_ONCE: &[AllowRow] = &[
+    AllowRow::new("pop-in", ".in-view", "", IN_VIEW_BAR).max(2),
     AllowRow::new("pop-in", ".spotlight.", "", SPOTLIGHT_MARKS).max(4),
     AllowRow::new("pop-out", ".spotlight.", "", SPOTLIGHT_MARKS).max(4),
     AllowRow::new("jump", "tile.a", ALONE, BY_DESIGN).max(22),

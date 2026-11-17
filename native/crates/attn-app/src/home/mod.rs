@@ -194,14 +194,10 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
                 .role("list")
                 .label("Asks")
                 .w_full()
-                .gap(2.0)
-                .child(group_label(
-                    "home.group.asks",
-                    "Asks",
-                    Some(asks.len()),
-                    None,
-                    t,
-                ))
+                .gap(0.0)
+                .child(
+                    group_label("home.group.asks", "Asks", Some(asks.len()), None, t).mb(space::S2),
+                )
                 .children(asks.iter().map(|item| ask_row(item, t))),
         );
     }
@@ -235,7 +231,12 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
                 )
                 .key("home.settled")
                 .role("heading")
-                .color(t.text_muted),
+                .color(t.text_muted)
+                .w_full()
+                .mt(4.0)
+                .px(space::S2)
+                .pb(6.0)
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border),
             );
         }
         body = body.children(home.groups.iter().map(|Group { key, label, rows }| {
@@ -294,8 +295,8 @@ fn group(
         .role("list")
         .label(label.to_owned())
         .w_full()
-        .gap(2.0)
-        .child(group_label(key, label, count, apart, t))
+        .gap(0.0)
+        .child(group_label(key, label, count, apart, t).mb(space::S2))
         .children(rows.iter().map(|agent| session_row(agent, t)))
 }
 
@@ -315,6 +316,7 @@ fn group_label(
     };
     row()
         .gap(space::S2)
+        .px(space::S2)
         .items_center()
         .child(type_::sans_caps(label).color(t.text_muted))
         .children(count.map(|n| caption(format!("{key}.count"), n.to_string())))
@@ -328,7 +330,7 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
         .role("list")
         .label("Snoozed")
         .w_full()
-        .gap(2.0)
+        .gap(0.0)
         .child(
             Button::new("Snoozed")
                 .variant(ButtonVariant::Ghost)
@@ -380,15 +382,22 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
         .focusable(true)
         .label(format!("{}: {}", item.from, item.ask.subject))
         .w_full()
-        .min_h(32.0)
-        .px(space::S2)
-        .py(space::S1)
-        .gap(space::S2)
+        .min_h(ROW_HEIGHT)
+        .px(12.0)
+        .gap(10.0)
         .items_center()
-        .radius(4.0)
+        .radius(6.0)
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| crate::asks::show(state, Some(&id), tx))
-        .child(text("?").font(type_::BODY).color(t.accent))
+        .child(
+            text("?")
+                .font(rune::TextStyle {
+                    weight: 700.0,
+                    ..type_::BODY
+                })
+                .color(t.accent)
+                .w(8.0),
+        )
         .child(
             text(item.from.clone())
                 .key(format!("home.ask.{}.from", item.ask.id))
@@ -409,6 +418,21 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
                 .single_line()
                 .truncate(),
         )
+}
+
+/// A row of the sessions card, as the Tauri app's `.session-row`: 10 points of padding over
+/// and under a line of text.
+const ROW_HEIGHT: f32 = 36.0;
+
+/// An agent's state dot on the card, as the Tauri app's `.state-dot`: 6 points across, or the
+/// sidebar's struck-through ring while its machine is unreachable.
+fn dot(key: &str, a: &HomeAgent, t: &Tokens) -> El {
+    let mark = state_mark(key, &a.agent, t);
+    if a.agent.offline {
+        mark
+    } else {
+        mark.size(6.0, 6.0).radius(3.0)
+    }
 }
 
 fn session_row(a: &HomeAgent, t: &Tokens) -> El {
@@ -437,12 +461,11 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
             .label(format!("Open {}", a.agent.name))
             .a11y_value(a.agent.state.wire())
             .w_full()
-            .min_h(32.0)
-            .px(space::S2)
-            .py(space::S1)
-            .gap(space::S2)
+            .min_h(ROW_HEIGHT)
+            .px(12.0)
+            .gap(10.0)
             .items_center()
-            .radius(4.0)
+            .radius(6.0)
             .fill(if a.agent.offline {
                 t.error.alpha(0.07)
             } else {
@@ -450,7 +473,7 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
             })
             .hover(t.bg_elevated)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
-            .child(state_mark(&key, &a.agent, t))
+            .child(dot(&key, a, t))
             .child(
                 col()
                     .grow(1.0)

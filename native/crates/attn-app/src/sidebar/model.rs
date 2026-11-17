@@ -197,6 +197,10 @@ pub struct DesktopHeader {
     pub number: i64,
     pub current: bool,
     pub empty: bool,
+    /// The desktop has a name of its own; the heading shows only its number otherwise.
+    pub named: bool,
+    /// The list's first desktop, which no gap separates from what is above it.
+    pub first: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -205,6 +209,8 @@ pub struct TileRow {
     pub id: String,
     pub kind: String,
     pub title: String,
+    /// The tile holds the focus of the desktop in view.
+    pub selected: bool,
 }
 
 impl TileRow {
@@ -216,6 +222,16 @@ impl TileRow {
             "browser" => "WEB",
             "notebook" => "NOTE",
             _ => "TILE",
+        }
+    }
+
+    /// The icon the row leads with, as the Tauri app's `tileKindLabel`.
+    pub fn icon(&self) -> &'static rune::Icon {
+        match self.kind.as_str() {
+            "seed" => &attn_ui::icon::GARDEN,
+            "markdown" => &attn_ui::icon::MARKDOWN,
+            "browser" => &attn_ui::icon::BROWSER,
+            _ => &attn_ui::icon::NOTEBOOK,
         }
     }
 }
@@ -591,6 +607,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
                             .map(|c| &*c.message),
                         facts.garden.of(&facts.profiles.selected),
                     ),
+                    selected: shown && id == desktop.active_pane_id,
                     id,
                     kind,
                 })),
@@ -632,6 +649,8 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
             number: desktop_number(desktop, desktops),
             current: shown,
             empty: children.is_empty(),
+            named: !desktop.name.trim().is_empty(),
+            first: !lines.iter().any(|l| matches!(l, Line::Desktop(_))),
         }));
         lines.extend(children);
     }

@@ -2,7 +2,7 @@ use attn_protocol::DesktopReorderMessage;
 
 use rune::Tx;
 
-use super::ROW_HEIGHT;
+use super::line_height;
 use super::model::Line;
 use crate::State;
 use crate::requests::Refused;
@@ -37,12 +37,17 @@ fn headers(lines: &[Line]) -> Vec<(usize, &str)> {
         .collect()
 }
 
+/// Where line `index` starts, points down the list; `lines.len()` gives where the list ends.
+fn top(lines: &[Line], index: usize) -> f32 {
+    lines[..index].iter().map(line_height).sum()
+}
+
 /// The seam nearest `y` points down the list: one above each desktop, and one under the list.
 fn nearest(lines: &[Line], y: f32) -> usize {
     let tops = headers(lines)
         .into_iter()
-        .map(|(i, _)| i as f32 * ROW_HEIGHT)
-        .chain([lines.len() as f32 * ROW_HEIGHT]);
+        .map(|(i, _)| top(lines, i))
+        .chain([top(lines, lines.len())]);
     tops.enumerate()
         .min_by(|(_, a), (_, b)| (a - y).abs().total_cmp(&(b - y).abs()))
         .map_or(0, |(seam, _)| seam)
@@ -76,7 +81,7 @@ pub(crate) fn drag(state: &mut State, desktop: &str, d: &rune::Drag, tx: &mut Tx
             if state.window.reorder.is_none() && d.dx.hypot(d.dy) < THRESHOLD {
                 return;
             }
-            let y = index as f32 * ROW_HEIGHT + d.start_y + d.dy;
+            let y = top(&lines, index) + d.start_y + d.dy;
             state.window.reorder = Some(Reorder {
                 desktop: desktop.to_owned(),
                 seam: nearest(&lines, y),

@@ -1528,6 +1528,73 @@ fn queue_agent_list(dark: bool) {
     snap(&mut world, "queue-agent-list", dark);
 }
 
+/// The queue flow with turns owed, as the audit seeded it: two agents waiting, the first with
+/// an open ask, the first three desktops on shortcut slots, and the crew.
+fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool) -> World {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.crew = Some(crew());
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("queue_mode_enabled".to_owned(), "true".to_owned());
+    }
+    for (n, desktop) in state.desktops.iter_mut().flatten().enumerate() {
+        desktop.shortcut_slot = (n < 3).then_some(n as i64 + 1);
+    }
+    for (session, opened) in state
+        .sessions
+        .iter_mut()
+        .flatten()
+        .zip(["2026-11-12T08:55:00Z", "2026-11-12T07:00:00Z"])
+    {
+        session.state = "waiting_input".into();
+        session.turn_owed = Some(true);
+        session.turn_opened_at = Some(opened.into());
+    }
+    state.asks = Some(vec![Ask {
+        id: "a-cache".into(),
+        session_id: "s0".into(),
+        subject: "Cache store".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        ..Ask::default()
+    }]);
+    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    press(&mut world, Action::SessionGoToDashboard);
+    if !home {
+        world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+        world.gesture(|app| app.move_to((1100.0, 700.0)));
+    }
+    if sidebar_hidden {
+        world.gesture(|app| app.click(Target::key("titlebar.sidebar")));
+    }
+    world
+}
+
+/// The seeded queue at Home: the waiting card, the ask on a row, the desktop strip.
+fn queue_seeded_home(dark: bool) {
+    let mut world = queue_seeded(dark, true, false);
+    snap(&mut world, "queue-seeded-home", dark);
+}
+
+/// The seeded queue with the asking agent's desktop open: its row in view, its desktop current.
+fn queue_seeded_agent(dark: bool) {
+    let mut world = queue_seeded(dark, false, false);
+    snap(&mut world, "queue-seeded-agent", dark);
+}
+
+/// The seeded queue with the sidebar collapsed: the queue bar in the title bar.
+fn queue_bar(dark: bool) {
+    let mut world = queue_seeded(dark, false, true);
+    snap(&mut world, "queue-bar", dark);
+}
+
+/// The desktop flow with the sidebar collapsed to its rail.
+fn rail(dark: bool) {
+    let mut world =
+        start(Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![])));
+    world.gesture(|app| app.click(Target::key("titlebar.sidebar")));
+    snap(&mut world, "rail", dark);
+}
+
 /// The working agent tends two seeds of a plot: its header's chip, then the list it pins.
 fn session_seeds(dark: bool) {
     let tended = |seed: Seed| Seed {
@@ -1944,6 +2011,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         session_menu(dark);
         queue_home(dark);
         queue_agent_list(dark);
+        queue_seeded_home(dark);
+        queue_seeded_agent(dark);
+        queue_bar(dark);
+        rail(dark);
         session_seeds(dark);
         markdown_selection(dark);
         snooze_menu(dark);

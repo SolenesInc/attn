@@ -3,23 +3,29 @@ use std::collections::{HashMap, HashSet};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
-use rune::{El, Tx, col, row, text};
+use rune::{El, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant};
 
-use super::model::{desktop_title, ordered_desktops};
+use super::model::{desktop_number, desktop_title, ordered_desktops};
 use super::queue::Bands;
 use super::{actions, open_desktop};
 use crate::State;
 use crate::desktop::DesktopMark;
 use crate::shell::View;
 
-/// A desktop's chip: its slot, marked when it shows and when a turn waits on it.
+/// A desktop's chip: its number or slot, marked when it shows and when a turn waits on it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Chip {
     pub desktop: String,
-    pub slot: i64,
+    /// The desktop's shortcut slot, which the queue's chips go by.
+    pub slot: Option<i64>,
+    /// The desktop's number, which the rail goes by.
+    pub number: i64,
     pub title: String,
+    /// The desktop shows in the window.
     pub current: bool,
+    /// The desktop the window shows or last showed, at Home too.
+    pub selected: bool,
     /// Nothing on the desktop, neither agents nor documents.
     pub empty: bool,
     /// The keys that select the desktop.
@@ -34,33 +40,35 @@ pub struct Chip {
 pub struct Extras {
     pub count: usize,
     pub waiting: usize,
+    /// The window's desktop is one of them.
+    pub selected: bool,
 }
 
-/// The chips of the desktops that have a shortcut slot, in slot order, and the desktops
-/// that have none. `waiting_on` names a desktop once for each turn waiting on it.
-pub fn chips<'a>(
-    state: &'a State,
-    waiting_on: impl IntoIterator<Item = &'a str>,
-) -> (Vec<Chip>, Extras) {
+/// A chip for every desktop, in the sidebar's order. `waiting_on` names a desktop once for
+/// each turn waiting on it.
+pub fn chips<'a>(state: &'a State, waiting_on: impl IntoIterator<Item = &'a str>) -> Vec<Chip> {
     let facts = &state.facts;
-    let current = (state.window.view == View::Desktop)
-        .then(|| facts.current_desktop().map(|d| d.id.clone()))
-        .flatten();
+    let selected = facts.current_desktop().map(|d| d.id.clone());
+    let home = state.window.view != View::Desktop;
     let mut waiting: HashMap<&str, usize> = HashMap::new();
     for desktop in waiting_on {
         *waiting.entry(desktop).or_default() += 1;
     }
-    let mut chips: Vec<Chip> = ordered_desktops(&facts.desktops)
+    ordered_desktops(&facts.desktops)
         .into_iter()
-        .filter_map(|d| {
-            let slot = d.shortcut_slot.filter(|s| *s > 0)?;
-            Some(Chip {
+        .map(|d| {
+            let slot = d.shortcut_slot.filter(|s| *s > 0);
+            let is_selected = selected.as_deref() == Some(d.id.as_str());
+            Chip {
                 desktop: d.id.clone(),
                 slot,
+                number: desktop_number(d, &facts.desktops),
                 title: desktop_title(d, &facts.desktops),
-                current: current.as_deref() == Some(d.id.as_str()),
+                current: is_selected && !home,
+                selected: is_selected,
                 empty: crate::desktop::holds_nothing(d),
-                keys: crate::Action::desktop_select(slot)
+                keys: slot
+                    .and_then(crate::Action::desktop_select)
                     .and_then(|a| crate::palette::label_of(state, &a)),
                 waiting: waiting.get(d.id.as_str()).copied().unwrap_or(0),
                 asks: d.panes.iter().any(|p| {
@@ -70,29 +78,31 @@ pub fn chips<'a>(
                         .find(|s| s.id == p.session_id)
                         .is_some_and(|s| !crate::asks::of_session(facts, s).is_empty())
                 }),
-            })
+            }
         })
-        .collect();
-    chips.sort_by_key(|c| c.slot);
-    let slotted: HashSet<&str> = chips.iter().map(|c| c.desktop.as_str()).collect();
-    let extras = Extras {
-        count: facts.desktops.len() - chips.len(),
-        waiting: facts
-            .desktops
-            .iter()
-            .filter(|d| !slotted.contains(d.id.as_str()))
-            .map(|d| waiting.get(d.id.as_str()).copied().unwrap_or(0))
-            .sum(),
-    };
-    (chips, extras)
+        .collect()
 }
 
-/// How a chip shows the turns waiting on its desktops: the queue sidebar's strip with a dot,
-/// the queue bar with their number.
-#[derive(Clone, Copy)]
-pub(crate) enum Mark {
-    Dot,
-    Count,
+/// The chips of the desktops that have a shortcut slot, in slot order, and the desktops
+/// that have none, as the queue's chips show them.
+fn slotted(chips: Vec<Chip>) -> (Vec<Chip>, Extras) {
+    let (mut slotted, rest): (Vec<Chip>, Vec<Chip>) =
+        chips.into_iter().partition(|c| c.slot.is_some());
+    slotted.sort_by_key(|c| c.slot);
+    let extras = Extras {
+        count: rest.len(),
+        waiting: rest.iter().map(|c| c.waiting).sum(),
+        selected: rest.iter().any(|c| c.selected),
+    };
+    (slotted, extras)
+}
+
+/// Where a queue chip sits, which sets its look: the queue sidebar's strip, as the Tauri app's
+/// `.queue-desktop-chip`, or the queue bar, as its `.queue-bar-desktop`.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Look {
+    Strip,
+    Bar,
 }
 
 /// How desktop `desktop`'s chip shows a dragged tile, where chips take one.
@@ -100,144 +110,259 @@ fn drop_on(state: &State, desktop: &str) -> Option<DesktopMark> {
     state.window.desk.drag.as_ref()?.desktop_mark(desktop)
 }
 
-pub(crate) fn chip(
-    prefix: &str,
-    chip: &Chip,
-    mark: Mark,
-    drop: Option<DesktopMark>,
-    t: &Tokens,
-) -> El {
-    let desktop = chip.desktop.clone();
+fn said(chip: &Chip, look: Look) -> (String, String) {
     let asks = if chip.asks { ", has open asks" } else { "" };
     let named = match &chip.keys {
         Some(keys) => format!("{} ({keys})", chip.title),
         None => chip.title.clone(),
     };
-    let label = format!("{named}{}{asks}", waiting_words(chip.waiting, mark));
-    let slot = chip.slot;
-    let waiting = chip.waiting;
-    let asks_mark = chip.asks;
-    let number = match (chip.current, chip.empty) {
-        (true, _) => attn_ui::brand_ink(t),
-        (false, true) => t.text_tertiary,
+    let label = format!("{named}{}{asks}", waiting_words(chip.waiting, look));
+    (named, label)
+}
+
+fn chip_value(current: bool, empty: bool) -> &'static str {
+    match (current, empty) {
+        (true, true) => "current, Empty desktop",
+        (true, false) => "current",
+        (false, true) => "Empty desktop",
+        (false, false) => "",
+    }
+}
+
+/// A slotted desktop's chip in the queue's strip or bar: its slot, framed, with the turns
+/// waiting on it hung off its top right corner so the chip keeps its size.
+pub(crate) fn chip(
+    prefix: &str,
+    chip: &Chip,
+    look: Look,
+    drop: Option<DesktopMark>,
+    t: &Tokens,
+) -> El {
+    let desktop = chip.desktop.clone();
+    let (named, label) = said(chip, look);
+    let slot = chip.slot.unwrap_or_default();
+    let ink = match (chip.selected, chip.empty) {
+        (true, _) => t.text_primary,
+        (false, true) => t.text_dimmed,
         (false, false) => t.text_secondary,
     };
-    let tokens = *t;
-    let el = Button::new(label)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
-        .label_with(move |_, _| {
-            row()
-                .items_center()
-                .child(
-                    text(slot.to_string())
-                        .font(type_::MONO_CAPTION)
-                        .color(number),
-                )
-                .children(waiting_mark(waiting, mark, &tokens))
-                .children(asks_mark.then(|| {
-                    text("?")
-                        .font(type_::MONO_CAPTION)
-                        .color(tokens.accent)
-                        .ml(2.0)
-                }))
-        })
-        .build(attn_ui::kit(t))
-        .key(format!("{prefix}.{}", chip.slot))
+    let face = queue_chip_face(look, chip.selected, !chip.empty, t)
+        .key(format!("{prefix}.{slot}"))
+        .role("button")
+        .focusable(true)
+        .label(label)
         .help(named)
-        .a11y_value(match (chip.current, chip.empty) {
-            (true, true) => "current, Empty desktop",
-            (true, false) => "current",
-            (false, true) => "Empty desktop",
-            (false, false) => "",
-        })
-        .h(22.0)
-        .min_w(22.0)
-        .px(4.0)
-        .radius(4.0)
-        .fill(if chip.current { t.brand } else { t.bg_button })
-        .hover(t.bg_elevated);
+        .a11y_value(chip_value(chip.current, chip.empty))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
+        .child(
+            text(slot.to_string())
+                .font(digits(look, chip.selected))
+                .color(ink),
+        )
+        .children(waiting_mark(chip.waiting, look, t));
+    dropped(face, drop, t)
+}
+
+fn dropped(face: El, drop: Option<DesktopMark>, t: &Tokens) -> El {
     match drop {
-        None => el,
-        Some(DesktopMark::Source) => el.opacity(0.4),
-        Some(DesktopMark::Accepts) => el.border(1.0, t.accent),
-        Some(DesktopMark::Target) => el.border(1.0, t.accent).fill(t.accent.alpha(0.18)),
+        None => face,
+        Some(DesktopMark::Source) => face.opacity(0.4),
+        Some(DesktopMark::Accepts) => face.border(1.0, t.brand).border_dash(2.0, 2.0),
+        Some(DesktopMark::Target) => face.border(1.0, t.brand).fill(t.brand.alpha(0.18)),
     }
 }
 
-fn waiting_words(waiting: usize, mark: Mark) -> String {
-    match (waiting, mark) {
+/// The frame of a queue chip, before its content.
+fn queue_chip_face(look: Look, selected: bool, has_panes: bool, t: &Tokens) -> El {
+    let face = row().center();
+    match look {
+        Look::Strip => {
+            let face = face
+                .min_w(15.0)
+                .h(18.0)
+                .radius(4.0)
+                .border(1.0, t.border)
+                .hover(t.bg_elevated);
+            match (selected, has_panes) {
+                (true, _) => face.fill(t.bg_elevated).border(1.0, t.border_focus),
+                (false, true) => face.fill(super::wash(t, 0.03)),
+                (false, false) => face,
+            }
+        }
+        Look::Bar => {
+            let face = face
+                .min_w(24.0)
+                .h(24.0)
+                .radius(6.0)
+                .border(1.0, rune::Color::TRANSPARENT)
+                .hover(t.bg_elevated);
+            match (selected, has_panes) {
+                (true, _) => face
+                    .fill(t.accent.alpha(0.22))
+                    .border(1.0, t.accent.alpha(0.5)),
+                (false, true) => face.fill(super::wash(t, 0.04)),
+                (false, false) => face,
+            }
+        }
+    }
+}
+
+fn digits(look: Look, selected: bool) -> rune::TextStyle {
+    match look {
+        Look::Strip => rune::TextStyle::new(10.5, if selected { 600.0 } else { 400.0 }).mono(),
+        Look::Bar => rune::TextStyle::new(11.5, 600.0).mono(),
+    }
+}
+
+fn waiting_words(waiting: usize, look: Look) -> String {
+    match (waiting, look) {
         (0, _) => String::new(),
-        (_, Mark::Dot) => ", has turns waiting".into(),
-        (1, Mark::Count) => ", 1 turn waiting".into(),
-        (n, Mark::Count) => format!(", {n} turns waiting"),
+        (_, Look::Strip) => ", has turns waiting".into(),
+        (1, Look::Bar) => ", 1 turn waiting".into(),
+        (n, Look::Bar) => format!(", {n} turns waiting"),
     }
 }
 
-fn waiting_mark(waiting: usize, mark: Mark, t: &Tokens) -> Option<El> {
-    (waiting > 0).then(|| match mark {
-        Mark::Dot => rune::el()
-            .size(5.0, 5.0)
-            .radius(2.5)
+/// The turns waiting on a chip's desktops, over its top right corner: a dot on the strip, as
+/// the Tauri app's `.queue-desktop-chip-waiting`, their number on the bar, as its
+/// `.queue-bar-desktop-waiting`.
+fn waiting_mark(waiting: usize, look: Look, t: &Tokens) -> Option<El> {
+    (waiting > 0).then(|| match look {
+        Look::Strip => rune::el()
+            .pin(None, Some(-3.0), Some(-3.0), None)
+            .size(6.0, 6.0)
+            .radius(3.0)
             .fill(t.warning)
-            .ml(2.0),
-        Mark::Count => row()
+            .border(1.0, t.bg_panel)
+            .inert(),
+        Look::Bar => row()
+            .pin(None, Some(-6.0), Some(-6.0), None)
             .min_w(15.0)
             .h(15.0)
             .px(4.0)
             .center()
             .radius(999.0)
             .fill(t.warning)
-            .ml(3.0)
-            .child(text(waiting.to_string()).font(COUNT_TYPE).color(t.bg_app)),
+            .inert()
+            .child(
+                text(waiting.to_string())
+                    .font(COUNT_TYPE)
+                    .color(attn_ui::warning_ink(t)),
+            ),
     })
 }
 
-fn extras_chip(key: &str, extras: Extras, mark: Mark, t: &Tokens) -> Option<El> {
-    let Extras { count, waiting } = extras;
+fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> {
+    let Extras {
+        count,
+        waiting,
+        selected,
+    } = extras;
     (count > 0).then(|| {
-        let tokens = *t;
-        Button::new(format!(
-            "{count} more desktop{} without a shortcut{}",
-            if count == 1 { "" } else { "s" },
-            waiting_words(waiting, mark)
-        ))
+        queue_chip_face(look, selected, false, t)
+            .key(key.to_owned())
+            .role("button")
+            .focusable(true)
+            .label(format!(
+                "{count} more desktop{} without a shortcut{}",
+                if count == 1 { "" } else { "s" },
+                waiting_words(waiting, look)
+            ))
+            .px(if look == Look::Strip { 5.0 } else { 6.0 })
+            .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                crate::dispatch(state, crate::Action::DesktopOverview, tx);
+            })
+            .child(
+                text(format!("+{count}"))
+                    .font(match look {
+                        Look::Strip => digits(look, selected),
+                        Look::Bar => rune::TextStyle::new(11.5, 500.0).mono(),
+                    })
+                    .color(if selected {
+                        t.text_primary
+                    } else {
+                        t.text_tertiary
+                    }),
+            )
+            .children(waiting_mark(waiting, look, t))
+    })
+}
+
+/// The strip's chip that opens the desktop overview, as the Tauri app's compact
+/// `SidebarDesktopOverview`.
+fn overview_chip(keys: Option<String>, t: &Tokens) -> El {
+    let label = match &keys {
+        Some(keys) => format!("Desktop overview ({keys})"),
+        None => "Desktop overview".to_owned(),
+    };
+    queue_chip_face(Look::Strip, false, false, t)
+        .key("queue.desktop-overview")
+        .role("button")
+        .focusable(true)
+        .label(label)
         .on_press_tx(|state: &mut State, tx: &mut Tx| {
             crate::dispatch(state, crate::Action::DesktopOverview, tx);
         })
-        .label_with(move |_, _| {
-            row()
-                .items_center()
-                .child(
-                    text(format!("+{count}"))
-                        .font(type_::MONO_CAPTION)
-                        .color(tokens.text_secondary),
-                )
-                .children(waiting_mark(waiting, mark, &tokens))
-        })
-        .build(attn_ui::kit(t))
-        .key(key.to_owned())
-        .h(22.0)
-        .px(4.0)
-        .radius(4.0)
-        .hover(t.bg_elevated)
-    })
+        .child(rune::icon(&attn_ui::icon::OVERVIEW, 10.0).color(t.text_dimmed))
 }
 
-/// The queue sidebar's foot: a chip per slotted desktop.
+/// The queue sidebar's foot, as the Tauri app's `.queue-desktop-strip`: a chip per slotted
+/// desktop, the others as one, the overview's chip, and the window's desktop by name with the
+/// overview's keys.
 pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
-    let (chips, extras) = chips(state, turns_on(bands));
-    row()
-        .key("queue.desktops")
-        .role("group")
-        .label("Desktops")
+    let all = chips(state, turns_on(bands));
+    let current = all.iter().find(|c| c.selected).map(|c| c.title.clone());
+    let (chips, extras) = slotted(all);
+    let overview_keys = crate::palette::label_of(state, &crate::Action::DesktopOverview);
+    col()
+        .key("queue.strip")
         .w_full()
-        .gap(space::S1)
-        .children(
-            chips
-                .iter()
-                .map(|c| chip("queue.desktop", c, Mark::Dot, drop_on(state, &c.desktop), t)),
+        .gap(6.0)
+        .pt(8.0)
+        .px(6.0)
+        .pb(6.0)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
+        .child(
+            row()
+                .key("queue.desktops")
+                .role("group")
+                .label("Desktops")
+                .w_full()
+                .flex_wrap()
+                .gap(2.0)
+                .children(chips.iter().map(|c| {
+                    chip(
+                        "queue.desktop",
+                        c,
+                        Look::Strip,
+                        drop_on(state, &c.desktop),
+                        t,
+                    )
+                }))
+                .children(extras_chip("queue.desktop-extras", extras, Look::Strip, t))
+                .child(overview_chip(overview_keys.clone(), t)),
         )
-        .children(extras_chip("queue.desktop-extras", extras, Mark::Dot, t))
+        .child(
+            row()
+                .key("queue.desktop-current")
+                .w_full()
+                .items_center()
+                .gap(6.0)
+                .child(
+                    text(current.unwrap_or_default())
+                        .font(type_::MONO_CAPTION)
+                        .color(t.text_tertiary)
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                        .grow(1.0),
+                )
+                .children(overview_keys.map(|keys| {
+                    text(keys)
+                        .font(rune::TextStyle::new(10.0, 400.0).mono())
+                        .color(t.text_dimmed)
+                })),
+        )
 }
 
 fn turns_on<'a>(bands: &Bands<'a>) -> Vec<&'a str> {
@@ -268,53 +393,91 @@ fn wanting_on(state: &State) -> Vec<&str> {
         .collect()
 }
 
-/// The desktop sidebar collapsed: Home, the way back out, and the desktops' chips.
+/// The desktop sidebar collapsed, as the Tauri app's `.icon-rail`: Home, a divider, and a
+/// chip for every desktop by its number. The title bar's toggle brings the sidebar back.
 pub(crate) fn rail(state: &State, t: &Tokens) -> El {
-    let (chips, extras) = chips(state, wanting_on(state));
+    let chips = chips(state, wanting_on(state));
     let home = state.window.view == View::Home;
     col()
         .key("rail")
         .role("navigation")
         .label("Rail")
-        .w(40.0)
+        .w(44.0)
         .h_full()
         .items_center()
-        .gap(space::S1)
-        .py(space::S2)
+        .pt(12.0)
+        .px(7.0)
         .fill(t.bg_panel)
-        .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
+        .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
         .child(
-            GlyphButton::new(&attn_ui::icon::HOME, "Home")
-                .icon_size(16.0)
-                .on_press(|state: &mut State| state.window.go_home())
-                .build(attn_ui::kit(t))
+            rail_button(home, t)
                 .key("rail.home")
+                .role("button")
+                .focusable(true)
+                .label("Home")
                 .a11y_value(if home { "current" } else { "" })
-                .radius(4.0)
-                .fill(if home { t.bg_selected } else { t.bg_panel })
-                .hover(t.bg_elevated),
+                .on_press(|state: &mut State| state.window.go_home())
+                .child(rune::icon(&attn_ui::icon::HOME, 16.0).color(if home {
+                    t.text_primary
+                } else {
+                    t.text_dimmed
+                })),
         )
-        .child(
-            GlyphButton::new(&attn_ui::icon::EXPAND, "Expand sidebar")
-                .on_press(|state: &mut State| state.window.sidebar_hidden = false)
-                .build(attn_ui::kit(t))
-                .key("rail.expand")
-                .radius(4.0)
-                .hover(t.bg_elevated),
-        )
+        .child(el().w(24.0).h(1.0).my(6.0).fill(t.border))
         .child(
             col()
                 .key("rail.desktops")
                 .role("group")
                 .label("Desktops")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
                 .items_center()
-                .gap(space::S1)
-                .children(
-                    chips
-                        .iter()
-                        .map(|c| chip("rail.desktop", c, Mark::Dot, None, t)),
-                )
-                .children(extras_chip("rail.desktop-extras", extras, Mark::Dot, t)),
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                })
+                .children(chips.iter().map(|c| rail_chip(c, t))),
+        )
+}
+
+/// A button of the rail, as the Tauri app's `.icon-btn`: 30 points square, filled while it is
+/// where the window is.
+fn rail_button(active: bool, t: &Tokens) -> El {
+    row()
+        .size(30.0, 30.0)
+        .mb(4.0)
+        .center()
+        .radius(7.0)
+        .fill(if active {
+            t.bg_elevated
+        } else {
+            rune::Color::TRANSPARENT
+        })
+        .hover(t.bg_elevated)
+}
+
+/// A desktop on the rail: its number chip, with a dot while an agent on it wants the user.
+fn rail_chip(chip: &Chip, t: &Tokens) -> El {
+    let desktop = chip.desktop.clone();
+    let (named, label) = said(chip, Look::Strip);
+    rail_button(chip.current, t)
+        .key(format!("rail.desktop.{}", chip.number))
+        .role("button")
+        .focusable(true)
+        .label(label)
+        .help(named)
+        .a11y_value(chip_value(chip.current, chip.empty))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
+        .child(
+            super::desktop_number(chip.number, chip.current, chip.empty, t).children(
+                (chip.waiting > 0).then(|| {
+                    el().pin(None, Some(-4.0), Some(-4.0), None)
+                        .size(8.0, 8.0)
+                        .radius(4.0)
+                        .fill(t.state_waiting)
+                        .inert()
+                }),
+            ),
         )
 }
 
@@ -444,8 +607,8 @@ fn tool_button(
         .hover(t.bg_elevated)
 }
 
-/// Queue flow with the sidebar collapsed: the waiting pill, then the desktops' chips, in
-/// the title bar.
+/// Queue flow with the sidebar collapsed: the waiting pill in the title bar, as the Tauri
+/// app's `.queue-bar-pill`: a dot, the count, then the agents whose turns wait.
 pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
     let owed = bands.owed();
     let crumbs: Vec<String> = bands
@@ -455,20 +618,87 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
         .map(|r| super::model::display_name(r.session))
         .collect();
     let more = bands.turns.len().saturating_sub(crumbs.len());
-    let mut pill = super::queue_view::owed_label(owed).unwrap_or_else(|| "Nothing owed".into());
+    let count = super::queue_view::owed_label(owed).unwrap_or_else(|| "Nothing owed".into());
+    let mut said = count.clone();
     if !crumbs.is_empty() {
-        pill.push_str(" · ");
-        pill.push_str(&crumbs.join(" › "));
+        said.push_str(" · ");
+        said.push_str(&crumbs.join(" › "));
     }
     if more > 0 {
-        pill.push_str(&format!(" +{more}"));
+        said.push_str(&format!(" +{more}"));
     }
-    let pill_ink = if owed.0 == 0 {
-        t.text_tertiary
-    } else {
-        t.text_primary
+    let sep = |glyph: &str| {
+        text(glyph.to_owned())
+            .font(type_::LABEL)
+            .color(t.text_dimmed)
     };
-    let (chips, extras) = chips(state, turns_on(bands));
+    let mut trail = Vec::new();
+    for (n, crumb) in crumbs.into_iter().enumerate() {
+        trail.push(sep(if n == 0 { "·" } else { "›" }));
+        trail.push(
+            text(crumb)
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .single_line()
+                .truncate()
+                .shrink(),
+        );
+    }
+    if more > 0 {
+        trail.push(
+            text(format!("+{more}"))
+                .font(type_::LABEL)
+                .color(t.text_tertiary),
+        );
+    }
+    let pill = row()
+        .key("queue-bar.pill")
+        .role("button")
+        .focusable(true)
+        .label(said)
+        .a11y_value(owed.0.to_string())
+        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+            super::bar_peek::dismiss(state);
+            crate::dispatch(state, crate::Action::UiActionMenu, tx);
+        })
+        .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
+            super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
+        })
+        .shrink()
+        .min_w(124.0)
+        .max_w(640.0)
+        .h(24.0)
+        .px(12.0)
+        .gap(8.0)
+        .items_center()
+        .radius(999.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+        .child(
+            row()
+                .items_center()
+                .gap(6.0)
+                .child(el().size(7.0, 7.0).radius(3.5).fill(if owed.0 > 0 {
+                    t.warning
+                } else {
+                    t.text_dimmed
+                }))
+                .child(
+                    text(count)
+                        .font(rune::TextStyle {
+                            weight: 600.0,
+                            ..type_::LABEL
+                        })
+                        .color(t.text_primary)
+                        .single_line(),
+                ),
+        )
+        .children(trail)
+        .child(
+            text(attn_ui::glyph::CARET_DOWN)
+                .font(rune::TextStyle::new(9.0, 400.0))
+                .color(t.text_dimmed),
+        );
     row()
         .key("queue-bar")
         .role("group")
@@ -476,56 +706,32 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
         .shrink()
         .h_full()
         .items_center()
-        .gap(space::S2)
-        .child(
-            Button::new(pill.clone())
-                .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                    super::bar_peek::dismiss(state);
-                    crate::dispatch(state, crate::Action::UiActionMenu, tx);
-                })
-                .label_with(move |_, _| {
-                    text(pill)
-                        .font(type_::LABEL)
-                        .color(pill_ink)
-                        .single_line()
-                        .truncate()
-                        .shrink()
-                })
-                .build(attn_ui::kit(t))
-                .key("queue-bar.pill")
-                .a11y_value(owed.0.to_string())
-                .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
-                    super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
-                })
-                .shrink()
-                .min_w(124.0)
-                .max_w(640.0)
-                .h(22.0)
-                .px(space::S2)
-                .radius(11.0)
-                .fill(t.bg_button)
-                .hover(t.bg_elevated),
-        )
+        .gap(6.0)
+        .child(pill)
         .children(runs_chip(state, t))
-        .child(
-            row()
-                .key("queue-bar.desktops")
-                .role("group")
-                .label("Desktops")
-                .h_full()
-                .items_center()
-                .gap(space::S2)
-                .children(chips.iter().map(|c| {
-                    let drop = drop_on(state, &c.desktop);
-                    chip("queue-bar.desktop", c, Mark::Count, drop, t)
-                }))
-                .children(extras_chip(
-                    "queue-bar.desktop-extras",
-                    extras,
-                    Mark::Count,
-                    t,
-                )),
-        )
+}
+
+/// The queue bar's desktop chips, which the title bar holds after the tile shelf, as the
+/// Tauri app's `.queue-bar-desktops`.
+pub(crate) fn queue_bar_desktops(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
+    let (chips, extras) = slotted(chips(state, turns_on(bands)));
+    row()
+        .key("queue-bar.desktops")
+        .role("group")
+        .label("Desktops")
+        .h_full()
+        .items_center()
+        .gap(4.0)
+        .children(chips.iter().map(|c| {
+            let drop = drop_on(state, &c.desktop);
+            chip("queue-bar.desktop", c, Look::Bar, drop, t)
+        }))
+        .children(extras_chip(
+            "queue-bar.desktop-extras",
+            extras,
+            Look::Bar,
+            t,
+        ))
 }
 
 /// The queue bar's count of automation runs and of those that need the user; pressing it walks

@@ -8,7 +8,7 @@ use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::model::{AgentRow, display_name, ordered_desktops};
 use super::queue::{self, Bands, QueueRow};
-use super::{ROW_HEIGHT, ROWS_BUILT, home_row, lead, open_agent};
+use super::{INSET, LEAF_HEIGHT, ROW_HEIGHT, ROWS_BUILT, home_row, lead, open_agent};
 use crate::State;
 use crate::action::Action;
 
@@ -63,6 +63,8 @@ pub struct QueueAgent {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum QLine {
+    /// The space that sets a section apart from the one above it, before the line keyed `of`.
+    Gap(String),
     Rule {
         key: &'static str,
         text: String,
@@ -103,6 +105,7 @@ pub struct RunGroup {
 impl QLine {
     pub fn key(&self) -> String {
         match self {
+            QLine::Gap(of) => format!("{of}.gap"),
             QLine::Rule { key, .. } => format!("queue.rule.{key}"),
             QLine::WaitingHead { .. } => "queue.waiting-head".into(),
             QLine::AgentsToggle { .. } => "queue.agents-toggle".into(),
@@ -231,7 +234,7 @@ pub(super) fn chief_slot(state: &State, t: &Tokens) -> Option<El> {
         QLine::ChiefSetup(chief) => {
             super::crew::chief_setup_row(key, chief, super::logos(state), t)
         }
-        QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
+        QLine::Member(member) => super::crew::row_view(key, member, t),
         _ => return None,
     })
 }
@@ -270,6 +273,12 @@ pub(super) fn chief_line(
     }
 }
 
+/// Starts a section with `line`, the gap above it first.
+fn section(lines: &mut Vec<QLine>, line: QLine) {
+    lines.push(QLine::Gap(line.key()));
+    lines.push(line);
+}
+
 /// The queue sidebar's body, top to bottom: the crew, the waiting card and its turns, the
 /// agent list's toggle, and with the list open its filter, working and snoozed agents.
 pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
@@ -298,7 +307,7 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
     members.retain(|(m, _)| Some(m) != chief_member.as_ref());
     members.sort_by(|a, b| a.0.cmp(&b.0));
     if chief_slot.is_some() || chief.is_some() || !members.is_empty() {
-        lines.push(QLine::CrewRule);
+        section(&mut lines, QLine::CrewRule);
         if let Some(slot) = chief_slot {
             lines.push(chief_line(state, &on_screen, bands, slot));
         } else if let Some(chief) = chief {
@@ -320,10 +329,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
     let pinned: std::collections::HashSet<&str> =
         bands.crew.iter().map(|r| r.session.id.as_str()).collect();
     let (waiting, unreachable) = bands.owed();
-    lines.push(QLine::WaitingHead {
-        waiting,
-        unreachable,
-    });
+    section(
+        &mut lines,
+        QLine::WaitingHead {
+            waiting,
+            unreachable,
+        },
+    );
     for row in &bands.turns {
         lines.push(QLine::Agent(agent(
             state,
@@ -344,10 +356,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
         .filter(|r| !pinned.contains(r.session.id.as_str()))
         .collect();
     let more = working.len() + snoozed.len();
-    lines.push(QLine::AgentsToggle {
-        open: window.agent_list_open,
-        more,
-    });
+    section(
+        &mut lines,
+        QLine::AgentsToggle {
+            open: window.agent_list_open,
+            more,
+        },
+    );
     if !window.agent_list_open {
         let parts: Vec<String> = [(working.len(), "working"), (snoozed.len(), "snoozed")]
             .into_iter()
@@ -365,10 +380,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
         };
         let working: Vec<_> = working.into_iter().filter(matches).collect();
         let snoozed: Vec<_> = snoozed.into_iter().filter(matches).collect();
-        lines.push(QLine::Rule {
-            key: "working",
-            text: format!("Working {}", working.len()),
-        });
+        section(
+            &mut lines,
+            QLine::Rule {
+                key: "working",
+                text: format!("Working {}", working.len()),
+            },
+        );
         if working.is_empty() {
             lines.push(QLine::Empty("working"));
         }
@@ -382,10 +400,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
             )));
         }
         if !snoozed.is_empty() {
-            lines.push(QLine::Rule {
-                key: "snoozed",
-                text: format!("Snoozed {}", snoozed.len()),
-            });
+            section(
+                &mut lines,
+                QLine::Rule {
+                    key: "snoozed",
+                    text: format!("Snoozed {}", snoozed.len()),
+                },
+            );
             for row in snoozed {
                 lines.push(QLine::Agent(agent(
                     state,
@@ -410,10 +431,13 @@ fn runs(state: &State, on_screen: &[String], lines: &mut Vec<QLine>) {
         return;
     }
     let places = queue::Places::of(&state.facts);
-    lines.push(QLine::RunsHead {
-        runs: groups.iter().map(|g| g.runs.len()).sum(),
-        needing: groups.iter().map(|g| g.needing_you.len()).sum(),
-    });
+    section(
+        lines,
+        QLine::RunsHead {
+            runs: groups.iter().map(|g| g.runs.len()).sum(),
+            needing: groups.iter().map(|g| g.needing_you.len()).sum(),
+        },
+    );
     for group in &groups {
         let open = state.window.run_groups_open.contains(&group.id);
         lines.push(QLine::RunGroup(RunGroup {
@@ -496,9 +520,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .w(super::width::of(state))
             .h_full()
             .fill(t.bg_panel)
-            .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
-            .padding(space::S2)
-            .gap(space::S1)
+            .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
             .children(crate::notifications::critical_strip(
                 &facts.notifications,
                 &t,
@@ -514,6 +536,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                     .w_full()
                     .grow(1.0)
                     .min_h(0.0)
+                    .px(INSET)
+                    .pb(space::S2)
                     .scroll(ScrollSpec {
                         stick_bottom: false,
                     })
@@ -526,7 +550,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                             .growth(GrowthSpec::default())
                             .virtual_rows(
                                 lines.len(),
-                                ROW_HEIGHT,
+                                LEAF_HEIGHT,
                                 move |_: &State, i| keys[i].key().into(),
                                 move |state: &State, i| {
                                     let line_key = lines[i].key();
@@ -564,6 +588,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             match line {
+                QLine::Gap(_) => rune::el().key(key).w_full().h(SECTION_GAP).a11y_hidden(),
                 QLine::Rule { text: label, .. } => rule(key, label, t),
                 QLine::WaitingHead {
                     waiting,
@@ -573,7 +598,8 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 QLine::Counts(counts) => text(counts.clone())
                     .key(key)
                     .font(type_::MONO_CAPTION)
-                    .color(t.text_tertiary),
+                    .color(t.text_tertiary)
+                    .px(6.0),
                 QLine::Empty(_) => text("Nobody else.")
                     .key(key)
                     .font(type_::LABEL)
@@ -583,7 +609,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                     queue_row(key, agent, cursor, logos, t).children(bar)
                 }
                 QLine::CrewRule => crew_rule(key, t),
-                QLine::Member(member) => super::crew::row_view(key, member, ROW_HEIGHT, t),
+                QLine::Member(member) => super::crew::row_view(key, member, t),
                 QLine::ChiefSetup(chief) => super::crew::chief_setup_row(key, chief, logos, t),
                 QLine::RunsHead { runs, needing } => runs_head(key, *runs, *needing, keys, t),
                 QLine::RunGroup(group) => run_group(key, group, t),
@@ -595,14 +621,9 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
 
 pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
     let tertiary = t.text_tertiary;
-    row()
-        .key(key.clone())
+    section_rule(key.clone())
         .role("heading")
         .label("Crew")
-        .w_full()
-        .h(ROW_HEIGHT)
-        .items_center()
-        .gap(space::S1)
         .child(type_::caps("Crew").color(t.text_tertiary))
         .child(rune::el().grow(1.0).h(1.0).fill(t.border_subtle))
         .child(
@@ -618,14 +639,30 @@ pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
 }
 
 fn rule(key: String, label: &str, t: &Tokens) -> El {
-    row()
-        .key(key)
+    section_rule(key)
         .role("heading")
         .label(label.to_owned())
-        .w_full()
-        .h(ROW_HEIGHT)
-        .items_center()
         .child(type_::caps(label).color(t.text_tertiary))
+        .child(rune::el().grow(1.0).h(1.0).fill(t.border_subtle))
+}
+
+/// The gap that sets a section of the queue sidebar apart from the one above it, as the
+/// Tauri app's `margin-top: 16px` on the crew block, the waiting card, the agents toggle, the
+/// agent list's bands and the automation runs.
+const SECTION_GAP: f32 = 16.0;
+
+/// A section's heading line, as the Tauri app's `.queue-section-rule`: 20 points high and 4
+/// over its rows.
+fn section_rule(key: String) -> El {
+    row()
+        .key(key)
+        .w_full()
+        .h(24.0)
+        .pb(4.0)
+        .items_center()
+        .gap(6.0)
+        .pl(4.0)
+        .pr(6.0)
 }
 
 fn keys_of(state: &State, action: &Action) -> Option<String> {
@@ -676,11 +713,6 @@ fn waiting_head(
     t: &Tokens,
 ) -> El {
     let label = owed_label((waiting, unreachable)).unwrap_or_else(|| "Nothing owed".into());
-    let ink = if waiting == 0 {
-        t.text_muted
-    } else {
-        t.warning
-    };
     let description = says("Open the oldest turn", keys.as_ref());
     let tokens = *t;
     Button::new(label.clone())
@@ -691,19 +723,49 @@ fn waiting_head(
             row()
                 .w_full()
                 .items_center()
-                .gap(space::S1)
-                .child(text(label).font(type_::SECTION).color(ink))
+                .gap(6.0)
+                .child(owed_words((waiting, unreachable), &tokens))
                 .children(rule_tail(keys, &tokens))
         })
         .build(attn_ui::kit(t))
         .key(key)
         .description(description)
         .w_full()
-        .h(ROW_HEIGHT)
-        .px(0.0)
+        .h(28.0)
+        .pl(4.0)
+        .pr(6.0)
         .justify_start()
         .radius(4.0)
-        .hover(t.bg_elevated)
+        .hover(super::hairline(t))
+}
+
+/// What the queue owes in the Tauri app's `.queue-waiting-count`: the number of waiting turns
+/// in bold warning, the words in primary, and an unreachable count in tertiary.
+fn owed_words((waiting, unreachable): (usize, usize), t: &Tokens) -> El {
+    let words = rune::TextStyle::new(13.0, 500.0);
+    let number = rune::TextStyle {
+        weight: 700.0,
+        ..words
+    };
+    if waiting == 0 && unreachable == 0 {
+        return text("Nothing owed").font(words).color(t.text_tertiary);
+    }
+    let mut parts = Vec::new();
+    if waiting > 0 {
+        parts.push(text(waiting.to_string()).font(number).color(t.warning));
+        parts.push(text("waiting").font(words).color(t.text_primary));
+    }
+    if unreachable > 0 {
+        if waiting > 0 {
+            parts.push(text("·").font(words).color(t.text_tertiary));
+        }
+        parts.push(
+            text(format!("{unreachable} unreachable"))
+                .font(words)
+                .color(t.text_tertiary),
+        );
+    }
+    row().items_center().gap(4.0).children(parts)
 }
 
 fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: &Tokens) -> El {
@@ -739,11 +801,13 @@ fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: 
         .key(key)
         .description(description)
         .w_full()
-        .h(ROW_HEIGHT)
-        .px(0.0)
+        .h(24.0)
+        .pb(4.0)
+        .pl(4.0)
+        .pr(6.0)
         .justify_start()
         .radius(4.0)
-        .hover(t.bg_elevated)
+        .hover(super::hairline(t))
 }
 
 fn plural(n: usize, noun: &str) -> String {
@@ -920,23 +984,15 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
     } else {
         a.snoozed_until.clone()
     };
-    let row = row()
-        .key(key.clone())
+    let row = super::leaf_row(key.clone(), a.agent.selected, t)
         .role("listitem")
         .label(format!("Open {}", a.agent.name))
         .a11y_value(a.agent.state.wire())
         .help(a.agent.hover())
-        .w_full()
-        .h(ROW_HEIGHT)
-        .items_center()
-        .gap(space::S2)
-        .px(space::S1)
-        .radius(4.0)
         .focus_selected(cursor)
         .fill(super::row_fill(&a.agent, t))
-        .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
-        .child(lead(&key, &a.agent, logos, t))
+        .child(badged_lead(&key, a, logos, t))
         .child(
             text(name)
                 .font(type_::BODY)
@@ -952,17 +1008,11 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
                 .map(|c| crate::desktop::chain::chip(&key, &a.agent.id, c, t)),
         )
         .children(crate::asks::marker(&key, a.agent.asks, t))
-        .children((!a.slot.is_empty()).then(|| {
-            text(a.slot.clone())
-                .key(format!("{key}.slot"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-        }))
         .children((!trailing.is_empty()).then(|| {
             text(trailing)
                 .key(format!("{key}.age"))
                 .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
+                .color(t.text_dimmed)
         }))
         .hover_group()
         .children(row_controls(&key, a, t));
@@ -976,6 +1026,42 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
         row
     }
 }
+
+/// A queue row's lead with its desktop's slot tucked under its lower right corner, as the
+/// Tauri app's `.queue-lead-badge`: it takes no room in the row.
+fn badged_lead(key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
+    row()
+        .w(14.0)
+        .h(14.0)
+        .center()
+        .child(lead(key, &a.agent, logos, t))
+        .children((!a.slot.is_empty()).then(|| {
+            row()
+                .pin(None, None, Some(-4.0), Some(-4.0))
+                .min_w(8.0)
+                .pl(2.0)
+                .pr(1.0)
+                .pt(1.0)
+                .justify_center()
+                .radius(3.0)
+                .fill(if a.agent.selected {
+                    t.bg_elevated
+                } else {
+                    t.bg_panel
+                })
+                .child(
+                    text(a.slot.clone())
+                        .key(format!("{key}.slot"))
+                        .font(SLOT_TYPE)
+                        .color(t.text_dimmed),
+                )
+        }))
+}
+
+const SLOT_TYPE: rune::TextStyle = rune::TextStyle {
+    line_height: 8.0,
+    ..rune::TextStyle::new(8.0, 400.0).mono()
+};
 
 /// The buttons a queue row shows while it is hovered or holds focus.
 fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
@@ -1033,10 +1119,7 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
         )
     });
     Some(
-        row()
-            .key(format!("{key}.controls"))
-            .gap(2.0)
-            .group_opacity(0.0, 1.0)
+        super::overlaid_controls(key, 0.0, 4.0, t)
             .children(ask_close)
             .children(unsnooze)
             .children(snooze)

@@ -130,6 +130,18 @@ outline!(
     r#"<path d="M4 2.5h7.5a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4Z"/><path d="M4 2.5a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 4 13.5"/><path d="M6 5.5h4M6 8h4" stroke-width="1.3"/>"#
 );
 outline!(
+    MARKDOWN,
+    16.0,
+    "1.3",
+    r#"<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M3.6 10.4V5.6l2 2.4 2-2.4v4.8"/><path d="M10.6 5.6v4.2M9 8.4l1.6 1.6 1.6-1.6"/>"#
+);
+outline!(
+    BROWSER,
+    16.0,
+    "1.3",
+    r#"<circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12"/>"#
+);
+outline!(
     EDITOR,
     16.0,
     "1.4",
