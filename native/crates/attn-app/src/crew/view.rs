@@ -183,6 +183,7 @@ fn roster_row(state: &State, member: &CrewMember, selected: Option<&str>, t: &To
         .and_then(|d| d.label.clone())
         .unwrap_or_default();
     let presence = presence(member);
+    let lines = if desktop.is_empty() { 1 } else { 2 };
     let (primary, tertiary, warning) = (t.text_primary, t.text_tertiary, t.warning);
     Button::new(format!("{name} {presence}"))
         .variant(ButtonVariant::Ghost)
@@ -210,6 +211,7 @@ fn roster_row(state: &State, member: &CrewMember, selected: Option<&str>, t: &To
         .build(attn_ui::kit(t))
         .key(format!("crew.roster.{}", member.id))
         .w_full()
+        .h(row_height(lines, t))
         .focus_selected(is_selected)
         .checked(is_selected)
 }
@@ -1106,4 +1108,10 @@ fn seed_row(seed: &Seed, all: &[std::sync::Arc<Seed>], t: &Tokens) -> El {
         .build(attn_ui::kit(t))
         .key(format!("crew.seed.{}", seed.id))
         .w_full()
+        .h(row_height(1, t))
+}
+
+/// The height of a list row whose name sits over `notes` lines of small print.
+fn row_height(notes: usize, t: &Tokens) -> f32 {
+    attn_ui::kit(t).ty.ui_medium.line_px() + notes as f32 * type_::LABEL.line_px() + 2.0 * space::S2
 }

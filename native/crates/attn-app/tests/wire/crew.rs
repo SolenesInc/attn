@@ -206,6 +206,49 @@ fn pick_opus(world: &mut World) {
 }
 
 #[test]
+fn a_roster_row_grows_with_the_lines_it_shows_and_no_row_covers_the_next() {
+    let with_desktop = |m| {
+        with(m, |m| {
+            m.launch_desktop = Some(LaunchDesktopSetting {
+                desktop_id: Some("work/desktop_2".into()),
+                label: Some("2 · Review".into()),
+                ..LaunchDesktopSetting::default()
+            })
+        })
+    };
+    let d = daemon(
+        vec![
+            member("ash", 1),
+            with_desktop(member("birch", 1)),
+            with_desktop(in_session(member("cedar", 1), "s-cedar")),
+        ],
+        vec![session("s-cedar", "claude")],
+        Vec::new(),
+    );
+    let mut world = World::start_sized(d, (1200.0, 900.0));
+    open(&mut world);
+    let rows: Vec<[f32; 4]> = ["ash", "birch", "cedar"]
+        .iter()
+        .map(|id| {
+            world
+                .screen()
+                .bounds(Target::key(format!("crew.roster.{id}")))
+                .unwrap_or_else(|| panic!("{id}'s row is drawn"))
+        })
+        .collect();
+    assert!(
+        rows[1][3] > rows[0][3],
+        "a row with its launch desktop is taller than one without: {rows:?}"
+    );
+    for pair in rows.windows(2) {
+        assert!(
+            pair[0][1] + pair[0][3] <= pair[1][1],
+            "a row ends before the next starts: {rows:?}"
+        );
+    }
+}
+
+#[test]
 fn the_palette_opens_manage_crew_on_the_profiles_first_member_and_escape_closes_it() {
     let other = with(member("otto", 1), |m| m.profile_id = "home".into());
     let retired = with(member("keel", 1), |m| m.retired = true);
