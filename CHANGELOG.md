@@ -6,6 +6,130 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-11-17]
+
+### Added
+- **You can pick a color scheme.** Settings → General lists color schemes
+  under Theme, each with a few swatches. attn ships its own scheme plus
+  Catppuccin (Mocha or Frappé in dark, Latte in light). The choice applies
+  live to the app and its terminals. `attn settings set color_scheme <id>`
+  does the same from the CLI, and `color_overrides` changes single colors.
+  While overrides are set, Settings shows "Custom colors" with a Reset.
+  `attn guide colors` has the names and examples.
+- **The snooze menu offers "Standby until…".** Picking a time asks the
+  session's agent to put the seed it tends on standby until then, so the
+  agent closes and comes back when the time arrives.
+- **Paired senders can refine dictated text and name outposts.** A program
+  paired with `attn send pair` can pipe its token and a raw transcript to
+  `attn refine --token-stdin` and get back the same refinement the app's
+  dictation uses. Killing the command stops the refinement. `attn send
+  sessions --json` now gives each outpost session a `host_label` with the
+  outpost's name, beside the `host` id.
+- **You can write your own harness plugin.** The plugin SDK
+  (`@victorarias/attn-plugin`) adds `client.driver`: one registration that
+  covers launch, resume, models, input, compaction and recovery. It ships
+  with an installable sample harness and a guide page, "Writing harness
+  plugins". A driver can declare its display name, and a worktree plugin
+  can say how long attn waits for each surface it handles.
+- **A native app can be built from source as a preview.** `make install
+  INSTANCE=<name> APP=native` installs a new Rust app in place of the
+  current one on a named instance. It is being built to match today's app
+  and uses less CPU and memory. Releases still ship the current app.
+
+### Changed
+- **attn has a new logo.** The app icon, the website and the README now show
+  a black cat with neon circuit lines in its ears.
+- **`attn seed standby` closes the session by default.** Standby now closes
+  the session, compacting first when it can, unless `--stay` keeps it open.
+  `--in` and `--at` also set the seed's reminder to that time, with the note
+  as its message. `--close` and `--compact` are gone.
+- **An agent can't harvest a seed while its ask to you is still open.**
+  Harvesting used to delete the seed's open asks, so a question could vanish
+  before you saw it. The harvest is now refused, naming each open ask, until
+  you answer or the agent withdraws it. Your own harvest and any wither
+  still withdraw the asks, and the reply names them.
+- **Nisse is now Sigma, and runs as a plugin.** The harness is no longer
+  built in: install the `sigma` harness plugin to use it. The earlier
+  Pi-based Sigma experiment is removed.
+- **Closes that attn made read "attn", not "you".** The ledger now records
+  attn as the closer for a session closed by `/clear` or `/resume`, a crew
+  member's day ending, or an outpost being removed.
+- **Automations can reach repositories on ssh-only hosts.** When you have
+  your own clone of a repository in your projects directory, automations
+  clone and fetch it the way that clone does, instead of always using
+  HTTPS. Each repository is cloned once again after the update.
+- **attn spends far less of your GitHub API budget.** Only the home polls
+  pull requests, so outposts no longer poll them too. An unchanged pull
+  request costs nothing to re-read. A watch on a pull request GitHub can no
+  longer find ends after ten minutes with one last update, instead of being
+  polled forever. The daemon log shows attn's share of each rate-limit
+  window.
+- **The experimental code review reader is easier to read and faster.**
+  - **Stepping:** ← and → keep a step's heading and prose in view.
+  - **Colors:** an opened file keeps its syntax colors.
+  - **Docked tile:** the key line and long code lines wrap to fit.
+  - **Brief:** it opens with the title and the change's facts. Its diagram
+    can be walked arrow by arrow, with Before and After.
+  - **Map:** the step's story sits beside the diagram, with captions and
+    grouped blocks written in plain mermaid.
+  - **Language server:** a question shows what it is waiting for. A late
+    answer is offered in the note line instead of interrupting.
+  - **Speed:** on a very large repository a review opens in seconds, where
+    it took minutes.
+
+### Fixed
+- **Shell panes keep the PATH your shell builds, and their history.** attn
+  replaced a pane's PATH with one captured when the daemon started, which
+  dropped entries such as Nix, direnv, or anything added only in an
+  interactive terminal. It also ran bash and sh with a temporary home, and
+  zsh with a temporary `ZDOTDIR`, so history went to a folder attn deleted
+  when the pane closed. Panes now run your own startup with your real home
+  and put attn first on the PATH afterwards.
+- **The Quick Capture shortcut no longer crashes the app.** Pressing it
+  while the pointer sat on the screen's top edge, such as on the menu bar,
+  aborted the Mac app. The panel now opens wherever the pointer is.
+- **The Linux daemon uses about 25 MB less memory.** The daemon kept memory
+  it had already freed. It now gives that memory back, which brings a
+  long-running daemon from about 129 MB to about 104 MB.
+- **An open Garden no longer keeps the daemon busy.** With the Garden open,
+  every note any agent wrote made the app ask for a new review, and each one
+  cost seconds of daemon CPU and thousands of git launches on a large
+  garden. The app now asks only when the Garden opens or a seed changes, and
+  a review looks only at the seeds it judges.
+- **A Codex session no longer sticks on "needs approval" after you
+  answer.** When the approval prompt and your answer arrived in the same
+  moment, the session stayed in pending approval. It now returns to working.
+- **Codex sessions keep their conversation through reloads and standby.**
+  Reloading a shared Codex session after a daemon restart could move its
+  terminal to a new session. A Codex agent woken from standby by seed mail
+  could lose the conversation it had just resumed. Both now stay on their
+  session and conversation.
+- **Asking an agent to close always closes it.** If the Claude mod went
+  silent just as the agent's turn ended, the close waited forever. It now
+  closes, and says the compact did not run.
+- **A shell on an outpost survives an outpost restart right after it
+  starts.** An outpost daemon that restarted moments after a terminal was
+  started there could remove that live terminal and end your shell.
+- **Updating two outposts at once works.** Two outposts on the same
+  platform each built the update and overwrote each other's result, so one
+  failed with a missing file. They now share one build. The update banner
+  names outposts at the same step together: "sandbox and oma: Copying it
+  over."
+- **Plugins start and recover more reliably.** A plugin still being
+  installed no longer starts from its temporary folder when the daemon
+  starts at the same moment. After a restart, a harness plugin gets its
+  running sessions back before it takes new input, and inbox messages wait
+  through an uncertain delivery instead of being dropped.
+
+### Removed
+- **The "Collapse utility terminal" shortcut is gone.** The panel it
+  belonged to was removed earlier and the shortcut did nothing. It no longer
+  appears in the shortcut editor, and its key, ⇧~ on macOS, is free again.
+
+<!-- changelog-commits: 462d90e157e09283c10c98c0305f57c6d1abdbbe..8bf9587f6a0c01e2dd96cf840a36866775064cf9 -->
+
+---
+
 ## [2026-11-11]
 
 ### Added
