@@ -63,15 +63,17 @@ function removeArms() {
 
 function cleanUpAndExit(signal) {
   console.error(`\n${signal}: cleaning up`);
+  let code = 130;
   try {
     if (current) cleanWorld(current);
-  } finally {
-    removeArms();
-    process.exit(130);
+  } catch (error) {
+    console.error(`instance ${current.instance} may still run: ${error.message}`);
+    code = 1;
   }
+  removeArms();
+  process.exit(code);
 }
-process.on('SIGINT', () => cleanUpAndExit('SIGINT'));
-process.on('SIGTERM', () => cleanUpAndExit('SIGTERM'));
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => cleanUpAndExit(signal));
 
 function delegate(world, testCase) {
   const { opening } = testCase;

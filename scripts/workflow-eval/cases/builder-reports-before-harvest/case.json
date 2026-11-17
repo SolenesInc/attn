@@ -6,5 +6,6 @@
    {"kind": "check", "seed": "task", "check": "C1", "state": "reported", "evidence": true},
    {"kind": "check", "seed": "task", "check": "C2", "state": "reported", "evidence": true},
    {"kind": "seed", "seed": "task", "status": "harvested"},
-   {"kind": "command", "pattern": "attn seed check report \\S+ C[12]\\b", "before": "attn seed harvest"},
+   {"kind": "command", "pattern": "attn seed check report \\S+ C1\\b", "before": "attn seed harvest"},
+   {"kind": "command", "pattern": "attn seed check report \\S+ C2\\b", "before": "attn seed harvest"},
    {"kind": "test", "run": "python3 -m unittest -q test_hidden"}]}
