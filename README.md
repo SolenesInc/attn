@@ -1,4 +1,4 @@
-<p align="center"> <img src="docs/banner.png" alt="attn, attention hub"
+<p align="center"> <img src="docs/banner.png" alt="attn: a black cat watching a wall of agents, one of them lit because it is waiting for you"
 width="100%" /> </p>
 
 # attn
