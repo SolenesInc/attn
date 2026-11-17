@@ -98,7 +98,8 @@ listing two automations and with one selected over its runs, a new automation's 
 its schedule, on a pull request trigger and with Advanced open, an automation's edit form,
 the form's hour picker and suggested time zones, each with a row reached by an arrow key, Home
 with the Chief and a crew member in the sidebar, the queue flow with two turns
-owed and an open ask at Home and on the asking agent's desktop, the queue bar
+owed and an open ask at Home and on the asking agent's desktop, the queue sidebar with
+the Chief between sessions and two automation runs that need the user, the queue bar
 with the sidebar collapsed, the desktop flow's rail, Manage crew on each of its
 four tabs, naming a new desktop from its launch settings, Home's merge confirmation, the shared
 Codex restart prompt, the dialog for a worktree that could not be made, the command palette offering

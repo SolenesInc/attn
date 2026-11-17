@@ -518,6 +518,45 @@ fn a_failed_harness_or_model_lookup_says_why_and_check_again_retries_before_star
 }
 
 #[test]
+fn the_chief_between_sessions_shows_its_whole_name_beside_between_sessions() {
+    for queue in [false, true] {
+        let mut initial = initial(queue, chief(true), Vec::new());
+        let namesake = CrewMember {
+            id: "namesake".into(),
+            chief: None,
+            ..chief(true)
+        };
+        initial.crew.as_mut().unwrap().push(namesake);
+        let mut world = start(initial);
+        let namesake = if queue {
+            "queue-crew.member.namesake.name"
+        } else {
+            "sidebar.crew.namesake.name"
+        };
+        let width = |world: &mut World, key: &str| world.rect(key)[2];
+        assert_eq!(
+            width(&mut world, &format!("{SLOT}.name")),
+            width(&mut world, namesake),
+            "queue sidebar: {queue}"
+        );
+    }
+}
+
+#[test]
+fn a_chief_named_at_the_name_limit_gives_way_inside_its_row() {
+    let long = CrewMember {
+        name: "C".repeat(40),
+        ..chief(true)
+    };
+    let mut world = start(initial(false, long, Vec::new()));
+    let [rx, _, rw, _] = world.rect(SLOT);
+    let [sx, _, sw, _] = world.rect(&format!("{SLOT}.start"));
+    let [nx, _, nw, _] = world.rect(&format!("{SLOT}.name"));
+    assert!(sx + sw <= rx + rw, "the start button leaves the row");
+    assert!(nx + nw <= sx, "the name runs under the start button");
+}
+
+#[test]
 fn the_chief_starts_with_one_click_closes_until_unbound_and_starts_again() {
     let between = chief(true);
     let mut world = start(initial(true, between.clone(), Vec::new()));

@@ -74,6 +74,18 @@ fn in_queue_flow_runs_group_under_their_automation_and_the_next_run_key_opens_th
 }
 
 #[test]
+fn the_runs_that_need_you_take_their_own_line_under_the_automations_heading() {
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        run("run-a", "r1", Some(60)),
+        run("run-b", "r2", Some(30)),
+    ]))));
+    let [hx, hy, hw, _] = world.rect("queue.runs");
+    let [x, y, w, _] = world.rect("queue.runs.needing");
+    assert_eq!((x, w), (hx, hw));
+    assert!(y > hy, "the button shares the heading's line");
+}
+
+#[test]
 fn only_the_current_singleton_counts_and_a_superseded_question_stays_reachable() {
     let previous = superseded(Session {
         state: "recoverable".into(),

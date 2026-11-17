@@ -739,7 +739,7 @@ fn route_field(
             .gap(4.0)
             .items_end()
             .flex_wrap()
-            .child(text(value).font(font).color(ink).wrap_anywhere());
+            .child(text(value).font(font).color(ink).wrap_anywhere().shrink());
         if let ("Model", Some((mark, mark_ink))) = (name, &tier) {
             shown = shown.child(text(mark.clone()).font(CAPTION).color(*mark_ink));
         }

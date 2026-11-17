@@ -835,9 +835,18 @@ fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: 
             })
             .label_with(move |_, _| {
                 row()
+                    .w_full()
                     .items_center()
                     .gap(space::S1)
-                    .child(text(shown).font(type_::LABEL).color(tokens.warning))
+                    .child(
+                        text(shown)
+                            .font(type_::LABEL)
+                            .color(tokens.warning)
+                            .single_line()
+                            .truncate()
+                            .shrink(),
+                    )
+                    .child(row().grow(1.0))
                     .children(keys.map(|k| {
                         text(k)
                             .font(KEYS_TYPE)
@@ -848,27 +857,34 @@ fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: 
             .build(attn_ui::kit(t))
             .key(format!("{key}.needing"))
             .description("Open the next run needing you; press again for the one after")
+            .w_full()
             .h(ROW_HEIGHT - 4.0)
-            .px(space::S1)
-            .radius(4.0)
-            .hover(t.bg_elevated)
+            .pl(6.0)
+            .pr(4.0)
+            .justify_start()
+            .radius(6.0)
+            .hover(t.warning.alpha(0.1))
     });
-    row()
+    col()
         .key(key)
         .role("heading")
         .label("Automations")
         .a11y_value(plural(runs, "run"))
         .help("Automation runs never join the queue")
         .w_full()
-        .h(ROW_HEIGHT)
-        .items_center()
-        .gap(space::S1)
-        .child(type_::caps("Automations").color(t.text_tertiary))
         .child(
-            text(plural(runs, "run"))
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .grow(1.0),
+            row()
+                .w_full()
+                .h(ROW_HEIGHT)
+                .items_center()
+                .gap(space::S1)
+                .child(type_::caps("Automations").color(t.text_tertiary))
+                .child(
+                    text(plural(runs, "run"))
+                        .font(type_::LABEL)
+                        .color(t.text_muted)
+                        .grow(1.0),
+                ),
         )
         .children(walk)
 }

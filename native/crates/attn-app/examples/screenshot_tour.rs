@@ -11,9 +11,9 @@ use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionResultMessage,
-    AutomationDefinitionSummary, AutomationDefinitionsResultMessage, AutomationRunSummary,
-    AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage, BusConsumerStatus,
-    BusStatusResultMessage, CreateWorktreeResultMessage, CrewCharterDocument,
+    AutomationDefinitionSummary, AutomationDefinitionsResultMessage, AutomationProvenance,
+    AutomationRunSummary, AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
+    BusConsumerStatus, BusStatusResultMessage, CreateWorktreeResultMessage, CrewCharterDocument,
     CrewCharterGetResultMessage, CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
     DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
@@ -2067,6 +2067,37 @@ fn queue_seeded_home(dark: bool) {
     snap(&mut world, "queue-seeded-home", dark);
 }
 
+/// The queue sidebar with the Chief between sessions and two automation runs that stopped
+/// with a question.
+fn queue_runs(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let mut members = crew();
+    members[0].agent = Some("claude".into());
+    members[0].model = Some("opus".into());
+    state.crew = Some(members);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("queue_mode_enabled".to_owned(), "true".to_owned());
+    }
+    for (session, (run_id, opened)) in state.sessions.iter_mut().flatten().zip([
+        ("r1", "2026-11-12T08:55:00Z"),
+        ("r2", "2026-11-12T07:00:00Z"),
+    ]) {
+        session.state = "waiting_input".into();
+        session.turn_owed = Some(true);
+        session.turn_opened_at = Some(opened.into());
+        session.automation = Some(AutomationProvenance {
+            definition_id: 1,
+            definition_name: "Morning digest".into(),
+            run_id: run_id.into(),
+            trigger_type: "scheduled".into(),
+            ..AutomationProvenance::default()
+        });
+    }
+    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    press(&mut world, Action::SessionGoToDashboard);
+    snap(&mut world, "queue-runs", dark);
+}
+
 /// The seeded queue with the asking agent's desktop open: its row in view, its desktop current.
 fn queue_seeded_agent(dark: bool) {
     let mut world = queue_seeded(dark, false, false);
@@ -2609,6 +2640,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         queue_home(dark);
         queue_agent_list(dark);
         queue_seeded_home(dark);
+        queue_runs(dark);
         queue_seeded_agent(dark);
         queue_bar(dark);
         rail(dark);

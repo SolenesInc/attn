@@ -243,6 +243,7 @@ pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
         .child(idle_lead(m.harness.as_deref(), t))
         .child(
             text(m.name.clone())
+                .key(format!("{key}.name"))
                 .font(type_::BODY)
                 .color(if m.chief {
                     t.text_primary
@@ -250,21 +251,30 @@ pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
                     t.text_tertiary
                 })
                 .single_line()
-                .truncate()
-                .grow(1.0),
+                .truncate(),
         )
-        .children(m.chief.then(|| {
-            rune::icon(&attn_ui::icon::CHIEF, 12.0)
-                .key(format!("{key}.chief"))
-                .color(t.text_tertiary)
-                .help(m.name.clone())
-        }))
-        .children(m.chief.then(|| {
-            text("between sessions")
-                .key(format!("{key}.age"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-        }))
+        .child(
+            row()
+                .grow(1.0)
+                .min_w(0.0)
+                .justify_end()
+                .items_center()
+                .gap(7.0)
+                .children(m.chief.then(|| {
+                    rune::icon(&attn_ui::icon::CHIEF, 12.0)
+                        .key(format!("{key}.chief"))
+                        .color(t.text_tertiary)
+                        .help(m.name.clone())
+                }))
+                .children(m.chief.then(|| {
+                    text("between sessions")
+                        .key(format!("{key}.age"))
+                        .font(type_::MONO_CAPTION)
+                        .color(t.text_tertiary)
+                        .single_line()
+                        .truncate()
+                })),
+        )
         .child(sun)
         .hover_group();
     let controls = rune::row()
