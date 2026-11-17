@@ -2605,7 +2605,6 @@ fn notifications_empty(dark: bool) {
     snap(&mut world, "notifications-empty", dark);
 }
 
-/// The overview over two desktops: terminal `a` beside the document, and one agent.
 /// Home's merge button on a pull request of the user's that is ready, asking first.
 fn merge_confirmation(dark: bool) {
     let mut world = popover_world(
@@ -2697,15 +2696,18 @@ fn session_not_created(dark: bool) {
     snap(&mut world, "session-not-created", dark);
 }
 
+/// The overview over three desktops: terminal `a` beside the document, one agent, and an empty
+/// one.
 fn desktop_overview(dark: bool) {
     let mut world = popover_world(
         dark,
         |state| {
-            state
-                .desktops
-                .as_mut()
-                .expect("the tour's desktops")
-                .truncate(2);
+            let desktops = state.desktops.as_mut().expect("the tour's desktops");
+            desktops.truncate(2);
+            desktops.push(Desktop {
+                tree_json: String::new(),
+                ..desktop("d-empty", "3", Value::Null, vec![])
+            });
             state
                 .sessions
                 .as_mut()

@@ -207,10 +207,7 @@ fn mini_node(node: &Node, desktop: &Desktop, t: &Tokens) -> El {
                 .clip_rounded(0.0)
                 .child(
                     text(label)
-                        .font(rune::TextStyle {
-                            size: 10.0,
-                            ..type_::LABEL
-                        })
+                        .font(rune::TextStyle::new(10.0, 400.0))
                         .color(if on { t.text_primary } else { t.text_secondary })
                         .single_line()
                         .truncate(),
@@ -256,18 +253,11 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         })
         .collect();
     cards.push(new_card(t));
-    let mut grid = col().w_full().gap(10.0);
-    let mut cards = cards.into_iter().peekable();
-    while cards.peek().is_some() {
-        let mut line = row().w_full().gap(10.0).items_start();
-        for _ in 0..GRID_COLUMNS {
-            line = match cards.next() {
-                Some(card) => line.child(card),
-                None => line.child(el().grow(1.0).min_w(0.0)),
-            };
-        }
-        grid = grid.child(line);
-    }
+    let grid = el()
+        .w_full()
+        .equal_columns(GRID_COLUMNS)
+        .gap(10.0)
+        .children(cards);
     let dialog = col()
         .key(DIALOG)
         .role("dialog")
@@ -340,10 +330,7 @@ fn card(
         .gap(space::S2)
         .child(
             text(slot.clone().unwrap_or_else(|| "no shortcut".to_owned()))
-                .font(rune::TextStyle {
-                    family: rune::Family::Mono,
-                    ..type_::LABEL
-                })
+                .font(type_::MONO_CAPTION)
                 .color(if slot.is_some() {
                     t.text_secondary
                 } else {
@@ -356,9 +343,13 @@ fn card(
                 .color(t.text_primary)
                 .single_line()
                 .truncate()
-                .grow(1.0),
+                .shrink(),
         )
-        .children(empty.then(|| text("empty").font(type_::LABEL).color(t.text_muted)));
+        .children(empty.then(|| {
+            text("empty")
+                .font(type_::CAPTION.italic())
+                .color(t.text_muted)
+        }));
     let mini = el()
         .w_full()
         .aspect_ratio(1.0 / MINI_ASPECT)
@@ -387,19 +378,19 @@ fn card(
             .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &target, tx))
             .label_with(|_, ink| {
                 text("Send focused pane here ⇧↵")
-                    .font(type_::LABEL)
+                    .font(type_::CAPTION)
                     .color(ink)
             })
             .build(attn_ui::kit(t))
             .key(format!("overview.send.{}", desktop.id))
-            .h(type_::LABEL.line_px() + 4.0)
+            .h(type_::CAPTION.line_px() + 4.0)
             .px(space::S2)
             .radius(5.0)
             .fill(t.bg_button)
             .border(1.0, t.border)
     });
     let card = col()
-        .grow(1.0)
+        .key(format!("overview.desktop.{}", desktop.id))
         .min_w(0.0)
         .gap(6.0)
         .padding(space::S2)
@@ -409,7 +400,7 @@ fn card(
         .child(open)
         .child(row().gap(6.0).children(send_button));
     if focused {
-        card.focus_ring(2.0, 0.0, t.border_focus)
+        card.outline(2.0, 0.0, t.border_focus)
     } else {
         card
     }
@@ -422,9 +413,9 @@ fn new_card(t: &Tokens) -> El {
         .label_with(|_, ink| text("+ New desktop").font(type_::BODY).color(ink))
         .build(attn_ui::kit(t))
         .key("overview.new")
-        .grow(1.0)
         .min_w(0.0)
-        .h(110.0)
+        .h_full()
+        .min_h(110.0)
         .radius(8.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)

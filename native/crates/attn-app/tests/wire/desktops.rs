@@ -2975,6 +2975,37 @@ fn the_overview_moves_between_desktops_by_arrow_and_switches_or_sends_the_active
 }
 
 #[test]
+fn the_overviews_cards_share_one_grid_whatever_each_card_holds() {
+    let mut world = start(two_desktops());
+
+    press(&mut world, Action::DesktopOverview);
+    let screen = world.screen();
+    assert!(
+        screen
+            .find(Target::key("overview.send.work/desktop_1"))
+            .is_none()
+    );
+    assert!(
+        screen
+            .find(Target::key("overview.send.work/desktop_2"))
+            .is_some()
+    );
+    let [current, other, new] = [
+        "overview.desktop.work/desktop_1",
+        "overview.desktop.work/desktop_2",
+        "overview.new",
+    ]
+    .map(|key| screen.bounds(Target::key(key)).unwrap());
+    for card in [other, new] {
+        assert_eq!(
+            (card[1], card[2], card[3]),
+            (current[1], current[2], current[3]),
+            "one row of equal cells: {current:?} {other:?} {new:?}"
+        );
+    }
+}
+
+#[test]
 fn the_overviews_new_desktop_card_makes_a_desktop_and_switches_to_it() {
     let daemon = daemon(two_desktops());
     daemon.on("desktop_create", |_| {
