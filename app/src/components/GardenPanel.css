@@ -691,10 +691,6 @@
   padding: 0;
 }
 
-.garden-body .md-reader-wrap {
-  max-width: none;
-}
-
 .garden-body .md-reader p,
 .garden-body .md-reader li {
   font-size: var(--font-size-md);

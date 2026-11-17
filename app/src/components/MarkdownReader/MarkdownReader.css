@@ -14,6 +14,7 @@
   color: var(--color-text-primary);
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
+  --md-prose-measure: 760px;
   --md-success: var(--color-success);
   --md-alert-note: var(--color-accent);
   --md-alert-tip: var(--color-success);
@@ -29,12 +30,6 @@
 }
 
 /* ---- Card layout ---- */
-
-.md-reader-wrap {
-  width: 100%;
-  max-width: 832px;
-  margin: 0 auto;
-}
 
 .md-reader-card {
   background: var(--color-bg-panel);
@@ -61,6 +56,10 @@
   .md-reader-card {
     padding: 3rem;
   }
+}
+
+.md-reader-card > :is(p, ul, ol, dl, blockquote, .md-alert, h1, h2, h3, h4, h5, h6) {
+  max-width: var(--md-prose-measure);
 }
 
 .md-reader-card > :first-child,

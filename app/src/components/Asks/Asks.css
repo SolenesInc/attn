@@ -303,10 +303,6 @@
   color: var(--color-text-primary);
 }
 
-.asks-markdown .md-reader-wrap {
-  max-width: none;
-}
-
 .asks-markdown .md-reader-card {
   background: none;
   border: none;

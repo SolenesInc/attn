@@ -718,7 +718,6 @@
 .crew-handoff-date code { color: var(--color-text-muted); font-size: 8px; }
 .crew-handoff-reader .md-reader { min-height: 360px; background: transparent; }
 .crew-handoff-reader .md-reader-doc { padding: 0; }
-.crew-handoff-reader .md-reader-wrap { max-width: none; }
 .crew-handoff-reader .md-reader-card { border: 0; border-radius: 0; box-shadow: none; }
 
 .crew-document-empty {
