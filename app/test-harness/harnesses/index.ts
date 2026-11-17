@@ -6,6 +6,7 @@ import { FileTreeHarness } from './FileTreeHarness';
 import { FrontmatterCardHarness } from './FrontmatterCardHarness';
 import { LiveMarkdownEditorHarness } from './LiveMarkdownEditorHarness';
 import { MarkdownAnnotationTilesHarness } from './MarkdownAnnotationTilesHarness';
+import { MarkdownReaderWidthHarness } from './MarkdownReaderWidthHarness';
 import { MermaidDiagramHarness } from './MermaidDiagramHarness';
 import { NotebookBrowserHarness } from './NotebookBrowserHarness';
 import { NotebookTileHarness } from './NotebookTileHarness';
@@ -36,6 +37,7 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   FrontmatterCard: FrontmatterCardHarness,
   LiveMarkdownEditor: LiveMarkdownEditorHarness,
   MarkdownAnnotationTiles: MarkdownAnnotationTilesHarness,
+  MarkdownReaderWidth: MarkdownReaderWidthHarness,
   MermaidDiagram: MermaidDiagramHarness,
   NotebookBrowser: NotebookBrowserHarness,
   NotebookTile: NotebookTileHarness,
