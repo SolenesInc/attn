@@ -146,6 +146,21 @@ fn the_dialog_and_its_next_button_hold_still_from_step_to_step() {
 }
 
 #[test]
+fn a_window_too_short_for_the_tour_keeps_next_inside_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut world = launch(&after_update(dir.path()), &[]);
+    world.resize((900.0, 480.0));
+    world.advance(Duration::from_secs(1));
+    let [_, y, _, h] = world
+        .screen()
+        .bounds(Target::key("whats-new.primary"))
+        .expect("the Next button");
+    assert!(y + h <= 480.0, "Next ends at {} in a 480 pt window", y + h);
+    press(&mut world, Key::Enter);
+    assert_eq!(title(&world), "Desktops arrange your agents");
+}
+
+#[test]
 fn got_it_ends_the_tour_and_a_relaunch_keeps_it_closed() {
     let dir = tempfile::tempdir().unwrap();
     let path = after_update(dir.path());

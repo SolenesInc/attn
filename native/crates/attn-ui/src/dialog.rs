@@ -105,12 +105,12 @@ impl DialogFrame {
                 shadow: shadow(t, 20.0, 60.0, 0.5),
             },
             glow: None,
-            header: [22.0, 24.0, 15.0, 24.0],
+            header: [22.0, 24.0, 24.0, 24.0],
             rule: None,
             title: TextStyle::new(21.0, 700.0),
             subtitle: TextStyle::new(13.0, 400.0),
             subtitle_ink: t.text_primary,
-            subtitle_gap: 8.0,
+            subtitle_gap: 15.0,
             close: None,
         }
     }
@@ -188,8 +188,8 @@ impl Dialog {
         self
     }
 
-    /// As tall as its content up to `points` and the window, as CSS `max-height`; past that the
-    /// body shrinks, so a part of it that scrolls takes the cut.
+    /// As tall as its content up to `points`, as CSS `max-height`. Every dialog stops at the
+    /// window too: past either, the body shrinks, so a part of it that scrolls takes the cut.
     pub fn max_height(mut self, points: f32) -> Self {
         self.height = Height::Fit(Some(points));
         self
@@ -288,9 +288,13 @@ impl Dialog {
         let body = col().key("body").w_full().children(self.body);
         let inside = col().w_full().clip_rounded(f.surface.radius - 1.0);
         let (panel, inside, body, layer_box) = match self.height {
-            Height::Fit(None) => (col(), inside, body, col().padding(16.0)),
-            Height::Fit(Some(points)) => (
-                col().max_h(points).shrink().min_h(0.0),
+            Height::Fit(cap) => (
+                match cap {
+                    Some(points) => col().max_h(points),
+                    None => col(),
+                }
+                .shrink()
+                .min_h(0.0),
                 inside.shrink().min_h(0.0),
                 body.shrink().min_h(0.0),
                 col().padding(16.0),

@@ -233,7 +233,7 @@ fn closing_a_desktop_with_tiles_asks_once_and_closes_only_on_confirm_from_each_e
 }
 
 #[test]
-fn the_confirmation_is_answered_by_cancel_or_close_desktop_with_no_close_button() {
+fn the_confirmation_asks_its_question_and_is_answered_by_cancel_or_close_desktop_alone() {
     let mut world = start(
         false,
         vec![session("shell", "shell")],
@@ -248,6 +248,14 @@ fn the_confirmation_is_answered_by_cancel_or_close_desktop_with_no_close_button(
         .filter_map(|n| n.name)
         .collect();
     assert_eq!(buttons, ["Cancel", "Close desktop"]);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::role("dialog").name("Close Work?"))
+            .description
+            .as_deref(),
+        Some("Close this desktop and everything inside it?")
+    );
 }
 
 #[test]

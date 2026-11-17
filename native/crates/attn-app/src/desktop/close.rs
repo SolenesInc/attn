@@ -1,6 +1,6 @@
 use attn_protocol::{Desktop, DesktopCloseMessage};
-use attn_ui::{Dialog, DialogFrame, Tokens, type_};
-use rune::{El, Tx, row, text};
+use attn_ui::{Dialog, DialogFrame, Tokens};
+use rune::{El, Tx, row};
 use rune_kit::{Button, ButtonVariant};
 
 use super::layout::Node;
@@ -117,17 +117,9 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
         format!("Close {}?", closing.title),
         DialogFrame::prompt(t),
     )
+    .subtitle("Close this desktop and everything inside it?")
     .on_close_tx(cancel)
     .width(620.0)
-    .child(
-        text("Close this desktop and everything inside it?")
-            .key("close_desktop.question")
-            .font(type_::BODY)
-            .color(t.text_primary)
-            .wrap()
-            .px(24.0)
-            .pb(24.0),
-    )
     .child(
         row()
             .w_full()

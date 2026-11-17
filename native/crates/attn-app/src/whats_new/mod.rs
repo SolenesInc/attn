@@ -408,6 +408,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .key("whats-new.step")
         .w_full()
         .h(LIVE_HEIGHT)
+        .shrink()
+        .min_h(0.0)
         .pt(12.0)
         .px(INSET)
         .pb(4.0)
@@ -447,6 +449,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             col()
                 .key("whats-new.tour")
                 .w_full()
+                .shrink()
+                .min_h(0.0)
                 .on_key(on_key)
                 .child(step_view)
                 .child(footer),
@@ -458,7 +462,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
 const INSET: f32 = 24.0;
 
 /// `.whats-new-live { flex: 0 1 480px }`: the tallest step, so the footer holds still while
-/// stepping.
+/// stepping, and less in a window too short for it.
 const LIVE_HEIGHT: f32 = 480.0;
 
 /// `.whats-new-step h2`.
