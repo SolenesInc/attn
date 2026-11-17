@@ -6,7 +6,8 @@ use std::collections::HashMap;
 
 use attn_protocol::{ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant};
 use attn_ui::Tokens;
-use rune::tok::{radius, type_};
+use attn_ui::type_;
+use rune::tok::radius;
 use rune::{Color, El, LineCap, Shape, TextStyle, canvas, col, el, text};
 
 const CHAR_WIDTH: f32 = 6.6;

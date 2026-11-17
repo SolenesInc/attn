@@ -1,5 +1,6 @@
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, icon};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Dialog, TextInput};
 
@@ -473,12 +474,12 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
                 .color(t.text_muted)
         }));
     let mut out = vec![
-        text(title.clone())
+        text(title.to_uppercase())
             .key(format!("{w}.title"))
             .role("heading")
             .label(title.clone())
-            .font(type_::TITLE)
-            .color(t.text_primary)
+            .font(TITLE)
+            .color(t.brand)
             .single_line()
             .truncate()
             .w_full()
@@ -992,8 +993,18 @@ pub(crate) fn desktop_label(state: &State, desktop: Option<&String>) -> String {
     format!("Desktop {number}")
 }
 
+const TITLE: rune::TextStyle = rune::TextStyle {
+    size: type_::TITLE.size,
+    ..type_::DRAWER_TITLE
+};
+
+const SECTION: rune::TextStyle = rune::TextStyle {
+    tracking: 1.6,
+    ..type_::CAPS
+};
+
 fn section(title: &str, t: &Tokens) -> El {
-    text(title).font(type_::SECTION).color(t.text_tertiary)
+    type_::upper(title, SECTION).color(t.text_dimmed)
 }
 
 fn footer(hints: &[&str], t: &Tokens) -> El {

@@ -6,7 +6,8 @@ use attn_protocol::{
     ReviewRow,
 };
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
 use rune_kit::TextArea;
 use rune_kit::syntax::{Paint, Syntax, highlight, lang_for_path};

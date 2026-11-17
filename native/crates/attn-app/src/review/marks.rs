@@ -4,7 +4,8 @@
 
 use attn_protocol::{MarkdownAnnotation, MarkdownAnnotationAnchor, ReviewRow};
 use attn_ui::Tokens;
-use rune::tok::{radius, space, type_};
+use attn_ui::type_;
+use rune::tok::{radius, space};
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::TextArea;
 

@@ -1,7 +1,8 @@
 mod model;
 
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Image, ScrollSpec, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant};
 
@@ -95,11 +96,7 @@ fn header(logo: Option<&Image>, t: &Tokens) -> El {
             col()
                 .grow(1.0)
                 .child(text("attn").font(type_::TITLE).color(t.text_primary))
-                .child(
-                    text("attention hub")
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                ),
+                .child(type_::sans_caps("attention hub").color(t.text_dimmed)),
         )
         .child(button(
             "home.settings",
@@ -249,10 +246,9 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
                 .w_full()
                 .items_center()
                 .child(
-                    text("Sessions")
+                    type_::caps("Sessions")
                         .role("heading")
-                        .font(type_::SECTION)
-                        .color(t.text_primary)
+                        .color(t.text_dimmed)
                         .grow(1.0),
                 )
                 .child(button(
@@ -304,11 +300,7 @@ fn group_label(
     row()
         .gap(space::S2)
         .items_center()
-        .child(
-            text(label.to_owned())
-                .font(type_::SECTION)
-                .color(t.text_tertiary),
-        )
+        .child(type_::sans_caps(label).color(t.text_muted))
         .children(count.map(|n| caption(format!("{key}.count"), n.to_string())))
         .children(apart.map(|said| caption(format!("{key}.apart"), said)))
 }
@@ -482,7 +474,7 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
                 text(when)
                     .key(format!("{key}.when"))
                     .font(type_::MONO_CAPTION)
-                    .color(t.text_tertiary)
+                    .color(t.text_dimmed)
             }))
             .children(unsnooze)
     })

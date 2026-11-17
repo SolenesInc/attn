@@ -1,7 +1,8 @@
 use std::rc::Rc;
 
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, icon};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx, col, row, text};
 use rune_kit::{
     Button, ButtonVariant, Checkbox, ControlSize, PopupItem, PopupList, SegmentedControl, Select,
@@ -60,12 +61,16 @@ fn error(field_key: String, words: &str, t: &Tokens) -> El {
         .wrap()
 }
 
+const SECTION_LABEL: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
+    ..type_::SANS_CAPS
+};
+
 fn section(label: &str, t: &Tokens) -> El {
-    col().w_full().gap(space::S2).child(
-        text(label.to_owned())
-            .font(type_::SECTION)
-            .color(t.text_tertiary),
-    )
+    col()
+        .w_full()
+        .gap(space::S2)
+        .child(type_::upper(label, SECTION_LABEL).color(t.text_tertiary))
 }
 
 fn field_error(f: &Form, field: Field, t: &Tokens) -> Option<El> {
@@ -1469,6 +1474,7 @@ fn schedule(f: &Form, t: &Tokens) -> El {
         TextInput::new(&f.cron)
             .key(key("cron"))
             .label("Cron")
+            .text_style(kit(t).ty.ui_compact.mono())
             .spellcheck(false)
             .invalid(f.preview.error.is_some())
             .on_edit(|s: &mut State| field_of(s, |f| &mut f.cron))

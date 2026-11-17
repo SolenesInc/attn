@@ -4,8 +4,9 @@
 //! note on the seed.
 
 use attn_protocol::{Desktop, DesktopUpdateTileMessage, MarkdownAnnotation, Session};
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{Cx, El, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Menu, MenuItem, Placement};
 
@@ -648,9 +649,8 @@ fn notes(
         .items_center()
         .gap(6.0)
         .child(
-            text("Review notes")
-                .font(type_::LABEL)
-                .color(t.text_primary)
+            type_::upper("Review notes", TITLE)
+                .color(t.text_secondary)
                 .grow(1.0),
         )
         .child(panel_button(
@@ -752,6 +752,38 @@ fn panel_button(
         .px(6.0)
 }
 
+const TITLE: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
+    tracking: 0.5,
+    ..type_::LABEL
+};
+
+const BADGE: rune::TextStyle = rune::TextStyle {
+    weight: 700.0,
+    tracking: 0.6,
+    ..type_::LABEL
+};
+
+/// A note's kind, or its quick label, on a tint of the kind's color, as the Tauri app's
+/// `.md-card-badge`.
+fn kind_badge(words: &str, tone: rune::Color) -> El {
+    type_::upper(words, BADGE)
+        .color(tone)
+        .px(6.0)
+        .py(1.0)
+        .radius(4.0)
+        .fill(tone.alpha(0.18))
+}
+
+fn badge_tone(mark: &MarkdownAnnotation, t: &Tokens) -> rune::Color {
+    match mark.r#type.as_str() {
+        _ if mark.quick_label_id.is_some() => t.warning,
+        "deletion" => t.error,
+        "global" => t.accent,
+        _ => t.warning,
+    }
+}
+
 fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: &Tokens) -> El {
     let label =
         mark.quick_label_id
@@ -761,10 +793,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
                 None => id.to_owned(),
             });
     let badge = label.unwrap_or_else(|| mark.r#type.clone());
-    let quote = mark
-        .anchor
-        .as_ref()
-        .map(|a| format!("\u{201c}{}\u{201d}", a.exact));
+    let quote = mark.anchor.as_ref().map(|a| format!("\"{}\"", a.exact));
     let line = mark
         .anchor
         .as_ref()
@@ -805,7 +834,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
             row()
                 .items_center()
                 .gap(6.0)
-                .child(text(badge).font(type_::LABEL).color(t.text_secondary))
+                .child(kind_badge(&badge, badge_tone(mark, t)))
                 .children(orphan.then(|| text("⚠ moved").font(type_::LABEL).color(t.warning)))
                 .child(el().grow(1.0))
                 .child(
@@ -821,10 +850,14 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
         )
         .children(quote.map(|q| {
             text(q)
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .wrap()
-                .max_lines(3)
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary)
+                .single_line()
+                .truncate()
+                .px(8.0)
+                .py(6.0)
+                .radius(6.0)
+                .fill(t.bg_app)
         }))
         .children(line.map(|l| text(l).font(type_::LABEL).color(t.warning)))
         .children(

@@ -8,7 +8,8 @@ use attn_protocol::{
     ProfileActionResultMessage, RemoveOutpostMessage, RepairOutpostMessage, UpdateOutpostMessage,
 };
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::{Button, TextInput};
 
@@ -578,16 +579,10 @@ fn add_form(state: &State, t: &Tokens) -> El {
         destination
     };
     let field = |label: &str, input: El| {
-        row()
+        col()
             .w_full()
-            .gap(space::S3)
-            .items_center()
-            .child(
-                text(label.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_primary)
-                    .w(140.0),
-            )
+            .gap(space::S1)
+            .child(type_::upper(label, type_::BOLD_CAPS).color(t.text_dimmed))
             .child(input)
     };
     col()

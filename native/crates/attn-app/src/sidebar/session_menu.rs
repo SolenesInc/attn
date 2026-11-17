@@ -1,6 +1,6 @@
 use attn_protocol::{ReloadSessionMessage, Session, UnregisterMessage};
 use attn_ui::Tokens;
-use rune::tok::type_;
+use attn_ui::type_;
 use rune::{El, Tx, text};
 use rune_kit::{MenuItem, Placement};
 

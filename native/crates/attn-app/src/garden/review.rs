@@ -6,8 +6,9 @@ use attn_protocol::{
     SeedReviewKeepMessage, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage,
     SeedReviewStartMessage, SeedTransitionMessage,
 };
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text, text_input};
 use rune_kit::ButtonVariant;
 

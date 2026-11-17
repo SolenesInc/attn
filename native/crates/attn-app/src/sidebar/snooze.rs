@@ -203,7 +203,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
         .label(title.clone())
         .open(true)
         .on_close(|state: &mut State| state.window.snooze = None)
-        .group_label(title);
+        .group_label(title.to_uppercase());
     for choice in CHOICES {
         kit_menu = kit_menu.item(
             MenuItem::new(choice.label())

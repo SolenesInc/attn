@@ -2,7 +2,8 @@
 //! rail with the note's outline and the notes that link to it.
 
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, ScrollSpec, TextStyle, Tx, col, el, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
@@ -95,11 +96,7 @@ fn header(state: &State, t: &Tokens) -> El {
         .child(
             col()
                 .grow(1.0)
-                .child(
-                    text("Knowledge base")
-                        .font(type_::SECTION)
-                        .color(t.text_tertiary),
-                )
+                .child(type_::upper("Knowledge base", type_::BOLD_CAPS).color(t.brand))
                 .child(
                     text("Notebook")
                         .key("notebook.title")
@@ -463,15 +460,13 @@ fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
                         .gap(space::S2)
                         .child(heading(&title, t).key(key(id, "document.title")))
                         .child(
-                            text(badge)
-                                .key(key(id, "document.kind"))
-                                .font(type_::LABEL)
-                                .color(if journal { t.accent } else { t.text_tertiary }),
+                            kind_badge(&badge, if journal { t.accent } else { t.brand }, t)
+                                .key(key(id, "document.kind")),
                         ),
                 )
                 .child(
                     text(open.path.clone())
-                        .font(type_::LABEL)
+                        .font(type_::MONO_CAPTION)
                         .color(t.text_tertiary),
                 )
                 .children(status.map(|s| {
@@ -663,7 +658,7 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
                     )
                     .child(
                         text(e.path.clone())
-                            .font(type_::LABEL)
+                            .font(type_::MONO_CAPTION)
                             .color(t.text_tertiary)
                             .truncate(),
                     )
@@ -757,9 +752,11 @@ fn section(id: &SurfaceId, section: Section, open: bool, count: usize, t: &Token
         title.to_owned()
     };
     let id = id.clone();
-    Button::new(words)
+    let ink = t.text_muted;
+    Button::new(words.clone())
         .variant(ButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
+        .label_with(move |_, _| type_::upper(&words, type_::BOLD_CAPS).color(ink))
         .build(attn_ui::kit(t))
         .key(key(&id, &title.to_lowercase()))
         .label(title)
@@ -773,6 +770,17 @@ fn section(id: &SurfaceId, section: Section, open: bool, count: usize, t: &Token
                 *closed = !*closed;
             }
         })
+}
+
+/// A note's kind beside its title, as the Tauri app's `.notebook-kind` pill.
+fn kind_badge(kind: &str, ink: rune::Color, t: &Tokens) -> El {
+    type_::upper(kind, type_::BADGE)
+        .color(ink)
+        .px(space::S2)
+        .py(2.0)
+        .radius(999.0)
+        .fill(t.bg_elevated)
+        .border(1.0, ink.alpha(0.42))
 }
 
 fn basename(path: &str) -> &str {

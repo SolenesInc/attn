@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use attn_protocol::{ActorView, Session};
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Placement};
 

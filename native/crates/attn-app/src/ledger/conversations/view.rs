@@ -6,7 +6,8 @@ use super::super::{LIST, Note, QUERY};
 use super::{amount, date, deleted, key, letter_label, retention, verbs};
 use crate::State;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune_kit::Checkbox;
 
 pub(crate) fn toolbar(state: &State, t: &Tokens) -> El {

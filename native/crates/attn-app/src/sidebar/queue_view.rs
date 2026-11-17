@@ -1,7 +1,8 @@
 use std::rc::Rc;
 
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row, text};
 use rune_kit::{Button, ButtonVariant, TextInput};
 
@@ -569,7 +570,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 QLine::AgentsToggle { open, more } => agents_toggle(key, *open, *more, keys, t),
                 QLine::Counts(counts) => text(counts.clone())
                     .key(key)
-                    .font(type_::LABEL)
+                    .font(type_::MONO_CAPTION)
                     .color(t.text_tertiary),
                 QLine::Empty(_) => text("Nobody else.")
                     .key(key)
@@ -591,6 +592,7 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
 }
 
 pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
+    let tertiary = t.text_tertiary;
     row()
         .key(key.clone())
         .role("heading")
@@ -599,16 +601,17 @@ pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
         .h(ROW_HEIGHT)
         .items_center()
         .gap(space::S1)
-        .child(text("Crew").font(type_::SECTION).color(t.text_tertiary))
+        .child(type_::caps("Crew").color(t.text_tertiary))
         .child(rune::el().grow(1.0).h(1.0).fill(t.border_subtle))
         .child(
             Button::new("manage")
                 .variant(ButtonVariant::GhostMuted)
-                .control_size(rune_kit::ControlSize::Small)
+                .label_with(move |_, _| text("manage").font(type_::CAPS).color(tertiary))
                 .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::open(state, None, tx))
                 .build(attn_ui::kit(t))
                 .key(format!("{key}.manage"))
-                .label("Manage crew"),
+                .label("Manage crew")
+                .px(0.0),
         )
 }
 
@@ -620,11 +623,7 @@ fn rule(key: String, label: &str, t: &Tokens) -> El {
         .w_full()
         .h(ROW_HEIGHT)
         .items_center()
-        .child(
-            text(label.to_owned())
-                .font(type_::SECTION)
-                .color(t.text_tertiary),
-        )
+        .child(type_::caps(label).color(t.text_tertiary))
 }
 
 fn keys_of(state: &State, action: &Action) -> Option<String> {
@@ -730,7 +729,7 @@ fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: 
                     .font(type_::LABEL)
                     .color(tokens.text_tertiary),
                 )
-                .child(text(label).font(type_::SECTION).color(tokens.text_tertiary))
+                .child(type_::caps(&label).color(tokens.text_tertiary))
                 .children(rule_tail(keys, &tokens))
         })
         .build(attn_ui::kit(t))
@@ -798,11 +797,7 @@ fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: 
         .h(ROW_HEIGHT)
         .items_center()
         .gap(space::S1)
-        .child(
-            text("Automations")
-                .font(type_::SECTION)
-                .color(t.text_tertiary),
-        )
+        .child(type_::caps("Automations").color(t.text_tertiary))
         .child(
             text(plural(runs, "run"))
                 .font(type_::LABEL)

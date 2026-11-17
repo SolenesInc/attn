@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use attn_protocol::{Seed, SeedNoteMessage, SeedTransitionMessage, SeedTransitionResultMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{
     El, Key, KeyEvent, Phase, ScrollSpec, TextEdit, Tx, col, el, memo, row, text, text_input,
 };

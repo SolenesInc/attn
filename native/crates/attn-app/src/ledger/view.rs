@@ -1,6 +1,7 @@
 use attn_protocol::SessionLedgerEntry;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize, Menu, MenuItem};
 
@@ -424,9 +425,12 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
                         .truncate(),
                 )
                 .child(
-                    text(meta(state, r).join("  ·  "))
+                    meta_line(meta(state, r))
                         .key(format!("ledger.row.{}.meta", entry.id))
-                        .font(type_::LABEL)
+                        .font(rune::TextStyle {
+                            weight: 400.0,
+                            ..type_::LABEL
+                        })
                         .color(t.text_tertiary)
                         .single_line()
                         .truncate(),
@@ -436,36 +440,57 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
         .child(
             text(stamp)
                 .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-                .single_line(),
+                .color(t.text_muted)
+                .single_line()
+                .self_center(),
         )
         .children(primary)
         .children(more)
 }
 
-fn meta(state: &State, r: &Row<'_>) -> Vec<String> {
+/// A row's meta line, its parts apart by dots and its directory in monospace, as the Tauri
+/// app's `.ledger-path`.
+fn meta_line(parts: Vec<(String, bool)>) -> El {
+    let mut line = String::new();
+    let mut spans = Vec::new();
+    for (i, (part, path)) in parts.into_iter().enumerate() {
+        if i > 0 {
+            line.push_str("  ·  ");
+        }
+        if path {
+            spans.push(rune::Span::new(line.len(), line.len() + part.len()).mono());
+        }
+        line.push_str(&part);
+    }
+    rune::rich(line, spans)
+}
+
+fn meta(state: &State, r: &Row<'_>) -> Vec<(String, bool)> {
     let entry = r.entry;
     let mut meta = Vec::new();
     if entry.priority.unwrap_or_default() {
-        meta.push("priority".into());
+        meta.push(("priority".into(), false));
     }
-    meta.push(entry.agent.clone());
+    meta.push((entry.agent.clone(), false));
     if let Some(host) = entry.host.as_deref().filter(|h| !h.is_empty()) {
-        meta.push(crate::desktop::outpost_name(host, &state.facts.outposts));
+        meta.push((
+            crate::desktop::outpost_name(host, &state.facts.outposts),
+            false,
+        ));
     }
     let profile = profile_text(entry);
     if !profile.is_empty() {
-        meta.push(profile);
+        meta.push((profile, false));
     }
-    meta.push(query::short_path(&entry.directory));
+    meta.push((query::short_path(&entry.directory), true));
     if let Some(branch) = entry.branch.as_deref().filter(|b| !b.is_empty()) {
-        meta.push(branch.to_owned());
+        meta.push((branch.to_owned(), false));
     }
     if r.live && entry.hidden.unwrap_or_default() {
-        meta.push("hidden".into());
+        meta.push(("hidden".into(), false));
     }
     if is_closed(entry) {
-        meta.push(closed_line(state, entry));
+        meta.push((closed_line(state, entry), false));
     }
     if let Some(verdict) = state
         .window
@@ -473,7 +498,10 @@ fn meta(state: &State, r: &Row<'_>) -> Vec<String> {
         .verdict(entry)
         .filter(|v| is_closed(entry) && v.actions.is_empty())
     {
-        meta.push(name_ids(state, &query::compact_paths(&verdict.summary)));
+        meta.push((
+            name_ids(state, &query::compact_paths(&verdict.summary)),
+            false,
+        ));
     }
     meta
 }
@@ -829,8 +857,8 @@ fn session_counts(state: &State, rows: &[Row<'_>], t: &Tokens) -> Vec<El> {
     std::iter::once(
         text(parts.join("  ·  "))
             .key("ledger.counts")
-            .font(type_::LABEL)
-            .color(t.text_secondary),
+            .font(type_::MONO_CAPTION)
+            .color(t.text_tertiary),
     )
     .chain(older)
     .collect()
@@ -1014,10 +1042,14 @@ pub(super) fn title(words: &str, t: &Tokens) -> El {
         .wrap()
 }
 
+const LABEL: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
+    tracking: 0.5,
+    ..type_::SANS_CAPS
+};
+
 pub(super) fn label(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(type_::LABEL)
-        .color(t.text_tertiary)
+    type_::upper(words, LABEL).color(t.text_dimmed)
 }
 
 pub(super) fn body(words: &str, t: &Tokens) -> El {

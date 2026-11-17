@@ -813,7 +813,7 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
         .bounds(Target::key("desktop.rename.refused"))
         .unwrap();
     assert!(
-        inside(popover, refused) && refused[3] > 1.5 * rune::tok::type_::LABEL.line_px(),
+        inside(popover, refused) && refused[3] > 1.5 * attn_ui::type_::LABEL.line_px(),
         "the refusal wraps onto more lines inside the popover: {refused:?} in {popover:?}"
     );
 

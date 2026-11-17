@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, Session};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Image, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown, Switch};
 
@@ -84,9 +85,8 @@ fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
         .py(space::S2)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
-            text("Asks")
-                .font(type_::SECTION)
-                .color(t.text_primary)
+            type_::upper("Asks", type_::DRAWER_TITLE)
+                .color(t.text_muted)
                 .grow(1.0),
         )
         .children((live > 0).then(|| {

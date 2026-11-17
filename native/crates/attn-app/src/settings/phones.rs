@@ -10,8 +10,9 @@ use attn_protocol::{
     PhonePairingRevokeMessage, PhonesGetMessage, Profile,
 };
 use attn_ui::Tokens;
+use attn_ui::type_;
 use qrcodegen::{QrCode, QrCodeEcc, QrSegment, Version};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Pixels, Tx, col, row, text};
 use rune_kit::Button;
 

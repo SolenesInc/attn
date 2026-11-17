@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use attn_protocol::MarkdownAnnotationAnchor;
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::type_;
 use rune::{
     Chord, Cx, El, Key, KeyEvent, KeyPlatform, SelectionChange, TextEdit, Tx, col, el, row, text,
     text_input,

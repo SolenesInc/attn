@@ -250,7 +250,7 @@ pub(crate) fn label_view(state: &crate::State, t: &attn_ui::Tokens) -> Option<ru
     (w.dragging || w.label_until.is_some()).then(|| {
         let label = rune::text(label(of(state), w.window))
             .key("sidebar.width-label")
-            .font(rune::tok::type_::MONO_CAPTION)
+            .font(attn_ui::type_::MONO_CAPTION)
             .color(t.text_secondary)
             .absolute(rune::tok::space::S2, rune::tok::space::S2)
             .px(rune::tok::space::S2)

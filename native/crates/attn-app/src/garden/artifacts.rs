@@ -5,7 +5,8 @@ use attn_protocol::{
     SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedCheckEvidence, SeedDocument,
     SeedNoteMessage,
 };
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, FileDialogOptions, Tx, col, row, text};
 
 use super::sheet::{Sheet, meta_word};

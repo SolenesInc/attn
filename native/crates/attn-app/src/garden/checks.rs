@@ -2,7 +2,8 @@ use attn_protocol::{
     ActorView, Seed, SeedCheck, SeedCheckEvidence, SeedCheckMessage, SeedDocument, SeedSharedCheck,
 };
 use attn_ui::GlyphButton;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, KeyEvent, Tx, col, row, text, text_input};
 
 use super::CheckFocus;

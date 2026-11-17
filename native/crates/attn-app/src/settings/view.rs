@@ -1,5 +1,6 @@
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::{Dialog, TextInput};
 
@@ -59,7 +60,7 @@ fn nav(state: &State, t: &Tokens) -> El {
         .label("Settings sections")
         .w(220.0)
         .h_full()
-        .gap(space::S3)
+        .gap(20.0)
         .padding(space::S3)
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
         .scroll(rune::ScrollSpec {
@@ -75,7 +76,7 @@ fn nav(state: &State, t: &Tokens) -> El {
     nav.children(groups.into_iter().map(|(label, items)| {
         col()
             .gap(space::S1)
-            .child(text(label).font(type_::SECTION).color(t.text_tertiary))
+            .child(type_::upper(label, type_::BOLD_CAPS).color(t.text_dimmed))
             .children(items.into_iter().map(|item| {
                 let section = item.section;
                 let active = dialog.section == section;

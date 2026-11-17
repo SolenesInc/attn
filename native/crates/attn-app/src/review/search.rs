@@ -3,7 +3,8 @@
 
 use attn_protocol::{ReviewBundle, ReviewFile, ReviewSearchMessage, ReviewSearchResultMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
@@ -318,6 +319,7 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
             stick_bottom: false,
         })
         .gap(2.0)
+        .padding(space::S1)
         .children(found.iter().enumerate().map(|(i, f)| {
             let on = i == search.selected;
             let el = row()
@@ -325,11 +327,12 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
                 .role("option")
                 .label(f.label())
                 .w_full()
+                .h(25.0)
+                .items_center()
                 .px(space::S2)
-                .py(2.0)
                 .child(
                     text(f.label())
-                        .font(type_::BODY)
+                        .font(type_::BODY.mono())
                         .color(t.text_primary)
                         .a11y_hidden(),
                 )

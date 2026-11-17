@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, memo, row, text};
 
 use super::model::{self, Relation, SessionNames};
@@ -122,7 +123,7 @@ impl Sheet<'_> {
             .child(
                 text(here.id.clone())
                     .font(type_::MONO_CAPTION)
-                    .color(t.text_tertiary),
+                    .color(t.text_muted),
             );
         head = head.child(meta).children(notes);
         if let Some(reason) = here.reason.as_ref().filter(|r| !r.is_empty()) {

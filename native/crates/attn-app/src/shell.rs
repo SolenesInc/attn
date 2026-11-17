@@ -1,7 +1,8 @@
 use attn_client::{Connection, Facts, Refusal};
 use attn_protocol::Desktop;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
 use rune_kit::popover::raised;
 use rune_kit::{Button, ButtonVariant, Dialog};

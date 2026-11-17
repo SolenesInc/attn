@@ -1,6 +1,7 @@
 use attn_protocol::{CrewMember, Seed};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog, TextArea, TextInput};
 
@@ -28,9 +29,33 @@ fn caption(key: impl Into<String>, words: impl Into<String>, t: &Tokens) -> El {
 }
 
 fn kicker(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(type_::SECTION)
-        .color(t.text_tertiary)
+    type_::caps(words).color(t.text_muted)
+}
+
+/// The file bar joined to the top of the charter editor, as the Tauri app's
+/// `.crew-charter-meta`: the file at its left and its language at its right.
+fn charter_bar(t: &Tokens) -> El {
+    row()
+        .key("crew.charter.meta")
+        .label("CHARTER.md · Markdown")
+        .w_full()
+        .h(28.0)
+        .items_center()
+        .px(space::S3)
+        .fill(t.bg_elevated)
+        .border_sides([1.0, 1.0, 0.0, 1.0], t.border)
+        .corners([7.0, 7.0, 0.0, 0.0])
+        .child(
+            text("CHARTER.md")
+                .font(type_::MONO_CAPTION)
+                .color(t.text_muted)
+                .grow(1.0),
+        )
+        .child(
+            text("Markdown")
+                .font(type_::MONO_CAPTION)
+                .color(t.text_muted),
+        )
 }
 
 fn status(key: &str, words: impl Into<String>, color: rune::Color) -> El {
@@ -114,10 +139,12 @@ fn roster(state: &State, t: &Tokens) -> El {
         .padding(space::S3)
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
         .child(
-            row()
-                .w_full()
-                .child(kicker("Members", t).grow(1.0))
-                .child(caption("crew.roster.count", members.len().to_string(), t)),
+            row().w_full().child(kicker("Members", t).grow(1.0)).child(
+                text(members.len().to_string())
+                    .key("crew.roster.count")
+                    .font(type_::CAPS)
+                    .color(t.text_muted),
+            ),
         );
     if members.len() > 5 {
         aside = aside.child(
@@ -693,8 +720,7 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
                     t.text_secondary,
                 )),
         )
-        .child(caption("crew.charter.meta", "CHARTER.md · Markdown", t))
-        .child(editor);
+        .child(col().w_full().child(charter_bar(t)).child(editor));
     if edit.phase == Phase::Error {
         let id = member.id.clone();
         section = section.child(

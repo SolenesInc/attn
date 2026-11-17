@@ -9,7 +9,8 @@ use std::path::PathBuf;
 
 use attn_protocol::SupportSnapshotMessage;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, FileDialogOptions, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Checkbox, ControlSize, Dialog};
 use serde_json::{Value, json};

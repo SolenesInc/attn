@@ -1,6 +1,7 @@
 use attn_protocol::{DesktopRenameMessage, RenameResultMessage, RenameSessionMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, text};
 use rune_kit::{Placement, TextInput};
 
@@ -221,8 +222,8 @@ fn popover(rename: &Rename, t: &Tokens) -> El {
     let field = TextInput::new(&rename.edit)
         .key(format!("{key}.field"))
         .plain()
-        .text_style(type_::BODY)
-        .height(type_::BODY.line_px())
+        .text_style(type_::BODY.mono())
+        .height(type_::BODY.mono().line_px())
         .width(None)
         .label(label)
         .on_edit(|state: &mut State| {

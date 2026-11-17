@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 
 use attn_protocol::{DelegationChoice, DelegationPreferences, DelegationRole};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Icon, TextEdit, Tx, col, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Select, TextArea, TextInput};
 
@@ -357,11 +358,7 @@ fn columns(icon_el: El, who: El, cell: El, more: El) -> El {
 }
 
 fn head(t: &Tokens) -> El {
-    let label = |s: &str| {
-        text(s.to_uppercase())
-            .font(type_::SECTION)
-            .color(t.text_tertiary)
-    };
+    let label = |s: &str| type_::upper(s, type_::BOLD_CAPS).color(t.text_tertiary);
     columns(row(), label("Role"), label("Runs on"), row())
         .key("settings.delegation.head")
         .py(space::S2)

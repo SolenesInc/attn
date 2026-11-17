@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::Button;
 

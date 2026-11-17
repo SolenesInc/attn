@@ -1,6 +1,7 @@
 use attn_protocol::{Worktree, WorktreeSweepEntry};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, row, text, text_input};
 
 use super::super::query::{

@@ -1,6 +1,7 @@
 use attn_protocol::{Session, SessionUsage, SessionUsageModel};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::Placement;
 

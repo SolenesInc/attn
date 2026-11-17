@@ -4,7 +4,8 @@
 use std::collections::HashMap;
 
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{Beat, Easing, El, Sequence, Tx, el, row, text};
 
 use crate::State;

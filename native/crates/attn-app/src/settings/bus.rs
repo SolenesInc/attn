@@ -6,12 +6,13 @@ use attn_protocol::{
     BusStatusResultMessage,
 };
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{Align, El, Tx, col, row, text};
-use rune_kit::{Badge, Button, ButtonVariant, Kit};
+use rune_kit::{Button, ButtonVariant, Kit};
 
 use super::Section;
-use super::pages::CAPTION;
+use super::pages::{CAPTION, Tone, pill};
 use crate::State;
 
 /// The daemon answers with one pass over the whole log, 209 ms at 945k rows, so the page reads
@@ -154,7 +155,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 .role("list")
                 .label("Event bus health")
                 .gap(space::S1)
-                .children(status.health.iter().map(|finding| {
+                .children(status.health.iter().enumerate().map(|(i, finding)| {
                     let error = finding.level == "error";
                     let level = if error { "Error" } else { "Warning" };
                     row()
@@ -162,7 +163,12 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                         .label(format!("{level}: {}", finding.message))
                         .gap(space::S2)
                         .items_center()
-                        .child(Badge::new(level).build(k))
+                        .child(pill(
+                            format!("settings.bus.health.{i}.level"),
+                            level.into(),
+                            if error { Tone::Bad } else { Tone::Warn },
+                            t,
+                        ))
                         .child(
                             text(finding.message.clone())
                                 .font(CAPTION)
@@ -252,8 +258,29 @@ fn section_head(title: &str, hint: String, t: &Tokens) -> El {
         .child(text(hint).font(CAPTION).color(t.text_tertiary).wrap())
 }
 
+/// A table's header row: the columns' names, uppercase and quiet.
+fn head_row(key: &str, name: &str, columns: Vec<String>, t: &Tokens) -> El {
+    table_row(
+        key.into(),
+        "Columns".into(),
+        type_::sans_caps(name).color(t.text_tertiary),
+        columns
+            .iter()
+            .map(|c| type_::caps(c).color(t.text_tertiary))
+            .collect(),
+        t,
+    )
+}
+
+fn numbers(cells: Vec<String>, t: &Tokens) -> Vec<El> {
+    cells
+        .into_iter()
+        .map(|n| text(n).font(type_::MONO_CAPTION).color(t.text_secondary))
+        .collect()
+}
+
 /// One table row: the name cell takes what is left, the number cells line up at the end.
-fn table_row(key: String, label: String, name: El, numbers: Vec<String>, t: &Tokens) -> El {
+fn table_row(key: String, label: String, name: El, numbers: Vec<El>, t: &Tokens) -> El {
     row()
         .key(key)
         .role("row")
@@ -264,13 +291,7 @@ fn table_row(key: String, label: String, name: El, numbers: Vec<String>, t: &Tok
         .items_center()
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(name.grow(1.0).min_w(0.0))
-        .children(numbers.into_iter().map(|n| {
-            text(n)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_secondary)
-                .w(72.0)
-                .align(Align::End)
-        }))
+        .children(numbers.into_iter().map(|n| n.w(72.0).align(Align::End)))
 }
 
 fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) -> Vec<El> {
@@ -298,10 +319,9 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
             .font(CAPTION)
             .color(t.text_tertiary)
     } else {
-        let header = table_row(
-            "settings.bus.producers.head".into(),
-            "Columns".into(),
-            text("Fact").font(CAPTION).color(t.text_tertiary),
+        let header = head_row(
+            "settings.bus.producers.head",
+            "Fact",
             vec![
                 "Events".into(),
                 "Share".into(),
@@ -327,7 +347,14 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
                             .color(t.text_primary)
                             .truncate(),
                     )
-                    .children(p.surging.then(|| Badge::new("Loud").build(k)));
+                    .children(p.surging.then(|| {
+                        pill(
+                            format!("settings.bus.producer.{}.loud", p.name),
+                            "Loud".into(),
+                            Tone::Warn,
+                            t,
+                        )
+                    }));
                 let cells = vec![
                     count(p.events),
                     format!("{:.1}%", p.share * 100.0),
@@ -344,7 +371,7 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
                     format!("settings.bus.producer.{}", p.name),
                     label.join(", "),
                     name,
-                    cells,
+                    numbers(cells, t),
                     t,
                 )
             }))
@@ -402,10 +429,9 @@ fn consumers(
                 .wrap(),
         ];
     }
-    let header = table_row(
-        "settings.bus.consumers.head".into(),
-        "Columns".into(),
-        text("Consumer").font(CAPTION).color(t.text_tertiary),
+    let header = head_row(
+        "settings.bus.consumers.head",
+        "Consumer",
         vec!["Cursor".into(), "Lag".into(), "Waiting".into()],
         t,
     )
@@ -420,8 +446,13 @@ fn consumers(
                     .font(type_::MONO_CAPTION)
                     .color(t.text_primary),
             )
-            .children(marks.iter().map(|(mark, help)| {
-                let badge = Badge::new(mark.clone()).build(k);
+            .children(marks.iter().enumerate().map(|(i, (mark, tone, help))| {
+                let badge = pill(
+                    format!("settings.bus.consumer.{}.mark.{i}", c.name),
+                    mark.clone(),
+                    *tone,
+                    t,
+                );
                 match help {
                     Some(help) => badge.help(help.clone()),
                     None => badge,
@@ -433,8 +464,8 @@ fn consumers(
                 } else {
                     c.filter.clone()
                 })
-                .font(CAPTION)
-                .color(t.text_tertiary)
+                .font(type_::MONO_CAPTION)
+                .color(t.text_dimmed)
                 .truncate(),
             );
         let cells = vec![
@@ -443,7 +474,7 @@ fn consumers(
             age(&c.oldest_unread_at, now_ms).unwrap_or_else(|| "—".into()),
         ];
         let mut label = vec![c.name.clone()];
-        label.extend(marks.iter().map(|(mark, _)| mark.clone()));
+        label.extend(marks.iter().map(|(mark, _, _)| mark.clone()));
         label.extend(cells.iter().cloned());
         let consumer = c.name.clone();
         let enabled = c.enabled;
@@ -463,7 +494,7 @@ fn consumers(
             format!("settings.bus.consumer.{}", c.name),
             label.join(", "),
             name,
-            cells,
+            numbers(cells, t),
             t,
         )
         .child(row().w(ACTION_W).justify_end().child(action));
@@ -482,17 +513,22 @@ fn consumers(
 }
 
 /// The marks a consumer row carries, each with the tooltip that explains it.
-fn marks(c: &BusConsumerStatus, status: &BusStatusResultMessage) -> Vec<(String, Option<String>)> {
+fn marks(
+    c: &BusConsumerStatus,
+    status: &BusStatusResultMessage,
+) -> Vec<(String, Tone, Option<String>)> {
     let mut marks = Vec::new();
     if c.holds_retention_floor && !c.pin_alarm {
         marks.push((
             "Retention floor".to_owned(),
+            Tone::Plain,
             Some("Retention stops at this consumer's cursor".to_owned()),
         ));
     }
     if c.pin_alarm {
         marks.push((
             format!("Pinning {}", bytes(c.pinned_bytes)),
+            Tone::Bad,
             Some(format!(
                 "Nothing below this consumer's cursor can be trimmed, and it has held that for longer than {}",
                 limit(status.pin_alarm_seconds).unwrap_or_default()
@@ -500,13 +536,13 @@ fn marks(c: &BusConsumerStatus, status: &BusStatusResultMessage) -> Vec<(String,
         ));
     }
     if !c.enabled {
-        marks.push(("Disabled".to_owned(), None));
+        marks.push(("Disabled".to_owned(), Tone::Warn, None));
     }
     if !c.stalled.is_empty() {
-        marks.push(("Stalled".to_owned(), Some(c.stalled.clone())));
+        marks.push(("Stalled".to_owned(), Tone::Bad, Some(c.stalled.clone())));
     }
     if status.delivering && c.enabled && !c.live {
-        marks.push(("Not running".to_owned(), None));
+        marks.push(("Not running".to_owned(), Tone::Bad, None));
     }
     marks
 }

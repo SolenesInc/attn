@@ -5,8 +5,9 @@
 use std::borrow::Cow;
 
 use attn_ui::Tokens;
+use attn_ui::type_;
 use rune::text::{Span, TextHighlight};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{Color, El, GrowthSpec, Phase, Tx, col, el, rich, row, text};
 
 use super::markdown::{LineKind, Shown, Style};

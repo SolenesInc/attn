@@ -8,7 +8,7 @@ use attn_protocol::{
     LaunchDesktopSetting,
 };
 use attn_ui::Tokens;
-use rune::tok::type_;
+use attn_ui::type_;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog, Select, SelectAppearance, TextInput};
 

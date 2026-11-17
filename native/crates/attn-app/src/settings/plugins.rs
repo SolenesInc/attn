@@ -10,7 +10,8 @@ use attn_protocol::{
     RemovePluginMessage, SetPluginPriorityMessage,
 };
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, FileDialogOptions, TextEdit, Tx, col, row, text};
 use rune_kit::{Button, TextInput};
 
@@ -524,7 +525,7 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         0 => pill(
             "settings.pill.plugins.health".into(),
             "healthy".into(),
-            Tone::Good,
+            Tone::Plain,
             t,
         ),
         n => pill(

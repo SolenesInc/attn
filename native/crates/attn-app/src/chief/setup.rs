@@ -3,7 +3,8 @@
 
 use attn_protocol::{GetSettingsMessage, HarnessModel};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, FileDialogOptions, Tx, col, row, text};
 use rune_kit::popover::{anchored, raised};
 use rune_kit::{Button, ButtonVariant, ControlSize, Placement, RadioItem};
@@ -543,9 +544,7 @@ fn radios(group: Group, choices: &[Choice], busy: bool, t: &Tokens) -> El {
 }
 
 fn kicker(label: &str, t: &Tokens) -> El {
-    text(label.to_owned())
-        .font(type_::SECTION)
-        .color(t.text_tertiary)
+    type_::caps(label).color(t.text_tertiary)
 }
 
 fn link(key: &str, label: &str, t: &Tokens, press: fn(&mut State, &mut Tx)) -> El {
@@ -687,9 +686,8 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                             .key(format!("{POP}.folder"))
                             .font(type_::MONO_CAPTION)
                             .color(t.text_secondary)
-                            .single_line()
-                            .truncate()
-                            .grow(1.0),
+                            .grow(1.0)
+                            .min_w(0.0),
                     )
                     .child(
                         Button::new("Choose…")

@@ -3,7 +3,8 @@
 
 use attn_protocol::{FsIndexMessage, FsIndexResultMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, el, row, text};
 use rune_kit::TextInput;
 

@@ -5,7 +5,8 @@ use std::collections::HashSet;
 
 use attn_protocol::{ReviewBundle, ReviewFile};
 use attn_ui::Tokens;
-use rune::tok::{radius, space, type_};
+use attn_ui::type_;
+use rune::tok::{radius, space};
 use rune::{El, col, row, text};
 
 use super::frames::Frame;
@@ -173,9 +174,10 @@ pub(super) fn not_shown(
                 .label(format!("{} {}", entry.path, entry.reason))
                 .w_full()
                 .gap(space::S2)
+                .pl(6.0)
                 .child(
                     text(entry.path.clone())
-                        .font(type_::LABEL)
+                        .font(type_::MONO_CAPTION)
                         .color(t.text_primary),
                 )
                 .child(

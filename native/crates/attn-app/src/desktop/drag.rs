@@ -3,7 +3,8 @@
 
 use attn_protocol::{DesktopMoveLeafMessage, ProfileActionResultMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{Drag, El, Phase, Tx, row, text};
 
 use super::layout::{self, Edge, Node, ShelfDrop, TILE_MIN_HEIGHT, TILE_MIN_WIDTH};

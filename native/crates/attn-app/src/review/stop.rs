@@ -3,7 +3,8 @@
 
 use attn_protocol::{ReviewNote, ReviewRow, ReviewStop};
 use attn_ui::Tokens;
-use rune::tok::{radius, space, type_};
+use attn_ui::type_;
+use rune::tok::{radius, space};
 use rune::{Color, El, Span, TextStyle, col, rich, row, text};
 use rune_kit::syntax::{Highlight, SyntaxTheme, highlight, lang_for_path};
 
@@ -166,12 +167,16 @@ pub(super) fn header(stop: &ReviewStop, rows: &[ReviewRow], t: &Tokens) -> El {
         .w_full()
         .gap(space::S2)
         .pb(space::S1)
-        .children(dir.map(|d| text(d).font(type_::LABEL).color(t.text_tertiary)))
-        .child(text(name).font(type_::LABEL).color(t.text_primary))
+        .child(
+            row()
+                .children(dir.map(|d| text(d).font(type_::MONO_CAPTION).color(t.text_tertiary)))
+                .child(text(name).font(type_::MONO_CAPTION).color(t.text_primary)),
+        )
         .child(
             text(range(stop, rows))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+                .font(type_::MONO_CAPTION)
+                .color(t.text_muted)
+                .ml(space::S1),
         )
         .children(changed)
 }
@@ -211,6 +216,12 @@ pub(super) fn script(key: &str, stop: &ReviewStop, stage: Option<Option<i64>>, t
     }
 }
 
+const WHO: TextStyle = TextStyle {
+    weight: 400.0,
+    tracking: 0.6,
+    ..type_::LABEL
+};
+
 pub(super) fn note(note: &ReviewNote, t: &Tokens) -> El {
     let who = if note.look { "look here" } else { "agent" };
     let tone = if note.look { t.warning } else { t.accent };
@@ -223,11 +234,11 @@ pub(super) fn note(note: &ReviewNote, t: &Tokens) -> El {
         .radius(radius::SM)
         .fill(tone.alpha(0.08))
         .border_sides([0.0, 0.0, 0.0, 2.0], tone)
-        .child(text(who).font(type_::LABEL).color(tone))
+        .child(type_::upper(who, WHO).color(tone))
         .child(
             text(note_range(note))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+                .font(type_::MONO_CAPTION)
+                .color(t.text_muted),
         )
         .child(
             text(note.text.clone())

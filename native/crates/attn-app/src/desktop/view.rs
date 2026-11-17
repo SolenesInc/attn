@@ -1,8 +1,9 @@
 use attn_protocol::{Desktop, DesktopPane, Session};
 use attn_term::mouse;
 use attn_ui::colors::TerminalColors;
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant};
 
@@ -357,7 +358,7 @@ fn short_id(session: &str) -> String {
 
 fn id_width(session: &str) -> Widths {
     Widths {
-        full: super::fit::text_w(&short_id(session), SUBLINE_TYPE),
+        full: super::fit::text_w(&short_id(session), SUBLINE_TYPE.mono()),
         short: None,
         icon: None,
     }
@@ -1364,7 +1365,7 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
             Button::new(format!("Copy session id {short}"))
                 .variant(ButtonVariant::GhostFaint)
                 .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone()))
-                .label_with(move |_, ink| text(face).font(SUBLINE_TYPE).color(ink))
+                .label_with(move |_, ink| text(face).font(SUBLINE_TYPE.mono()).color(ink))
                 .build(attn_ui::kit(t))
                 .key(format!("{key}.id"))
                 .h(SUBLINE_TYPE.line_px())

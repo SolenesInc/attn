@@ -3,7 +3,8 @@
 
 use attn_client::MigrationMarker;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 

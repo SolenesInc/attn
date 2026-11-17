@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use attn_protocol::SetSettingMessage;
 use attn_ui::Tokens;
 use attn_ui::colors::{SCHEMES, has_overrides};
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::RadioItem;
 

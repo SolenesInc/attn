@@ -15,8 +15,9 @@ pub(crate) mod sending;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, icon};
-use rune::tok::{radius, space, type_};
+use rune::tok::{radius, space};
 use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
 use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
 

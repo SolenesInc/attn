@@ -4,7 +4,8 @@ use std::cell::RefCell;
 
 use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::{Button, ControlSize, SegmentedControl, Switch, TextInput};
 
@@ -143,6 +144,7 @@ pub(super) fn setting_field(
         .key(field_key)
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
+        .text_style(attn_ui::kit(t).ty.ui_compact.mono())
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
@@ -355,8 +357,8 @@ pub(super) fn experimental(state: &State, t: &Tokens) -> Vec<El> {
                     col()
                         .w(140.0)
                         .gap(space::S1)
-                        .child(text(group).font(type_::SECTION).color(t.text_tertiary))
-                        .child(text(count).font(CAPTION).color(t.text_muted)),
+                        .child(type_::upper(group, type_::BOLD_CAPS).color(t.text_tertiary))
+                        .child(text(count).font(type_::MONO_CAPTION).color(t.text_dimmed)),
                 )
                 .child(
                     col()
@@ -465,22 +467,26 @@ pub(super) enum Tone {
 
 /// A small status marker: a page's state beside its heading, or a plugin's.
 pub(super) fn pill(key: String, label: String, tone: Tone, t: &Tokens) -> El {
-    let ink = match tone {
-        Tone::Good => t.success,
-        Tone::Warn => t.warning,
-        Tone::Bad => t.error,
-        Tone::Plain => t.text_secondary,
+    let (ink, fill, edge) = match tone {
+        Tone::Plain => (t.text_secondary, t.bg_elevated, t.border),
+        Tone::Good => tinted(t.success, t.success.mix(t.text_primary, 0.27)),
+        Tone::Warn => tinted(t.warning, t.warning),
+        Tone::Bad => tinted(t.error, t.error),
     };
-    text(label.clone())
+    type_::upper(&label, type_::BADGE)
         .key(key)
         .role("status")
-        .label(label)
-        .font(CAPTION)
         .color(ink)
         .px(space::S2)
-        .py(2.0)
+        .py(3.0)
         .radius(999.0)
-        .border(1.0, t.border)
+        .fill(fill)
+        .border(1.0, edge)
+}
+
+/// A pill's ink, fill and border on `tone`, as the Tauri app's `.settings-pill.good`.
+fn tinted(tone: rune::Color, ink: rune::Color) -> (rune::Color, rune::Color, rune::Color) {
+    (ink, tone.alpha(0.11), tone.alpha(0.42))
 }
 
 /// A warning line, as the Tauri pages show a plugin's trouble.

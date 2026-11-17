@@ -6,8 +6,9 @@ use std::rc::Rc;
 
 use attn_protocol::{MarkdownAnnotation, ReviewRow, ReviewStop};
 use attn_ui::Tokens;
+use attn_ui::type_;
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeStream};
-use rune::tok::{radius, space, type_};
+use rune::tok::{radius, space};
 use rune::{El, Image, Link, Span, col, text};
 use rune_kit::markdown::Markdown;
 

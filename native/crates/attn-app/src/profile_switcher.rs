@@ -6,8 +6,9 @@ use attn_protocol::{
     Profile, ProfileActionResultMessage, ProfileCreateMessage, ProfileDeleteMessage,
     ProfileRenameMessage, ProfileSelectMessage,
 };
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, icon, row, text};
 use rune_kit::{Button, ButtonVariant, Kit, Placement, TextInput, popover};
 

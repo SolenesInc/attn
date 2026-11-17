@@ -1,5 +1,6 @@
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{ClipboardContent, Cx, El, Image, SurfaceFit, Tx, col, el, row, text, text_input};
 
 use super::attach::{self, Attachment, Source};
@@ -304,9 +305,21 @@ fn footer(panel: &Panel, t: &Tokens) -> El {
         }))
         .child(el().grow(1.0))
         .child(
-            text("⇧↵ new line")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+            row()
+                .key("capture.hint")
+                .label("⇧↵ new line")
+                .items_center()
+                .gap(space::S1)
+                .mr(7.0)
+                .child(text("⇧↵").font(type_::MONO_CAPTION).color(t.text_muted))
+                .child(
+                    text("new line")
+                        .font(rune::TextStyle {
+                            weight: 400.0,
+                            ..type_::LABEL
+                        })
+                        .color(t.text_muted),
+                ),
         )
         .child(
             button(

@@ -6,8 +6,9 @@ use attn_client::Reply;
 use attn_protocol::{
     CalloutAnchorsRequestMessage, CalloutResultMessage, CalloutShowRequestMessage, CalloutStep,
 };
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, icon};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{Align, Cx, El, ElementInfo, Key, KeyEvent, Mods, Side, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 

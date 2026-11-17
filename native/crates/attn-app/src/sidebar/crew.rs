@@ -2,8 +2,9 @@
 //! it wakes the member, and the member's menu.
 
 use attn_protocol::CrewMember;
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Tx, row, text};
 use rune_kit::{ButtonVariant, MenuItem, Placement};
 

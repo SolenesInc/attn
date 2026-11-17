@@ -1,7 +1,8 @@
 use attn_client::Notifications;
 use attn_protocol::Notification;
+use attn_ui::type_;
 use attn_ui::{Tokens, icon};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::{
     Button, ButtonVariant, Collapsible, ControlSize, IconButton, IconButtonVariant, Placement,
@@ -113,8 +114,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         .px(space::S3)
         .py(space::S2)
         .child(
-            text("Notifications")
-                .font(type_::LABEL)
+            type_::upper("Notifications", type_::BOLD_CAPS)
                 .color(t.text_primary)
                 .grow(1.0),
         )

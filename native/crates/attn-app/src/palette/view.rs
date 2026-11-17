@@ -1,5 +1,6 @@
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::TextInput;
 
@@ -51,7 +52,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .children(listing.count.clone().map(|c| {
             text(c)
                 .key("palette.count")
-                .font(type_::LABEL)
+                .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary)
         }));
     let empty = listing.rows.is_empty().then(|| {

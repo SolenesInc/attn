@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use attn_client::Facts;
 use attn_protocol::{Seed, SeedDocument, SeedNote, Session};
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{Color, El, Key, KeyEvent, TextStyle, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Placement};
 
@@ -682,6 +683,7 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
         )
     });
     let (id, face) = (primary.id.clone(), primary.id.clone());
+    let id_ink = t.text_tertiary;
     let open_seed = Button::new(format!("Open seed {id}"))
         .variant(ButtonVariant::GhostMuted)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &id, &session, tx))
@@ -690,7 +692,7 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
                 .w_full()
                 .gap(space::S2)
                 .child(text("Open seed ↗").font(type_::LABEL).color(ink).grow(1.0))
-                .child(text(face).font(type_::MONO_CAPTION).color(ink))
+                .child(text(face).font(type_::MONO_CAPTION).color(id_ink))
         })
         .build(attn_ui::kit(t))
         .key(format!("{}.open", pop.surface()))

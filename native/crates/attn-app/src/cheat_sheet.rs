@@ -3,7 +3,8 @@
 //! carry a note. The keys come from the user's keymap.
 
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, KeyPlatform, col, el, row, text};
 use rune_kit::Keybind;
 

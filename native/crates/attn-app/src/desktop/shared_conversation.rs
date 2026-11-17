@@ -1,6 +1,6 @@
 use attn_protocol::{Desktop, Session};
 use attn_ui::Tokens;
-use rune::tok::type_;
+use attn_ui::type_;
 use rune::{El, col, text};
 
 /// Where each session whose conversation another terminal also has open says it is open, as

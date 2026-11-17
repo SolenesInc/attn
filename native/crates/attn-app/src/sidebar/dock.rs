@@ -3,7 +3,8 @@
 //! The PRs chip also opens its drawer.
 
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use serde_json::{Value, json};
 
@@ -14,6 +15,12 @@ use crate::shell::Drawer;
 const KEYS: rune::TextStyle = rune::TextStyle {
     weight: 600.0,
     ..type_::MONO_CAPTION
+};
+
+const HEADING: rune::TextStyle = rune::TextStyle {
+    weight: 700.0,
+    tracking: 1.8,
+    ..type_::CAPS
 };
 
 const DEFAULT_ITEMS: &[&str] = &[
@@ -153,12 +160,7 @@ pub(crate) fn view(dock: &Dock, t: &Tokens) -> El {
         .key("sidebar.dock.head")
         .w_full()
         .items_center()
-        .child(
-            text("DOCK")
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-                .grow(1.0),
-        )
+        .child(text("DOCK").font(HEADING).color(t.text_tertiary).grow(1.0))
         .child(
             text(toggle)
                 .key("sidebar.dock.toggle")
@@ -185,7 +187,7 @@ pub(crate) fn view(dock: &Dock, t: &Tokens) -> El {
             .label("Dock")
             .w_full()
             .flex_wrap()
-            .gap(space::S2)
+            .gaps(space::S2, space::S3)
             .children(dock.chips.iter().map(|chip| chip_view(chip, t)))
     });
     col()
@@ -205,8 +207,6 @@ fn chip_view(chip: &Chip, t: &Tokens) -> El {
         .label(said)
         .items_center()
         .gap(4.0)
-        .px(8.0)
-        .py(2.0)
         .radius(999.0)
         .child(text(chip.keys.clone()).font(KEYS).color(t.text_secondary))
         .child(
@@ -218,6 +218,10 @@ fn chip_view(chip: &Chip, t: &Tokens) -> El {
                     t.text_tertiary
                 }),
         );
+    let face = match chip.action == Action::DockAttention || chip.active {
+        true => face.px(8.0).py(2.0),
+        false => face,
+    };
     let face = match chip.active {
         true => face
             .a11y_value("active")

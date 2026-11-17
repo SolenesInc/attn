@@ -3,8 +3,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use attn_protocol::Seed;
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, GrowthSpec, ScrollSpec, Span, Tx, col, el, memo, rich, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
@@ -789,7 +790,7 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
                         .color(if look.id_hit {
                             t.text_primary
                         } else {
-                            t.text_tertiary
+                            t.text_muted
                         }),
                 );
         if seed.standby.is_some() && look.blockers > 0 {

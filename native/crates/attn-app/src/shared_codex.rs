@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 use attn_protocol::{
     InstallCodexUpdateMessage, RestartSharedCodexMessage, SharedCodexBlocker, SharedCodexState,
 };
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, icon};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
 use serde::{Deserialize, Serialize};

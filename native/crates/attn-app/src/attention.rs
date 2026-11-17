@@ -9,8 +9,9 @@ use attn_protocol::{
     ApprovePRMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, PR,
     PRVisitedMessage, RefreshPRsMessage, Session,
 };
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, icon};
-use rune::tok::{space, type_};
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
 
@@ -380,9 +381,8 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
                 .py(space::S2)
                 .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
                 .child(
-                    text("Needs Attention")
-                        .font(type_::SECTION)
-                        .color(t.text_primary)
+                    type_::upper("Needs Attention", type_::DRAWER_TITLE)
+                        .color(t.text_muted)
                         .grow(1.0),
                 )
                 .child(
@@ -414,7 +414,7 @@ fn section(key: &str, title: &str, count: usize, rows: Vec<El>, t: &Tokens) -> E
         .child(
             row()
                 .gap(space::S2)
-                .child(text(title).font(type_::LABEL).color(t.text_secondary))
+                .child(type_::caps(title).color(t.text_dimmed))
                 .child(
                     text(count.to_string())
                         .font(type_::LABEL)
@@ -816,10 +816,9 @@ fn pr_card(state: &State, t: &Tokens) -> El {
                 .items_center()
                 .gap(space::S2)
                 .child(
-                    text("Pull Requests")
+                    type_::caps("Pull Requests")
                         .role("heading")
-                        .font(type_::SECTION)
-                        .color(t.text_primary)
+                        .color(t.text_dimmed)
                         .grow(1.0),
                 )
                 .child(

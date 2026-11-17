@@ -2,7 +2,8 @@
 //! model the built-in table misses, and the form that adds one.
 
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Select, SelectAppearance, TextInput};
 

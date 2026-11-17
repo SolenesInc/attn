@@ -1,5 +1,5 @@
+use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::type_;
 use rune::{Drag, El, Key, KeyEvent, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, TextArea};
 

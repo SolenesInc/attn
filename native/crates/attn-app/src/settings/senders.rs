@@ -4,7 +4,8 @@
 use attn_client::{Connection, Slices};
 use attn_protocol::{PairedSender, SenderUnpairMessage, SendersGetMessage};
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::Button;
 
@@ -126,14 +127,19 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
     };
     let mut body = Vec::new();
     if senders.is_empty() {
-        let said = "No paired senders. A program pairs with attn send pair --name <name>.";
+        let command = "attn send pair --name <name>";
+        let said = format!("No paired senders. A program pairs with {command}.");
+        let start = said.find(command).unwrap_or_default();
         body.push(
-            text(said)
-                .key("settings.senders.empty")
-                .label(said)
-                .font(type_::BODY)
-                .color(t.text_tertiary)
-                .wrap(),
+            rune::rich(
+                said.clone(),
+                vec![rune::Span::new(start, start + command.len()).mono()],
+            )
+            .key("settings.senders.empty")
+            .label(said)
+            .font(type_::BODY)
+            .color(t.text_tertiary)
+            .wrap(),
         );
     } else {
         body.push(

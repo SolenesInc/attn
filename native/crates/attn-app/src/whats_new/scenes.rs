@@ -455,7 +455,7 @@ pub(super) fn scene(scene: Scene, press: Option<String>, t: &Tokens) -> El {
             .border(1.0, t.border)
             .child(
                 text(keys)
-                    .font(rune::tok::type_::MONO_CAPTION)
+                    .font(attn_ui::type_::MONO_CAPTION)
                     .color(t.text_primary)
                     .a11y_hidden(),
             )

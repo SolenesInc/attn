@@ -3,6 +3,7 @@ use std::sync::RwLock;
 use rune::{Color, Shadow};
 
 pub mod colors;
+pub mod type_;
 
 /// The interface's colors in one appearance, named by meaning. The surfaces, borders, text and
 /// status colors name the Tauri app's CSS variables they carry: `bg_app` is `--color-bg-app`.
@@ -126,6 +127,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.text_base = t.text_primary;
     p.text_muted = t.text_secondary;
     p.text_faint = t.text_tertiary;
+    p.text_weak = t.text_tertiary;
     p.text_accent = t.accent;
     p.icon_base = t.text_secondary;
     p.icon_muted = t.text_tertiary;

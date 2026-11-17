@@ -4,7 +4,8 @@
 
 use attn_protocol::HarnessModel;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::popover::{anchored, raised};
 use rune_kit::{Button, ButtonVariant, ControlSize, Placement, TextInput};
@@ -541,22 +542,57 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
         .collect::<Vec<_>>()
         .join(" · ");
     let shown = parts.clone();
-    let ink_secondary = t.text_tertiary;
+    let tokens = *t;
     let warning = view.missing.then_some(t.warning);
     let opener = target.clone();
     let button = Button::new(label)
         .label_with(move |font, ink| {
-            row()
-                .gap(space::S3)
-                .items_center()
-                .children(shown.into_iter().map(|(name, v)| {
+            let part =
+                |name: &str, v: String| {
+                    let color = match (name, warning) {
+                        ("Model", Some(warning)) => warning,
+                        ("Harness", _) if field => tokens.text_secondary,
+                        ("Effort", _) if field => tokens.accent,
+                        _ => ink,
+                    };
                     col()
-                        .gap(2.0)
-                        .children(field.then(|| text(name).font(CAPTION).color(ink_secondary)))
-                        .child(text(v).font(font).color(match warning {
-                            Some(warning) if name == "Model" => warning,
-                            _ => ink,
+                        .gap(4.0)
+                        .children(field.then(|| {
+                            type_::upper(name, type_::BOLD_CAPS).color(tokens.text_tertiary)
                         }))
+                        .child(text(v).font(font).color(color))
+                };
+            if !field {
+                return row()
+                    .gap(space::S3)
+                    .items_center()
+                    .children(shown.into_iter().map(|(name, v)| part(name, v)));
+            }
+            let (effort, line): (Vec<_>, Vec<_>) =
+                shown.into_iter().partition(|(name, _)| *name == "Effort");
+            col()
+                .w_full()
+                .gap(space::S2)
+                .child(
+                    row()
+                        .w_full()
+                        .gap(16.0)
+                        .items_start()
+                        .children(line.into_iter().map(|(name, v)| {
+                            let grow = if name == "Model" { 2.0 } else { 1.0 };
+                            part(name, v).grow(grow).min_w(0.0)
+                        }))
+                        .child(
+                            text(attn_ui::icon::CARET_DOWN)
+                                .font(font)
+                                .color(tokens.text_tertiary),
+                        ),
+                )
+                .children(effort.into_iter().map(|(name, v)| {
+                    part(name, v)
+                        .w_full()
+                        .pt(space::S2)
+                        .border_sides([1.0, 0.0, 0.0, 0.0], tokens.border_subtle)
                 }))
         })
         .expanded(open)

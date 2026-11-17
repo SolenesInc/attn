@@ -18,7 +18,8 @@ use std::rc::Rc;
 
 use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
 
 pub use model::AgentState;
@@ -387,9 +388,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             let row = match line {
                 Line::Desktop(desktop) => {
-                    let close = rune::row()
-                        .key(format!("{key}.controls"))
-                        .group_opacity(0.0, 1.0)
+                    let close = overlaid_controls(&key, keys.is_some(), t)
                         .child(rename_desktop_button(&key, desktop, t))
                         .child(close_desktop_button(&key, desktop, t));
                     desktop_row(key.clone(), desktop, keys.clone(), t)
@@ -869,11 +868,39 @@ fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
         )
         .child(
             text(tile.word())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary),
+                .font(type_::BADGE)
+                .color(t.text_dimmed)
+                .border(1.0, t.border)
+                .radius(3.0)
+                .px(3.0),
         )
-        .children((tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile, t)))
-        .child(close_tile_button(&key, tile, t))
+        .hover_group()
+        .child(
+            overlaid_controls(&key, false, t)
+                .children(
+                    (tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile, t)),
+                )
+                .child(close_tile_button(&key, tile, t)),
+        )
+}
+
+/// A row's hover controls, laid over its right end as the Tauri app's `.session-actions`
+/// and `.desktop-actions` are, so the row keeps its trailing hint or tag where it would be
+/// without them, and only hides what they cover.
+fn overlaid_controls(row_key: &str, beside_keys: bool, t: &Tokens) -> El {
+    rune::row()
+        .key(format!("{row_key}.controls"))
+        .group_opacity(0.0, 1.0)
+        .pin(
+            None,
+            Some(0.0),
+            Some(if beside_keys { 28.0 } else { 4.0 }),
+            Some(0.0),
+        )
+        .items_center()
+        .gap(2.0)
+        .pl(6.0)
+        .fill(t.bg_elevated)
 }
 
 fn close_tile_button(row_key: &str, tile: &TileRow, t: &Tokens) -> El {

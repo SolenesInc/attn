@@ -3,7 +3,8 @@
 //! panel does in the Tauri editor.
 
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, TextInput};
 

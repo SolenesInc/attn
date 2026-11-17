@@ -7,7 +7,8 @@ use attn_protocol::{
     SetSettingMessage,
 };
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use attn_ui::type_;
+use rune::tok::space;
 use rune::{El, Tx, row, text};
 
 use super::nav::Note;
