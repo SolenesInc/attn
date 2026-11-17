@@ -482,6 +482,56 @@ fn a_zone_the_user_types_is_previewed_and_saved_and_one_the_daemon_refuses_holds
     assert!(is(&world, &key("save"), "disabled"));
 }
 
+fn suggested_zones(world: &World) -> Vec<String> {
+    let suggestions = format!("{}-content", key("time-zones"));
+    if !has(world, &suggestions) {
+        return Vec::new();
+    }
+    world
+        .screen()
+        .descendants(Target::key(suggestions))
+        .into_iter()
+        .filter(|n| n.role == "list-box-option")
+        .filter_map(|n| n.name)
+        .collect()
+}
+
+#[test]
+fn typing_part_of_a_zone_suggests_its_full_name_and_choosing_it_sets_the_schedule_s_zone() {
+    let mut world = open_schedule("0 9 * * 1-5");
+    fill(&mut world, "time-zone", "stockh");
+    assert_eq!(suggested_zones(&world), ["Europe/Stockholm"]);
+
+    world.gesture(|app| app.click(Target::role("list-box-option").name("Europe/Stockholm")));
+    assert_eq!(value(&world, "time-zone"), "Europe/Stockholm");
+    assert!(suggested_zones(&world).is_empty());
+    assert_eq!(last_preview(&world)["time_zone"], "Europe/Stockholm");
+    press(&mut world, "save");
+    assert_eq!(
+        applied(&world)[0].0["trigger"]["schedule"]["time_zone"],
+        "Europe/Stockholm"
+    );
+}
+
+#[test]
+fn the_arrow_keys_walk_the_suggested_zones_return_chooses_one_and_escape_hides_them() {
+    let mut world = open_schedule("0 9 * * 1-5");
+    fill(&mut world, "time-zone", "america/new_");
+    assert_eq!(suggested_zones(&world), ["America/New_York"]);
+    world.gesture(|app| {
+        app.press("down");
+        app.press("enter");
+    });
+    assert_eq!(value(&world, "time-zone"), "America/New_York");
+    assert!(suggested_zones(&world).is_empty());
+
+    world.gesture(|app| app.press("down"));
+    assert_eq!(suggested_zones(&world), ["America/New_York"]);
+    world.gesture(|app| app.press("escape"));
+    assert!(suggested_zones(&world).is_empty());
+    assert!(has(&world, &key("time-zone")));
+}
+
 fn refuse_previews(daemon: &Daemon) {
     daemon.on("automation_schedule_preview", |_| {
         message(AutomationSchedulePreviewResultMessage {

@@ -2,18 +2,21 @@ use std::rc::Rc;
 
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx, col, row, text};
 use rune_kit::{
-    Button, ButtonVariant, Checkbox, ControlSize, SegmentedControl, Select, TextArea, TextInput,
+    Button, ButtonVariant, Checkbox, ControlSize, PopupItem, PopupList, SegmentedControl, Select,
+    TextArea, TextInput,
 };
 
 use super::model::{CatchUp, Continuity, Field, Location, Trigger};
-use super::{Form, KEY, Load, field_key, form, form_mut};
+use super::{Form, KEY, Load, ZoneSuggestions, field_key, form, form_mut};
 use crate::State;
 use crate::automations::schedule::{ALL_DAYS, Friendly, Tab, Unit, WEEKDAYS};
 use crate::settings::{Route, RouteHarness, RouteTarget, Rules};
 
 pub(super) const DELETE: &str = "automations.form.delete";
+pub(super) const TIME_ZONE: &str = "automations.form.time-zone";
+const TIME_ZONES: &str = "automations.form.time-zones";
 const AUTOMATION_HARNESSES: [&str; 2] = ["codex", "claude"];
 const MINUTE_STEPS: [u32; 7] = [1, 2, 5, 10, 15, 20, 30];
 const HOUR_STEPS: [u32; 7] = [1, 2, 3, 4, 6, 8, 12];
@@ -1074,13 +1077,80 @@ fn choices(schedule: &Friendly) -> Vec<Choice> {
     }
 }
 
-/// The open schedule list over the window, when one is open.
+fn zone_option_key(zone: &str) -> String {
+    format!("{TIME_ZONES}-option-{zone}")
+}
+
+fn active_zone(f: &Form) -> Option<&'static str> {
+    let ZoneSuggestions::Shown { active: Some(i) } = f.zone_suggestions else {
+        return None;
+    };
+    super::zones_matching(&f.time_zone.text).get(i).copied()
+}
+
+/// Down and Up walk the suggestions, looping, Return chooses the highlighted one and Escape
+/// hides them, as a datalist's keys do.
+fn zone_keys(state: &mut State, ev: &KeyEvent, _: &mut Tx) -> bool {
+    let Some(f) = form_mut(state) else {
+        return false;
+    };
+    let count = super::zones_matching(&f.time_zone.text).len();
+    let active = match f.zone_suggestions {
+        ZoneSuggestions::Shown { active } => active,
+        ZoneSuggestions::Hidden => None,
+    };
+    let shown = f.zone_suggestions != ZoneSuggestions::Hidden;
+    let step = match ev.key {
+        Key::Down if count > 0 => Some(active.map_or(0, |i| (i + 1) % count)),
+        Key::Up if shown && count > 0 => {
+            Some(active.map_or(count - 1, |i| (i + count - 1) % count))
+        }
+        Key::Escape if shown && count > 0 => None,
+        Key::Enter => {
+            let Some(zone) = active_zone(f) else {
+                return false;
+            };
+            super::choose_zone(state, zone);
+            return true;
+        }
+        _ => return false,
+    };
+    f.zone_suggestions = match step {
+        Some(i) => ZoneSuggestions::Shown { active: Some(i) },
+        None => ZoneSuggestions::Hidden,
+    };
+    true
+}
+
+fn zone_suggestions(f: &Form, t: &Tokens, layers: &mut Vec<El>) {
+    let ZoneSuggestions::Shown { active } = f.zone_suggestions else {
+        return;
+    };
+    let zones = super::zones_matching(&f.time_zone.text);
+    if zones.is_empty() {
+        return;
+    }
+    PopupList::new(TIME_ZONES, TIME_ZONE)
+        .label("Time zones")
+        .side(Side::Bottom)
+        .align(Align::End)
+        .items(zones.iter().map(|zone| PopupItem::new(*zone, *zone)))
+        .active(active)
+        .on_active(|state: &mut State, i| {
+            edit_of(state).zone_suggestions = ZoneSuggestions::Shown { active: Some(i) }
+        })
+        .on_choose(|state: &mut State, zone: &str, _: &mut Tx| super::choose_zone(state, zone))
+        .build(kit(t), layers);
+}
+
+/// The open schedule list or the time zone suggestions over the window, when one is open.
 pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(f) = form(state) else { return };
     if state.window.layer.is_none() {
         crate::settings::route_overlay(state, t, layers);
         crate::launch_desktop::overlay(state, t, layers);
     }
+    zone_suggestions(f, t, layers);
     let Some(open) = &f.open_select else { return };
     let Some(schedule) = f.schedule().1 else {
         return;
@@ -1290,10 +1360,15 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
             )
             .child(
                 TextInput::new(&f.time_zone)
-                    .key(key("time-zone"))
+                    .key(TIME_ZONE)
                     .label("Time zone")
                     .spellcheck(false)
+                    .active_descendant(active_zone(f).map(zone_option_key))
                     .on_edit(|s: &mut State| &mut edit_of(s).time_zone)
+                    .on_change(|s: &mut State, _: &mut Tx| {
+                        edit_of(s).zone_suggestions = ZoneSuggestions::Shown { active: None };
+                    })
+                    .on_key(zone_keys)
                     .build(kit(t))
                     .w(200.0),
             ),

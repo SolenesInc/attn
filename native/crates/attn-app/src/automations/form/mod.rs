@@ -6,6 +6,7 @@ pub(crate) mod model;
 mod view;
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use attn_protocol::{
     AutomationApplyMessage, AutomationApplyResultMessage, AutomationDefinitionGetMessage,
@@ -89,8 +90,19 @@ pub(crate) struct Form {
     pub(crate) replaced: Option<String>,
     pub(crate) preview: Preview,
     pub(crate) open_select: Option<String>,
+    pub(crate) zone_suggestions: ZoneSuggestions,
     focused: Option<String>,
     epoch: u64,
+}
+
+/// The zones listed under the time zone field while the user types in it, as the Tauri form's
+/// datalist lists them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ZoneSuggestions {
+    #[default]
+    Hidden,
+    /// `active`: the row the arrow keys highlight, by its place among the matches.
+    Shown { active: Option<usize> },
 }
 
 pub(crate) fn field_key(field: Field) -> String {
@@ -145,6 +157,45 @@ fn local_zone() -> String {
         .unwrap_or_else(|| "UTC".into())
 }
 
+/// The IANA zones the system's tz database names, UTC first, as `Intl.supportedValuesOf`
+/// gives the Tauri form.
+fn zones() -> &'static [String] {
+    static ZONES: OnceLock<Vec<String>> = OnceLock::new();
+    ZONES.get_or_init(|| {
+        let table = std::fs::read_to_string("/usr/share/zoneinfo/zone.tab").unwrap_or_default();
+        let mut zones: Vec<String> = table
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .filter_map(|line| line.split('\t').nth(2))
+            .map(str::to_owned)
+            .collect();
+        zones.sort();
+        zones.insert(0, "UTC".into());
+        zones
+    })
+}
+
+/// The zones whose name holds `typed`, ignoring case, as a datalist matches; none until
+/// something is typed.
+pub(crate) fn zones_matching(typed: &str) -> Vec<&'static str> {
+    let typed = typed.trim().to_lowercase();
+    if typed.is_empty() {
+        return Vec::new();
+    }
+    zones()
+        .iter()
+        .map(String::as_str)
+        .filter(|zone| zone.to_lowercase().contains(&typed))
+        .collect()
+}
+
+pub(crate) fn choose_zone(state: &mut State, zone: &str) {
+    if let Some(f) = form_mut(state) {
+        f.time_zone.replace_text(zone);
+        f.zone_suggestions = ZoneSuggestions::Hidden;
+    }
+}
+
 impl Form {
     fn new(id: Option<i64>, profile: String) -> Form {
         let mut form = Form {
@@ -190,6 +241,7 @@ impl Form {
             replaced: None,
             preview: Preview::default(),
             open_select: None,
+            zone_suggestions: ZoneSuggestions::Hidden,
             focused: None,
             epoch: 0,
         };
@@ -666,6 +718,12 @@ pub(crate) fn follow_focus(state: &mut State, tx: &mut Tx) -> bool {
         let left = std::mem::replace(&mut f.focused, focused.clone());
         if let Some(which) = left.as_deref().and_then(field_of_key) {
             f.check(which);
+            changed = true;
+        }
+        if focused.as_deref() != Some(view::TIME_ZONE)
+            && f.zone_suggestions != ZoneSuggestions::Hidden
+        {
+            f.zone_suggestions = ZoneSuggestions::Hidden;
             changed = true;
         }
         let stays = matches!(focused.as_deref(), Some(view::DELETE | DRAWER));
