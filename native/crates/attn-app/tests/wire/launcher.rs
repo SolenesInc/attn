@@ -532,6 +532,32 @@ fn tab_on_a_typed_checkout_opens_its_where_list_and_backspace_returns_to_the_pat
     }
 }
 
+/// Tauri's `stepBack`: each Escape takes one step, the Where list first, then the typed text,
+/// and the dialog last, so a typed path takes three presses and a recent two.
+#[test]
+fn escape_steps_back_from_the_where_list_through_the_typed_path_and_then_closes() {
+    for typed in [Some(REPO), None] {
+        let mut world = open("main_repo");
+        if let Some(path) = typed {
+            type_path(&mut world, "new-session", path);
+        }
+        open_where(&mut world);
+
+        press(&mut world, Key::Escape);
+        assert!(!where_shows(&world), "{typed:?}");
+        assert_eq!(field(&world, "new-session"), typed.unwrap_or_default());
+        if typed.is_some() {
+            press(&mut world, Key::Escape);
+            assert_eq!(field(&world, "new-session"), "");
+        }
+        assert!(dialog_open(&world), "{typed:?}");
+
+        press(&mut world, Key::Escape);
+        assert!(!dialog_open(&world), "{typed:?}");
+        rest(&mut world);
+    }
+}
+
 #[test]
 fn a_named_worktree_starts_from_the_default_or_the_current_branch() {
     for (current, default_branch, from) in [

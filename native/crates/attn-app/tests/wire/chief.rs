@@ -1356,3 +1356,26 @@ fn home_shows_the_chief_slot_and_no_chief_of_staff_card() {
                     .is_some_and(|k| k.contains("chief-of-staff")))
     );
 }
+
+#[test]
+fn on_a_first_launch_the_tour_keeps_the_first_setup_away_and_escape_reaches_the_new_agent_launcher()
+{
+    let mut first = initial(true, chief(false), Vec::new());
+    first
+        .settings
+        .as_mut()
+        .expect("settings")
+        .insert("new_session_launcher_enabled".into(), "true".into());
+    let mut world = World::start_with_prefs(daemon(first), rune::prefs::Prefs::memory());
+    world.settle();
+    assert_eq!(focused(&world).as_deref(), Some("whats-new.primary"));
+    assert!(!shows(&world, SETUP));
+
+    dispatch(&mut world, Action::SessionNew);
+    assert_eq!(focused(&world).as_deref(), Some("new-session.path.field"));
+    assert!(!shows(&world, SETUP));
+
+    press(&mut world, Key::Escape);
+    assert!(!shows(&world, "new-session"));
+    assert!(!shows(&world, SETUP));
+}

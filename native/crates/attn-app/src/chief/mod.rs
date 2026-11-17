@@ -387,8 +387,9 @@ pub(crate) fn poll(state: &mut State, tx: &mut Tx) -> bool {
         && !by_user
         && state.window.chief.automatic.as_deref() != Some(key.as_str())
     {
-        let quiet =
-            state.facts.desktops.iter().all(|d| d.panes.is_empty()) && tx.focused().is_none();
+        let quiet = state.facts.desktops.iter().all(|d| d.panes.is_empty())
+            && state.window.layer.is_none()
+            && tx.focused().is_none();
         if quiet {
             state.window.chief.automatic = Some(key);
         } else {

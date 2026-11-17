@@ -358,6 +358,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     }
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
+    let greeted = whats_new::greet(state, tx);
     let settings =
         settings::poll(state, now, tx) | crew::poll(state, now, tx) | chief::poll(state, tx);
     let updating = update_run::poll(state, now, tx)
@@ -366,7 +367,6 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | attention::poll(state, now);
     let automated = automations::poll(state, now, tx);
     let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);
-    let greeted = whats_new::greet(state, tx);
     let reported = diagnostic_report::poll(state, now, tx);
     let expired = shell::expire(state, now, tx) || expired;
     let browsed_pages = browser::follow(state, tx);
