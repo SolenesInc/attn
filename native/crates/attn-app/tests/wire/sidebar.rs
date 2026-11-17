@@ -1175,3 +1175,57 @@ fn a_press_on_an_agent_row_that_barely_moves_opens_the_agent() {
     assert_eq!(shown.len(), 1, "{shown:?}");
     assert_eq!(shown[0]["session_id"], "t1");
 }
+
+fn many_desktops(n: usize) -> InitialStateMessage {
+    let (sessions, desktops) = (0..n)
+        .map(|i| {
+            let (id, agent) = (format!("d{i:02}"), format!("a{i:02}"));
+            let pane = pane(&id, &format!("p{i}"), &agent);
+            (session(&agent, "idle"), desktop(&id, &id, "", vec![pane]))
+        })
+        .unzip();
+    state(sessions, desktops)
+}
+
+#[test]
+fn rows_below_the_dock_scroll_into_view_by_the_wheel_and_by_an_automation_press() {
+    let mut world = World::start(Daemon::scripted().state(many_desktops(14)));
+    world.resize((1200.0, 800.0));
+    world.open_desktop();
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key("sidebar.scroll"))
+        .expect("the sidebar scrolls");
+    let below = |world: &World, key: &str| {
+        let [_, top, _, height] = world.screen().bounds(Target::key(key)).expect("built");
+        top + height - (y + h)
+    };
+    assert!(
+        below(&world, "sidebar.session.a13") > 0.0,
+        "the last row starts under the Dock"
+    );
+
+    world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, -2000.0));
+    world.settle();
+    assert!(
+        below(&world, "sidebar.session.a13") <= 0.5,
+        "the wheel brings the last row into view"
+    );
+
+    world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, 2000.0));
+    world.settle();
+    assert!(
+        below(&world, "sidebar.session.a13") > 0.0,
+        "the wheel takes it back under the Dock"
+    );
+    world
+        .automate(
+            "press",
+            serde_json::json!({"target": {"key": "sidebar.session.a13"}}),
+        )
+        .expect("the press scrolls the row into view and lands on it");
+    assert!(below(&world, "sidebar.session.a13") <= 0.5);
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0]["session_id"], "a13");
+}
