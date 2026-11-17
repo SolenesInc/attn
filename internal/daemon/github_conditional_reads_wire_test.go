@@ -2,8 +2,12 @@ package daemon_test
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/github/mockserver"
 	"github.com/victorarias/attn/internal/protocol"
@@ -112,4 +116,45 @@ func onlyStatus(statuses []int, want int) bool {
 		}
 	}
 	return len(statuses) > 0
+}
+
+func TestAHostKeepsItsReadsAndSpendWindowAcrossTheHostRefresh(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	gh.Config.SetKeepAlivesEnabled(false)
+	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Add checkout", Role: "author"})
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+	t.Setenv("ATTN_MOCK_GH_HOST", "github.test")
+
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		firstWindowEnd := time.Now().Add(time.Hour).Truncate(time.Second)
+		gh.StartRateLimitWindow(firstWindowEnd)
+		refreshPRs(t, app)
+		checkoutID := prNumbered(t, queryPRs(t, w.Client(), ""), 1).ID
+		fetchPRDetails(t, app, checkoutID)
+		synctest.Wait()
+
+		beforeHostRefresh := len(gh.Requests())
+		w.advance(5*time.Minute + time.Second)
+		gh.StartRateLimitWindow(firstWindowEnd.Add(time.Hour))
+		fetchPRDetails(t, app, checkoutID)
+		synctest.Wait()
+
+		statuses := pullRequestReadStatuses(gh.Requests()[beforeHostRefresh:])
+		for _, path := range []string{"/repos/acme/shop/pulls/1", "/repos/acme/shop/pulls/1/reviews"} {
+			if !onlyStatus(statuses[path], http.StatusNotModified) {
+				t.Errorf("reads of the unchanged %s after the host refresh answered %v, want only 304", path, statuses[path])
+			}
+		}
+		log, err := os.ReadFile(filepath.Join(w.Dir, "daemon.log"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		closed := "GitHub spend: host=github.test resource=core window_end=" + firstWindowEnd.Format(time.RFC3339)
+		if !strings.Contains(string(log), closed) {
+			t.Errorf("daemon.log has no spend line for the window that closed after the host refresh; want one starting %q", closed)
+		}
+	})
 }

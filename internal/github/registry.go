@@ -18,10 +18,19 @@ func NewClientRegistry() *ClientRegistry {
 	return &ClientRegistry{clients: make(map[string]*Client)}
 }
 
-func (r *ClientRegistry) Register(host string, client *Client) {
+func (r *ClientRegistry) Ensure(stopPacing context.Context, logf func(format string, args ...any), host, apiURL, token string) error {
+	apiURL = resolveAPIURL(host, apiURL)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if existing, ok := r.clients[host]; ok && existing.baseURL == apiURL && existing.token == token {
+		return nil
+	}
+	client, err := NewClientForHost(stopPacing, logf, host, apiURL, token)
+	if err != nil {
+		return err
+	}
 	r.clients[host] = client
+	return nil
 }
 
 func (r *ClientRegistry) Remove(host string) {
@@ -73,13 +82,17 @@ func (r *ClientRegistry) FetchAllPRs() ([]*protocol.PR, error) {
 }
 
 func NewClientForHost(stopPacing context.Context, logf func(format string, args ...any), host, apiURL, token string) (*Client, error) {
-	if apiURL == "" {
-		apiURL = mapHostToAPIURL(host)
-	}
 	if token == "" {
 		return nil, ErrNoToken
 	}
-	return newClientWithToken(stopPacing, logf, host, apiURL, token)
+	return newClientWithToken(stopPacing, logf, host, resolveAPIURL(host, apiURL), token)
+}
+
+func resolveAPIURL(host, apiURL string) string {
+	if apiURL == "" {
+		return mapHostToAPIURL(host)
+	}
+	return apiURL
 }
 
 func (r *ClientRegistry) snapshotClients() map[string]*Client {

@@ -2604,12 +2604,10 @@ func (d *Daemon) discoverGitHubHosts(cliUsable bool) error {
 			d.logf("GitHub token fetch failed for %s: %v", hostInfo.Host, err)
 			continue
 		}
-		client, err := github.NewClientForHost(d.life.Context(), d.logf, hostInfo.Host, hostInfo.APIURL, token)
-		if err != nil {
+		if err := d.registerGitHubClient(hostInfo.Host, hostInfo.APIURL, token); err != nil {
 			d.logf("GitHub client create failed for %s: %v", hostInfo.Host, err)
 			continue
 		}
-		d.registerGitHubClient(hostInfo.Host, client)
 		discovered[hostInfo.Host] = true
 		pausepoint.At(pausepoint.DaemonGitHubHostRegistered)
 	}
@@ -2654,9 +2652,12 @@ func (d *Daemon) forgetPRsOfHostsOtherThan(hosts []string) {
 	})
 }
 
-func (d *Daemon) registerGitHubClient(host string, client *github.Client) {
+func (d *Daemon) registerGitHubClient(host, apiURL, token string) error {
+	if err := d.ghRegistry.Ensure(d.life.Context(), d.logf, host, apiURL, token); err != nil {
+		return err
+	}
 	d.store.RememberGitHubHost(host)
-	d.ghRegistry.Register(host, client)
+	return nil
 }
 
 func (d *Daemon) gitHubHosts() []string {
@@ -2719,15 +2720,14 @@ func (d *Daemon) registerMockClient(mockURL string) error {
 		host = "mock.github.local"
 	}
 
-	client, err := github.NewClientForHost(d.life.Context(), d.logf, host, mockURL, token)
-	if err != nil {
+	for _, existing := range d.ghRegistry.Hosts() {
+		if existing != host {
+			d.ghRegistry.Remove(existing)
+		}
+	}
+	if err := d.registerGitHubClient(host, mockURL, token); err != nil {
 		return err
 	}
-
-	for _, existing := range d.ghRegistry.Hosts() {
-		d.ghRegistry.Remove(existing)
-	}
-	d.registerGitHubClient(host, client)
 	d.logf("Mock GitHub client registered for %s (%s)", host, mockURL)
 	return nil
 }
