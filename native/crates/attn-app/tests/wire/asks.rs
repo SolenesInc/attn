@@ -8,6 +8,7 @@ use attn_protocol::{
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
+    SeedStandbyView, StandbyTender,
 };
 use attn_testkit::{Daemon, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -694,6 +695,55 @@ fn an_ask_about_a_seed_nobody_live_tends_waits_for_its_next_tender() {
     );
     assert!(!has(&world, "asks.open-agent"));
     assert!(!has(&world, "asks.snooze"));
+}
+
+#[test]
+fn an_ask_whose_tender_is_on_standby_names_it_and_says_whether_an_answer_resumes_it() {
+    for (resume, blocked, says) in [
+        (None, None, "Your answer resumes it."),
+        (Some("any"), None, "Your answer resumes it."),
+        (
+            Some("watches"),
+            None,
+            "Your answer waits until a reminder or pull request update resumes it.",
+        ),
+        (
+            Some("off"),
+            None,
+            "Seed mail does not resume it, so your answer waits for it.",
+        ),
+        (
+            None,
+            Some("the folder is gone"),
+            "Resume blocked: the folder is gone. Your answer waits for it.",
+        ),
+    ] {
+        let mut seed = migration(Some("delegate"));
+        seed.standby = Some(SeedStandbyView {
+            note: "Waits for the user".into(),
+            resume_blocked: blocked.map(str::to_owned),
+            tender: Some(StandbyTender {
+                session_id: "delegate".into(),
+                label: "Migrate the cache".into(),
+                agent: "claude".into(),
+                ..StandbyTender::default()
+            }),
+            ..SeedStandbyView::default()
+        });
+        let mut state = one_desktop(vec![api_working()]);
+        state.seeds = Some(vec![seed]);
+        let settings: Vec<(&str, &str)> = resume
+            .map(|value| ("garden.tender_resume", value))
+            .into_iter()
+            .collect();
+        let mut world = start_on(state, vec![landing()], &settings);
+        open_drawer(&mut world);
+
+        assert_eq!(name(&world, "asks.from"), "Migrate the cache · on standby");
+        assert_eq!(name(&world, "asks.resumes"), says, "{resume:?} {blocked:?}");
+        assert!(!has(&world, "asks.open-agent"));
+        assert!(!has(&world, "asks.snooze"));
+    }
 }
 
 #[test]

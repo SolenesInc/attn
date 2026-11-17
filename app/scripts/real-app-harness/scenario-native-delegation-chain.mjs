@@ -27,6 +27,7 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerFailureEvidence('native_screenshot', () => driver.screenshot(path.join(runner.runDir, 'failure-native.png')));
 
 const created = [];
+const seedOf = new Map();
 const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`));
 
 function preferences(cmd, prefs) {
@@ -85,7 +86,12 @@ try {
     fs.mkdirSync(runner.sessionDir, { recursive: true });
     writeMockAgentFixture(runner.sessionDir, {
       name: 'Role identity check',
-      turns: [{ includes: 'role identity', actions: [{ type: 'reply', text: 'Ready to inspect the delegation chain.', state: 'idle' }] }],
+      turns: [
+        { includes: 'go on standby', actions: [
+          { type: 'capture', name: 'seed', pattern: '(s-[a-z0-9]+)' },
+          { type: 'attn', args: ['seed', 'standby', '{{seed}}', '-m', 'Merge once CI is green'] }] },
+        { includes: 'role identity', actions: [{ type: 'reply', text: 'Ready to inspect the delegation chain.', state: 'idle' }] },
+      ],
     });
     const before = observer.currentDesktopId();
     if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
@@ -105,6 +111,7 @@ try {
         '--brief', 'Inspect role identity. Wait for direction.', '--cwd', runner.sessionDir, '--name', name);
       const result = JSON.parse(output.slice(output.indexOf('{')));
       created.push(result.session_id);
+      seedOf.set(result.session_id, result.seed_id);
       await observer.waitFor(() => paneOf(result.session_id), `${name} placed`, 30_000);
       return result.session_id;
     };
@@ -165,6 +172,29 @@ try {
     await driver.pressKey('Enter');
     await driver.waitFor({ key: card }, { gone: true });
     await driver.state('window', { expect: { on_screen: child }, timeoutMs: 15_000 });
+  });
+
+  await runner.step('a_delegate_on_standby_stays_in_the_chain_and_opens_its_seed', async () => {
+    const seed = seedOf.get(child);
+    observer.send({ cmd: 'pty_input', id: observer.terminalOf(child), data: `go on standby ${seed}\r`, source: 'automation' });
+    await observer.waitFor(() => !observer.getSession(child), 'the delegate closes on standby', 30_000);
+    await driver.click({ key: `sidebar.session.${builder}` });
+    await driver.state('window', { expect: { on_screen: builder }, timeoutMs: 15_000 });
+    const card = `sidebar.session.${builder}.chain.popover`;
+    await driver.click({ key: `sidebar.session.${builder}.chain` });
+    await driver.waitFor({ key: card });
+    const dormant = 'Check keyboard flow · on standby · Merge once CI is green';
+    const dispatcher = (await chainRows(card)).find((r) => /\.agent\.\d+$/.test(r.key) && r.name.startsWith('Build chain navigator'));
+    const under = Number(dispatcher.key.split('.').pop()) + 1;
+    await driver.waitFor({ key: `${card}.agent.${under}`, name: dormant }, { timeoutMs: 15_000 });
+    await shot('standby-chain');
+    await driver.pressKey('Down');
+    await picked(card, 'Check keyboard flow · on standby');
+    await driver.pressKey('Enter');
+    await driver.waitFor({ key: card }, { gone: true });
+    await observer.waitFor(() => JSON.stringify(observer.desktopOf(builder) ?? {}).includes(seed),
+      'Enter opens the seed beside its dispatcher', 15_000);
+    await shot('standby-seed-opened');
   });
 
   await runner.step('a_deleted_role_keeps_the_agents_launched_with_it', async () => {

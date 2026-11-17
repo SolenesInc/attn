@@ -654,7 +654,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
-        if crate::desktop::shows_chain(session, &state.facts.sessions) {
+        if crate::desktop::shows_chain(session, &state.facts) {
             commands.push(
                 Command::new(
                     "show-delegation-chain",

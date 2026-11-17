@@ -308,6 +308,12 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
         .children(item.holder.map(|s| open_agent(s, &item.from, t)))
         .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)));
     let mut blocks = vec![Block::custom("asks.from.block", from)];
+    if let Some(standby) = item.standby.as_ref().filter(|_| ask.reply.is_none()) {
+        blocks.push(Block::custom(
+            "asks.resumes.block",
+            words(standby.answer.clone(), Type::Small, t.text_secondary).key("asks.resumes"),
+        ));
+    }
     if let Some(seed) = &ask.seed_id {
         let id = seed.clone();
         blocks.push(Block::custom(
@@ -370,10 +376,13 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
             ),
         });
     }
-    let note_placeholder = if item.holder.is_some() || ask.seed_id.is_none() {
-        format!("Anything else for {}?", item.from)
-    } else {
-        "Anything else for its next tender?".to_owned()
+    let note_placeholder = match (item.holder, &item.standby, &ask.seed_id) {
+        (None, Some(standby), _) => format!(
+            "Anything else for {}?",
+            crate::desktop::chain::dormant_name(standby.tender)
+        ),
+        (None, None, Some(_)) => "Anything else for its next tender?".to_owned(),
+        _ => format!("Anything else for {}?", item.from),
     };
     match &ask.reply {
         Some(reply) => blocks.extend(reply.note.as_ref().filter(|n| !n.is_empty()).map(|n| {
