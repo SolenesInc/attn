@@ -1,10 +1,10 @@
 use attn_ui::colors::mix_srgb;
 use attn_ui::keycap;
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, glyph};
+use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph};
 use rune::tok::space;
-use rune::{El, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant, Dialog, TextInput};
+use rune::{El, TextStyle, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
 use super::{Catalog, Choice, Offer, Opened, Picker, Which, agents, listed, numbered, paths};
@@ -869,37 +869,42 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
     let setup = state.window.launching.worktree.as_ref()?;
     let k = attn_ui::kit(t);
     if let (Some(error), true) = (&setup.failed, setup.opened) {
-        let dismiss = link("Dismiss", type_::BODY, t, |state, _| {
-            state.window.launching.worktree = None
-        })
-        .key("worktree-setup.dismiss");
-        let failure = col()
-            .key("worktree-setup.error")
-            .role("alert")
-            .label(format!("Create failed: {error}"))
-            .child(text("Create failed").font(type_::BODY).color(t.error))
-            .child(
-                text(error.clone())
-                    .font(type_::BODY)
-                    .color(t.text_secondary),
-            );
         let mut layers = Vec::new();
-        Dialog::new("worktree-setup", "Session was not created")
-            .description("Action needed")
-            .open(true)
-            .fit()
-            .width(480.0)
-            .on_close(|state: &mut State| state.window.launching.worktree = None)
-            .child(
-                col()
-                    .w_full()
-                    .gap(space::S2)
-                    .px(16.0)
-                    .pb(16.0)
-                    .child(failure)
-                    .child(dismiss),
-            )
-            .build(k, &mut layers);
+        let ink = t.text_primary;
+        Dialog::new(
+            "worktree-setup",
+            "Session was not created",
+            DialogFrame::progress(t),
+        )
+        .subtitle(setup.subject.clone())
+        .lead(not_created(setup, error, t))
+        .width(560.0)
+        .on_close(|state: &mut State| state.window.launching.worktree = None)
+        .child(
+            row()
+                .w_full()
+                .justify_end()
+                .px(20.0)
+                .pt(18.0)
+                .pb(20.0)
+                .child(
+                    Button::new("Dismiss")
+                        .variant(ButtonVariant::Ghost)
+                        .on_press(|state: &mut State| state.window.launching.worktree = None)
+                        .label_with(move |_, _| {
+                            text("Dismiss").font(TextStyle::new(12.0, 650.0)).color(ink)
+                        })
+                        .build(k)
+                        .key("worktree-setup.dismiss")
+                        .h(34.0)
+                        .px(13.0)
+                        .radius(6.0)
+                        .fill(t.border)
+                        .border(1.0, t.border_hover)
+                        .hover(t.border_hover),
+                ),
+        )
+        .build(t, &mut layers);
         return Some(
             el().key("worktree-setup.layer")
                 .absolute(0.0, 0.0)
@@ -1034,6 +1039,93 @@ fn footer(hints: &[(&str, &str)], t: &Tokens) -> El {
                         .a11y_hidden(),
                 )
         }))
+}
+
+/// What `.cleanup-content` says of a worktree that could not be made: the failed status pin
+/// beside the kicker, the heading, the branch and folder, and git's error.
+fn not_created(setup: &repo::Setup, error: &str, t: &Tokens) -> El {
+    let folder = match &setup.step {
+        repo::Step::SyncingRepo(path) | repo::Step::CreatingWorktree(path) => {
+            Some(paths::tildify(path))
+        }
+        repo::Step::FetchingDetails => None,
+    };
+    let pin = el()
+        .w(10.0)
+        .min_h(72.0)
+        .radius(5.0)
+        .fill(t.error)
+        .box_shadow(rune::Shadow {
+            blur: 28.0,
+            color: t.error.alpha(0.32),
+            ..rune::Shadow::default()
+        });
+    let failure = col()
+        .key("worktree-setup.error")
+        .role("alert")
+        .label(format!("Create failed: {error}"))
+        .w_full()
+        .mt(14.0)
+        .px(12.0)
+        .py(11.0)
+        .gap(8.0)
+        .radius(7.0)
+        .fill(t.error.alpha(0.09))
+        .border(1.0, t.error.alpha(0.36))
+        .child(
+            text("Create failed")
+                .font(TextStyle::new(12.0, 700.0).mono())
+                .color(t.text_primary),
+        )
+        .child(
+            text(error.to_owned())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_muted)
+                .wrap(),
+        );
+    let copy = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .child(
+            type_::upper(
+                "Action needed",
+                TextStyle::new(10.0, 700.0).mono().tracking(1.4),
+            )
+            .color(mix_srgb(t.brand, rune::Color::WHITE, 0.3))
+            .mb(7.0),
+        )
+        .child(
+            text("Session was not created")
+                .font(TextStyle::new(18.0, 650.0).lh(21.6))
+                .color(t.text_primary),
+        )
+        .child(
+            col()
+                .w_full()
+                .mt(10.0)
+                .gap(5.0)
+                .child(
+                    text(setup.subject.clone())
+                        .font(TextStyle::new(13.0, 400.0).mono())
+                        .color(t.text_primary)
+                        .single_line()
+                        .truncate(),
+                )
+                .children(folder.map(|folder| {
+                    text(folder)
+                        .font(type_::MONO_CAPTION)
+                        .color(t.text_muted)
+                        .single_line()
+                        .truncate()
+                })),
+        )
+        .child(failure);
+    row()
+        .w_full()
+        .items_start()
+        .gap(14.0)
+        .child(pin)
+        .child(copy)
 }
 
 /// A word in the accent colour that is pressed as a button named by it.

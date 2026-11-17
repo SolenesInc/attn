@@ -1314,7 +1314,11 @@ fn a_worktree_that_cannot_be_made_is_reported_once_in_the_corner_without_launchi
             shown.as_deref().is_some_and(|s| s.contains(error)),
             "{shown:?}"
         );
-        world.gesture(|app| app.click(Target::key("worktree-setup.dismiss")));
+        if error == "disk full" {
+            press(&mut world, Key::Escape);
+        } else {
+            world.gesture(|app| app.click(Target::key("worktree-setup.dismiss")));
+        }
 
         assert!(world.screen().find(Target::key("worktree-setup")).is_none());
         assert_eq!(world.daemon.sent_of("create_worktree").len(), 1);

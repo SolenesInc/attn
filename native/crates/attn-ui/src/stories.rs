@@ -1,11 +1,11 @@
 use rune::{Cx, El, Playground, Story, TextEdit, col, el};
 use rune_kit::{
-    Button, ButtonVariant, Dialog, Field, Kit, List, ListItem, Menu, MenuItem, Popover, TextField,
-    Toast, ToastRegion, Tooltip,
+    Button, ButtonVariant, Field, Kit, List, ListItem, Menu, MenuItem, Popover, TextField, Toast,
+    ToastRegion, Tooltip,
 };
 
 use crate::colors::scheme_for;
-use crate::kit;
+use crate::{Dialog, DialogFrame, kit};
 
 /// What a component story shows: one component, open where it opens, in the stage's
 /// appearance, which the playground's own switch sets.
@@ -106,15 +106,22 @@ fn menu(_: &Showcase, cx: &mut Cx<Showcase>) -> El {
 }
 
 fn dialog(s: &Showcase, cx: &mut Cx<Showcase>) -> El {
+    let t = scheme_for(None).colors(cx.system_dark()).ui;
     stage(cx, |k, layer| {
-        Dialog::new("story.dialog", "Close this session?")
-            .description("The agent stops and its terminal closes.")
+        if !s.dismissed {
+            Dialog::new(
+                "story.dialog",
+                "Close this session?",
+                DialogFrame::prompt(&t),
+            )
+            .subtitle("The agent stops and its terminal closes.")
             .child(
                 rune::row()
-                    .gap(8.0)
+                    .gap(10.0)
                     .justify_end()
                     .w_full()
-                    .padding(16.0)
+                    .px(24.0)
+                    .pb(22.0)
                     .child(Button::new("Cancel").build(k))
                     .child(
                         Button::new("Close session")
@@ -122,10 +129,9 @@ fn dialog(s: &Showcase, cx: &mut Cx<Showcase>) -> El {
                             .build(k),
                     ),
             )
-            .fit()
-            .open(!s.dismissed)
             .on_close(|s: &mut Showcase| s.dismissed = true)
-            .build(k, layer);
+            .build(&t, layer);
+        }
         el()
     })
 }

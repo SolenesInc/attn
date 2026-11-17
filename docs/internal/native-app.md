@@ -93,7 +93,8 @@ finder over the note, a popped-out tile window, the classic new-session picker, 
 in its dialog, its Where list and on an empty desktop, a new automation's form, its hour
 picker and suggested time zones, each with a row reached by an arrow key, Home
 with the Chief and a crew member in the sidebar, Manage crew on each of its
-four tabs, the command palette offering
+four tabs, naming a new desktop from its launch settings, Home's merge confirmation, the shared
+Codex restart prompt, the dialog for a worktree that could not be made, the command palette offering
 the Chief's setup, the notifications panel, also with no notifications, the PRs drawer, an
 agent's actions menu, and the other floating surfaces: a session's snooze and
 rename popovers, a tile header's usage popover and its seeds popover for one

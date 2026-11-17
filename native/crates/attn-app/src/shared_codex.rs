@@ -10,10 +10,10 @@ use attn_protocol::{
     InstallCodexUpdateMessage, RestartSharedCodexMessage, SharedCodexBlocker, SharedCodexState,
 };
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, glyph};
+use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph};
 use rune::tok::space;
-use rune::{El, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
+use rune::{El, TextStyle, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant, ControlSize};
 use serde::{Deserialize, Serialize};
 
 use crate::State;
@@ -654,7 +654,6 @@ pub(crate) fn confirm(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let (Some(confirm), Some(codex)) = (state.window.shared_codex.confirm, current(state)) else {
         return;
     };
-    let k = attn_ui::kit(t);
     let item = |key: String, name: String, detail: Option<&str>| {
         col()
             .key(key)
@@ -663,6 +662,13 @@ pub(crate) fn confirm(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 Some(detail) => format!("{name} · {detail}"),
                 None => name.clone(),
             })
+            .w_full()
+            .gap(2.0)
+            .px(10.0)
+            .py(8.0)
+            .fill(t.bg_app)
+            .border(1.0, t.border)
+            .radius(6.0)
             .child(text(name).font(type_::BODY).color(t.text_primary))
             .children(detail.map(|d| {
                 text(d.to_owned())
@@ -738,42 +744,47 @@ pub(crate) fn confirm(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         }
     };
     let close = |state: &mut State, _: &mut Tx| close_confirm(state);
-    Dialog::new(key, title)
-        .description(said)
-        .open(true)
-        .fit()
+    let listed = !items.is_empty();
+    let prompt = DialogFrame::prompt(t);
+    let frame = DialogFrame {
+        header: [22.0, 24.0, if listed { 12.0 } else { 24.0 }, 24.0],
+        subtitle: TextStyle::new(13.0, 400.0).lh(19.5),
+        subtitle_ink: t.text_secondary,
+        ..prompt
+    };
+    Dialog::new(key, title, frame)
+        .subtitle(said)
+        .width(480.0)
         .on_close_tx(close)
         .child(
             col()
                 .key(format!("{key}.list"))
                 .role("list")
-                .gap(space::S1)
-                .px(space::S3)
+                .w_full()
+                .gap(6.0)
+                .px(24.0)
+                .pb(if listed { 24.0 } else { 0.0 })
                 .children(items),
         )
-        .child(
-            row()
-                .w_full()
-                .gap(space::S2)
-                .padding(space::S3)
-                .child(row().grow(1.0))
-                .child(
-                    Button::new("Cancel")
-                        .on_press_tx(close)
-                        .build(k)
-                        .key(format!("{key}.cancel"))
-                        .autofocus(),
-                )
-                .child(
-                    Button::new(action)
-                        .variant(ButtonVariant::Submit)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| match confirm {
-                            Confirm::Restart => restart(state, true, tx),
-                            Confirm::Reload => reload_old_tiles(state, tx),
-                        })
-                        .build(k)
-                        .key(format!("{key}.confirm")),
+        .child(crate::prompt_dialog::actions(
+            crate::prompt_dialog::button(
+                Button::new("Cancel").on_press_tx(close),
+                false,
+                format!("{key}.cancel"),
+                t,
+            )
+            .autofocus(),
+            crate::prompt_dialog::button(
+                Button::new(action).on_press_tx(
+                    move |state: &mut State, tx: &mut Tx| match confirm {
+                        Confirm::Restart => restart(state, true, tx),
+                        Confirm::Reload => reload_old_tiles(state, tx),
+                    },
                 ),
-        )
-        .build(k, layers);
+                true,
+                format!("{key}.confirm"),
+                t,
+            ),
+        ))
+        .build(t, layers);
 }

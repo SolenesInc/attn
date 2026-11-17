@@ -1,7 +1,7 @@
 use attn_protocol::{Desktop, DesktopCloseMessage};
 use attn_ui::{Dialog, DialogFrame, Tokens};
-use rune::{El, Tx, row};
-use rune_kit::{Button, ButtonVariant};
+use rune::{El, Tx};
+use rune_kit::Button;
 
 use super::layout::Node;
 use crate::State;
@@ -110,7 +110,6 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     let Some(closing) = state.window.closing_desktop.as_ref() else {
         return Vec::new();
     };
-    let k = attn_ui::kit(t);
     let mut layer = Vec::new();
     Dialog::new(
         "close_desktop",
@@ -120,35 +119,21 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     .subtitle("Close this desktop and everything inside it?")
     .on_close_tx(cancel)
     .width(620.0)
-    .child(
-        row()
-            .w_full()
-            .gap(10.0)
-            .px(24.0)
-            .pb(22.0)
-            .justify_end()
-            .child(
-                Button::new("Cancel")
-                    .on_press_tx(cancel)
-                    .build(k)
-                    .key("close_desktop.cancel")
-                    .h(PROMPT_BUTTON_HEIGHT)
-                    .px(12.0)
-                    .autofocus(),
-            )
-            .child(
-                Button::new("Close desktop")
-                    .variant(ButtonVariant::Submit)
-                    .on_press_tx(confirm)
-                    .build(k)
-                    .key("close_desktop.confirm")
-                    .h(PROMPT_BUTTON_HEIGHT)
-                    .px(12.0),
-            ),
-    )
+    .child(crate::prompt_dialog::actions(
+        crate::prompt_dialog::button(
+            Button::new("Cancel").on_press_tx(cancel),
+            false,
+            "close_desktop.cancel",
+            t,
+        )
+        .autofocus(),
+        crate::prompt_dialog::button(
+            Button::new("Close desktop").on_press_tx(confirm),
+            true,
+            "close_desktop.confirm",
+            t,
+        ),
+    ))
     .build(t, &mut layer);
     layer
 }
-
-/// `.mp-button`: 7 points above and below 13 point text, inside a 1 point edge.
-const PROMPT_BUTTON_HEIGHT: f32 = 31.0;

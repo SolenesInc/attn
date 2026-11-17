@@ -384,6 +384,11 @@ fn merge_asks_first_and_squashes_on_yes() {
     assert!(world.daemon.sent_of("merge_pr").is_empty());
 
     click(&mut world, "attention.pr.a1.merge");
+    world.gesture(|app| app.key(escape()));
+    assert!(!has(&world, MERGE));
+    assert!(world.daemon.sent_of("merge_pr").is_empty());
+
+    click(&mut world, "attention.pr.a1.merge");
     click(&mut world, "attention.merge.confirm");
     assert!(!has(&world, MERGE));
     let sent = world.daemon.sent_of("merge_pr");

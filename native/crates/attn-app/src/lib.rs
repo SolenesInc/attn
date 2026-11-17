@@ -40,6 +40,7 @@ mod outpost_updates;
 mod palette;
 mod picker;
 mod profile_switcher;
+mod prompt_dialog;
 pub mod prompts;
 pub mod quick_capture;
 mod requests;

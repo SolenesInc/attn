@@ -7,10 +7,10 @@ use attn_protocol::{
     Desktop, LaunchDesktopGetMessage, LaunchDesktopKind, LaunchDesktopResultMessage,
     LaunchDesktopSetting,
 };
-use attn_ui::Tokens;
 use attn_ui::type_;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Dialog, Select, SelectAppearance, TextInput};
+use attn_ui::{Dialog, DialogFrame, Tokens};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
+use rune_kit::{Button, Select, SelectAppearance, TextInput};
 
 use crate::State;
 
@@ -348,14 +348,22 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         Some(keys) => format!("On {keys}."),
         None => "No shortcut.".to_owned(),
     };
-    Dialog::new("launch-desktop.naming", "A new desktop")
-        .open(true)
-        .width(360.0)
+    let prompt = DialogFrame::prompt(t);
+    let frame = DialogFrame {
+        header: [22.0, 24.0, 0.0, 24.0],
+        ..prompt
+    };
+    Dialog::new("launch-desktop.naming", "A new desktop", frame)
+        .width(620.0)
         .on_close_tx(cancel_name)
         .child(
             col()
-                .padding(16.0)
+                .w_full()
+                .px(24.0)
+                .pt(20.0)
+                .pb(20.0)
                 .gap(8.0)
+                .child(text("Name").font(type_::BODY).color(t.text_primary))
                 .child(
                     TextInput::new(&naming.name)
                         .key(NAME_FIELD)
@@ -385,30 +393,24 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                         .key("launch-desktop.naming.hint")
                         .label(hint)
                         .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                )
-                .child(
-                    row()
-                        .gap(8.0)
-                        .justify_end()
-                        .child(
-                            Button::new("Cancel")
-                                .variant(ButtonVariant::Neutral)
-                                .control_size(ControlSize::Small)
-                                .on_press_tx(cancel_name)
-                                .build(k)
-                                .key("launch-desktop.naming.cancel"),
-                        )
-                        .child(
-                            Button::new("Use this name")
-                                .variant(ButtonVariant::Submit)
-                                .control_size(ControlSize::Small)
-                                .disabled(empty)
-                                .on_press_tx(use_name)
-                                .build(k)
-                                .key("launch-desktop.naming.use"),
-                        ),
+                        .color(t.text_muted),
                 ),
         )
-        .build(k, layers);
+        .child(crate::prompt_dialog::actions(
+            crate::prompt_dialog::button(
+                Button::new("Cancel").on_press_tx(cancel_name),
+                false,
+                "launch-desktop.naming.cancel",
+                t,
+            ),
+            crate::prompt_dialog::button(
+                Button::new("Use this name")
+                    .disabled(empty)
+                    .on_press_tx(use_name),
+                true,
+                "launch-desktop.naming.use",
+                t,
+            ),
+        ))
+        .build(t, layers);
 }

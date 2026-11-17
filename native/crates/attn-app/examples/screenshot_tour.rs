@@ -12,17 +12,18 @@ use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
     AutomationSchedulePreviewResultMessage, BusConsumerStatus, BusStatusResultMessage,
-    CrewCharterDocument, CrewCharterGetResultMessage, CrewHandoffsGetResultMessage, CrewMember,
-    DelegationPreferences, DelegationPreferencesResultMessage, DelegationRole, Desktop,
-    DesktopPane, DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage,
-    Harness, InitialStateMessage, NotificationListResultMessage, PartyView, PhoneLink,
-    PhonesUpdatedMessage, Profile, RecentLocation, RecentLocationsResultMessage,
-    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow,
-    ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
-    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
-    SessionUsageModel, Worktree,
+    CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
+    CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
+    DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
+    DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
+    InitialStateMessage, InspectPathResultMessage, LaunchDesktopResultMessage,
+    NotificationListResultMessage, PR, PartyView, PathInspection, PhoneLink, PhonesUpdatedMessage,
+    Profile, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage,
+    RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
+    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
+    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
+    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -1377,6 +1378,14 @@ fn home(dark: bool) {
 /// Manage crew with the Chief and scout, open on `member` at `tab`: a daemon that lists Claude
 /// Code and Codex, and holds an empty charter and no handoffs.
 fn manage_crew(dark: bool, member: &str, tab: &str, name: &str) {
+    let mut world = crew_page(dark);
+    world.gesture(|app| app.click(Target::key(format!("crew.roster.{member}"))));
+    world.gesture(|app| app.click(Target::key(format!("crew.tab.{tab}"))));
+    snap(&mut world, name, dark);
+}
+
+/// Manage crew open, over a daemon that also lists the desktops a member can launch on.
+fn crew_page(dark: bool) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.crew = Some(
         crew()
@@ -1435,12 +1444,39 @@ fn manage_crew(dark: bool, member: &str, tab: &str, name: &str) {
                 member: r["member"].as_str().map(Into::into),
                 ..CrewHandoffsGetResultMessage::new()
             })
+        })
+        .on("launch_desktop_get", |r: &Request| {
+            message(LaunchDesktopResultMessage {
+                request_id: request_id(r),
+                action: "launch_desktop_get".into(),
+                success: true,
+                desktops: Some(vec![Desktop {
+                    id: DESKTOP.into(),
+                    profile_id: PROFILE.into(),
+                    name: "Work".into(),
+                    shortcut_slot: Some(1),
+                    ..Desktop::default()
+                }]),
+                ..LaunchDesktopResultMessage::new()
+            })
         });
     let mut world = start(daemon);
     run(&mut world, Action::OpenCrew);
-    world.gesture(|app| app.click(Target::key(format!("crew.roster.{member}"))));
-    world.gesture(|app| app.click(Target::key(format!("crew.tab.{tab}"))));
-    snap(&mut world, name, dark);
+    world
+}
+
+/// Naming the new desktop the Chief launches on, from its Desktop list.
+fn desktop_naming(dark: bool) {
+    let mut world = crew_page(dark);
+    world.gesture(|app| app.click(Target::key("crew.tab.launch")));
+    world.gesture(|app| app.click(Target::key("crew.launch.chief.desktop-trigger")));
+    world
+        .automate(
+            "press",
+            json!({"target": {"role": "option", "name": "A new desktop…"}}),
+        )
+        .expect("the Desktop list offers a new desktop");
+    snap(&mut world, "desktop-naming", dark);
 }
 
 /// The palette offering to set up the Chief.
@@ -1742,6 +1778,97 @@ fn notifications_empty(dark: bool) {
 }
 
 /// The overview over two desktops: terminal `a` beside the document, and one agent.
+/// Home's merge button on a pull request of the user's that is ready, asking first.
+fn merge_confirmation(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            state.prs = Some(vec![PR {
+                id: "a1".into(),
+                number: 7,
+                role: "author".into(),
+                title: "Route every key through the keymap".into(),
+                repo: "victorarias/attn".into(),
+                author: "me".into(),
+                reason: "ready_to_merge".into(),
+                url: "https://github.com/victorarias/attn/pull/7".into(),
+                host: "github.com".into(),
+                state: "waiting".into(),
+                ..PR::default()
+            }])
+        },
+        |_| {},
+    );
+    press(&mut world, Action::SessionGoToDashboard);
+    world.gesture(|app| app.click(Target::key("home.pr.a1.merge")));
+    snap(&mut world, "merge-confirmation", dark);
+}
+
+/// Restarting shared Codex while two agents hold it, from the update band.
+fn shared_codex_restart(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            state.shared_codex = Some(SharedCodexState {
+                running_version: Some("0.162.1".into()),
+                installed_version: Some("0.163.0".into()),
+                latest_version: Some("0.163.0".into()),
+                restart: "pending".into(),
+                blockers: Some(
+                    [("s0", "turn"), ("s2", "approval")]
+                        .iter()
+                        .map(|(session, reason)| SharedCodexBlocker {
+                            session_id: (*session).into(),
+                            reason: (*reason).into(),
+                        })
+                        .collect(),
+                ),
+                ..SharedCodexState::default()
+            })
+        },
+        |_| {},
+    );
+    world.gesture(|app| app.click(Target::role("button").name("Restart now")));
+    snap(&mut world, "shared-codex-restart", dark);
+}
+
+/// The classic picker's new worktree in the api project that git refused, opened from the corner.
+fn session_not_created(dark: bool) {
+    let daemon = launcher_daemon_with(dark, false, false);
+    daemon
+        .on("inspect_path", |r: &Request| {
+            let path = r["path"].as_str().unwrap_or_default().to_owned();
+            message(InspectPathResultMessage {
+                success: true,
+                inspection: Some(PathInspection {
+                    exists: true,
+                    is_directory: true,
+                    input_path: path.clone(),
+                    repo_root: Some(path.clone()),
+                    resolved_path: path,
+                    home_path: Some("/home/me".into()),
+                }),
+                ..InspectPathResultMessage::new()
+            })
+        })
+        .on("create_worktree", |_: &Request| {
+            message(CreateWorktreeResultMessage {
+                success: false,
+                error: Some("fatal: a branch named 'taken' already exists".into()),
+                ..CreateWorktreeResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionNew);
+    world.gesture(|app| app.type_text("api"));
+    world.advance(std::time::Duration::from_millis(200));
+    tap(&mut world, Key::Enter);
+    world.gesture(|app| app.type_text("taken"));
+    tap(&mut world, Key::Enter);
+    world.gesture(|app| app.click(Target::key("worktree-setup")));
+    snap(&mut world, "session-not-created", dark);
+}
+
 fn desktop_overview(dark: bool) {
     let mut world = popover_world(
         dark,
@@ -1839,6 +1966,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         quick_capture_mailboxes(dark);
         notebook_file(dark);
         notebook_finder(dark);
+        merge_confirmation(dark);
+        desktop_naming(dark);
+        shared_codex_restart(dark);
+        session_not_created(dark);
     }
 }
 

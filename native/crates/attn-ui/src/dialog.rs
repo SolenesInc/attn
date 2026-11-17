@@ -20,6 +20,12 @@ pub struct DialogFrame {
     pub subtitle_ink: Color,
     pub subtitle_gap: f32,
     pub close: Option<Close>,
+    /// Painted over the surface's fill, as CSS `background` layers: a vertical gradient from its
+    /// first color to its second.
+    pub sheen: Option<[Color; 2]>,
+    /// Painted over the sheen: a gradient at an angle in radians, as CSS
+    /// `linear-gradient(135deg, …)`, through its stops.
+    pub wash: Option<(f32, [(f32, Color); 2])>,
 }
 
 /// The × in a dialog's header: the glyph's size, its ink and the square it is pressed in.
@@ -54,6 +60,8 @@ impl DialogFrame {
                 ink: t.text_dimmed,
                 side: 26.0,
             }),
+            sheen: None,
+            wash: None,
         }
     }
 
@@ -95,6 +103,8 @@ impl DialogFrame {
                 ink: t.text_muted,
                 side: 22.0,
             }),
+            sheen: None,
+            wash: None,
         }
     }
 
@@ -116,6 +126,58 @@ impl DialogFrame {
             subtitle_ink: t.text_primary,
             subtitle_gap: 15.0,
             close: None,
+            sheen: None,
+            wash: None,
+        }
+    }
+
+    /// A pull request's merge, asked first: `.merge-confirm-modal`, a ruled header with a
+    /// monospace title.
+    pub fn merge(t: &Tokens) -> DialogFrame {
+        DialogFrame {
+            backdrop: Backdrop {
+                fill: t.shadow.alpha(0.6),
+                blur: 0.0,
+            },
+            surface: Frame {
+                fill: t.bg_panel,
+                edge: t.border,
+                radius: 8.0,
+                shadow: shadow(t, 24.0, 64.0, 0.6),
+            },
+            header: [16.0, 16.0, 16.0, 16.0],
+            rule: Some(t.border),
+            title: TextStyle::new(13.0, 600.0).mono(),
+            ..DialogFrame::prompt(t)
+        }
+    }
+
+    /// A session being set up, or why it was not: `.cleanup-content` over
+    /// `.session-progress-prompt`, a card washed in brand from its corner, with no ×.
+    pub fn progress(t: &Tokens) -> DialogFrame {
+        DialogFrame {
+            backdrop: Backdrop {
+                fill: t.bg_overlay,
+                blur: 2.0,
+            },
+            surface: Frame {
+                fill: t.bg_panel,
+                edge: t.border_hover,
+                radius: 8.0,
+                shadow: shadow(t, 22.0, 76.0, 0.54),
+            },
+            glow: Some(Shadow {
+                spread: 1.0,
+                color: Color::WHITE.alpha(0.03),
+                ..Shadow::default()
+            }),
+            header: [18.0, 20.0, 0.0, 20.0],
+            sheen: Some([t.bg_elevated, t.bg_panel]),
+            wash: Some((
+                135f32.to_radians(),
+                [(0.0, t.brand.alpha(0.08)), (0.42, t.brand.alpha(0.0))],
+            )),
+            ..DialogFrame::prompt(t)
         }
     }
 }
@@ -324,6 +386,12 @@ impl Dialog {
             .token_motion(k.motion.overlay);
         if let Some(glow) = f.glow {
             panel = panel.box_shadow(glow);
+        }
+        if let Some([top, bottom]) = f.sheen {
+            panel = panel.gradient(top, bottom);
+        }
+        if let Some((angle, stops)) = f.wash {
+            panel = panel.linear_gradient(angle, stops);
         }
         let panel = modal(panel).modal_click_outside(self.outside);
         layer.push(
