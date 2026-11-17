@@ -753,6 +753,28 @@ fn a_long_charter_scrolls_inside_an_editor_that_keeps_its_height() {
 }
 
 #[test]
+fn the_charter_editor_s_grip_drags_it_taller_and_never_below_its_least_height() {
+    let d = daemon(vec![member("fern", 1)], Vec::new(), Vec::new());
+    d.answer_in_turn(
+        "crew_charter_get",
+        [charter_read("fern", "Tend the garden.", "t1")],
+    );
+    let mut world = World::start_sized(d, (1200.0, 1100.0));
+    on_charter(&mut world);
+    let grip = "crew.charter.editor-grip";
+    let drag = |world: &mut World, by: f64| {
+        let [x, y, w, h] = world.rect(grip);
+        let to = ((x + w / 2.0) as f32, (y + h / 2.0 + by) as f32);
+        world.gesture(|app| app.drag(Target::key(grip), to));
+        world.rect(grip)[1]
+    };
+    let rest = world.rect(grip)[1];
+    assert_eq!(drag(&mut world, 120.0), rest + 120.0);
+    assert_eq!(drag(&mut world, -500.0), rest);
+    assert_eq!(editor(&world), "Tend the garden.");
+}
+
+#[test]
 fn the_charter_saves_after_a_pause_against_the_version_it_read_and_at_once_when_the_user_leaves() {
     let d = daemon(
         vec![member("fern", 1)],

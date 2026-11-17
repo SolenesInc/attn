@@ -1022,6 +1022,7 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         .label(format!("Charter for {}", member.name))
         .rows(usize::MAX)
         .max_height(CHARTER_HEIGHT)
+        .resizable()
         .spellcheck(true)
         .width(None)
         .on_edit(move |state: &mut State| state.window.crew.charters.field_mut(&edited))

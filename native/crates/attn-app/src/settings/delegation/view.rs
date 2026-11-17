@@ -775,6 +775,7 @@ fn text_field(
             .placeholder(placeholder.to_owned())
             .on_edit(move |state: &mut State| super::draft_mut(state, &editing))
             .auto_grow(3, 12)
+            .resizable()
             .width(None)
             .build(k)
     };

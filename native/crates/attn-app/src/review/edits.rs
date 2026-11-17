@@ -533,6 +533,7 @@ pub(crate) fn view(open: &Open, words: &TextEdit, t: &Tokens) -> El {
     let area = TextArea::new(words)
         .key(FIELD)
         .width(None)
+        .resizable()
         .label("Edit")
         .on_edit(field)
         .on_key(on_key)

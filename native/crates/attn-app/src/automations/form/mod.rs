@@ -84,8 +84,6 @@ pub(crate) struct Form {
     pub(crate) stale: bool,
     pub(crate) delete_armed: bool,
     pub(crate) advanced: bool,
-    /// The prompt's height, which its grip drags taller.
-    pub(crate) prompt_height: f32,
     pub(crate) definition_shown: bool,
     pub(crate) copied: bool,
     /// The user chose the Cron tab, which shows even for a schedule the controls can write.
@@ -252,7 +250,6 @@ impl Form {
             stale: false,
             delete_armed: false,
             advanced: false,
-            prompt_height: view::PROMPT_HEIGHT,
             definition_shown: false,
             copied: false,
             cron_tab: false,

@@ -37,7 +37,7 @@ const MONTHS: [&str; 12] = [
 ];
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /// The prompt's least height, the Tauri app's `.automation-form__textarea { min-height: 120px }`.
-pub(super) const PROMPT_HEIGHT: f32 = 120.0;
+const PROMPT_HEIGHT: f32 = 120.0;
 /// The width `attn_ui::scroll_bar` takes beside the content, as WebKit's styled scroll bar does.
 const SCROLL_BAR: f32 = 8.0;
 /// attn checks schedules once a minute.
@@ -595,19 +595,6 @@ fn launch(state: &State, f: &Form, t: &Tokens) -> El {
 
 fn prompt(f: &Form, t: &Tokens) -> El {
     let checked = super::field_of_key(&field_key(Field::Prompt));
-    let grip = rune::icon(&attn_ui::icon::RESIZE_GRIP, 10.0)
-        .key(key("prompt-grip"))
-        .color(t.text_tertiary)
-        .cursor(rune::Cursor::ResizeRow)
-        .pin(None, None, Some(3.0), Some(3.0))
-        .on_drag(|state: &mut State, drag: &mut rune::Drag, _: &mut Tx| {
-            let Some(f) = form_mut(state) else { return };
-            match drag.phase {
-                rune::Phase::Down => drag.data = f.prompt_height,
-                rune::Phase::Move => f.prompt_height = (drag.data + drag.dy).max(PROMPT_HEIGHT),
-                rune::Phase::Up => {}
-            }
-        });
     section("Prompt", t)
         .child(
             col().w_full().child(
@@ -615,6 +602,8 @@ fn prompt(f: &Form, t: &Tokens) -> El {
                     .key(field_key(Field::Prompt))
                     .label("Prompt")
                     .spellcheck(true)
+                    .min_height(PROMPT_HEIGHT)
+                    .resizable()
                     .on_edit(|s: &mut State| field_of(s, |f| &mut f.prompt))
                     .on_change(move |state: &mut State, _: &mut Tx| {
                         if let (Some(f), Some(which)) = (form_mut(state), checked) {
@@ -624,10 +613,8 @@ fn prompt(f: &Form, t: &Tokens) -> El {
                     .build(kit(t))
                     .fill(t.bg_elevated)
                     .invalid(f.errors.contains_key(&Field::Prompt))
-                    .w_full()
-                    .h(f.prompt_height),
-            )
-            .child(grip),
+                    .w_full(),
+            ),
         )
         .child(hint(
             "This is the instruction the agent receives. Trigger details arrive separately as structured context — they can never rewrite this prompt.",

@@ -147,6 +147,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.pressed = t.bg_selected;
     p.scrim = t.bg_overlay;
     kit.keycap = Some(keycap::kit_cap);
+    kit.glyph.select = Some(&rune_kit::glyphs::CHEVRON_UP_DOWN);
     kit.elevation.button_neutral = Vec::new();
     kit.elevation = std::mem::take(&mut kit.elevation).with_input(vec![input_ring(t)]);
     kit.elevation.floating = vec![popover_shadow(t)];

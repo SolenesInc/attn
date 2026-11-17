@@ -354,6 +354,7 @@ pub(crate) fn composer_view(composer: &Composer, words: &TextEdit, t: &Tokens) -
     let area = TextArea::new(words)
         .key(FIELD)
         .width(None)
+        .resizable()
         .label(title)
         .placeholder(if composer.kind == Kind::Question {
             "What do you want to know?"
