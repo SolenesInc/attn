@@ -1,0 +1,10 @@
+{"level": 1, "role": "builder", "model": "sonnet",
+ "opening": {"seed": "task", "authorization": "Commit the change on main. The repository has no remote, so nothing is pushed."},
+ "standin": [],
+ "limits": {"minutes": 20, "usd": 5},
+ "graders": [
+   {"kind": "check", "seed": "task", "check": "C1", "state": "reported", "evidence": true},
+   {"kind": "check", "seed": "task", "check": "C2", "state": "reported", "evidence": true},
+   {"kind": "seed", "seed": "task", "status": "harvested"},
+   {"kind": "command", "pattern": "attn seed check report \\S+ C[12]\\b", "before": "attn seed harvest"},
+   {"kind": "test", "run": "python3 -m unittest -q test_hidden"}]}
