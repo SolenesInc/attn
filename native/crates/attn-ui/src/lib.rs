@@ -133,6 +133,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.text_faint = t.text_tertiary;
     p.text_weak = t.text_tertiary;
     p.text_accent = t.accent;
+    p.text_on_accent = t.on_accent;
     p.icon_base = t.text_secondary;
     p.icon_muted = t.text_tertiary;
     p.icon_faint = t.text_muted;

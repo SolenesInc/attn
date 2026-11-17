@@ -85,3 +85,44 @@ fn primary_button_text_reads_at_aa_contrast_on_every_enabled_fill_in_dark_and_li
         }
     }
 }
+
+#[test]
+fn accent_badge_text_is_the_schemes_ink_on_its_accent_and_reads_at_aa_in_classic_light() {
+    fn badge(&(scheme, dark): &(usize, bool), _: &mut rune::Cx<(usize, bool)>) -> rune::El {
+        let kit = attn_ui::kit(&attn_ui::colors::SCHEMES[scheme].colors(dark).ui);
+        rune::row().child(
+            rune_kit::Badge::new("Customized")
+                .variant(rune_kit::BadgeVariant::Accent)
+                .build(kit)
+                .key("badge"),
+        )
+    }
+    for (scheme, colors) in attn_ui::colors::SCHEMES.iter().enumerate() {
+        for dark in [true, false] {
+            let ui = &colors.colors(dark).ui;
+            let mut runtime =
+                Runtime::new((scheme, dark), badge, (300.0, 100.0), Env::new(dark, 2.0));
+            runtime.frame(0.0);
+            let elements = runtime.elements();
+            let find = |path: &str| {
+                elements
+                    .iter()
+                    .find(|e| e.path.ends_with(path))
+                    .unwrap_or_else(|| panic!("no {path}"))
+            };
+            let fill = find("badge").fill;
+            let ink = find("badge/label").text_color.expect("the badge's ink");
+            let id = colors.id;
+            assert_eq!((fill, ink), (ui.accent, ui.on_accent), "{id} dark={dark}");
+            if id == "classic" {
+                let ratio = contrast(ink, fill);
+                assert!(
+                    ratio >= 4.5,
+                    "{id} dark={dark}: accent badge text {} on {} is {ratio:.2}:1",
+                    ink.hex(),
+                    fill.hex()
+                );
+            }
+        }
+    }
+}
