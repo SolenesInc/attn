@@ -8,7 +8,7 @@ import { openAttachedTerminals } from './test/appFixtures';
 import { agentPane, soloDesktop, daemonSession, daemonDesktop, defaultProfile, splitDesktop, terminalDesktop, type DaemonSession } from './test/daemonFixtures';
 import { fakeRects, sizeTerminals } from './test/layout';
 import { serveLaunches } from './test/locations';
-import { pressShortcut, renderApp } from './test/renderApp';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
 import type { AttachBlock } from './types/generated';
 import { initialState, type ScriptedDaemon } from './test/scriptedDaemon';
@@ -125,6 +125,7 @@ async function openKittyImages(sessionId: string) {
   return { ...view, place };
 }
 
+const TERMINAL_CELL_WIDTH = 8;
 const TERMINAL_CELL_HEIGHT = 21;
 
 function rowCenter(row: number) {
@@ -450,6 +451,23 @@ describe('App terminal runtime', () => {
 
     expect(visibleText('s2')).toContain('only-in-s2');
     expect(visibleText('s1')).not.toContain('only-in-s2');
+  });
+
+  it('draws a terminal at its grid when it returns after a color change rebuilt it out of sight', async () => {
+    layOutTerminals(640, 420);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+    open('s1');
+    await daemon.idle();
+    open('s2');
+    await daemon.idle();
+
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { color_overrides: '{"dark":{"terminal":{"bg":"#080816"}}}' } }));
+    open('s1');
+    await daemon.idle();
+
+    const canvas = document.querySelector<HTMLCanvasElement>('[data-pane-id="pane-s1"] canvas')!;
+    expect({ width: canvas.width, height: canvas.height }).toEqual({ width: 80 * TERMINAL_CELL_WIDTH, height: 24 * TERMINAL_CELL_HEIGHT });
   });
 
   it('answers a terminal query once while a session moves to another desktop, and keeps rendering it there', async () => {

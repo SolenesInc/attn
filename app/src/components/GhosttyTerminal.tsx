@@ -2242,6 +2242,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         // A color change or fault recovery rebuilds every mounted pane, so the released
         // surface state has to survive the rebuild.
         if (surfaceReleasedRef.current) renderer.releaseDrawingBuffer();
+        renderer.resize(initialSize.cols, initialSize.rows);
         const recoveryAttempt = recoveryAttemptRef.current;
         const recoveredModelFault = modelRecoveryPendingRef.current;
         recoveryAttemptRef.current = 0;
