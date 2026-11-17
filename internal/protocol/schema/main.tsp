@@ -4716,6 +4716,34 @@ model AskListMessage {
 model AskListResult {
   enabled: boolean;
   asks: Ask[];
+  // Open asks of the agents this session oversees: the agents below it in its
+  // delegation chain, or every agent in the profile for the chief. Never this
+  // session's own.
+  overseen: OverseenAsk[];
+}
+
+// from is the asker: the seed's tender for an ask about a seed, the crew
+// member for a member's ask, and the asking session otherwise.
+model OverseenAsk {
+  ask: Ask;
+  from: ActorView;
+}
+
+// Read one open ask the session holds or oversees.
+@extension("x-on", #{ home: true })
+model AskShowMessage {
+  cmd: "ask_show";
+  session_id: SessionID;
+  ask_id: string;
+}
+
+// held is false for an ask the session oversees and does not hold. markdown
+// is the ask as its agent wrote it.
+model AskShowResult {
+  ask: Ask;
+  markdown: string;
+  from: ActorView;
+  held: boolean;
 }
 
 @extension("x-on", #{ home: true })
@@ -4723,6 +4751,9 @@ model AskCloseMessage {
   cmd: "ask_close";
   session_id: SessionID;
   ask_id: string;
+  // Required when the session oversees the ask and does not hold it. The
+  // ask's seed keeps it as a note, and the asker gets it as mail.
+  reason?: string;
 }
 
 // picked holds choice labels; other is the user's own choice on a one/any
@@ -6742,6 +6773,14 @@ model SeedShowResult {
   // Explicit external associations projected as attach-minus-detach over the
   // whole log. These remain references until a user brings one into the seed.
   "references": SeedArtifactReference[];
+  // The seed's open asks to the user, oldest first.
+  "open_asks": SeedOpenAsk[];
+}
+
+model SeedOpenAsk {
+  id: string;
+  subject: string;
+  created_at: string;
 }
 
 // The log entries saved in (after, bookmark] on a seed and every seed below
@@ -7639,6 +7678,7 @@ model Response {
   worktree_refresh_result?: WorktreeRefreshResult;
   ask_open_result?: Ask;
   ask_list_result?: AskListResult;
+  ask_show_result?: AskShowResult;
   record_vent_result?: Vent;
   session_instructions_result?: SessionInstructionsResult;
   session_transcript_result?: SessionTranscriptResult;

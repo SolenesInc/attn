@@ -77,7 +77,7 @@ func TestAnAnsweredAskIsTypedIntoTheAgentsConversationAndHandsItsTurnBack(t *tes
 	if listed, err := cli.AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 0 {
 		t.Fatalf("after the answer the agent lists %+v (%v), want no open ask", listed, err)
 	}
-	if err := cli.AskClose(protocol.SessionID(asker), asked.ID); err == nil {
+	if err := cli.AskClose(protocol.SessionID(asker), asked.ID, ""); err == nil {
 		t.Fatal("the agent withdrew an ask the user already answered")
 	}
 
@@ -398,10 +398,10 @@ func TestAnAgentWithdrawsItsOwnAskOnly(t *testing.T) {
 	if asked.Subject != "Cache store" {
 		t.Errorf("subject = %q, want the one given", asked.Subject)
 	}
-	if err := cli.AskClose(protocol.SessionID(other), asked.ID); err == nil {
+	if err := cli.AskClose(protocol.SessionID(other), asked.ID, ""); err == nil {
 		t.Fatal("another agent withdrew the ask")
 	}
-	if err := cli.AskClose(protocol.SessionID(asker), asked.ID); err != nil {
+	if err := cli.AskClose(protocol.SessionID(asker), asked.ID, ""); err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
 	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
@@ -530,9 +530,6 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	}
 	if listed, err := cli.AskList(second.SessionID); err != nil || len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {
 		t.Fatalf("the seed's next tender lists %+v (%v), want the ask its predecessor filed", listed, err)
-	}
-	if err := cli.AskClose("caller", asked.ID); err == nil {
-		t.Fatal("the dispatcher, who does not tend the seed, withdrew the ask")
 	}
 
 	successor.Prompted()
@@ -717,5 +714,99 @@ func TestClosingASessionClosesTheAsksAddressedToIt(t *testing.T) {
 	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "late" })
 	if late.Success {
 		t.Fatal("an ask of a closed session took an answer")
+	}
+}
+
+func TestAnAgentReadsAndWithdrawsTheAsksOfTheAgentsItOversees(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	registerSessions(t, w, cli, "outsider")
+	seed := plantDelegationSeed(t, cli, "caller", "Migrate the store")
+	delegated, err := cli.Delegate(delegateAtSeed("caller", cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(delegated.SessionID))
+	asked, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", cwd)
+	if err != nil {
+		t.Fatalf("the delegate asks: %v", err)
+	}
+	if _, err := cli.AskOpen("caller", "", cacheAsk, "Caller's own", cwd); err != nil {
+		t.Fatalf("the dispatcher asks: %v", err)
+	}
+	startConfiguredChief(t, w, cli)
+	chief := chiefSession(t, cli)
+	side := createProfile(app, "Side")
+	sideAsker := w.Spawn(w.AppOn(side.ID), fakeagent.Claude, w.Path("side"))
+	w.Launched(sideAsker)
+	sideAsk, err := cli.AskOpen(protocol.SessionID(sideAsker), "", cacheAsk, "", w.Path("side"))
+	if err != nil {
+		t.Fatalf("the side profile's agent asks: %v", err)
+	}
+
+	listed, err := cli.AskList("caller")
+	if err != nil || len(listed.Asks) != 1 || listed.Asks[0].Subject != "Caller's own" {
+		t.Fatalf("the dispatcher lists %+v (%v), want only its own ask among its asks", listed, err)
+	}
+	if len(listed.Overseen) != 1 || listed.Overseen[0].Ask.ID != asked.ID || string(listed.Overseen[0].From.Ref) != "session:"+string(delegated.SessionID) {
+		t.Fatalf("the dispatcher oversees %+v, want %s from %s", listed.Overseen, asked.ID, delegated.SessionID)
+	}
+	shown, err := cli.AskShow("caller", asked.ID)
+	if err != nil || shown.Held || shown.Markdown != cacheAsk || protocol.Deref(shown.Ask.SeedID) != seed {
+		t.Fatalf("the dispatcher reads %+v (%v), want the delegate's ask about %s, not held", shown, err, seed)
+	}
+	if own, err := cli.AskShow(delegated.SessionID, asked.ID); err != nil || !own.Held {
+		t.Fatalf("the delegate reads its own ask as %+v (%v), want it held", own, err)
+	}
+	opened, err := cli.SeedShow("caller", seed)
+	if err != nil || len(opened.OpenAsks) != 1 || opened.OpenAsks[0] != (protocol.SeedOpenAsk{ID: asked.ID, Subject: asked.Subject, CreatedAt: asked.CreatedAt}) {
+		t.Fatalf("seed show lists the open asks %+v (%v), want %s", opened.OpenAsks, err, asked.ID)
+	}
+
+	if outside, err := cli.AskList("outsider"); err != nil || len(outside.Overseen) != 0 {
+		t.Fatalf("a session outside the chain oversees %+v (%v), want none", outside.Overseen, err)
+	}
+	if _, err := cli.AskShow("outsider", asked.ID); err == nil {
+		t.Fatal("a session outside the chain read the delegate's ask")
+	}
+	if err := cli.AskClose("outsider", asked.ID, "not mine"); err == nil {
+		t.Fatal("a session outside the chain withdrew the delegate's ask")
+	}
+
+	byChief, err := cli.AskList(chief)
+	if err != nil || len(byChief.Overseen) != 2 || slices.ContainsFunc(byChief.Overseen, func(o protocol.OverseenAsk) bool { return o.Ask.ID == sideAsk.ID }) {
+		t.Fatalf("the chief oversees %+v (%v), want the two asks of its profile and none of another", byChief.Overseen, err)
+	}
+	if _, err := cli.AskShow(chief, sideAsk.ID); err == nil {
+		t.Fatal("the chief read an ask of another profile")
+	}
+	if _, err := cli.AskShow(chief, asked.ID); err != nil {
+		t.Fatalf("the chief reads the delegate's ask: %v", err)
+	}
+
+	if err := cli.AskClose("caller", asked.ID, ""); err == nil || !strings.Contains(err.Error(), "-m") {
+		t.Fatalf("the dispatcher withdrew its delegate's ask without a reason: %v", err)
+	}
+	const why = "The user already chose Postgres in the plot."
+	if err := cli.AskClose("caller", asked.ID, why); err != nil {
+		t.Fatalf("the dispatcher withdraws its delegate's ask: %v", err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+		return !slices.ContainsFunc(m.Asks, func(a protocol.Ask) bool { return a.ID == asked.ID })
+	})
+	mail := inboxContents(readInbox(t, cli, string(delegated.SessionID), 0).Items)
+	for _, want := range []string{asked.ID, why} {
+		if !strings.Contains(mail, want) {
+			t.Errorf("the delegate's mail reads %q, missing %q", mail, want)
+		}
+	}
+	notes, err := cli.SeedNotes("caller", seed, client.SeedNotesQuery{Limit: 1})
+	if err != nil || len(notes.Notes) != 1 || !strings.Contains(notes.Notes[0].Body, why) || authorSessionOf(notes.Notes[0]) != "caller" {
+		t.Fatalf("the seed's newest note is %+v (%v), want the dispatcher's withdrawal saying why", notes, err)
+	}
+	if closed, err := cli.SeedShow("caller", seed); err != nil || len(closed.OpenAsks) != 0 {
+		t.Fatalf("after the withdrawal seed show lists %+v (%v), want no open asks", closed.OpenAsks, err)
 	}
 }

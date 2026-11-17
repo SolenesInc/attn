@@ -3006,6 +3006,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
 	case protocol.CmdAskList:
 		d.handleAskList(conn, msg.(*protocol.AskListMessage))
+	case protocol.CmdAskShow:
+		d.handleAskShow(conn, msg.(*protocol.AskShowMessage))
 	case protocol.CmdAskClose:
 		d.handleAskClose(conn, msg.(*protocol.AskCloseMessage))
 	case protocol.CmdRecordVent:

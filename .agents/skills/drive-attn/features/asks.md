@@ -21,8 +21,11 @@ withdraw them. Asks are on by default, and an agent keeps the setting it launche
 - `ask-replied`: asks answered in the last day, shown again with their answers.
 - `ask-on-seed`: an ask about a seed the agent tends, answered to the seed's tender and kept as a note.
 - `ask-holds-harvest`: an agent's harvest of a seed with an open ask refuses and names each ask, a harvest-on-merge clears its arming instead, and a wither or the user's harvest withdraws the asks; `seed wither` names them.
-- `ask-list`: an agent lists its open asks and those about seeds it tends.
-- `ask-close`: an agent withdraws an ask it no longer needs.
+- `ask-list`: an agent lists its open asks and those about seeds it tends, then, apart from them, the open asks of the agents it oversees, each with its asker.
+- `ask-show`: an agent prints one ask it holds or oversees, with its asker, seed, age and markdown, and "Not your ask" for an overseen one.
+- `ask-close`: an agent withdraws an ask it no longer needs, or an overseen ask with `-m "<why>"`; attn notes the reason on the ask's seed and mails it to the asker.
+- `ask-oversee`: an agent reaches the asks of the agents below it in its delegation chain, and the Chief every ask in its profile, never another profile's.
+- `ask-seed-show`: `attn seed show` lists the seed's open asks above its notes.
 - `ask-snooze`: snoozing or waking the agent that holds an ask from the drawer; a snoozed agent's asks wait under Snoozed, leave every open-ask count and send no phone push.
 - `ask-markers`: the open-ask chip on the agent's tile header and the marker on its sidebar row.
 - `ask-guidance`: what attn tells agents about asking.
@@ -42,8 +45,9 @@ withdraw them. Asks are on by default, and an agent keeps the setting it launche
 
 ### Agents
 
-- `attn ask` (`cmd/attnd/ask.go`): with no subcommand it opens an ask from stdin or `--file`, and takes `--subject` and `--seed`. It reads each local image the markdown shows (resolved against the working directory, or beside `--file`) and sends the bytes with the ask; an unreadable image or more than 5 MiB of images refuses the ask. The subcommands are `list` and `close <id>`. Every form takes `--session` and `--json`.
-- Prompts: the asks guidance in the session instructions of agents launched with asks on (`internal/prompts/content/ask/guidance.md`), and the answer as attn types it (`internal/prompts/content/ask/answer.md`, `entry.md`, `entry-picked.md`, `entry-recommended.md`, `entry-other.md`, `entry-unanswered.md`, `note.md`).
+- `attn ask` (`cmd/attnd/ask.go`): with no subcommand it opens an ask from stdin or `--file`, and takes `--subject` and `--seed`. It reads each local image the markdown shows (resolved against the working directory, or beside `--file`) and sends the bytes with the ask; an unreadable image or more than 5 MiB of images refuses the ask. The subcommands are `list`, `show <id>` and `close <id>`, which takes `-m <why>` and needs it for an overseen ask. Every form takes `--session` and `--json`.
+- `attn seed show <seed>` (`cli/attn/src/commands/seed/render.rs`): an `asks` line per open ask, above the notes.
+- Prompts: the asks guidance in the session instructions of agents launched with asks on (`internal/prompts/content/ask/guidance.md`), Follow progress and recover in the delegation reference (`internal/prompts/content/skills/attn/references/delegation.md`), the withdrawal mail and seed note (`tellWithdrawnAsk`, `internal/daemon/asks.go`), and the answer as attn types it (`internal/prompts/content/ask/answer.md`, `entry.md`, `entry-picked.md`, `entry-recommended.md`, `entry-other.md`, `entry-unanswered.md`, `note.md`).
 
 ### Triggers
 
@@ -124,6 +128,7 @@ Preconditions:
 - **List and withdraw from the agent.** Run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "list asks" --enter`: peek shows `<ask>  Cache store`. Run `wsctl input --id <terminal> --text "withdraw <ask>" --enter`: peek shows `Withdrew <ask>.`, and the drawer shows `.asks-empty`. The drawer reopens in the Replied list when you last left it there, so when `.asks-list` reads `Replied in the last day`, press `r` once with focus off any text field.
 - **Ask from a file, as JSON.** Run `wsctl input --id <terminal> --text "file ask" --enter`: peek shows the ask as JSON with `"subject":"Ship day"` and its `"id"`. Run `wsctl input --id <terminal> --text "json list" --enter`: peek shows `{"asks":[...]` naming that id and `"enabled":true`. Withdraw it as above.
 - **Images travel with the ask.** Save a png as `$A/shots/shot.png` and run `./attn ask --session ask-agent` from `$A` with `![shot](shots/shot.png)` and a `:::question-text` block on stdin. Delete `$A/shots`, open the drawer with ⌘⇧R: `bridge dom_wait '{"selector":".asks-markdown img[src^=\"data:image/png\"]","timeoutMs":5000}'` matches. From an outpost session, the same ask shows its image at the home. `ls <data-dir>/asks/<ask>` lists the copy; after `./attn ask close <ask> --session ask-agent` the folder is gone. An image over the limit refuses with `max_ask_image_bytes=5242880`.
+- **An overseer reads and withdraws a delegate's ask.** From `$A`, plant a seed, delegate it with `./attn delegate --session ask-agent --seed <seed> …`, and have the delegate ask about it (`./attn ask --session <delegate> --seed <seed>`). `./attn ask list --session ask-agent` prints the line `Asked by agents you oversee. These are not your asks, …` and `<ask>  <slug>  <subject>  · from <delegate>`. `./attn ask show <ask> --session ask-agent` prints `asked by`, `seed`, `open`, `Not your ask.` and the markdown. `./attn seed show <seed>` prints `asks  <ask>  "<subject>" · open <age> · waits on the user`. `./attn ask close <ask> --session ask-agent` refuses and names `-m`; `./attn ask close <ask> --session ask-agent -m "<why>"` prints `Withdrew <ask>.`, `./attn seed notes <seed>` shows the reason, and `./attn agent inbox --session <delegate>` shows the mail. A session outside the chain gets `is not an open ask of this session or of an agent it oversees` from `show` and `close`.
 - **From the person's shell.** `./attn ask list --session ask-agent` prints `No open asks.` and `./attn ask list --session ask-early` prints `Asks are off for this session.`
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek ask-agent` after each ask and after each answer lands, `./attn seed notes <seed>`, `bridge dom_text` of the ask before answering and of the replied list, and `bridge capture_screenshot '{"path":"<P>/asks-drawer.png"}'` with an open ask on screen, where `<P>` is the folder's path written out. Name each file for its way in, such as `asks-chip-seed-notes.txt`.
 
@@ -168,7 +173,7 @@ Steps:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/asks.rs` (the native app), `internal/daemon/asks_wire_test.go`, `internal/daemon/phone_push_wire_test.go` (no push for a snoozed asker).
+- Wire: `native/crates/attn-app/tests/wire/asks.rs` (the native app), `internal/daemon/asks_wire_test.go` (overseen asks: `TestAnAgentReadsAndWithdrawsTheAsksOfTheAgentsItOversees`), `internal/daemon/phone_push_wire_test.go` (no push for a snoozed asker).
 - Stack: `cmd/attnd/ask_stack_test.go`, `cmd/attnd/ask_images_stack_test.go`, `app/e2e/asks.spec.ts`.
 - Kernel: `internal/ask/ask_test.go`.
 - App: `app/src/App.asks.test.tsx`.

@@ -151,7 +151,7 @@ For direct delegation, choose the model explicitly. Available harnesses, models 
 
 The launch output names the seed, the session, the folder and branch, and the operation. A successful launch means the agent started, not that its work is done. Each new delegation starts an ordinary watch on the delegation's seed and on that seed's descendants. For watch and unwatch behavior, read Rings and watches (`attn skill --reference garden`). A recovery does not recreate a watch you removed.
 
-To read the work, run `attn seed show <seed-id>`. To reach the seed's current or next tender, run `attn agent msg <seed-id> "…"`. To message the previous session after a handover, address that session by its id, using the syntax in `attn agent --help`. The delegate reports as `attn skill --reference delegated-agent` says. Respond to the completion, progress, and advice requests that reach you, and do not track every edit.
+To read the work, run `attn seed show <seed-id>`. It also lists the seed's open asks to the user. `attn ask list` shows the open asks of the agents below you, apart from your own, and `attn ask show <id>` reads one. When an ask no longer needs the user, withdraw it with `attn ask close <id> -m "<why>"`: attn notes the reason on the seed and tells the asker. To reach the seed's current or next tender, run `attn agent msg <seed-id> "…"`. To message the previous session after a handover, address that session by its id, using the syntax in `attn agent --help`. The delegate reports as `attn skill --reference delegated-agent` says. Respond to the completion, progress, and advice requests that reach you, and do not track every edit.
 
 If the CLI loses the response, check the request before you start another delegation:
 

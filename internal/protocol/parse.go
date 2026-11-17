@@ -56,6 +56,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdAskOpen:                       decodeInto[AskOpenMessage],
 	CmdAskList:                       decodeInto[AskListMessage],
 	CmdAskClose:                      decodeInto[AskCloseMessage],
+	CmdAskShow:                       decodeInto[AskShowMessage],
 	CmdAskAnswer:                     decodeInto[AskAnswerMessage],
 	CmdAskImage:                      decodeInto[AskImageMessage],
 	CmdAskSeedMentions:               decodeInto[AskSeedMentionsMessage],

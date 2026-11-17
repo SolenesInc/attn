@@ -184,35 +184,139 @@ func errSessionNotLive(sessionID protocol.SessionID) error {
 	return fmt.Errorf("session %q is not live in attn", sessionID)
 }
 
+type askReach int
+
+const (
+	askOutOfReach askReach = iota
+	askHeld
+	askOverseen
+)
+
+func (d *Daemon) askReach(sessionID protocol.SessionID, held func(who.Address) bool, a shownAsk) askReach {
+	switch {
+	case held(a.stored.To):
+		return askHeld
+	case a.profileID != "" && (gardenStanding{daemon: d, profileID: a.profileID}).Oversees(who.Session(sessionID).Actor(), d.askerOf(a.stored)):
+		return askOverseen
+	}
+	return askOutOfReach
+}
+
+func (d *Daemon) askerOf(a store.Ask) who.Party {
+	if seedID, ok := a.To.TenderOf(); ok {
+		if seed, _, err := d.readSeed(seedID); err == nil {
+			return seed.Tender
+		}
+		return who.Party{}
+	}
+	if key, ok := a.To.Member(); ok {
+		return who.Member(key)
+	}
+	return who.Session(a.SessionID)
+}
+
 func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
 	sessionID := protocol.TrimID(msg.SessionID)
 	if d.store.Get(sessionID) == nil {
 		d.sendError(conn, errSessionNotLive(sessionID).Error())
 		return
 	}
-	result := &protocol.AskListResult{Enabled: d.launchedWithAsks(sessionID), Asks: []protocol.Ask{}}
+	result := &protocol.AskListResult{Enabled: d.launchedWithAsks(sessionID), Asks: []protocol.Ask{}, Overseen: []protocol.OverseenAsk{}}
 	held := d.askAddressHeldBy(sessionID)
 	for _, a := range d.asks() {
-		if a.stored.Reply == nil && held(a.stored.To) {
+		if a.stored.Reply != nil {
+			continue
+		}
+		switch d.askReach(sessionID, held, a) {
+		case askHeld:
 			result.Asks = append(result.Asks, a.wire)
+		case askOverseen:
+			result.Overseen = append(result.Overseen, protocol.OverseenAsk{Ask: a.wire, From: d.actorView(d.askerOf(a.stored).Actor())})
 		}
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskListResult: result})
 }
 
-func (d *Daemon) handleAskClose(conn net.Conn, msg *protocol.AskCloseMessage) {
-	sessionID := protocol.TrimID(msg.SessionID)
-	stored, err := d.store.GetOpenAsk(strings.TrimSpace(msg.AskID))
-	if err != nil || !d.askAddressHeldBy(sessionID)(stored.To) {
-		d.sendError(conn, fmt.Sprintf("%s is not an open ask of this session", msg.AskID))
-		return
+func (d *Daemon) reachableOpenAsk(sessionID protocol.SessionID, askID string) (shownAsk, askReach, error) {
+	unreachable := fmt.Errorf("%s is not an open ask of this session or of an agent it oversees", askID)
+	stored, err := d.store.GetOpenAsk(strings.TrimSpace(askID))
+	if err != nil {
+		return shownAsk{}, askOutOfReach, unreachable
 	}
-	if err := d.store.CloseAsk(stored.ID); err != nil {
+	shown, err := d.readAsk(stored)
+	if err != nil {
+		return shownAsk{}, askOutOfReach, err
+	}
+	reach := d.askReach(sessionID, d.askAddressHeldBy(sessionID), shown)
+	if reach == askOutOfReach {
+		return shownAsk{}, askOutOfReach, unreachable
+	}
+	return shown, reach, nil
+}
+
+func (d *Daemon) handleAskShow(conn net.Conn, msg *protocol.AskShowMessage) {
+	shown, reach, err := d.reachableOpenAsk(protocol.TrimID(msg.SessionID), msg.AskID)
+	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskShowResult: &protocol.AskShowResult{
+		Ask: shown.wire, Markdown: shown.stored.Markdown, From: d.actorView(d.askerOf(shown.stored).Actor()), Held: reach == askHeld,
+	}})
+}
+
+func (d *Daemon) handleAskClose(conn net.Conn, msg *protocol.AskCloseMessage) {
+	sessionID := protocol.TrimID(msg.SessionID)
+	shown, reach, err := d.reachableOpenAsk(sessionID, msg.AskID)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	reason := strings.TrimSpace(protocol.Deref(msg.Reason))
+	if reach == askOverseen && reason == "" {
+		d.sendError(conn, fmt.Sprintf("%s is not your ask. Say why you withdraw it, and attn tells its asker: attn ask close %s -m \"<why>\"",
+			shown.stored.ID, shown.stored.ID))
+		return
+	}
+	if err := d.store.CloseAsk(shown.stored.ID); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	if reach == askOverseen {
+		d.tellWithdrawnAsk(sessionID, shown.stored, reason)
+	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
-	d.announceClosedAsks([]string{stored.ID})
+	d.announceClosedAsks([]string{shown.stored.ID})
+}
+
+func (d *Daemon) tellWithdrawnAsk(overseer protocol.SessionID, withdrawn store.Ask, reason string) {
+	by := d.partyOfSession(overseer)
+	text := fmt.Sprintf("%s withdrew the ask %s (%q) from the user, so no answer will come. Why: %s",
+		d.partyView(by).Name, withdrawn.ID, withdrawn.Subject, reason)
+	if seedID, ok := withdrawn.To.TenderOf(); ok {
+		if _, err := d.appendSeedNote(seedID, text, by.Actor(), garden.NoteKindNote, nil, false, overseer); err != nil {
+			d.logf("asks: noting the withdrawal of %s on %s: %v", withdrawn.ID, seedID, err)
+		}
+	}
+	now := time.Now()
+	message := inbox.Message{ID: uuid.NewString(), Sender: by, Body: text, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
+	if err := d.store.PutPeerMessage(message, withdrawn.To); err != nil {
+		d.logf("asks: telling %s that %s was withdrawn: %v", withdrawn.To, withdrawn.ID, err)
+		return
+	}
+	d.deliverSavedInbox(withdrawn.To, message.ID, now)
+}
+
+func (d *Daemon) seedOpenAsks(seedID string) []protocol.SeedOpenAsk {
+	asks, err := d.store.OpenAsksTo(who.ToTenderOf(seedID))
+	if err != nil {
+		d.logf("asks: reading the open asks about %s: %v", seedID, err)
+	}
+	open := make([]protocol.SeedOpenAsk, 0, len(asks))
+	for _, a := range asks {
+		open = append(open, protocol.SeedOpenAsk{ID: a.ID, Subject: a.Subject, CreatedAt: a.CreatedAt})
+	}
+	return open
 }
 
 func (d *Daemon) handleAskAnswer(client *wsClient, msg *protocol.AskAnswerMessage) {

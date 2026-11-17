@@ -18,7 +18,7 @@ const LISTED: &[Listed] = &[
     },
     Listed {
         name: "ask",
-        args: "[list|close]",
+        args: "[list|show|close]",
         summary: "ask the user something they answer from attn",
     },
     Listed {

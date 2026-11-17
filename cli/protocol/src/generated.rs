@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d6c1b0dbb368";
+pub const PROTOCOL_VERSION: &str = "6b761e3365a4";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -543,6 +543,8 @@ pub struct AskChoice {
 pub struct AskCloseMessage {
     pub ask_id: String,
     pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     pub session_id: SessionID,
 }
 
@@ -619,6 +621,8 @@ pub struct AskListResult {
     #[serde(deserialize_with = "null_as_default")]
     pub asks: Vec<Ask>,
     pub enabled: bool,
+    #[serde(deserialize_with = "null_as_default")]
+    pub overseen: Vec<OverseenAsk>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskOpenMessage {
@@ -711,6 +715,29 @@ impl AskSeedMentionsResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskShowMessage {
+    pub ask_id: String,
+    pub cmd: String,
+    pub session_id: SessionID,
+}
+
+impl AskShowMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "ask_show".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskShowResult {
+    pub ask: Ask,
+    pub from: ActorView,
+    pub held: bool,
+    pub markdown: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AsksUpdatedMessage {
@@ -7590,6 +7617,11 @@ impl OutpostsUpdatedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OverseenAsk {
+    pub ask: Ask,
+    pub from: ActorView,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PR {
     pub approved_by_me: bool,
     pub author: String,
@@ -9118,6 +9150,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_open_result: Option<Ask>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask_show_result: Option<AskShowResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authors: Option<Vec<AuthorState>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caller_session_id: Option<SessionID>,
@@ -10480,6 +10514,12 @@ pub struct SeedNotesResult {
     pub total: i64,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedOpenAsk {
+    pub created_at: String,
+    pub id: String,
+    pub subject: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedOutlinePart {
     pub bytes: i64,
     pub heading: String,
@@ -11080,6 +11120,8 @@ pub struct SeedShowResult {
     #[serde(deserialize_with = "null_as_default")]
     pub notes: Vec<SeedNote>,
     pub notes_total: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub open_asks: Vec<SeedOpenAsk>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_outline: Option<Vec<SeedOutlinePart>>,
     #[serde(deserialize_with = "null_as_default")]
@@ -14717,6 +14759,9 @@ impl ResponseField for AskListResult {
 }
 impl ResponseField for Ask {
     const FIELD: &'static str = "ask_open_result";
+}
+impl ResponseField for AskShowResult {
+    const FIELD: &'static str = "ask_show_result";
 }
 impl ResponseField for CalloutAnchorsResult {
     const FIELD: &'static str = "callout_anchors_result";

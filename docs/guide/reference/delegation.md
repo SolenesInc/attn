@@ -123,6 +123,14 @@ seed as a note. The seed stays open until you answer, because Attn refuses an
 agent's harvest while the seed's ask waits for you. When you harvest the seed
 yourself, or anyone withers it, its open asks close.
 
+An agent can read the open asks of the agents below it in its delegation chain,
+and the Chief can read every ask in its profile. `attn ask list` shows them
+apart from the agent's own asks, `attn ask show <id>` prints one, and
+`attn seed show` lists a seed's open asks. Such an agent can also withdraw one
+with `attn ask close <id> -m "<why>"`, when the question no longer needs you.
+Attn keeps the reason as a note on the ask's seed and tells the agent that
+asked, so it does not wait for an answer. Only you answer asks.
+
 When an ask has recommended answers for two or more questions, **Accept all
 recommended** (or `a`) selects every one of them in the draft, so you can review
 and change them before you send. Questions with no recommendation stay

@@ -19,9 +19,9 @@ use attn_protocol::{
     ActorView, AgentCloseResult, GardenReview, PartyView, Seed, SeedArtifact,
     SeedArtifactReference, SeedAuthorization, SeedAuthorizationResult, SeedAuthorizationUpdate,
     SeedBoardRow, SeedClosedAsk, SeedClosedCount, SeedHarvestCondition, SeedListResult, SeedNote,
-    SeedPlotProgress, SeedReadyResult, SeedRelation, SeedReminder, SeedRow, SeedSearchResult,
-    SeedShowResult, SeedSimilar, SeedSinceExpired, SeedStandbyView, SeedTransitionResult,
-    SeedWatchResult,
+    SeedOpenAsk, SeedPlotProgress, SeedReadyResult, SeedRelation, SeedReminder, SeedRow,
+    SeedSearchResult, SeedShowResult, SeedSimilar, SeedSinceExpired, SeedStandbyView,
+    SeedTransitionResult, SeedWatchResult,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
@@ -1239,10 +1239,27 @@ fn holdings(out: &mut String, result: &SeedShowResult) {
     }
 }
 
+fn open_asks(out: &mut String, asks: &[SeedOpenAsk]) {
+    if asks.is_empty() {
+        return;
+    }
+    out.push('\n');
+    for ask in asks {
+        let _ = writeln!(
+            out,
+            "asks  {}  {} · open {} · waits on the user",
+            ask.id,
+            quote(ask.subject.as_bytes()),
+            last_active(&ask.created_at)
+        );
+    }
+}
+
 pub fn show(result: &SeedShowResult, bookmark_at: i64) -> String {
     let seed = &result.seed;
     let mut out = header(seed, result.watching);
     bookmark_line(&mut out, "show", &seed.id, bookmark_at, "");
+    open_asks(&mut out, &result.open_asks);
     if !result.notes.is_empty() {
         out.push('\n');
         notes(

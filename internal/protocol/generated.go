@@ -653,6 +653,9 @@ type AskCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 }
@@ -713,6 +716,9 @@ type AskListResult struct {
 
 	// Enabled corresponds to the JSON schema field "enabled".
 	Enabled bool `json:"enabled"`
+
+	// Overseen corresponds to the JSON schema field "overseen".
+	Overseen []OverseenAsk `json:"overseen"`
 }
 
 type AskOpenMessage struct {
@@ -817,6 +823,31 @@ type AskSeedMentionsResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type AskShowMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type AskShowResult struct {
+	// Ask corresponds to the JSON schema field "ask".
+	Ask Ask `json:"ask"`
+
+	// From corresponds to the JSON schema field "from".
+	From ActorView `json:"from"`
+
+	// Held corresponds to the JSON schema field "held".
+	Held bool `json:"held"`
+
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown string `json:"markdown"`
 }
 
 type AsksUpdatedMessage struct {
@@ -8006,6 +8037,14 @@ type OutpostsUpdatedMessage struct {
 	Outposts []OutpostInfo `json:"outposts"`
 }
 
+type OverseenAsk struct {
+	// Ask corresponds to the JSON schema field "ask".
+	Ask Ask `json:"ask"`
+
+	// From corresponds to the JSON schema field "from".
+	From ActorView `json:"from"`
+}
+
 type PR struct {
 	// ApprovedByMe corresponds to the JSON schema field "approved_by_me".
 	ApprovedByMe bool `json:"approved_by_me"`
@@ -9559,6 +9598,9 @@ type Response struct {
 
 	// AskOpenResult corresponds to the JSON schema field "ask_open_result".
 	AskOpenResult *Ask `json:"ask_open_result,omitempty,omitzero"`
+
+	// AskShowResult corresponds to the JSON schema field "ask_show_result".
+	AskShowResult *AskShowResult `json:"ask_show_result,omitempty,omitzero"`
 
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`
@@ -11355,6 +11397,17 @@ type SeedNotesResult struct {
 	Total int `json:"total"`
 }
 
+type SeedOpenAsk struct {
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject string `json:"subject"`
+}
+
 type SeedOutlinePart struct {
 	// Bytes corresponds to the JSON schema field "bytes".
 	Bytes int `json:"bytes"`
@@ -12036,6 +12089,9 @@ type SeedShowResult struct {
 
 	// NotesTotal corresponds to the JSON schema field "notes_total".
 	NotesTotal int `json:"notes_total"`
+
+	// OpenAsks corresponds to the JSON schema field "open_asks".
+	OpenAsks []SeedOpenAsk `json:"open_asks"`
 
 	// ParentOutline corresponds to the JSON schema field "parent_outline".
 	ParentOutline []SeedOutlinePart `json:"parent_outline,omitempty,omitzero"`

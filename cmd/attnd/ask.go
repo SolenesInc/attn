@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/client"
@@ -27,7 +28,7 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 	command := ""
-	if len(args) > 0 && (args[0] == "list" || args[0] == "close") {
+	if len(args) > 0 && (args[0] == "list" || args[0] == "show" || args[0] == "close") {
 		command, args = args[0], args[1:]
 		setCommandPath("ask " + command)
 	}
@@ -38,6 +39,7 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	subject := fs.String("subject", "", "the ask's subject")
 	seed := fs.String("seed", "", "a seed you tend that the ask is about")
 	file := fs.String("file", "", "read the ask from this markdown file instead of stdin")
+	reason := fs.String("m", "", "why you withdraw an ask of an agent you oversee")
 	positionals, err := parseInterspersedFlagArgs(fs, args)
 	if err != nil {
 		fmt.Fprintf(stderr, "ask: %v\n", err)
@@ -59,8 +61,10 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch command {
 	case "list":
 		err = listAsks(c, sessionID, *asJSON, stdout)
+	case "show":
+		err = showAsk(c, sessionID, positionals[0], *asJSON, stdout)
 	case "close":
-		if err = c.AskClose(sessionID, positionals[0]); err == nil {
+		if err = c.AskClose(sessionID, positionals[0], *reason); err == nil {
 			fmt.Fprintf(stdout, "Withdrew %s.\n", positionals[0])
 		}
 	default:
@@ -79,8 +83,8 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 func askUsageError(command string, positionals []string) string {
 	switch {
-	case command == "close" && len(positionals) != 1:
-		return "ask close: needs exactly one ask id"
+	case (command == "close" || command == "show") && len(positionals) != 1:
+		return fmt.Sprintf("ask %s: needs exactly one ask id", command)
 	case command == "list" && len(positionals) > 0:
 		return fmt.Sprintf("ask list: unexpected argument %q", positionals[0])
 	case command == "" && len(positionals) > 0:
@@ -185,26 +189,92 @@ func listAsks(c *client.Client, sessionID protocol.SessionID, asJSON bool, stdou
 	}
 	if !result.Enabled {
 		fmt.Fprintln(stdout, "Asks are off for this session.")
-		return nil
 	}
-	if len(result.Asks) == 0 {
-		fmt.Fprintln(stdout, "No open asks.")
+	switch {
+	case len(result.Asks) == 0 && len(result.Overseen) == 0:
+		if result.Enabled {
+			fmt.Fprintln(stdout, "No open asks.")
+		}
 		return nil
+	case len(result.Asks) == 0 && result.Enabled:
+		fmt.Fprintln(stdout, "You have no open asks.")
 	}
 	for _, open := range result.Asks {
-		if open.SeedID == nil {
-			fmt.Fprintf(stdout, "%s  %s\n", open.ID, open.Subject)
-		} else {
-			fmt.Fprintf(stdout, "%s  %s  %s\n", open.ID, askSeedName(open), open.Subject)
-		}
+		fmt.Fprintln(stdout, askRow(open))
+	}
+	if len(result.Overseen) == 0 {
+		return nil
+	}
+	if len(result.Asks) > 0 || result.Enabled {
+		fmt.Fprintln(stdout)
+	}
+	fmt.Fprintln(stdout, "Asked by agents you oversee. These are not your asks, and their answers go to the askers.")
+	fmt.Fprintln(stdout, `Read one: attn ask show <id>. Withdraw one: attn ask close <id> -m "<why>".`)
+	for _, overseen := range result.Overseen {
+		fmt.Fprintf(stdout, "%s  · from %s\n", askRow(overseen.Ask), askerName(overseen.From))
 	}
 	return nil
+}
+
+func askRow(a protocol.Ask) string {
+	if a.SeedID == nil {
+		return fmt.Sprintf("%s  %s", a.ID, a.Subject)
+	}
+	return fmt.Sprintf("%s  %s  %s", a.ID, askSeedName(a), a.Subject)
+}
+
+func askerName(from protocol.ActorView) string {
+	session, ok := strings.CutPrefix(string(from.Ref), "session:")
+	if !ok || strings.HasPrefix(session, from.Name) {
+		return from.Name
+	}
+	return fmt.Sprintf("%s (%.8s)", from.Name, session)
+}
+
+func showAsk(c *client.Client, sessionID protocol.SessionID, askID string, asJSON bool, stdout io.Writer) error {
+	shown, err := c.AskShow(sessionID, askID)
+	if err != nil {
+		return err
+	}
+	if asJSON {
+		return json.NewEncoder(stdout).Encode(shown)
+	}
+	a := shown.Ask
+	fmt.Fprintf(stdout, "%s  %s\n", a.ID, a.Subject)
+	fmt.Fprintf(stdout, "asked by  %s\n", askerName(shown.From))
+	if a.SeedID != nil {
+		fmt.Fprintf(stdout, "seed      %s\n", askSeedName(a))
+	}
+	fmt.Fprintf(stdout, "open      %s\n", askAge(a.CreatedAt))
+	if !shown.Held {
+		fmt.Fprintf(stdout, "Not your ask. The user answers it, and the answer goes to its asker. Withdraw it with attn ask close %s -m \"<why>\".\n", a.ID)
+	}
+	fmt.Fprintf(stdout, "\n%s\n", strings.TrimRight(shown.Markdown, "\n"))
+	return nil
+}
+
+func askAge(createdAt string) string {
+	at, err := time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return createdAt
+	}
+	switch age := time.Since(at); {
+	case age < time.Minute:
+		return fmt.Sprintf("%ds", int(age.Seconds()))
+	case age < time.Hour:
+		return fmt.Sprintf("%dm", int(age.Minutes()))
+	case age < 48*time.Hour:
+		return fmt.Sprintf("%dh", int(age.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(age.Hours()/24))
+	}
 }
 
 func writeAskHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn ask [flags] < ask.md
        attn ask list
-       attn ask close <id>
+       attn ask show <id>
+       attn ask close <id> [-m <why>]
 
 Ask the user what you cannot settle alone. They answer from attn, without
 opening your terminal.
@@ -251,9 +321,18 @@ the conversation as their message, approvals included. By then they have
 likely moved on and will not read what you write back there. If their answer
 asks you something, reply with a new ask. If you still need them, ask again.
 
+You can also read and withdraw the asks of the agents you oversee: the agents
+below you in your delegation chain, or every agent in your profile when you
+are the Chief. They are not your asks, and only the user answers them. attn ask
+list shows them apart from yours. To withdraw one that no longer needs the
+user, say why with -m: attn notes the reason on the ask's seed and tells the
+agent that asked, so it does not wait for an answer.
+
 commands:
   (none)                 open an ask from stdin or --file
-  list                   your open asks and those about seeds you tend
+  list                   your open asks and those about seeds you tend, then
+                         the open asks of the agents you oversee
+  show <id>              print one ask: who asked, its seed, its age and text
   close <id>             withdraw an ask you no longer need answered
 
 flags:
@@ -263,5 +342,7 @@ flags:
   --file <path>          read the ask from a file; images resolve beside it
   --session <id>         session id (defaults to the current session)
   --json                 print the result as JSON
+  -m <why>               with close: why you withdraw an ask of an agent you
+                         oversee; required for those, and sent to the asker
 `)
 }

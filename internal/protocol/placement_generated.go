@@ -41,6 +41,7 @@ var Placements = map[string][]Placement{
 	"ask_close":                        {Placement{LocatorHome, ""}},
 	"ask_list":                         {Placement{LocatorHome, ""}},
 	"ask_open":                         {Placement{LocatorHome, ""}},
+	"ask_show":                         {Placement{LocatorHome, ""}},
 	"automation_apply":                 {Placement{LocatorHome, ""}},
 	"automation_cleanup":               {Placement{LocatorHome, ""}},
 	"automation_definition_get":        {Placement{LocatorHome, ""}},
@@ -450,6 +451,18 @@ func (m AskOpenMessage) Placement() Placement {
 }
 
 func (m AskOpenMessage) Locate() string {
+	return ""
+}
+
+func (AskShowMessage) CommandName() string {
+	return "ask_show"
+}
+
+func (m AskShowMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AskShowMessage) Locate() string {
 	return ""
 }
 

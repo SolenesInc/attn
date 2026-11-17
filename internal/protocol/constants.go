@@ -71,6 +71,7 @@ const (
 	CmdAskOpen                       = "ask_open"
 	CmdAskList                       = "ask_list"
 	CmdAskClose                      = "ask_close"
+	CmdAskShow                       = "ask_show"
 	CmdAskAnswer                     = "ask_answer"
 	CmdAskImage                      = "ask_image"
 	CmdAskSeedMentions               = "ask_seed_mentions"

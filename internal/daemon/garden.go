@@ -1037,6 +1037,7 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 			ArtifactDir:    shownArtifactDir,
 			Artifacts:      artifacts,
 			References:     d.seedArtifactReferences(seed.ID),
+			OpenAsks:       d.seedOpenAsks(seed.ID),
 		},
 	})
 }

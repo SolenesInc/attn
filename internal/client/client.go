@@ -945,8 +945,23 @@ func (c *Client) WithdrawVent(sessionID protocol.SessionID, ventID string) error
 	return err
 }
 
-func (c *Client) AskClose(sessionID protocol.SessionID, askID string) error {
-	_, err := c.send(protocol.AskCloseMessage{Cmd: protocol.CmdAskClose, SessionID: sessionID, AskID: askID})
+func (c *Client) AskShow(sessionID protocol.SessionID, askID string) (*protocol.AskShowResult, error) {
+	resp, err := c.send(protocol.AskShowMessage{Cmd: protocol.CmdAskShow, SessionID: sessionID, AskID: askID})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AskShowResult == nil {
+		return nil, errors.New("daemon returned no ask")
+	}
+	return resp.AskShowResult, nil
+}
+
+func (c *Client) AskClose(sessionID protocol.SessionID, askID, reason string) error {
+	msg := protocol.AskCloseMessage{Cmd: protocol.CmdAskClose, SessionID: sessionID, AskID: askID}
+	if reason = strings.TrimSpace(reason); reason != "" {
+		msg.Reason = protocol.Ptr(reason)
+	}
+	_, err := c.send(msg)
 	return err
 }
 
