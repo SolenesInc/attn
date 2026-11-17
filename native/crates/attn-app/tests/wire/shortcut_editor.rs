@@ -110,7 +110,7 @@ fn open_editor(world: &mut World) {
     press(world, key_event(&default_chord(&Action::UiShowShortcuts)));
     click(world, "shortcuts.edit");
     assert!(editor_open(world), "{}", world.screen());
-    assert!(!shows(world, "dialog", "Keyboard shortcuts"));
+    assert!(!shows(world, "dialog", "Keyboard Shortcuts"));
     let focused = world.screen().focused().and_then(|n| n.name);
     assert_eq!(focused.as_deref(), Some("Filter shortcuts"));
 }
@@ -262,6 +262,11 @@ fn recording_takes_the_keys_that_would_run_an_action_and_saves_them() {
         keycaps(Binding::Chord(chord("mod+shift+y")))
     );
     assert!(editor_open(&world));
+    assert_eq!(
+        focused_key(&world),
+        Some(keys_of(&Action::TilePopOut)),
+        "the keyboard stays on the row it recorded"
+    );
     assert!(world.runtime_is_at_rest());
 }
 
@@ -402,7 +407,7 @@ fn unbinding_a_shortcut_frees_its_keys_for_another_action() {
 
     click(&mut world, "shortcut-editor.unbind.session.new");
     assert_eq!(overrides(&world)["session.new"], Value::Null);
-    assert_eq!(shown(&world, &Action::SessionNew), "Record shortcut");
+    assert_eq!(shown(&world, &Action::SessionNew), "Unassigned");
     assert!(!row_has(&world, &Action::SessionNew, "unbind"));
 
     let freed = default_chord(&Action::SessionNew);
@@ -725,7 +730,12 @@ fn escape_stops_recording_and_keeps_the_binding() {
     assert_eq!(shown(&world, &Action::UiActionMenu), before);
     assert!(editor_open(&world));
     assert!(writes(&world).is_empty());
+    assert_eq!(focused_key(&world), Some(keys_of(&Action::UiActionMenu)));
     assert!(world.runtime_is_at_rest());
+}
+
+fn focused_key(world: &World) -> Option<String> {
+    world.screen().focused().and_then(|n| n.key)
 }
 
 #[test]
@@ -790,7 +800,7 @@ fn a_recorded_chord_runs_its_action_once_the_daemon_has_it() {
 
     world.gesture(|app| app.press("mod+shift+y"));
     world.gesture(|app| app.type_text("g"));
-    assert!(shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(shows(&world, "dialog", "Keyboard Shortcuts"));
 }
 
 #[test]
@@ -846,7 +856,7 @@ fn a_change_made_before_the_daemon_has_the_last_one_keeps_both() {
 }
 
 #[test]
-fn restore_defaults_drops_every_rebind_and_keeps_the_rest_of_the_setting() {
+fn restore_defaults_drops_every_rebind_and_puts_back_the_default_dock() {
     let mut world = start(Some(
         json!({"session.new": {"key": "m", "meta": true, "alt": true}}),
     ));
@@ -856,7 +866,11 @@ fn restore_defaults_drops_every_rebind_and_keeps_the_rest_of_the_setting() {
 
     let saved = saved(&world);
     assert_eq!(saved["overrides"], json!({}));
-    assert_eq!(saved["dock"]["items"], json!(["dock.attention"]));
+    assert_eq!(
+        saved["dock"],
+        json!({"collapsed": false, "items": DEFAULT_DOCK})
+    );
+    assert_eq!(docked(&world), DEFAULT_DOCK);
     assert!(!badge(&world, &Action::SessionNew, "customized"));
     assert!(world.runtime_is_at_rest());
 }
@@ -999,4 +1013,197 @@ fn reopening_starts_with_no_filter_and_nothing_recording() {
         keycaps(defaults().binding(&Action::UiActionMenu).unwrap())
     );
     assert!(writes(&world).is_empty());
+}
+
+const DEFAULT_DOCK: [&str; 6] = [
+    "dock.attention",
+    "terminal.splitVertical",
+    "terminal.splitHorizontal",
+    "session.newHorizontal",
+    "terminal.toggleZoom",
+    "session.toggleSidebar",
+];
+
+fn with_dock(items: &[&str]) -> World {
+    let setting =
+        json!({"version": 1, "overrides": {}, "dock": {"collapsed": true, "items": items}})
+            .to_string();
+    World::start(keeping(&[(SETTING, setting.as_str())]))
+}
+
+/// The ids of the shortcuts the editor's Dock section lists, in order.
+fn docked(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .children(Target::key("shortcut-editor.dock.list"))
+        .into_iter()
+        .filter_map(|n| {
+            n.key?
+                .strip_prefix("shortcut-editor.dock.")
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+/// The ids the last keybindings write keeps in the dock, in order.
+fn saved_dock(world: &World) -> Vec<String> {
+    let setting = saved(world);
+    setting["dock"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| id.as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn the_dock_section_lists_the_docked_shortcuts_and_reorders_and_removes_them() {
+    let mut world = with_dock(&[
+        "dock.attention",
+        "terminal.toggleZoom",
+        "session.toggleSidebar",
+    ]);
+    open_editor(&mut world);
+    assert_eq!(
+        docked(&world),
+        [
+            "dock.attention",
+            "terminal.toggleZoom",
+            "session.toggleSidebar"
+        ]
+    );
+    let first_up = world
+        .screen()
+        .get(Target::key("shortcut-editor.dock.up.dock.attention"));
+    assert!(first_up.is("disabled"), "the first item cannot move up");
+
+    click(&mut world, "shortcut-editor.dock.down.dock.attention");
+    assert_eq!(
+        saved_dock(&world),
+        [
+            "terminal.toggleZoom",
+            "dock.attention",
+            "session.toggleSidebar"
+        ]
+    );
+    assert_eq!(saved(&world)["dock"]["collapsed"], json!(true));
+
+    click(&mut world, "shortcut-editor.dock.up.session.toggleSidebar");
+    assert_eq!(
+        docked(&world),
+        [
+            "terminal.toggleZoom",
+            "session.toggleSidebar",
+            "dock.attention"
+        ]
+    );
+
+    click(
+        &mut world,
+        "shortcut-editor.dock.remove.terminal.toggleZoom",
+    );
+    assert_eq!(docked(&world), ["session.toggleSidebar", "dock.attention"]);
+    assert_eq!(saved(&world)["overrides"], json!({}));
+    rest(&mut world);
+}
+
+#[test]
+fn the_star_on_a_row_pins_its_shortcut_to_the_dock_and_unpins_it() {
+    let mut world = with_dock(&["dock.attention"]);
+    open_editor(&mut world);
+    let star = |world: &World| {
+        world
+            .screen()
+            .get(Target::key("shortcut-editor.dock-pin.desktop.overview"))
+    };
+    assert_eq!(star(&world).name.as_deref(), Some("Add to dock"));
+
+    click(&mut world, "shortcut-editor.dock-pin.desktop.overview");
+    assert_eq!(saved_dock(&world), ["dock.attention", "desktop.overview"]);
+    assert_eq!(docked(&world), ["dock.attention", "desktop.overview"]);
+    assert_eq!(star(&world).name.as_deref(), Some("Remove from dock"));
+
+    click(&mut world, "shortcut-editor.dock-pin.desktop.overview");
+    assert_eq!(saved_dock(&world), ["dock.attention"]);
+    rest(&mut world);
+}
+
+#[test]
+fn an_emptied_dock_says_so_and_the_filter_hides_the_section() {
+    let mut world = with_dock(&[]);
+    open_editor(&mut world);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shortcut-editor.dock.empty"))
+            .is_some()
+    );
+
+    world.gesture(|app| app.type_text("zoom"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shortcut-editor.dock"))
+            .is_none()
+    );
+}
+
+#[test]
+fn each_category_lists_its_shortcuts_in_the_tauri_apps_order() {
+    let mut world = start(None);
+    open_editor(&mut world);
+    let rows = |category: &str| -> Vec<String> {
+        world
+            .screen()
+            .children(Target::key(format!("shortcut-editor.category.{category}")))
+            .into_iter()
+            .filter_map(|n| {
+                n.key?
+                    .strip_prefix("shortcut-editor.row.")
+                    .map(str::to_owned)
+            })
+            .collect()
+    };
+    assert_eq!(
+        rows("Sessions")[..4],
+        [
+            "sidebar.wider",
+            "sidebar.narrower",
+            "session.new",
+            "session.newTerminal"
+        ]
+    );
+    assert_eq!(
+        rows("Sessions").last().map(String::as_str),
+        Some("dock.asks")
+    );
+    assert_eq!(rows("Review"), ["session.refreshPRs", "dock.attention"]);
+    assert_eq!(rows("App")[0], "app.quit");
+}
+
+#[test]
+fn the_sheet_lists_desktops_and_sessions_beside_the_other_sections_with_edit_in_its_header() {
+    let mut world = start(None);
+    world.gesture(|app| app.key(key_event(&default_chord(&Action::UiShowShortcuts))));
+    let screen = world.screen();
+    let at = |key: &str| screen.bounds(Target::key(key)).unwrap();
+    let sessions = at("shortcuts.Sessions");
+    let panes = at("shortcuts.Panes");
+    assert_eq!(sessions[1], panes[1], "the two columns start level");
+    assert!(
+        panes[0] >= sessions[0] + sessions[2],
+        "Panes sits right of Sessions"
+    );
+    for later in ["shortcuts.Markdown", "shortcuts.Review", "shortcuts.App"] {
+        assert_eq!(
+            at(later)[0],
+            panes[0],
+            "{later} follows Panes in its column"
+        );
+    }
+    let edit = at("shortcuts.edit");
+    assert!(
+        edit[1] + edit[3] <= at("shortcuts.list")[1],
+        "Edit shortcuts sits above the list, so it never scrolls away"
+    );
 }

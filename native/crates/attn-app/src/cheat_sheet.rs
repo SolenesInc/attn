@@ -5,7 +5,7 @@
 use attn_ui::Tokens;
 use attn_ui::keycap;
 use attn_ui::type_;
-use rune::{El, KeyPlatform, col, el, row, text};
+use rune::{El, KeyPlatform, TextStyle, col, el, row, text};
 
 use crate::Action;
 use crate::keymap::{Binding, Keymap};
@@ -238,23 +238,53 @@ fn spoken(keymap: &Keymap, caps: &[String]) -> String {
     })
 }
 
-pub(crate) fn sections(keymap: &Keymap, t: &Tokens) -> Vec<El> {
-    SECTIONS
-        .iter()
-        .map(|section| {
-            col()
-                .key(format!("shortcuts.{}", section.key))
-                .role("list")
-                .label(section.title)
-                .w_full()
-                .child(crate::shell::section_title(section.title, t))
-                .children(section.lines.iter().enumerate().flat_map(|(i, line)| {
-                    let rule =
-                        (i > 0).then(|| el().w_full().h(1.0).fill(t.border_subtle).a11y_hidden());
-                    rule.into_iter().chain([row_of(keymap, line, t)])
-                }))
-        })
-        .collect()
+/// `.shortcuts-category-title` and `.shortcut-editor-category-title`: the heading of a
+/// group of shortcuts, uppercase in the brand color.
+pub(crate) fn category_title(title: &str, t: &Tokens) -> El {
+    type_::upper(title, CATEGORY_TITLE)
+        .role("heading")
+        .color(t.brand)
+}
+
+const CATEGORY_TITLE: TextStyle = TextStyle {
+    weight: 700.0,
+    tracking: 0.7,
+    ..type_::SECTION
+};
+
+/// The sheet's sections in two columns, as `.shortcuts-body { column-count: 2 }` balances
+/// them: the first column takes sections until it holds half the rows.
+pub(crate) fn columns(keymap: &Keymap, t: &Tokens) -> [Vec<El>; 2] {
+    let rows: usize = SECTIONS.iter().map(|s| s.lines.len()).sum();
+    let mut first = 0;
+    let mut split = 0;
+    for section in SECTIONS {
+        if first * 2 >= rows {
+            break;
+        }
+        first += section.lines.len();
+        split += 1;
+    }
+    let (left, right) = SECTIONS.split_at(split);
+    [left, right].map(|sections| {
+        sections
+            .iter()
+            .map(|section| section_of(keymap, section, t))
+            .collect()
+    })
+}
+
+fn section_of(keymap: &Keymap, section: &Section, t: &Tokens) -> El {
+    col()
+        .key(format!("shortcuts.{}", section.key))
+        .role("list")
+        .label(section.title)
+        .w_full()
+        .child(category_title(section.title, t).mb(6.0))
+        .children(section.lines.iter().enumerate().flat_map(|(i, line)| {
+            let rule = (i > 0).then(|| el().w_full().h(1.0).fill(t.border_subtle).a11y_hidden());
+            rule.into_iter().chain([row_of(keymap, line, t)])
+        }))
 }
 
 fn row_of(keymap: &Keymap, line: &Line, t: &Tokens) -> El {
@@ -279,7 +309,12 @@ fn row_of(keymap: &Keymap, line: &Line, t: &Tokens) -> El {
             .wrap(),
     );
     if let Some(note) = &note {
-        label = label.child(text(note.clone()).font(type_::LABEL).color(t.text_tertiary));
+        label = label.child(
+            text(note.clone())
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .wrap(),
+        );
     }
     let item = row()
         .key(format!("shortcut.{}", first.unwrap_or_default()))

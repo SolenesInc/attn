@@ -16,6 +16,8 @@ pub const PREVIOUS: &str = "▲";
 pub const NEXT: &str = "▼";
 pub const SUNRISE: &str = "☀";
 pub const RELOAD: &str = "↻";
+pub const ARROW_UP: &str = "↑";
+pub const ARROW_DOWN: &str = "↓";
 
 pub const CARET_DOWN: &str = "\u{f0d7}";
 pub const CARET_RIGHT: &str = "\u{f0da}";
@@ -41,3 +43,5 @@ pub const BELL_SLASH: &str = "\u{f1f6}";
 pub const SITEMAP: &str = "\u{f0e8}";
 pub const BAN: &str = "\u{f05e}";
 pub const STAR_OPEN: &str = "\u{f006}";
+pub const STAR: &str = "\u{f005}";
+pub const UNDO: &str = "\u{f0e2}";

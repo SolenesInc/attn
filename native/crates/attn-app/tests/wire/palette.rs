@@ -319,7 +319,7 @@ fn a_command_picked_by_enter_or_by_pointer_counts_once_and_runs() {
         assert!(
             world
                 .screen()
-                .find(Target::role("dialog").name("Keyboard shortcuts"))
+                .find(Target::role("dialog").name("Keyboard Shortcuts"))
                 .is_some()
         );
         assert_eq!(world.daemon.sent_of("get_command_usage").len(), 1);
@@ -470,7 +470,7 @@ fn a_late_answer_is_dropped_and_failed_reads_and_writes_say_so_without_blocking_
     assert!(
         world
             .screen()
-            .find(Target::role("dialog").name("Keyboard shortcuts"))
+            .find(Target::role("dialog").name("Keyboard Shortcuts"))
             .is_some()
     );
     assert_eq!(

@@ -1126,7 +1126,7 @@ app/src/App.shortcutEditor.test.tsx	App shortcut editor > refuses a chord leader
 app/src/App.shortcutEditor.test.tsx	App shortcut editor > saves a recorded chord, which fires once the daemon echoes the setting back	attn-app/tests/wire/shortcut_editor.rs::a_recorded_chord_runs_its_action_once_the_daemon_has_it	
 app/src/App.shortcutEditor.test.tsx	App shortcut editor > saves a chord whose leader is the row’s own default keys	attn-app/tests/wire/shortcut_editor.rs::a_chord_may_lead_with_the_rows_own_keys	
 app/src/App.shortcutEditor.test.tsx	App shortcut editor > asks before a chord takes a leader another shortcut uses	attn-app/tests/wire/shortcut_editor.rs::a_chord_whose_leader_another_shortcut_uses_asks_first	
-app/src/App.shortcutEditor.test.tsx	App shortcut editor > restores every default	attn-app/tests/wire/shortcut_editor.rs::restore_defaults_drops_every_rebind_and_keeps_the_rest_of_the_setting	
+app/src/App.shortcutEditor.test.tsx	App shortcut editor > restores every default	attn-app/tests/wire/shortcut_editor.rs::restore_defaults_drops_every_rebind_and_puts_back_the_default_dock	
 app/src/App.shortcutEditor.test.tsx	App shortcut editor > filters by %s and hides the dock while filtering	attn-app/tests/wire/shortcut_editor.rs::the_filter_keeps_the_rows_whose_label_or_keys_match	
 app/src/App.shortcutEditor.test.tsx	App shortcut editor > announces a filter that matches nothing	attn-app/tests/wire/shortcut_editor.rs::a_filter_that_matches_nothing_says_so	
 app/src/App.shortcutEditor.test.tsx	App shortcut editor > never records keys typed into the filter, nor keeps a pending reassign	attn-app/tests/wire/shortcut_editor.rs::keys_typed_into_the_filter_are_never_recorded_and_typing_drops_a_reassign	

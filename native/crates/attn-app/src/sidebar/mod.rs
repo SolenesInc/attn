@@ -2,7 +2,7 @@ pub(crate) mod actions;
 pub(crate) mod bar_peek;
 mod chrome;
 pub(crate) mod crew;
-mod dock;
+pub(crate) mod dock;
 mod harness_icon;
 pub(crate) mod model;
 pub(crate) mod queue;

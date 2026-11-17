@@ -106,6 +106,62 @@ fn needs_an_agent(action: &Action) -> bool {
     )
 }
 
+/// The actions the dock lists, in order and once each: the ones pinned, or the default.
+pub(crate) fn pinned(state: &State) -> Vec<Action> {
+    let mut pinned: Vec<Action> = Vec::new();
+    for action in stored(state)
+        .items
+        .iter()
+        .filter_map(|id| Action::from_id(&current_id(id)))
+    {
+        if !pinned.contains(&action) {
+            pinned.push(action);
+        }
+    }
+    pinned
+}
+
+/// Pins `action` at the dock's end, or takes it out.
+pub(crate) fn pin(state: &mut State, action: &Action, on: bool, tx: &mut Tx) {
+    let mut pinned = pinned(state);
+    if pinned.contains(action) == on {
+        return;
+    }
+    match on {
+        true => pinned.push(action.clone()),
+        false => pinned.retain(|a| a != action),
+    }
+    write_items(state, &pinned, tx);
+}
+
+/// Moves `action` one place toward the dock's start, or toward its end when `later`.
+pub(crate) fn shift(state: &mut State, action: &Action, later: bool, tx: &mut Tx) {
+    let mut pinned = pinned(state);
+    let Some(from) = pinned.iter().position(|a| a == action) else {
+        return;
+    };
+    let to = match later {
+        true => Some(from + 1).filter(|&to| to < pinned.len()),
+        false => from.checked_sub(1),
+    };
+    let Some(to) = to else {
+        return;
+    };
+    pinned.swap(from, to);
+    write_items(state, &pinned, tx);
+}
+
+fn write_items(state: &mut State, pinned: &[Action], tx: &mut Tx) {
+    let items: Vec<&str> = pinned.iter().map(Action::id).collect();
+    let dock = json!({"collapsed": stored(state).collapsed, "items": items});
+    crate::shortcut_editor::write_dock(state, dock, tx);
+}
+
+/// The dock a fresh setting has, as Restore Defaults writes it.
+pub(crate) fn default_dock() -> Value {
+    json!({"collapsed": false, "items": DEFAULT_ITEMS})
+}
+
 pub(crate) fn of(state: &State) -> Dock {
     let stored = stored(state);
     let agent_shown = state.window.on_screen(&state.facts).is_some();
@@ -113,16 +169,8 @@ pub(crate) fn of(state: &State) -> Dock {
         && state.facts.current_desktop().is_some_and(|desktop| {
             state.window.desk.row(&desktop.id).view == crate::desktop::layout::View::Zoomed
         });
-    let mut seen = Vec::new();
-    let chips = stored
-        .items
-        .iter()
-        .filter_map(|id| Action::from_id(&current_id(id)))
-        .filter(|action| {
-            let first = !seen.contains(action);
-            seen.push(action.clone());
-            first
-        })
+    let chips = pinned(state)
+        .into_iter()
         .filter(|action| agent_shown || !needs_an_agent(action))
         .filter_map(|action| {
             let keys = crate::palette::label_of(state, &action)?;

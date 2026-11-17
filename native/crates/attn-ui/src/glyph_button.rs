@@ -97,6 +97,11 @@ impl GlyphButton {
         self
     }
 
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.button = self.button.disabled(disabled);
+        self
+    }
+
     pub fn help(mut self, help: impl Into<String>) -> Self {
         self.button = self.button.help(help);
         self

@@ -212,6 +212,8 @@ macro_rules! actions {
 }
 
 actions! {
+    SidebarWider = "sidebar.wider", Sessions, "Widen the sidebar";
+    SidebarNarrower = "sidebar.narrower", Sessions, "Narrow the sidebar";
     SessionNew = "session.new", Sessions, "New session on this desktop";
     SessionNewTerminal = "session.newTerminal", Sessions, "New terminal on this desktop";
     SessionNewHorizontal = "session.newHorizontal", Sessions, "New session below";
@@ -227,10 +229,7 @@ actions! {
     SessionJumpToWaiting = "session.jumpToWaiting", Sessions, "Jump to next waiting session";
     SessionNextRun = "session.nextRun", Sessions, "Next automation run needing you";
     SidebarAgentList = "sidebar.agentList", Sessions, "All agents";
-    SidebarWider = "sidebar.wider", Sessions, "Widen the sidebar";
-    SidebarNarrower = "sidebar.narrower", Sessions, "Narrow the sidebar";
     SessionSettle = "session.settle", Sessions, "Settle turn";
-    DockAsks = "dock.asks", Sessions, "Asks drawer";
     SessionPriority = "session.priority", Sessions, "Toggle session priority";
     SessionSnooze = "session.snooze", Sessions, "Snooze this agent";
     SessionCancelCountdown = "session.cancelCountdown", Sessions, "Stop the countdown, or keep the next turn";
@@ -262,6 +261,7 @@ actions! {
     DesktopSendStay7 = "desktop.sendStay7", Sessions, "Move this to desktop 7";
     DesktopSendStay8 = "desktop.sendStay8", Sessions, "Move this to desktop 8";
     DesktopSendStay9 = "desktop.sendStay9", Sessions, "Move this to desktop 9";
+    DockAsks = "dock.asks", Sessions, "Asks drawer";
 
     TerminalOpen = "terminal.open", Panes, "Focus utility terminal";
     TerminalSplitVertical = "terminal.splitVertical", Panes, "New shell beside";
@@ -284,9 +284,10 @@ actions! {
     MarkdownSendAnnotations = "markdown.sendAnnotations", Markdown, "Send annotations to session";
     TerminalSendAnnotations = "terminal.sendAnnotations", Markdown, "Send terminal annotations to session";
 
-    DockAttention = "dock.attention", Review, "PRs drawer";
     SessionRefreshPrs = "session.refreshPRs", Review, "Refresh PRs";
+    DockAttention = "dock.attention", Review, "PRs drawer";
 
+    AppQuit = "app.quit", App, "Quit attn";
     UiActionMenu = "ui.actionMenu", App, "Agent palette";
     UiCommandPalette = "ui.commandPalette", App, "Command palette";
     UiOpenSettings = "ui.openSettings", App, "Settings";
@@ -294,12 +295,11 @@ actions! {
     UiIncreaseFontSize = "ui.increaseFontSize", App, "Increase font size";
     UiDecreaseFontSize = "ui.decreaseFontSize", App, "Decrease font size";
     UiResetFontSize = "ui.resetFontSize", App, "Reset font size";
-    FileOpen = "file.open", App, "Open a markdown file";
     NotebookOpenTile = "notebook.openTile", App, "Open Editor tile";
     NotebookOpenFullscreen = "notebook.openFullscreen", App, "Open Notebook fullscreen";
+    FileOpen = "file.open", App, "Open a markdown file";
     BoardOpen = "board.open", App, "Open the garden";
     SessionsOpen = "sessions.open", App, "Open the sessions list";
-    AppQuit = "app.quit", App, "Quit attn";
 }
 
 impl Action {

@@ -218,7 +218,7 @@ fn view_all_shortcuts_hands_off_to_the_shortcut_list() {
     assert!(
         world
             .screen()
-            .find(Target::role("dialog").name("Keyboard shortcuts"))
+            .find(Target::role("dialog").name("Keyboard Shortcuts"))
             .is_some()
     );
 }

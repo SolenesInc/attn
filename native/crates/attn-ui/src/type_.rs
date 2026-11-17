@@ -13,6 +13,9 @@ pub const CAPTION: TextStyle = TextStyle::new(12.0, 400.0);
 /// paths, counts, ages and other values read as data rather than prose.
 pub const MONO_CAPTION: TextStyle = TextStyle::new(12.0, 400.0).mono();
 
+/// The Tauri app's 12px regular text: small buttons, hints and fields.
+pub const SMALL: TextStyle = TextStyle::new(12.0, 400.0);
+
 /// The Tauri app's uppercase monospace headings and labels, `text-transform: uppercase;
 /// letter-spacing: .04em–.16em`: section headings, kickers, field labels and badges.
 pub const CAPS: TextStyle = SECTION.mono().tracking(1.0);

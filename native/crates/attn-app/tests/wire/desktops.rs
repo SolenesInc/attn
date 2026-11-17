@@ -3381,7 +3381,7 @@ fn row_shortcuts_in_a_tile_window_leave_the_desktop_and_a_split_opens_beside_its
     assert!(
         world
             .screen()
-            .find(Target::role("dialog").name("Keyboard shortcuts"))
+            .find(Target::role("dialog").name("Keyboard Shortcuts"))
             .is_some(),
         "other keys run in the main window"
     );

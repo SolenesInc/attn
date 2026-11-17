@@ -806,36 +806,61 @@ fn close_layer(state: &mut State, tx: &mut Tx) {
 }
 
 fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
-    let edit = rune_kit::Button::new("Edit shortcuts")
-        .on_press_tx(crate::shortcut_editor::open)
-        .build(attn_ui::kit(t))
-        .key("shortcuts.edit");
-    Dialog::new("shortcuts", "Keyboard shortcuts", DialogFrame::sheet(t))
-        .width(560.0)
-        .max_height(600.0)
-        .header(edit)
+    let [left, right] = crate::cheat_sheet::columns(&state.keymap, t);
+    let column = |sections: Vec<El>| {
+        col()
+            .w(0.0)
+            .grow(1.0)
+            .min_w(0.0)
+            .gap(12.0)
+            .children(sections)
+    };
+    Dialog::new("shortcuts", "Keyboard Shortcuts", DialogFrame::sheet(t))
+        .width(760.0)
+        .window_height(0.8)
+        .header(edit_shortcuts(t))
         .on_close_tx(close_layer)
         .child(
             col()
                 .key("shortcuts.list")
                 .w_full()
-                .shrink()
+                .grow(1.0)
                 .min_h(0.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
                 .child(
-                    col()
+                    row()
                         .w_full()
-                        .gap(space::S2)
+                        .items_start()
+                        .gap(28.0)
                         .px(20.0)
-                        .pt(12.0)
+                        .pt(24.0)
                         .pb(20.0)
-                        .children(crate::cheat_sheet::sections(&state.keymap, t)),
+                        .child(column(left))
+                        .child(column(right)),
                 )
                 .scroll_bar_styled(attn_ui::dialog_scroll_bar(t)),
         )
         .build(t, layers);
+}
+
+/// `.shortcuts-edit`: a brand-tinted button beside the sheet's ×.
+fn edit_shortcuts(t: &Tokens) -> El {
+    const WORDS: &str = "Edit shortcuts";
+    let ink = t.brand;
+    attn_ui::brand_tinted(
+        rune_kit::Button::new(WORDS)
+            .variant(rune_kit::ButtonVariant::Ghost)
+            .label_with(move |_, _| text(WORDS).font(type_::SMALL).color(ink))
+            .on_press_tx(crate::shortcut_editor::open)
+            .build(attn_ui::kit(t))
+            .key("shortcuts.edit")
+            .h(27.0)
+            .px(12.0)
+            .radius(6.0),
+        t,
+    )
 }
 
 /// A notice that only tells: a card at the window's bottom right, as the Tauri app's toast.
@@ -971,8 +996,4 @@ fn floating(key: &str, surface: El) -> El {
             .padding(space::S6)
             .child(surface),
     )
-}
-
-pub(crate) fn section_title(title: &str, t: &Tokens) -> El {
-    text(title).font(type_::SECTION).color(t.text_tertiary)
 }

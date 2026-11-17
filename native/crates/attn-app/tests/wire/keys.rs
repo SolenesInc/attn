@@ -342,7 +342,7 @@ fn plain_ctrl_and_a_letter_belong_to_the_shell_on_linux() {
     world.gesture(|app| app.press("ctrl+c"));
 
     assert_eq!(typed(&world), [typed_into("r1", "\u{3}")]);
-    assert!(!shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(!shows(&world, "dialog", "Keyboard Shortcuts"));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -541,11 +541,11 @@ fn a_sequence_runs_when_its_second_key_follows_the_leader_in_time() {
         .name
         .unwrap_or_default();
     assert!(hint.ends_with("then…"), "{hint}");
-    assert!(!shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(!shows(&world, "dialog", "Keyboard Shortcuts"));
     world.advance(Duration::from_millis(599));
     world.gesture(|app| app.type_text("j"));
 
-    assert!(shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(shows(&world, "dialog", "Keyboard Shortcuts"));
     assert!(world.screen().find(Target::key("leader.text")).is_none());
     assert!(
         typed(&world).is_empty(),
@@ -567,7 +567,7 @@ fn a_sequence_lapses_after_its_timeout_and_the_next_key_types() {
     assert!(world.screen().find(Target::key("leader.text")).is_none());
     world.gesture(|app| app.type_text("j"));
 
-    assert!(!shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(!shows(&world, "dialog", "Keyboard Shortcuts"));
     assert_eq!(typed(&world), [typed_into("r1", "j")]);
     assert!(world.runtime_is_at_rest());
 }
@@ -587,7 +587,7 @@ fn escape_cancels_a_leader_and_the_leader_again_keeps_it_armed() {
         })
     });
     world.gesture(|app| app.type_text("j"));
-    assert!(!shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(!shows(&world, "dialog", "Keyboard Shortcuts"));
     assert_eq!(typed(&world), [typed_into("r1", "j")]);
 
     world.gesture(|app| app.press("mod+shift+y"));
@@ -595,7 +595,7 @@ fn escape_cancels_a_leader_and_the_leader_again_keeps_it_armed() {
     world.gesture(|app| app.press("mod+shift+y"));
     world.advance(Duration::from_millis(400));
     world.gesture(|app| app.type_text("j"));
-    assert!(shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(shows(&world, "dialog", "Keyboard Shortcuts"));
     assert_eq!(typed(&world), [typed_into("r1", "j")]);
     rest(&mut world);
 }
@@ -612,7 +612,7 @@ fn a_rebind_moves_the_action_and_takes_its_keys_from_the_default_holding_them() 
 
     world.gesture(|app| app.key(toggle_sidebar.clone()));
 
-    assert!(shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(shows(&world, "dialog", "Keyboard Shortcuts"));
     world.gesture(|app| {
         app.key(KeyEvent {
             key: Key::Escape,
@@ -637,7 +637,7 @@ fn a_sequence_that_leads_with_a_default_takes_its_keys() {
     assert!(world.screen().find(Target::key("leader.text")).is_some());
     world.gesture(|app| app.type_text("j"));
 
-    assert!(shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(shows(&world, "dialog", "Keyboard Shortcuts"));
     assert!(!shows(&world, "dialog", "Commands"));
     rest(&mut world);
 }
@@ -654,7 +654,7 @@ fn a_ctrl_letter_after_a_leader_ends_it_and_never_reaches_the_shell() {
 
     assert!(world.screen().find(Target::key("leader.text")).is_none());
     assert!(typed(&world).is_empty());
-    assert!(!shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(!shows(&world, "dialog", "Keyboard Shortcuts"));
     rest(&mut world);
 }
 
@@ -667,7 +667,7 @@ fn a_rebind_saved_with_the_shifted_character_takes_the_keys_of_its_physical_key(
 
     world.gesture(|app| app.press("mod+shift+1"));
 
-    assert!(shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(shows(&world, "dialog", "Keyboard Shortcuts"));
     rest(&mut world);
 }
 
@@ -684,7 +684,7 @@ fn a_rebind_arriving_from_the_daemon_applies_at_once() {
 
     world.gesture(|app| app.key(show_shortcuts));
 
-    assert!(!shows(&world, "dialog", "Keyboard shortcuts"));
+    assert!(!shows(&world, "dialog", "Keyboard Shortcuts"));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -723,7 +723,7 @@ fn a_key_that_types_text_goes_to_the_terminal_holding_the_keyboard_even_when_bou
         assert_eq!(typed(&world), [typed_into("r1", "~")], "{settings:?}");
         assert_eq!(notice(&world), None, "{settings:?}");
         assert!(
-            !shows(&world, "dialog", "Keyboard shortcuts"),
+            !shows(&world, "dialog", "Keyboard Shortcuts"),
             "{settings:?}"
         );
         rest(&mut world);
@@ -737,7 +737,7 @@ fn a_key_that_types_text_goes_to_the_terminal_holding_the_keyboard_even_when_bou
     world.gesture(|app| app.key(tilde.clone()));
     world.gesture(|app| app.type_text("x"));
     assert!(
-        shows(&world, "dialog", "Keyboard shortcuts"),
+        shows(&world, "dialog", "Keyboard Shortcuts"),
         "on home no terminal takes the key, so it runs its action"
     );
     assert!(typed(&world).is_empty(), "home types into no terminal");
