@@ -10,11 +10,14 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, TextInput};
+use rune_kit::TextInput;
 
 use super::autosave::{self, Codec, PLAIN, TRIMMED};
 use super::harnesses::{self, Availability};
-use super::pages::{CAPTION, S4, block, feature_lines, feature_switch, refusal, row_card};
+use super::pages::{
+    CAPTION, S4, block, blocks, feature, feature_note, feature_switch, plain_row, refusal,
+    row_card, row_words, toggle,
+};
 use super::route::{self, Route, RouteHarness, Rules, Target, TierInfo};
 use crate::{State, setting};
 
@@ -199,25 +202,6 @@ pub(super) fn wanted(state: &State) -> Vec<(String, bool)> {
         .collect()
 }
 
-/// A button that reads Enable or Disable and is announced as the switch `name`.
-fn toggle(
-    key: &str,
-    name: &str,
-    on: bool,
-    disabled: bool,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    crate::settings::pages::Action::new(if on { "Disable" } else { "Enable" })
-        .disabled(disabled)
-        .on_press_tx(press)
-        .build(t)
-        .key(key.to_owned())
-        .role("switch")
-        .label(name.to_owned())
-        .checked(on)
-}
-
 fn setting_toggle(key: &'static str, name: &str, disabled: bool, t: &Tokens, state: &State) -> El {
     let on = setting::on(&state.facts.settings, key);
     toggle(
@@ -246,29 +230,33 @@ fn hint(said: &str, t: &Tokens) -> El {
         .wrap()
 }
 
-/// A field that edits the setting `key`, saved on Enter and when the focus leaves it, with its
-/// label above, its hint below and its refusal beside it.
+/// A field that edits the setting `key` and fills its column, saved on Enter and when the
+/// focus leaves it, with its label above, its hint below and its refusal under that, as the
+/// Tauri app's `.settings-field`.
 fn field(
     state: &State,
     key: String,
     label: &str,
     placeholder: &str,
     hint_text: &str,
+    step: Option<f64>,
     t: &Tokens,
 ) -> El {
     let drafts = &state.window.settings.autosave;
     let field = drafts.field(&key);
     let empty = rune::TextEdit::default();
     let (edit, submit) = (key.clone(), key.clone());
-    let input = TextInput::new(field.map_or(&empty, |f| &f.draft))
+    let mut input = TextInput::new(field.map_or(&empty, |f| &f.draft))
         .key(super::field_key(&key))
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(&edit))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
-        .width(Some(220.0));
-    let input = super::pages::input(input, t);
+        .width(None);
+    if let Some(step) = step {
+        input = input.trailing(super::pages::setting_arrows(&key, step, t));
+    }
     let saved = drafts.shows_saved_mark(&key).then(|| {
         text("Saved")
             .key(format!("settings.saved.{key}"))
@@ -277,23 +265,25 @@ fn field(
             .font(CAPTION)
             .color(t.success)
     });
-    let refusal_shown = refusal(state, &key, t);
     col()
-        .gap(space::S1)
-        .child(
-            text(label.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
+        .min_w(0.0)
+        .gap(7.0)
+        .child(type_::upper(label, type_::BOLD_CAPS).color(t.text_dimmed))
         .child(
             row()
+                .w_full()
                 .gap(space::S2)
                 .items_center()
-                .child(input)
+                .child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .child(super::pages::input(input, t)),
+                )
                 .children(saved),
         )
-        .child(hint(hint_text, t))
-        .children(refusal_shown)
+        .child(super::pages::hint(hint_text, t))
+        .children(refusal(state, &key, t))
 }
 
 fn drafts_error(state: &State, key: &str) -> Option<String> {
@@ -353,27 +343,11 @@ fn default_agent(state: &State, t: &Tokens) -> El {
 }
 
 fn asks(state: &State, t: &Tokens) -> El {
-    let name = attn_protocol::go_values::FEATURES
-        .iter()
-        .find(|f| f.key == ASKS)
-        .map_or("Asks", |f| f.name);
-    row()
-        .w_full()
-        .gap(S4)
-        .items_center()
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(space::S1)
-                .child(text(name).font(type_::LABEL).color(t.text_primary))
-                .children(feature_lines(state, ASKS, t)),
-        )
-        .child(feature_switch(state, ASKS, false, t))
+    let feature = feature(ASKS);
+    plain_row(
+        row_words(feature.name, feature.summary, t).children(feature_note(state, ASKS, t)),
+        feature_switch(state, ASKS, false, t),
+    )
 }
 
 fn session_defaults(state: &State, t: &Tokens) -> El {
@@ -393,29 +367,33 @@ fn session_defaults(state: &State, t: &Tokens) -> El {
             t,
         ));
     }
-    body.push(row_card(
-        "Default agent",
-        "Used for new sessions and opening PRs.",
-        t,
+    body.push(plain_row(
+        row_words("Default agent", "Used for new sessions and opening PRs.", t),
         default_agent(state, t),
     ));
-    body.push(row_card(
-        "Auto-approve",
-        "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval.",
-        t,
+    body.push(plain_row(
+        row_words(
+            "Auto-approve",
+            "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval.",
+            t,
+        ),
         setting_toggle(AUTO_APPROVE, "Auto-approve", false, t, state),
     ));
     body.push(asks(state, t));
-    body.push(row_card(
-        "Direct agent launches",
-        "Start agents without an attn process beside each one, which uses less memory. On by default; applies to new and reloaded agents.",
-        t,
+    body.push(plain_row(
+        row_words(
+            "Direct agent launches",
+            "Start agents without an attn process beside each one, which uses less memory. On by default; applies to new and reloaded agents.",
+            t,
+        ),
         setting_toggle(DIRECT_LAUNCH, "Direct agent launches", false, t, state),
     ));
-    body.push(row_card(
-        "Shared terminal host",
-        "Run terminals in one shared process, which uses less memory, and stream output only to the terminals the window shows. On by default; applies to new and reloaded terminals.",
-        t,
+    body.push(plain_row(
+        row_words(
+            "Shared terminal host",
+            "Run terminals in one shared process, which uses less memory, and stream output only to the terminals the window shows. On by default; applies to new and reloaded terminals.",
+            t,
+        ),
         setting_toggle(SHARED_HOST, "Shared terminal host", !migrating, t, state),
     ));
     block("session-defaults", "Session defaults", "", t, body)
@@ -429,34 +407,44 @@ fn resume_choice(settings: &BTreeMap<String, String>) -> &'static str {
     }
 }
 
+/// A standby case's verdict, as the Tauri app's `.settings-standby-verdict`.
+const VERDICT: rune::TextStyle = rune::TextStyle::new(12.0, 700.0);
+/// The title of the standby cases, as `.settings-standby-explain-title`.
+const STANDBY_TITLE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).tracking(0.7);
+
 fn seeds_on_standby(state: &State, t: &Tokens) -> El {
     let settings = &state.facts.settings;
     let choice = resume_choice(settings);
     let ring = settings.get(OWN_PR_COMMENTS).is_some_and(|v| v == "ring");
     let cases = STANDBY_MAIL.iter().map(|(case, resumes)| {
-        let verdict = if resumes.contains(&choice) {
-            "Resumes"
+        let resumes = resumes.contains(&choice);
+        let verdict = if resumes { "Resumes" } else { "Waits" };
+        let (ink, fill) = if resumes {
+            (t.warning, t.warning.alpha(0.14))
         } else {
-            "Waits"
+            (t.text_secondary, t.bg_button)
         };
         row()
             .role("listitem")
             .label(format!("{verdict} {case}"))
-            .gap(space::S2)
+            .gap(10.0)
+            .items_center()
             .child(
                 text(verdict)
-                    .font(type_::LABEL)
-                    .color(if verdict == "Resumes" {
-                        t.success
-                    } else {
-                        t.text_tertiary
-                    })
-                    .a11y_hidden(),
+                    .font(VERDICT)
+                    .color(ink)
+                    .a11y_hidden()
+                    .w(70.0)
+                    .py(2.0)
+                    .center()
+                    .radius(4.0)
+                    .fill(fill),
             )
             .child(
                 text(*case)
                     .font(type_::BODY)
-                    .color(t.text_secondary)
+                    .color(t.text_primary)
+                    .wrap()
                     .a11y_hidden(),
             )
     });
@@ -477,21 +465,24 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> El {
                 |state, value, tx| autosave::apply(state, TENDER_RESUME, value, tx),
             ),
             col()
-                .gap(space::S1)
-                .child(
-                    text("A closed agent on standby")
-                        .font(type_::LABEL)
-                        .color(t.text_primary),
-                )
+                .w_full()
+                .max_w(640.0)
+                .gap(8.0)
+                .py(12.0)
+                .px(14.0)
+                .radius(8.0)
+                .fill(t.bg_elevated)
+                .border(1.0, t.border)
+                .child(type_::upper("A closed agent on standby", STANDBY_TITLE).color(t.text_tertiary))
                 .child(
                     col()
                         .key("settings.standby.cases")
                         .role("list")
                         .label("A closed agent on standby")
-                        .gap(space::S1)
+                        .gap(6.0)
                         .children(cases),
                 )
-                .child(hint(
+                .child(super::pages::hint(
                     "attn always starts a session for a crew member who tends the seed, whatever you pick.",
                     t,
                 )),
@@ -576,7 +567,8 @@ fn capabilities(agent: &str, caps: Option<&BTreeMap<String, bool>>, t: &Tokens) 
         .key(format!("settings.agent.{agent}.capabilities"))
         .role("list")
         .label("Capabilities")
-        .gap(space::S1)
+        .w_full()
+        .mt(20.0)
         .children(known.chain(other).map(|cap| {
             let label = capability_label(cap);
             let value = if caps[cap] {
@@ -587,18 +579,21 @@ fn capabilities(agent: &str, caps: Option<&BTreeMap<String, bool>>, t: &Tokens) 
             row()
                 .role("listitem")
                 .label(format!("{label}: {value}"))
-                .gap(space::S2)
+                .w_full()
+                .gap(S4)
+                .py(6.0)
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
                 .child(
                     text(label)
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .w(140.0)
+                        .font(CAPTION)
+                        .color(t.text_primary)
+                        .grow(1.0)
                         .a11y_hidden(),
                 )
                 .child(
                     text(value)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
+                        .font(CAPTION)
+                        .color(t.text_tertiary)
                         .a11y_hidden(),
                 )
         }))
@@ -619,48 +614,34 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> El {
             .get(agent)
             .copied()
             .unwrap_or_else(|| harnesses::resolved_default(settings) == agent);
-    let summary = format!(
-        "{} · {}",
-        route_badge(state, agent),
-        availability_word(status)
-    );
     let toggled = agent.to_owned();
-    let head = disclosure(
-        format!("settings.agent.{agent}.toggle"),
-        &label,
-        Some(summary),
-        open,
-        t,
-        move |state| {
-            let shown = &mut state.window.settings.agents.shown;
-            let was = shown
-                .get(&toggled)
-                .copied()
-                .unwrap_or_else(|| harnesses::resolved_default(&state.facts.settings) == toggled);
-            state
-                .window
-                .settings
-                .agents
-                .shown
-                .insert(toggled.clone(), !was);
-        },
-    );
-    let mut group = col()
+    let head = agent_head(state, agent, &label, status, open, t, move |state| {
+        let shown = &mut state.window.settings.agents.shown;
+        let was = shown
+            .get(&toggled)
+            .copied()
+            .unwrap_or_else(|| harnesses::resolved_default(&state.facts.settings) == toggled);
+        state
+            .window
+            .settings
+            .agents
+            .shown
+            .insert(toggled.clone(), !was);
+    });
+    let group = col()
         .key(format!("settings.agent.{agent}"))
         .role("group")
         .label(label.clone())
         .w_full()
-        .gap(space::S2)
-        .padding(space::S2)
         .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
+        .border(1.0, t.border)
         .child(head);
     if !open {
         return group;
     }
+    let mut content = col().w_full().px(20.0).pb(20.0);
     if overrides {
-        group = group.child(route::chip(
+        content = content.child(route::chip(
             state,
             t,
             target(agent),
@@ -668,38 +649,18 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> El {
             true,
         ));
     } else {
-        group = group.child(hint(
-            "Model and effort follow this agent's own configuration.",
-            t,
-        ));
+        content = content.child(
+            text("Model and effort follow this agent's own configuration.")
+                .font(type_::BODY)
+                .color(t.text_tertiary)
+                .wrap(),
+        );
     }
     let advanced_open = refusal_inside || page.advanced.contains(agent);
-    let mut fields = row().gap(S4).items_start();
-    if executable {
-        fields = fields.child(field(
-            state,
-            executable_key(agent),
-            "Executable",
-            agent,
-            "Empty uses the executable on PATH.",
-            t,
-        ));
-    }
-    if overrides {
-        fields = fields.child(field(
-            state,
-            cap_key(agent),
-            "Context cap (tokens)",
-            "Agent default",
-            "Empty uses the agent's own compaction behavior.",
-            t,
-        ));
-    }
     let toggled = agent.to_owned();
-    group = group.child(disclosure(
+    content = content.child(disclosure(
         format!("settings.agent.{agent}.advanced"),
         "Advanced",
-        None,
         advanced_open,
         t,
         move |state| {
@@ -709,63 +670,155 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> El {
             }
         },
     ));
-    if !advanced_open {
-        return group;
+    if advanced_open {
+        let mut fields = row().w_full().equal_columns(2).gap(10.0).items_start();
+        if executable {
+            fields = fields.child(field(
+                state,
+                executable_key(agent),
+                "Executable",
+                agent,
+                "Empty uses the executable on PATH.",
+                None,
+                t,
+            ));
+        }
+        if overrides {
+            fields = fields.child(field(
+                state,
+                cap_key(agent),
+                "Context cap (tokens)",
+                "Agent default",
+                "Empty uses the agent's own compaction behavior.",
+                Some(1000.0),
+                t,
+            ));
+        }
+        let all_capabilities = harnesses::capabilities(settings);
+        content = content
+            .child(fields)
+            .child(capabilities(agent, all_capabilities.get(agent), t));
     }
-    let all_capabilities = harnesses::capabilities(settings);
-    group
-        .child(fields)
-        .child(capabilities(agent, all_capabilities.get(agent), t))
+    group.child(content)
 }
 
-/// A button that shows and hides what follows it, with a summary beside its title.
-fn disclosure(
-    key: String,
-    title: &str,
-    summary: Option<String>,
+/// An agent group's head, as the Tauri app's `.settings-agent > summary`: the chevron and the
+/// agent's name, and at its right end the agent's default route and whether it is available.
+fn agent_head(
+    state: &State,
+    agent: &str,
+    label: &str,
+    status: Availability,
     open: bool,
     t: &Tokens,
     toggle: impl Fn(&mut State) + 'static,
 ) -> El {
-    let ink_secondary = t.text_tertiary;
-    let glyph = &crate::settings::pages::kit(t).glyph;
-    let triangle = if open {
-        glyph.triangle_down
-    } else {
-        glyph.triangle_right
-    };
-    let (shown, said) = (title.to_owned(), summary.clone());
-    let button = Button::new(title)
-        .variant(ButtonVariant::Ghost)
+    let settings = &state.facts.settings;
+    let value = Route::stored(
+        agent,
+        settings.get(&model_key(agent)).map_or("", String::as_str),
+        settings.get(&effort_key(agent)).map_or("", String::as_str),
+    );
+    let word = availability_word(status);
+    row()
+        .key(format!("settings.agent.{agent}.toggle"))
+        .role("button")
+        .label(label.to_owned())
+        .a11y_value(format!("{} · {word}", route_badge(state, agent)))
         .expanded(open)
-        .label_with(move |font, ink| {
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.text_secondary)
+        .w_full()
+        .gap(S4)
+        .items_center()
+        .px(20.0)
+        .py(18.0)
+        .child(chevron(open, t))
+        .child(
+            text(label.to_owned())
+                .font(AGENT_NAME)
+                .color(t.text_primary),
+        )
+        .child(rune::spacer())
+        .child(
             row()
-                .gap(space::S2)
+                .gap(space::S1)
                 .items_center()
-                .child(rune::icon(triangle, 10.0).color(ink_secondary))
-                .child(text(shown).font(font).color(ink))
-                .children(said.map(|s| text(s).font(CAPTION).color(ink_secondary)))
-        })
+                .child(route::badge(state, t, &value))
+                .child(
+                    text(format!("· {word}"))
+                        .font(CAPTION)
+                        .color(t.text_secondary),
+                ),
+        )
         .on_press(toggle)
-        .build(crate::settings::pages::kit(t))
-        .key(key);
-    match summary {
-        Some(summary) => button.a11y_value(summary),
-        None => button,
-    }
+}
+
+/// An agent's name in its group's head.
+const AGENT_NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
+
+/// The `›` before an agent's name, turned down while its group is open.
+fn chevron(open: bool, t: &Tokens) -> El {
+    let icon = if open {
+        crate::settings::pages::kit(t).glyph.chevron_down
+    } else {
+        &attn_ui::icon::EXPAND
+    };
+    rune::icon(icon, 12.0).color(t.text_tertiary)
+}
+
+/// A line that shows and hides what follows it, as the Tauri app's
+/// `.settings-agent-advanced > summary`.
+fn disclosure(
+    key: String,
+    title: &str,
+    open: bool,
+    t: &Tokens,
+    toggle: impl Fn(&mut State) + 'static,
+) -> El {
+    let triangle = if open {
+        attn_ui::glyph::CARET_DOWN
+    } else {
+        attn_ui::glyph::CARET_RIGHT
+    };
+    row()
+        .key(key)
+        .role("button")
+        .label(title.to_owned())
+        .expanded(open)
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.text_secondary)
+        .w_full()
+        .gap(6.0)
+        .items_center()
+        .py(16.0)
+        .child(
+            text(triangle)
+                .font(type_::BODY)
+                .color(t.text_secondary)
+                .a11y_hidden(),
+        )
+        .child(
+            text(title.to_owned())
+                .font(type_::BODY)
+                .color(t.text_secondary),
+        )
+        .on_press(toggle)
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
     let agents = ordered(&state.facts.settings);
-    vec![
-        session_defaults(state, t),
-        seeds_on_standby(state, t),
+    let mut page = blocks(
+        vec![session_defaults(state, t), seeds_on_standby(state, t)],
+        t,
+    );
+    page.extend([
         col()
             .key("settings.agents.list")
             .w_full()
-            .gap(space::S2)
-            .pb(S4)
+            .gap(12.0)
             .children(agents.iter().map(|agent| agent_group(state, agent, t))),
         pricing::page(state, t),
-    ]
+    ]);
+    page
 }

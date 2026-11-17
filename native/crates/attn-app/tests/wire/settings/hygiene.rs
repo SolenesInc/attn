@@ -101,6 +101,29 @@ fn auto_settle_turns_on_from_its_switch_and_its_windows_save_trimmed() {
 }
 
 #[test]
+fn the_auto_settle_windows_arrows_step_the_wait_by_five_and_the_countdown_by_one() {
+    let (daemon, _) = accepting(DAEMON_WINDOWS);
+    let mut world = World::start(daemon);
+    on_hygiene(&mut world);
+    let arm = field("auto_settle_arm_seconds");
+    let countdown = field("auto_settle_countdown_seconds");
+
+    click(&mut world, &format!("{arm}.up"));
+    click(&mut world, &format!("{countdown}.down"));
+
+    assert_eq!(
+        writes(&world),
+        [
+            ("auto_settle_arm_seconds".to_owned(), "35".to_owned()),
+            ("auto_settle_countdown_seconds".to_owned(), "14".to_owned()),
+        ]
+    );
+    assert_eq!(value(&world, &arm), "35");
+    assert_eq!(value(&world, &countdown), "14");
+    rest(&mut world);
+}
+
+#[test]
 fn quiet_notifications_are_on_by_default_and_turning_them_off_saves_false() {
     let (daemon, _) = accepting(DAEMON_WINDOWS);
     let mut world = World::start(daemon);

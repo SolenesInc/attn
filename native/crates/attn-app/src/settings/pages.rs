@@ -7,7 +7,7 @@ use attn_ui::Tokens;
 use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, Tx, col, row, text};
+use rune::{El, TextStyle, Tx, col, row, text};
 use rune_kit::{Button, TextInput};
 
 use super::autosave;
@@ -18,56 +18,101 @@ pub(super) const CAPTION: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 pub(super) const S4: f32 = 16.0;
 use crate::setting;
 
-/// A titled block of a page: its title and what it is for, then its controls.
+/// A block's heading, as the Tauri app's `.settings-block h3`.
+pub(super) const BLOCK_HEADING: rune::TextStyle = rune::TextStyle::new(13.0, 700.0);
+/// A row card's title, as the Tauri app's `.settings-row-title`.
+const ROW_TITLE: rune::TextStyle = rune::TextStyle::new(13.0, 750.0);
+
+/// A titled block of a page, as the Tauri app's `.settings-block`: its heading and what it is
+/// for, then its controls.
 pub(super) fn block(key: &str, title: &str, description: &str, t: &Tokens, body: Vec<El>) -> El {
     col()
         .key(format!("settings.block.{key}"))
         .role("group")
         .label(title.to_owned())
         .w_full()
-        .gap(space::S2)
-        .pb(S4)
-        .child(
-            text(title.to_owned())
-                .font(type_::SECTION)
-                .color(t.text_primary),
-        )
-        .children((!description.is_empty()).then(|| {
-            text(description.to_owned())
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .wrap()
-        }))
-        .child(col().w_full().gap(space::S2).children(body))
-}
-
-/// One setting in a block: its name and explanation on the left, its control on the right.
-pub(super) fn row_card(title: &str, copy: &str, t: &Tokens, control: El) -> El {
-    row()
-        .w_full()
-        .gap(S4)
-        .items_center()
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
+        .gap(12.0)
+        .pb(22.0)
         .child(
             col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(space::S1)
+                .w_full()
+                .gap(8.0)
                 .child(
                     text(title.to_owned())
-                        .font(type_::LABEL)
+                        .font(BLOCK_HEADING)
                         .color(t.text_primary),
                 )
-                .children((!copy.is_empty()).then(|| {
-                    text(copy.to_owned())
-                        .font(CAPTION)
+                .children((!description.is_empty()).then(|| {
+                    text(description.to_owned())
+                        .font(type_::BODY)
                         .color(t.text_tertiary)
                         .wrap()
                 })),
         )
+        .child(col().w_full().gap(10.0).children(body))
+}
+
+/// A block that follows another on its page, set off by a rule as the Tauri app's
+/// `.settings-block ~ .settings-block`.
+pub(super) fn after_block(block: El, t: &Tokens) -> El {
+    block.pt(20.0).border_sides([1.0, 0.0, 0.0, 0.0], t.border)
+}
+
+/// Blocks one after another, each after the first set off by a rule.
+pub(super) fn blocks(blocks: Vec<El>, t: &Tokens) -> Vec<El> {
+    blocks
+        .into_iter()
+        .enumerate()
+        .map(|(i, block)| if i == 0 { block } else { after_block(block, t) })
+        .collect()
+}
+
+/// The small print under a row card's title, as the Tauri app's `.settings-row-copy`.
+pub(super) fn row_copy(copy: impl Into<String>, t: &Tokens) -> El {
+    text(copy.into())
+        .font(CAPTION)
+        .color(t.text_secondary)
+        .wrap()
+}
+
+/// A row card's title and its small print.
+pub(super) fn row_words(title: &str, copy: &str, t: &Tokens) -> El {
+    col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(4.0)
+        .child(text(title.to_owned()).font(ROW_TITLE).color(t.text_primary))
+        .children((!copy.is_empty()).then(|| row_copy(copy, t)))
+}
+
+/// The Tauri app's `.settings-row-card`: one setting on the page's raised surface, its name
+/// and explanation on the left, its control on the right.
+pub(super) fn row_card(title: &str, copy: &str, t: &Tokens, control: El) -> El {
+    card_surface(row(), t)
+        .w_full()
+        .min_h(56.0)
+        .gap(S4)
+        .items_center()
+        .py(12.0)
+        .px(14.0)
+        .child(row_words(title, copy, t))
+        .child(control)
+}
+
+/// The raised surface of a settings card, as the Tauri app's row, plugin and price cards.
+pub(super) fn card_surface(el: El, t: &Tokens) -> El {
+    el.radius(7.0).fill(t.bg_elevated).border(1.0, t.border)
+}
+
+/// One setting as a plain row on the page, as the Tauri app's `.settings-default-row`: its
+/// words, from [`row_words`], on the left and its control on the right.
+pub(super) fn plain_row(words: El, control: El) -> El {
+    row()
+        .w_full()
+        .gap(24.0)
+        .items_center()
+        .py(8.0)
+        .child(words)
         .child(control)
 }
 
@@ -351,32 +396,55 @@ pub(super) fn input(field: TextInput, t: &Tokens) -> El {
 
 /// The width of a field that holds a number.
 pub(super) const NUMBER_FIELD: f32 = 160.0;
-/// The width of a field that holds a path or a command.
-pub(super) const PATH_FIELD: f32 = 320.0;
 
-/// A field that edits the setting `key`: it saves on Enter and when the focus leaves it, and
-/// shows its Saved mark and its refusal beside it.
-pub(super) fn setting_field(
+/// A field `width` points wide that edits the number setting `key`, with arrows that step it
+/// by `step`: it saves on Enter, when the focus leaves it and on each step, and shows its Saved
+/// mark beside it and its refusal under it.
+pub(super) fn number_field(
     state: &State,
     key: &'static str,
     label: &str,
     placeholder: &str,
     width: f32,
+    step: f64,
     t: &Tokens,
 ) -> El {
-    let field_key = super::field_key(key);
     let field = state.window.settings.autosave.field(key);
     let empty = rune::TextEdit::default();
     let draft = TextInput::new(field.map_or(&empty, |f| &f.draft))
-        .key(field_key)
+        .key(super::field_key(key))
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
+        .trailing(setting_arrows(key, step, t))
         .width(Some(width));
-    let input = input(draft, t);
-    let saved = state
+    col()
+        .items_end()
+        .gap(space::S1)
+        .child(
+            row()
+                .gap(space::S2)
+                .items_center()
+                .child(input(draft, t))
+                .children(saved_mark(state, key, t)),
+        )
+        .children(refusal(state, key, t))
+}
+
+/// The arrows that step the number setting `key` by `step` and save it.
+pub(super) fn setting_arrows(key: &str, step: f64, t: &Tokens) -> El {
+    let setting = key.to_owned();
+    arrows(&super::field_key(key), t, move |state, up, tx| {
+        let next = stepped_value(state.window.settings.autosave.draft(&setting), step, up);
+        autosave::apply(state, &setting, &next, tx);
+    })
+}
+
+/// The Saved mark a field shows beside itself once its value lands.
+fn saved_mark(state: &State, key: &str, t: &Tokens) -> Option<El> {
+    state
         .window
         .settings
         .autosave
@@ -388,18 +456,106 @@ pub(super) fn setting_field(
                 .label("Saved")
                 .font(CAPTION)
                 .color(t.success)
-        });
+        })
+}
+
+/// `typed` stepped once by `step`, up or down: a number field's arrows. An empty or unreadable
+/// field steps from zero.
+pub(super) fn stepped_value(typed: &str, step: f64, up: bool) -> String {
+    let now = typed.trim().parse::<f64>().unwrap_or(0.0);
+    let next = if up { now + step } else { now - step };
+    if next.fract() == 0.0 {
+        format!("{}", next as i64)
+    } else {
+        format!("{next}")
+    }
+}
+
+/// A field's name above it, as the Tauri app's `.settings-label`.
+pub(super) fn field_label(said: &str, t: &Tokens) -> El {
+    type_::upper(said, type_::BOLD_CAPS).color(t.text_dimmed)
+}
+
+/// A field that edits the setting `key` and fills its row, as the Tauri app's
+/// `.settings-input { width: 100% }`: it saves on Enter and when the focus leaves it, steps by
+/// `step` with up and down arrows when set, and shows its Saved mark, then `beside`, to its right
+/// and its refusal under it.
+pub(super) fn wide_setting_field(
+    state: &State,
+    key: &'static str,
+    label: &str,
+    placeholder: &str,
+    step: Option<f64>,
+    beside: Option<El>,
+    t: &Tokens,
+) -> El {
+    let field = state.window.settings.autosave.field(key);
+    let empty = rune::TextEdit::default();
+    let mut draft = TextInput::new(field.map_or(&empty, |f| &f.draft))
+        .key(super::field_key(key))
+        .label(label.to_owned())
+        .placeholder(placeholder.to_owned())
+        .invalid(field.is_some_and(|f| f.error.is_some()))
+        .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
+        .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
+        .width(None);
+    if let Some(step) = step {
+        draft = draft.trailing(setting_arrows(key, step, t));
+    }
     col()
-        .items_end()
-        .gap(space::S1)
+        .w_full()
+        .gap(7.0)
         .child(
             row()
-                .gap(space::S2)
+                .w_full()
+                .gap(8.0)
                 .items_center()
-                .child(input)
-                .children(saved),
+                .child(col().grow(1.0).min_w(0.0).child(input(draft, t)))
+                .children(saved_mark(state, key, t))
+                .children(beside),
         )
         .children(refusal(state, key, t))
+}
+
+/// The up and down arrows a number input shows at its right edge, keyed `{key}.up` and
+/// `{key}.down`; `step` runs with `true` for up.
+pub(super) fn arrows(
+    key: &str,
+    t: &Tokens,
+    step: impl Fn(&mut State, bool, &mut Tx) + Clone + 'static,
+) -> El {
+    let glyph = &kit(t).glyph;
+    let arrow = |up: bool| {
+        let step = step.clone();
+        row()
+            .key(format!("{key}.{}", if up { "up" } else { "down" }))
+            .role("button")
+            .label(if up { "Increase" } else { "Decrease" })
+            .w(14.0)
+            .h(9.0)
+            .center()
+            .child(
+                rune::icon(
+                    if up {
+                        glyph.chevron_up
+                    } else {
+                        glyph.chevron_down
+                    },
+                    8.0,
+                )
+                .color(t.text_secondary)
+                .a11y_hidden(),
+            )
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| step(state, up, tx))
+    };
+    col()
+        .h(19.0)
+        .w(14.0)
+        .mr(4.0)
+        .radius(3.0)
+        .border(1.0, t.border)
+        .child(arrow(true))
+        .child(arrow(false))
 }
 
 /// The refusals the page draws beside their controls, by setting, with where a refused close
@@ -502,10 +658,7 @@ pub(super) fn segmented(
 
 /// The switch in a feature page's head, which turns the feature on and off.
 pub(super) fn feature_switch(state: &State, key: &'static str, show_state: bool, t: &Tokens) -> El {
-    let feature = FEATURES
-        .iter()
-        .find(|f| f.key == key)
-        .expect("a feature page names a declared feature");
+    let feature = feature(key);
     let on = setting::on(&state.facts.settings, key);
     switch(
         format!("settings.feature.{key}"),
@@ -517,11 +670,18 @@ pub(super) fn feature_switch(state: &State, key: &'static str, show_state: bool,
     )
 }
 
-/// A feature's summary line, then what its switch also does and when a change starts.
-pub(super) fn feature_lines(state: &State, key: &str, t: &Tokens) -> Vec<El> {
-    let Some(feature) = FEATURES.iter().find(|f| f.key == key) else {
-        return Vec::new();
-    };
+/// The declared feature `key`.
+pub(super) fn feature(key: &str) -> &'static attn_protocol::go_values::Feature {
+    FEATURES
+        .iter()
+        .find(|f| f.key == key)
+        .expect("a settings page names a declared feature")
+}
+
+/// What a feature's switch also does and when a change starts, as the Tauri app's
+/// `.settings-flag-note`: small print in `text_muted` under the feature's summary.
+pub(super) fn feature_note(state: &State, key: &str, t: &Tokens) -> Option<El> {
+    let feature = feature(key);
     let shortcut = (key == "asks_enabled")
         .then(|| state.keymap.binding(&crate::Action::DockAsks))
         .flatten()
@@ -530,13 +690,7 @@ pub(super) fn feature_lines(state: &State, key: &str, t: &Tokens) -> Vec<El> {
         .into_iter()
         .filter(|s| !s.is_empty())
         .collect();
-    let mut lines = vec![
-        text(feature.summary)
-            .font(type_::BODY)
-            .color(t.text_secondary)
-            .wrap(),
-    ];
-    let words = |s: String| text(s).font(CAPTION).color(t.text_tertiary);
+    let words = |s: String| text(s).font(CAPTION).color(t.text_muted);
     let key = format!("settings.feature-note.{key}");
     match shortcut {
         Some(chord) => {
@@ -546,7 +700,7 @@ pub(super) fn feature_lines(state: &State, key: &str, t: &Tokens) -> Vec<El> {
                 .chain(rest.iter().copied())
                 .collect::<Vec<_>>()
                 .join(" ");
-            lines.push(
+            Some(
                 row()
                     .key(key)
                     .label(said)
@@ -560,13 +714,15 @@ pub(super) fn feature_lines(state: &State, key: &str, t: &Tokens) -> Vec<El> {
                         (!rest.is_empty())
                             .then(|| words(rest.join(" ")).wrap().shrink().a11y_hidden()),
                     ),
-            );
+            )
         }
-        None if !rest.is_empty() => lines.push(words(rest.join(" ")).key(key).wrap()),
-        None => {}
+        None if !rest.is_empty() => Some(words(rest.join(" ")).key(key).wrap()),
+        None => None,
     }
-    lines
 }
+
+/// An experimental feature's name, as the Tauri app's `.settings-flag-name`.
+const FLAG_NAME: rune::TextStyle = rune::TextStyle::new(14.0, 600.0);
 
 pub(super) fn experimental(state: &State, t: &Tokens) -> Vec<El> {
     let experimental: Vec<_> = FEATURES
@@ -581,76 +737,117 @@ pub(super) fn experimental(state: &State, t: &Tokens) -> Vec<El> {
     }
     groups
         .into_iter()
-        .map(|group| {
+        .enumerate()
+        .map(|(i, group)| {
             let features: Vec<_> = experimental.iter().filter(|f| f.group == group).collect();
             let on = features
                 .iter()
                 .filter(|f| setting::on(&state.facts.settings, f.key))
                 .count();
             let count = format!("{on} of {} on", features.len());
-            row()
+            let gutter = col()
+                .w(132.0)
+                .gap(6.0)
+                .pt(12.0)
+                .child(type_::upper(group, type_::BOLD_CAPS).color(t.text_tertiary))
+                .child(
+                    row()
+                        .label(count.clone())
+                        .child(
+                            text(on.to_string())
+                                .font(TextStyle {
+                                    weight: 500.0,
+                                    ..type_::MONO_CAPTION
+                                })
+                                .color(t.warning)
+                                .a11y_hidden(),
+                        )
+                        .child(
+                            text(format!(" of {} on", features.len()))
+                                .font(type_::MONO_CAPTION)
+                                .color(t.text_dimmed)
+                                .a11y_hidden(),
+                        ),
+                );
+            let group_row = row()
                 .key(format!("settings.feature-group.{group}"))
                 .role("group")
                 .label(format!("{group}, {count}"))
                 .w_full()
-                .gap(S4)
-                .pb(S4)
-                .child(
-                    col()
-                        .w(140.0)
-                        .gap(space::S1)
-                        .child(type_::upper(group, type_::BOLD_CAPS).color(t.text_tertiary))
-                        .child(text(count).font(type_::MONO_CAPTION).color(t.text_dimmed)),
-                )
+                .gap(20.0)
+                .pb(14.0)
+                .child(gutter)
                 .child(
                     col()
                         .grow(1.0)
                         .min_w(0.0)
-                        .gap(space::S2)
-                        .children(features.iter().map(|feature| {
-                            row()
-                                .w_full()
-                                .gap(space::S3)
-                                .items_center()
-                                .padding(space::S3)
-                                .radius(6.0)
-                                .fill(t.bg_panel)
-                                .border(1.0, t.border_subtle)
-                                .child(
-                                    col()
-                                        .grow(1.0)
-                                        .min_w(0.0)
-                                        .gap(space::S1)
-                                        .child(
-                                            text(feature.name)
-                                                .font(type_::LABEL)
-                                                .color(t.text_primary),
-                                        )
-                                        .children(feature_lines(state, feature.key, t)),
-                                )
-                                .child(feature_switch(state, feature.key, false, t))
-                        })),
-                )
+                        .children(features.iter().map(|feature| flag(state, feature, t))),
+                );
+            if i == 0 {
+                group_row
+            } else {
+                group_row
+                    .pt(18.0)
+                    .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+            }
         })
         .collect()
+}
+
+/// One experimental feature, as the Tauri app's `.settings-flag`: a flat row whose name and
+/// summary stay quiet while it is off, washed in amber from its left edge while it is on.
+fn flag(state: &State, feature: &attn_protocol::go_values::Feature, t: &Tokens) -> El {
+    let on = setting::on(&state.facts.settings, feature.key);
+    let (name_ink, summary_ink) = if on {
+        (t.text_primary, t.text_secondary)
+    } else {
+        (t.text_secondary, t.text_tertiary)
+    };
+    let words = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(4.0)
+        .child(text(feature.name).font(FLAG_NAME).color(name_ink))
+        .child(
+            text(feature.summary)
+                .font(type_::BODY)
+                .color(summary_ink)
+                .wrap(),
+        )
+        .children(feature_note(state, feature.key, t));
+    let row = row()
+        .key(format!("settings.flag.{}", feature.key))
+        .w_full()
+        .gap(24.0)
+        .items_start()
+        .pt(10.0)
+        .pb(11.0)
+        .px(12.0)
+        .child(words)
+        .child(feature_switch(state, feature.key, false, t).mt(1.0));
+    if on {
+        row.linear_gradient(
+            std::f32::consts::FRAC_PI_2,
+            [
+                (0.0, attn_ui::colors::mix_srgb(t.bg_panel, t.warning, 0.07)),
+                (0.45, t.bg_panel),
+            ],
+        )
+    } else {
+        row
+    }
 }
 
 pub(super) fn github_hosts(state: &State, t: &Tokens) -> Vec<El> {
     let github = &state.facts.github;
     let body = if let Some(reason) = github.polling_off_reason.as_deref() {
         vec![
-            text(reason.to_owned())
+            empty(reason.to_owned(), t)
                 .key("settings.github.polling-off")
-                .font(type_::BODY)
-                .color(t.text_secondary)
                 .wrap(),
         ]
     } else if github.hosts.is_empty() {
-        vec![
-            text("No authenticated hosts detected.")
-                .font(type_::BODY)
-                .color(t.text_secondary),
-        ]
+        vec![empty("No authenticated hosts detected.", t)]
     } else {
         vec![
             row()
@@ -671,11 +868,10 @@ pub(super) fn github_hosts(state: &State, t: &Tokens) -> Vec<El> {
                 })),
         ]
     };
-    let hint = github.polling_off_reason.is_none().then(|| {
-        text("Add hosts with `gh auth login --hostname <host>`.")
-            .font(CAPTION)
-            .color(t.text_tertiary)
-    });
+    let hint = github
+        .polling_off_reason
+        .is_none()
+        .then(|| hint("Add hosts with `gh auth login --hostname <host>`.", t));
     vec![block(
         "github",
         "GitHub Hosts",
@@ -685,11 +881,41 @@ pub(super) fn github_hosts(state: &State, t: &Tokens) -> Vec<El> {
     )]
 }
 
-/// A switch that turns the boolean setting `key` on and off, saved as soon as it flips.
+/// A line that says a list or a page has nothing in it, as the Tauri app's `.settings-empty`.
+pub(super) fn empty(said: impl Into<String>, t: &Tokens) -> El {
+    text(said.into()).font(type_::BODY).color(t.text_tertiary)
+}
+
+/// A hint beside a control, as the Tauri app's `.settings-hint`.
+pub(super) fn hint(said: impl Into<String>, t: &Tokens) -> El {
+    text(said.into()).font(CAPTION).color(t.text_muted)
+}
+
+/// A button that reads Enable or Disable and is announced as the switch `name`, as the Tauri
+/// app's `.settings-action[role=switch]`.
+pub(super) fn toggle(
+    key: &str,
+    name: &str,
+    on: bool,
+    disabled: bool,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    Action::new(if on { "Disable" } else { "Enable" })
+        .disabled(disabled)
+        .on_press_tx(press)
+        .build(t)
+        .key(key.to_owned())
+        .role("switch")
+        .label(name.to_owned())
+        .checked(on)
+}
+
+/// A toggle that turns the boolean setting `key` on and off, saved as soon as it flips.
 pub(super) fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> El {
     let on = setting::on(&state.facts.settings, key);
-    switch(
-        format!("settings.switch.{key}"),
+    toggle(
+        &format!("settings.switch.{key}"),
         label,
         on,
         false,
@@ -711,7 +937,10 @@ pub(super) enum Tone {
 pub(super) fn pill(key: String, label: String, tone: Tone, t: &Tokens) -> El {
     let (ink, fill, edge) = match tone {
         Tone::Plain => (t.text_secondary, t.bg_elevated, t.border),
-        Tone::Good => tinted(t.success, t.success.mix(t.text_primary, 0.27)),
+        Tone::Good => tinted(
+            t.success,
+            attn_ui::colors::mix_srgb(t.text_primary, t.success, 0.73),
+        ),
         Tone::Warn => tinted(t.warning, t.warning),
         Tone::Bad => tinted(t.error, t.error),
     };

@@ -534,12 +534,11 @@ pub(super) fn page(state: &State, t: &Tokens) -> El {
     }
     col()
         .w_full()
-        .gap(space::S2)
+        .mt(24.0)
         .pb(S4)
         .child(super::disclosure(
             "settings.pricing".into(),
             "Model pricing overrides",
-            None,
             pricing.open,
             t,
             |state| {

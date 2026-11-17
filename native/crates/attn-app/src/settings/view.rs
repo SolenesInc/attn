@@ -4,7 +4,7 @@ use rune::tok::space;
 use rune::{Color, El, TextStyle, Tx, col, el, row, text};
 use rune_kit::{ScrollBar, TextInput};
 
-use super::pages::{CAPTION, S4};
+use super::pages::CAPTION;
 use super::sections::{self, Section};
 use super::{
     agents, analytics, appearance, background, bus, delegation, desktop, hygiene, models, outposts,
@@ -223,49 +223,65 @@ fn nav(state: &State, t: &Tokens) -> El {
     .scroll_bar_styled(attn_ui::scroll_bar(t).track_offset(0.0, 1.0))
 }
 
+/// The section's title, as the Tauri app's `.settings-content-head h1`.
+const SECTION_TITLE: TextStyle = TextStyle::new(18.0, 750.0);
+/// How far the lead sits from the column's edge at most, as `.settings-lead`.
+const LEAD_WIDTH: f32 = 680.0;
+
 fn body(state: &State, t: &Tokens) -> El {
     state.window.settings.anchors.clear();
     let section = state.window.settings.section;
     let item = section.item();
-    let lead: Vec<El> = match item.feature {
-        Some(key) => pages::feature_lines(state, key, t),
-        None if !item.description.is_empty() => vec![
-            text(item.description)
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap(),
-        ],
-        None => Vec::new(),
+    let summary = match item.feature {
+        Some(key) => pages::feature(key).summary,
+        None => item.description,
     };
+    let lead = (!summary.is_empty()).then(|| {
+        text(summary)
+            .font(type_::BODY)
+            .color(t.text_secondary)
+            .wrap()
+            .max_w(LEAD_WIDTH)
+            .mt(9.0)
+    });
+    let note = item
+        .feature
+        .and_then(|key| pages::feature_note(state, key, t))
+        .map(|note| note.max_w(LEAD_WIDTH).mt(6.0));
     let head = row()
         .w_full()
-        .gap(S4)
+        .gap(20.0)
+        .items_end()
+        .pb(24.0)
         .child(
             col()
                 .grow(1.0)
                 .min_w(0.0)
-                .gap(space::S1)
                 .child(
                     text(item.label)
                         .key("settings.heading")
                         .role("heading")
                         .label(item.label)
-                        .font(type_::TITLE)
+                        .font(SECTION_TITLE)
                         .color(t.text_primary),
                 )
-                .children(lead),
+                .children(lead)
+                .children(note),
         )
         .children(
             item.feature
                 .map(|key| pages::feature_switch(state, key, true, t)),
         )
-        .child(
-            row()
-                .key("settings.pills")
-                .gap(space::S2)
-                .items_center()
-                .children(pills(state, section, t)),
-        );
+        .children({
+            let pills = pills(state, section, t);
+            (!pills.is_empty()).then(|| {
+                row()
+                    .key("settings.pills")
+                    .gap(space::S2)
+                    .items_center()
+                    .children(pills)
+            })
+        });
     let off = item
         .feature
         .is_some_and(|key| !setting::on(&state.facts.settings, key));
@@ -274,7 +290,6 @@ fn body(state: &State, t: &Tokens) -> El {
         .role("group")
         .label(item.label)
         .w_full()
-        .gap(space::S2)
         .children(page(state, section, t));
     if off {
         content = content.opacity(0.45).inert();
@@ -284,8 +299,10 @@ fn body(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .gap(space::S3)
-        .padding(S4)
+        .pt(26.0)
+        .px(28.0)
+        .pb(32.0)
+        .fill(t.bg_panel)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
@@ -306,10 +323,12 @@ fn status(state: &State, t: &Tokens) -> El {
     } else {
         None
     };
+    let shown = said.is_some() || !refusals.is_empty();
     row()
         .key("settings.autosave")
         .role("status")
         .label(said.unwrap_or_default())
+        .py(if shown { 8.0 } else { 0.0 })
         .gap(space::S2)
         .items_center()
         .children(said.map(|s| text(s).font(CAPTION).color(t.text_tertiary)))

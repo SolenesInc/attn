@@ -590,23 +590,62 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
             )
             .children(recommended);
     }
-    let ink_of = move |name: &str, ink: Color| match (name, warning) {
-        ("Model", Some(warning)) => warning,
-        _ => ink,
+    let unset = view.effective.is_empty();
+    let effort_ink = if view.effort_missing {
+        t.warning
+    } else {
+        t.accent
     };
-    Button::new(label)
-        .label_with(move |font, ink| {
-            row().gap(space::S3).items_center().children(
-                parts
-                    .into_iter()
-                    .map(|(name, v)| text(v).font(font).color(ink_of(name, ink))),
-            )
-        })
-        .expanded(open)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx))
-        .build(crate::settings::pages::kit(t))
+    let font = crate::settings::pages::kit(t).ty.ui;
+    let mut chip = row()
         .key(key)
+        .role("button")
+        .label(label.to_owned())
         .a11y_value(summary)
+        .expanded(open)
+        .focusable(true)
+        .focus_ring(2.0, -2.0, t.accent)
+        .min_w(0.0)
+        .gap(8.0)
+        .items_center()
+        .px(10.0)
+        .py(6.0)
+        .radius(6.0);
+    chip = if open {
+        chip.fill(t.bg_input).border(1.0, t.border_hover)
+    } else if unset {
+        chip.border(1.0, t.warning.alpha(0.45))
+            .border_dash(4.0, 3.0)
+            .hover(t.bg_input)
+    } else {
+        chip.border(1.0, Color::TRANSPARENT).hover(t.bg_input)
+    };
+    for (name, v) in parts {
+        let part = match name {
+            "Harness" => text(v).font(CAPTION).color(if unset {
+                t.text_tertiary
+            } else {
+                t.text_secondary
+            }),
+            "Model" => text(v)
+                .font(font)
+                .color(if unset || view.missing {
+                    t.warning
+                } else {
+                    t.text_primary
+                })
+                .min_w(0.0)
+                .shrink(),
+            _ => text(v).font(font).color(effort_ink),
+        };
+        chip = chip.child(part.a11y_hidden());
+    }
+    chip.child(
+        rune::icon(crate::settings::pages::kit(t).glyph.chevron_down, 12.0)
+            .color(t.text_tertiary)
+            .a11y_hidden(),
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx))
 }
 
 /// What a route runs, as the Tauri app's `.route-badge`: a pill of the harness, the model with
@@ -664,7 +703,7 @@ pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
 /// The Tauri app's `.route-field`: harness and model on one line beside the caret, and the
 /// effort under a hairline, each under its label.
 fn route_field(parts: Vec<(&str, String)>, warning: Option<Color>, t: &Tokens) -> El {
-    let font = crate::settings::pages::kit(t).ty.ui;
+    let k = crate::settings::pages::kit(t);
     let part = |name: &str, value: String| {
         let ink = match (name, warning) {
             ("Model", Some(warning)) => warning,
@@ -672,6 +711,7 @@ fn route_field(parts: Vec<(&str, String)>, warning: Option<Color>, t: &Tokens) -
             ("Effort", _) => t.accent,
             _ => t.text_primary,
         };
+        let font = if name == "Harness" { CAPTION } else { k.ty.ui };
         col()
             .gap(4.0)
             .min_w(0.0)
@@ -702,8 +742,7 @@ fn route_field(parts: Vec<(&str, String)>, warning: Option<Color>, t: &Tokens) -
                     part(name, v).grow(grow)
                 }))
                 .child(
-                    text(attn_ui::glyph::CARET_DOWN)
-                        .font(font)
+                    rune::icon(k.glyph.chevron_down, 12.0)
                         .color(t.text_tertiary)
                         .a11y_hidden(),
                 ),

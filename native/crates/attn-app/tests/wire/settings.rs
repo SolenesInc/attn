@@ -183,6 +183,7 @@ fn value(world: &World, key: &str) -> String {
 
 fn retype(world: &mut World, key: &str, text: &str) {
     click(world, key);
+    press(world, Key::End);
     for _ in 0..value(world, key).chars().count() {
         press(world, Key::Backspace);
     }

@@ -16,14 +16,15 @@ use attn_protocol::{
     CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
     DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
-    InitialStateMessage, InspectPathResultMessage, LaunchDesktopResultMessage,
-    NotificationListResultMessage, PR, PartyView, PathInspection, PhoneLink, PhonesUpdatedMessage,
-    Profile, RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage,
-    RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
-    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
-    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
+    HarnessModel, HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
+    LaunchDesktopResultMessage, NotificationListResultMessage, PR, PartyView, PathInspection,
+    PhoneLink, PhonesUpdatedMessage, Profile, RecentLocation, RecentLocationsResultMessage,
+    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow,
+    ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
+    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
+    SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -890,10 +891,25 @@ fn settings_section(
     settings: &[(&str, &str)],
     answer: impl FnOnce(&Daemon),
 ) {
+    let mut world = settings_world(dark, section, search, settings, |_| {}, answer);
+    snap(&mut world, &format!("settings-{section}"), dark);
+}
+
+/// The Settings dialog on `section`, its state changed by `change` and the daemon answering as
+/// `answer` scripts it.
+fn settings_world(
+    dark: bool,
+    section: &str,
+    search: &str,
+    settings: &[(&str, &str)],
+    change: impl FnOnce(&mut InitialStateMessage),
+    answer: impl FnOnce(&Daemon),
+) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), seeds());
     if let Some(set) = state.settings.as_mut() {
         set.extend(settings.iter().map(|&(k, v)| (k.to_owned(), v.to_owned())));
     }
+    change(&mut state);
     let daemon = Daemon::scripted().state(state);
     answer(&daemon);
     let mut world = start(daemon);
@@ -901,7 +917,70 @@ fn settings_section(
     world.gesture(|app| app.click(Target::key("settings.search.field")));
     world.gesture(|app| app.type_text(search));
     world.gesture(|app| app.click(Target::key(format!("settings.nav.{section}"))));
-    snap(&mut world, &format!("settings-{section}"), dark);
+    world
+}
+
+/// A Settings page scrolled to its end.
+fn settings_bottom(dark: bool, section: &str, search: &str, settings: &[(&str, &str)]) {
+    let mut world = settings_world(dark, section, search, settings, |_| {}, |_| {});
+    world.gesture(|app| app.update(|_, tx| tx.scroll_to_bottom_instant("settings.body")));
+    snap(&mut world, &format!("settings-{section}-bottom"), dark);
+}
+
+/// GitHub hosts with polling off, so the page shows why.
+fn settings_connectivity(dark: bool) {
+    let mut world = settings_world(
+        dark,
+        "connectivity",
+        "github",
+        &[],
+        |state| {
+            state.github_polling_off_reason =
+                Some("GitHub polling is off: gh is not installed".into());
+        },
+        |_| {},
+    );
+    snap(&mut world, "settings-connectivity", dark);
+}
+
+/// Models with one harness reporting a model attn gives no tier.
+fn settings_models(dark: bool) {
+    settings_section(dark, "models", "models", &[], |daemon| {
+        daemon.on("delegation_preferences_get", |r: &Request| {
+            message(DelegationPreferencesResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                preferences: Some(DelegationPreferences::default()),
+                harnesses: Some(vec![Harness {
+                    id: "claude".into(),
+                    name: "Claude Code".into(),
+                    available: true,
+                    model_pin: true,
+                    effort_pin: true,
+                    discovery: true,
+                }]),
+                templates: Some(Vec::new()),
+                expanded_roles: Some(Vec::new()),
+                ..DelegationPreferencesResultMessage::new()
+            })
+        });
+        daemon.on("harness_models", |r: &Request| {
+            message(HarnessModelsResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                models: vec![HarnessModel {
+                    harness: "claude".into(),
+                    id: "mock-agent-1".into(),
+                    name: "Mock agent 1".into(),
+                    access: "unknown".into(),
+                    effort_support: "unsupported".into(),
+                    tier_source: "none".into(),
+                    ..HarnessModel::default()
+                }],
+                ..HarnessModelsResultMessage::new()
+            })
+        });
+    });
 }
 
 /// The diagnostic report's choices, its Save the primary action.
@@ -2031,6 +2110,13 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         settings_updates(dark);
         settings_event_bus(dark);
         settings_section(dark, "desktop", "files", &[], |_| {});
+        settings_section(dark, "hygiene", "attention queue", &[], |_| {});
+        settings_section(dark, "backgroundAgents", "background agents", &[], |_| {});
+        settings_section(dark, "backgroundTasks", "task runner", &[], |_| {});
+        settings_connectivity(dark);
+        settings_models(dark);
+        settings_bottom(dark, "agents", "agents", &[]);
+        settings_bottom(dark, "experimental", "experimental", SWITCHED_ON);
         automation_new(dark);
         diagnostic_report(dark);
         quick_capture(dark);

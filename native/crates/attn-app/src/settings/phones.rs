@@ -15,7 +15,7 @@ use qrcodegen::{QrCode, QrCodeEcc, QrSegment, Version};
 use rune::tok::space;
 use rune::{El, Pixels, Tx, col, row, text};
 
-use super::pages::{CAPTION, block, warning};
+use super::pages::{CAPTION, block, blocks, warning};
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -467,5 +467,5 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
             .iter()
             .map(|profile| profile_block(state, phones, profile, t)),
     );
-    shown
+    blocks(shown, t)
 }

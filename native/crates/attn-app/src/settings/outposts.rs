@@ -13,7 +13,7 @@ use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
-use super::pages::{CAPTION, PATH_FIELD, Tone, block, pill, warning};
+use super::pages::{CAPTION, Tone, after_block, block, pill, warning};
 use crate::State;
 use crate::action::Action;
 
@@ -580,7 +580,7 @@ fn add_form(state: &State, t: &Tokens) -> El {
     let field = |label: &str, input: El| {
         col()
             .w_full()
-            .gap(space::S1)
+            .gap(7.0)
             .child(type_::upper(label, type_::BOLD_CAPS).color(t.text_dimmed))
             .child(input)
     };
@@ -588,7 +588,8 @@ fn add_form(state: &State, t: &Tokens) -> El {
         .key("settings.outposts.add")
         .role("form")
         .label("Add an outpost")
-        .gap(space::S2)
+        .w_full()
+        .gap(10.0)
         .child(field(
             "Name",
             super::pages::input(
@@ -598,7 +599,7 @@ fn add_form(state: &State, t: &Tokens) -> El {
                     .placeholder(name_placeholder)
                     .on_edit(|state: &mut State| &mut panel(state).name)
                     .on_submit(add)
-                    .width(Some(PATH_FIELD)),
+                    .width(None),
                 t,
             ),
         ))
@@ -611,7 +612,7 @@ fn add_form(state: &State, t: &Tokens) -> El {
                     .placeholder("user@host")
                     .on_edit(|state: &mut State| &mut panel(state).destination)
                     .on_submit(add)
-                    .width(Some(PATH_FIELD)),
+                    .width(None),
                 t,
             ),
         ))
@@ -659,12 +660,12 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
             .gap(space::S2)
             .children(listed.iter().map(|outpost| card(state, outpost, t)))
     };
-    shown.push(block(
+    shown.push(after_block(block(
         "outposts.list",
         "Outposts",
         "Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, releases enrollment and stops its daemon over ssh, then forgets this outpost. Its binary, data and Notebook stay. If ssh cannot reach it, run this instance's attn enrollment leave and attn daemon stop commands there.",
         t,
         vec![list],
-    ));
+    ), t));
     shown
 }

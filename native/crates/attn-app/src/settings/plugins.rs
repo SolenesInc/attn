@@ -529,7 +529,7 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         0 => pill(
             "settings.pill.plugins.health".into(),
             "healthy".into(),
-            Tone::Plain,
+            Tone::Good,
             t,
         ),
         n => pill(

@@ -12,7 +12,7 @@ use rune::{Align, El, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
 use super::Section;
-use super::pages::{CAPTION, Tone, pill};
+use super::pages::{self, CAPTION, Tone, pill};
 use crate::State;
 
 /// The daemon answers with one pass over the whole log, 209 ms at 945k rows, so the page reads
@@ -204,13 +204,13 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 })
                 .key("settings.bus.delivery")
                 .font(CAPTION)
-                .color(t.text_tertiary)
+                .color(t.text_muted)
                 .wrap()
                 .grow(1.0)
                 .min_w(0.0),
             ),
     );
-    page
+    vec![col().w_full().gap(10.0).children(page)]
 }
 
 fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> El {
@@ -231,51 +231,79 @@ fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> El {
     ];
     row()
         .key("settings.bus.summary")
-        .gap(20.0)
+        .w_full()
+        .equal_columns(stats.len())
+        .gap(8.0)
         .children(stats.into_iter().map(|(key, label, value)| {
-            col()
-                .gap(2.0)
-                .child(text(label).font(CAPTION).color(t.text_tertiary))
-                .child(
-                    text(value.clone())
-                        .key(format!("settings.bus.summary.{key}"))
-                        .label(format!("{label} {value}"))
-                        .font(type_::LABEL)
-                        .color(t.text_primary),
-                )
+            stat_tile(
+                format!("settings.bus.summary.{key}"),
+                label,
+                value,
+                t.text_primary,
+                t,
+            )
         }))
+}
+
+/// A stat tile's name, as the Tauri app's `.bus-stat-label`: uppercase, spaced .06em.
+pub(super) const STAT_LABEL: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).tracking(0.72);
+
+/// One headline number in its bordered tile, as the Tauri app's `.bus-stat`: its name over its
+/// value, keyed `key`, in `ink`.
+pub(super) fn stat_tile(
+    key: String,
+    label: &str,
+    value: String,
+    ink: rune::Color,
+    t: &Tokens,
+) -> El {
+    col()
+        .min_w(0.0)
+        .gap(2.0)
+        .py(8.0)
+        .px(10.0)
+        .radius(6.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border_subtle)
+        .child(type_::upper(label, STAT_LABEL).color(t.text_tertiary))
+        .child(
+            text(value)
+                .key(key)
+                .font(type_::MONO_CAPTION)
+                .color(ink)
+                .truncate(),
+        )
 }
 
 fn section_head(title: &str, hint: String, t: &Tokens) -> El {
     col()
         .gap(space::S1)
-        .pt(space::S3)
+        .pt(6.0)
         .child(
             text(title.to_owned())
-                .font(type_::SECTION)
+                .font(SECTION_TITLE)
                 .color(t.text_primary),
         )
-        .child(text(hint).font(CAPTION).color(t.text_tertiary).wrap())
+        .child(pages::hint(hint, t).wrap())
 }
 
-/// A table's header row: the columns' names, uppercase and quiet.
-const HEAD: rune::TextStyle = rune::TextStyle {
-    weight: 400.0,
-    tracking: 0.7,
-    ..type_::CAPS
-};
+/// A table section's title, as the Tauri app's `.bus-section-head h4`.
+const SECTION_TITLE: rune::TextStyle = rune::TextStyle::new(13.0, 700.0);
 
+/// A table's header row: the columns' names, uppercase and quiet on the raised fill, as the
+/// Tauri app's `.bus-head`.
 fn head_row(key: &str, name: &str, columns: Vec<String>, t: &Tokens) -> El {
     table_row(
         key.into(),
         "Columns".into(),
-        type_::sans_caps(name).color(t.text_tertiary),
+        type_::upper(name, STAT_LABEL).color(t.text_tertiary),
         columns
             .iter()
-            .map(|c| type_::upper(c, HEAD).color(t.text_tertiary))
+            .map(|c| type_::upper(c, STAT_LABEL.mono()).color(t.text_tertiary))
             .collect(),
-        t,
     )
+    .fill(t.bg_elevated)
+    .corners([5.0, 5.0, 0.0, 0.0])
 }
 
 fn numbers(cells: Vec<String>, t: &Tokens) -> Vec<El> {
@@ -286,18 +314,36 @@ fn numbers(cells: Vec<String>, t: &Tokens) -> Vec<El> {
 }
 
 /// One table row: the name cell takes what is left, the number cells line up at the end.
-fn table_row(key: String, label: String, name: El, numbers: Vec<El>, t: &Tokens) -> El {
+fn table_row(key: String, label: String, name: El, numbers: Vec<El>) -> El {
     row()
         .key(key)
         .role("row")
         .label(label)
         .w_full()
-        .gap(space::S2)
-        .py(space::S1)
+        .gap(10.0)
+        .py(7.0)
+        .px(10.0)
         .items_center()
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(name.grow(1.0).min_w(0.0))
         .children(numbers.into_iter().map(|n| n.w(72.0).align(Align::End)))
+}
+
+/// A table's box, as the Tauri app's `.bus-table`: bordered and rounded, a rule between rows.
+fn table(key: &str, label: &str, rows: Vec<El>, t: &Tokens) -> El {
+    col()
+        .key(key.to_owned())
+        .role("table")
+        .label(label.to_owned())
+        .w_full()
+        .radius(6.0)
+        .border(1.0, t.border_subtle)
+        .children(rows.into_iter().enumerate().map(|(i, row)| {
+            if i == 0 {
+                row
+            } else {
+                row.border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+            }
+        }))
 }
 
 fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) -> Vec<El> {
@@ -320,10 +366,7 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
         loud
     };
     let table = if shown.is_empty() {
-        text("Nothing has been published yet.")
-            .key("settings.bus.no-producers")
-            .font(CAPTION)
-            .color(t.text_tertiary)
+        pages::empty("Nothing has been published yet.", t).key("settings.bus.no-producers")
     } else {
         let header = head_row(
             "settings.bus.producers.head",
@@ -337,50 +380,54 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
             ],
             t,
         );
-        col()
-            .key("settings.bus.producers")
-            .role("table")
-            .label("Producers")
-            .w_full()
-            .child(header)
-            .children(shown.into_iter().map(|p| {
-                let name = row()
-                    .gap(space::S2)
-                    .items_center()
-                    .child(
-                        text(p.name.clone())
-                            .font(type_::MONO_CAPTION)
-                            .color(t.text_primary)
-                            .truncate(),
-                    )
-                    .children(p.surging.then(|| {
-                        pill(
-                            format!("settings.bus.producer.{}.loud", p.name),
-                            "Loud".into(),
-                            Tone::Warn,
-                            t,
-                        )
-                    }));
-                let cells = vec![
-                    count(p.events),
-                    format!("{:.1}%", p.share * 100.0),
-                    count(p.subjects),
-                    rate(p.recent_per_hour),
-                    rate(p.baseline_per_hour),
-                ];
-                let mut label = vec![p.name.clone()];
-                if p.surging {
-                    label.push("Loud".into());
-                }
-                label.extend(cells.iter().cloned());
-                table_row(
-                    format!("settings.bus.producer.{}", p.name),
-                    label.join(", "),
-                    name,
-                    numbers(cells, t),
-                    t,
+        let rows = shown.into_iter().map(|p| {
+            let name = row()
+                .gap(space::S2)
+                .items_center()
+                .child(
+                    text(p.name.clone())
+                        .font(type_::MONO_CAPTION)
+                        .color(t.text_primary)
+                        .truncate(),
                 )
-            }))
+                .children(p.surging.then(|| {
+                    pill(
+                        format!("settings.bus.producer.{}.loud", p.name),
+                        "Loud".into(),
+                        Tone::Warn,
+                        t,
+                    )
+                }));
+            let cells = vec![
+                count(p.events),
+                format!("{:.1}%", p.share * 100.0),
+                count(p.subjects),
+                rate(p.recent_per_hour),
+                rate(p.baseline_per_hour),
+            ];
+            let mut label = vec![p.name.clone()];
+            if p.surging {
+                label.push("Loud".into());
+            }
+            label.extend(cells.iter().cloned());
+            let row = table_row(
+                format!("settings.bus.producer.{}", p.name),
+                label.join(", "),
+                name,
+                numbers(cells, t),
+            );
+            if p.surging {
+                row.fill(t.brand.alpha(0.07))
+            } else {
+                row
+            }
+        });
+        table(
+            "settings.bus.producers",
+            "Producers",
+            std::iter::once(header).chain(rows).collect(),
+            t,
+        )
     };
     let mut out = vec![head, table];
     if !quiet.is_empty() {
@@ -422,10 +469,8 @@ fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens
     if status.consumers.is_empty() {
         return vec![
             head,
-            text("No durable consumers are registered. Every subscriber on this bus is ephemeral, so nothing holds a cursor and nothing pins retention.")
+            pages::empty("No durable consumers are registered. Every subscriber on this bus is ephemeral, so nothing holds a cursor and nothing pins retention.", t)
                 .key("settings.bus.no-consumers")
-                .font(CAPTION)
-                .color(t.text_tertiary)
                 .wrap(),
         ];
     }
@@ -496,20 +541,18 @@ fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens
             label.join(", "),
             name,
             numbers(cells, t),
-            t,
         )
         .child(row().w(ACTION_W).justify_end().child(action));
         if c.enabled { row } else { row.opacity(0.6) }
     });
     vec![
         head,
-        col()
-            .key("settings.bus.consumers")
-            .role("table")
-            .label("Consumers")
-            .w_full()
-            .child(header)
-            .children(rows),
+        table(
+            "settings.bus.consumers",
+            "Consumers",
+            std::iter::once(header).chain(rows).collect(),
+            t,
+        ),
     ]
 }
 

@@ -49,6 +49,8 @@ fn activity_stays_off_while_browsing_and_enables_once_a_light_default_is_saved()
     preview_harness(&mut world, "Codex");
     assert!(writes(&world).is_empty());
     pick_model(&mut world, "Light default → gpt-6-luna");
+    press(&mut world, rune::Key::Escape);
+    assert!(!picker_open(&world));
     click(&mut world, "settings.activity.toggle");
     assert_eq!(
         writes(&world),

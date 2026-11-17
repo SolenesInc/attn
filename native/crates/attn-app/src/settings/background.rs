@@ -2,8 +2,6 @@
 //! advisor, and the context cap of headless runs.
 
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 use serde::{Deserialize, Serialize};
@@ -11,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use super::autosave::{self, Codec};
 use super::harnesses;
 use super::pages::{
-    Action, CAPTION, Look, NUMBER_FIELD, block, refusal_beside, row_card, setting_field,
+    Action, CAPTION, Look, arrows, block, blocks, field_label, hint, input as input_style,
+    refusal_beside, row_card, stepped_value, wide_setting_field,
 };
 use super::route::{self, Route, Rules, Target};
 use crate::State;
@@ -348,29 +347,39 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
     } else {
         &page.present
     };
+    let key = super::part_field_key(ACTIVITY_INTERVALS, part);
     let input = TextInput::new(edit)
-        .key(super::part_field_key(ACTIVITY_INTERVALS, part))
+        .key(key.clone())
         .label(label.to_owned())
-        .on_edit(move |state: &mut State| {
-            let page = &mut state.window.settings.background;
-            if part == "watching" {
-                &mut page.watching
-            } else {
-                &mut page.present
-            }
-        })
+        .on_edit(move |state: &mut State| interval_edit(state, part))
         .on_change(intervals_typed)
         .on_submit(|state: &mut State, tx: &mut Tx| autosave::commit(state, ACTIVITY_INTERVALS, tx))
-        .width(Some(120.0));
-    let input = crate::settings::pages::input(input, t);
+        .width(None)
+        .trailing(arrows(&key, t, move |state, up, tx| {
+            let edit = interval_edit(state, part);
+            let next = stepped_value(&edit.text, 1.0, up)
+                .parse::<i64>()
+                .map_or(INTERVAL_MIN_SECONDS, |n| {
+                    n.clamp(INTERVAL_MIN_SECONDS, INTERVAL_MAX_SECONDS)
+                });
+            *edit = TextEdit::new(next.to_string());
+            intervals_typed(state, tx);
+            autosave::commit(state, ACTIVITY_INTERVALS, tx);
+        }));
     col()
-        .gap(space::S1)
-        .child(
-            text(label.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
-        .child(input)
+        .min_w(0.0)
+        .gap(7.0)
+        .child(field_label(label, t))
+        .child(input_style(input, t))
+}
+
+fn interval_edit<'a>(state: &'a mut State, part: &str) -> &'a mut TextEdit {
+    let page = &mut state.window.settings.background;
+    if part == "watching" {
+        &mut page.watching
+    } else {
+        &mut page.present
+    }
 }
 
 fn session_activity(state: &State, t: &Tokens) -> El {
@@ -406,7 +415,7 @@ fn session_activity(state: &State, t: &Tokens) -> El {
             t,
         ));
     }
-    body.extend(harnesses::failure_row(state, "activity", Look::Quiet, t));
+    body.extend(harnesses::failure_row(state, "activity", Look::Plain, t));
     body.push(route::chip(
         state,
         t,
@@ -416,7 +425,10 @@ fn session_activity(state: &State, t: &Tokens) -> El {
     ));
     body.push(
         row()
-            .gap(S4)
+            .w_full()
+            .equal_columns(2)
+            .gap(10.0)
+            .items_start()
             .child(interval_field(
                 state,
                 "watching",
@@ -437,9 +449,7 @@ fn session_activity(state: &State, t: &Tokens) -> El {
         t,
     ));
     body.push(
-        text("A session that has written nothing since its last line is skipped, so blocked and finished agents cost nothing however long home stays open.")
-            .font(CAPTION)
-            .color(t.text_tertiary)
+        hint("A session that has written nothing since its last line is skipped, so blocked and finished agents cost nothing however long home stays open.", t)
             .wrap(),
     );
     block(
@@ -450,8 +460,6 @@ fn session_activity(state: &State, t: &Tokens) -> El {
         body,
     )
 }
-
-const S4: f32 = super::pages::S4;
 
 fn garden_advisor(state: &State, t: &Tokens) -> El {
     let settings = &state.facts.settings;
@@ -475,7 +483,7 @@ fn garden_advisor(state: &State, t: &Tokens) -> El {
     body.extend(harnesses::failure_row(
         state,
         "garden-advisor",
-        Look::Quiet,
+        Look::Plain,
         t,
     ));
     body.push(route::chip(
@@ -503,19 +511,23 @@ fn compaction(state: &State, t: &Tokens) -> El {
             thousands(DEFAULT_CONTEXT_WINDOW_CAP)
         ),
         t,
-        vec![row_card(
-            "Headless runs",
-            "",
-            t,
-            setting_field(
-                state,
-                HEADLESS_CONTEXT_CAP,
-                "Headless runs",
-                "",
-                NUMBER_FIELD,
-                t,
+        vec![
+            row().w_full().equal_columns(2).gap(10.0).child(
+                col()
+                    .min_w(0.0)
+                    .gap(7.0)
+                    .child(field_label("Headless runs", t))
+                    .child(wide_setting_field(
+                        state,
+                        HEADLESS_CONTEXT_CAP,
+                        "Headless runs",
+                        "",
+                        Some(1000.0),
+                        None,
+                        t,
+                    )),
             ),
-        )],
+        ],
     )
 }
 
@@ -533,9 +545,12 @@ pub(super) fn thousands(n: u64) -> String {
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
-    vec![
-        session_activity(state, t),
-        garden_advisor(state, t),
-        compaction(state, t),
-    ]
+    blocks(
+        vec![
+            session_activity(state, t),
+            garden_advisor(state, t),
+            compaction(state, t),
+        ],
+        t,
+    )
 }

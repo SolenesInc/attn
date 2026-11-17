@@ -6,9 +6,8 @@ use attn_ui::colors::{SCHEMES, has_overrides};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
-use rune_kit::RadioItem;
 
-use super::pages::{NUMBER_FIELD, block, button, named_button, row_card, segmented, setting_field};
+use super::pages::{block, blocks, button, named_button, number_field, row_card, segmented};
 use crate::State;
 use crate::action::Action;
 use crate::sidebar::width;
@@ -19,6 +18,11 @@ const COLOR_SCHEME: &str = "color_scheme";
 const COLOR_OVERRIDES: &str = "color_overrides";
 const UI_SCALE: &str = "uiScale";
 const GARDEN_SCALE: &str = "gardenScale";
+/// The narrowest tile width's field, as wide as the Tauri app draws it.
+const TILE_COLS_FIELD: f32 = 174.0;
+/// The sidebar width's field: the Tauri app draws it 66 points wide, and native's larger
+/// monospace needs six more for "240" to clear the arrows.
+const SIDEBAR_FIELD: f32 = 72.0;
 const MIN_SCALE: f32 = 0.7;
 const MAX_SCALE: f32 = 1.5;
 const SCALE_STEP: f32 = 0.1;
@@ -109,6 +113,10 @@ fn choose_theme(state: &mut State, theme: &'static str, _: &mut Tx) {
 
 const SWATCHES: usize = 7;
 
+/// A color scheme's name, as the Tauri app's `.settings-color-scheme`: native's 12 points, at
+/// its weight.
+const SCHEME_NAME: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
+
 fn swatches(t: &Tokens) -> [rune::Color; SWATCHES] {
     [
         t.bg_app,
@@ -126,36 +134,59 @@ fn swatches(t: &Tokens) -> [rune::Color; SWATCHES] {
 fn color_schemes(state: &State, t: &Tokens) -> El {
     let settings = &state.facts.settings;
     let chosen = crate::color_scheme(settings).id;
-    let kit = crate::settings::pages::kit(t);
     let n = SCHEMES.len();
     let list = col()
         .key("settings.color-schemes")
         .role("radiogroup")
         .label("Color scheme")
         .focus_group()
-        .gap(space::S2)
+        .w_full()
+        .gap(4.0)
         .children(SCHEMES.iter().enumerate().map(|(i, scheme)| {
             let id = scheme.id;
+            let chosen = id == chosen;
             let strip = row()
                 .radius(4.0)
                 .clip_rounded(4.0)
                 .border(1.0, t.border)
+                .padding(1.0)
                 .children(
                     swatches(&scheme.colors(t.dark).ui)
-                        .map(|color| el().size(14.0, 14.0).fill(color)),
+                        .map(|color| el().size(14.0, 18.0).fill(color)),
                 )
                 .a11y_hidden();
-            RadioItem::new(scheme.name.clone(), id == chosen)
-                .on_select_tx(move |state: &mut State, _: &mut Tx| {
-                    store(state, COLOR_SCHEME, id.to_owned())
-                })
-                .build(kit)
+            let (edge, ink) = if chosen {
+                (t.accent, t.text_primary)
+            } else {
+                (t.border, t.text_secondary)
+            };
+            row()
                 .key(format!("settings.color-scheme.{id}"))
+                .role("radio")
+                .label(scheme.name.clone())
+                .checked(chosen)
+                .focusable(true)
+                .focus_selected(chosen)
+                .focus_ring(2.0, 1.0, t.accent)
                 .position_in_set(i + 1, n)
                 .w_full()
+                .min_h(36.0)
+                .gap(12.0)
+                .px(12.0)
                 .items_center()
-                .child(el().grow(1.0).min_w(space::S6))
+                .radius(8.0)
+                .fill(t.bg_elevated)
+                .border(1.0, edge)
                 .child(strip)
+                .child(
+                    text(scheme.name.clone())
+                        .font(SCHEME_NAME)
+                        .color(ink)
+                        .a11y_hidden(),
+                )
+                .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                    store(state, COLOR_SCHEME, id.to_owned())
+                })
         }));
     let overrides = settings.get(COLOR_OVERRIDES).map_or("", String::as_str);
     let custom = has_overrides(overrides).then(|| {
@@ -176,10 +207,16 @@ fn color_schemes(state: &State, t: &Tokens) -> El {
             ))
     });
     col()
-        .gap(space::S3)
-        .child(row().child(list))
+        .w_full()
+        .mt(10.0)
+        .gap(8.0)
+        .child(list)
         .children(custom)
 }
+
+/// A font size's value between its buttons, as the Tauri app's `.settings-font-scale-value`:
+/// native's 12 points, bold.
+const SCALE_VALUE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0);
 
 fn scale_control(
     key: &str,
@@ -190,32 +227,33 @@ fn scale_control(
     up: fn(&mut State, &mut Tx),
     reset: Option<(&'static str, Press)>,
 ) -> El {
+    let step = |dir: &str, said: &str, shown: &str, press: Press| {
+        named_button(
+            format!("settings.scale.{key}.{dir}"),
+            &format!("{said} {what} font size"),
+            shown,
+            t,
+            press,
+        )
+        .w(38.0)
+        .px(0.0)
+    };
     row()
         .key(format!("settings.scale.{key}"))
-        .gap(space::S2)
+        .gap(8.0)
         .items_center()
-        .child(named_button(
-            format!("settings.scale.{key}.down"),
-            &format!("Decrease {what} font size"),
-            "−",
-            t,
-            down,
-        ))
+        .child(step("down", "Decrease", "−", down))
         .child(
-            text(value.clone())
-                .key(format!("settings.scale.{key}.value"))
-                .role("status")
-                .label(value)
-                .font(type_::LABEL)
-                .color(t.text_primary),
+            row().min_w(72.0).center().child(
+                text(value.clone())
+                    .key(format!("settings.scale.{key}.value"))
+                    .role("status")
+                    .label(value)
+                    .font(SCALE_VALUE)
+                    .color(t.text_primary),
+            ),
         )
-        .child(named_button(
-            format!("settings.scale.{key}.up"),
-            &format!("Increase {what} font size"),
-            "+",
-            t,
-            up,
-        ))
+        .child(step("up", "Increase", "+", up))
         .children(
             reset.map(|(label, press)| {
                 button(format!("settings.scale.{key}.reset"), label, t, press)
@@ -271,97 +309,102 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
             |state, tx| super::autosave::apply(state, width::SETTING, "", tx),
         )
     });
-    vec![
-        block(
-            "theme",
-            "Theme",
-            "Choose the appearance and the color scheme of attn and its terminals.",
-            t,
-            vec![
-                segmented(THEME, "Theme preference", THEMES, theme, t, choose_theme),
-                color_schemes(state, t),
-            ],
-        ),
-        block(
-            "font-size",
-            "Font Size",
-            "Scale text across attn. The garden can use its own size, independent of the rest of the app.",
-            t,
-            vec![
-                row_card(
-                    "App",
-                    &app_copy,
-                    t,
-                    scale_control(
-                        "app",
-                        "app",
-                        percent(scale),
+    blocks(
+        vec![
+            block(
+                "theme",
+                "Theme",
+                "Choose the appearance and the color scheme of attn and its terminals.",
+                t,
+                vec![
+                    segmented(THEME, "Theme preference", THEMES, theme, t, choose_theme),
+                    color_schemes(state, t),
+                ],
+            ),
+            block(
+                "font-size",
+                "Font Size",
+                "Scale text across attn. The garden can use its own size, independent of the rest of the app.",
+                t,
+                vec![
+                    row_card(
+                        "App",
+                        &app_copy,
                         t,
-                        |s, tx| run(s, Action::UiDecreaseFontSize, tx),
-                        |s, tx| run(s, Action::UiIncreaseFontSize, tx),
-                        (scale != 1.0).then_some(("Reset", reset_ui_scale as Press)),
-                    ),
-                ),
-                row_card(
-                    "The garden",
-                    "Seeds, plots, and their logs. Matches the app size until you change it.",
-                    t,
-                    scale_control(
-                        "garden",
-                        "garden",
-                        garden.map_or_else(|| "Match app".to_owned(), percent),
-                        t,
-                        |s, _| garden_step(s, -SCALE_STEP),
-                        |s, _| garden_step(s, SCALE_STEP),
-                        garden
-                            .is_some()
-                            .then_some(("Match app", match_app as Press)),
-                    ),
-                ),
-            ],
-        ),
-        block(
-            "layout",
-            "Layout",
-            "How wide tiles and the sidebar get.",
-            t,
-            vec![
-                row_card(
-                    "Narrowest tile width (columns)",
-                    "A tile never gets narrower than this. A narrower width fits more tiles in the row.",
-                    t,
-                    setting_field(
-                        state,
-                        NARROWEST_TILE_COLS,
-                        "Narrowest tile width (columns)",
-                        "",
-                        NUMBER_FIELD,
-                        t,
-                    ),
-                ),
-                row_card(
-                    "Sidebar width (pixels)",
-                    &format!(
-                        "The open sidebar's width, from {} to {}. Empty uses the default of {}.",
-                        width::MIN as i64,
-                        width::MAX as i64,
-                        width::DEFAULT as i64
-                    ),
-                    t,
-                    row()
-                        .gap(space::S2)
-                        .items_center()
-                        .children(use_default)
-                        .child(setting_field(
-                            state,
-                            width::SETTING,
-                            "Sidebar width (pixels)",
-                            &default_width,
-                            NUMBER_FIELD,
+                        scale_control(
+                            "app",
+                            "app",
+                            percent(scale),
                             t,
-                        )),
-                ),
-            ],
-        ),
-    ]
+                            |s, tx| run(s, Action::UiDecreaseFontSize, tx),
+                            |s, tx| run(s, Action::UiIncreaseFontSize, tx),
+                            (scale != 1.0).then_some(("Reset", reset_ui_scale as Press)),
+                        ),
+                    ),
+                    row_card(
+                        "The garden",
+                        "Seeds, plots, and their logs. Matches the app size until you change it.",
+                        t,
+                        scale_control(
+                            "garden",
+                            "garden",
+                            garden.map_or_else(|| "Match app".to_owned(), percent),
+                            t,
+                            |s, _| garden_step(s, -SCALE_STEP),
+                            |s, _| garden_step(s, SCALE_STEP),
+                            garden
+                                .is_some()
+                                .then_some(("Match app", match_app as Press)),
+                        ),
+                    ),
+                ],
+            ),
+            block(
+                "layout",
+                "Layout",
+                "How wide tiles and the sidebar get.",
+                t,
+                vec![
+                    row_card(
+                        "Narrowest tile width (columns)",
+                        "A tile never gets narrower than this. A narrower width fits more tiles in the row.",
+                        t,
+                        number_field(
+                            state,
+                            NARROWEST_TILE_COLS,
+                            "Narrowest tile width (columns)",
+                            "",
+                            TILE_COLS_FIELD,
+                            1.0,
+                            t,
+                        ),
+                    ),
+                    row_card(
+                        "Sidebar width (pixels)",
+                        &format!(
+                            "The open sidebar's width, from {} to {}. Empty uses the default of {}.",
+                            width::MIN as i64,
+                            width::MAX as i64,
+                            width::DEFAULT as i64
+                        ),
+                        t,
+                        row()
+                            .gap(space::S2)
+                            .items_center()
+                            .child(number_field(
+                                state,
+                                width::SETTING,
+                                "Sidebar width (pixels)",
+                                &default_width,
+                                SIDEBAR_FIELD,
+                                1.0,
+                                t,
+                            ))
+                            .children(use_default),
+                    ),
+                ],
+            ),
+        ],
+        t,
+    )
 }

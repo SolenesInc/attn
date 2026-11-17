@@ -104,7 +104,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 .role("alert")
                 .label(error.clone())
                 .gap(space::S2)
-                .child(text(error.clone()).font(CAPTION).color(t.text_tertiary))
+                .child(text(error.clone()).font(CAPTION).color(t.text_muted))
                 .child(
                     Button::new("Try again")
                         .on_press_tx(read)
@@ -114,17 +114,18 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
         ];
     }
     if tasks.list.is_empty() {
-        let said = if tasks.loading {
+        let said = text(if tasks.loading {
             "Loading tasks…"
         } else {
             "No background tasks."
-        };
-        return vec![
-            text(said)
-                .key("settings.tasks.empty")
-                .font(CAPTION)
-                .color(t.text_tertiary),
-        ];
+        })
+        .key("settings.tasks.empty")
+        .font(CAPTION);
+        return vec![if tasks.loading {
+            said.color(t.text_muted).pt(6.0).pb(10.0)
+        } else {
+            said.color(t.text_dimmed).pt(2.0).pb(8.0)
+        }];
     }
     vec![
         col()

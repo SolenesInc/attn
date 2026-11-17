@@ -6,12 +6,11 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, row, text};
-use rune_kit::RadioItem;
 
 use super::autosave::{self, Codec};
 use super::catalogs::{self, TIER_OVERRIDES};
 use super::harnesses;
-use super::pages::{Action, CAPTION, Look, S4, block, warning};
+use super::pages::{Action, BLOCK_HEADING, CAPTION, Look, block, blocks, warning};
 use super::route::{TierInfo, TierOverride, tier_label, tier_overrides};
 use crate::State;
 
@@ -136,16 +135,16 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
     let words = col()
         .grow(1.0)
         .min_w(0.0)
-        .gap(space::S1)
+        .gap(4.0)
         .child(
             row()
-                .gap(space::S2)
+                .gap(space::S1)
                 .items_center()
                 .child(
                     text(name.clone())
                         .key(format!("{key}.name"))
                         .label(name.clone())
-                        .font(type_::LABEL)
+                        .font(type_::BODY)
                         .color(t.text_primary),
                 )
                 .children((!mark.is_empty()).then(|| {
@@ -157,7 +156,7 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
                 })),
         )
         .child(caption(format!("{key}.detail"), detail, t));
-    let mut controls = row().gap(S4).items_center();
+    let mut controls = row().gap(8.0).items_center();
     if !alias {
         let reset = model.clone();
         let mut group = row()
@@ -165,7 +164,6 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
             .role("radiogroup")
             .label(format!("Tier for {name}"))
             .focus_group()
-            .gap(space::S3)
             .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                 if matches!(ev.key, Key::Delete | Key::Backspace) {
                     set_tier(state, &reset, None, tx);
@@ -176,13 +174,17 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
         for (i, tier) in TIERS.into_iter().enumerate() {
             let model = model.clone();
             group = group.child(
-                RadioItem::new(tier_label(tier), selected.as_deref() == Some(tier))
-                    .on_select_tx(move |state: &mut State, tx: &mut Tx| {
-                        set_tier(state, &model, Some(tier), tx)
-                    })
-                    .build(crate::settings::pages::kit(t))
-                    .key(format!("{key}.tier.{tier}"))
-                    .position_in_set(i + 1, TIERS.len()),
+                tier_option(
+                    format!("{key}.tier.{tier}"),
+                    tier,
+                    i,
+                    selected.as_deref() == Some(tier),
+                    own.is_some(),
+                    t,
+                )
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    set_tier(state, &model, Some(tier), tx)
+                }),
             );
         }
         controls = controls.child(group);
@@ -200,18 +202,49 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
     item(key, &name, t).child(words).child(controls)
 }
 
+/// One of a model's three tiers, as the Tauri app's `.model-tier-radios label`: joined to its
+/// neighbours, the chosen one filled, and drawn in `warning` when it is the user's own.
+fn tier_option(key: String, tier: &str, i: usize, chosen: bool, own: bool, t: &Tokens) -> El {
+    let label = tier_label(tier);
+    let last = i + 1 == TIERS.len();
+    let (ink, fill, edge) = match (chosen, own) {
+        (true, true) => (t.warning, t.bg_button, t.warning),
+        (true, false) => (t.text_primary, t.bg_button, t.border),
+        _ => (t.text_secondary, rune::Color::TRANSPARENT, t.border),
+    };
+    row()
+        .key(key)
+        .role("radio")
+        .label(label.clone())
+        .checked(chosen)
+        .focusable(true)
+        .focus_selected(chosen)
+        .focus_ring(2.0, -2.0, t.accent)
+        .position_in_set(i + 1, TIERS.len())
+        .px(9.0)
+        .py(5.0)
+        .fill(fill)
+        .border_sides([1.0, 1.0, 1.0, if i == 0 { 1.0 } else { 0.0 }], edge)
+        .corners(match (i == 0, last) {
+            (true, _) => [5.0, 0.0, 0.0, 5.0],
+            (_, true) => [0.0, 5.0, 5.0, 0.0],
+            _ => [0.0; 4],
+        })
+        .child(text(label).font(CAPTION).color(ink).a11y_hidden())
+}
+
+/// A model's line in its harness's list, as the Tauri app's `.model-tier-row`: no card, a
+/// hairline under it.
 fn item(key: String, name: &str, t: &Tokens) -> El {
     row()
         .key(key)
         .role("group")
         .label(name.to_owned())
         .w_full()
-        .gap(S4)
+        .gap(12.0)
         .items_center()
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
+        .py(11.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
 }
 
 fn orphan_row(entry: &TierOverride, t: &Tokens) -> El {
@@ -228,7 +261,7 @@ fn orphan_row(entry: &TierOverride, t: &Tokens) -> El {
                     text(name.clone())
                         .key(format!("{key}.name"))
                         .label(name)
-                        .font(type_::LABEL)
+                        .font(type_::BODY)
                         .color(t.text_primary),
                 )
                 .child(caption(
@@ -277,13 +310,14 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
     let found = catalogs::of(state, &harness.id, harness.discovery);
     let models: &[HarnessModel] = found.catalog.map_or(&[], |c| c.models.as_slice());
     let key = format!("settings.models.{}", harness.id);
-    let mut heading = row().gap(space::S2).items_center().child(
+    let mut heading = row().w_full().gap(12.0).items_start().child(
         text(harness.name.clone())
             .key(format!("{key}.heading"))
             .role("heading")
             .label(harness.name.clone())
-            .font(type_::SECTION)
-            .color(t.text_primary),
+            .font(BLOCK_HEADING)
+            .color(t.text_primary)
+            .grow(1.0),
     );
     if harness.discovery {
         let id = harness.id.clone();
@@ -297,23 +331,31 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
             },
         ));
     }
+    let default_line = |tier: &str, said: String| {
+        text(said.clone())
+            .key(format!("{key}.{tier}-default"))
+            .label(said)
+            .font(CAPTION)
+            .color(t.text_primary)
+    };
     let defaults = row()
-        .gap(S4)
-        .child(caption(
-            format!("{key}.light-default"),
+        .w_full()
+        .flex_wrap()
+        .gap(20.0)
+        .py(12.0)
+        .child(default_line(
+            "light",
             format!(
                 "Light default → {}",
                 default_name(harness, &found, models, "light")
             ),
-            t,
         ))
-        .child(caption(
-            format!("{key}.deep-default"),
+        .child(default_line(
+            "deep",
             format!(
                 "Deep default → {}",
                 default_name(harness, &found, models, "deep")
             ),
-            t,
         ));
     let mut body = vec![heading, defaults];
     if let Some(error) = found.error {
@@ -336,7 +378,12 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
             .role("status"),
         );
     }
-    body.extend(models.iter().map(|m| model_row(m, entries, t)));
+    body.push(
+        col()
+            .w_full()
+            .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+            .children(models.iter().map(|m| model_row(m, entries, t))),
+    );
     let shows_orphans = !harness.discovery
         || found.catalog.is_some()
         || found.error.is_some()
@@ -358,22 +405,27 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
             "No longer reported"
         };
         body.push(
-            text(title)
-                .key(format!("{key}.orphans"))
-                .role("heading")
-                .label(title)
-                .font(type_::LABEL)
-                .color(t.text_primary),
+            col()
+                .w_full()
+                .mt(18.0)
+                .child(
+                    text(title)
+                        .key(format!("{key}.orphans"))
+                        .role("heading")
+                        .label(title)
+                        .font(BLOCK_HEADING)
+                        .color(t.text_primary),
+                )
+                .children(orphans.into_iter().map(|e| orphan_row(e, t))),
         );
-        body.extend(orphans.into_iter().map(|e| orphan_row(e, t)));
     }
     col()
         .key(key)
         .role("region")
         .label(format!("{} models", harness.name))
         .w_full()
-        .gap(space::S2)
-        .pb(S4)
+        .gap(12.0)
+        .pb(22.0)
         .children(body)
 }
 
@@ -405,7 +457,7 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
                     text(said.clone())
                         .key(format!("{key}.name"))
                         .label(said)
-                        .font(type_::LABEL)
+                        .font(type_::BODY)
                         .color(t.text_primary)
                         .grow(1.0),
                 )
@@ -442,12 +494,17 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
             .role("status"),
         );
     }
-    out.extend(listed.iter().map(|h| harness_block(state, h, &entries, t)));
-    out.extend(missing_harnesses(&listed, &entries, t));
+    let harness_blocks = listed
+        .iter()
+        .map(|h| harness_block(state, h, &entries, t))
+        .chain(missing_harnesses(&listed, &entries, t))
+        .collect();
+    out.extend(blocks(harness_blocks, t));
     out
 }
 
-/// The Tauri app's `.settings-action.quiet`, as every model action is drawn.
+/// A model action: the Tauri app's `.settings-action.quiet`, which outside Delegation draws as
+/// any other action.
 fn quiet(
     key: String,
     label: &str,
@@ -456,7 +513,6 @@ fn quiet(
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
     Action::new(shown)
-        .look(Look::Quiet)
         .on_press_tx(press)
         .build(t)
         .key(key)

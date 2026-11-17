@@ -551,6 +551,21 @@ fn no_record_list_is_read_until_one_is_shown_then_one_page_per_list() {
 }
 
 #[test]
+fn a_pressed_tab_shows_its_list_and_the_keys_keep_working() {
+    let mut world = on_records();
+    click(&mut world, "settings.analytics.views.app");
+    press(&mut world, "[");
+
+    let streams: Vec<Value> = world
+        .daemon
+        .sent_of("list_analytics_records")
+        .iter()
+        .map(|r| r["stream"].clone())
+        .collect();
+    assert_eq!(streams, [json!("app"), json!("bus")]);
+}
+
+#[test]
 fn a_same_second_burst_folds_opens_with_enter_and_each_record_shows_exactly_as_stored() {
     let mut world = on_records();
     press(&mut world, "]");

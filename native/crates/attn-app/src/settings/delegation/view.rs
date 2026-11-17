@@ -22,6 +22,10 @@ const ICON_COLUMN: f32 = 36.0;
 const CELL_COLUMN: f32 = 280.0;
 const MORE_COLUMN: f32 = 40.0;
 const COLUMN_GAP: f32 = 14.0;
+/// The empty table's copy, 52 characters of the caption face wide, as the Tauri app's `52ch`.
+const EMPTY_COPY_W: f32 = 52.0 * 7.3;
+/// The row's details button's dots, bold and spaced .1em, as the Tauri app's `.delegation-more`.
+const MORE_DOTS: rune::TextStyle = rune::TextStyle::new(13.0, 700.0).tracking(1.3);
 const NOT_SAID: &str = "No condition yet. The agent cannot pick this.";
 const DESCRIPTION_HINT: &str =
     "Prose, as long as it needs to be. The first line is what the table shows.";
@@ -120,8 +124,32 @@ const ICONS: [(&str, &Icon); 9] = [
     ("layers", &LAYERS),
 ];
 
-/// A role's icon, or its name's initial when it has none.
+/// A role's icon, or its name's initial when it has none, in its box as the Tauri app's
+/// `.delegation-icon`.
 fn role_icon(name: &str, which: &str, t: &Tokens) -> El {
+    icon_box(role_glyph(name, which, t))
+        .fill(t.bg_elevated)
+        .border(1.0, t.border_subtle)
+}
+
+/// The fallback row's icon, in a dashed empty box, as the Tauri app's `.delegation-icon.fallback`.
+fn fallback_icon(t: &Tokens) -> El {
+    icon_box(role_glyph("Anything else", "arrow", t))
+        .border(1.0, t.border_subtle)
+        .border_dash(3.0, 3.0)
+}
+
+fn icon_box(glyph: El) -> El {
+    row()
+        .w(ICON_COLUMN)
+        .h(ICON_COLUMN)
+        .radius(8.0)
+        .items_center()
+        .justify_center()
+        .child(glyph)
+}
+
+fn role_glyph(name: &str, which: &str, t: &Tokens) -> El {
     match ICONS.iter().find(|(id, _)| *id == which) {
         Some((_, glyph)) => icon(glyph, 16.0).color(t.text_secondary).a11y_hidden(),
         None => {
@@ -363,6 +391,7 @@ fn head(t: &Tokens) -> El {
         .key("settings.delegation.head")
         .py(space::S2)
         .fill(t.bg_elevated)
+        .corners([9.0, 9.0, 0.0, 0.0])
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
 }
 
@@ -386,7 +415,7 @@ fn who(
         .chain((!description.is_empty()).then(|| description.clone()))
         .collect();
     let (primary, secondary, warning, muted) =
-        (t.text_primary, t.text_tertiary, t.warning, t.text_muted);
+        (t.text_primary, t.text_secondary, t.warning, t.text_muted);
     let shown = name.to_owned();
     let tag_key = key.clone();
     Button::new(name)
@@ -422,14 +451,15 @@ fn who(
                         .color(secondary)
                         .w_full()
                         .min_w(0.0)
-                        .truncate()
+                        .wrap()
                 }))
         })
         .on_press_tx(press)
         .build(crate::settings::pages::kit(t))
         .key(key)
         .description(said.join(" · "))
-        .h(48.0)
+        .min_h(48.0)
+        .px(0.0)
         .w_full()
         .min_w(0.0)
         .justify_start()
@@ -442,14 +472,23 @@ fn more(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
+    let ink = if open {
+        t.text_primary
+    } else {
+        t.text_tertiary
+    };
     Button::new("···")
         .variant(ButtonVariant::Ghost)
-        .control_size(ControlSize::Small)
         .expanded(open)
+        .label_with(move |_, _| text("···").font(MORE_DOTS).color(ink))
         .on_press_tx(press)
         .build(crate::settings::pages::kit(t))
         .key(key)
         .label(format!("{name} details"))
+        .w(32.0)
+        .h(32.0)
+        .px(0.0)
+        .justify_center()
 }
 
 fn toggle(key: String) -> impl Fn(&mut State, &mut Tx) + 'static {
@@ -519,9 +558,7 @@ fn role_row(
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
             columns(
-                row()
-                    .opacity(if role.enabled { 1.0 } else { 0.45 })
-                    .child(role_icon(&view.name, &view.icon, t)),
+                role_icon(&view.name, &view.icon, t).opacity(if role.enabled { 1.0 } else { 0.45 }),
                 who(
                     key.clone(),
                     &view.name,
@@ -758,7 +795,7 @@ fn role_editor(state: &State, role: &DelegationRole, t: &Tokens) -> El {
     let id = role.id.clone();
     let icon_button = |which: &'static str, label: String| {
         let id = id.clone();
-        let glyph = role_icon(&role.name, which, t);
+        let glyph = role_glyph(&role.name, which, t);
         Button::new(label)
             .variant(ButtonVariant::Ghost)
             .control_size(ControlSize::Small)
@@ -973,7 +1010,7 @@ fn fallback_row(state: &State, d: &Delegation, t: &Tokens) -> El {
     let key = "settings.delegation.fallback".to_owned();
     let mut out = col().key(format!("{key}.row")).w_full().child(
         columns(
-            role_icon("Anything else", "arrow", t),
+            fallback_icon(t),
             who(
                 key.clone(),
                 "Anything else",
@@ -1074,9 +1111,11 @@ fn empty_panel(can_adopt: bool, t: &Tokens) -> El {
         )
         .child(
             text("Start with Attn's maintained roles, then pick a model for each. Attn keeps their instructions current; the model choices stay yours.")
-                .font(type_::BODY)
+                .font(CAPTION)
                 .color(t.text_secondary)
-                .wrap(),
+                .wrap()
+                .max_w(EMPTY_COPY_W)
+                .align(rune::Align::Center),
         )
         .child(
             row()

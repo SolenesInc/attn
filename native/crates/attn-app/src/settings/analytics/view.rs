@@ -7,8 +7,8 @@ use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 use rune_kit::{
-    Badge, BadgeVariant, Button, ButtonVariant, ControlSize, Kit, List, ListItem, SegmentedControl,
-    Toast, ToastRegion,
+    Badge, BadgeVariant, Button, ButtonVariant, ControlSize, Kit, List, ListItem, Toast,
+    ToastRegion,
 };
 
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
@@ -72,16 +72,18 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
             .wrap()
         }))
         .children(page.machine.then(|| machine(state, page, sharing, t)))
-        .child(views(state, page.view, k))
+        .child(views(state, page.view, t))
         .child(
             row()
                 .w_full()
-                .gap(S4)
+                .gap(14.0)
                 .items_start()
                 .child(
                     col()
-                        .w(360.0)
-                        .gap(space::S2)
+                        .grow(0.9)
+                        .w(0.0)
+                        .min_w(300.0)
+                        .gap(6.0)
                         .child(list(state, page, &items, index, t, k))
                         .children((page.view != VENTS).then(|| footer(page, &items, t, k))),
                 )
@@ -90,13 +92,15 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         .key("settings.analytics.inspector")
                         .role("group")
                         .label("Selected")
-                        .grow(1.0)
+                        .grow(1.4)
+                        .w(0.0)
                         .min_w(0.0)
-                        .gap(space::S2)
-                        .padding(space::S3)
-                        .radius(6.0)
-                        .fill(t.bg_panel)
-                        .border(1.0, t.border_subtle)
+                        .gap(12.0)
+                        .py(14.0)
+                        .px(16.0)
+                        .radius(7.0)
+                        .fill(t.bg_elevated)
+                        .border(1.0, t.border)
                         .children(inspector(state, page, current, sharing, t, k)),
                 ),
         )
@@ -127,17 +131,15 @@ pub(in crate::settings) fn toast(state: &State, t: &Tokens) -> Option<El> {
 }
 
 fn stat(id: &str, label: &str, value: String, tone: Option<rune::Color>, t: &Tokens) -> El {
-    col()
-        .grow(1.0)
-        .w(0.0)
-        .gap(2.0)
-        .child(text(label.to_owned()).font(CAPTION).color(t.text_tertiary))
-        .child(
-            text(value)
-                .key(format!("settings.analytics.stat.{id}"))
-                .font(type_::LABEL)
-                .color(tone.unwrap_or(t.text_primary)),
-        )
+    crate::settings::bus::stat_tile(
+        format!("settings.analytics.stat.{id}"),
+        label,
+        value,
+        tone.unwrap_or(t.text_primary),
+        t,
+    )
+    .grow(1.0)
+    .w(0.0)
 }
 
 fn strip(
@@ -167,8 +169,8 @@ fn strip(
     let outposts = state.facts.outposts.len();
     row()
         .w_full()
-        .gap(20.0)
-        .items_center()
+        .gap(8.0)
+        .items_stretch()
         .child(stat(
             "sharing",
             "Sharing",
@@ -176,7 +178,7 @@ fn strip(
             if refused {
                 Some(t.warning)
             } else {
-                (!sharing).then_some(t.text_muted)
+                (!sharing).then_some(t.text_tertiary)
             },
             t,
         ))
@@ -184,7 +186,7 @@ fn strip(
             "vents",
             "Vents",
             vents_value,
-            vents.is_empty().then_some(t.text_muted),
+            vents.is_empty().then_some(t.text_tertiary),
             t,
         ))
         .child(stat("kept", "Kept here", kept, None, t))
@@ -247,30 +249,60 @@ fn sharing_stat(sharing: bool, status: Option<&GetAnalyticsStatusResultMessage>)
     }
 }
 
-fn views(state: &State, view: usize, k: &Kit) -> El {
+fn views(state: &State, view: usize, t: &Tokens) -> El {
     let fresh = state
         .facts
         .vents
         .iter()
         .filter(|v| !items::is_done(v))
         .count();
-    let names: Vec<String> = VIEWS
-        .iter()
-        .enumerate()
-        .map(|(i, (_, name))| match i {
-            VENTS if fresh > 0 => format!("{name} {fresh}"),
-            _ => (*name).to_owned(),
-        })
-        .collect();
-    row().child(
-        SegmentedControl::new(&names, Some(view))
-            .label("Show")
-            .fit()
-            .on_pick(|state: &mut State, i: usize, tx: &mut Tx| super::switch_view(state, i, tx))
-            .build(k)
-            .key("settings.analytics.views"),
-    )
+    row()
+        .key("settings.analytics.views")
+        .role("tablist")
+        .label("Show")
+        .focus_group()
+        .gap(6.0)
+        .flex_wrap()
+        .children(VIEWS.iter().enumerate().map(|(i, (id, name))| {
+            let on = i == view;
+            let count = (i == VENTS && fresh > 0).then(|| fresh.to_string());
+            row()
+                .key(format!("settings.analytics.views.{id}"))
+                .role("tab")
+                .label(match &count {
+                    Some(count) => format!("{name} {count}"),
+                    None => (*name).to_owned(),
+                })
+                .focusable(true)
+                .focus_selected(on)
+                .preserve_focus_on_press(true)
+                .gap(6.0)
+                .items_center()
+                .px(10.0)
+                .py(3.0)
+                .radius(999.0)
+                .fill(if on { t.bg_selected } else { t.bg_elevated })
+                .border(1.0, if on { t.border_focus } else { t.border })
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| super::switch_view(state, i, tx))
+                .child(text(*name).font(CAPTION).color(if on {
+                    t.text_primary
+                } else {
+                    t.text_secondary
+                }))
+                .children(count.map(|count| {
+                    text(count)
+                        .font(COUNT)
+                        .color(attn_ui::colors::mix_srgb(rune::Color::BLACK, t.brand, 0.11))
+                        .px(7.0)
+                        .py(1.0)
+                        .radius(9.0)
+                        .fill(t.brand)
+                }))
+        }))
 }
+
+/// The count of new vents on the Vents tab, as the Tauri app's `.analytics-count`.
+const COUNT: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
 
 fn slug(seeds: &[std::sync::Arc<Seed>], id: &str) -> String {
     seeds
@@ -316,9 +348,10 @@ fn row_label(state: &State, item: &Item) -> String {
 fn list(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Tokens, k: &Kit) -> El {
     let name = VIEWS[page.view].1;
     if items.is_empty() {
-        let said = if page.view == VENTS {
-            "No vents yet. Agents launched since you turned this on can send one."
-        } else {
+        if page.view == VENTS {
+            return el().key(LIST);
+        }
+        let said = {
             match &page.records {
                 Some(r) if !r.loading && r.error.is_none() => "Nothing recorded yet.",
                 Some(r) if !r.loading => "",
@@ -921,7 +954,10 @@ fn hints(view: usize, sharing: bool, t: &Tokens) -> El {
         .key("settings.analytics.keys")
         .role("group")
         .label("Keys")
-        .gap(space::S3)
+        .w_full()
+        .gap(14.0)
+        .pt(10.0)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
         .flex_wrap()
         .children(keys.into_iter().map(|(keys, label)| {
             row()

@@ -82,8 +82,9 @@ the 16 ANSI colors and a selection, a terminal with a comment mark, a seed id, a
 selected command block and find matches, a Markdown file with code and a Mermaid
 diagram, a review stop with its key line, the review's key sheet and file view,
 the Garden fullscreen and in the dock at its root and on a plot, the Chief's
-setup, Settings on Appearance, Agents, Analytics, Delegation, Outposts,
-Experimental, Phones, Plugins, Updates, Event bus and Files and locations, Quick Capture with a
+setup, Settings on Appearance, Agents and its end, Analytics, Delegation, Outposts,
+Experimental and its end, Phones, Plugins, Updates, Event bus, Files and locations, Attention
+queue, Background agents, Task runner, GitHub hosts and Models, Quick Capture with a
 message typed and with its mailbox list open, the shortcut editor
 and the shortcuts sheet, What's New on its first and its queue step, the
 close-desktop dialog, the diagnostic report, the command and agent palettes, the profile switcher, the
