@@ -215,8 +215,8 @@ pub const FAMILIES: (&str, &str) = (
 
 pub mod backdrop;
 pub use backdrop::Backdrop;
-pub mod finder;
 pub mod dialog;
+pub mod finder;
 pub use dialog::{Dialog, DialogFrame};
 pub mod frame;
 pub use frame::Frame;

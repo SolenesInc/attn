@@ -1,6 +1,6 @@
 use attn_protocol::{SnoozeTurnMessage, StandbySessionMessage};
 use attn_ui::Tokens;
-use rune::{El, Tx, col};
+use rune::{El, Tx};
 use rune_kit::{MenuItem, Placement};
 
 use crate::State;
@@ -226,29 +226,16 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     }
     let kit_menu = kit_menu.group_label(format!("↑ ↓ choose · ↵ {mode} · esc cancel"));
     let mut layer = Vec::new();
-    match &menu.under {
-        Some(under) => {
-            kit_menu
-                .anchor(under.clone())
-                .build(attn_ui::kit(t), &mut layer);
-        }
-        None => {
-            let spot = kit_menu
-                .placement(Placement::Bottom)
-                .build(attn_ui::kit(t), &mut layer);
-            let centre = col()
-                .key(format!("{MENU}.center"))
-                .items_center()
-                .child(rune::el().grow(1.0))
-                .child(spot)
-                .child(rune::el().grow(2.0));
-            let centre = match crate::desktop::on_screen_tile(state, &menu.session) {
-                Some([x, y, w, h]) => centre.absolute(x, y).w(w).h(h),
-                None => centre.absolute(0.0, 0.0).w_full().h_full(),
-            };
-            layer.insert(0, centre);
-        }
-    }
+    let anchored = match &menu.under {
+        Some(under) => kit_menu.anchor(under.clone()),
+        None => kit_menu
+            .anchor(
+                crate::desktop::on_screen_tile(state, &menu.session)
+                    .unwrap_or_else(|| "window".into()),
+            )
+            .placement(Placement::Center),
+    };
+    anchored.build(attn_ui::kit(t), &mut layer);
     layer
 }
 

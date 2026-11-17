@@ -557,20 +557,15 @@ pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
         .collect()
 }
 
-/// Where the tile of agent `session` sits in the window, while the window shows it.
-pub(crate) fn on_screen_tile(state: &State, session: &str) -> Option<[f32; 4]> {
+/// The key of the tile of agent `session`, while the window shows it.
+pub(crate) fn on_screen_tile(state: &State, session: &str) -> Option<String> {
     let desktop = state.facts.current_desktop()?;
     let leaves = on_screen_leaves(state);
-    let pane = desktop
+    desktop
         .panes
         .iter()
-        .find(|p| p.session_id == session && leaves.contains(&p.pane_id))?;
-    state
-        .window
-        .desk
-        .rects
-        .get(&format!("tile.{}", pane.pane_id))
-        .copied()
+        .find(|p| p.session_id == session && leaves.contains(&p.pane_id))
+        .map(|pane| format!("tile.{}", pane.pane_id))
 }
 
 fn request_id() -> String {

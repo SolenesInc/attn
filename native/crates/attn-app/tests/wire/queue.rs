@@ -1836,7 +1836,7 @@ fn the_reached_row_follows_its_agent_when_a_settle_moves_it_to_another_band() {
 }
 
 #[test]
-fn the_snooze_key_opens_its_menu_centred_across_the_tile_of_the_agent_on_screen() {
+fn the_snooze_key_opens_its_menu_centred_over_the_tile_of_the_agent_on_screen() {
     let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
         turn("t-old", 120),
         turn("t-new", 5),
@@ -1860,8 +1860,8 @@ fn the_snooze_key_opens_its_menu_centred_across_the_tile_of_the_agent_on_screen(
         [tx, ty, tw, th]
     );
     assert!(
-        my >= ty && my + mh <= ty + th,
-        "menu {:?} opens inside tile {:?}",
+        (my + mh / 2.0 - (ty + th / 2.0)).abs() < 1.0,
+        "menu {:?} centres down tile {:?}",
         [mx, my, mw, mh],
         [tx, ty, tw, th]
     );

@@ -1,14 +1,15 @@
-use rune::{Color, El, Shadow, TextStyle, Tx, col, el, row, text};
+use rune::{Color, El, Shadow, TextStyle, Tx, col, row, text};
 use rune_kit::ButtonVariant;
 
 use crate::frame::shadow;
-use crate::{Frame, GlyphButton, Tokens};
+use crate::{Backdrop, Frame, GlyphButton, Tokens};
 
-/// How a dialog is framed, as the Tauri app's CSS draws that family of dialog: its surface,
-/// the header's insets and the rule under it, the title and subtitle type, and the × that
-/// closes it.
+/// How a dialog is framed, as the Tauri app's CSS draws that family of dialog: the backdrop
+/// behind it, its surface, the header's insets and the rule under it, the title and subtitle
+/// type, and the × that closes it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DialogFrame {
+    pub backdrop: Backdrop,
     pub surface: Frame,
     pub glow: Option<Shadow>,
     /// `[top, right, bottom, left]`, as CSS `padding`.
@@ -34,6 +35,7 @@ impl DialogFrame {
     /// `.shortcut-editor-modal`.
     pub fn sheet(t: &Tokens) -> DialogFrame {
         DialogFrame {
+            backdrop: Backdrop::modal(t),
             surface: Frame {
                 fill: t.bg_app,
                 edge: t.border,
@@ -74,6 +76,7 @@ impl DialogFrame {
     /// `.diagnostic-report-sheet`.
     pub fn report(t: &Tokens) -> DialogFrame {
         DialogFrame {
+            backdrop: Backdrop::overlay(t),
             surface: Frame {
                 fill: t.bg_elevated,
                 edge: t.border_hover,
@@ -98,6 +101,7 @@ impl DialogFrame {
     /// A question that Cancel and one action answer, with no ×: `.mp-dialog`.
     pub fn prompt(t: &Tokens) -> DialogFrame {
         DialogFrame {
+            backdrop: Backdrop::overlay(t),
             surface: Frame {
                 fill: t.bg_panel,
                 edge: t.border_hover,
@@ -323,13 +327,9 @@ impl Dialog {
         }
         let panel = modal(panel).modal_click_outside(self.outside);
         layer.push(
-            el().key(format!("{}-scrim", self.key))
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(k.c.scrim)
-                .token_motion(k.motion.overlay)
-                .a11y_hidden(),
+            f.backdrop
+                .draw(format!("{}-scrim", self.key))
+                .token_motion(k.motion.overlay),
         );
         layer.push(
             layer_box
