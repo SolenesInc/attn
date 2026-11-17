@@ -509,7 +509,6 @@ pub(crate) fn follow(state: &mut State) {
 
 /// The connection came back: edits it lost write again, and charters and letters read again.
 pub(crate) fn reconnected(state: &mut State, tx: &mut Tx) {
-    state.window.crew.handoffs.connection += 1;
     launch::reconnected(state, tx);
     charter::reconnected(state, tx);
     if is_open(state) {

@@ -34,12 +34,10 @@ pub(crate) struct History {
     pub(crate) letter: Option<Letter>,
     pub(crate) error: Option<String>,
     request: u64,
-    /// The connection it was read on.
-    connection: u64,
 }
 
 impl History {
-    /// The letter the reader shows: the selected one, or the newest.
+    /// The letter the reader shows: the one the user picked, or the newest.
     pub(crate) fn shown(&self) -> Option<&CrewHandoffSummary> {
         self.handoffs
             .iter()
@@ -52,8 +50,6 @@ impl History {
 pub(crate) struct Histories {
     pub(crate) by_member: BTreeMap<String, History>,
     requests: u64,
-    /// Rises with each reconnect, so a history read on an earlier connection reads again.
-    pub(crate) connection: u64,
 }
 
 fn failed(answer: &Answer, fallback: &str, error: Option<String>) -> String {
@@ -66,34 +62,31 @@ fn failed(answer: &Answer, fallback: &str, error: Option<String>) -> String {
     }
 }
 
-/// Reads `member`'s letters, unless they were read on this connection; `force` reads again.
-pub(crate) fn load(state: &mut State, member: &str, force: bool, tx: &mut Tx) {
+/// Reads `member`'s letters, showing the ones read before until they arrive; `reread_letter`
+/// also reads the shown letter again.
+pub(crate) fn load(state: &mut State, member: &str, reread_letter: bool, tx: &mut Tx) {
     let histories = &mut state.window.crew.handoffs;
-    let connection = histories.connection;
-    let current = histories
-        .by_member
-        .get(member)
-        .is_some_and(|e| e.reading != Reading::Failed && e.connection == connection);
-    if current && !force {
-        return;
-    }
     let existing = histories.by_member.remove(member);
     histories.requests += 1;
     let request = histories.requests;
-    let (handoffs, selected, letter) = match existing {
-        Some(e) => (e.handoffs, e.selected, if force { None } else { e.letter }),
-        None => (Vec::new(), None, None),
+    let (reading, handoffs, selected, letter) = match existing {
+        Some(e) if e.reading == Reading::Ready => (
+            Reading::Ready,
+            e.handoffs,
+            e.selected,
+            e.letter.filter(|_| !reread_letter),
+        ),
+        _ => (Reading::Loading, Vec::new(), None, None),
     };
     histories.by_member.insert(
         member.to_owned(),
         History {
-            reading: Reading::Loading,
+            reading,
             handoffs,
             selected,
             letter,
             error: None,
             request,
-            connection,
         },
     );
     let member = member.to_owned();
@@ -114,22 +107,22 @@ pub(crate) fn load(state: &mut State, member: &str, force: bool, tx: &mut Tx) {
             let result = answer.parse::<CrewHandoffsGetResultMessage>();
             match result {
                 Some(r) if r.success => {
-                    let selected = history
-                        .selected
-                        .clone()
-                        .filter(|s| r.handoffs.iter().any(|h| &h.filename == s))
-                        .or_else(|| r.handoffs.first().map(|h| h.filename.clone()));
-                    let letter = history
-                        .letter
-                        .take()
-                        .filter(|l| Some(&l.filename) == selected.as_ref());
-                    let wants_letter = letter.is_none();
                     history.reading = Reading::Ready;
                     history.handoffs = r.handoffs;
-                    history.selected = selected.clone();
-                    history.letter = letter;
-                    if wants_letter && let Some(selected) = selected {
-                        load_letter(state, &member, &selected, tx);
+                    let picked = history
+                        .selected
+                        .take()
+                        .filter(|s| history.handoffs.iter().any(|h| &h.filename == s));
+                    history.selected = picked;
+                    let shown = history.shown().map(|h| h.filename.clone());
+                    history.letter = history
+                        .letter
+                        .take()
+                        .filter(|l| Some(&l.filename) == shown.as_ref());
+                    if history.letter.is_none()
+                        && let Some(shown) = shown
+                    {
+                        load_letter(state, &member, &shown, tx);
                     }
                 }
                 other => {

@@ -1159,6 +1159,74 @@ fn a_history_read_lost_with_the_connection_gives_way_to_the_new_connections_read
     );
 }
 
+#[test]
+fn a_letter_filed_between_two_showings_of_the_handoffs_tab_shows_without_refresh() {
+    let d = daemon(
+        vec![member("fern", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    );
+    let history = |filenames: &[&str]| CrewHandoffsGetResultMessage {
+        success: true,
+        member: Some("fern".into()),
+        handoffs: filenames
+            .iter()
+            .map(|f| letter(f, "2026-11-16T10:00:00Z"))
+            .collect(),
+        ..CrewHandoffsGetResultMessage::new()
+    };
+    d.answer_in_turn(
+        "crew_handoffs_get",
+        [
+            Answer::Reply(message(history(&[]))),
+            Answer::Reply(message(history(&["b.md"]))),
+            Answer::Hold,
+        ],
+    );
+    d.on("crew_handoff_get", |request| {
+        let filename = request["filename"].as_str().unwrap_or_default();
+        letter_read(
+            filename,
+            &format!("Letter {}", filename.trim_end_matches(".md")),
+        )
+    });
+    let reads = |world: &World, content: &str| {
+        world
+            .screen()
+            .descendants(Target::key("crew.handoff.reader"))
+            .iter()
+            .any(|n| n.name.as_deref() == Some(content))
+    };
+    let mut world = World::start(d);
+    open(&mut world);
+    click(&mut world, "crew.tab.handoffs");
+    assert!(shows(&world, "crew.handoffs.empty"));
+    press(&mut world, Key::Escape);
+    open(&mut world);
+    click(&mut world, "crew.tab.handoffs");
+    assert_eq!(
+        named(&world, "crew.handoffs.count").as_deref(),
+        Some("1 letter"),
+        "reopening Manage crew reads the letters again"
+    );
+    assert!(reads(&world, "Letter b"));
+    click(&mut world, "crew.tab.launch");
+    click(&mut world, "crew.tab.handoffs");
+    assert!(
+        reads(&world, "Letter b"),
+        "the letters read before stay while they are read again"
+    );
+    let held = world.daemon.sent_of("crew_handoffs_get").remove(2);
+    world.daemon.reply_to(&held, history(&["c.md", "b.md"]));
+    world.settle();
+    assert_eq!(
+        named(&world, "crew.handoffs.count").as_deref(),
+        Some("2 letters"),
+        "coming back to the tab reads the letters again"
+    );
+    assert!(reads(&world, "Letter c"), "the newest letter shows");
+}
+
 fn planted_by(seed: Seed, member: &str) -> Seed {
     Seed {
         planter: ActorView {
