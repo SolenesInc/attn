@@ -38,7 +38,7 @@ came back and close the shells. Terminals keep running when the app or the daemo
 
 ### Agents
 
-- `attn terminal` (`cmd/attnd/terminal.go`): `ls [--desktop <ref> | --all] [--json]`, `open [--host <outpost|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>]`, `run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>]`, `send <terminal> (--text "<text>" | --keys C-c Escape Enter ...) [--desktop <ref>]`, `read <terminal> [--last | --scrollback [--lines <n>]]`, `wait <terminal> --until prompt|exit [--timeout <seconds>]`, `close <terminal> [--desktop <ref>]`. Typing and closing on another desktop need `--desktop`. `move` is in [desktops.md](desktops.md).
+- `attn terminal` (`cli/attn/src/commands/terminal.rs`): `ls [--desktop <ref> | --all] [--json]`, `open [--host <outpost|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>]`, `run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>]`, `send <terminal> (--text "<text>" | --keys C-c Escape Enter ...) [--desktop <ref>]`, `read <terminal> [--last | --scrollback [--lines <n>]]`, `wait <terminal> --until prompt|exit [--timeout <seconds>]`, `close <terminal> [--desktop <ref>]`. Typing and closing on another desktop need `--desktop`. `move` is in [desktops.md](desktops.md).
 - `attn agent peek <session>` reads another agent's screen ([agent-state.md](agent-state.md)).
 - Prompts: `attn skill --reference terminal`, on placement, reach, typing, reading and waiting (`internal/prompts/content/skills/attn/references/terminal.md`), and its capability index (`internal/prompts/content/skills/attn/SKILL.md`).
 

@@ -42,10 +42,10 @@ removes outposts in Settings. Agents open shells and delegate onto them with
 
 ### Agents
 
-- `attn terminal open --host <outpost|home>` opens a shell on that machine at the end of the row (`cmd/attnd/terminal.go`). For the verb itself, see [terminals.md](terminals.md). An agent on an outpost opens on its own machine by default, and `--host home` reaches the home.
+- `attn terminal open --host <outpost|home>` opens a shell on that machine at the end of the row (`cli/attn/src/commands/terminal.rs`). For the verb itself, see [terminals.md](terminals.md). An agent on an outpost opens on its own machine by default, and `--host home` reaches the home.
 - `attn delegate --host <outpost|home>` starts a delegate on that machine, and that machine checks the folder, refs and worktree. For the verb itself, see [delegation.md](delegation.md).
 - `attn session reopen <id>` resumes a closed outpost session on the outpost it ran on, and refuses naming the host while that outpost is unreachable or removed (`cmd/attnd/session_reopen.go`). For the verb itself, see [ledger.md](ledger.md).
-- `attn enrollment status` and `attn enrollment leave [--home <daemon-id>]` (`cmd/attnd/enrollment.go`). Run them on an outpost to see or release the home that outpost is enrolled to. With `--home`, the outpost keeps an enrollment to any other home, and the status reads `kept`.
+- `attn enrollment status` and `attn enrollment leave [--home <daemon-id>]` (`cli/attn/src/commands/enrollment.rs`). Run them on an outpost to see or release the home that outpost is enrolled to. With `--home`, the outpost keeps an enrollment to any other home, and the status reads `kept`.
 - An agent on an outpost runs every other attn verb through its outpost daemon, which reaches the home. When the home is unreachable, the command fails at once and names the home.
 
 ### Triggers
@@ -166,7 +166,7 @@ Steps:
 ## Tests
 
 - Wire: `internal/bridge/*_test.go`, `internal/daemon/outposts_wire_test.go`, `internal/daemon/outpost_forward_transcript_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/launcher_outposts.rs`, `native/crates/attn-app/tests/wire/settings/outposts.rs`, `outpost_updates.rs`, `remote_shell.rs`, `remote_agents.rs`, `outpost_paths.rs` and the outpost tests in `tile_header.rs`, `terminal_annotations.rs`, `keys.rs` and `ledger.rs`.
-- Stack: `cmd/attnd/outposts_stack_test.go`, `cmd/attnd/outpost_connect_terminal_stack_test.go`, `cmd/attnd/outpost_*_stack_test.go`, `cmd/attnd/remote_*_stack_test.go`, `cmd/attnd/enrollment_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `cmd/attnd/delegate_outpost_stack_test.go`, `cmd/attnd/session_reopen_outpost_stack_test.go`, `cmd/attnd/garden_resume_outpost_stack_test.go`, `cmd/attnd/launcher_reads_stack_test.go`, `cmd/attnd/remote_worktree_delete_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
+- Stack: `cmd/attnd/outposts_stack_test.go`, `cmd/attnd/outpost_connect_terminal_stack_test.go`, `cmd/attnd/outpost_*_stack_test.go`, `cmd/attnd/remote_*_stack_test.go`, `cmd/attnd/outpost_enrollment_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `cmd/attnd/delegate_outpost_stack_test.go`, `cmd/attnd/session_reopen_outpost_stack_test.go`, `cmd/attnd/garden_resume_outpost_stack_test.go`, `cmd/attnd/launcher_reads_stack_test.go`, `cmd/attnd/remote_worktree_delete_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
 - Scenario: in the native app `native-outposts-settings`, `native-outpost-update` and `native-notebook-sync`; in the Tauri app `outposts-settings`, `outpost-update`, `notebook-sync`.
 - Kernel: `internal/enrollment/*_test.go`, `internal/outpostbuild/*_test.go`.
 - App: `app/src/App.outpostsSettings.test.tsx`, `app/src/App.outpostUpdates.test.tsx`, `app/src/App.remoteAgents.test.tsx`, `app/src/App.remoteShell.test.tsx`, `app/src/App.outpostPaths.test.tsx`, `app/src/App.outpostsNotebook.test.tsx`, `app/src/App.newSessionLauncher.outposts.test.tsx`, `app/src/components/ledger/SessionsTab.outposts.test.tsx`.

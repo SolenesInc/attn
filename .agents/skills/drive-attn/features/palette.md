@@ -95,7 +95,6 @@ Steps:
 ## Tests
 
 - Wire: `native/crates/attn-app/tests/wire/palette.rs` (the native app), `internal/daemon/command_usage_wire_test.go`.
-- Stack: `cmd/attnd/command_usage_stack_test.go`.
 - Scenario: `native-palette-order` (the native app), `palette-order`, `snooze-keyboard`.
 - App: `app/src/App.actionMenu.test.tsx`, `app/src/App.commandUsage.test.tsx`, `app/src/App.paletteRename.test.tsx`, `app/src/components/palette/Palette.test.tsx`, `app/src/components/palette/UnifiedPalette.keyboard.test.tsx`, `app/src/components/palette/agentPaletteRows.ordering.test.tsx`.
 

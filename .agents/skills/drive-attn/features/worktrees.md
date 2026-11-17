@@ -33,7 +33,7 @@ sweep never takes it, delete a worktree now, and read what the sweep removed.
 
 ### Agents
 
-- `attn worktree` (`cmd/attnd/worktree.go`): `list` and `log` (with `--repo`, `--limit`, `--json`), `keep`, `unkeep`, `delete` (with `--force`) and `refresh`. None needs a session.
+- `attn worktree` (`cli/attn/src/commands/worktree.rs`): `list` and `log` (with `--repo`, `--limit`, `--json`), `keep`, `unkeep`, `delete` (with `--force`) and `refresh`. None needs a session.
 - `attn delegate --new-worktree` creates the worktree a delegate works in (`--branch` with `--from`, or `--existing-branch`, and `--worktree-path`). [delegation.md](delegation.md) covers the verb.
 - What agents read: when attn removes a worktree, the daemon adds the note "attn <removed|deleted> the worktree <path> (branch <branch> of <repository>): <reason>." to the log of each seed that worked there (`internal/daemon/worktree_sweep.go`).
 

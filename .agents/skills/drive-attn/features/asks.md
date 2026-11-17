@@ -107,7 +107,7 @@ Preconditions:
 - **The queue bar.**
   - With an ask open, run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"title-bar-right\"] .title-bar-count-badge"}'` reads `1`.
   - Click the asks button in `[data-testid="title-bar-right"]` natively: the drawer opens on the ask.
-  - Press Escape, run `./attn settings set queue_mode_enabled false`, and click `button[title="Expand sidebar"]` natively. Withdraw the `Cache store` ask the same way.
+  - Press Escape, run `./attn settings set queue_mode_enabled false`, and click `[aria-label="Show sidebar"]` natively. Withdraw the `Cache store` ask the same way.
 - **Snooze and wake from the drawer.**
   - With the `Cache store` ask from ask-agent open and the sidebar label starting `1 open ask`, open the drawer, click the subject natively and press `s`. `bridge dom_wait '{"selector":"[role=\"menu\"][aria-label=\"Snooze ask-agent\"]","timeoutMs":5000}'` matches. Press Enter: the menu closes and focus is on the drawer's `Wake` button.
   - `bridge dom_text '{"selector":".asks-list"}'` reads `Snoozed` and `until …`, `.asks-count` is gone, and the sidebar label no longer starts with `1 open ask`. `./attn session list --tree` shows ask-agent with `snoozed until <instant>`.

@@ -97,9 +97,9 @@ Steps:
 
 ## Tests
 
-- Wire: `internal/daemon/bus_status_wire_test.go`, `internal/daemon/bus_health_wire_test.go`, `internal/daemon/bus_lag_wire_test.go`, `internal/daemon/bus_pin_alarm_wire_test.go`, `internal/daemon/daemon_warnings_wire_test.go`, `internal/daemon/diag_wire_test.go`, `internal/daemon/support_snapshot_wire_test.go`, `internal/daemon/backup_wire_test.go`, `internal/daemon/backup_rotation_wire_test.go`, `internal/daemon/tasks_wire_test.go`, `internal/daemon/tasks_protocol_wire_test.go`, `internal/daemon/tasks_restart_wire_test.go`.
+- Wire: `internal/daemon/bus_status_wire_test.go`, `internal/daemon/bus_health_wire_test.go`, `internal/daemon/bus_pin_alarm_wire_test.go`, `internal/daemon/daemon_warnings_wire_test.go`, `internal/daemon/diag_wire_test.go`, `internal/daemon/support_snapshot_wire_test.go`, `internal/daemon/backup_wire_test.go`, `internal/daemon/backup_rotation_wire_test.go`, `internal/daemon/tasks_wire_test.go`, `internal/daemon/tasks_protocol_wire_test.go`, `internal/daemon/tasks_restart_wire_test.go`.
 - Stack: `cmd/attnd/debug_stack_test.go`, `cmd/attnd/preflight_stack_test.go`, `cmd/attnd/db_stack_test.go`, `cmd/attnd/bus_stack_test.go`.
-- Kernel: `cmd/attnd/bus_test.go`, `internal/daemon/bus_pin_alarm_test.go`, `internal/store/backup_test.go`, `internal/bus/*_test.go`, `internal/jobs/*_test.go`.
+- Kernel: `cmd/attnd/bus_test.go`, `internal/daemon/bus_pin_alarm_test.go`, `internal/bus/*_test.go`, `internal/jobs/*_test.go`.
 - Wire (the native app): `native/crates/attn-app/tests/wire/migration_failure.rs`, `native/crates/attn-app/tests/wire/diagnostic_report.rs`.
 - App: `app/src/App.diagnosticReport.test.tsx`, `app/src/App.eventBusSettings.test.tsx`, `app/src/App.backgroundTasks.test.tsx`, `app/src/application/useAppDiagnostics.test.tsx`, `app/src/components/MigrationFailureScreen.facts.test.tsx`.
 
