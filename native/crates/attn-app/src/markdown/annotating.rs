@@ -210,7 +210,7 @@ pub(crate) fn highlights(
                 (false, true) => t.error.alpha(0.2),
                 (false, false) => t.warning.alpha(0.28),
             };
-            let highlight = Highlight::new().bg(bg).key(mark_key(tile, &painted.id));
+            let highlight = square(Highlight::new().bg(bg)).key(mark_key(tile, &painted.id));
             out.push((
                 painted.source.clone(),
                 if painted.deletion {
@@ -231,10 +231,16 @@ pub(crate) fn highlights(
         };
         out.push((
             pending.source.clone(),
-            Highlight::new().bg(bg).key(key(tile, "pending")),
+            square(Highlight::new().bg(bg)).key(key(tile, "pending")),
         ));
     }
     out
+}
+
+/// A mark painted as the Tauri reader's `::highlight()` paints it: a square block exactly as
+/// wide as its words.
+fn square(highlight: Highlight) -> Highlight {
+    highlight.pad(0.0).radius(0.0)
 }
 
 /// A selection in tile `tile`'s document changed: let go over a passage, the toolbar opens on
