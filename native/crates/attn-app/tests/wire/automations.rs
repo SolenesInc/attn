@@ -514,6 +514,32 @@ fn run_now_asks_a_worktree_automation_for_its_pull_request_first() {
 }
 
 #[test]
+fn the_drawer_closes_after_a_pull_request_run_fails() {
+    let review = AutomationDefinitionSummary {
+        location_type: Some("repository_worktree".into()),
+        ..definition(3, "Review a pull request")
+    };
+    let mut world = opened_with(&Scene::of(vec![review]), |daemon| {
+        refuse_runs(daemon, "folder is not trusted");
+    });
+    click(&mut world, "automations.run-now.3");
+    world.gesture(|app| app.type_text("https://github.com/victorarias/attn/pull/42"));
+    world
+        .automate(
+            "press",
+            serde_json::json!({"target": {"key": "automations.pr-run.3"}}),
+        )
+        .unwrap();
+    assert_eq!(
+        name(&world, "automations.run-error.3").as_deref(),
+        Some("folder is not trusted")
+    );
+
+    click(&mut world, "automations.close");
+    assert!(!has(&world, "automations"));
+}
+
+#[test]
 fn a_refused_run_says_why_and_the_next_click_is_a_new_run() {
     let mut world = opened_with(&Scene::of(vec![definition(1, "PR reviewer")]), |daemon| {
         refuse_runs(daemon, "automation is disabled");

@@ -1,7 +1,7 @@
 use attn_protocol::{AutomationDefinitionSummary, AutomationRunSummary};
 use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, Tx, col, row, text};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Switch, TextInput};
 
 use super::{Automations, DRAWER, form};
@@ -333,6 +333,16 @@ fn definition_row(
     item
 }
 
+/// The prompt's URL, or the drawer's spare once the prompt is gone, so the field's last edit as
+/// focus leaves it has somewhere to land.
+fn pull_request_url(state: &mut State) -> &mut TextEdit {
+    let automations = &mut state.window.automations;
+    match automations.pull_request.as_mut() {
+        Some(prompt) => &mut prompt.url,
+        None => &mut automations.spare,
+    }
+}
+
 fn pull_request_prompt(
     automations: &Automations,
     prompt: &super::PullRequestPrompt,
@@ -344,15 +354,7 @@ fn pull_request_prompt(
         .key(pull_request_field(id))
         .label("Pull request URL")
         .placeholder("https://github.com/owner/repo/pull/42")
-        .on_edit(|state: &mut State| {
-            &mut state
-                .window
-                .automations
-                .pull_request
-                .as_mut()
-                .expect("the prompt shows")
-                .url
-        })
+        .on_edit(pull_request_url)
         .on_change(|state: &mut State, _: &mut Tx| {
             if let Some(prompt) = state.window.automations.pull_request.as_mut() {
                 prompt.missing = false;
