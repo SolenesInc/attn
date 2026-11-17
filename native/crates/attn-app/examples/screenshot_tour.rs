@@ -13,12 +13,13 @@ use attn_protocol::{
     ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
     AutomationSchedulePreviewResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, Desktop, DesktopPane, DesktopTileContentMessage,
-    GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, InitialStateMessage, Profile,
-    RecentLocation, RecentLocationsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote,
-    ReviewRow, ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge,
-    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, Worktree,
+    GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, InitialStateMessage,
+    PartyView, Profile, RecentLocation, RecentLocationsResultMessage, RepoInfo, ReviewBundle,
+    ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
+    SeedDocumentGetResultMessage, SeedEdge, SeedPlotProgress, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
+    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
+    Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -1085,6 +1086,65 @@ fn session_menu(dark: bool) {
     snap(&mut world, "session-menu", dark);
 }
 
+fn queue_flow(dark: bool) -> World {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.crew = Some(crew());
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("queue_mode_enabled".to_owned(), "true".to_owned());
+    }
+    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    press(&mut world, Action::SessionGoToDashboard);
+    world
+}
+
+/// The queue flow's Home with the crew.
+fn queue_home(dark: bool) {
+    let mut world = queue_flow(dark);
+    snap(&mut world, "queue-home", dark);
+}
+
+/// The queue flow's agent list, opened.
+fn queue_agent_list(dark: bool) {
+    let mut world = queue_flow(dark);
+    world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
+    snap(&mut world, "queue-agent-list", dark);
+}
+
+/// The working agent tends two seeds of a plot: its header's chip, then the list it pins.
+fn session_seeds(dark: bool) {
+    let tended = |seed: Seed| Seed {
+        claimed: true,
+        tender: Some(PartyView {
+            name: "Builder".into(),
+            r#ref: "session:s0".into(),
+            session_id: Some("s0".into()),
+        }),
+        ..seed
+    };
+    let seeds = seeds()
+        .into_iter()
+        .map(|seed| match seed.id.as_str() {
+            "s-one" | "s-two" => tended(seed),
+            _ => seed,
+        })
+        .collect();
+    let mut world =
+        start(Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), seeds)));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    world.gesture(|app| app.click(Target::key("tile.a.seed")));
+    snap(&mut world, "session-seeds", dark);
+}
+
+/// A word of the document selected, with the annotation toolbar over it.
+fn markdown_selection(dark: bool) {
+    let mut world = with_document(dark);
+    world.gesture(|app| {
+        app.update(|_, tx| tx.select_text("tile.m.document.md/b1".to_owned(), 0..6))
+    });
+    world.settle();
+    snap(&mut world, "markdown-selection", dark);
+}
+
 fn shoot(out: PathBuf, scheme: Option<String>) {
     if let Some(id) = &scheme {
         let ids: Vec<&str> = attn_ui::colors::SCHEMES.iter().map(|s| s.id).collect();
@@ -1130,6 +1190,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         notifications(dark);
         attention(dark);
         session_menu(dark);
+        queue_home(dark);
+        queue_agent_list(dark);
+        session_seeds(dark);
+        markdown_selection(dark);
     }
 }
 

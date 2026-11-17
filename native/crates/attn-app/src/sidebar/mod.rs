@@ -304,24 +304,16 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
 }
 
 pub(crate) fn home_row(home: bool, keys: Option<String>, t: &Tokens) -> El {
-    nav_row(
-        "sidebar.home",
-        &attn_ui::icon::HOME,
-        t.text_primary,
-        "Home",
-        keys,
-        t,
-    )
-    .a11y_value(if home { "current" } else { "" })
-    .fill(if home { t.bg_selected } else { t.bg_panel })
-    .on_press(|state: &mut State| state.window.go_home())
+    nav_row("sidebar.home", &attn_ui::icon::HOME, "Home", keys, t)
+        .a11y_value(if home { "current" } else { "" })
+        .fill(if home { t.bg_selected } else { t.bg_panel })
+        .on_press(|state: &mut State| state.window.go_home())
 }
 
 fn overview_row(keys: Option<String>, t: &Tokens) -> El {
     nav_row(
         "sidebar.overview",
         &attn_ui::icon::OVERVIEW,
-        t.text_secondary,
         "Desktop overview",
         keys,
         t,
@@ -337,7 +329,6 @@ fn overview_row(keys: Option<String>, t: &Tokens) -> El {
 fn nav_row(
     key: &str,
     glyph: impl Into<attn_ui::Glyph>,
-    ink: rune::Color,
     label: &str,
     keys: Option<String>,
     t: &Tokens,
@@ -354,12 +345,11 @@ fn nav_row(
         .padding(space::S1)
         .radius(4.0)
         .hover(t.bg_elevated)
-        .child(
-            row()
-                .w(14.0)
-                .justify_center()
-                .child(glyph.into().draw(14.0, type_::BODY, ink)),
-        )
+        .child(row().w(14.0).justify_center().child(glyph.into().draw(
+            14.0,
+            type_::BODY,
+            t.text_primary,
+        )))
         .child(
             text(label)
                 .font(type_::BODY)
