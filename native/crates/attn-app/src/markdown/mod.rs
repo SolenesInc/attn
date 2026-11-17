@@ -480,6 +480,7 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
         .inline_code_size(12.25)
         .inline_code_font(1.0, 400.0)
         .inline_code_pad(5.25)
+        .inline_code_pad_y(1.75)
         .inline_code_bg(t.bg_elevated)
         .code_block_font(TextStyle {
             size: 13.0,

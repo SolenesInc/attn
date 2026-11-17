@@ -235,7 +235,7 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
 }
 
 /// The line's spans in the window's colours: its bullet in the brand colour, and a link to a
-/// missing note in it too, underlined in the error colour and followed by its warning.
+/// missing note in it too, underlined in dashes of the error colour and followed by its warning.
 fn with_theme(shown: &Shown, t: &Tokens) -> Vec<Span> {
     let mut out = spans(shown, Some(t));
     if let Some(bullet) = &shown.bullet {
@@ -245,7 +245,7 @@ fn with_theme(shown: &Shown, t: &Tokens) -> Vec<Span> {
         out.push(
             Span::new(link.start, link.end)
                 .color(t.brand)
-                .underline(t.error.alpha(0.5)),
+                .underline_dashed(t.error.alpha(0.5)),
         );
         out.push(Span::new(mark.start, mark.end).color(t.error));
     }

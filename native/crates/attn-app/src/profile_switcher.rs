@@ -410,7 +410,8 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
     .radius(6.0)
     .fill(t.bg_elevated)
     .border(1.0, t.border)
-    .hover(t.bg_elevated);
+    .hover(t.bg_elevated)
+    .hover_border(t.border_focus);
     crate::shell::title_bar_slot(PILL_SLOT, pill)
 }
 
