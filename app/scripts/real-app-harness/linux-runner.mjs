@@ -74,9 +74,13 @@ flock ${quote(`${root}/operation.lock`)} true
 echo took
 exec cat >/dev/null`;
   const holder = spawn('ssh', sshArgs(provider.connection(), `bash -c ${quote(script)}`), { stdio: ['pipe', 'pipe', 'inherit'] });
+  const asked = Date.now();
   for await (const line of readline.createInterface({ input: holder.stdout })) {
     if (line === 'busy') console.error(`Waiting for another run on the guest checkout ${path.posix.basename(root)}`);
-    if (line === 'took') return () => holder.stdin.end();
+    if (line === 'took') {
+      console.error(`Waited ${Math.round((Date.now() - asked) / 1000)}s for the guest checkout ${path.posix.basename(root)}`);
+      return () => holder.stdin.end();
+    }
   }
   throw new Error(`Could not take a turn on the guest checkout ${path.posix.basename(root)}`);
 }

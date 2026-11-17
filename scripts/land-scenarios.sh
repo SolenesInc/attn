@@ -77,8 +77,12 @@ MESSAGE
   echo "land: scenarios $scenarios passed on CI's Linux"
 }
 
+waited_for_runner() {
+  sed -n 's/^Waited \([0-9]*\)s for the guest checkout .*/\1/p' "$1" | grep . || echo 0
+}
+
 run_on_ssh() {
-  local target="$1" scenarios="$2" logs scenario failed=""
+  local target="$1" scenarios="$2" logs scenario failed="" started waited
   if ! pnpm --silent --dir app real-app:linux status --provider ssh --target "$target" >/dev/null 2>&1; then
     echo "land: the landing runner $target cannot be reached, so the scenarios run on CI's Linux instead" >&2
     run_on_github "$scenarios"
@@ -87,16 +91,17 @@ run_on_ssh() {
   logs="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-runner.XXXXXX")"
   for scenario in ${scenarios//,/ }; do
     echo "land: running scenario $scenario on $target, before the push"
+    started=$SECONDS
     perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$target" \
       --checkout land --scenario "$scenario" --out "$logs/$scenario" >"$logs/$scenario.log" 2>&1 &
     runner_pid=$!
     if wait "$runner_pid"; then
       runner_pid=""
       record_pass "$scenario" "ssh:$target" "$logs/$scenario.log"
-      echo "land: scenario $scenario passed on $target: $logs/$scenario.log"
+      echo "land: scenario $scenario passed on $target in $((SECONDS - started))s, $(waited_for_runner "$logs/$scenario.log")s of it waiting for other landings: $logs/$scenario.log"
     else
       runner_pid=""
-      echo "land: scenario $scenario failed on $target, so it runs again on CI's Linux, and that run decides. Log: $logs/$scenario.log" >&2
+      echo "land: scenario $scenario failed on $target in $((SECONDS - started))s, $(waited_for_runner "$logs/$scenario.log")s of it waiting for other landings, so it runs again on CI's Linux, and that run decides. Log: $logs/$scenario.log" >&2
       failed="${failed:+$failed,}$scenario"
     fi
   done

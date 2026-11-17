@@ -94,6 +94,7 @@ case "$args" in
   *"real-app:linux status --provider ssh --target runner.invalid") exit "${LAND_RUNNER_REACH_EXIT:-0}" ;;
   *"real-app:linux soak "*)
     printf 'runner %s\n' "${args#*real-app:linux }" >>"$LAND_CHECK_LOG"
+    echo "Waited ${LAND_RUNNER_WAITED:-0}s for the guest checkout land" >&2
     if [ -n "${LAND_RUNNER_HOLD:-}" ]; then
       bash -c 'trap "echo \"runner child stopped\" >>\"\$LAND_CHECK_LOG\"; exit 143" TERM
         echo running >"$LAND_RUNNER_HOLD/watching"
@@ -493,10 +494,11 @@ grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'a changed diff did not
 
 git config attn.landRunner ssh:runner.invalid
 printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
-land 'Change a scenario on the landing runner'
+land 'Change a scenario on the landing runner' LAND_RUNNER_WAITED=7
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --scenario shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed on the landing runner ran on CI' >&2; exit 1; fi
-expect_output 'scenario shelf-moves passed on runner.invalid'
+expect_output 'scenario shelf-moves passed on runner.invalid in '
+expect_output 's, 7s of it waiting for other landings: '
 grep -rqE '^shelf-moves ssh:runner.invalid /.*/shelf-moves.log$' "$records" || { echo 'a scenario that passed on the landing runner left no pass record' >&2; exit 1; }
 
 printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
@@ -510,7 +512,8 @@ printf '\n' >>.agents/skills/drive-attn/features/example.md
 land 'Change the product while a scenario fails on the landing runner' LAND_RUNNER_FAIL=shelf-peek
 grep -qF -- '--scenario shelf-layout ' "$LAND_CHECK_LOG" && grep -qF -- '--scenario shelf-peek ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run each scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'only the scenario that failed on the landing runner should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-expect_output 'scenario shelf-peek failed on runner.invalid, so it runs again on CI'
+expect_output 'scenario shelf-peek failed on runner.invalid in '
+expect_output 'of it waiting for other landings, so it runs again on CI'
 no_land_scenario_refs
 
 export LAND_RUNNER_FAIL=shelf-moves

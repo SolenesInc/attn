@@ -119,7 +119,8 @@ Each scenario then runs as `real-app:linux soak --checkout land` on that
 machine, from an empty instance. Every landing, from any clone or host, uses
 that one guest checkout and its build output, so the machine holds one build
 of each app however many worktrees land. Landings take turns on it, one
-scenario at a time.
+scenario at a time, and the landing prints each scenario's time on the machine
+and how much of it went to waiting for other landings.
 
 The landing prints where it keeps each scenario's log from the machine.
 [What land.sh does](trunk-based-development.md#what-landsh-does) says what
