@@ -453,7 +453,7 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     };
     MarkdownStyle::from_kit(kit)
         .body_font(body)
-        .heading_font(1, heading(19.25, 700.0, 25.0))
+        .heading_font(1, heading(19.25, 700.0, 25.0).tracking(-0.025 * 19.25))
         .heading_font(2, heading(16.625, 600.0, 23.3))
         .heading_font(3, heading(14.0, 600.0, 21.7))
         .heading_font(4, heading(14.0, 600.0, 21.7))

@@ -29,6 +29,8 @@ struct Kept {
     popped: bool,
     /// The tile shows seed `s-plan` instead of the file, tended by the session named, if any.
     seed: Option<Option<&'static str>>,
+    /// The window is narrow enough that the tile's header has no room for an overall note.
+    narrow: bool,
 }
 
 type Shared = Arc<Mutex<Kept>>;
@@ -171,7 +173,12 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
         json!({ "event": "desktop_update_tile_result", "request_id": r["request_id"], "success": r["tile_session_id"] != "s-refused" })
     });
     let seed = kept.lock().unwrap().seed.is_some();
-    let mut world = World::start_sized(daemon, (2400.0, 900.0));
+    let size = if kept.lock().unwrap().narrow {
+        (2100.0, 900.0)
+    } else {
+        (2600.0, 900.0)
+    };
+    let mut world = World::start_sized(daemon, size);
     world.open_desktop();
     if !seed {
         world.daemon.emit(content(doc));
@@ -615,7 +622,7 @@ fn typing_over_a_selection_writes_a_comment_that_saves_only_with_words_and_waits
         .filter_map(|n| n.name)
         .collect();
     assert!(
-        heading.iter().any(|h| h == "\u{201c}tile layout\u{201d}"),
+        heading.iter().any(|h| h == "\"tile layout\""),
         "the box quotes its passage: {heading:?}"
     );
     world.gesture(|app| app.key(ctrl_enter()));
@@ -778,6 +785,41 @@ fn a_card_brings_its_mark_into_view_and_an_overall_note_is_written_from_the_head
         (1, Some("Ship it"))
     );
     assert!(global[0].get("anchor").is_none_or(Value::is_null));
+}
+
+#[test]
+fn a_narrow_tile_drops_the_headers_overall_note_and_the_review_notes_write_one() {
+    let (mut world, kept) = start_with(
+        DOC,
+        Kept {
+            narrow: true,
+            ..holding(vec![held("early", "deletion", "tile layout", None)])
+        },
+    );
+    let [_, _, width, _] = world
+        .screen()
+        .bounds(Target::key("tile.m.document"))
+        .unwrap_or_else(|| panic!("no document tile:\n{}", world.screen()));
+    assert!(width < 720.0, "the tile is {width} points across");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.m.document.overall"))
+            .is_none(),
+        "the header has no room for an overall note"
+    );
+    assert_eq!(label_of(&world, "notes").as_deref(), Some("Notes 1"));
+
+    click(&mut world, "notes");
+    click(&mut world, "notes.overall");
+    world.gesture(|app| app.type_text("Ship it"));
+    click(&mut world, "composer.save");
+    pause(&mut world);
+    assert!(
+        marks(&kept)
+            .iter()
+            .any(|m| m["type"] == "global" && m["text"] == "Ship it")
+    );
 }
 
 #[test]

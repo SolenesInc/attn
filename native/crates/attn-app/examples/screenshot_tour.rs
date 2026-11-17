@@ -1979,6 +1979,106 @@ fn markdown_selection(dark: bool) {
     snap(&mut world, "markdown-selection", dark);
 }
 
+const RELEASE_NOTES: &str = "# Release notes
+
+A short document that exercises every block the reader draws.
+
+Colors move into one module, and every view reads them from there.
+";
+
+/// The release notes beside agent `a`, the tile bound to it, over a daemon that keeps the
+/// document's marks as it is asked to.
+fn annotated_document(dark: bool) -> World {
+    let mut tile = document_tile("m", "/repo/release.md");
+    tile["tile_session_id"] = json!("s0");
+    let daemon = Daemon::scripted().state(initial(dark, tile, vec![]));
+    let kept = std::sync::Arc::new(std::sync::Mutex::new((Vec::<Value>::new(), 0_i64)));
+    let draft = |(marks, generation): &(Vec<Value>, i64), r: &Request, event: &str| {
+        json!({
+            "event": event,
+            "request_id": r["request_id"],
+            "document_uri": r["document_uri"],
+            "source_kind": r["source_kind"],
+            "success": true,
+            "annotations": marks,
+            "generation": generation,
+        })
+    };
+    let read = kept.clone();
+    daemon.on("markdown_annotations_get", move |r: &Request| {
+        draft(&read.lock().unwrap(), r, "markdown_annotations_get_result")
+    });
+    daemon.on("markdown_annotations_save", move |r: &Request| {
+        let mut kept = kept.lock().unwrap();
+        for upsert in r["upserts"].as_array().into_iter().flatten() {
+            kept.0.retain(|m| m["id"] != upsert["id"]);
+            kept.0.push(upsert.clone());
+        }
+        kept.1 += 1;
+        draft(&kept, r, "markdown_annotations_save_result")
+    });
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/release.md", RELEASE_NOTES, None);
+    world
+}
+
+/// The release notes with their first paragraph's words "short document that exercises every
+/// block" selected and let go, so the annotation toolbar shows over them.
+fn annotation_selected(dark: bool) -> World {
+    let mut world = annotated_document(dark);
+    world.gesture(|app| {
+        app.update(|_, tx| tx.select_text("tile.m.document.md/b1".to_owned(), 2..44))
+    });
+    world.settle();
+    world
+}
+
+fn annotation_composing(dark: bool) -> World {
+    let mut world = annotation_selected(dark);
+    world.gesture(|app| app.click(Target::key("tile.m.document.toolbar.comment")));
+    world.gesture(|app| app.type_text("Name the blocks it skips."));
+    world.settle();
+    world
+}
+
+fn annotation_saved(dark: bool) -> World {
+    let mut world = annotation_composing(dark);
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        })
+    });
+    world.advance(std::time::Duration::from_secs(1));
+    world.settle();
+    world
+}
+
+fn annotation_selection(dark: bool) {
+    let mut world = annotation_selected(dark);
+    snap(&mut world, "annotation-selection", dark);
+}
+
+fn annotation_comment(dark: bool) {
+    let mut world = annotation_composing(dark);
+    snap(&mut world, "annotation-comment", dark);
+}
+
+fn annotation_saved_shot(dark: bool) {
+    let mut world = annotation_saved(dark);
+    snap(&mut world, "annotation-saved", dark);
+}
+
+fn annotation_notes(dark: bool) {
+    let mut world = annotation_saved(dark);
+    world.gesture(|app| app.click(Target::key("tile.m.document.notes")));
+    world.settle();
+    snap(&mut world, "annotation-notes-list", dark);
+}
+
 fn request_id(r: &Request) -> String {
     r["request_id"].as_str().unwrap_or_default().into()
 }
@@ -2366,6 +2466,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         rail(dark);
         session_seeds(dark);
         markdown_selection(dark);
+        annotation_selection(dark);
+        annotation_comment(dark);
+        annotation_saved_shot(dark);
+        annotation_notes(dark);
         snooze_menu(dark);
         rename_session(dark);
         session_usage(dark);

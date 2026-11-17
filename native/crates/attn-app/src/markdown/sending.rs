@@ -6,7 +6,6 @@
 use attn_protocol::{Desktop, DesktopUpdateTileMessage, MarkdownAnnotation, Session};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
 use rune::{Cx, El, Tx, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Menu, MenuItem, Placement};
 
@@ -104,40 +103,48 @@ pub(crate) fn controls(
     );
     let any = !desktop_sessions(desktop, sessions).is_empty();
     let noting = matches!(kind, Kind::Seed { tender: None, .. });
-    let small = |label: String, face: String| {
-        Button::new(label)
-            .variant(ButtonVariant::GhostMuted)
-            .label_with(move |_, ink| text(face).font(type_::LABEL).color(ink))
-    };
+    let roomy = rune::memo::layout_with(&format!("tile.{tile}"), |r| r[2] > OVERALL_HIDDEN_AT)
+        .unwrap_or(false);
     let place = |button: Button, part: &str| {
         button
             .build(attn_ui::kit(t))
             .key(key(tile, part))
-            .h(type_::LABEL.line_px() + 6.0)
-            .px(space::S1)
+            .h(CONTROL_H)
             .radius(5.0)
     };
+    let quiet = |label: String, face: El| {
+        Button::new(label)
+            .variant(ButtonVariant::GhostMuted)
+            .label_with(move |_, _| face)
+    };
+    let words = |words: String| text(words).font(type_::LABEL).color(t.text_secondary);
     let (overall_tile, overall_uri) = (tile.to_owned(), uri.to_owned());
     let notes_tile = tile.to_owned();
-    let mut parts = vec![
-        place(
-            small("Overall note".into(), "Overall note".into())
-                .help("Add an overall note")
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::annotating::compose_overall(state, &overall_tile, &overall_uri, tx)
-                }),
-            "overall",
-        ),
-        place(
-            small(
-                format!("Notes {count}"),
-                format!("{} {count}", attn_ui::glyph::COMMENT),
+    let mut parts: Vec<El> = Vec::new();
+    if roomy {
+        parts.push(
+            place(
+                quiet("Overall note".into(), words("Overall note".into()))
+                    .help("Add an overall note")
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        super::annotating::compose_overall(state, &overall_tile, &overall_uri, tx)
+                    }),
+                "overall",
             )
-            .help("Show review notes")
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &notes_tile, tx)),
+            .px(8.0),
+        );
+    }
+    parts.push(
+        place(
+            quiet(format!("Notes {count}"), words(format!("Notes {count}")))
+                .help("Show review notes")
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    open_notes(state, &notes_tile, tx)
+                }),
             "notes",
-        ),
-    ];
+        )
+        .px(8.0),
+    );
     let done = |noted: bool| if noted { "Noted ✓" } else { "Sent ✓" };
     let status = match &sent {
         Some(Sent::Done { kept, noted, .. }) if *kept > 0 => {
@@ -149,26 +156,42 @@ pub(crate) fn controls(
         Some(Sent::Sending) | None => None,
     };
     let caret = |label: &str| {
-        let tile = tile.to_owned();
+        let (tile, ink) = (tile.to_owned(), t.text_primary);
         place(
-            small(label.to_owned(), attn_ui::glyph::CARET_DOWN.into())
+            Button::new(label.to_owned())
+                .variant(ButtonVariant::Neutral)
+                .label_with(move |_, _| caret_mark(ink))
                 .on_press(move |state: &mut State| toggle_menu(state, &tile)),
             "send.menu",
         )
+        .w(CONTROL_H)
+        .ml(-1.0)
+        .corners([0.0, 5.0, 5.0, 0.0])
+        .fill(t.bg_button)
+        .border(1.0, t.border)
     };
     let idle = count == 0 && sent.is_none();
     if idle && matches!(kind, Kind::File { .. }) {
         let tile_menu = tile.to_owned();
-        parts.push(place(
-            small(
-                format!("Annotation destination: {name}"),
-                format!("To {name} {}", attn_ui::glyph::CARET_DOWN),
+        let face = row()
+            .gap(4.0)
+            .items_center()
+            .child(words("To".into()))
+            .child(words(name.clone()).single_line().truncate().max_w(82.0))
+            .child(caret_mark(t.text_secondary));
+        parts.push(
+            place(
+                Button::new(format!("Annotation destination: {name}"))
+                    .variant(ButtonVariant::GhostMuted)
+                    .label_with(move |_, _| face)
+                    .help(format!("Annotations will be sent to {name}"))
+                    .disabled(!any)
+                    .on_press(move |state: &mut State| toggle_menu(state, &tile_menu)),
+                "send.to",
             )
-            .help(format!("Annotations will be sent to {name}"))
-            .disabled(!any)
-            .on_press(move |state: &mut State| toggle_menu(state, &tile_menu)),
-            "send.to",
-        ));
+            .px(7.0)
+            .border(1.0, t.border),
+        );
     } else if !idle {
         let action = match &sent {
             Some(Sent::Sending) if noting => "Noting…".to_owned(),
@@ -180,15 +203,15 @@ pub(crate) fn controls(
             None if noting => format!("Note on seed {count}"),
             None => format!("Send {count}"),
         };
-        let quiet = matches!(sent, Some(Sent::Sending | Sent::Done { .. }));
+        let quiet_status = matches!(sent, Some(Sent::Sending | Sent::Done { .. }));
         let problem = matches!(
             sent,
             Some(Sent::Skipped | Sent::Warning(_) | Sent::Failed(_))
         );
-        let label = if quiet || matches!(kind, Kind::Seed { .. }) {
-            action
-        } else {
-            format!("{action} to {name}")
+        let target = (!quiet_status && matches!(kind, Kind::File { .. })).then(|| name.clone());
+        let label = match &target {
+            Some(name) => format!("{action} to {name}"),
+            None => action.clone(),
         };
         let label = if problem { format!("! {label}") } else { label };
         let chord = send_key
@@ -212,28 +235,67 @@ pub(crate) fn controls(
         };
         let nowhere = matches!(kind, Kind::File { .. }) && to.is_none();
         let disabled = matches!(sent, Some(Sent::Sending)) || count == 0 || nowhere;
+        let split = match kind {
+            Kind::File { .. } if any => Some("Change annotation destination"),
+            Kind::Seed {
+                tender: Some(_), ..
+            } => Some("More annotation destinations"),
+            _ => None,
+        };
         let send_tile = tile.to_owned();
-        let face = label.clone();
+        let ink = match &sent {
+            Some(Sent::Done { .. }) => t.success,
+            _ => t.text_primary,
+        };
+        let face = row()
+            .gap(4.0)
+            .items_center()
+            .children(problem.then(|| text("!").font(SEND).color(t.warning)))
+            .child(text(action).font(SEND).color(ink))
+            .children(target.map(|name| {
+                row()
+                    .gap(3.0)
+                    .items_center()
+                    .min_w(0.0)
+                    .child(text("to").font(type_::LABEL).color(t.text_secondary))
+                    .child(
+                        text(name)
+                            .font(type_::LABEL)
+                            .color(t.text_secondary)
+                            .single_line()
+                            .truncate()
+                            .max_w(82.0),
+                    )
+            }));
+        let edge = if problem {
+            attn_ui::colors::mix_srgb(t.border, t.warning, 0.48)
+        } else {
+            t.border
+        };
         let button = place(
             Button::new(label)
-                .variant(ButtonVariant::Outline)
-                .label_with(move |_, ink| text(face).font(type_::LABEL).color(ink))
+                .variant(ButtonVariant::Neutral)
+                .label_with(move |_, _| face)
                 .help(title)
                 .disabled(disabled)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &send_tile, tx)),
             "send",
         )
+        .px(10.0)
+        .fill(t.bg_button)
+        .border(1.0, edge)
         .live_region(rune::LiveRegion::Polite);
+        let button = if split.is_some() {
+            button.corners([5.0, 0.0, 0.0, 5.0])
+        } else {
+            button
+        };
         parts.push(match status {
             Some(status) => button.description(status),
             None => button,
         });
-        match kind {
-            Kind::File { .. } if any => parts.push(caret("Change annotation destination")),
-            Kind::Seed {
-                tender: Some(_), ..
-            } => parts.push(caret("More annotation destinations")),
-            _ => {}
+        if let Some(label) = split {
+            parts.push(caret(label));
         }
     }
     row()
@@ -242,6 +304,20 @@ pub(crate) fn controls(
         .gap(2.0)
         .children(parts)
 }
+
+/// The Tauri tile header's controls, `.desktop-dock-tile-send-button` and its kin, are 24 points
+/// high; a tile 720 points across or less has no room for "Overall note".
+const CONTROL_H: f32 = 24.0;
+const OVERALL_HIDDEN_AT: f32 = 720.0;
+
+/// The ▾ a header control opens its menu with.
+fn caret_mark(ink: rune::Color) -> El {
+    rune::icon(&attn_ui::icon::DISCLOSE_OPEN, 12.0).color(ink)
+}
+const SEND: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
+    ..type_::LABEL
+};
 
 /// A document tile: the desktop it is on, its document, and where its marks go.
 struct Tiled<'a> {
@@ -650,48 +726,59 @@ fn notes(
     let count = marks.len();
     let (closed, overall, cleared) = (tile.to_owned(), tile.to_owned(), tile.to_owned());
     let arming = reading.clearing.is_some();
+    let quiet = t.text_secondary;
     let head = row()
         .items_center()
         .gap(6.0)
+        .pt(4.0)
+        .px(2.0)
+        .pb(10.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border.alpha(0.5))
+        .child(type_::upper("Review notes", TITLE).color(t.text_secondary))
         .child(
-            type_::upper("Review notes", TITLE)
-                .color(t.text_secondary)
-                .grow(1.0),
+            Button::new("Close review notes")
+                .variant(ButtonVariant::GhostMuted)
+                .label_with(move |_, _| text(count.to_string()).font(COUNT).color(quiet))
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &closed, tx))
+                .build(attn_ui::kit(t))
+                .key(key(tile, "notes.close"))
+                .h(COUNT.line_px() + 2.0)
+                .px(8.0)
+                .radius(999.0)
+                .fill(t.bg_button),
         )
-        .child(panel_button(
-            tile,
-            "notes.close",
-            ("Close review notes", count.to_string()),
-            t.text_secondary,
-            t,
-            move |state: &mut State, tx: &mut Tx| open_notes(state, &closed, tx),
-        ))
+        .child(el().grow(1.0))
         .child(panel_button(
             tile,
             "notes.overall",
             ("+ Overall note", "+ Overall note".to_owned()),
-            t.text_secondary,
+            t.text_muted,
             t,
             move |state: &mut State, tx: &mut Tx| {
                 if let Some(r) = state.readings.tiles.get_mut(&overall) {
                     r.notes = false;
                 }
-                let uri = state.readings.tiles.get(&overall).map(|r| r.uri.clone());
-                if let Some(uri) = uri.or_else(|| tile_of(state, &overall).map(|d| d.uri)) {
+                if let Some(uri) = tile_of(state, &overall).map(|d| d.uri) {
                     super::annotating::compose_overall(state, &overall, &uri, tx);
                 }
             },
         ))
         .children((count > 0).then(|| {
             let words = if arming { "Confirm?" } else { "Clear all" };
-            panel_button(
+            let danger = attn_ui::colors::mix_srgb(t.error, rune::Color::WHITE, 0.24);
+            let button = panel_button(
                 tile,
                 "notes.clear",
                 (words, words.to_owned()),
-                t.error,
+                if arming { danger } else { t.text_muted },
                 t,
                 move |state: &mut State, tx: &mut Tx| clear_all(state, &cleared, tx),
-            )
+            );
+            if arming {
+                button.fill(t.error.alpha(0.12))
+            } else {
+                button
+            }
         }));
     let body: Vec<El> = if marks.is_empty() {
         vec![
@@ -749,17 +836,31 @@ fn panel_button(
 ) -> El {
     Button::new(label)
         .variant(ButtonVariant::GhostMuted)
-        .label_with(move |_, _| text(face).font(type_::LABEL).color(ink))
+        .label_with(move |_, _| text(face).font(QUIET).color(ink))
         .on_press_tx(press)
         .build(attn_ui::kit(t))
         .key(key(tile, part))
-        .h(type_::LABEL.line_px() + 6.0)
+        .h(QUIET.line_px() + 4.0)
         .px(6.0)
+        .radius(5.0)
 }
 
 const TITLE: rune::TextStyle = rune::TextStyle {
     weight: 600.0,
     tracking: 0.5,
+    ..type_::LABEL
+};
+
+/// The review notes' quiet actions and the note under a passage, in the interface face at
+/// regular weight, as the Tauri app's `.md-sidebar-action` and `.md-card-text`.
+const QUIET: rune::TextStyle = rune::TextStyle {
+    weight: 400.0,
+    ..type_::LABEL
+};
+
+/// The notes' count beside the title, as the Tauri app's `.md-sidebar-count` pill.
+const COUNT: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
     ..type_::LABEL
 };
 
@@ -820,6 +921,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
         None => card,
     };
     card.checked(selected)
+        .hover_group()
         .gap(4.0)
         .padding(8.0)
         .radius(6.0)
@@ -843,14 +945,18 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
                 .children(orphan.then(|| text("⚠ moved").font(type_::LABEL).color(t.warning)))
                 .child(el().grow(1.0))
                 .child(
-                    GlyphButton::new(attn_ui::glyph::TIMES, "Remove annotation")
-                        .font(type_::LABEL)
-                        .side(18.0)
+                    GlyphButton::new(&attn_ui::icon::ANNOTATION_CANCEL, "Remove annotation")
+                        .icon_size(14.0)
+                        .side(20.0)
+                        .color(t.text_muted)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             remove(state, &removed, std::slice::from_ref(&gone), tx)
                         })
                         .build(attn_ui::kit(t))
-                        .key(key(tile, &format!("notes.remove.{}", mark.id))),
+                        .key(key(tile, &format!("notes.remove.{}", mark.id)))
+                        .w(20.0)
+                        .radius(4.0)
+                        .group_opacity(0.0, 1.0),
                 ),
         )
         .children(quote.map(|q| {
@@ -869,14 +975,25 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
             mark.text
                 .clone()
                 .filter(|s| !s.is_empty())
-                .map(|c| text(c).font(type_::BODY).color(t.text_primary).wrap()),
+                .map(|c| noted(text(c).font(QUIET).color(t.text_primary).wrap(), t.accent)),
         )
         .children(answer.map(|a| {
-            text(format!("answer: {a}"))
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap()
+            noted(
+                text(format!("answer: {a}"))
+                    .font(QUIET)
+                    .color(t.text_secondary)
+                    .wrap(),
+                t.text_muted,
+            )
         }))
+}
+
+/// A note's words or its answer under the passage, set off by a bar in `bar` on the left.
+fn noted(words: El, bar: rune::Color) -> El {
+    words
+        .pl(8.0)
+        .border_sides([0.0, 0.0, 0.0, 2.0], bar)
+        .mt(2.0)
 }
 
 /// Takes marks `ids` off tile `tile`'s document.
