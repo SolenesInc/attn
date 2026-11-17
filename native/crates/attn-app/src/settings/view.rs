@@ -34,6 +34,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .child(body(state, t));
     let mut dialog = Dialog::new("settings", "Settings")
         .description("local daemon")
+        .lead(title(t))
         .open(super::is_open(state))
         .width(960.0)
         .max_height(720.0)
@@ -243,4 +244,20 @@ fn pills(state: &State, section: Section, t: &Tokens) -> Vec<El> {
         Section::Delegation => delegation::pill(state, t).into_iter().collect(),
         _ => Vec::new(),
     }
+}
+
+/// The dialog's title as the Tauri app's `.settings-title`: the name in uppercase monospace,
+/// then the daemon it edits after a rule.
+fn title(t: &Tokens) -> El {
+    row()
+        .items_center()
+        .gap(16.0)
+        .child(type_::upper("Settings", type_::BOLD_CAPS).color(t.text_primary))
+        .child(
+            text("local daemon")
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .pl(16.0)
+                .border_sides([0.0, 0.0, 0.0, 1.0], t.border),
+        )
 }

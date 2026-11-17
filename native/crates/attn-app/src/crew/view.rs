@@ -28,6 +28,8 @@ fn caption(key: impl Into<String>, words: impl Into<String>, t: &Tokens) -> El {
         .color(t.text_tertiary)
 }
 
+const TITLE: rune::TextStyle = rune::TextStyle::new(16.0, 650.0).tracking(-0.3);
+
 fn kicker(words: &str, t: &Tokens) -> El {
     type_::caps(words).color(t.text_muted)
 }
@@ -100,6 +102,12 @@ pub(crate) fn panel(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let k = attn_ui::kit(t);
     Dialog::new("crew", "Manage crew")
         .description("Crew")
+        .lead(
+            col()
+                .gap(1.0)
+                .child(kicker("Crew", t))
+                .child(text("Manage crew").font(TITLE).color(t.text_primary)),
+        )
         .open(true)
         .width(960.0)
         .max_height(720.0)

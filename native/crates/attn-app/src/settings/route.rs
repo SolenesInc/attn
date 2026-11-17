@@ -880,7 +880,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let shown = shown_route(p, &value, &rules);
     let view = view(state, &shown, &rules);
     let k = crate::settings::pages::kit(t);
-    let mut body = row().gap(space::S3).items_start();
+    let mut body = row().gap(space::S3).min_h(0.0).shrink();
     if !rules.fixed_harness {
         body = body.child(harness_list(&shown, &rules, t));
     }
@@ -1018,7 +1018,7 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
             .key("settings.route-picker.refresh")
             .busy(view.discovered.loading)
     });
-    let mut main = col().grow(1.0).min_w(0.0).gap(space::S2).child(
+    let mut main = col().grow(1.0).min_w(0.0).min_h(0.0).gap(space::S2).child(
         row()
             .gap(space::S2)
             .items_center()
@@ -1132,6 +1132,8 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
         .label("Model")
         .gap(2.0)
         .max_h(280.0)
+        .min_h(0.0)
+        .shrink()
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         });

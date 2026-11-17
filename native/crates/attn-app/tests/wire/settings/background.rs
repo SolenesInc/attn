@@ -1,5 +1,5 @@
 use attn_protocol::DelegationPreferencesResultMessage;
-use attn_testkit::{Target, World, message};
+use attn_testkit::{Daemon, Target, World, message};
 
 use super::harness_catalogs::{
     enter_model, harnesses, open_route, options, pick_effort, pick_model, picker_open,
@@ -16,10 +16,17 @@ const ACTIVITY: &str = "settings.route.activity";
 const ADVISOR: &str = "settings.route.garden-advisor";
 
 fn on_background(settings: &[(&str, &str)]) -> World {
+    to_background(World::start(serving(settings)))
+}
+
+fn serving(settings: &[(&str, &str)]) -> Daemon {
     let all: Vec<(&str, &str)> = HEADLESS.iter().chain(settings).copied().collect();
     let (daemon, stored) = accepting(&all);
     serve(&daemon, &stored, harnesses());
-    let mut world = World::start(daemon);
+    daemon
+}
+
+fn to_background(mut world: World) -> World {
     open(&mut world);
     click(&mut world, "settings.nav.backgroundAgents");
     assert_eq!(state(&mut world)["activeSection"], "backgroundAgents");
@@ -91,6 +98,27 @@ fn the_activity_route_saves_as_one_config_and_the_refresh_fields_as_one_pair() {
         ]
     );
     rest(&mut world);
+}
+
+#[test]
+fn at_any_window_height_the_route_picker_keeps_its_effort_within_reach() {
+    for height in (400..=720).step_by(40) {
+        let mut world = to_background(World::start_sized(serving(&[]), (960.0, height as f32)));
+        open_route(&mut world, "Session activity model");
+        preview_harness(&mut world, "Codex");
+        pick_model(&mut world, "gpt-6-luna");
+        pick_effort(&mut world, "high");
+        assert!(!picker_open(&world), "{height} pt");
+        assert_eq!(
+            writes(&world).last(),
+            Some(&(
+                "activity.config".to_owned(),
+                r#"{"agent":"codex","model":"gpt-6-luna","effort":"high"}"#.to_owned()
+            )),
+            "{height} pt"
+        );
+        rest(&mut world);
+    }
 }
 
 #[test]
