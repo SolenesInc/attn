@@ -140,13 +140,27 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
                 .grow(1.0),
         );
     if let (Some(enabled), Load::Ready) = (f.enabled, &f.load) {
+        let word = if enabled { "Enabled" } else { "Disabled" };
+        let (edge, ink) = if enabled {
+            (t.brand, t.brand)
+        } else {
+            (t.border_subtle, t.text_secondary)
+        };
         header = header.child(
-            rune_kit::Switch::new(enabled)
-                .label(if enabled { "Enabled" } else { "Disabled" })
-                .control_size(ControlSize::Mini)
-                .on_toggle_tx(super::toggle_enabled)
-                .build(kit(t))
-                .key(key("enabled")),
+            row()
+                .key(key("enabled"))
+                .role("switch")
+                .label(word)
+                .checked(enabled)
+                .focusable(true)
+                .px(10.0)
+                .py(3.0)
+                .radius(999.0)
+                .fill(t.bg_elevated)
+                .border(1.0, edge)
+                .hover(t.bg_selected)
+                .child(text(word).font(type_::LABEL).color(ink).a11y_hidden())
+                .on_press_tx(super::toggle_enabled),
         );
     }
     header = header.child(
@@ -231,18 +245,24 @@ fn trigger(f: &Form, t: &Tokens) -> El {
             .w_full()
             .gap(space::S2)
             .children(cards.into_iter().map(|(trigger, id, label)| {
+                let chosen = f.trigger == trigger;
+                let (fill, edge, ink) = if chosen {
+                    (t.brand.alpha(0.15), t.brand, t.text_primary)
+                } else {
+                    (t.bg_elevated, t.border, t.text_secondary)
+                };
                 Button::new(label)
-                    .variant(if f.trigger == trigger {
-                        ButtonVariant::Contrast
-                    } else {
-                        ButtonVariant::Outline
-                    })
+                    .variant(ButtonVariant::Ghost)
                     .control_size(ControlSize::Small)
+                    .label_with(move |font, _| text(label).font(font).color(ink))
                     .disabled(f.saving)
                     .on_press(move |state: &mut State| super::choose_trigger(state, trigger))
                     .build(kit(t))
                     .key(key(&format!("trigger-{id}")))
-                    .checked(f.trigger == trigger)
+                    .checked(chosen)
+                    .radius(6.0)
+                    .fill(fill)
+                    .border(1.0, edge)
                     .grow(1.0)
             })),
     );
@@ -883,13 +903,16 @@ fn actions(f: &Form, t: &Tokens) -> El {
         )
         .child(
             Button::new(if f.saving { "Saving…" } else { "Save" })
-                .variant(ButtonVariant::Submit)
+                .variant(ButtonVariant::Ghost)
                 .control_size(ControlSize::Small)
                 .disabled(f.save_blocked())
                 .shortcut("mod+enter")
                 .on_press_tx(super::save)
                 .build(kit(t))
-                .key(key("save")),
+                .key(key("save"))
+                .radius(6.0)
+                .fill(t.bg_button)
+                .border(1.0, t.brand),
         );
     c.child(bar)
 }
@@ -1200,14 +1223,15 @@ fn day_buttons(schedule: &Friendly, t: &Tokens) -> El {
         let on = days.contains(&day);
         let schedule = schedule.clone();
         let current = days.clone();
+        let (fill, edge, ink) = if on {
+            (t.brand.alpha(0.15), t.brand, t.brand)
+        } else {
+            (rune::Color::TRANSPARENT, t.border_subtle, t.text_tertiary)
+        };
         Button::new(name)
-            .variant(if on {
-                ButtonVariant::Contrast
-            } else {
-                ButtonVariant::Outline
-            })
+            .variant(ButtonVariant::Ghost)
             .control_size(ControlSize::Small)
-            .label_with(move |font, ink| text(letter).font(font).color(ink))
+            .label_with(move |font, _| text(letter).font(font).color(ink))
             .on_press(move |state: &mut State| {
                 if on && current.len() == 1 {
                     return;
@@ -1224,6 +1248,10 @@ fn day_buttons(schedule: &Friendly, t: &Tokens) -> El {
             .build(kit(t))
             .key(key(&format!("schedule-day.{day}")))
             .checked(on)
+            .size(28.0, 26.0)
+            .radius(5.0)
+            .fill(fill)
+            .border(1.0, edge)
     });
     let preset = |label: &'static str, name: &str, days: &[u8]| {
         let schedule = schedule.clone();
@@ -1242,7 +1270,7 @@ fn day_buttons(schedule: &Friendly, t: &Tokens) -> El {
         .gap(space::S1)
         .items_center()
         .wrap()
-        .child(row().role("group").label("Days").gap(2.0).children(buttons))
+        .child(row().role("group").label("Days").gap(3.0).children(buttons))
         .child(preset("Every day", "schedule-every-day", &ALL_DAYS))
         .child(preset("Weekdays", "schedule-weekdays", &WEEKDAYS))
 }

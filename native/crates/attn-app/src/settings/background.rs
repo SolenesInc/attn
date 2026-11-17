@@ -360,7 +360,7 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
         .on_change(intervals_typed)
         .on_submit(|state: &mut State, tx: &mut Tx| autosave::commit(state, ACTIVITY_INTERVALS, tx))
         .width(Some(120.0))
-        .build(attn_ui::kit(t));
+        .build(crate::settings::pages::kit(t));
     col()
         .gap(space::S1)
         .child(
@@ -389,7 +389,7 @@ fn session_activity(state: &State, t: &Tokens) -> El {
                 tx,
             )
         })
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key("settings.activity.toggle");
     let mut body = vec![row_card(
         "Generate activity lines",

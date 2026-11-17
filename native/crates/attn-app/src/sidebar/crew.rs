@@ -325,8 +325,15 @@ pub(crate) fn chief_setup_row(key: String, chief: &crate::chief::View, t: &Token
         .child(
             text(pill)
                 .key(format!("{key}.pill"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+                .font(rune::TextStyle {
+                    weight: 600.0,
+                    ..type_::LABEL
+                })
+                .color(t.brand)
+                .fill(t.brand.alpha(0.14))
+                .radius(999.0)
+                .px(7.0)
+                .py(1.0),
         );
     if chief.busy {
         row = row.disabled(true);

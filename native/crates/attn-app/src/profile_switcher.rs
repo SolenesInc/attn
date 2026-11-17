@@ -472,7 +472,7 @@ fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens, k: &Kit)
     let id = profile.id.clone();
     let name = profile.name.clone();
     let shown = name.clone();
-    let mark = t.text_secondary;
+    let mark = t.brand;
     let choose_button = Button::new(name.clone())
         .variant(ButtonVariant::Ghost)
         .label_with(move |font, ink| {

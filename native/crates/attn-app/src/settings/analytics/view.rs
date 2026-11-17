@@ -22,7 +22,7 @@ pub(super) const LIST: &str = "settings.analytics.list";
 const LONG_VENT_CHARS: usize = 420;
 
 pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let page = &state.window.settings.analytics;
     let sharing = super::sharing(state);
     let items = super::listed(state);
@@ -109,7 +109,7 @@ pub(in crate::settings) fn toast(state: &State, t: &Tokens) -> Option<El> {
         return None;
     }
     let said = state.window.settings.analytics.said.as_ref()?;
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let mut toast = Toast::new("settings.analytics.toast", said.title.clone());
     if let Some(detail) = &said.detail {
         toast = toast.description(detail.clone());

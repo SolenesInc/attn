@@ -111,7 +111,7 @@ fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
         .child(
             Button::new("Remove")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| remove(state, &id, tx))
-                .build(attn_ui::kit(t))
+                .build(crate::settings::pages::kit(t))
                 .key(format!("{key}.remove")),
         )
 }

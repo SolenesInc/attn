@@ -7,7 +7,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
-use rune_kit::{Button, ControlSize, SegmentedControl, Switch, TextInput};
+use rune_kit::{Button, TextInput};
 
 use super::autosave;
 use crate::State;
@@ -89,12 +89,22 @@ pub(super) fn named_button(
 ) -> El {
     Button::new(shown)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key)
         .label(label.to_owned())
 }
 
-/// A switch that reads On or Off when `show_state` asks for it.
+/// The kit the settings pages build with: the Tauri app's settings paint primary actions in
+/// `warning`, where the rest of the app paints them in `brand`.
+pub(super) fn kit(t: &Tokens) -> &'static rune_kit::Kit {
+    attn_ui::kit(&Tokens {
+        brand: t.warning,
+        ..*t
+    })
+}
+
+/// A switch that reads On or Off when `show_state` asks for it, drawn as the Tauri app's
+/// `.settings-switch`: a 36 by 20 track, `warning` when on.
 pub(super) fn switch(
     key: String,
     label: &str,
@@ -103,23 +113,93 @@ pub(super) fn switch(
     t: &Tokens,
     toggle: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    let switch = Switch::new(on)
-        .label(label)
-        .hide_label()
-        .control_size(ControlSize::Mini)
-        .on_toggle_tx(toggle)
-        .build(attn_ui::kit(t))
-        .key(key);
+    let (track, edge, knob) = if on {
+        (t.warning, t.warning, attn_ui::warning_ink(t))
+    } else {
+        (t.bg_button, t.border_hover, t.text_tertiary)
+    };
+    let knob = rune::el()
+        .key("thumb")
+        .size(14.0, 14.0)
+        .radius(7.0)
+        .absolute(if on { 19.0 } else { 3.0 }, 3.0)
+        .fill(knob);
+    let track = rune::el()
+        .key("control")
+        .size(36.0, 20.0)
+        .radius(10.0)
+        .fill(track)
+        .border(1.0, edge)
+        .child(knob)
+        .a11y_hidden();
     row()
-        .gap(space::S2)
+        .key(key)
+        .role("switch")
+        .label(label.to_owned())
+        .checked(on)
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.warning)
+        .gap(10.0)
         .items_center()
-        .child(switch)
+        .child(track)
         .children(show_state.then(|| {
             text(if on { "On" } else { "Off" })
                 .font(type_::LABEL)
                 .color(t.text_secondary)
                 .a11y_hidden()
         }))
+        .on_press_tx(toggle)
+}
+
+/// The track of the Tauri app's `.settings-segmented`, as wide as its options.
+pub(super) fn segment_track(key: impl Into<String>, label: &str, t: &Tokens) -> El {
+    row()
+        .key(key.into())
+        .role("radiogroup")
+        .label(label.to_owned())
+        .focus_group()
+        .gap(6.0)
+        .padding(5.0)
+        .radius(8.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border)
+}
+
+/// One option of a segment track; the chosen one is `warning`, as `.settings-segmented-option`.
+pub(super) fn segment(key: String, name: &str, chosen: bool, t: &Tokens) -> El {
+    let (fill, ink) = if chosen {
+        (t.warning, attn_ui::warning_ink(t))
+    } else {
+        (rune::Color::TRANSPARENT, t.text_secondary)
+    };
+    let mut option = row()
+        .key(key)
+        .role("radio")
+        .label(name.to_owned())
+        .checked(chosen)
+        .focusable(true)
+        .focus_selected(chosen)
+        .focus_ring(2.0, 1.0, t.warning)
+        .h(32.0)
+        .px(12.0)
+        .center()
+        .radius(6.0)
+        .fill(fill)
+        .child(
+            text(name.to_owned())
+                .font(rune::TextStyle {
+                    weight: 700.0,
+                    ..type_::BODY
+                })
+                .color(ink)
+                .a11y_hidden(),
+        );
+    if chosen {
+        option = option.border(1.0, t.warning.alpha(0.8));
+    } else {
+        option = option.hover(t.bg_button);
+    }
+    option
 }
 
 /// The width of a field that holds a number.
@@ -149,7 +229,7 @@ pub(super) fn setting_field(
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
         .width(Some(width))
-        .build(attn_ui::kit(t));
+        .build(crate::settings::pages::kit(t));
     let saved = state
         .window
         .settings
@@ -265,15 +345,13 @@ pub(super) fn segmented(
     t: &Tokens,
     choose: fn(&mut State, &'static str, &mut Tx),
 ) -> El {
-    let names: Vec<&str> = options.iter().map(|&(_, name)| name).collect();
-    let selected = options.iter().position(|&(value, _)| value == chosen);
-    let control = SegmentedControl::new(&names, selected)
-        .label(label)
-        .fit()
-        .on_pick(move |state: &mut State, i: usize, tx: &mut Tx| choose(state, options[i].0, tx))
-        .build(attn_ui::kit(t))
-        .key(format!("settings.choice.{key}"));
-    row().child(control)
+    let track = segment_track(format!("settings.choice.{key}"), label, t).children(
+        options.iter().enumerate().map(|(i, &(value, name))| {
+            segment(format!("segment{i}"), name, value == chosen, t)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| choose(state, value, tx))
+        }),
+    );
+    row().child(track)
 }
 
 /// The switch in a feature page's head, which turns the feature on and off.

@@ -80,7 +80,8 @@ A view in `attn-app` takes its colors from `crate::colors` or
 light, one PNG each: the sidebar with an agent in every state, a terminal with
 the 16 ANSI colors and a selection, a terminal with a comment mark, a seed id, a
 selected command block and find matches, a Markdown file with code and a Mermaid
-diagram, a review stop, the Garden, Settings, the command palette, a
+diagram, a review stop, the Garden, Settings on Appearance and on Agents, the
+shortcut editor, What's New, the close-desktop dialog, the command palette, a
 popped-out tile window, Launcher 2.0 in its dialog, its Where list and on an
 empty desktop, and a new automation's hour picker and suggested time zones, each
 with a row reached by an arrow key. The `screenshot_tour` example of `attn-app`

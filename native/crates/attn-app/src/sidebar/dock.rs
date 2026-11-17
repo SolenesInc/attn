@@ -225,8 +225,8 @@ fn chip_view(chip: &Chip, t: &Tokens) -> El {
     let face = match chip.active {
         true => face
             .a11y_value("active")
-            .fill(t.accent.alpha(0.12))
-            .border(1.0, t.accent.alpha(0.35)),
+            .fill(t.brand.alpha(0.12))
+            .border(1.0, t.brand.alpha(0.35)),
         false => face,
     };
     match chip.action {

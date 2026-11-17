@@ -4,7 +4,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
-use rune_kit::Button;
+use rune_kit::{Button, ButtonVariant};
 
 use super::model::{desktop_title, ordered_desktops};
 use super::queue::Bands;
@@ -117,10 +117,10 @@ pub(crate) fn chip(
     let slot = chip.slot;
     let waiting = chip.waiting;
     let asks_mark = chip.asks;
-    let number = if chip.empty {
-        t.text_tertiary
-    } else {
-        t.text_secondary
+    let number = match (chip.current, chip.empty) {
+        (true, _) => attn_ui::brand_ink(t),
+        (false, true) => t.text_tertiary,
+        (false, false) => t.text_secondary,
     };
     let tokens = *t;
     let el = Button::new(label)
@@ -154,11 +154,7 @@ pub(crate) fn chip(
         .min_w(22.0)
         .px(4.0)
         .radius(4.0)
-        .fill(if chip.current {
-            t.bg_selected
-        } else {
-            t.bg_button
-        })
+        .fill(if chip.current { t.brand } else { t.bg_button })
         .hover(t.bg_elevated);
     match drop {
         None => el,
@@ -339,9 +335,18 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
         "Collapse sidebar"
     };
     vec![
-        tool("titlebar.new", "New agent", "New", t, |state, tx| {
-            crate::dispatch(state, crate::Action::SessionNew, tx);
-        }),
+        attn_ui::brand_tinted(
+            tool_button(
+                "titlebar.new",
+                GlyphButton::new("New", "New agent").variant(ButtonVariant::Ghost),
+                t,
+                |state, tx| {
+                    crate::dispatch(state, crate::Action::SessionNew, tx);
+                },
+            )
+            .px(space::S2),
+            t,
+        ),
         tool(
             "titlebar.garden",
             if crate::garden::mode(state) == crate::garden::Mode::Closed {
@@ -365,10 +370,9 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             t,
             crate::automations::toggle,
         ),
-        tool(
+        tool_button(
             "titlebar.commands",
-            "Commands",
-            attn_ui::icon::BOLT,
+            GlyphButton::new(attn_ui::icon::BOLT, "Commands").color(t.brand),
             t,
             |state, tx| {
                 crate::dispatch(state, crate::Action::UiCommandPalette, tx);
@@ -417,7 +421,16 @@ fn tool(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    GlyphButton::new(glyph, label)
+    tool_button(key, GlyphButton::new(glyph, label), t, press)
+}
+
+fn tool_button(
+    key: &str,
+    button: GlyphButton,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    button
         .font(type_::BODY)
         .on_press_tx(press)
         .build(attn_ui::kit(t))

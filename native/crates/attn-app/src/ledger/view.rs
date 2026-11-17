@@ -401,10 +401,11 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
         .px(space::S3)
         .py(space::S2)
         .fill(if selected {
-            t.bg_selected
+            t.brand.alpha(0.09)
         } else {
             rune::Color::TRANSPARENT
         })
+        .border_sides([0.0, 0.0, 0.0, if selected { 2.0 } else { 0.0 }], t.brand)
         .hover(t.bg_elevated)
         .opacity(if closed { 0.75 } else { 1.0 })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {

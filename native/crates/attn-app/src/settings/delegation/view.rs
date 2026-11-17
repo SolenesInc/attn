@@ -182,7 +182,7 @@ fn button(
         .variant(variant)
         .control_size(ControlSize::Small)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
 }
 
 fn harness_rules(state: &State) -> Rules {
@@ -426,7 +426,7 @@ fn who(
                 }))
         })
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key)
         .description(said.join(" · "))
         .h(48.0)
@@ -447,7 +447,7 @@ fn more(
         .control_size(ControlSize::Small)
         .expanded(open)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key)
         .label(format!("{name} details"))
 }
@@ -716,7 +716,7 @@ fn text_field(
             .unwrap_or_default(),
     );
     let edit = d.drafts.get(&key).map_or(&shown, |draft| &draft.edit);
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let control = if field.single_line() {
         let editing = field.clone();
         let submitted = key.clone();
@@ -770,7 +770,7 @@ fn role_editor(state: &State, role: &DelegationRole, t: &Tokens) -> El {
                 };
                 commit(state, table::with_icon(&preferences, &id, which), tx);
             })
-            .build(attn_ui::kit(t))
+            .build(crate::settings::pages::kit(t))
             .key(format!(
                 "settings.delegation.role.{}.icon.{}",
                 role.id,
@@ -869,7 +869,7 @@ fn alternative_row(
                 )
         })
         .on_press_tx(toggle)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key.clone())
         .description(said)
         .h(44.0)
@@ -900,7 +900,7 @@ fn alternative_row(
         .control_size(ControlSize::Small)
         .help(format!("Remove {name}"))
         .on_press_tx(remove)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(format!("{key}.remove"))
         .label(format!("Remove {name}"));
     let mut out = col().w_full().child(
@@ -1088,7 +1088,7 @@ fn empty_panel(can_adopt: bool, t: &Tokens) -> El {
                         .control_size(ControlSize::Small)
                         .disabled(!can_adopt)
                         .on_press_tx(adopt)
-                        .build(attn_ui::kit(t))
+                        .build(crate::settings::pages::kit(t))
                         .key("settings.delegation.adopt"),
                 )
                 .child(button("+ Custom role", ButtonVariant::Neutral, t, add_role).key("settings.delegation.add")),
@@ -1254,7 +1254,7 @@ fn adoption_panel(
     t: &Tokens,
 ) -> El {
     let open = page_state(state).adoption_open.as_deref();
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     col()
         .key("settings.delegation.adoption")
         .role("group")
@@ -1322,5 +1322,6 @@ pub(in crate::settings) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<E
         return;
     };
     let name = table::label(table::view(expanded, template));
-    adoption_select(preferences, adoption, open, &name, true).build(attn_ui::kit(t), layers);
+    adoption_select(preferences, adoption, open, &name, true)
+        .build(crate::settings::pages::kit(t), layers);
 }

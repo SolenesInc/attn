@@ -317,7 +317,7 @@ fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> El {
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     revoke(state, &device, &profile, tx)
                 })
-                .build(attn_ui::kit(t))
+                .build(crate::settings::pages::kit(t))
                 .key(format!("{key}.revoke")),
         )
 }
@@ -370,7 +370,7 @@ fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &T
             row().child(
                 Button::new("Cancel")
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| cancel(state, &id, tx))
-                    .build(attn_ui::kit(t))
+                    .build(crate::settings::pages::kit(t))
                     .key(format!("{key}.cancel")),
             ),
         )
@@ -423,7 +423,7 @@ fn profile_block(
             })
             .disabled(phones.link.state == "off")
             .on_press_tx(move |state: &mut State, tx: &mut Tx| pair(state, &id, tx))
-            .build(attn_ui::kit(t))
+            .build(crate::settings::pages::kit(t))
             .key(format!("settings.phones.{}.pair", profile.id)),
         ),
     );

@@ -93,8 +93,13 @@ fn nav(state: &State, t: &Tokens) -> El {
                     .h(28.0)
                     .px(space::S2)
                     .items_center()
-                    .radius(4.0)
-                    .fill(if active { t.bg_selected } else { t.bg_elevated })
+                    .radius(6.0)
+                    .fill(if active {
+                        t.warning.alpha(0.12)
+                    } else {
+                        t.bg_elevated
+                    })
+                    .border_sides([0.0, 0.0, 0.0, if active { 3.0 } else { 0.0 }], t.warning)
                     .hover(t.bg_selected)
                     .child(
                         text(item.label)

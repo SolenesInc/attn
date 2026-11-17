@@ -712,11 +712,15 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             (_, false, None) => "Save".to_owned(),
         };
         let can_save = form.can_save;
+        let shown = primary.clone();
         let mut button = Button::new(primary.clone())
-            .variant(if can_save {
-                ButtonVariant::Submit
-            } else {
-                ButtonVariant::Neutral
+            .variant(ButtonVariant::Submit)
+            .label_with(move |style, ink| {
+                row()
+                    .gap(10.0)
+                    .items_center()
+                    .child(text(shown.clone()).font(style).color(ink))
+                    .child(text("⏎").font(style).color(ink.alpha(0.65)))
             })
             .on_press_tx(submit)
             .build(k)
@@ -725,7 +729,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             .label(primary)
             .a11y_value(if can_save { "ready" } else { "unavailable" });
         if !can_save {
-            button = button.layer_opacity(0.5);
+            button = button.layer_opacity(0.45);
         }
         body = body.child(row().justify_end().child(button));
     }
@@ -736,6 +740,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             .role("dialog")
             .label(title)
             .focusable(true)
+            .no_focus_ring()
             .padding(space::S3)
             .gap(space::S3)
             .w(320.0)

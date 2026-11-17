@@ -126,7 +126,7 @@ fn swatches(t: &Tokens) -> [rune::Color; SWATCHES] {
 fn color_schemes(state: &State, t: &Tokens) -> El {
     let settings = &state.facts.settings;
     let chosen = crate::color_scheme(settings).id;
-    let kit = attn_ui::kit(t);
+    let kit = crate::settings::pages::kit(t);
     let n = SCHEMES.len();
     let list = col()
         .key("settings.color-schemes")

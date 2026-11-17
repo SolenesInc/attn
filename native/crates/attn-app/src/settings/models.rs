@@ -180,7 +180,7 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
                     .on_select_tx(move |state: &mut State, tx: &mut Tx| {
                         set_tier(state, &model, Some(tier), tx)
                     })
-                    .build(attn_ui::kit(t))
+                    .build(crate::settings::pages::kit(t))
                     .key(format!("{key}.tier.{tier}"))
                     .position_in_set(i + 1, TIERS.len()),
             );

@@ -95,7 +95,14 @@ fn header(logo: Option<&Image>, t: &Tokens) -> El {
         .child(
             col()
                 .grow(1.0)
-                .child(text("attn").font(type_::TITLE).color(t.text_primary))
+                .child(
+                    text("attn")
+                        .font(rune::TextStyle {
+                            weight: 700.0,
+                            ..type_::TITLE
+                        })
+                        .color(t.brand),
+                )
                 .child(type_::sans_caps("attention hub").color(t.text_dimmed)),
         )
         .child(button(

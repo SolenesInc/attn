@@ -153,7 +153,7 @@ fn action(state: &State, t: &Tokens) -> El {
                 })
                 .disabled(running)
                 .on_press_tx(start)
-                .build(attn_ui::kit(t))
+                .build(crate::settings::pages::kit(t))
                 .key("settings.updates.start"),
             ),
         )

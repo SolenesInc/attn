@@ -460,7 +460,7 @@ pub(super) fn failure_row(state: &State, block: &str, t: &Tokens) -> Option<El> 
             .child(
                 Button::new("Retry")
                     .on_press_tx(retry)
-                    .build(attn_ui::kit(t))
+                    .build(crate::settings::pages::kit(t))
                     .key(format!("settings.{block}.harness-retry")),
             ),
     )

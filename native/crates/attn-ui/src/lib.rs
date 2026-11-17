@@ -121,9 +121,9 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.bg_button_neutral = t.bg_button;
     p.layer_04 = t.border_hover;
     p.bg_accent = t.accent;
-    p.bg_icon_button_contrast = t.accent;
-    p.submit_fg = t.on_accent;
-    p.submit_icon = t.on_accent;
+    p.bg_icon_button_contrast = t.brand;
+    p.submit_fg = brand_ink(t);
+    p.submit_icon = brand_ink(t);
     p.text_base = t.text_primary;
     p.text_muted = t.text_secondary;
     p.text_faint = t.text_tertiary;
@@ -146,6 +146,21 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     kit.elevation.md = vec![popover_shadow(t)];
     kit.elevation.overlay = vec![popover_shadow(t)];
     kit
+}
+
+/// The Tauri app's brand-tinted control: a `brand` edge at 50% over a 12% `brand` fill.
+pub fn brand_tinted(e: rune::El, t: &Tokens) -> rune::El {
+    e.fill(t.brand.alpha(0.12)).border(1.0, t.brand.alpha(0.5))
+}
+
+/// The Tauri app's ink on a brand fill, `color-mix(in srgb, var(--color-brand) 12%, black)`.
+pub fn brand_ink(t: &Tokens) -> Color {
+    colors::mix_srgb(t.brand, t.shadow, 0.88)
+}
+
+/// The Tauri app's ink on a warning fill, `color-mix(in srgb, var(--color-warning) 10%, black)`.
+pub fn warning_ink(t: &Tokens) -> Color {
+    colors::mix_srgb(t.warning, t.shadow, 0.9)
 }
 
 /// The Tauri app's field outline, `border: 1px solid var(--color-border)`.

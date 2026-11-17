@@ -597,7 +597,7 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
         })
         .expanded(open)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx))
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key.clone())
         .a11y_value(summary);
     let recommended = (field && view.above_tier)
@@ -879,7 +879,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     };
     let shown = shown_route(p, &value, &rules);
     let view = view(state, &shown, &rules);
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let mut body = row().gap(space::S3).items_start();
     if !rules.fixed_harness {
         body = body.child(harness_list(&shown, &rules, t));
@@ -921,7 +921,7 @@ fn option(key: String, label: &str, selected: bool, disabled: bool, t: &Tokens, 
         .variant(ButtonVariant::Ghost)
         .label_with(move |_, _| content)
         .disabled(disabled)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key)
         .role("option")
         .focus_selected(selected)
@@ -1005,7 +1005,7 @@ fn harness_list(shown: &Route, rules: &Rules, t: &Tokens) -> El {
 }
 
 fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let refresh = view.harness.filter(|h| h.discovery).map(|h| {
         let id = h.id.clone();
         Button::new("Refresh")
@@ -1323,7 +1323,7 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
                 let mut button = Button::new(shown)
                     .control_size(ControlSize::Small)
                     .disabled(view.pins_unavailable)
-                    .build(attn_ui::kit(t))
+                    .build(crate::settings::pages::kit(t))
                     .key(format!("{EFFORT}.{i}"))
                     .checked(value.effort == level);
                 if !view.pins_unavailable {
@@ -1356,7 +1356,7 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
         })
         .on_submit(|state: &mut State, tx: &mut Tx| finish(state, tx))
         .width(Some(160.0))
-        .build(attn_ui::kit(t));
+        .build(crate::settings::pages::kit(t));
     Some(head(input))
 }
 

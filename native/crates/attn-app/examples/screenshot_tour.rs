@@ -274,6 +274,15 @@ fn press(world: &mut World, action: Action) {
     world.gesture(|app| app.key(chord));
 }
 
+/// Dispatches `action` as a handler would, for an action with no chord of its own.
+fn run(world: &mut World, action: Action) {
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(state, action, tx);
+        })
+    });
+}
+
 fn seed(id: &str, title: &str, status: &str, parent: Option<&str>) -> Seed {
     Seed {
         profile_id: PROFILE.into(),
@@ -504,6 +513,37 @@ fn settings_page(dark: bool) {
     press(&mut world, Action::UiOpenSettings);
     world.gesture(|app| app.click(Target::role("button").name("Appearance")));
     snap(&mut world, "settings", dark);
+}
+
+/// The Agents page: its switches, the default agent and the seeds-on-standby choices.
+fn settings_agents(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::UiOpenSettings);
+    world.gesture(|app| app.click(Target::key("settings.nav.agents")));
+    snap(&mut world, "settings-agents", dark);
+}
+
+fn shortcut_editor(dark: bool) {
+    let mut world = with_document(dark);
+    run(&mut world, Action::OpenShortcutEditor);
+    snap(&mut world, "shortcut-editor", dark);
+}
+
+fn whats_new(dark: bool) {
+    let mut world = with_document(dark);
+    run(&mut world, Action::OpenWhatsNew);
+    snap(&mut world, "whats-new", dark);
+}
+
+fn close_desktop(dark: bool) {
+    let mut world = with_document(dark);
+    run(
+        &mut world,
+        Action::CloseDesktop {
+            desktop: DESKTOP.into(),
+        },
+    );
+    snap(&mut world, "close-desktop", dark);
 }
 
 fn palette(dark: bool) {
@@ -803,6 +843,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         review_stop(dark);
         garden(dark);
         settings_page(dark);
+        settings_agents(dark);
+        shortcut_editor(dark);
+        whats_new(dark);
+        close_desktop(dark);
         palette(dark);
         terminal_overlays(dark);
         tile_window(dark);

@@ -276,7 +276,7 @@ fn rate_input(
                 .on_change(on_change)
                 .on_submit(on_submit)
                 .width(Some(110.0))
-                .build(attn_ui::kit(t)),
+                .build(crate::settings::pages::kit(t)),
         )
 }
 
@@ -360,7 +360,7 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             autosave::apply(state, &remove, "", tx)
                         })
-                        .build(attn_ui::kit(t))
+                        .build(crate::settings::pages::kit(t))
                         .key(format!("settings.price.{model}.remove")),
                 ),
         )
@@ -423,7 +423,7 @@ fn billed_as_select(state: &State) -> Select {
 pub(super) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let pricing = &state.window.settings.agents.pricing;
     if pricing.open && pricing.billed_as_open {
-        billed_as_select(state).build(attn_ui::kit(t), layers);
+        billed_as_select(state).build(crate::settings::pages::kit(t), layers);
     }
 }
 
@@ -470,7 +470,7 @@ fn new_form(state: &State, t: &Tokens) -> El {
                         })
                         .on_submit(add)
                         .width(Some(280.0))
-                        .build(attn_ui::kit(t)),
+                        .build(crate::settings::pages::kit(t)),
                 ),
         )
         .child(row().gap(space::S2).wrap().children(rates))
@@ -498,7 +498,7 @@ fn new_form(state: &State, t: &Tokens) -> El {
 
 pub(super) fn page(state: &State, t: &Tokens) -> El {
     let pricing = &state.window.settings.agents.pricing;
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let mut body = col()
         .key("settings.prices")
         .w_full()

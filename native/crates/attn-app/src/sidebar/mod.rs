@@ -510,12 +510,12 @@ fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &T
             text(desktop.number.to_string())
                 .font(type_::MONO_CAPTION)
                 .color(if desktop.current {
-                    t.text_primary
+                    attn_ui::brand_ink(t)
                 } else {
                     t.text_tertiary
                 })
                 .fill(if desktop.current {
-                    t.bg_selected
+                    t.brand
                 } else {
                     t.bg_button
                 })

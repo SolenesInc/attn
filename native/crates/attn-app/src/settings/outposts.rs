@@ -349,7 +349,7 @@ fn action(
     Button::new(label)
         .disabled(disabled)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key)
 }
 
@@ -570,7 +570,7 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
 }
 
 fn add_form(state: &State, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let page = &state.window.settings.outposts;
     let destination = page.destination.text.trim().to_owned();
     let name_placeholder = if destination.is_empty() {

@@ -3,6 +3,7 @@
 
 use attn_protocol::{FsIndexMessage, FsIndexResultMessage};
 use attn_ui::Tokens;
+use attn_ui::colors::mix_srgb;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, el, row, text};
@@ -219,9 +220,9 @@ fn option(path: &str, highlighted: bool, t: &Tokens) -> El {
         .gap(space::S2)
         .px(space::S2)
         .py(space::S1)
-        .radius(4.0)
+        .radius(8.0)
         .fill(if highlighted {
-            t.bg_selected
+            mix_srgb(t.bg_elevated, t.brand, 0.18)
         } else {
             t.bg_elevated
         })

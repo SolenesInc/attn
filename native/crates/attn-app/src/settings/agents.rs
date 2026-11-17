@@ -211,7 +211,7 @@ fn toggle(
     Button::new(if on { "Disable" } else { "Enable" })
         .disabled(disabled)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key.to_owned())
         .role("switch")
         .label(name.to_owned())
@@ -268,7 +268,7 @@ fn field(
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(&edit))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
         .width(Some(220.0))
-        .build(attn_ui::kit(t));
+        .build(crate::settings::pages::kit(t));
     let saved = drafts.shows_saved_mark(&key).then(|| {
         text("Saved")
             .key(format!("settings.saved.{key}"))
@@ -308,56 +308,48 @@ fn default_agent(state: &State, t: &Tokens) -> El {
     let settings = &state.facts.settings;
     let availability = harnesses::availability(settings);
     let chosen = state.window.settings.autosave.draft(DEFAULT_AGENT);
-    let k = attn_ui::kit(t);
     let options = ordered(settings).into_iter().map(|agent| {
         let label = harnesses::label(settings, &agent);
         let status = harnesses::of(&availability, &agent);
-        let active = chosen == agent;
-        let mut button = Button::new(label.clone())
-            .variant(if active {
-                ButtonVariant::Neutral
-            } else {
-                ButtonVariant::GhostMuted
-            })
-            .disabled(status == Availability::Unavailable);
-        match status {
-            Availability::Unavailable => {
-                button = button.help(format!("{label} CLI not found in PATH"))
-            }
-            Availability::Checking => {
-                button = button.help(format!("Checking for {label} on this machine"))
-            }
-            Availability::Available => {}
+        let unavailable = status == Availability::Unavailable;
+        let mut option = super::pages::segment(
+            format!("settings.default-agent.{agent}"),
+            &label,
+            chosen == agent,
+            t,
+        )
+        .disabled(unavailable)
+        .children((status == Availability::Checking).then(|| {
+            text("…")
+                .key(format!("settings.default-agent.{agent}.checking"))
+                .role("img")
+                .label("checking")
+                .color(t.text_tertiary)
+        }));
+        let help = match status {
+            Availability::Unavailable => Some(format!("{label} CLI not found in PATH")),
+            Availability::Checking => Some(format!("Checking for {label} on this machine")),
+            Availability::Available => None,
+        };
+        if unavailable {
+            option = option.layer_opacity(0.45);
+        }
+        if let Some(help) = help {
+            option = option.help(help.clone()).description(help);
         }
         let picked = agent.clone();
-        let button = button
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                let availability = harnesses::availability(&state.facts.settings);
-                if harnesses::selectable(&availability, &picked) {
-                    autosave::apply(state, DEFAULT_AGENT, &picked, tx);
-                }
-            })
-            .build(k)
-            .key(format!("settings.default-agent.{agent}"))
-            .checked(active);
-        row()
-            .items_center()
-            .child(button)
-            .children((status == Availability::Checking).then(|| {
-                text("…")
-                    .key(format!("settings.default-agent.{agent}.checking"))
-                    .role("img")
-                    .label("checking")
-                    .color(t.text_tertiary)
-            }))
+        option.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            let availability = harnesses::availability(&state.facts.settings);
+            if harnesses::selectable(&availability, &picked) {
+                autosave::apply(state, DEFAULT_AGENT, &picked, tx);
+            }
+        })
     });
-    row()
-        .key("settings.default-agent")
-        .role("group")
-        .label("Default session agent")
-        .gap(space::S1)
-        .items_center()
-        .children(options)
+    row().child(
+        super::pages::segment_track("settings.default-agent", "Default session agent", t)
+            .items_center()
+            .children(options),
+    )
 }
 
 fn asks(state: &State, t: &Tokens) -> El {
@@ -736,7 +728,7 @@ fn disclosure(
     toggle: impl Fn(&mut State) + 'static,
 ) -> El {
     let ink_secondary = t.text_tertiary;
-    let glyph = &attn_ui::kit(t).glyph;
+    let glyph = &crate::settings::pages::kit(t).glyph;
     let triangle = if open {
         glyph.triangle_down
     } else {
@@ -755,7 +747,7 @@ fn disclosure(
                 .children(said.map(|s| text(s).font(CAPTION).color(ink_secondary)))
         })
         .on_press(toggle)
-        .build(attn_ui::kit(t))
+        .build(crate::settings::pages::kit(t))
         .key(key);
     match summary {
         Some(summary) => button.a11y_value(summary),

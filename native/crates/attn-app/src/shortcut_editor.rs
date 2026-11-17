@@ -635,13 +635,18 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .build(k)
                 .key("shortcut-editor.restore"),
         )
-        .child(
+        .child(attn_ui::brand_tinted(
             Button::new("Done")
-                .variant(ButtonVariant::Submit)
+                .variant(ButtonVariant::Ghost)
+                .label_with({
+                    let ink = t.brand;
+                    move |style, _| text("Done").font(style).color(ink)
+                })
                 .on_press(close)
                 .build(k)
                 .key("shortcut-editor.done"),
-        );
+            t,
+        ));
     Dialog::new("shortcut-editor", "Customize Shortcuts")
         .description("Click a shortcut to rebind it. Changes save automatically.")
         .open(true)

@@ -1,4 +1,4 @@
-use rune::{El, TextStyle, Tx, text};
+use rune::{Color, El, TextStyle, Tx, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
 /// An icon button whose icon is a glyph of [`crate::icon`], or a short mark such as `×` or
@@ -9,6 +9,7 @@ pub struct GlyphButton {
     button: Button,
     side: f32,
     font: Option<TextStyle>,
+    color: Option<Color>,
 }
 
 impl GlyphButton {
@@ -18,6 +19,7 @@ impl GlyphButton {
             button: Button::new(label).variant(ButtonVariant::GhostMuted),
             side: 22.0,
             font: None,
+            color: None,
         }
     }
 
@@ -30,6 +32,12 @@ impl GlyphButton {
     /// The glyph's type; the button's own unless set.
     pub fn font(mut self, font: TextStyle) -> Self {
         self.font = Some(font);
+        self
+    }
+
+    /// The glyph's color; the variant's ink unless set.
+    pub fn color(mut self, color: Color) -> Self {
+        self.color = Some(color);
         self
     }
 
@@ -59,9 +67,14 @@ impl GlyphButton {
             button,
             side,
             font,
+            color,
         } = self;
         button
-            .label_with(move |style, ink| text(glyph).font(font.unwrap_or(style)).color(ink))
+            .label_with(move |style, ink| {
+                text(glyph)
+                    .font(font.unwrap_or(style))
+                    .color(color.unwrap_or(ink))
+            })
             .build(k)
             .h(side)
             .min_w(side)

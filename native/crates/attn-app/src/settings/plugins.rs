@@ -300,7 +300,7 @@ fn meta(key: String, label: &str, value: String, t: &Tokens) -> El {
 }
 
 fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let plugins = &state.window.settings.plugins;
     let name = plugin.name.clone();
     let busy = plugins.busy.is_some();
@@ -440,7 +440,7 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let plugins = &state.window.settings.plugins;
     let listed = &state.facts.plugins;
     let busy = plugins.busy.is_some();

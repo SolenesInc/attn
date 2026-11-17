@@ -321,7 +321,15 @@ fn footer(panel: &Panel, t: &Tokens) -> El {
                         .color(t.text_muted),
                 ),
         )
-        .child(
+        .child(if panel.can_send() {
+            primary_button(
+                "capture.send",
+                send.trim_end_matches(" ↵"),
+                send,
+                t,
+                super::send,
+            )
+        } else {
             button(
                 "capture.send",
                 send.trim_end_matches(" ↵"),
@@ -329,8 +337,8 @@ fn footer(panel: &Panel, t: &Tokens) -> El {
                 t,
                 super::send,
             )
-            .disabled(!panel.can_send()),
-        )
+            .disabled(true)
+        })
 }
 
 fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
@@ -361,21 +369,20 @@ fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
             .on_press_tx(move |panel: &mut Panel, tx: &mut Tx| {
                 super::pick(panel, picked.clone(), tx);
             })
-            .child(
-                text(m.name.clone())
-                    .font(type_::BODY)
-                    .color(if m.id == chosen {
-                        t.accent
-                    } else {
-                        t.text_primary
-                    }),
-            )
+            .child(text(m.name.clone()).font(type_::BODY).color(t.text_primary))
             .child(text(detail).font(type_::LABEL).color(t.text_tertiary))
             .child(el().grow(1.0))
             .children((index < 4).then(|| {
                 text(format!("⌘{}", index + 1))
                     .font(type_::MONO_CAPTION)
                     .color(t.text_tertiary)
+            }))
+            .children((m.id == chosen).then(|| {
+                text("✓")
+                    .key(format!("capture.mailbox.{}.chosen", m.id))
+                    .font(type_::LABEL)
+                    .color(t.brand)
+                    .a11y_hidden()
             }))
     });
     let list = col()
@@ -702,6 +709,33 @@ fn button(
     t: &Tokens,
     press: impl Fn(&mut Panel, &mut Tx) + 'static,
 ) -> El {
+    painted_button(
+        key,
+        name,
+        face,
+        (t.bg_button, t.border, t.text_primary),
+        press,
+    )
+}
+
+/// The panel's primary action, filled `brand`.
+fn primary_button(
+    key: &str,
+    name: &str,
+    face: &str,
+    t: &Tokens,
+    press: impl Fn(&mut Panel, &mut Tx) + 'static,
+) -> El {
+    painted_button(key, name, face, (t.brand, t.brand, t.on_brand), press)
+}
+
+fn painted_button(
+    key: &str,
+    name: &str,
+    face: &str,
+    (fill, edge, ink): (rune::Color, rune::Color, rune::Color),
+    press: impl Fn(&mut Panel, &mut Tx) + 'static,
+) -> El {
     row()
         .key(key.to_owned())
         .role("button")
@@ -710,14 +744,10 @@ fn button(
         .px(space::S2)
         .py(space::S1)
         .radius(6.0)
-        .fill(t.bg_button)
-        .border(1.0, t.border)
+        .fill(fill)
+        .border(1.0, edge)
         .on_press_tx(press)
-        .child(
-            text(face.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
+        .child(text(face.to_owned()).font(type_::LABEL).color(ink))
 }
 
 fn kind(name: &str, image: bool) -> String {

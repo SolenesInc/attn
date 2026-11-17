@@ -114,7 +114,7 @@ fn switch(state: &mut State, consumer: String, enabled: bool, tx: &mut Tx) {
 }
 
 pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let bus = &state.window.settings.bus;
     let Some(status) = &bus.status else {
         return vec![match &bus.error {

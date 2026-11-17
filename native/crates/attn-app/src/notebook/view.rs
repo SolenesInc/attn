@@ -299,11 +299,7 @@ fn tree_row(
         .child(
             text(name)
                 .font(type_::BODY)
-                .color(if open {
-                    t.text_primary
-                } else {
-                    t.text_secondary
-                })
+                .color(if open { t.brand } else { t.text_secondary })
                 .truncate(),
         )
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -317,7 +313,11 @@ fn tree_row(
         row_el = row_el.expanded(expanded);
     }
     if open {
-        row_el = row_el.fill(t.bg_selected).a11y_value("open");
+        row_el = row_el
+            .fill(t.bg_elevated)
+            .border(1.0, t.border)
+            .radius(8.0)
+            .a11y_value("open");
     }
     row_el
 }

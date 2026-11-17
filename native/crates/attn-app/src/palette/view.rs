@@ -1,4 +1,5 @@
 use attn_ui::Tokens;
+use attn_ui::colors::mix_srgb;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
@@ -167,7 +168,7 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     }
     face.focus_selected(highlighted)
         .fill(if highlighted {
-            t.bg_selected
+            mix_srgb(t.bg_elevated, t.brand, 0.18)
         } else {
             t.bg_elevated
         })

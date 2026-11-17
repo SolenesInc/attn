@@ -95,7 +95,7 @@ fn retry(state: &mut State, id: String, tx: &mut Tx) {
 }
 
 pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
-    let k = attn_ui::kit(t);
+    let k = crate::settings::pages::kit(t);
     let tasks = &state.window.settings.tasks;
     if let Some(error) = &tasks.error {
         return vec![
