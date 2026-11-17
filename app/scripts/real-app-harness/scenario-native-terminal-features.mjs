@@ -86,7 +86,7 @@ try {
 
   await runner.step('select_a_command_block', async () => {
     const rows = await run('echo block-$((0 + 1))', 'block-1');
-    const row = rows.findIndex((text) => text.trim() === 'block-1');
+    const row = rows.findIndex((text) => text.trim() === 'block-one');
     runner.assert(row >= 0, 'the output row reads block-1 alone', rows);
     const slot = await driver.waitFor(terminal());
     const caret = await driver.waitFor({ key: `terminal.${runtimeId}.caret` });
