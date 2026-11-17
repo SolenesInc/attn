@@ -8,7 +8,6 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndANewConversationCountsItsOwn(t *testing.T) {
@@ -116,11 +115,10 @@ func TestCodexUsageCountsEveryRequestOnceAcrossARestart(t *testing.T) {
 		t.Fatalf("usage after the restart = %+v, want %d tokens", restored, counted)
 	}
 
-	w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
-		m.ID = protocol.SessionID(session)
-		m.ResumeSessionID = protocol.Ptr(codex.ConversationID)
-	})
 	resumed := w.Launched(session)
+	if !resumed.Resumed || resumed.ConversationID != codex.ConversationID {
+		t.Fatalf("the restarted daemon ran codex %q, want it to resume %s", resumed.Argv, codex.ConversationID)
+	}
 	app.TypeLine(session, "after tax")
 	resumed.Prompted()
 	check := "The discount stays before tax."
