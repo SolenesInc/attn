@@ -566,7 +566,7 @@ fn month_day(at_ms: i64) -> String {
 /// The instant whole: weekday, date and clock.
 pub fn full_stamp(at_ms: i64) -> String {
     format!(
-        "{}, {}, {}",
+        "{}, {} at {}",
         WEEKDAYS[crate::calendar::weekday(local_day(at_ms)) as usize],
         month_day(at_ms),
         crate::calendar::clock_two_digit(at_ms)

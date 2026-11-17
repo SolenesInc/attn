@@ -26,6 +26,7 @@ use attn_protocol::{
     SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
     SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
     SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
+    WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -1303,26 +1304,65 @@ fn ledger(dark: bool) {
     snap(&mut world, "ledger", dark);
 }
 
-/// The ledger with one live agent selected, whose inspector offers Focus.
+/// The ledger with a working, a waiting, an idle and a closed agent, the waiting one selected:
+/// its inspector names the seed it tends, its usage, its conversation and Focus.
 fn ledger_seeded(dark: bool) {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
-    daemon.on("session_list", |r: &Request| {
+    let tended = Seed {
+        claimed: true,
+        tender: Some(PartyView {
+            name: "reviewer".into(),
+            r#ref: "session:s1".into(),
+            session_id: Some("s1".into()),
+        }),
+        ..seed("s-one", "Colors in one place", "growing", None)
+    };
+    let daemon = Daemon::scripted().state(initial(
+        dark,
+        document_tile("m", "/repo/plan.md"),
+        vec![tended],
+    ));
+    let entry = |id: &str, label: &str, state: &str, seen: &str| SessionLedgerEntry {
+        id: id.into(),
+        label: label.into(),
+        agent: "claude".into(),
+        directory: format!("/home/me/projects/{label}"),
+        profile_id: PROFILE.into(),
+        profile_name: "Work".into(),
+        state: state.into(),
+        last_seen: seen.into(),
+        ..SessionLedgerEntry::default()
+    };
+    let entries = vec![
+        entry("s0", "builder", "working", "2026-11-17T09:00:00Z"),
+        SessionLedgerEntry {
+            usage: Some(SessionUsage {
+                total_tokens: 6_483,
+                models: vec![model_usage(
+                    "agent",
+                    SessionUsageModel {
+                        input_tokens: 6_000,
+                        output_tokens: 483,
+                        total_tokens: 6_483,
+                        ..SessionUsageModel::default()
+                    },
+                )],
+                ..SessionUsage::default()
+            }),
+            ..entry("s1", "reviewer", "waiting_input", "2026-11-17T08:58:00Z")
+        },
+        entry("s4", "docs", "idle", "2026-11-17T08:40:00Z"),
+        SessionLedgerEntry {
+            closed_at: Some("2026-11-17T07:00:00Z".into()),
+            closed_by: Some("user".into()),
+            ..entry("gone", "old run", "idle", "2026-11-17T07:00:00Z")
+        },
+    ];
+    daemon.on("session_list", move |r: &Request| {
         message(SessionListResultMessage {
             request_id: r["request_id"].as_str().unwrap().into(),
             success: true,
             result: Some(SessionListResult {
-                entries: vec![SessionLedgerEntry {
-                    id: "s1".into(),
-                    label: "API work".into(),
-                    agent: "claude".into(),
-                    directory: "/home/me/projects/api".into(),
-                    profile_id: PROFILE.into(),
-                    profile_name: "Work".into(),
-                    state: "waiting_input".into(),
-                    last_seen: "2026-11-17T09:00:00Z".into(),
-                    ..SessionLedgerEntry::default()
-                }],
+                entries: entries.clone(),
                 ..SessionListResult::default()
             }),
             ..SessionListResultMessage::new()
@@ -1332,6 +1372,32 @@ fn ledger_seeded(dark: bool) {
     press(&mut world, Action::SessionsOpen);
     world.gesture(|app| app.click(Target::key("ledger.row.s1")));
     snap(&mut world, "ledger-seeded", dark);
+}
+
+/// The ledger's Worktrees list with no worktrees: its scopes, its filter and its refresh.
+fn ledger_worktrees(dark: bool) {
+    let daemon =
+        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    daemon.on("session_list", |r: &Request| {
+        message(SessionListResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            result: Some(SessionListResult::default()),
+            ..SessionListResultMessage::new()
+        })
+    });
+    daemon.on("worktree_list", |r: &Request| {
+        message(WorktreeListResultEvent {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            worktree_list_result: WorktreeListResult::default(),
+            ..WorktreeListResultEvent::new()
+        })
+    });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionsOpen);
+    world.gesture(|app| app.click(Target::key("ledger.tab.worktrees")));
+    snap(&mut world, "ledger-worktrees", dark);
 }
 
 /// The Chief's setup, opened from its row while it has no harness yet.
@@ -2448,6 +2514,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         review_keys(dark);
         review_file(dark);
         ledger_seeded(dark);
+        ledger_worktrees(dark);
         chief_setup(dark);
         home(dark);
         palette_chief(dark);

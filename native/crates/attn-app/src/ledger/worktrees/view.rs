@@ -4,10 +4,10 @@ use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, row, text, text_input};
 
+use super::super::parts::{self, Glyph, Ink, body, group, muted};
 use super::super::query::{
     base_name, full_stamp, name_ids, relative_stamp, tilde_path, until_stamp,
 };
-use super::super::view::{INSPECTOR_WIDTH, body, button, chip_button, label, muted, title};
 use super::super::{LIST, Note, QUERY};
 use super::{Refresh, Scope, Verb, live_sessions, refreshing, verbs};
 use crate::State;
@@ -26,44 +26,26 @@ pub(crate) fn toolbar(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .min_w(0.0)
         .color(t.text_primary);
-    row()
-        .w_full()
-        .items_center()
-        .gap(space::S3)
-        .px(space::S3)
-        .py(space::S2)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            row()
-                .role("radiogroup")
-                .label("Which worktrees")
-                .gap(2.0)
-                .children(Scope::ALL.map(|scope| {
-                    chip_button(
-                        &format!("ledger.scope.{}", scope.label().to_lowercase()),
-                        scope.label(),
-                        scope == ledger.scope,
-                        t,
-                    )
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        super::set_scope(state, scope, tx)
-                    })
-                })),
-        )
-        .child(
-            row()
-                .grow(1.0)
-                .min_w(0.0)
-                .items_center()
-                .gap(space::S2)
-                .px(space::S2)
-                .py(space::S1)
-                .radius(4.0)
-                .fill(t.bg_input)
-                .border(1.0, t.border)
-                .child(text("/").font(type_::MONO_CAPTION).color(t.text_muted))
-                .child(field),
-        )
+    let scopes = parts::segmented(
+        "ledger.scope",
+        "radiogroup",
+        "Which worktrees",
+        Scope::ALL
+            .map(|scope| {
+                parts::segment(
+                    format!("ledger.scope.{}", scope.label().to_lowercase()),
+                    scope.label(),
+                    scope == ledger.scope,
+                    t,
+                )
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    super::set_scope(state, scope, tx)
+                })
+            })
+            .into(),
+        t,
+    );
+    parts::toolbar(vec![scopes, parts::query_well(field, Vec::new(), t)], t)
 }
 
 pub(crate) fn list(state: &State, t: &Tokens) -> El {
@@ -249,11 +231,33 @@ fn note_line(key: &str, note: Option<&Note>, t: &Tokens) -> Option<El> {
                 .key(key.to_owned())
                 .role("status")
                 .label(words.clone())
-                .font(type_::LABEL)
+                .font(parts::META)
                 .color(t.warning)
                 .wrap(),
         ),
         _ => None,
+    }
+}
+
+/// A worktree's mark, as the Tauri app's `worktreeGlyph`.
+fn glyph(state: &State, w: &Worktree) -> Glyph {
+    if refreshing(state, &w.path) {
+        Glyph::Refreshing
+    } else if w.refresh_error.as_deref().is_some_and(|e| !e.is_empty())
+        || w.prunable.unwrap_or_default()
+    {
+        Glyph::Error
+    } else if w.pinned.unwrap_or_default() {
+        Glyph::Pinned
+    } else if w.sweep_status.as_deref() == Some("scheduled") {
+        Glyph::Scheduled
+    } else if w.dirty.unwrap_or_default()
+        || w.unpushed.is_some_and(|n| n > 0)
+        || w.stashes.is_some_and(|n| n > 0)
+    {
+        Glyph::Dirty
+    } else {
+        Glyph::Clean
     }
 }
 
@@ -271,112 +275,67 @@ fn worktree_row(state: &State, w: &Worktree, selected: bool, t: &Tokens) -> El {
             Some(Note::Busy(busy)) => busy.clone(),
             _ => verb.label(),
         };
-        button(&format!("ledger.row.{path}.verb"), &words, t).on_press_tx(
+        parts::row_verb(format!("ledger.row.{path}.verb"), &words, selected, t).on_press_tx(
             move |state: &mut State, tx: &mut Tx| super::run(state, &p, verb.clone(), tx),
         )
     });
     let more = (verbs.len() > 1 && !busy).then(|| {
         let p = path.clone();
-        button(&format!("ledger.row.{path}.more"), "···", t)
+        parts::row_more(format!("ledger.row.{path}.more"), selected, t)
             .label(format!("More for {name}"))
             .a11y_value(if menu_open { "expanded" } else { "" })
             .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &p))
     });
     let chosen = path.clone();
-    row()
-        .key(format!("ledger.row.{path}"))
-        .role("option")
-        .label(name.clone())
-        .a11y_value(if selected { "selected" } else { "" })
-        .w_full()
-        .items_start()
-        .gap(space::S2)
-        .px(space::S3)
-        .py(space::S2)
-        .fill(if selected {
-            t.bg_selected
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .hover(t.bg_elevated)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::select(state, &chosen);
-            tx.focus(LIST, false);
-        })
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(2.0)
-                .child(
-                    text(name)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .single_line()
-                        .truncate(),
-                )
-                .child(
-                    text(row_meta(state, w).join("  ·  "))
-                        .key(format!("ledger.row.{path}.meta"))
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .single_line()
-                        .truncate(),
-                )
-                .children(note_line(&format!("ledger.row.{path}.note"), note, t)),
-        )
-        .children(primary)
-        .children(more)
+    let body = parts::row_body(
+        name.clone(),
+        false,
+        parts::meta(row_meta(state, w).join("  ·  ")).key(format!("ledger.row.{path}.meta")),
+        note_line(&format!("ledger.row.{path}.note"), note, t),
+        t,
+    );
+    parts::list_row(
+        format!("ledger.row.{path}"),
+        name,
+        selected,
+        glyph(state, w),
+        body,
+        primary.into_iter().chain(more).collect(),
+        t,
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        super::select(state, &chosen);
+        tx.focus(LIST, false);
+    })
 }
 
 fn swept_row(state: &State, e: &WorktreeSweepEntry, selected: bool, t: &Tokens) -> El {
     let mut meta: Vec<String> = e.branch.iter().cloned().collect();
     meta.push(e.action.clone());
     meta.extend(e.reason.iter().cloned());
-    if let Some(at) = epoch_ms(&e.at) {
-        meta.push(relative_stamp(at, state.epoch_ms));
-    }
+    let stamp = epoch_ms(&e.at).map(|at| parts::stamp(relative_stamp(at, state.epoch_ms), t));
     let id = e.id.clone();
-    row()
-        .key(format!("ledger.row.{}", e.id))
-        .role("option")
-        .label(base_name(&e.path).to_owned())
-        .a11y_value(if selected { "selected" } else { "" })
-        .w_full()
-        .px(space::S3)
-        .py(space::S2)
-        .opacity(0.6)
-        .fill(if selected {
-            t.bg_selected
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .hover(t.bg_elevated)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::select(state, &id);
-            tx.focus(LIST, false);
-        })
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(2.0)
-                .child(
-                    text(base_name(&e.path).to_owned())
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .single_line()
-                        .truncate(),
-                )
-                .child(
-                    text(meta.join("  ·  "))
-                        .key(format!("ledger.row.{}.meta", e.id))
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .single_line()
-                        .truncate(),
-                ),
-        )
+    let name = base_name(&e.path).to_owned();
+    let body = parts::row_body(
+        name.clone(),
+        true,
+        parts::meta(meta.join("  ·  ")).key(format!("ledger.row.{}.meta", e.id)),
+        None,
+        t,
+    );
+    parts::list_row(
+        format!("ledger.row.{}", e.id),
+        name,
+        selected,
+        Glyph::Removed,
+        body,
+        stamp.into_iter().collect(),
+        t,
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        super::select(state, &id);
+        tx.focus(LIST, false);
+    })
 }
 
 fn copy_path(path: &str, copied: bool, t: &Tokens) -> El {
@@ -388,15 +347,6 @@ fn copy_path(path: &str, copied: bool, t: &Tokens) -> El {
         t,
         move |state: &mut State, tx: &mut Tx| super::super::copy(state, p.clone(), tx),
     )
-}
-
-fn group(key: &str, name: &str, t: &Tokens) -> El {
-    col()
-        .key(format!("ledger.inspector.{key}"))
-        .role("group")
-        .label(name.to_owned())
-        .gap(2.0)
-        .child(label(name, t))
 }
 
 fn session_label(state: &State, id: &str) -> Option<String> {
@@ -431,66 +381,46 @@ pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {
 }
 
 pub(crate) fn inspector(state: &State, t: &Tokens) -> El {
-    let aside = col()
-        .key("ledger.inspector")
-        .role("complementary")
-        .label("Details")
-        .w(INSPECTOR_WIDTH)
-        .h_full()
-        .gap(space::S3)
-        .padding(space::S3)
-        .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        });
     let ledger = &state.window.ledger.worktrees;
     let chosen = super::selected_key(state);
     let copied = state.window.ledger.copied.as_deref();
     match ledger.scope {
         Scope::Active => {
             if let Some(w) = chosen.and_then(|k| ledger.all().iter().find(|w| w.path == k)) {
-                return worktree_inspector(state, aside, w, copied, t);
+                return worktree_inspector(state, w, copied, t);
             }
         }
         Scope::Removed => {
             if let Some(e) = chosen.and_then(|k| ledger.sweep_log().iter().find(|e| e.id == k)) {
-                let mut aside = aside
-                    .child(title(base_name(&e.path), t))
-                    .child(muted(&e.action, t))
-                    .child(group("path", "Path", t).child(copy_path(
-                        &e.path,
-                        copied == Some(&e.path),
-                        t,
-                    )))
-                    .child(
-                        group("repository", "Repository", t)
-                            .child(body(&tilde_path(&e.main_repo), t)),
-                    );
+                let mut fields = vec![
+                    group("path", "Path", t).child(copy_path(&e.path, copied == Some(&e.path), t)),
+                    group("repository", "Repository", t).child(body(&tilde_path(&e.main_repo), t)),
+                ];
                 if let Some(branch) = &e.branch {
-                    aside = aside.child(group("branch", "Branch", t).child(body(branch, t)));
+                    fields.push(group("branch", "Branch", t).child(body(branch, t)));
                 }
                 if let Some(at) = epoch_ms(&e.at) {
-                    aside = aside.child(group("when", "When", t).child(body(&full_stamp(at), t)));
+                    fields.push(group("when", "When", t).child(body(&full_stamp(at), t)));
                 }
                 if let Some(reason) = &e.reason {
-                    aside = aside.child(group("why", "Why", t).child(body(reason, t)));
+                    fields.push(group("why", "Why", t).child(body(reason, t)));
                 }
-                return aside;
+                return parts::inspector(
+                    parts::head(
+                        base_name(&e.path),
+                        Some(parts::kicker(Glyph::Removed, &e.action, t)),
+                        t,
+                    ),
+                    fields,
+                    t,
+                );
             }
         }
     }
-    aside
-        .child(title("Nothing selected", t))
-        .child(muted("Pick a row to read it here.", t))
+    super::super::view::nothing_selected("Pick a row to read it here.", t)
 }
 
-fn worktree_inspector(
-    state: &State,
-    aside: El,
-    w: &Worktree,
-    copied: Option<&str>,
-    t: &Tokens,
-) -> El {
+fn worktree_inspector(state: &State, w: &Worktree, copied: Option<&str>, t: &Tokens) -> El {
     let ledger = &state.window.ledger.worktrees;
     let now = state.epoch_ms;
     let path = w.path.clone();
@@ -538,8 +468,9 @@ fn worktree_inspector(
         ))
         .child(muted(&observed, t));
     let activity = w.last_activity_at.as_deref().and_then(epoch_ms).map(|at| {
-        group("last-activity", "Last activity", t).child(body(
-            &format!("{} ({})", full_stamp(at), relative_stamp(at, now)),
+        group("last-activity", "Last activity", t).child(parts::value_with(
+            &full_stamp(at),
+            &format!("({})", relative_stamp(at, now)),
             t,
         ))
     });
@@ -566,7 +497,7 @@ fn worktree_inspector(
         .children(live.is_empty().then(|| muted("none live here", t)))
         .children(live.into_iter().map(|s| {
             let (p, id, name) = (path.clone(), s.id.clone(), s.name.clone());
-            button(&format!("ledger.inspector.session.{}", s.id), &s.name, t).on_press_tx(
+            parts::link(format!("ledger.inspector.session.{}", s.id), &s.name, t).on_press_tx(
                 move |state: &mut State, tx: &mut Tx| {
                     super::run(
                         state,
@@ -582,7 +513,7 @@ fn worktree_inspector(
         }))
         .child({
             let p = path.clone();
-            button(
+            parts::link(
                 "ledger.inspector.sessions-here",
                 "every session that ran here →",
                 t,
@@ -601,42 +532,54 @@ fn worktree_inspector(
     } else {
         vec![Verb::Keep(!w.pinned.unwrap_or_default()), Verb::Delete]
     };
-    aside
-        .child(title(base_name(&path), t))
-        .child(muted(&kicker.join(" · "), t).key("ledger.inspector.kicker"))
-        .child(group("path", "Path", t).child(copy_path(&path, copied == Some(path.as_str()), t)))
-        .child(repository)
-        .child(branch)
-        .child(state_group)
-        .children(activity)
-        .child(sweep_group)
-        .child(sessions)
-        .children(note_line("ledger.inspector.note", note, t))
-        .child(
-            row()
-                .gap(space::S2)
-                .children(actions.into_iter().enumerate().map(|(at, verb)| {
-                    let words = match (&verb, note) {
-                        (Verb::Keep(_), Some(Note::Busy(busy))) => busy.clone(),
-                        _ => verb.label(),
-                    };
-                    let el = button(&format!("ledger.inspector.action.{at}"), &words, t)
-                        .label(verb.label());
-                    if busy && verb != Verb::Cancel {
-                        el.a11y_value("disabled").opacity(0.5)
-                    } else {
-                        let p = path.clone();
-                        el.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            super::run(state, &p, verb.clone(), tx)
-                        })
-                    }
-                })),
-        )
+    let actions = row()
+        .gap(6.0)
+        .children(actions.into_iter().enumerate().map(|(at, verb)| {
+            let words = match (&verb, note) {
+                (Verb::Keep(_), Some(Note::Busy(busy))) => busy.clone(),
+                _ => verb.label(),
+            };
+            let ink = match verb {
+                Verb::Delete | Verb::DeleteNow { .. } => Ink::Danger,
+                Verb::Keep(_) => Ink::Primary,
+                _ => Ink::Quiet,
+            };
+            let el = parts::verb(format!("ledger.inspector.action.{at}"), &words, ink, t)
+                .label(verb.label());
+            if busy && verb != Verb::Cancel {
+                el.a11y_value("disabled").opacity(0.5)
+            } else {
+                let p = path.clone();
+                el.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    super::run(state, &p, verb.clone(), tx)
+                })
+            }
+        }));
+    parts::inspector(
+        parts::head(
+            base_name(&path),
+            Some(parts::kicker(glyph(state, w), &kicker.join(" · "), t)),
+            t,
+        ),
+        vec![
+            group("path", "Path", t).child(copy_path(&path, copied == Some(path.as_str()), t)),
+            repository,
+            branch,
+            state_group,
+        ]
+        .into_iter()
+        .chain(activity)
+        .chain([sweep_group, sessions])
+        .chain(note_line("ledger.inspector.note", note, t))
+        .chain([actions])
+        .collect(),
+        t,
+    )
 }
 
 pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
     let ledger = &state.window.ledger.worktrees;
-    let mut parts = Vec::new();
+    let mut counts = Vec::new();
     match ledger.scope {
         Scope::Active => {
             let rows = super::active_rows(state);
@@ -649,28 +592,24 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
                     w.sweep_status.as_deref() == Some("scheduled") && !w.pinned.unwrap_or_default()
                 })
                 .count();
-            parts.push(format!(
+            counts.push(format!(
                 "{shown} {}",
                 if shown == 1 { "worktree" } else { "worktrees" }
             ));
             for (n, words) in [(kept, "kept"), (dirty, "dirty"), (scheduled, "scheduled")] {
                 if n > 0 {
-                    parts.push(format!("{n} {words}"));
+                    counts.push(format!("{n} {words}"));
                 }
             }
             let hidden = ledger.all().len() - shown;
             if hidden > 0 {
-                parts.push(format!("{hidden} hidden by the query"));
+                counts.push(format!("{hidden} hidden by the query"));
             }
         }
-        Scope::Removed => parts.push(format!("{} removed", super::removed_rows(state).len())),
+        Scope::Removed => counts.push(format!("{} removed", super::removed_rows(state).len())),
     }
-    let mut out = vec![
-        text(parts.join("  ·  "))
-            .key("ledger.counts")
-            .font(type_::LABEL)
-            .color(t.text_secondary),
-    ];
+    let mut out =
+        vec![parts::status_text(counts.join("  ·  "), t.text_tertiary).key("ledger.counts")];
     let asked = match ledger.refresh() {
         Some(Refresh::Asked(at)) => {
             format!("refresh · asked {}", relative_stamp(*at, state.epoch_ms))
@@ -678,7 +617,7 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
         _ => "refresh".into(),
     };
     out.push(
-        button("ledger.refresh", &asked, t)
+        parts::status_link("ledger.refresh", asked, t)
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::refresh(state, tx)),
     );
     let error = ledger
@@ -690,12 +629,10 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
         });
     if let Some(error) = error {
         out.push(
-            text(error.clone())
+            parts::status_text(error.clone(), t.error)
                 .key("ledger.error")
                 .role("alert")
-                .label(error)
-                .font(type_::LABEL)
-                .color(t.error),
+                .label(error),
         );
     }
     out

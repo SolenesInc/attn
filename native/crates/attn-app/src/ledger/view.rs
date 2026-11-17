@@ -6,13 +6,14 @@ use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize, Menu, MenuItem};
 
+use super::parts::{self, Glyph, Ink, body, field, group, muted};
 use super::query::{self, Scope, is_closed};
 use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations, worktrees};
 use crate::State;
+use crate::desktop::usage;
 use crate::sidebar::model::AgentState;
 
 const INSET: f32 = 10.0;
-pub(super) const INSPECTOR_WIDTH: f32 = 340.0;
 
 /// The open row's verb menu, beside its More button, for the shell's layers.
 pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {
@@ -165,10 +166,11 @@ fn header(state: &State, t: &Tokens) -> El {
     let shown = state.window.ledger.tab;
     row()
         .w_full()
+        .h(44.0)
         .items_center()
         .gap(space::S2)
-        .px(space::S3)
-        .py(space::S2)
+        .pl(10.0)
+        .pr(14.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(
             row()
@@ -177,8 +179,8 @@ fn header(state: &State, t: &Tokens) -> El {
                 .grow(1.0)
                 .gap(2.0)
                 .children(Tab::ALL.map(|tab| {
-                    chip_button(
-                        &format!("ledger.tab.{}", tab.label().to_lowercase()),
+                    parts::tab(
+                        format!("ledger.tab.{}", tab.label().to_lowercase()),
                         tab.label(),
                         tab == shown,
                         t,
@@ -189,27 +191,32 @@ fn header(state: &State, t: &Tokens) -> El {
                 })),
         )
         .child(
-            keyed("ledger.close", "Close", "esc", Ink::Quiet, t)
+            keyed("ledger.close", "Close", "esc", Keyed::Quiet, t)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx)),
         )
 }
 
 fn toolbar(state: &State, t: &Tokens) -> El {
     let ledger = &state.window.ledger;
-    let scopes = row()
-        .key("ledger.scope")
-        .role("group")
-        .label("Which sessions")
-        .gap(2.0)
-        .children(Scope::ALL.map(|scope| {
-            chip_button(
-                &format!("ledger.scope.{}", scope.label().to_lowercase()),
-                scope.label(),
-                ledger.filters.scope == scope,
-                t,
-            )
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::set_scope(state, scope, tx))
-        }));
+    let scopes = parts::segmented(
+        "ledger.scope",
+        "group",
+        "Which sessions",
+        Scope::ALL
+            .map(|scope| {
+                parts::segment(
+                    format!("ledger.scope.{}", scope.label().to_lowercase()),
+                    scope.label(),
+                    ledger.filters.scope == scope,
+                    t,
+                )
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    super::set_scope(state, scope, tx)
+                })
+            })
+            .into(),
+        t,
+    );
     let unresolved = {
         let facets = ledger.read_facets();
         let profiles =
@@ -271,29 +278,7 @@ fn toolbar(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .min_w(QUERY_ROOM)
         .color(t.text_primary);
-    row()
-        .w_full()
-        .items_center()
-        .gap(space::S3)
-        .px(space::S3)
-        .py(space::S2)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(scopes)
-        .child(
-            row()
-                .grow(1.0)
-                .min_w(0.0)
-                .items_center()
-                .gap(space::S2)
-                .px(space::S2)
-                .py(space::S1)
-                .radius(4.0)
-                .fill(t.bg_input)
-                .border(1.0, t.border)
-                .child(text("/").font(type_::MONO_CAPTION).color(t.text_muted))
-                .child(field)
-                .children(chips),
-        )
+    parts::toolbar(vec![scopes, parts::query_well(field, chips, t)], t)
 }
 
 fn list(state: &State, rows: &[Row<'_>], selected: Option<&Row<'_>>, t: &Tokens) -> El {
@@ -347,13 +332,13 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
             Some(Note::Busy(busy)) => busy.clone(),
             _ => verb.label(),
         };
-        button(&format!("ledger.row.{}.verb", entry.id), &words, t).on_press_tx(
+        parts::row_verb(format!("ledger.row.{}.verb", entry.id), &words, selected, t).on_press_tx(
             move |state: &mut State, tx: &mut Tx| super::run(state, &id, verb.clone(), tx),
         )
     });
     let more = (r.verbs.len() > 1 && !busy).then(|| {
         let id = entry.id.clone();
-        button(&format!("ledger.row.{}.more", entry.id), "···", t)
+        parts::row_more(format!("ledger.row.{}.more", entry.id), selected, t)
             .label(format!("More for {}", r.title))
             .a11y_value(if menu_open { "expanded" } else { "" })
             .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &id))
@@ -364,70 +349,38 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
                 .key(format!("ledger.row.{}.note", entry.id))
                 .role("status")
                 .label(words.clone())
-                .font(type_::LABEL)
+                .font(parts::META)
                 .color(t.warning)
                 .single_line()
                 .truncate(),
         ),
         _ => None,
     };
-    row()
-        .key(format!("ledger.row.{}", entry.id))
-        .role("option")
-        .label(r.title.clone())
-        .a11y_value(if selected { "selected" } else { "" })
-        .w_full()
-        .items_start()
-        .gap(space::S2)
-        .px(space::S3)
-        .py(space::S2)
-        .fill(if selected {
-            t.brand.alpha(0.09)
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .border_sides([0.0, 0.0, 0.0, if selected { 2.0 } else { 0.0 }], t.brand)
-        .hover(t.bg_elevated)
-        .opacity(if closed { 0.75 } else { 1.0 })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::select(state, &id);
-            tx.focus(LIST, false);
-        })
-        .child(glyph(entry, r.live, t).mt(5.0))
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(2.0)
-                .child(
-                    text(r.title.clone())
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .single_line()
-                        .truncate(),
-                )
-                .child(
-                    meta_line(meta(state, r))
-                        .key(format!("ledger.row.{}.meta", entry.id))
-                        .font(rune::TextStyle {
-                            weight: 400.0,
-                            ..type_::LABEL
-                        })
-                        .color(t.text_tertiary)
-                        .single_line()
-                        .truncate(),
-                )
-                .children(note_line),
-        )
-        .child(
-            text(stamp)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_muted)
-                .single_line()
-                .self_center(),
-        )
-        .children(primary)
-        .children(more)
+    let body = parts::row_body(
+        r.title.clone(),
+        closed,
+        meta_line(meta(state, r))
+            .key(format!("ledger.row.{}.meta", entry.id))
+            .font(parts::META),
+        note_line,
+        t,
+    );
+    parts::list_row(
+        format!("ledger.row.{}", entry.id),
+        r.title.clone(),
+        selected,
+        glyph(entry, r.live, t),
+        body,
+        std::iter::once(parts::stamp(stamp, t))
+            .chain(primary)
+            .chain(more)
+            .collect(),
+        t,
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        super::select(state, &id);
+        tx.focus(LIST, false);
+    })
 }
 
 /// A row's meta line, its parts apart by dots and its directory in monospace, as the Tauri
@@ -521,32 +474,22 @@ fn profile_text(entry: &SessionLedgerEntry) -> String {
     }
 }
 
-fn glyph(entry: &SessionLedgerEntry, live: bool, t: &Tokens) -> El {
-    let color = if is_closed(entry) || !live {
-        t.text_muted
+fn glyph(entry: &SessionLedgerEntry, live: bool, t: &Tokens) -> Glyph {
+    if is_closed(entry) || !live {
+        return Glyph::Closed;
+    }
+    let state = AgentState::parse(&entry.state);
+    let ink = crate::sidebar::state_color(state, t);
+    if state == AgentState::Working {
+        Glyph::Working(ink)
     } else {
-        crate::sidebar::state_color(AgentState::parse(&entry.state), t)
-    };
-    el().w(8.0).h(8.0).radius(4.0).fill(color).a11y_hidden()
+        Glyph::Live(ink)
+    }
 }
 
 fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
-    let aside = col()
-        .key("ledger.inspector")
-        .role("complementary")
-        .label("Details")
-        .w(INSPECTOR_WIDTH)
-        .h_full()
-        .gap(space::S3)
-        .padding(space::S3)
-        .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        });
     let Some(r) = selected else {
-        return aside
-            .child(title("Nothing selected", t))
-            .child(muted("Pick a row to read it here.", t));
+        return nothing_selected("Pick a row to read it here.", t);
     };
     let entry = r.entry;
     let ledger = &state.window.ledger;
@@ -569,11 +512,7 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     let mut fields = vec![
         field(
             "Profile",
-            if profile.is_empty() {
-                "—".into()
-            } else {
-                profile
-            },
+            if profile.is_empty() { "—" } else { &profile },
             t,
         ),
         directory_field(entry, verdict, ledger.copied.as_deref(), t),
@@ -587,64 +526,38 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
                 "Branch",
                 entry
                     .branch
-                    .clone()
+                    .as_deref()
                     .filter(|b| !b.is_empty())
-                    .unwrap_or("—".into()),
+                    .unwrap_or("—"),
                 t,
             )
             .children(branch_state.map(|s| muted(s, t))),
         );
     }
+    let instant = if closed { "Closed" } else { "Last seen" };
     fields.push(
-        field(
-            if closed { "Closed" } else { "Last seen" },
-            format!(
-                "{} ({})",
-                query::full_stamp(at_ms),
-                query::relative_stamp(at_ms, state.epoch_ms)
-            ),
-            t,
-        )
-        .children(closed.then(|| muted(&closed_line(state, entry)["closed ".len()..], t))),
+        group(&instant.to_lowercase().replace(' ', "-"), instant, t)
+            .child(parts::value_with(
+                &query::full_stamp(at_ms),
+                &format!("({})", query::relative_stamp(at_ms, state.epoch_ms)),
+                t,
+            ))
+            .children(closed.then(|| muted(&closed_line(state, entry)["closed ".len()..], t))),
     );
     let usage = (!closed)
         .then(|| state.facts.sessions.iter().find(|s| s.id == entry.id))
         .flatten()
         .and_then(|s| s.usage.as_ref())
         .or(entry.usage.as_ref());
-    if let Some(usage) = usage {
-        let tokens = format!("{} tokens", thousands(usage.total_tokens));
-        let words = match usage.cost_usd {
-            Some(cost) if !usage.measurement_incomplete.unwrap_or_default() => {
-                format!("${cost:.2} · {tokens}")
-            }
-            _ => tokens,
-        };
-        fields.push(
-            field("Usage", words, t).children(
-                usage
-                    .measurement_incomplete
-                    .unwrap_or_default()
-                    .then(|| muted("Measurement incomplete; some usage may be missing.", t)),
-            ),
-        );
-    }
-    if let Some(Verb::Seed { title, .. }) = r.verbs.iter().find(|v| matches!(v, Verb::Seed { .. }))
-    {
-        let (id, seed) = (
-            entry.id.clone(),
-            r.verbs
-                .iter()
-                .find(|v| matches!(v, Verb::Seed { .. }))
-                .cloned(),
-        );
-        fields.push(col().gap(2.0).child(label("Seed", t)).child(
-            button("ledger.inspector.seed", title, t).on_press_tx(
-                move |state: &mut State, tx: &mut Tx| {
-                    if let Some(seed) = seed.clone() {
-                        super::run(state, &id, seed, tx)
-                    }
-                },
+    fields.extend(usage.map(|usage| usage_field(usage, t)));
+    if let Some((seed, title)) = r.verbs.iter().find_map(|v| match v {
+        Verb::Seed { title, .. } => Some((v.clone(), title.clone())),
+        _ => None,
+    }) {
+        let id = entry.id.clone();
+        fields.push(group("seed", "Seed", t).child(
+            parts::link("ledger.inspector.seed", &title, t).on_press_tx(
+                move |state: &mut State, tx: &mut Tx| super::run(state, &id, seed.clone(), tx),
             ),
         ));
     }
@@ -666,23 +579,18 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
                 text(words.clone())
                     .key("ledger.inspector.keep-note")
                     .role("status")
-                    .font(type_::LABEL)
+                    .font(parts::META)
                     .color(t.warning)
                     .wrap(),
             ),
             _ => None,
         };
         fields.push(
-            col()
-                .key("ledger.inspector.conversation")
-                .role("group")
-                .label("Conversation")
-                .gap(2.0)
-                .child(label("Conversation", t))
+            group("conversation", "Conversation", t)
                 .child(muted(pin, t))
                 .children(refused)
                 .child(
-                    button("ledger.inspector.keep", &verb.label(), t)
+                    parts::verb("ledger.inspector.keep", &verb.label(), Ink::Quiet, t)
                         .a11y_value(if busy { "busy" } else { "" })
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             super::run(state, &id, Verb::Keep(keep), tx)
@@ -693,19 +601,63 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     if r.live {
         let id = entry.id.clone();
         fields.push(
-            keyed("ledger.inspector.focus", "Focus", "↵", Ink::Primary, t).on_press_tx(
+            keyed("ledger.inspector.focus", "Focus", "↵", Keyed::Primary, t).on_press_tx(
                 move |state: &mut State, tx: &mut Tx| super::run(state, &id, Verb::Focus, tx),
             ),
         );
     }
-    aside
+    parts::inspector(
+        parts::head(
+            &r.title,
+            Some(parts::kicker(
+                glyph(entry, r.live, t),
+                &kicker.join(" · "),
+                t,
+            )),
+            t,
+        ),
+        fields,
+        t,
+    )
+}
+
+/// The inspector while no row is chosen.
+pub(super) fn nothing_selected(hint: &str, t: &Tokens) -> El {
+    parts::inspector(
+        parts::head("Nothing selected", None, t),
+        vec![body(hint, t).color(t.text_tertiary)],
+        t,
+    )
+}
+
+/// What a session spent, as the Tauri app's usage field: the header's badge, then the whole
+/// count beside a price; the whole count alone while the measurement is incomplete.
+fn usage_field(u: &attn_protocol::SessionUsage, t: &Tokens) -> El {
+    let tokens = format!("{} tokens", usage::grouped(u.total_tokens));
+    let shown = group("usage", "Usage", t);
+    if !usage::measured(u) {
+        return shown.child(body(&tokens, t)).children(
+            u.measurement_incomplete
+                .unwrap_or_default()
+                .then(|| muted("Measurement incomplete; some usage may be missing.", t)),
+        );
+    }
+    let badge = usage::badge_of(u);
+    let line = row()
+        .items_center()
         .child(
-            col()
-                .gap(2.0)
-                .child(title(&r.title, t))
-                .child(muted(&kicker.join(" · "), t)),
+            text(badge.text)
+                .label(badge.label)
+                .font(type_::LABEL)
+                .color(t.text_tertiary)
+                .px(3.0),
         )
-        .children(fields)
+        .children(
+            u.cost_usd
+                .is_some()
+                .then(|| muted(&format!(" · {tokens}"), t)),
+        );
+    shown.child(line)
 }
 
 fn directory_field(
@@ -716,9 +668,7 @@ fn directory_field(
 ) -> El {
     let directory = entry.directory.clone();
     let copied = copied == Some(entry.directory.as_str());
-    col()
-        .gap(2.0)
-        .child(label("Directory", t))
+    group("directory", "Directory", t)
         .child(copy_path(
             "ledger.inspector.directory",
             &query::tilde_path(&entry.directory),
@@ -739,7 +689,7 @@ fn reopen_verdict(state: &State, r: &Row<'_>, t: &Tokens) -> El {
     let mut block = col()
         .key("ledger.inspector.reopen")
         .gap(space::S1)
-        .child(label("Reopen", t));
+        .child(parts::label("Reopen", t));
     if deleted {
         block = block.child(body(
             "Its profile was deleted. This session cannot be reopened.",
@@ -771,7 +721,7 @@ fn reopen_verdict(state: &State, r: &Row<'_>, t: &Tokens) -> El {
                 .key("ledger.inspector.note")
                 .role("status")
                 .label(words.clone())
-                .font(type_::LABEL)
+                .font(parts::META)
                 .color(t.warning)
                 .wrap(),
         );
@@ -793,9 +743,10 @@ fn reopen_verdict(state: &State, r: &Row<'_>, t: &Tokens) -> El {
             Some(Note::Busy(busy)) if at == 0 => busy.clone(),
             _ => verb.label(),
         };
-        button(
-            &format!("ledger.inspector.action.{at}"),
+        parts::verb(
+            format!("ledger.inspector.action.{at}"),
             &format!("{hint}  {words}"),
+            if at == 0 { Ink::Primary } else { Ink::Quiet },
             t,
         )
         .label(verb.label())
@@ -811,19 +762,19 @@ fn session_counts(state: &State, rows: &[Row<'_>], t: &Tokens) -> Vec<El> {
     let shown = rows.len();
     let live = rows.iter().filter(|r| r.live).count();
     let closed = rows.iter().filter(|r| is_closed(r.entry)).count();
-    let mut parts = vec![format!(
+    let mut counts = vec![format!(
         "{shown} {}",
         if shown == 1 { "session" } else { "sessions" }
     )];
     if live > 0 {
-        parts.push(format!("{live} live"));
+        counts.push(format!("{live} live"));
     }
     if closed > 0 {
-        parts.push(format!("{closed} closed"));
+        counts.push(format!("{closed} closed"));
     }
     let hidden = ledger.entries().len() - shown;
     if hidden > 0 {
-        parts.push(format!("{hidden} hidden by the query"));
+        counts.push(format!("{hidden} hidden by the query"));
     }
     let older = (ledger.omitted() > 0).then(|| {
         let words = if ledger.loading_more() {
@@ -831,43 +782,38 @@ fn session_counts(state: &State, rows: &[Row<'_>], t: &Tokens) -> Vec<El> {
         } else {
             format!("{} older ↓", ledger.omitted())
         };
-        button("ledger.older", &words, t)
+        parts::status_link("ledger.older", words, t)
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::load_more(state, tx))
     });
-    std::iter::once(
-        text(parts.join("  ·  "))
-            .key("ledger.counts")
-            .font(type_::MONO_CAPTION)
-            .color(t.text_tertiary),
-    )
-    .chain(older)
-    .collect()
+    std::iter::once(parts::status_text(counts.join("  ·  "), t.text_tertiary).key("ledger.counts"))
+        .chain(older)
+        .collect()
 }
 
 fn status(state: &State, counts: Vec<El>, t: &Tokens) -> El {
     let ledger = &state.window.ledger;
-    let copied = ledger.copied.as_ref().map(|_| {
-        text("copied")
-            .key("ledger.copied")
-            .font(type_::LABEL)
-            .color(t.success)
-    });
+    let copied = ledger
+        .copied
+        .as_ref()
+        .map(|_| parts::status_text("copied".into(), t.success).key("ledger.copied"));
     let legend = ledger.legend.then(|| legend(t));
     row()
         .key("ledger.status")
         .role("status")
         .w_full()
+        .h(30.0)
         .items_center()
-        .gap(space::S3)
-        .px(space::S3)
-        .py(space::S2)
+        .gap(12.0)
+        .px(12.0)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .children(counts)
-        .children(copied)
+        .child(parts::status_line(
+            counts.into_iter().chain(copied).collect(),
+            t,
+        ))
         .child(el().grow(1.0))
         .children(legend)
         .child(
-            keyed("ledger.keys", "keys", "?", Ink::Mono, t)
+            keyed("ledger.keys", "keys", "?", Keyed::Mono, t)
                 .label("Keys")
                 .a11y_value(if ledger.legend { "expanded" } else { "" })
                 .on_press_tx(|state: &mut State, _: &mut Tx| {
@@ -1011,74 +957,10 @@ fn query_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-fn thousands(n: i64) -> String {
-    let digits = n.unsigned_abs().to_string();
-    let mut out = String::new();
-    for (at, c) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    if n < 0 { format!("-{out}") } else { out }
-}
-
-pub(super) fn title(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .role("heading")
-        .font(type_::TITLE)
-        .color(t.text_primary)
-        .wrap()
-}
-
-const LABEL: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    tracking: 0.5,
-    ..type_::SANS_CAPS
-};
-
-pub(super) fn label(words: &str, t: &Tokens) -> El {
-    type_::upper(words, LABEL).color(t.text_dimmed)
-}
-
-pub(super) fn body(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(type_::BODY)
-        .color(t.text_primary)
-        .wrap()
-}
-
-pub(super) fn muted(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(type_::LABEL)
-        .color(t.text_tertiary)
-        .wrap()
-}
-
-pub(super) fn field(name: &str, value: String, t: &Tokens) -> El {
-    col()
-        .key(format!(
-            "ledger.inspector.{}",
-            name.to_lowercase().replace(' ', "-")
-        ))
-        .role("group")
-        .label(name.to_owned())
-        .gap(2.0)
-        .child(label(name, t))
-        .child(body(&value, t))
-}
-
-pub(super) fn button(key: &str, words: &str, t: &Tokens) -> El {
-    Button::new(words)
-        .control_size(ControlSize::Small)
-        .build(attn_ui::kit(t))
-        .key(key.to_owned())
-}
-
 /// How a [`keyed`] button reads: Close's quiet word after which its key sits, the status bar's
 /// monospace word, or the inspector's primary verb, raised on its own frame.
 #[derive(Clone, Copy, PartialEq)]
-enum Ink {
+enum Keyed {
     Quiet,
     Mono,
     Primary,
@@ -1086,21 +968,21 @@ enum Ink {
 
 /// A button that shows its key as a keycap beside its word, as Tauri's ledger buttons do: the
 /// key first for a verb, after the word otherwise.
-fn keyed(key: &str, word: &'static str, cap: &'static str, ink: Ink, t: &Tokens) -> El {
+fn keyed(key: &str, word: &'static str, cap: &'static str, ink: Keyed, t: &Tokens) -> El {
     let t = *t;
     let button = Button::new(word)
         .variant(ButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
         .label_with(move |font, _| {
             let (font, color) = match ink {
-                Ink::Quiet => (
+                Keyed::Quiet => (
                     rune::TextStyle {
                         weight: 400.0,
                         ..font
                     },
                     t.text_tertiary,
                 ),
-                Ink::Mono => (
+                Keyed::Mono => (
                     rune::TextStyle {
                         weight: 400.0,
                         ..font
@@ -1108,7 +990,7 @@ fn keyed(key: &str, word: &'static str, cap: &'static str, ink: Ink, t: &Tokens)
                     .mono(),
                     t.text_tertiary,
                 ),
-                Ink::Primary => (
+                Keyed::Primary => (
                     rune::TextStyle {
                         weight: 400.0,
                         ..font
@@ -1118,7 +1000,7 @@ fn keyed(key: &str, word: &'static str, cap: &'static str, ink: Ink, t: &Tokens)
             };
             let cap = keycap::Keys::ledged(&[cap]).build(&t).a11y_hidden();
             let word = text(word).font(font).color(color);
-            if ink == Ink::Quiet {
+            if ink == Keyed::Quiet {
                 row().gap(6.0).items_center().child(word).child(cap)
             } else {
                 row().gap(6.0).items_center().child(cap).child(word)
@@ -1127,11 +1009,11 @@ fn keyed(key: &str, word: &'static str, cap: &'static str, ink: Ink, t: &Tokens)
         .build(attn_ui::kit(&t))
         .key(key.to_owned());
     match ink {
-        Ink::Primary => button
+        Keyed::Primary => button
             .self_start()
             .fill(t.bg_elevated)
             .border(1.0, t.border),
-        Ink::Quiet | Ink::Mono => button,
+        Keyed::Quiet | Keyed::Mono => button,
     }
 }
 
@@ -1140,19 +1022,6 @@ const QUERY_ROOM: f32 = 80.0;
 
 /// The longest token that keeps its whole chip: a date bound such as `from:2026-09-01` is 15.
 const SHORT_TOKEN: usize = 16;
-
-pub(super) fn chip_button(key: &str, words: &str, on: bool, t: &Tokens) -> El {
-    Button::new(words)
-        .variant(if on {
-            ButtonVariant::Neutral
-        } else {
-            ButtonVariant::GhostMuted
-        })
-        .control_size(ControlSize::Small)
-        .build(attn_ui::kit(t))
-        .key(key.to_owned())
-        .a11y_value(if on { "pressed" } else { "" })
-}
 
 /// A path the user copies with y or with the copy button beside it, marked once copied.
 pub(super) fn copy_path(

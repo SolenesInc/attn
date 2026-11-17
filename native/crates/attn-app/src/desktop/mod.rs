@@ -26,7 +26,7 @@ mod shelf;
 mod spotlight;
 mod stale_build;
 mod terminal_menu;
-mod usage;
+pub(crate) mod usage;
 mod view;
 mod windows;
 

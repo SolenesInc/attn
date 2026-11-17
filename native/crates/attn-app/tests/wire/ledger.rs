@@ -5,7 +5,8 @@ use attn_protocol::{
     InitialStateMessage, OutpostInfo, PartyView, Profile, ProfilesChangedMessage, Seed,
     SessionClosedMessage, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets,
     SessionLedgerProfileFacet, SessionListResult, SessionListResultMessage, SessionReopen,
-    SessionReopenResult, SessionReopenResultMessage, SettingsUpdatedMessage,
+    SessionReopenResult, SessionReopenResultMessage, SessionUsage, SessionUsageModel,
+    SettingsUpdatedMessage,
 };
 use attn_testkit::{Daemon, Request, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -726,6 +727,61 @@ fn a_hidden_live_session_is_marked_on_its_row_and_in_the_inspector() {
     assert!(name(&world, "ledger.row.api.meta").ends_with("hidden"));
     assert!(text_in(&world, "ledger.inspector").contains("hidden"));
     assert!(!name(&world, "ledger.row.docs.meta").contains("hidden"));
+}
+
+fn spent(tokens: i64, cost_usd: Option<f64>, incomplete: bool) -> SessionUsage {
+    SessionUsage {
+        total_tokens: tokens,
+        cost_usd,
+        measurement_incomplete: incomplete.then_some(true),
+        models: vec![SessionUsageModel {
+            model: "claude-opus-5".into(),
+            total_tokens: tokens,
+            ..SessionUsageModel::default()
+        }],
+        ..SessionUsage::default()
+    }
+}
+
+#[test]
+fn the_inspector_says_when_a_session_was_seen_and_what_it_spent_as_the_header_badge_does() {
+    let rows = [
+        ("tokens", spent(6_483, None, false)),
+        ("priced", spent(6_483, Some(1.2345), false)),
+        ("partial", spent(6_483, None, true)),
+    ]
+    .into_iter()
+    .map(|(id, usage)| SessionLedgerEntry {
+        usage: Some(usage),
+        ..closed(entry(id, id, 1), "user")
+    })
+    .collect();
+    let mut world = World::start(ledger_daemon(state(vec![], vec![]), rows));
+    open(&mut world);
+    click(&mut world, "ledger.scope.all");
+
+    click(&mut world, "ledger.row.tokens");
+    let seen = text_in(&world, "ledger.inspector.closed");
+    assert!(seen.contains(" at ") && seen.contains("(1m)"), "{seen}");
+    let usage = text_in(&world, "ledger.inspector.usage");
+    assert!(
+        usage.contains("6.5k tokens") && !usage.contains("6,483"),
+        "{usage}"
+    );
+
+    click(&mut world, "ledger.row.priced");
+    let priced = text_in(&world, "ledger.inspector.usage");
+    assert!(
+        priced.contains("$1.23") && priced.contains("· 6,483 tokens"),
+        "{priced}"
+    );
+
+    click(&mut world, "ledger.row.partial");
+    let partial = text_in(&world, "ledger.inspector.usage");
+    assert!(
+        partial.contains("6,483 tokens") && partial.contains("Measurement incomplete"),
+        "{partial}"
+    );
 }
 
 #[test]

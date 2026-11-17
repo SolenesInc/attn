@@ -17,13 +17,20 @@ pub(crate) struct Badge {
 
 /// The usage a session's header shows, once it is measured whole and has any.
 pub(crate) fn shown(session: &Session) -> Option<&SessionUsage> {
-    session.usage.as_ref().filter(|u| {
-        u.measurement_incomplete != Some(true) && u.total_tokens > 0 && !u.models.is_empty()
-    })
+    session.usage.as_ref().filter(|u| measured(u))
+}
+
+/// Whether `usage` is measured whole and has any, so a badge can say it.
+pub(crate) fn measured(usage: &SessionUsage) -> bool {
+    usage.measurement_incomplete != Some(true) && usage.total_tokens > 0 && !usage.models.is_empty()
 }
 
 pub(crate) fn badge(session: &Session) -> Option<Badge> {
-    let usage = shown(session)?;
+    shown(session).map(badge_of)
+}
+
+/// The badge of `usage`, measured or not.
+pub(crate) fn badge_of(usage: &SessionUsage) -> Badge {
     let text = match usage.cost_usd {
         Some(cost) => format!(
             "{}{}",
@@ -37,10 +44,10 @@ pub(crate) fn badge(session: &Session) -> Option<Badge> {
     } else {
         ""
     };
-    Some(Badge {
+    Badge {
         label: format!("Session usage {text}{detail}"),
         text,
-    })
+    }
 }
 
 fn unpriced_mark(unpriced: bool) -> &'static str {
@@ -77,7 +84,7 @@ fn compact_tokens(tokens: i64) -> String {
     }
 }
 
-fn grouped(n: i64) -> String {
+pub(crate) fn grouped(n: i64) -> String {
     let digits = n.abs().to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
