@@ -73,3 +73,18 @@ clear the setting:
 ```sh
 attn settings set color_overrides ""
 ```
+
+## Match Claude Code's colors
+
+Programs in a terminal that use the terminal's 16 colors, such as your shell
+prompt, `ls` and `git`, take the scheme's terminal colors. Programs that choose
+exact colors of their own keep them. Claude Code's `dark` and `light` themes do
+this, so diffs and message boxes keep Claude Code's colors whatever scheme you
+pick. To match the scheme, choose another theme with `/theme` in Claude Code:
+
+- **Dark mode (ANSI colors only)** or **Light mode (ANSI colors only)** use only
+  the terminal's colors, so they follow any scheme. Diff lines lose their
+  tinted background.
+- A custom theme made from your scheme's colors keeps the tinted diff lines.
+  Claude Code reads custom themes from `~/.claude/themes/` and from plugins.
+  Pick a theme again when you change scheme.
