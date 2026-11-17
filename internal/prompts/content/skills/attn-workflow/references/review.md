@@ -24,12 +24,20 @@ When the assignment asks you to exercise the running product, use realistic, iso
 
 ## Return findings
 
-Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose the defect, and the consequence. Include a file location or reproducible steps and supporting evidence. Label each finding measured, inferred, or guessed, as [Prove it works](../principles/prove-it-works.md) defines the labels. Separate confirmed defects from unresolved questions and optional improvements. When you weigh another reviewer's findings, give the reason for each dismissed finding in one line. A finding that two independent reviews raise is strong evidence. If a finding repeats an earlier one, it is a class: say so, and recommend fixing it with [Correction](correction.md).
+Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose the defect, and the consequence. Include a file location or reproducible steps and supporting evidence. Label each finding measured, inferred, or guessed, as [Prove it works](../principles/prove-it-works.md) defines the labels. When you weigh another reviewer's findings, give the reason for each dismissed finding in one line. A finding that two independent reviews raise is strong evidence. If a finding repeats an earlier one, it is a class: say so, and recommend fixing it with [Correction](correction.md).
 
-When the reviewed seed carries checks, record a verdict on each check you judged. Use `attn seed check confirm <seed-id> <C#>` for a check the evidence proves, and `attn seed check reject <seed-id> <C#> -m "<what would prove it>"` for a check the evidence does not prove. Leave the checks you did not judge as they are.
+Sort the findings into three groups, and name the group of each finding:
+
+- Blocking: a defect in behavior that you can show at the reviewed revision, with a run that fails or a line of documentation that the change made wrong. A defect that the base already has blocks only when the change copies it or newly reaches it. Record any other defect of the base in one line.
+- Scope question: a finding about the design, as Inspect and exercise the change describes. A scope question needs no run.
+- Follow-up: every other finding, including an optional improvement and a defect that you could not reproduce, which keeps its label.
+
+List the questions about intent that you asked under Establish the review context apart from the findings.
+
+When the reviewed seed carries checks, record a verdict on each check you judged. Use `attn seed check confirm <seed-id> <C#>` for a check the evidence proves, and `attn seed check reject <seed-id> <C#> -m "<what would prove it>"` for a check the evidence does not prove. A rejected check blocks the change. Leave the checks you did not judge as they are.
 
 Summarize what you checked, the reviewed revision, coverage gaps, and your recommendation. If no actionable findings remain, say so and state any material limits on the review.
 
-Return implementation fixes to the Builder with enough context to address them. In a follow-up review, check the correction and the affected behavior, and reuse prior evidence where it remains valid. When two corrections that share an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) and report the assumption as the finding. Publish comments or other external responses only when the user or the assigned task authorizes it.
+Return the blocking findings to the Builder with enough context to address them. In a follow-up review, check the correction and the affected behavior, and reuse prior evidence where it remains valid. When two corrections that share an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) and report the assumption as the finding. Publish comments or other external responses only when the user or the assigned task authorizes it.
 
 Report the review in the conversation, and record it in the assigned seed with links to the supporting artifacts.

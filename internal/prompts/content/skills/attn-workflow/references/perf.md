@@ -6,7 +6,7 @@ Use this process when a measurement shows something slow, large, or busy when it
 
 ## Reproduce and measure
 
-Name the workload that shows the symptom: data size, history, state, concurrency. Reproduce the workload on the surface where the symptom was reported, and pick one metric and the direction that counts as better. If no case reproduces the complaint, fix the reproduction before you change code.
+Name the workload that shows the symptom: data size, history, state, concurrency. Reproduce the workload on the surface where the symptom was reported, and pick one metric and the direction that counts as better. If no case reproduces the complaint, fix the reproduction before you change code. Before the first run, write down the decision the number informs and the effect that would change that decision, as [Explain the number](../principles/explain-the-number.md) asks.
 
 Build the measurement as a lever: one repeatable command that prints the metric, the error count, and the amount of work done. Take enough samples that the spread is smaller than the effect, and report the median of several runs with the spread. Start from the repository's own measurement tooling and guidance, where it has them: benchmarks, profiling entry points, performance scenarios, and the signals the repository says are stable on this machine. Build your own command only for what they do not cover. Check that the command separates an easy case from the slow case. If it cannot, change the workload or the metric, then freeze the command. Before any change, record the baseline and a green run of the tests that must keep passing.
 
