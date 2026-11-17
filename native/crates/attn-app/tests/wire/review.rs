@@ -137,18 +137,28 @@ fn start() -> World {
     start_with_session(None)
 }
 
-/// The fixture's desktop, with the document tile bound to `session` when given.
-fn start_with_session(session: Option<&str>) -> World {
+/// A markdown tile `id` showing `path`, bound to `session` when given.
+fn document_tile(id: &str, path: &str, session: Option<&str>) -> serde_json::Value {
     let mut document = json!({
         "type": "tile",
-        "tile_id": "m",
+        "tile_id": id,
         "tile_kind": "markdown",
-        "tile_params": json!({ "path": DOC }).to_string(),
+        "tile_params": json!({ "path": path }).to_string(),
     });
     if let Some(session) = session {
         document["tile_session_id"] = json!(session);
     }
-    let tree = row(vec![pane("a"), document]);
+    document
+}
+
+/// The fixture's desktop, with the document tile bound to `session` when given.
+fn start_with_session(session: Option<&str>) -> World {
+    start_with_tiles(vec![document_tile("m", DOC, session)])
+}
+
+/// The fixture's desktop: agent `a`, then `tiles`.
+fn start_with_tiles(tiles: Vec<serde_json::Value>) -> World {
+    let tree = row(std::iter::once(pane("a")).chain(tiles).collect::<Vec<_>>());
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
@@ -509,6 +519,10 @@ fn shows_the_keys_in_a_key_line_and_a_sheet() {
     assert!(keys.iter().any(|k| k == "? all keys"), "{keys:?}");
     assert!(keys.iter().any(|k| k == "← → stop"), "{keys:?}");
     assert!(keys.iter().any(|k| k == "c note"), "{keys:?}");
+    assert!(
+        keys.iter().any(|k| k == "f r h definition, uses, type"),
+        "{keys:?}"
+    );
 
     world.gesture(|app| app.type_text("?"));
     let sheet: Vec<String> = world
@@ -3638,7 +3652,8 @@ fn a_click_on_a_search_result_opens_it_as_enter_does() {
 }
 
 #[test]
-fn a_click_in_the_brief_moves_the_cursor_and_acts_on_the_facts_a_changed_file_and_a_frame_tab() {
+fn a_click_in_the_brief_moves_the_cursor_and_acts_on_the_facts_a_changed_file_a_stops_file_button_and_a_frame_tab()
+ {
     let mut world = open();
     let (_, warmed) = (serve(&world), file_reads(&world).len());
     keyboard_elsewhere(&mut world);
@@ -3677,6 +3692,15 @@ fn a_click_in_the_brief_moves_the_cursor_and_acts_on_the_facts_a_changed_file_an
         "back from the first file leaves the file view"
     );
 
+    click(&mut world, Target::key(format!("{stop}.file")));
+    assert_eq!(
+        file_reads(&world).last().map(String::as_str),
+        Some("calc.go")
+    );
+    let view = file_view(&world).expect("the stop's file button opens its file");
+    assert!(view.iter().any(|t| t == "calc.go"), "{view:?}");
+    click(&mut world, Target::role("button").name("close esc"));
+
     click(&mut world, Target::role("tab").name("2 Walkthrough"));
     assert_eq!(stage_stop(&world).as_deref(), Some("calc.go"));
 }
@@ -3710,10 +3734,20 @@ fn a_drag_across_a_file_view_row_selects_its_text_and_leaves_the_cursor() {
 }
 
 #[test]
-fn a_click_on_a_verdict_in_the_send_sheet_picks_it_as_its_key_does() {
+fn a_click_on_a_verdict_in_the_send_sheet_picks_it_as_its_key_does_and_send_sends_as_enter_does() {
     let (mut world, _, sends) = open_marking(presented());
     press(&mut world, Key::Down);
     send_key(&mut world);
+    let sheet: Vec<String> = world
+        .screen()
+        .descendants(Target::key("review.send"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        sheet.iter().any(|t| t == "Send the review to Agent a"),
+        "the sheet names the session the review goes to: {sheet:?}"
+    );
     click(&mut world, Target::key("review.send.verdict.c"));
     let picked = world
         .screen()
@@ -3722,7 +3756,7 @@ fn a_click_on_a_verdict_in_the_send_sheet_picks_it_as_its_key_does() {
         .find(|n| n.is("checked"))
         .and_then(|n| n.name);
     assert_eq!(picked.as_deref(), Some("comment"));
-    press(&mut world, Key::Enter);
+    click(&mut world, Target::key("review.send.go"));
     let sent = sends.lock().unwrap().clone();
     assert_eq!(
         sent.last().map(|s| s["verdict"].clone()),
@@ -4048,9 +4082,11 @@ fn a_mark_and_an_edit_leave_the_review_from_their_remove_button_and_the_file_sta
         .map(|m| m["id"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(ids.len(), 2);
-    for id in &ids {
-        world.gesture(|app| app.click(Target::key(format!("review.mark.{id}.remove"))));
-    }
+    let (edit, note): (Vec<&String>, Vec<&String>) =
+        ids.iter().partition(|id| id.starts_with("review-edit-"));
+    world.gesture(|app| app.click(Target::key(format!("review.mark.{}.remove", edit[0]))));
+    press(&mut world, Key::Escape);
+    world.gesture(|app| app.click(Target::key(format!("review.mark.{}.remove", note[0]))));
     world.advance(std::time::Duration::from_secs(1));
     world.settle();
     assert!(kept.lock().unwrap().is_empty());
@@ -4091,6 +4127,28 @@ fn a_wide_table_in_a_review_wraps_its_cells_inside_the_document() {
         );
         assert!(ch > 30.0, "cell {n} wraps: {ch} high");
     }
+}
+
+#[test]
+fn a_table_in_a_review_takes_the_cards_width_past_the_prose_column() {
+    let cell = |n: usize| format!("cell {n} of a table that is wider than a paragraph");
+    let table = format!(
+        "\n| One | Two | Three |\n| --- | --- | --- |\n| {} | {} | {} |\n",
+        cell(1),
+        cell(2),
+        cell(3)
+    );
+    let mut world = start();
+    deliver(&mut world, &format!("{DOCUMENT}{table}"), Some(bundle()));
+    click(&mut world, Target::key("tile.m.focus"));
+    let screen = world.screen();
+    let [x, _, _, _] = screen.bounds(Target::key("tile.m.document")).unwrap();
+    let [cx, _, cw, _] = screen.bounds(Target::role("label").name(cell(3))).unwrap();
+    assert!(
+        cx + cw - x > 800.0,
+        "the table runs past the 68-character prose column: its last cell ends {} in",
+        cx + cw - x
+    );
 }
 
 #[test]
@@ -6780,5 +6838,67 @@ fn keeps_an_answer_that_arrives_while_the_reader_still_holds_an_unsaved_copy_of_
     assert!(
         screen.contains("So the return reads as a value."),
         "{screen}"
+    );
+}
+
+#[test]
+fn a_review_tiles_header_offers_the_review_with_no_notes_and_its_button_opens_the_send_sheet() {
+    let (mut world, _, sends) = open_marking(presented());
+    let review = world.screen().get(Target::key("tile.m.document.send"));
+    assert_eq!(review.name.as_deref(), Some("Review to Agent a"));
+    assert!(!review.is("disabled"), "a review sends with no notes");
+
+    click(&mut world, Target::key("tile.m.document.send"));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Send the review"))
+            .is_some(),
+        "the button opens the send sheet rather than sending"
+    );
+    assert!(sends.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_document_shown_alone_among_others_tabs_each_and_a_tab_shows_its_document_alone() {
+    let mut world = start_with_tiles(vec![
+        document_tile("m", DOC, None),
+        document_tile("n", "/notes/notes.md", None),
+    ]);
+    deliver(&mut world, DOCUMENT, Some(bundle()));
+    let tabs = |world: &World| -> Vec<String> {
+        world
+            .screen()
+            .all(Target::role("tab"))
+            .into_iter()
+            .filter(|n| {
+                n.key
+                    .as_deref()
+                    .is_some_and(|k| k.starts_with("review.tab."))
+            })
+            .map(|n| {
+                let name = n.name.clone().unwrap_or_default();
+                if n.is("checked") {
+                    format!("{name} *")
+                } else {
+                    name
+                }
+            })
+            .collect()
+    };
+    assert!(
+        tabs(&world).is_empty(),
+        "no tabs while the documents share the row"
+    );
+
+    click(&mut world, Target::key("tile.m.focus"));
+    assert_eq!(tabs(&world), ["review.md *", "notes.md"]);
+
+    click(&mut world, Target::key("review.tab.n"));
+    assert_eq!(tabs(&world), ["review.md", "notes.md *"]);
+    assert!(world.screen().find(Target::key("tile.n")).is_some());
+    assert!(
+        world.screen().find(Target::key("tile.m")).is_none(),
+        "the tab shows its document alone"
     );
 }

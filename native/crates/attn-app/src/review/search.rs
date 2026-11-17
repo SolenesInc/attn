@@ -49,6 +49,44 @@ impl Found {
         }
     }
 
+    /// What the result's row shows: where or what it found, then at its right end where it
+    /// is or what changed, in the colors the Tauri search gives them.
+    fn columns(&self, t: &Tokens) -> (El, El) {
+        let where_ = |w: String| text(w).font(type_::MONO_CAPTION).color(t.text_muted);
+        match self {
+            Found::Changed(f) => {
+                let stat = if f.binary {
+                    where_("binary".into())
+                } else {
+                    row()
+                        .gap(4.0)
+                        .child(
+                            text(format!("+{}", f.added))
+                                .font(type_::MONO_CAPTION)
+                                .color(t.success),
+                        )
+                        .child(
+                            text(format!("−{}", f.removed))
+                                .font(type_::MONO_CAPTION)
+                                .color(t.error),
+                        )
+                };
+                (path_label(&f.path, t), stat)
+            }
+            Found::File(path) => (path_label(path, t), where_("file".into())),
+            Found::Hit {
+                path,
+                line,
+                text: hit,
+            } => (
+                text(hit.trim().to_owned())
+                    .font(type_::MONO_CAPTION)
+                    .color(t.text_primary),
+                where_(format!("{path}:{line}")),
+            ),
+        }
+    }
+
     fn label(&self) -> String {
         match self {
             Found::Changed(f) if f.binary => format!("{} binary", f.path),
@@ -295,7 +333,7 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
     let note = note.map(|(text_, alert)| {
         text(text_)
             .font(type_::LABEL)
-            .color(if alert { t.error } else { t.warning })
+            .color(t.warning)
             .wrap()
             .role(if alert { "alert" } else { "status" })
     });
@@ -307,7 +345,9 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
     .then(|| {
         text(format!("Nothing matches {}", query.text))
             .font(type_::BODY)
-            .color(t.text_tertiary)
+            .color(t.text_secondary)
+            .px(space::S2)
+            .py(space::S1)
     });
     let list = col()
         .key(LIST)
@@ -318,10 +358,10 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .gap(2.0)
         .padding(space::S1)
         .children(found.iter().enumerate().map(|(i, f)| {
             let on = i == search.selected;
+            let (what, where_) = f.columns(t);
             let el = row()
                 .key(option_key(i))
                 .role("option")
@@ -329,16 +369,15 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
                 .w_full()
                 .h(25.0)
                 .items_center()
+                .gap(space::S3)
                 .px(space::S2)
-                .child(
-                    text(f.label())
-                        .font(type_::BODY.mono())
-                        .color(t.text_primary)
-                        .a11y_hidden(),
-                )
+                .radius(4.0)
+                .child(what.min_w(0.0).a11y_hidden())
+                .child(col().grow(1.0))
+                .child(where_.a11y_hidden())
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, i, tx));
             if on {
-                el.fill(t.bg_selected).focus_selected(true)
+                el.fill(super::cursor_tint(t)).focus_selected(true)
             } else {
                 el
             }
@@ -351,10 +390,32 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
         .modal_tx(true, close)
         .w_full()
         .max_w(640.0)
-        .padding(space::S3)
-        .gap(space::S2)
-        .child(field)
-        .children(note)
+        .child(
+            col()
+                .w_full()
+                .px(space::S3)
+                .py(10.0)
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+                .child(field),
+        )
+        .children(note.map(|n| n.px(space::S3).py(6.0)))
         .child(list);
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
+}
+
+/// A path with its folder quieter than its file's name, as the Tauri review's path label.
+fn path_label(path: &str, t: &Tokens) -> El {
+    let at = path.rfind('/').map_or(0, |i| i + 1);
+    let (dir, name) = path.split_at(at);
+    row()
+        .children((!dir.is_empty()).then(|| {
+            text(dir.to_owned())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_muted)
+        }))
+        .child(
+            text(name.to_owned())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_primary),
+        )
 }

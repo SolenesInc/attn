@@ -33,8 +33,10 @@ use document::Part;
 use frames::{Frame, MapPlace, Side};
 
 /// The reading column's width, as the markdown reader's card caps it.
-const CARD_MAX_WIDTH: f32 = 832.0;
-const CARD_PADDING: f32 = 20.0;
+/// The review's card, as the Tauri review reader widens the markdown reader's.
+pub(crate) const CARD_MAX_WIDTH: f32 = 1180.0;
+/// How many characters wide prose and headings run, as the Tauri review reader caps them.
+const PROSE_CHARACTERS: usize = 68;
 /// The frames the reader draws.
 const BUILT: [Frame; 3] = [Frame::Brief, Frame::Walkthrough, Frame::Map];
 /// The Walkthrough's script column is this wide, at most this share of the tile.
@@ -573,9 +575,7 @@ fn hash(text: &str) -> u64 {
 /// card.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn body(
-    tile: &str,
-    view: &str,
-    title: &str,
+    (tile, view, title, padding): (&str, &str, &str, f32),
     (source, bundle, revision): (&str, &ReviewBundle, u64),
     readings: &crate::markdown::Readings,
     (document, pictures, pictured): (
@@ -636,150 +636,161 @@ pub(crate) fn body(
         if !reading.shows(at) {
             return None;
         }
+        let margins = part.margins();
         let key = format!("{prefix}.part.{at}");
         let on = |place: &Place| place.part == at;
         let current = cursor.filter(|&i| on(&reading.places[i]));
-        Some(match part {
-            Part::Prose { source: range, .. } => {
-                let text = &reading.source[range.clone()];
-                let at = (text, range.start, read_version, *t);
-                let block = memo(format!("{key}.text"), at, || read(range.clone()));
-                let el = place_press(col().key(key.clone()).w_full().child(block), tile, key);
-                cursor_frame(el, current.is_some(), t)
-            }
-            Part::Summary => keys::summary(
-                tile,
-                bundle,
-                review,
-                current.map(|i| &reading.places[i].spot),
-                t,
-            ),
-            Part::Stop(index) if reading.frame == Frame::Walkthrough => {
-                let stage = reading
-                    .stage
-                    .filter(|(s, _)| s == index)
-                    .map(|(_, line)| line);
-                let script = stop::script(&key, &bundle.stops[*index], stage, t);
-                if stage.is_some() {
-                    script
-                } else {
-                    let stop = *index;
-                    script.on_press_tx(pressed(tile, move |state, tile, message, tx| {
-                        let Some(bundle) = message.review.as_ref() else {
-                            return;
-                        };
-                        let parts = document::parts(&message.content, bundle);
-                        apply(
-                            state,
-                            tile,
-                            message,
-                            &parts,
-                            None,
-                            Some(Move::Stage(stop, None)),
-                            tx,
-                        );
-                    }))
+        Some((
+            margins,
+            match part {
+                Part::Prose {
+                    source: range,
+                    block: kind,
+                } => {
+                    let text = &reading.source[range.clone()];
+                    let at = (text, range.start, read_version, *t);
+                    let block = memo(format!("{key}.text"), at, || read(range.clone()));
+                    let el = col()
+                        .key(key.clone())
+                        .w_full()
+                        .max_w(prose_width(t, *kind))
+                        .child(block);
+                    cursor_frame(place_press(el, tile, key), current.is_some(), t)
                 }
-            }
-            Part::Stop(index) => {
-                let first = reading.places.iter().position(on).unwrap_or(0);
-                let row = current.map(|i| i - first);
-                let s = &bundle.stops[*index];
-                let colors = reviews.colors(&s.path, &s.file_hash);
-                let rows = reading.rows_of(*index);
-                let on = marks_on(&s.path);
-                let selected_places = current
-                    .filter(|_| review.select_from.is_some())
-                    .and_then(|c| selected_places(&reading, review, c))
-                    .map(|(a, b)| (a - first, b - first));
-                let selected = current
-                    .filter(|_| review.select_from.is_some())
-                    .and_then(|c| selected_rows(&reading, review, c))
-                    .map(|(_, a, b)| (a, b));
-                let marked: Vec<_> = on
-                    .iter()
-                    .map(|(l, m)| (*l, m.id.clone(), m.text.clone(), m.answer.clone()))
-                    .collect();
-                let version = (
-                    revision,
-                    row,
-                    selected,
-                    colors.is_some(),
-                    rows.len(),
-                    marked,
-                    asking.clone(),
-                    pictured,
-                    *t,
-                );
-                memo(key.clone(), version, || {
-                    if blocks::is_document(&s.path) {
-                        let file = crate::markdown::Document {
-                            path: in_repository(bundle, &s.path),
-                            ..document.clone()
-                        };
-                        return blocks::view(
-                            (tile, &key, host.is_none()),
-                            s,
-                            (&file, pictures),
-                            (rows, &blocks::blocks(rows)),
-                            (row, selected_places),
-                            &on,
-                            t,
-                        );
+                Part::Summary => keys::summary(
+                    tile,
+                    bundle,
+                    review,
+                    current.map(|i| &reading.places[i].spot),
+                    t,
+                ),
+                Part::Stop(index) if reading.frame == Frame::Walkthrough => {
+                    let stage = reading
+                        .stage
+                        .filter(|(s, _)| s == index)
+                        .map(|(_, line)| line);
+                    let script = stop::script(&key, &bundle.stops[*index], stage, t);
+                    if stage.is_some() {
+                        script
+                    } else {
+                        let stop = *index;
+                        script.on_press_tx(pressed(tile, move |state, tile, message, tx| {
+                            let Some(bundle) = message.review.as_ref() else {
+                                return;
+                            };
+                            let parts = document::parts(&message.content, bundle);
+                            apply(
+                                state,
+                                tile,
+                                message,
+                                &parts,
+                                None,
+                                Some(Move::Stage(stop, None)),
+                                tx,
+                            );
+                        }))
                     }
-                    stop::stop(
-                        (tile, &key),
-                        s,
-                        rows,
-                        (row, selected),
-                        (&on, &asking),
-                        colors.as_deref(),
-                        t,
-                    )
-                })
-            }
-            Part::NotShown => keys::not_shown(
-                (Some(tile), &key),
-                bundle,
-                current.map(|i| &reading.places[i].spot),
-                t,
-            ),
-            Part::Diagram(index) => {
-                let flow = &bundle.flows[*index];
-                let current = current.map(|i| reading.places[i].key.clone());
-                let drawn = memo(key.clone(), (revision, current.clone(), *t), || {
-                    diagram::diagram(
-                        &key,
-                        flow,
-                        &|m| {
-                            let place = m.stop_line.map(|_| arrow_key(&key, m.line));
-                            diagram::Mark {
-                                current: place.is_some() && place == current,
-                                place: place.map(|key| (tile.to_owned(), key)),
-                            }
-                        },
-                        t,
-                    )
-                });
-                let switch = (sides && flow.side.is_some())
-                    .then(|| side_switch(&format!("{key}.side"), tile, reading.side, t));
-                col().w_full().gap(space::S1).children(switch).child(drawn)
-            }
-        })
+                }
+                Part::Stop(index) => {
+                    let first = reading.places.iter().position(on).unwrap_or(0);
+                    let row = current.map(|i| i - first);
+                    let s = &bundle.stops[*index];
+                    let colors = reviews.colors(&s.path, &s.file_hash);
+                    let rows = reading.rows_of(*index);
+                    let on = marks_on(&s.path);
+                    let selected_places = current
+                        .filter(|_| review.select_from.is_some())
+                        .and_then(|c| selected_places(&reading, review, c))
+                        .map(|(a, b)| (a - first, b - first));
+                    let selected = current
+                        .filter(|_| review.select_from.is_some())
+                        .and_then(|c| selected_rows(&reading, review, c))
+                        .map(|(_, a, b)| (a, b));
+                    let marked: Vec<_> = on
+                        .iter()
+                        .map(|(l, m)| (*l, m.id.clone(), m.text.clone(), m.answer.clone()))
+                        .collect();
+                    let version = (
+                        revision,
+                        row,
+                        selected,
+                        colors.is_some(),
+                        rows.len(),
+                        marked,
+                        asking.clone(),
+                        pictured,
+                        *t,
+                    );
+                    memo(key.clone(), version, || {
+                        if blocks::is_document(&s.path) {
+                            let file = crate::markdown::Document {
+                                path: in_repository(bundle, &s.path),
+                                ..document.clone()
+                            };
+                            return blocks::view(
+                                (tile, &key, host.is_none()),
+                                s,
+                                (&file, pictures),
+                                (rows, &blocks::blocks(rows)),
+                                (row, selected_places),
+                                &on,
+                                t,
+                            );
+                        }
+                        stop::stop(
+                            (tile, &key),
+                            s,
+                            rows,
+                            (row, selected),
+                            (&on, &asking),
+                            colors.as_deref(),
+                            t,
+                        )
+                    })
+                }
+                Part::NotShown => keys::not_shown(
+                    (Some(tile), &key),
+                    bundle,
+                    current.map(|i| &reading.places[i].spot),
+                    t,
+                ),
+                Part::Diagram(index) => {
+                    let flow = &bundle.flows[*index];
+                    let current = current.map(|i| reading.places[i].key.clone());
+                    let drawn = memo(key.clone(), (revision, current.clone(), *t), || {
+                        diagram::diagram(
+                            &key,
+                            flow,
+                            &|m| {
+                                let place = m.stop_line.map(|_| arrow_key(&key, m.line));
+                                diagram::Mark {
+                                    current: place.is_some() && place == current,
+                                    place: place.map(|key| (tile.to_owned(), key)),
+                                }
+                            },
+                            t,
+                        )
+                    });
+                    let switch = (sides && flow.side.is_some())
+                        .then(|| side_switch(&format!("{key}.side"), tile, reading.side, t));
+                    col().w_full().gap(space::S1).children(switch).child(drawn)
+                }
+            },
+        ))
     });
     let card = col()
         .key(card_key(tile))
         .w_full()
         .max_w(CARD_MAX_WIDTH)
-        .padding(CARD_PADDING)
-        .gap(space::S3)
+        .padding(padding)
         .radius(radius::LG)
         .fill(t.bg_panel)
         .border(1.0, t.border.alpha(0.5))
-        .children(parts)
+        .children(spaced(parts))
         .children((!moved.is_empty()).then(|| {
             col()
                 .key(format!("{prefix}.moved"))
+                .mt(21.0)
                 .role("region")
                 .label("Moved notes")
                 .w_full()
@@ -798,8 +809,6 @@ pub(crate) fn body(
         .key(view)
         .role("document")
         .label(title)
-        .w_full()
-        .grow(1.0)
         .min_h(0.0)
         .scroll(ScrollSpec {
             stick_bottom: false,
@@ -817,12 +826,12 @@ pub(crate) fn body(
         document = document.active_descendant(key);
     }
     let frame = match reading.frame {
-        Frame::Map => map(tile, &reading, document, revision, t),
+        Frame::Map => map(tile, &reading, document.w_full().grow(1.0), revision, t),
         Frame::Walkthrough => {
-            let width = rune::memo::layout(&prefix).map_or(0.0, |r| r[2]);
             let script = (!review.filled).then(|| {
                 document
-                    .w(SCRIPT_WIDTH.min(width * SCRIPT_SHARE))
+                    .w_frac(SCRIPT_SHARE)
+                    .max_w(SCRIPT_WIDTH)
                     .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
             });
             let stage = match review.files.last() {
@@ -856,7 +865,7 @@ pub(crate) fn body(
                 .children(script)
                 .child(stage)
         }
-        Frame::Brief => document,
+        Frame::Brief => document.w_full().grow(1.0),
     };
     let frame = match review
         .files
@@ -953,7 +962,17 @@ pub(crate) fn body(
         )
         .children(review.sending.as_ref().map(|(verdict, destination)| {
             let carried: Vec<&attn_protocol::MarkdownAnnotation> = draft.iter().collect();
-            let sheet = marks::sheet(tile, &carried, *verdict, destination.as_ref(), sent, t);
+            let to = destination.as_ref().map(|d| match d {
+                crate::markdown::drafts::To::Session(id) => marks::Recipient::Session(
+                    servers
+                        .sessions
+                        .iter()
+                        .find(|s| &s.id == id)
+                        .map_or_else(|| id.clone(), crate::sidebar::model::display_name),
+                ),
+                crate::markdown::drafts::To::Seed(seed) => marks::Recipient::Seed(seed.clone()),
+            });
+            let sheet = marks::sheet(tile, &carried, *verdict, to, sent, t);
             floating(sheet, 0.10, 640.0, 0.92)
         }))
         .children(reviews.search.as_ref().filter(|s| s.tile == tile).map(|s| {
@@ -964,6 +983,31 @@ pub(crate) fn body(
                 0.90,
             )
         }))
+}
+
+/// Each part with the space above it that its margins and the margins of the part before it
+/// collapse into; the first part starts at the card's padding.
+fn spaced(parts: impl Iterator<Item = ((f32, f32), El)>) -> Vec<El> {
+    let mut below = None;
+    parts
+        .map(|((top, bottom), el)| {
+            let gap = below.map_or(0.0, |b: f32| b.max(top));
+            below = Some(bottom);
+            el.mt(gap)
+        })
+        .collect()
+}
+
+/// How wide a prose part of kind `block` runs: its font's 68 characters, as CSS's `68ch`, for
+/// the text blocks the Tauri review caps; a code block, table or anything else takes the card.
+fn prose_width(t: &Tokens, block: document::Prose) -> f32 {
+    let heading = match block {
+        document::Prose::Heading(level) => Some(level),
+        document::Prose::Other => return f32::INFINITY,
+        _ => None,
+    };
+    let font = crate::markdown::font(t, heading);
+    rune::text::measure(&"0".repeat(PROSE_CHARACTERS), &[], font, None).0
 }
 
 /// `panel` floating over the reader as the Tauri app's review sheets do: centered across,
@@ -1133,14 +1177,27 @@ fn participant(flow: &ReviewFlow, id: &str) -> String {
     label[..end].trim().to_owned()
 }
 
-/// A place's element, marked when the cursor stands on it.
+/// A place's element, marked when the cursor stands on it: the Tauri review's accent tint
+/// over whatever fills it, with an accent bar inside its left edge.
 pub(crate) fn cursor_frame(el: El, current: bool, t: &Tokens) -> El {
-    let el = el.radius(radius::SM).px(space::S2);
     if current {
-        el.fill(t.bg_selected).focus_selected(true)
+        let tint = cursor_tint(t);
+        el.gradient(tint, tint)
+            .border_sides([0.0, 0.0, 0.0, 2.0], t.accent)
+            .focus_selected(true)
     } else {
         el
     }
+}
+
+/// The tint that marks the place the cursor is on, a search result picked or lines selected.
+pub(crate) fn cursor_tint(t: &Tokens) -> rune::Color {
+    t.accent.alpha(0.22)
+}
+
+/// The quieter tint of a picked frame or side, as the Tauri review's range color.
+pub(crate) fn range_tint(t: &Tokens) -> rune::Color {
+    t.accent.alpha(0.08)
 }
 
 /// The send key on a review tile that holds the keyboard: the send sheet opens with the
@@ -1253,13 +1310,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         let picked = marks::Verdict::of_key(typed);
         match ev.key {
             Key::Escape => review.sending = None,
-            Key::Enter => {
-                if let Some(to) = to {
-                    let moved = moved_marks(state, &tile, &message, bundle);
-                    let uri = drafts_uri(&message);
-                    marks::send(state, (&tile, &uri), to, verdict, moved, tx);
-                }
-            }
+            Key::Enter => send_review(state, &tile, &message, (verdict, to), tx),
             _ if let Some(picked) = picked => pick_verdict(review, picked),
             _ => {}
         }
@@ -1620,7 +1671,17 @@ fn pressed(
 /// `el`, place `key` of review tile `tile`, where a press puts the cursor, then acts as Enter
 /// does on the facts, a changed file and a Not shown entry.
 pub(crate) fn place_press(el: El, tile: &str, key: String) -> El {
-    el.on_press_tx(pressed(tile, move |state, tile, message, tx| {
+    el.on_press_tx(press_place(tile, key, false))
+}
+
+/// `el`, a stop's file button in review tile `tile`, where a press puts the cursor on place
+/// `key` of the stop and opens the file there, as Enter does.
+pub(crate) fn file_press(el: El, tile: &str, key: String) -> El {
+    el.on_press_tx(press_place(tile, key, true))
+}
+
+fn press_place(tile: &str, key: String, opens: bool) -> impl Fn(&mut State, &mut Tx) + 'static {
+    pressed(tile, move |state, tile, message, tx| {
         let Some(bundle) = message.review.as_ref() else {
             return;
         };
@@ -1634,10 +1695,11 @@ pub(crate) fn place_press(el: El, tile: &str, key: String) -> El {
         let Some(at) = reading.places.iter().position(|p| p.key == key) else {
             return;
         };
-        let acts = matches!(
-            reading.places[at].spot,
-            Spot::Facts | Spot::File(_) | Spot::NotShown(_)
-        );
+        let acts = opens
+            || matches!(
+                reading.places[at].spot,
+                Spot::Facts | Spot::File(_) | Spot::NotShown(_)
+            );
         let to = acts
             .then(|| open_place(review, &reading, at, false))
             .flatten();
@@ -1645,7 +1707,7 @@ pub(crate) fn place_press(el: El, tile: &str, key: String) -> El {
         let to_line = Some(Move::Line(at, false));
         apply(state, tile, message, parts, Some(&reading), to_line, tx);
         apply(state, tile, message, parts, Some(&reading), to, tx);
-    }))
+    })
 }
 
 /// `el`, frame `frame`'s tab in review tile `tile`, where a press switches to the frame as its
@@ -1692,6 +1754,39 @@ pub(crate) fn verdict_press(el: El, tile: &str, verdict: marks::Verdict) -> El {
         }
         state.readings.revision += 1;
     }))
+}
+
+/// `el`, the send sheet's Send in review tile `tile`, where a press sends as Enter does.
+pub(crate) fn send_press(el: El, tile: &str) -> El {
+    el.on_press_tx(pressed(tile, move |state, tile, message, tx| {
+        let sending = state
+            .readings
+            .reviews
+            .tiles
+            .get(tile)
+            .and_then(|r| r.sending.clone());
+        if let Some(sending) = sending {
+            send_review(state, tile, message, sending, tx);
+        }
+        state.readings.revision += 1;
+    }))
+}
+
+/// Sends review tile `tile`'s review with `verdict` to `to`, when the tile has somewhere to
+/// send it.
+fn send_review(
+    state: &mut State,
+    tile: &str,
+    message: &attn_protocol::DesktopTileContentMessage,
+    (verdict, to): (marks::Verdict, Option<crate::markdown::drafts::To>),
+    tx: &mut Tx,
+) {
+    let (Some(to), Some(bundle)) = (to, message.review.as_ref()) else {
+        return;
+    };
+    let moved = moved_marks(state, tile, message, bundle);
+    let uri = drafts_uri(message);
+    marks::send(state, (tile, &uri), to, verdict, moved, tx);
 }
 
 /// Picks `verdict` in the send sheet, when it shows.

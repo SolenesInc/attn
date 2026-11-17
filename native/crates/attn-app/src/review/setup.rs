@@ -136,7 +136,7 @@ pub(crate) fn states(
                 "{language} setting up in {}",
                 crate::sidebar::model::display_name(agent)
             ))
-            .color(t.accent)
+            .color(t.text_secondary)
             .role("button")
             .key(format!("{}.server.{language}", super::prefix(tile)))
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -165,9 +165,9 @@ pub(crate) fn states(
         let said = said
             .key(format!("{}.server.{language}", super::prefix(tile)))
             .color(match n.state.as_str() {
-                "ready" => t.text_secondary,
-                "failed" => t.error,
-                _ => t.text_tertiary,
+                "ready" => t.success,
+                "missing" | "failed" => t.warning,
+                _ => t.text_secondary,
             });
         let keys = candidate.is_some_and(|o| std::ptr::eq(o, n)).then(|| {
             let press = |keys: &str, what: &str, key: &str, act: fn(&mut State, &str, &mut Tx)| {
@@ -203,7 +203,7 @@ pub(crate) fn states(
             .key(format!("{}.servers", super::prefix(tile)))
             .role("group")
             .label("Language servers")
-            .gap(space::S3)
+            .gap(16.0)
             .children(entries),
     )
 }

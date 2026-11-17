@@ -222,6 +222,12 @@ outline!(
     r#"<path d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10"/>"#
 );
 outline!(
+    FOCUS_DOCUMENT,
+    16.0,
+    "1.5",
+    r#"<path d="M2.75 6V2.75H6M10 2.75h3.25V6M13.25 10v3.25H10M6 13.25H2.75V10"/>"#
+);
+outline!(
     UNFOCUS,
     16.0,
     "1.4",
@@ -238,12 +244,6 @@ outline!(
     16.0,
     "1.3",
     r#"<path d="M6.5 13.5h-4v-4M2.5 13.5L8 8M9.5 2.5h4v10h-10"/>"#
-);
-outline!(
-    FOCUS_DOCUMENT,
-    16.0,
-    "1.5",
-    r#"<path d="M2.75 6V2.75H6M10 2.75h3.25V6M13.25 10v3.25H10M6 13.25H2.75V10"/>"#
 );
 outline!(
     REVIEW_NOTES,

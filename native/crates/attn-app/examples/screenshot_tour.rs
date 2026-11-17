@@ -22,9 +22,9 @@ use attn_protocol::{
     InitialStateMessage, InspectPathResultMessage, LaunchDesktopResultMessage,
     LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView, PathInspection, PhoneLink,
     PhonesUpdatedMessage, Profile, RecentLocation, RecentLocationsResultMessage,
-    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow,
-    ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
-    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
+    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNotShown,
+    ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge,
+    SeedNote, SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
     SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
     SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
     SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree, WorktreeListResult,
@@ -86,20 +86,34 @@ const REVIEW: &str = "---
 attn: review
 frame: brief
 repository: /repo
-base: 4be1c0d
-head: 9f3a7e2
+base: 4139a109c
+head: 12e1c7870
 ---
 
 # Name the sum
 
-Add used to return its sum directly.
+The total was computed inline. It now comes from `sum_to`, so the limit has a name.
 
-## Add keeps its result
+> [!IMPORTANT]
+> One line changes behavior: `main` calls `sum_to(10)`.
 
-### calc.go:3-6
+For example, `sum_to(3)` returns 6.
 
-- L4!: The sum gets a name.
-- L5: Then it is returned.
+## main asks the helper
+
+### totals.rs:1-5
+
+- L3!: The inline range is gone.
+
+## The helper owns the range
+
+### totals.rs:7-9
+
+- L8: Same range, with the limit as a parameter.
+
+## Not shown
+
+- README.md: wording only
 ";
 
 fn settings(dark: bool) -> Option<BTreeMap<String, String>> {
@@ -211,9 +225,19 @@ fn start(daemon: Daemon) -> World {
 }
 
 fn deliver(world: &mut World, path: &str, content: &str, review: Option<ReviewBundle>) {
+    deliver_to(world, "m", path, content, review);
+}
+
+fn deliver_to(
+    world: &mut World,
+    tile: &str,
+    path: &str,
+    content: &str,
+    review: Option<ReviewBundle>,
+) {
     world.daemon.emit(DesktopTileContentMessage {
         desktop_id: DESKTOP.into(),
-        tile_id: "m".into(),
+        tile_id: tile.into(),
         tile_kind: "markdown".into(),
         path: path.into(),
         content: content.into(),
@@ -371,41 +395,104 @@ fn review_note(line: i64, at: i64, look: bool, text: &str) -> ReviewNote {
 }
 
 fn review() -> ReviewBundle {
+    let stop = |heading_line: i64, (now_from, now_to): (i64, i64), rows, notes| ReviewStop {
+        heading_line,
+        path: "totals.rs".into(),
+        from: now_from,
+        to: now_to,
+        now_from,
+        now_to,
+        file_hash: "h1".into(),
+        rows,
+        notes,
+        ..ReviewStop::default()
+    };
+    let file = |path: &str, added, removed| ReviewFile {
+        path: path.into(),
+        status: "modified".into(),
+        added,
+        removed,
+        ..ReviewFile::default()
+    };
     ReviewBundle {
         frame: "brief".into(),
         repository: "/repo".into(),
-        base: Some("4be1c0d".into()),
-        head: "9f3a7e2".into(),
-        stops: vec![ReviewStop {
-            heading_line: 15,
-            path: "calc.go".into(),
-            from: 3,
-            to: 6,
-            now_from: 3,
-            now_to: 6,
-            file_hash: "h1".into(),
-            rows: vec![
-                review_line(" ", Some(3), Some(3), "func Add(a, b int) int {"),
-                review_line("-", Some(4), None, "\treturn a + b // the old way"),
-                review_line("+", None, Some(4), "\tsum := a + b"),
-                review_line("+", None, Some(5), "\treturn sum"),
-                review_line(" ", Some(5), Some(6), "}"),
-            ],
-            notes: vec![
-                review_note(17, 4, true, "The sum gets a name."),
-                review_note(18, 5, false, "Then it is returned."),
-            ],
-            ..ReviewStop::default()
-        }],
-        files: vec![ReviewFile {
-            path: "calc.go".into(),
-            status: "modified".into(),
-            added: 2,
-            removed: 1,
-            ..ReviewFile::default()
+        base: Some("4139a109c".into()),
+        head: "12e1c7870".into(),
+        stops: vec![
+            stop(
+                20,
+                (1, 5),
+                vec![
+                    review_line("-", Some(1), None, "/// Sums the numbers from one to ten."),
+                    review_line(
+                        "+",
+                        None,
+                        Some(1),
+                        "/// Sums the numbers from one to a limit.",
+                    ),
+                    review_line(" ", Some(2), Some(2), "fn main() {"),
+                    review_line("-", Some(3), None, "    let total: u32 = (1..=10).sum();"),
+                    review_line("+", None, Some(3), "    let total = sum_to(10);"),
+                    review_line(" ", Some(4), Some(4), "    println!(\"total = {total}\");"),
+                    review_line("+", None, Some(5), "}"),
+                ],
+                vec![review_note(22, 3, true, "The inline range is gone.")],
+            ),
+            stop(
+                26,
+                (7, 9),
+                vec![
+                    review_line("+", None, Some(7), "fn sum_to(limit: u32) -> u32 {"),
+                    review_line("+", None, Some(8), "    (1..=limit).sum()"),
+                    review_line(" ", Some(5), Some(9), "}"),
+                ],
+                vec![review_note(
+                    28,
+                    8,
+                    false,
+                    "Same range, with the limit as a parameter.",
+                )],
+            ),
+        ],
+        files: vec![file("totals.rs", 6, 2), file("README.md", 1, 1)],
+        not_shown: vec![ReviewNotShown {
+            path: "README.md".into(),
+            reason: "wording only".into(),
+            line: 32,
         }],
         ..ReviewBundle::default()
     }
+}
+
+/// The daemon reads `totals.rs` whole for the file view, as the Tauri audit's walkthrough shows it.
+fn serve_totals(daemon: &Daemon) {
+    daemon.on("review_file", |r: &Request| {
+        let rows = vec![
+            review_line("-", Some(1), None, "/// Sums the numbers from one to ten."),
+            review_line(
+                "+",
+                None,
+                Some(1),
+                "/// Sums the numbers from one to a limit.",
+            ),
+            review_line(" ", Some(2), Some(2), "fn main() {"),
+            review_line("-", Some(3), None, "    let total: u32 = (1..=10).sum();"),
+            review_line("+", None, Some(3), "    let total = sum_to(10);"),
+            review_line(" ", Some(4), Some(4), "    println!(\"total = {total}\");"),
+            review_line("+", None, Some(5), "}"),
+            review_line("+", None, Some(6), ""),
+            review_line("+", None, Some(7), "fn sum_to(limit: u32) -> u32 {"),
+            review_line("+", None, Some(8), "    (1..=limit).sum()"),
+            review_line(" ", Some(5), Some(9), "}"),
+            review_line(" ", Some(6), Some(10), ""),
+            review_line(" ", Some(7), Some(11), "fn label(n: u32) -> String {"),
+            review_line(" ", Some(8), Some(12), "    format!(\"item {n}\")"),
+            review_line(" ", Some(9), Some(13), "}"),
+        ];
+        json!({"event": "review_file_result", "success": true, "path": r["path"],
+            "rows": rows, "hash": "h1"})
+    });
 }
 
 fn pixels<S: 'static>(
@@ -1720,6 +1807,7 @@ fn notebook_tree(dark: bool) {
 fn review_file(dark: bool) {
     let daemon =
         Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
+    serve_totals(&daemon);
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
     world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
@@ -1736,6 +1824,49 @@ fn review_keys(dark: bool) {
     world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
     world.gesture(|app| app.type_text("?"));
     snap(&mut world, "review-keys", dark);
+}
+
+/// The review shown alone on its desktop, bound to agent a's session, beside a second open
+/// document, as the Tauri audit shot it: its tabs over the tile, its header and its brief.
+fn review_alone(dark: bool) -> World {
+    let mut bound = document_tile("m", "/repo/review.md");
+    bound["tile_session_id"] = json!("s0");
+    let tiles = row(vec![bound, document_tile("n", "/repo/notes.md")]);
+    let mut state = initial(dark, tiles, vec![]);
+    if let Some(desktop) = state.desktops.as_mut().and_then(|d| d.first_mut()) {
+        desktop.active_pane_id = "m".into();
+    }
+    let daemon = Daemon::scripted().state(state);
+    serve_totals(&daemon);
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
+    deliver_to(&mut world, "n", "/repo/notes.md", "# Notes\n", None);
+    world.gesture(|app| app.click(Target::key("tile.m.focus")));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    world
+}
+
+fn review_focused(dark: bool) {
+    let mut world = review_alone(dark);
+    snap(&mut world, "review-focused", dark);
+}
+
+fn review_walkthrough(dark: bool) {
+    let mut world = review_alone(dark);
+    world.gesture(|app| app.type_text("2"));
+    snap(&mut world, "review-walkthrough", dark);
+}
+
+fn review_search(dark: bool) {
+    let mut world = review_alone(dark);
+    world.gesture(|app| app.type_text("/"));
+    snap(&mut world, "review-search", dark);
+}
+
+fn review_send_sheet(dark: bool) {
+    let mut world = review_alone(dark);
+    press(&mut world, Action::MarkdownSendAnnotations);
+    snap(&mut world, "review-send-sheet", dark);
 }
 
 fn launcher_empty_desktop(dark: bool) {
@@ -2770,6 +2901,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         notebook_tree(dark);
         review_keys(dark);
         review_file(dark);
+        review_focused(dark);
+        review_walkthrough(dark);
+        review_search(dark);
+        review_send_sheet(dark);
         ledger_seeded(dark);
         ledger_worktrees(dark);
         chief_setup(dark);

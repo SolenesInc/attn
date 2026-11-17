@@ -271,22 +271,12 @@ impl Desk {
     }
 
     /// Where the tile area lays out `rendered`, the screen it shows, from the area's top left
-    /// corner: each split at the ratio this window shows, and a tile shown alone inset as the
-    /// Tauri app's focus mode insets it.
-    pub(crate) fn placement(&self, rendered: &Node, alone: bool) -> layout::Placement {
+    /// corner: each split at the ratio this window shows.
+    pub(crate) fn placement(&self, rendered: &Node) -> layout::Placement {
         let (w, h) = self.area().map_or((0.0, 0.0), |a| (a.w, a.h));
-        let inset = if alone { view::ALONE_INSET } else { 0.0 };
-        let mut placed = layout::place(
-            rendered,
-            ((w - 2.0 * inset).max(0.0), (h - 2.0 * inset).max(0.0)),
-            view::DIVIDER_PX,
-            &|split| self.ratios.get(&split.id).map_or(split.ratio, |o| o.ratio),
-        );
-        for (_, rect) in &mut placed.leaves {
-            rect[0] += inset;
-            rect[1] += inset;
-        }
-        placed
+        layout::place(rendered, (w, h), view::DIVIDER_PX, &|split| {
+            self.ratios.get(&split.id).map_or(split.ratio, |o| o.ratio)
+        })
     }
 
     /// The split whose divider a drag holds.

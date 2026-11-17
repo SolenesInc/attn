@@ -45,14 +45,15 @@ fn card_padding(room: f32) -> f32 {
     }
 }
 
-/// The card's padding and the text column inside it, in a document view `area` points across.
-fn card_fit(area: Option<u32>) -> (f32, Option<f32>) {
+/// The card's padding and the text column inside it, in a document view `area` points across,
+/// for a card at most `widest` points wide.
+fn card_fit(area: Option<u32>, widest: f32) -> (f32, Option<f32>) {
     let Some(area) = area else {
         return (card_padding(0.0), None);
     };
     let room = area as f32 - 2.0 * space::S3;
     let padding = card_padding(room);
-    let text = room.min(CARD_MAX_WIDTH) - 2.0 * (padding + CARD_BORDER);
+    let text = room.min(widest) - 2.0 * (padding + CARD_BORDER);
     (padding, Some(text.max(0.0)))
 }
 
@@ -92,7 +93,12 @@ pub(crate) fn body(
     .uri();
     let marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
     let kept = readings.kept(&view);
-    let (padding, text_width) = card_fit(kept.width);
+    let widest = if content.review.is_some() {
+        crate::review::CARD_MAX_WIDTH
+    } else {
+        CARD_MAX_WIDTH
+    };
+    let (padding, text_width) = card_fit(kept.width, widest);
     let version = (
         *revision,
         title,
@@ -170,9 +176,7 @@ pub(crate) fn body(
             Vec::new()
         };
         return crate::review::body(
-            tile,
-            &view,
-            title,
+            (tile, &view, title, padding),
             (&content.content, bundle, *revision),
             readings,
             (
@@ -431,17 +435,7 @@ fn details_order(source: &str) -> Rc<dyn Fn(usize) -> usize> {
 /// point labels.
 pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     let kit = attn_ui::kit(t);
-    let body = TextStyle {
-        size: 15.0,
-        line_height: 24.4,
-        ..kit.ty.body
-    };
-    let heading = |size: f32, weight: f32, line_height: f32| TextStyle {
-        size,
-        weight,
-        line_height,
-        ..body
-    };
+    let body = font(t, None);
     let small = TextStyle {
         size: 14.0,
         line_height: 22.75,
@@ -449,11 +443,15 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     };
     MarkdownStyle::from_kit(kit)
         .body_font(body)
-        .heading_font(1, heading(19.25, 700.0, 25.0).tracking(-0.025 * 19.25))
-        .heading_font(2, heading(16.625, 600.0, 23.3))
-        .heading_font(3, heading(14.0, 600.0, 21.7))
-        .heading_font(4, heading(14.0, 600.0, 21.7))
+        .heading_font(1, font(t, Some(1)))
+        .heading_font(2, font(t, Some(2)))
+        .heading_font(3, font(t, Some(3)))
+        .heading_font(4, font(t, Some(4)))
+        .text(t.text_primary.alpha(0.9))
+        .heading_text(1, t.text_primary)
+        .heading_text(3, t.text_primary.alpha(0.8))
         .deep_heading(t.text_primary)
+        .syntax_theme(attn_ui::colors::syntax(t.dark))
         .list_font(small)
         .list_marker(t.accent.alpha(0.6))
         .inline_code_font(12.25 / 15.0, 400.0)
@@ -488,6 +486,30 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
             Color::TRANSPARENT,
             t.text_secondary.alpha(0.5),
         )
+}
+
+/// The reader's paragraph font, or its font for headings of `level`: the `h1` set tight.
+pub(crate) fn font(t: &Tokens, level: Option<u8>) -> TextStyle {
+    let body = TextStyle {
+        size: 15.0,
+        line_height: 24.4,
+        ..attn_ui::kit(t).ty.body
+    };
+    let heading = |size: f32, weight: f32, line_height: f32| TextStyle {
+        size,
+        weight,
+        line_height,
+        ..body
+    };
+    match level {
+        None => body,
+        Some(1) => TextStyle {
+            tracking: -0.025 * 19.25,
+            ..heading(19.25, 700.0, 25.0)
+        },
+        Some(2) => heading(16.625, 600.0, 23.3),
+        Some(_) => heading(14.0, 600.0, 21.7),
+    }
 }
 
 /// An image with no picture to show, in the Tauri reader's words: for a document's local file,

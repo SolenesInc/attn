@@ -251,21 +251,6 @@ pub fn tile_title(
     {
         return title;
     }
-    let basename = |path: &str| {
-        let trimmed = path.trim_end_matches('/');
-        trimmed
-            .rsplit('/')
-            .next()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(trimmed)
-            .to_owned()
-    };
-    let path_in = |params: &str| {
-        serde_json::from_str::<Value>(params)
-            .ok()
-            .and_then(|v| v.get("path").and_then(Value::as_str).map(str::to_owned))
-            .unwrap_or_else(|| params.to_owned())
-    };
     match kind {
         "seed" if !params.is_empty() => seeds
             .iter()
@@ -297,6 +282,36 @@ pub fn tile_title(
             }
         }
     }
+}
+
+/// What a review document's tab names it: its file's name, or for a seed its id, as the Tauri
+/// app's review tabs.
+pub fn document_tab(kind: &str, params: &str) -> String {
+    let path = if kind == "markdown" {
+        path_in(params)
+    } else {
+        params.to_owned()
+    };
+    Some(basename(&path))
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| kind.to_owned())
+}
+
+fn basename(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    trimmed
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(trimmed)
+        .to_owned()
+}
+
+fn path_in(params: &str) -> String {
+    serde_json::from_str::<Value>(params)
+        .ok()
+        .and_then(|v| v.get("path").and_then(Value::as_str).map(str::to_owned))
+        .unwrap_or_else(|| params.to_owned())
 }
 
 /// The longest a document's title runs before it ends in an ellipsis.

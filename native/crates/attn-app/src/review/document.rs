@@ -10,12 +10,9 @@ use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Part {
-    /// One top-level block of the document's markdown, by its source bytes, with its heading
-    /// level when it is a heading.
-    Prose {
-        source: Range<usize>,
-        heading: Option<u8>,
-    },
+    /// One top-level block of the document's markdown, by its source bytes, with what kind of
+    /// block it is.
+    Prose { source: Range<usize>, block: Prose },
     /// The change's facts and its changed files.
     Summary,
     /// The bundle's stop at this index, in place of its heading and note items.
@@ -26,16 +23,45 @@ pub(crate) enum Part {
     Diagram(usize),
 }
 
+/// The kinds of markdown block that space themselves apart differently in the document.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Prose {
+    Heading(u8),
+    Paragraph,
+    List,
+    Quote,
+    Other,
+}
+
 impl Part {
     /// A `#` or `##` heading, which opens a step of the review.
     pub(crate) fn opens_step(&self) -> bool {
         matches!(
             self,
             Part::Prose {
-                heading: Some(1 | 2),
+                block: Prose::Heading(1 | 2),
                 ..
             }
         )
+    }
+
+    /// The space this part wants above and below it, as the Tauri reader's CSS margins at its
+    /// 14 point rem; two neighbours' margins collapse into the larger.
+    pub(crate) fn margins(&self) -> (f32, f32) {
+        match self {
+            Part::Prose { block, .. } => match block {
+                Prose::Heading(1) => (21.0, 14.0),
+                Prose::Heading(2) => (28.0, 10.5),
+                Prose::Heading(3) => (21.0, 7.0),
+                Prose::Heading(_) => (14.0, 7.0),
+                Prose::Paragraph => (0.0, 14.0),
+                Prose::List => (5.25, 5.25),
+                Prose::Quote | Prose::Other => (14.0, 14.0),
+            },
+            Part::Summary | Part::Diagram(_) => (0.0, 14.0),
+            Part::Stop(_) => (14.0, 14.0),
+            Part::NotShown => (7.0, 0.0),
+        }
     }
 }
 
@@ -48,6 +74,8 @@ struct Block {
 enum Kind {
     Heading(u8),
     List(Vec<i64>),
+    Paragraph,
+    Quote,
     Other,
 }
 
@@ -71,13 +99,15 @@ pub(crate) fn parts(source: &str, bundle: &ReviewBundle) -> Vec<Part> {
             Kind::Heading(3) if let Some(stop) = stop_at(block.line) => Part::Stop(stop),
             Kind::List(items) if within(items, &note_lines) => continue,
             Kind::List(items) if within(items, &not_shown_lines) => Part::NotShown,
-            Kind::Heading(level) => Part::Prose {
-                source: block.source,
-                heading: Some(*level),
-            },
-            _ => Part::Prose {
-                source: block.source,
-                heading: None,
+            kind => Part::Prose {
+                source: block.source.clone(),
+                block: match kind {
+                    Kind::Heading(level) => Prose::Heading(*level),
+                    Kind::List(_) => Prose::List,
+                    Kind::Paragraph => Prose::Paragraph,
+                    Kind::Quote => Prose::Quote,
+                    Kind::Other => Prose::Other,
+                },
             },
         };
         parts.push(part);
@@ -86,7 +116,7 @@ pub(crate) fn parts(source: &str, bundle: &ReviewBundle) -> Vec<Part> {
         matches!(
             p,
             Part::Prose {
-                heading: Some(1),
+                block: Prose::Heading(1),
                 ..
             }
         )
@@ -117,6 +147,8 @@ fn blocks(source: &str) -> Vec<Block> {
                         }
                         Tag::Heading { level, .. } => Kind::Heading(*level as u8),
                         Tag::List(_) => Kind::List(Vec::new()),
+                        Tag::Paragraph => Kind::Paragraph,
+                        Tag::BlockQuote(_) => Kind::Quote,
                         _ => Kind::Other,
                     };
                     if !skipping {

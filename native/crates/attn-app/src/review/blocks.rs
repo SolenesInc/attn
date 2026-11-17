@@ -517,7 +517,7 @@ pub(super) fn view(
                 .iter()
                 .any(|b| n.now_from > 0 && within(b, n.now_to))
         })
-        .map(|n| super::stop::note(n, t));
+        .map(|n| super::stop::note(n, super::stop::note_indent(t), t));
     let shown = read.blocks.iter().enumerate().flat_map(|(i, b)| {
         let keyed = super::stop::row_key(key, i);
         let before = b
@@ -578,7 +578,7 @@ pub(super) fn view(
             .notes
             .iter()
             .filter(move |n| n.now_from > 0 && within(b, n.now_to))
-            .map(|n| super::stop::note(n, t));
+            .map(|n| super::stop::note(n, super::stop::note_indent(t), t));
         let marked = marks
             .iter()
             .filter(move |(at, _)| within(b, *at))
@@ -594,34 +594,33 @@ pub(super) fn view(
         .removed_after
         .as_deref()
         .map(|d| was(d, format!("{key}.removed"), file, t));
-    let empty = (read.blocks.is_empty() && read.removed_after.is_none()).then(|| {
-        text("The file is gone or empty now.")
-            .font(type_::BODY)
-            .color(t.text_tertiary)
+    let empty =
+        (read.blocks.is_empty() && read.removed_after.is_none()).then(|| super::stop::empty(t));
+    let first = read
+        .blocks
+        .iter()
+        .position(|b| b.from <= stop.now_to && b.to >= stop.now_from)
+        .unwrap_or(0);
+    let source = super::file_press(
+        super::stop::action("source", "↵", format!("{key}.file"), t),
+        tile,
+        super::stop::row_key(key, first),
+    );
+    let editor = editor.then(|| {
+        let (tile, path) = (tile.to_owned(), stop.path.clone());
+        super::stop::action("editor", "o", format!("{key}.editor"), t)
+            .label("Open in the editor")
+            .on_press_tx(move |state: &mut crate::State, tx: &mut rune::Tx| {
+                super::open_in_editor(state, &tile, path.clone(), tx)
+            })
     });
-    col()
-        .key(key.to_owned())
-        .role("group")
-        .label(format!("{} {}", stop.path, super::stop::range(stop, rows)))
-        .w_full()
-        .radius(radius::MD)
-        .border(1.0, t.border.alpha(0.6))
-        .fill(t.bg_tile)
-        .padding(space::S2)
-        .gap(space::S1)
-        .child(super::stop::header(stop, rows, t))
-        .children(editor.then(|| {
-            let (tile, path) = (tile.to_owned(), stop.path.clone());
-            text("o editor")
-                .key(format!("{key}.editor"))
-                .role("button")
-                .label("Open in the editor")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .on_press_tx(move |state: &mut crate::State, tx: &mut rune::Tx| {
-                    super::open_in_editor(state, &tile, path.clone(), tx)
-                })
-        }))
+    super::stop::card(key, stop, rows, t)
+        .child(super::stop::header(
+            stop,
+            rows,
+            editor.into_iter().chain([source]),
+            t,
+        ))
         .children(unplaced)
         .children(shown)
         .children(after)

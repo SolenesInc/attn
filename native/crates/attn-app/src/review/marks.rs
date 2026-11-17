@@ -44,6 +44,14 @@ impl Verdict {
         }
     }
 
+    fn title(self) -> &'static str {
+        match self {
+            Verdict::Approve => "Approve",
+            Verdict::RequestChanges => "Request changes",
+            Verdict::Comment => "Comment",
+        }
+    }
+
     pub(crate) fn of_key(key: &str) -> Option<Verdict> {
         match key {
             "a" => Some(Verdict::Approve),
@@ -404,11 +412,17 @@ fn unsent(sent: Option<&Sent>) -> Option<String> {
 
 /// The send: every mark it carries in reading order with its place, the verdict picked, and
 /// how the last send went when it did not.
+/// Who a sent review goes to, by the name the user knows it by.
+pub(crate) enum Recipient {
+    Session(String),
+    Seed(String),
+}
+
 pub(crate) fn sheet(
     tile: &str,
     marks: &[&MarkdownAnnotation],
     verdict: Verdict,
-    to: Option<&To>,
+    to: Option<Recipient>,
     sent: Option<&Sent>,
     t: &Tokens,
 ) -> El {
@@ -461,8 +475,8 @@ pub(crate) fn sheet(
     });
     let alone = marks.is_empty().then(|| {
         text("No notes: the verdict goes alone.")
-            .font(type_::BODY)
-            .color(t.text_tertiary)
+            .font(crate::markdown::font(t, None))
+            .color(t.text_primary.alpha(0.9))
     });
     let problem = unsent(sent).map(|why| {
         text(why)
@@ -482,38 +496,46 @@ pub(crate) fn sheet(
             Verdict::RequestChanges => "r",
             Verdict::Comment => "c",
         };
-        let choice = text(format!("{key} {}", v.name()))
+        let picked = v == verdict;
+        let choice = button(key, v.title(), picked, t)
             .role("radio")
             .label(v.name())
             .key(format!("review.send.verdict.{key}"))
-            .checked(v == verdict)
-            .font(type_::LABEL)
-            .color(if v == verdict {
-                t.text_primary
-            } else {
-                t.text_tertiary
-            });
+            .checked(picked);
         super::verdict_press(choice, tile, v)
     });
-    let to = match to {
-        Some(To::Session(s)) => format!("Goes to {s}."),
-        Some(To::Seed(s)) => format!("Goes onto {s}."),
-        None => "No session takes it: bind the document to a session first.".into(),
+    let (title, onto, problem_to) = match to {
+        Some(Recipient::Session(name)) => (format!("Send the review to {name}"), None, None),
+        Some(Recipient::Seed(seed)) => (
+            "Send the review".into(),
+            Some(format!("Goes onto {seed}.")),
+            None,
+        ),
+        None => (
+            "Send the review".into(),
+            None,
+            Some("Bind a session to this tile to send the review."),
+        ),
     };
+    let send = super::send_press(
+        button("↵", "Send", false, t)
+            .key("review.send.go")
+            .role("button")
+            .label("Send"),
+        tile,
+    );
     let panel = col()
         .key("review.send")
         .role("dialog")
         .label("Send the review")
         .w_full()
         .max_w(640.0)
-        .padding(space::S3)
+        .px(20.0)
+        .py(16.0)
         .gap(space::S2)
-        .child(
-            text("Send the review")
-                .font(type_::TITLE)
-                .color(t.text_primary),
-        )
-        .child(text(to).font(type_::LABEL).color(t.text_secondary))
+        .child(text(title).font(type_::TITLE).color(t.text_primary))
+        .children(onto.map(|o| text(o).font(type_::BODY).color(t.text_secondary)))
+        .children(problem_to.map(|p| text(p).font(type_::BODY).color(t.warning).wrap()))
         .child(
             col()
                 .role("list")
@@ -527,14 +549,27 @@ pub(crate) fn sheet(
             row()
                 .role("radiogroup")
                 .label("Verdict")
-                .gap(space::S3)
+                .gap(space::S2)
                 .children(choices),
         )
         .children(problem)
         .child(
-            text("a, r, c pick the verdict · ↵ send · esc back")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+            row()
+                .mt(4.0)
+                .gap(space::S2)
+                .items_center()
+                .child(send)
+                .child(
+                    row()
+                        .gap(4.0)
+                        .items_center()
+                        .child(super::keys::caps("esc", t))
+                        .child(
+                            text("keep reviewing")
+                                .font(type_::LABEL)
+                                .color(t.text_muted),
+                        ),
+                ),
         );
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
 }
@@ -568,4 +603,37 @@ pub(crate) fn send(
         },
         tx,
     );
+}
+
+/// A button of the send sheet: its key's cap and what it does, bordered, in the accent when
+/// `picked`, as the Tauri sheet's verdicts and Send.
+fn button(key: &str, what: &str, picked: bool, t: &Tokens) -> El {
+    let cap = super::keys::caps(key, t).a11y_hidden();
+    let words = text(what.to_owned())
+        .font(type_::BODY)
+        .color(if picked {
+            t.text_primary
+        } else {
+            t.text_secondary
+        })
+        .a11y_hidden();
+    let (first, second) = if key == "↵" {
+        (words, cap)
+    } else {
+        (cap, words)
+    };
+    row()
+        .gap(6.0)
+        .items_center()
+        .px(10.0)
+        .py(4.0)
+        .radius(6.0)
+        .border(1.0, if picked { t.accent } else { t.border })
+        .fill(if picked {
+            t.accent.alpha(0.14)
+        } else {
+            rune::Color::TRANSPARENT
+        })
+        .child(first)
+        .child(second)
 }

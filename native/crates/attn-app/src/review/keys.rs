@@ -48,49 +48,78 @@ pub(super) fn summary(
     let prefix = &prefix(tile);
     let added: i64 = bundle.files.iter().map(|f| f.added).sum();
     let removed: i64 = bundle.files.iter().map(|f| f.removed).sum();
-    let commits = match bundle.base.as_deref().filter(|b| !b.is_empty()) {
+    let base = bundle.base.as_deref().filter(|b| !b.is_empty());
+    let commits = match base {
         Some(base) => format!("base {} → head {}", short(base), short(&bundle.head)),
         None => format!("a tour at head {}", short(&bundle.head)),
     };
-    let facts = [
-        commits,
-        plural(bundle.files.len(), "file", "files"),
-        format!("+{added} −{removed}"),
-        format!(
-            "{} {} of {} changed lines",
-            plural(bundle.stops.len(), "stop shows", "stops show"),
-            shown_changed_lines(bundle),
-            added + removed
-        ),
-    ];
+    let stops = format!(
+        "{} {} of {} changed lines",
+        plural(bundle.stops.len(), "stop shows", "stops show"),
+        shown_changed_lines(bundle),
+        added + removed
+    );
+    let files = plural(bundle.files.len(), "file", "files");
     let toggle = (!bundle.files.is_empty()).then(|| {
         format!(
             "{} the files",
             if review.files_shown { "hide" } else { "show" }
         )
     });
-    let shown = facts.join(" · ");
+    let said = [
+        commits,
+        files.clone(),
+        format!("+{added} −{removed}"),
+        stops.clone(),
+    ]
+    .join(" · ");
     let said = match &toggle {
-        Some(toggle) => format!("{shown} · ↵ {toggle}"),
-        None => shown.clone(),
+        Some(toggle) => format!("{said} · ↵ {toggle}"),
+        None => said,
     };
+    let words = |w: &str| text(w.to_owned()).font(FACT).color(t.text_secondary);
+    let chip = |commit: &str| {
+        text(short(commit).to_owned())
+            .font(type_::MONO_CAPTION)
+            .color(t.text_secondary)
+            .px(6.0)
+            .py(2.0)
+            .radius(4.0)
+            .fill(t.bg_elevated)
+    };
+    let fact = || row().gap(4.0).items_center();
+    let commits = match base {
+        Some(base) => fact()
+            .child(words("base"))
+            .child(chip(base))
+            .child(words("→ head"))
+            .child(chip(&bundle.head)),
+        None => fact()
+            .child(words("a tour at head"))
+            .child(chip(&bundle.head)),
+    };
+    let lines = fact()
+        .child(text(format!("+{added}")).font(FACT).color(t.success))
+        .child(text(format!("−{removed}")).font(FACT).color(t.error));
     let mut meta = row()
         .key(format!("{prefix}.facts"))
         .role("button")
         .label(said)
         .w_full()
+        .flex_wrap()
+        .gaps(4.0, 12.0)
         .items_center()
-        .gap(space::S3)
-        .child(
-            text(shown)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .wrap()
+        .px(6.0)
+        .py(2.0)
+        .radius(4.0)
+        .children([commits, words(&files), lines, words(&stops)].map(El::a11y_hidden))
+        .children(toggle.map(|toggle| {
+            row()
                 .grow(1.0)
-                .shrink()
-                .a11y_hidden(),
-        )
-        .children(toggle.map(|toggle| hint("↵", toggle, t).a11y_hidden()));
+                .justify_end()
+                .child(hint("↵", toggle, t))
+                .a11y_hidden()
+        }));
     if !bundle.files.is_empty() {
         meta = meta.expanded(review.files_shown);
     }
@@ -123,6 +152,11 @@ pub(super) fn summary(
         .label("The change")
         .w_full()
         .gap(space::S1)
+        .px(16.0)
+        .py(12.0)
+        .radius(12.0)
+        .fill(t.bg_panel)
+        .border(1.0, t.border.alpha(0.5))
         .child(place_press(
             cursor_frame(meta, cursor == Some(&Spot::Facts), t),
             tile,
@@ -131,6 +165,14 @@ pub(super) fn summary(
         .children(files.into_iter().flatten())
         .children(problems)
 }
+
+/// The change's facts, at the Tauri summary's 13 points.
+const FACT: TextStyle = TextStyle {
+    size: 13.0,
+    line_height: 18.0,
+    weight: 400.0,
+    ..type_::LABEL
+};
 
 fn file_row(prefix: &str, i: usize, file: &ReviewFile, t: &Tokens) -> El {
     let stat = if file.binary {
@@ -155,6 +197,8 @@ fn file_row(prefix: &str, i: usize, file: &ReviewFile, t: &Tokens) -> El {
         .label(label)
         .w_full()
         .gap(space::S2)
+        .px(6.0)
+        .py(2.0)
         .child(
             text(file.status.clone())
                 .font(type_::LABEL)
@@ -203,7 +247,7 @@ pub(super) fn not_shown(
                         .color(t.text_secondary)
                         .wrap(),
                 );
-            let el = cursor_frame(el, current, t).pl(space::S2 + 6.0);
+            let el = cursor_frame(el.px(6.0).py(2.0), current, t);
             match tile {
                 Some(tile) => place_press(el, tile, format!("{key}.entry.{j}")),
                 None => el,
@@ -275,6 +319,7 @@ fn keys_for(
         ("i".to_owned(), "edit"),
         (send_label(), "send"),
     ];
+    keys.insert(2, ("f r h".into(), "definition, uses, type"));
     if marking {
         keys.splice(2..2, marks);
     }
@@ -296,16 +341,37 @@ pub(super) fn key_line(
         row()
             .role("tablist")
             .label("Frames")
-            .gap(space::S2)
+            .gap(2.0)
+            .pr(space::S2)
+            .border_sides([0.0, 1.0, 0.0, 0.0], t.border.alpha(0.6))
             .children(
                 Frame::ALL
                     .iter()
                     .filter(|(f, _, _)| offered.contains(f))
                     .map(|(f, key, name)| {
                         let on = *f == frame;
-                        let tab = text(format!("{key} {name}"))
-                            .font(type_::LABEL)
-                            .color(if on { t.text_primary } else { t.text_tertiary })
+                        let tab = row()
+                            .gap(4.0)
+                            .items_center()
+                            .px(8.0)
+                            .py(2.0)
+                            .radius(4.0)
+                            .border(1.0, if on { t.border } else { t.border.alpha(0.0) })
+                            .fill(if on {
+                                super::range_tint(t)
+                            } else {
+                                rune::Color::TRANSPARENT
+                            })
+                            .child(caps(key, t).a11y_hidden())
+                            .child(
+                                text(*name)
+                                    .font(TextStyle {
+                                        weight: 400.0,
+                                        ..type_::LABEL
+                                    })
+                                    .color(if on { t.text_primary } else { t.text_secondary })
+                                    .a11y_hidden(),
+                            )
                             .role("tab")
                             .label(format!("{key} {name}"))
                             .key(format!("{prefix}.frame.{key}"))
@@ -314,20 +380,27 @@ pub(super) fn key_line(
                     }),
             )
     });
+    let entries = row()
+        .grow(1.0)
+        .min_w(0.0)
+        .flex_wrap()
+        .gaps(4.0, 16.0)
+        .items_center()
+        .children(tabs)
+        .children(servers)
+        .children(keys.iter().map(|(k, w)| entry(k, w)));
     row()
         .key(format!("{prefix}.keys"))
         .role("toolbar")
         .label("Review keys")
         .w_full()
-        .flex_wrap()
-        .gap(space::S3)
-        .px(space::S3)
+        .min_h(28.0)
+        .gap(16.0)
+        .items_center()
+        .px(space::S2)
         .py(space::S1)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.5))
-        .children(tabs)
-        .children(keys.iter().map(|(k, w)| entry(k, w)))
-        .children(servers)
-        .child(col().grow(1.0))
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.6))
+        .child(entries)
         .child(entry("?", "all keys"))
 }
 
@@ -379,7 +452,7 @@ const ALL_KEYS: &[(&str, &str)] = &[
     ),
     (
         "i",
-        "Edit what the cursor is on: the selected lines, else a whole string or comment of several lines, else the line. ⌥↑ and ⌥↓ take in a line. Saving writes the file and lists the edit in the review.",
+        "Edit what the cursor is on: the selected lines, else a whole string or comment of several lines, else the line; in a document, the paragraph or block as markdown. ⌥↑ and ⌥↓ take in a line. Saving writes the file and lists the edit in the review.",
     ),
     (
         "u",
@@ -463,6 +536,12 @@ pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
         .border(1.0, t.border)
         .box_shadow(attn_ui::frame::shadow(t, 18.0, 40.0, 0.32))
         .child(text("Keys").font(type_::TITLE).color(t.text_primary))
+        .child(
+            text("Selecting text and typing still writes a comment, as in any markdown tile.")
+                .font(crate::markdown::font(t, None))
+                .color(t.text_primary.alpha(0.9))
+                .wrap(),
+        )
         .children(read_only.then(|| {
             text("This file is outside the repository and read-only: c, a and i do nothing here.")
                 .font(type_::BODY)
@@ -483,7 +562,7 @@ pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
                 .child(
                     text(*what)
                         .font(type_::BODY)
-                        .color(t.text_secondary)
+                        .color(t.text_primary)
                         .wrap()
                         .grow(1.0),
                 )

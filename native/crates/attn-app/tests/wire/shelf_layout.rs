@@ -28,9 +28,6 @@ fn window(area: f32) -> (f32, f32) {
 
 /// Two tiles fit at 57 and 66 cols, one from 76.
 const TWO_FIT: f32 = 1348.0;
-/// How far a tile shown alone sits in from each edge of the tile area, as the Tauri app's
-/// focus mode pads it.
-const ALONE_INSET: f32 = 10.0;
 /// Three tiles fit at 57 and 66 cols, two at 76 to 100.
 const THREE_FIT: f32 = 1848.0;
 /// Four tiles fit at 57 cols, three at 66 and 76, two at 86 and 100, one from 120.
@@ -1284,7 +1281,7 @@ const LANDS_AT_ONCE: &[AllowRow] = &[
     AllowRow::new("pop-out", "tile.", ALONE, BY_DESIGN).max(2),
     AllowRow::new("pop-in", "divider.", ALONE, BY_DESIGN).max(1),
     AllowRow::new("pop-out", "divider.", ALONE, BY_DESIGN).max(1),
-    AllowRow::new("jump", "regions/tiles", ALONE, SIDEBAR_GOES).max(4),
+    AllowRow::new("jump", "tiles.column", ALONE, SIDEBAR_GOES).max(6),
     AllowRow::new("jump", "tiles.area", ALONE, SIDEBAR_GOES).max(4),
     AllowRow::new("pop-out", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
     AllowRow::new("pop-in", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
@@ -1436,8 +1433,8 @@ fn showing_a_tile_alone_and_returning_it_land_in_the_frame_of_the_key() {
     assert!(lands_at_once(&alone, "a"), "{:?}", looks_of(&alone, "a"));
     assert_eq!(
         looks_of(&alone, "a")[0].0[2],
-        TWO_FIT + BESIDE_TILES - 2.0 * ALONE_INSET,
-        "the agent alone takes the sidebar's room"
+        TWO_FIT + BESIDE_TILES,
+        "the agent alone takes the sidebar's room, edge to edge as the Tauri app's focus mode"
     );
     assert!(sidebar_beside(&alone, "a").iter().all(|shown| !shown));
 

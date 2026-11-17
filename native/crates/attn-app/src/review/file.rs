@@ -339,7 +339,7 @@ pub(super) fn view(
     let strip: Vec<El> = notes
         .iter()
         .filter(|n| line.is_some_and(|l| n.now_from > 0 && l >= n.now_from && l <= n.now_to))
-        .map(|n| super::stop::note(n, t))
+        .map(|n| super::stop::note(n, space::S2, t))
         .chain(marks)
         .collect();
     let strip = (!strip.is_empty()).then(|| {
@@ -385,14 +385,6 @@ fn rows_view(
     t: &Tokens,
 ) -> El {
     let asking = asking.clone();
-    let digits = rows
-        .iter()
-        .flat_map(|r| [r.old, r.now])
-        .flatten()
-        .max()
-        .unwrap_or(1)
-        .to_string()
-        .len();
     let range = file.target.range;
     let inside: Option<Rc<[bool]>> = stage
         .then(|| range.map(|r| rows_inside(rows, r).into()))
@@ -407,11 +399,10 @@ fn rows_view(
     let rows_ = rows.clone();
     let widest = rows.iter().map(|r| columns(&r.text)).max().unwrap_or(0);
     let char_w = 0.6 * 13.0;
-    let gutter = 2.0 * (digits as f32 * char_w + 12.0).ceil() + 14.0 + 2.0 * space::S2;
+    let row_w = super::stop::gutter(t) + (widest + 1) as f32 * char_w;
     let list = col()
         .key(format!("{prefix}.view.rows"))
         .w_full()
-        .min_w(gutter + widest as f32 * char_w + space::S3)
         .growth(GrowthSpec::default())
         .virtual_rows(
             rows.len(),
@@ -432,18 +423,20 @@ fn rows_view(
                     asking.labels_at(&keyed),
                     asking.asked.as_deref() == Some(keyed.as_str()),
                 );
-                let line = code_row(r, &spans, digits, in_range, false, marked, &tokens).key(keyed);
-                let line = match noted(&notes.iter().collect::<Vec<_>>(), r.now) {
-                    Some(true) => line.border_sides([0.0, 0.0, 0.0, 3.0], tokens.warning),
-                    Some(false) => line.border_sides([0.0, 0.0, 0.0, 3.0], tokens.text_tertiary),
-                    None => line,
+                let marker = match noted(&notes.iter().collect::<Vec<_>>(), r.now) {
+                    _ if in_range => Some(super::stop::range_marker(&tokens)),
+                    Some(true) => Some((3.0, tokens.warning)),
+                    Some(false) => Some((3.0, tokens.text_muted.alpha(0.7))),
+                    None => None,
                 };
+                let line = code_row(r, &spans, marker, false, marked, &tokens).key(keyed);
                 let line = match &inside {
-                    Some(inside) if !inside[i] => line.group_opacity(0.45, 0.45),
+                    Some(inside) if !inside[i] && i != cursor => line.group_opacity(0.45, 0.45),
                     _ => line,
                 };
                 let line = if selecting && i >= from && i <= to && i != cursor {
-                    line.fill(tokens.accent.alpha(0.1))
+                    let tint = super::cursor_tint(&tokens);
+                    line.gradient(tint, tint)
                 } else {
                     line
                 };
@@ -461,5 +454,6 @@ fn rows_view(
         })
         .scroll_xy()
         .radius(radius::SM)
+        .child(rune::el().w(row_w).h(0.0))
         .child(list)
 }

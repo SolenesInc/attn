@@ -3,12 +3,16 @@
 //! (`native/clippy.toml`).
 #![allow(clippy::disallowed_methods)]
 
+mod syntax;
+
 use std::sync::LazyLock;
 
 use rune::Color;
 use serde_json::Value;
 
 use crate::Tokens;
+
+pub use syntax::github as syntax;
 
 /// An sRGB color as its three bytes, as a terminal's cells carry it.
 pub type Rgb = [u8; 3];

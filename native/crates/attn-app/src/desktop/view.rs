@@ -19,8 +19,6 @@ use crate::terminal::{Release, Terminals, accelerator};
 pub(super) const TILES: &str = "tiles";
 /// The strip over the line between two tiles that drags it, as wide as the Tauri app's.
 pub(super) const DIVIDER_PX: f32 = 9.0;
-/// How far a tile shown alone sits in from the tile area's edges, as in the Tauri app.
-pub(super) const ALONE_INSET: f32 = 10.0;
 /// `.desktop-pane-headline`, the agent header's first line.
 const HEADLINE_PX: f32 = 30.0;
 const HEADLINE_PAD: f32 = 10.0;
@@ -192,15 +190,17 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             ))
         })
     });
-    moves_with_the_row(col().key(TILES))
+    let tabs = desktop.and_then(|d| review_tabs(d, desk.row(&d.id).view.clone(), t));
+    let tiles = col()
+        .key(TILES)
         .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
             super::drag::gesture(state, d, tx, super::drag::Owner::Tiles)
         })
         .role("main")
         .label("Tiles")
+        .w_full()
         .grow(1.0)
-        .min_w(0.0)
-        .h_full()
+        .min_h(0.0)
         .clip_rounded(0.0)
         .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| {
             let area = Some(Area::at(rect, state.terminals.metrics().cell_w));
@@ -211,7 +211,92 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             state.window.desk.reported_area = area;
             super::settle(state, tx);
         })
-        .child(content)
+        .child(content);
+    moves_with_the_row(col().key("tiles.column"))
+        .grow(1.0)
+        .min_w(0.0)
+        .h_full()
+        .children(tabs)
+        .child(tiles)
+}
+
+/// A tab for each document on `desktop` while one of them is shown alone and it holds more
+/// than one, as the Tauri app's review tabs: a press shows that document alone.
+fn review_tabs(desktop: &Desktop, view: super::layout::View, t: &Tokens) -> Option<El> {
+    let super::layout::View::Focused(shown) = view else {
+        return None;
+    };
+    let documents: Vec<(String, String)> = crate::sidebar::model::leaves(&desktop.tree_json)
+        .into_iter()
+        .filter_map(|leaf| match leaf {
+            crate::sidebar::model::Leaf::Tile { id, kind, params }
+                if kind == "markdown" || kind == "seed" =>
+            {
+                Some((id, crate::sidebar::model::document_tab(&kind, &params)))
+            }
+            _ => None,
+        })
+        .collect();
+    if documents.len() < 2 || !documents.iter().any(|(id, _)| *id == shown) {
+        return None;
+    }
+    let tabs = documents.into_iter().map(|(id, name)| {
+        let selected = id == shown;
+        let (desktop, leaf) = (desktop.id.clone(), id.clone());
+        text(name.clone())
+            .key(format!("review.tab.{id}"))
+            .role("tab")
+            .label(name)
+            .checked(selected)
+            .font(type_::LABEL)
+            .color(if selected {
+                t.text_primary
+            } else {
+                t.text_secondary
+            })
+            .single_line()
+            .truncate()
+            .max_w(220.0)
+            .px(9.0)
+            .py(5.0)
+            .radius(6.0)
+            .border(
+                1.0,
+                if selected {
+                    t.brand.alpha(0.38)
+                } else {
+                    t.brand.alpha(0.0)
+                },
+            )
+            .fill(if selected {
+                t.brand.alpha(0.12)
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .hover(if selected {
+                t.brand.alpha(0.12)
+            } else {
+                t.bg_button
+            })
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                super::actions::focus_leaf(state, &desktop, &leaf, tx)
+            })
+    });
+    Some(
+        row()
+            .key("review.tabs")
+            .role("tablist")
+            .label("Open review documents")
+            .w_full()
+            .items_center()
+            .gap(3.0)
+            .px(space::S3)
+            .py(6.0)
+            .fill(t.bg_elevated)
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+            .scroll_x()
+            .children(tabs),
+    )
 }
 
 /// What an agent header's second line shows, each piece at the level its tile's width leaves
@@ -599,7 +684,7 @@ fn screen(
                     now_ms,
                     chrome_leading: 0.0,
                 };
-                let placed = desk.placement(&rendered, cx.focused.is_some());
+                let placed = desk.placement(&rendered);
                 let held = desk.held_divider(&placed);
                 laid_out(&rendered, &placed, held, &cx)
             }
@@ -1052,6 +1137,7 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
                 uri,
                 crate::markdown::sending::Kind::File {
                     bound: session.clone(),
+                    review: content.message.review.is_some(),
                 },
             )
         }

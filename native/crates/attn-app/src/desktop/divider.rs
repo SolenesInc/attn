@@ -234,7 +234,7 @@ fn split_rect(state: &State, desktop: &str, split: &str) -> Option<[f32; 4]> {
     let (tree, plan) = desk.plan(facts, shown)?;
     let view = desk.row(desktop).view;
     let rendered = plan.rendered(&tree, &view, &shown.active_pane_id);
-    let placed = desk.placement(&rendered, matches!(view, layout::View::Focused(_)));
+    let placed = desk.placement(&rendered);
     let [x, y, w, h] = placed.splits.into_iter().find(|s| s.id == split)?.rect;
     Some([area.x + x, area.y + y, w, h])
 }

@@ -54,8 +54,9 @@ fn destination<'a>(
 
 /// Whose marks a document tile holds, and where they go.
 pub(crate) enum Kind {
-    /// A markdown file's, sent to the session the tile is bound to.
-    File { bound: Option<String> },
+    /// A markdown file's, sent to the session the tile is bound to; a review's goes through
+    /// its send sheet.
+    File { bound: Option<String>, review: bool },
     /// A seed's, sent to the session tending it, or as a note on the seed when none does.
     Seed { id: String, tender: Option<String> },
 }
@@ -75,7 +76,7 @@ impl Kind {
 
     fn bound(&self) -> Option<&str> {
         match self {
-            Kind::File { bound } => bound.as_deref(),
+            Kind::File { bound, .. } => bound.as_deref(),
             Kind::Seed { .. } => None,
         }
     }
@@ -178,7 +179,8 @@ pub(crate) fn controls(
         .fill(t.bg_button)
         .border(1.0, t.border)
     };
-    let idle = count == 0 && sent.is_none();
+    let review = matches!(kind, Kind::File { review: true, .. });
+    let idle = count == 0 && sent.is_none() && !review;
     if idle && matches!(kind, Kind::File { .. }) {
         let tile_menu = tile.to_owned();
         let face = row()
@@ -214,6 +216,8 @@ pub(crate) fn controls(
             Some(Sent::Warning(_)) => "Needs attention".to_owned(),
             Some(Sent::Failed(_)) => "Send failed".to_owned(),
             None if noting => format!("Note on seed {count}"),
+            None if review && count > 0 => format!("Review {count}"),
+            None if review => "Review".to_owned(),
             None => format!("Send {count}"),
         };
         let quiet_status = matches!(sent, Some(Sent::Sending | Sent::Done { .. }));
@@ -243,11 +247,14 @@ pub(crate) fn controls(
             (Kind::Seed { tender: None, .. }, _) => {
                 format!("Leave annotations as a note on the seed{chord}")
             }
+            (Kind::File { review: true, .. }, Some(_)) => {
+                format!("Send the review to {name} with a verdict{chord}")
+            }
             (Kind::File { .. }, Some(_)) => format!("Send annotations to {name}{chord}"),
             (Kind::File { .. }, None) => "Choose a session before sending annotations".to_owned(),
         };
         let nowhere = matches!(kind, Kind::File { .. }) && to.is_none();
-        let disabled = matches!(sent, Some(Sent::Sending)) || count == 0 || nowhere;
+        let disabled = matches!(sent, Some(Sent::Sending)) || (count == 0 && !review) || nowhere;
         let split = match kind {
             Kind::File { .. } if any => Some("Change annotation destination"),
             Kind::Seed {
@@ -367,7 +374,10 @@ fn tile_of<'a>(state: &'a State, tile: &str) -> Option<Tiled<'a>> {
         return Some(Tiled {
             desktop,
             uri,
-            kind: Kind::File { bound },
+            kind: Kind::File {
+                bound,
+                review: content.message.review.is_some(),
+            },
         });
     }
     state.facts.desktops.iter().find_map(|desktop| {
@@ -395,7 +405,7 @@ fn tile_of<'a>(state: &'a State, tile: &str) -> Option<Tiled<'a>> {
 pub(crate) fn destination_of(state: &State, tile: &str) -> Option<(String, Option<To>)> {
     let tiled = tile_of(state, tile)?;
     let to = match &tiled.kind {
-        Kind::File { bound } => destination(
+        Kind::File { bound, .. } => destination(
             &state.readings,
             tiled.desktop,
             &state.facts.sessions,
@@ -421,7 +431,7 @@ pub(crate) fn send(state: &mut State, tile: &str, tx: &mut Tx) {
         return;
     };
     let to = match &tiled.kind {
-        Kind::File { bound } => destination(
+        Kind::File { bound, .. } => destination(
             &state.readings,
             tiled.desktop,
             &state.facts.sessions,
@@ -624,7 +634,7 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
         };
         if reading.menu && cx.layout(&key(tile, "controls")).is_some() {
             let shown = match &kind {
-                Kind::File { bound } => {
+                Kind::File { bound, .. } => {
                     let current = destination(
                         &state.readings,
                         desktop,
