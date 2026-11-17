@@ -627,6 +627,47 @@ fn tended_agent(dark: bool) -> InitialStateMessage {
     state
 }
 
+/// The title bar's shelf on a desktop wider than the window, as the audit's desktop: the
+/// waiting reviewer active beside a shell and a document, each marked by its state or kind, and
+/// two agents off screen as chips.
+fn shelf(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let named = |id: &str, label: &str, agent: &str, status: &str| Session {
+        label: label.into(),
+        agent: agent.into(),
+        ..session(id, status)
+    };
+    state.sessions.get_or_insert_default().extend([
+        named("x-r", "reviewer", "claude", "waiting_input"),
+        named("x-sh", "shell", "shell", "idle"),
+        named("x-w", "builder", "claude", "working"),
+        named("x-i", "scout", "codex", "idle"),
+    ]);
+    if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
+        desktop.panes = vec![
+            agent_pane(DESKTOP, "r", "x-r"),
+            agent_pane(DESKTOP, "sh", "x-sh"),
+            agent_pane(DESKTOP, "w", "x-w"),
+            agent_pane(DESKTOP, "i", "x-i"),
+        ];
+        desktop.active_pane_id = "r".into();
+        desktop.tree_json = row(vec![
+            pane("r"),
+            pane("sh"),
+            document_tile("m", "/repo/plan.md"),
+            pane("w"),
+            pane("i"),
+        ])
+        .to_string();
+    }
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("narrowest_tile_cols".into(), "40".into());
+    }
+    let mut world = start(Daemon::scripted().state(state));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    snap(&mut world, "shelf", dark);
+}
+
 fn review_stop(dark: bool) {
     let daemon =
         Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
@@ -2875,6 +2916,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
     for dark in [true, false] {
         sidebar_and_terminal(dark);
         tile_headers(dark);
+        shelf(dark);
         review_stop(dark);
         garden(dark);
         garden_dock(dark);

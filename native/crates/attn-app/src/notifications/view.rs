@@ -26,28 +26,43 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> El {
     } else {
         "Show Notifications"
     };
-    let ink = if counts.unread_critical > 0 {
+    let dot = (counts.unread > 0).then_some(if counts.unread_critical > 0 {
         t.error
     } else {
-        t.text_secondary
-    };
-    let unread = counts.unread > 0;
-    let dot = t.accent;
+        t.brand
+    });
+    let ring = t.bg_panel;
     let bell = Button::new(label)
-        .variant(ButtonVariant::Ghost)
+        .variant(ButtonVariant::GhostMuted)
         .expanded(open)
-        .label_with(move |_, _| {
-            row()
-                .items_center()
-                .gap(2.0)
-                .child(rune::icon(&icon::BELL, 13.0).color(ink))
-                .children(unread.then(|| el().size(6.0, 6.0).radius(3.0).fill(dot)))
+        .label_with(move |_, ink| {
+            rune::icon(&icon::BELL, 13.0)
+                .color(ink)
+                .children(dot.map(|dot| unread_dot(dot, ring)))
         })
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
         .build(attn_ui::kit(t))
         .key(BELL)
-        .a11y_value(counts.unread.to_string());
+        .a11y_value(counts.unread.to_string())
+        .h(crate::sidebar::TITLE_BUTTON)
+        .min_w(crate::sidebar::TITLE_BUTTON)
+        .radius(6.0)
+        .hover(t.bg_elevated);
+    let bell = crate::sidebar::framed(if open { bell.fill(t.bg_elevated) } else { bell }, t);
     crate::shell::title_bar_slot(BELL_SLOT, bell)
+}
+
+/// The Tauri app's `.title-bar-notification-dot`: 6 points, 2 points in from the button's top
+/// right corner, ringed in the title bar's fill.
+fn unread_dot(dot: rune::Color, ring: rune::Color) -> El {
+    row()
+        .pin(None, Some(-5.5), Some(-5.5), None)
+        .size(10.0, 10.0)
+        .radius(5.0)
+        .fill(ring)
+        .center()
+        .inert()
+        .child(el().size(6.0, 6.0).radius(3.0).fill(dot))
 }
 
 /// The strip that names the newest unread critical notification above the sidebar's rows,
@@ -173,8 +188,8 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
             ..Frame::menu(t)
         }
         .draw(surface),
-        BELL_SLOT,
-        Placement::BottomEnd,
+        crate::shell::TITLE_BAR_LEFT,
+        Placement::BottomStart,
         8.0,
     )
 }

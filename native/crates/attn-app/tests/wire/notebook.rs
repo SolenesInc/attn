@@ -2347,3 +2347,30 @@ fn a_press_on_an_outline_heading_in_an_inactive_editor_tile_takes_the_tile_and_i
     world.gesture(|d| d.type_text("Typed after the press."));
     assert!(editor_text(&world, "notebook.tile.n.editor").contains("Typed after the press."));
 }
+
+#[test]
+fn the_title_bars_notebook_button_opens_the_notebook_over_the_window() {
+    let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
+    let mut world = start(&disk);
+    let button = world
+        .automate("find", json!({ "target": { "key": "titlebar.notebook" } }))
+        .unwrap();
+    assert!(
+        button["name"]
+            .as_str()
+            .is_some_and(|n| n.starts_with("Open Notebook (")),
+        "{button}"
+    );
+
+    world.gesture(|d| d.click(Target::key("titlebar.notebook")));
+    world.settle();
+
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notebook.title"))
+            .name
+            .as_deref(),
+        Some("Notebook")
+    );
+}

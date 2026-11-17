@@ -22,6 +22,9 @@ use crate::sidebar::AgentState;
 
 const CHIP_PX: f32 = 112.0;
 const LIVE_DOT_PX: f32 = 28.0;
+const LIVE_PAD_PX: f32 = 4.0;
+const MARK_PX: f32 = 7.0;
+const SHELF_GAP_PX: f32 = 4.0;
 const CAPS_PX: f32 = 104.0;
 /// How long the width label shows after fewer or more tiles.
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
@@ -165,14 +168,12 @@ fn chip(
 
 /// How many chips show either side when the shelf is `available` points wide; the rest go
 /// into the caps, the chips nearest the screen kept.
-fn allot(available: f32, before: usize, after: usize, dots: usize) -> (usize, usize) {
-    let without_caps = ((available - dots as f32 * LIVE_DOT_PX) / CHIP_PX).floor();
+fn allot(available: f32, before: usize, after: usize, live: f32) -> (usize, usize) {
+    let without_caps = ((available - live) / CHIP_PX).floor();
     if (before + after) as f32 <= without_caps {
         return (before, after);
     }
-    let room = ((available - dots as f32 * LIVE_DOT_PX - CAPS_PX) / CHIP_PX)
-        .floor()
-        .max(0.0) as usize;
+    let room = ((available - live - CAPS_PX) / CHIP_PX).floor().max(0.0) as usize;
     let (mut left, mut right) = (0, 0);
     while left + right < room && (left < before || right < after) {
         if right < after && (right <= left || left >= before) {
@@ -239,7 +240,8 @@ impl Shelf {
         let (before, screen, after) =
             (chips(&plan.before), chips(&plan.screen), chips(&plan.after));
         let available = desk.shelf_px.unwrap_or(f32::INFINITY);
-        let (left, right) = allot(available, before.len(), after.len(), screen.len());
+        let live = 2.0 * LIVE_PAD_PX + screen.iter().map(dot_px).sum::<f32>() + SHELF_GAP_PX;
+        let (left, right) = allot(available, before.len(), after.len(), live);
         Some(Shelf {
             desktop: desktop.id.clone(),
             active: desktop.active_pane_id.clone(),
@@ -322,7 +324,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let dots = row()
         .key("shelf.live")
         .items_center()
-        .gap(space::S1)
+        .px(LIVE_PAD_PX)
         .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
             state.window.desk.width_control = inside
         })
@@ -352,7 +354,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             .role("toolbar")
             .label("Shelf")
             .items_center()
-            .gap(space::S1)
+            .gap(SHELF_GAP_PX)
             .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| record(state, "shelf", rect, tx))
             .children(menu(Edge::Left, shelf.before_cap()))
             .children(
@@ -408,7 +410,7 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .center()
+        .items_center()
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
             if state.window.desk.shelf_px == Some(w) {
                 tx.live_only();
@@ -443,7 +445,7 @@ fn chip_button(
                 .key(format!("{key}.member.{i}"))
                 .pt(2.0)
                 .border_sides(
-                    [0.0, 0.0, 0.0, 2.0],
+                    [0.0, 0.0, 2.0, 0.0],
                     if peeked {
                         t.text_secondary
                     } else {
@@ -476,10 +478,10 @@ fn chip_button(
         .a11y_value(state)
         .w(CHIP_PX - space::S1)
         .min_w(0.0)
+        .h(22.0)
         .items_center()
-        .gap(space::S1)
-        .px(space::S2)
-        .py(space::S1)
+        .gap(5.0)
+        .px(6.0)
         .radius(5.0)
         .fill(t.bg_button)
         .border(1.0, t.border)
@@ -498,7 +500,7 @@ fn chip_button(
         .children(marks)
         .child(
             text(chip.label.clone())
-                .font(type_::LABEL)
+                .font(type_::CAPTION)
                 .color(if chip.arrival.is_some() {
                     t.text_primary
                 } else {
@@ -539,19 +541,27 @@ fn member_mark(member: Member, needs: bool, t: &Tokens) -> El {
     let mark = rune::el();
     match member {
         Member::Agent(state) => mark
-            .w(7.0)
-            .h(7.0)
-            .radius(3.5)
+            .w(MARK_PX)
+            .h(MARK_PX)
+            .radius(MARK_PX / 2.0)
             .fill(crate::sidebar::state_color(state, t)),
-        Member::Tile => {
-            mark.w(7.0)
-                .h(7.0)
-                .radius(1.0)
-                .fill(if needs { t.warning } else { t.text_secondary })
-        }
+        Member::Tile => mark.w(MARK_PX).h(MARK_PX).radius(1.0).fill(if needs {
+            t.warning
+        } else {
+            t.text_secondary
+        }),
     }
 }
 
+/// How wide a tile on screen's button is: its marks 1 point apart with 2 points either side, and
+/// at least `LIVE_DOT_PX`.
+fn dot_px(chip: &Chip) -> f32 {
+    let marks = chip.members.len() as f32;
+    (4.0 + marks * MARK_PX + (marks - 1.0).max(0.0)).max(LIVE_DOT_PX)
+}
+
+/// A tile on screen's button in the shelf, as the Tauri app's `.desktop-shelf-dot`: the marks
+/// of its column's tiles, underlined while it holds the active tile.
 fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
     let (desktop, leaf) = (desktop.to_owned(), chip.go.clone());
     row()
@@ -559,25 +569,31 @@ fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
         .role("button")
         .label(chip.label.clone())
         .a11y_value(if current { "current" } else { "" })
-        .w(LIVE_DOT_PX - space::S1)
-        .h(LIVE_DOT_PX - space::S1)
+        .min_w(LIVE_DOT_PX)
+        .h(22.0)
+        .px(2.0)
+        .gap(1.0)
         .center()
+        .border_sides(
+            [0.0, 0.0, 2.0, 0.0],
+            if current {
+                t.text_secondary
+            } else {
+                rune::Color::TRANSPARENT
+            },
+        )
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             actions::show_leaf(state, &desktop, &leaf, tx)
         })
-        .child(rune::el().w(8.0).h(8.0).radius(4.0).fill(if current {
-            t.accent
-        } else {
-            t.text_tertiary
-        }))
+        .children(chip.members.iter().map(|m| member_mark(*m, false, t)))
 }
 
 /// The accent bar on the side of a chip or cap a dragged tile would land on.
 fn drop_bar(el: El, drop: Option<Edge>, t: &Tokens) -> El {
     match drop {
         None => el,
-        Some(Edge::Left) => el.border_sides([3.0, 0.0, 0.0, 0.0], t.accent),
-        Some(Edge::Right) => el.border_sides([0.0, 3.0, 0.0, 0.0], t.accent),
+        Some(Edge::Left) => el.border_sides([0.0, 0.0, 0.0, 2.0], t.accent),
+        Some(Edge::Right) => el.border_sides([0.0, 2.0, 0.0, 0.0], t.accent),
     }
 }
 

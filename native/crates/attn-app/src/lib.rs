@@ -399,7 +399,10 @@ pub fn app() -> rune::App<State> {
         min_size: Some((800.0, 600.0)),
         ..AppSpec::new("attn", (1200.0, 800.0), State::default, shell::view)
     })
-    .titlebar(Titlebar::new(shell::TITLE_BAR_HEIGHT))
+    .titlebar(
+        Titlebar::new(shell::TITLE_BAR_HEIGHT)
+            .traffic_lights(shell::TRAFFIC_LIGHTS.0, shell::TRAFFIC_LIGHTS.1),
+    )
     .on_ime(keys::on_ime)
     .on_field_key(keys::on_field_key)
     .on_open_url(open_link)

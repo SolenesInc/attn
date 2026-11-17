@@ -171,14 +171,14 @@ fn a_connecting_app_counts_the_feed_and_names_its_newest_critical_notification()
 }
 
 #[test]
-fn the_panel_hangs_8_points_under_the_title_bar_its_right_edge_on_the_bells() {
+fn the_panel_hangs_8_points_under_the_title_bar_its_left_edge_on_the_new_buttons() {
     let mut world = start(vec![notification("a", "info", "Compaction finished")]);
     open(&mut world);
     let [_, by, _, bh] = world.rect("titlebar");
-    let [bx, _, bw, _] = world.rect(BELL);
-    let [px, py, pw, _] = world.rect(PANEL);
+    let [nx, ..] = world.rect("titlebar.new");
+    let [px, py, ..] = world.rect(PANEL);
     assert_eq!(py, by + bh + 8.0);
-    assert!((px + pw - (bx + bw)).abs() <= 1.0, "{px} {pw} {bx} {bw}");
+    assert!((px - nx).abs() <= 1.0, "{px} {nx}");
 }
 
 #[test]

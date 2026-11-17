@@ -1391,44 +1391,37 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
     };
     let open = state.window.shows(crate::shell::Drawer::Asks);
     let tokens = *t;
-    Some(
-        Button::new(label)
-            .variant(ButtonVariant::GhostMuted)
-            .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
-            .label_with(move |_, _| {
-                row()
-                    .items_center()
-                    .child(rune::icon(&attn_ui::icon::ASKS, 13.0).color(tokens.text_secondary))
-                    .children((count > 0).then(|| {
-                        row()
-                            .pin(None, Some(-6.0), Some(-6.0), None)
-                            .min_w(15.0)
-                            .h(15.0)
-                            .px(4.0)
-                            .center()
-                            .radius(999.0)
-                            .fill(tokens.accent)
-                            .inert()
-                            .child(
-                                text(count.to_string())
-                                    .font(BADGE_TYPE)
-                                    .color(tokens.bg_app),
-                            )
-                    }))
-            })
-            .build(attn_ui::kit(t))
-            .key("titlebar.asks")
-            .a11y_value(count.to_string())
-            .checked(open)
-            .h(22.0)
-            .min_w(24.0)
-            .px(space::S1)
-            .radius(4.0)
-            .fill(if open {
-                t.bg_selected
-            } else {
-                rune::Color::TRANSPARENT
-            })
-            .hover(t.bg_elevated),
-    )
+    let button = Button::new(label)
+        .variant(ButtonVariant::GhostMuted)
+        .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
+        .label_with(move |_, _| {
+            row()
+                .items_center()
+                .child(rune::icon(&attn_ui::icon::ASKS, 13.0).color(tokens.text_secondary))
+                .children((count > 0).then(|| {
+                    row()
+                        .pin(None, Some(-10.5), Some(-10.5), None)
+                        .min_w(19.0)
+                        .h(19.0)
+                        .px(6.0)
+                        .center()
+                        .radius(999.0)
+                        .fill(tokens.accent)
+                        .border(2.0, tokens.bg_panel)
+                        .inert()
+                        .child(
+                            text(count.to_string())
+                                .font(BADGE_TYPE)
+                                .color(tokens.bg_app),
+                        )
+                }))
+        })
+        .build(attn_ui::kit(t))
+        .key("titlebar.asks")
+        .a11y_value(count.to_string())
+        .h(crate::sidebar::TITLE_BUTTON)
+        .min_w(crate::sidebar::TITLE_BUTTON)
+        .radius(6.0)
+        .hover(t.bg_elevated);
+    Some(crate::sidebar::opens(button, open, t))
 }

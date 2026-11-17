@@ -2745,14 +2745,14 @@ fn the_peek_closes_when_the_pointer_leaves_and_escape_forgets_a_draft() {
 
     rest_on(&mut world, "shelf.chip.c");
     world.advance(Duration::from_millis(200));
-    rest_on(&mut world, "tile.a");
+    rest_on(&mut world, "tile.b");
     world.advance(Duration::from_millis(200));
     assert!(peek(&world).is_none(), "leaving the chip closes the peek");
 
     rest_on(&mut world, "shelf.chip.c");
     world.advance(Duration::from_millis(200));
     reply(&mut world, "draft");
-    rest_on(&mut world, "tile.a");
+    rest_on(&mut world, "tile.b");
     world.advance(Duration::from_millis(200));
     assert!(peek(&world).is_some(), "a peek being replied in stays");
 

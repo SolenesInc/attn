@@ -214,9 +214,9 @@ fn peek_at(world: &mut World, leaf: &str) {
     world.advance(Duration::from_millis(200));
 }
 
-/// Moves off the shelf and its peek, onto the middle of tile `a`.
+/// Moves off the shelf and its peek, onto the middle of tile `b`.
 fn move_away(world: &mut World) {
-    rest_on(world, "tile.a");
+    rest_on(world, "tile.b");
 }
 
 fn click(world: &mut World, key: &str) {
@@ -386,7 +386,7 @@ fn a_press_outside_closes_the_peek_and_the_pointer_on_the_peek_keeps_it_open() {
     let mut world = peeking();
 
     peek_at(&mut world, "c");
-    click(&mut world, "tile.a");
+    click(&mut world, "tile.b");
     assert!(peek(&world).is_none(), "a press outside closes the peek");
 
     move_away(&mut world);

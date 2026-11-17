@@ -61,6 +61,7 @@ mod wire {
     mod terminal_stale_build;
     mod terminal_view;
     mod tile_header;
+    mod title_bar;
     mod update_run;
     mod whats_new;
 }

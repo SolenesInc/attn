@@ -27,7 +27,7 @@ writers never collide. The chief treats the notebook as its home.
 
 - Keys (`app/src/shortcuts/registry.ts`): ⌥⌘N opens an editor tile (`notebook.openTile`), ⇧⌥⌘N opens the notebook fullscreen (`notebook.openFullscreen`).
 - Palette (`app/src/application/useAppCommands.tsx`): `notebook` ("Open the notebook") and `notebook-tile` ("Open Editor tile").
-- Sidebar: the "Open Notebook (⇧⌥⌘N)" button (`app/src/application/useAppSidebarActions.tsx`).
+- Title bar: the "Open Notebook (⇧⌥⌘N)" button (`app/src/application/useAppSidebarActions.tsx`; native `titlebar.notebook`, `native/crates/attn-app/src/sidebar/chrome.rs`).
 - Fullscreen and tile (`app/src/components/NotebookSurface.tsx`): the "Notebook files" list, the document with its save status, the Outline and Backlinks sections, the "chief: active" or "chief: idle" status, and "Close" (Esc) fullscreen.
 - Editor tile (`app/src/components/notebook/NotebookTile.tsx`): its "Editor root" picker (`app/src/components/SessionTerminalDesktop/NotebookRootPicker.tsx`) and its note finder, "Find a note…" (`app/src/components/notebook/NotebookFinder.tsx`).
 - **Settings → Notebook Folder** (`app/src/components/SettingsModalSections.tsx`): "Notebook folder" sets `notebook.root` for the profile the window shows, and a blank value means the default folder. "This profile uses:" shows `notebook.root.effective`.
@@ -118,7 +118,7 @@ Steps:
 
 - **Journal from the person's shell and from an agent.** As above: the CLI and the mock agent do not touch the app.
 - **Fullscreen with the shortcut.** Run `bridge key '{"chord":"mod+alt+shift+n"}'` and `bridge wait '{"target":{"key":"notebook.panel"}}'`. `bridge find '{"target":{"key":"notebook.title"}}'` is named `Notebook`, and `notebook.file.journal` is in `bridge tree`. Press Escape: `bridge wait '{"target":{"key":"notebook.panel"},"gone":true}'` answers.
-- **Fullscreen from the palette.** Run `bridge key '{"chord":"mod+shift+k"}'`, `bridge type '{"text":"Open the notebook"}'` and `bridge key '{"chord":"enter"}'`: `notebook.panel` answers.
+- **Fullscreen from the palette and the title bar.** Run `bridge key '{"chord":"mod+shift+k"}'`, `bridge type '{"text":"Open the notebook"}'` and `bridge key '{"chord":"enter"}'`: `notebook.panel` answers. Close it and run `bridge press '{"target":{"key":"titlebar.notebook"}}'`: it answers again.
 - **Find a note and read it.** With the notebook open, run `bridge run '{"name":"file.open"}'`, `bridge wait '{"target":{"key":"notebook.finder.field"}}'`, `bridge type '{"text":"<date>"}'` and `bridge key '{"chord":"enter"}'`. `notebook.document.title` is named `<date>`, and `bridge tree` holds `drive-attn journal` and `The mock agent wrote this.` as `notebook.editor.line.<n>` text. The markdown opener did not open: `opener` is not in `bridge tree`.
 - **It follows the disk.** Run `./attn journal append --entry "appended while open"`. `bridge wait '{"target":{"role":"text","name":"appended while open"}}'` answers.
 - **Edit, save and undo.** Run `bridge press '{"target":{"key":"notebook.editor"}}'`, `bridge key '{"chord":"mod+down"}'` and `bridge type '{"text":"\nTyped in attn."}'`. `notebook.status` reads `Saved` within a second, and `cat $NB/journal/<date>.md` ends with `Typed in attn.`. Run `bridge key '{"chord":"mod+z"}'`: the line leaves `bridge tree`, and once `notebook.status` reads `Saved` it leaves the file. `bridge key '{"chord":"mod+shift+z"}'` brings it back.

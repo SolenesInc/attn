@@ -11,7 +11,7 @@ use attn_ui::keycap;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, icon, row, text};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Kit, Placement, TextInput, popover};
 
 use crate::requests::{Answer, Refused};
@@ -378,17 +378,24 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
         .binding(&Action::ProfileSwitch)
         .map(|b| state.keymap.label(b));
     let shown = name.clone();
-    let chevron = attn_ui::kit(t).glyph.chevron_down;
+    let (ink, caret) = (t.text_primary, t.text_dimmed);
     let button = Button::new(name)
         .variant(ButtonVariant::GhostMuted)
         .help("Switch profile")
         .expanded(is_open(state))
-        .label_with(move |font, ink| {
+        .label_with(move |_, _| {
             row()
-                .gap(space::S1)
+                .gap(6.0)
                 .items_center()
-                .child(text(shown).font(font).color(ink))
-                .child(icon(chevron, 12.0).color(ink))
+                .child(
+                    text(shown)
+                        .font(NAME_TYPE)
+                        .color(ink)
+                        .single_line()
+                        .truncate()
+                        .shrink(),
+                )
+                .child(rune::icon(&attn_ui::icon::DISCLOSE_OPEN, CARET_PX).color(caret))
         })
         .on_press_tx(toggle);
     let pill = match keys {
@@ -396,9 +403,19 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
         None => button,
     }
     .build(attn_ui::kit(t))
-    .key(PILL);
+    .key(PILL)
+    .h(24.0)
+    .max_w(140.0)
+    .px(8.0)
+    .radius(6.0)
+    .fill(t.bg_elevated)
+    .border(1.0, t.border)
+    .hover(t.bg_elevated);
     crate::shell::title_bar_slot(PILL_SLOT, pill)
 }
+
+const NAME_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
+const CARET_PX: f32 = 8.0;
 
 /// The switcher under the pill, while it is open.
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {

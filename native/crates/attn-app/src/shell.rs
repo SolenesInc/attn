@@ -16,6 +16,13 @@ pub(crate) const LEADER_TIMEOUT: f64 = 0.6;
 /// How long a notice stays, as the Tauri app's toast does.
 const NOTICE_SECONDS: f64 = 6.0;
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
+/// The title bar's tools, which the notifications panel hangs under, as the Tauri app's
+/// `.notifications-panel` at `left: var(--title-bar-lights)`.
+pub(crate) const TITLE_BAR_LEFT: &str = "titlebar.left";
+/// Where the close button sits, in points from the window's top left, as the Tauri app's overlay
+/// title bar puts it: the lights end 70 points in, so the title bar's first control starts at
+/// the 78 points `TitleBar.tsx` leaves them.
+pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (9.0, 9.0);
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
 /// desktop are the daemon's; this is the window's own.
@@ -477,31 +484,56 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         state.facts.connection,
         Connection::Connected | Connection::Reconnecting { .. }
     ) && !crate::migration_gate::holds(state);
-    let controls = if connected {
-        crate::sidebar::title_controls(state, t)
-    } else {
-        Vec::new()
-    };
-    let middle = connected
-        .then(|| crate::sidebar::title_middle(state, t))
-        .flatten();
-    let parts = controls
-        .into_iter()
-        .chain(middle)
-        .chain([crate::desktop::shelf_slot(state, t)])
-        .chain(
+    let lights = cx.chrome_insets().leading + 8.0;
+    let beside_sidebar =
+        !state.window.sidebar_hidden && !crate::desktop::shows_an_agent_alone(state);
+    let left = row()
+        .key(TITLE_BAR_LEFT)
+        .items_center()
+        .gap(4.0)
+        .min_w(if beside_sidebar {
+            (crate::sidebar::width::of(state) - lights).max(0.0)
+        } else {
+            0.0
+        })
+        .children(
+            connected
+                .then(|| crate::sidebar::title_tools(state, t))
+                .into_iter()
+                .flatten(),
+        );
+    let middle = row()
+        .key("titlebar.middle")
+        .grow(1.0)
+        .min_w(0.0)
+        .h_full()
+        .px(6.0)
+        .items_center()
+        .gap(space::S2)
+        .children(
+            connected
+                .then(|| crate::sidebar::title_middle(state, t))
+                .flatten(),
+        )
+        .child(crate::desktop::shelf_slot(state, t))
+        .children(
             connected
                 .then(|| crate::sidebar::title_desktops(state, t))
                 .flatten(),
-        )
-        .chain(connected.then(|| crate::notifications::title_button(state, t)))
-        .chain(
+        );
+    let right = row()
+        .key("titlebar.right")
+        .items_center()
+        .gap(4.0)
+        .children(
             connected
-                .then(|| crate::asks::title_button(state, t))
+                .then(|| crate::sidebar::title_panels(state, t))
+                .into_iter()
                 .flatten(),
         )
-        .chain(instance_marker(state, t))
-        .chain(connected.then(|| crate::profile_switcher::pill(state, t)));
+        .children(instance_marker(state, t))
+        .children(connected.then(|| crate::profile_switcher::pill(state, t)));
+    let parts = [left, middle, right];
     let covered = title_bar_covered(state);
     row()
         .key("titlebar")
@@ -509,12 +541,11 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .label("Title bar")
         .w_full()
         .h(TITLE_BAR_HEIGHT)
-        .pl(cx.chrome_insets().leading + 8.0)
+        .pl(lights)
         .pr(8.0)
         .fill(t.bg_panel)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .items_center()
-        .gap(space::S2)
         .window_drag()
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
             if state.window.desk.window_w == Some(w) {
@@ -523,7 +554,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
             }
             state.window.desk.window_w = Some(w);
         })
-        .children(parts.map(|part| {
+        .children(parts.into_iter().map(|part| {
             if covered {
                 part.layer_opacity(COVERED_OPACITY)
             } else {
