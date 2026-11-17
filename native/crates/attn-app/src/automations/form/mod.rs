@@ -84,6 +84,8 @@ pub(crate) struct Form {
     pub(crate) stale: bool,
     pub(crate) delete_armed: bool,
     pub(crate) advanced: bool,
+    /// The prompt's height, which its grip drags taller.
+    pub(crate) prompt_height: f32,
     pub(crate) definition_shown: bool,
     pub(crate) copied: bool,
     /// The user chose the Cron tab, which shows even for a schedule the controls can write.
@@ -94,6 +96,10 @@ pub(crate) struct Form {
     pub(crate) open_select: Option<String>,
     pub(crate) zone_suggestions: ZoneSuggestions,
     focused: Option<String>,
+    /// The field the form put the keyboard in as it opened, until the person types or moves
+    /// on: leaving it untouched is not a visit, so its rule stays quiet, as the Tauri app's
+    /// form, which focuses nothing, stays quiet.
+    placed: Option<String>,
     /// This opening of the form: a save or delete answered after it closed changes nothing.
     opening: u64,
     /// The read the form waits for: only its answer fills the form.
@@ -246,6 +252,7 @@ impl Form {
             stale: false,
             delete_armed: false,
             advanced: false,
+            prompt_height: view::PROMPT_HEIGHT,
             definition_shown: false,
             copied: false,
             cron_tab: false,
@@ -254,6 +261,7 @@ impl Form {
             open_select: None,
             zone_suggestions: ZoneSuggestions::Hidden,
             focused: None,
+            placed: None,
             opening,
             reading: 0,
         };
@@ -329,6 +337,7 @@ impl Form {
 
     /// Checks again the fields `which` names that failed, as an edit to one does.
     pub(crate) fn edited(&mut self, which: impl Fn(&Field) -> bool) {
+        self.placed = None;
         if self.errors.keys().any(&which) {
             self.check(which);
         }
@@ -402,8 +411,16 @@ pub(crate) fn open(state: &mut State, definition: Option<i64>, tx: &mut Tx) {
     crate::settings::want_harnesses(state, tx);
     match definition {
         Some(id) => read(state, id, false, tx),
-        None => tx.focus(field_key(Field::Name), false),
+        None => place_keyboard(state, tx),
     }
+}
+
+/// Puts the keyboard in Name as the form opens.
+fn place_keyboard(state: &mut State, tx: &mut Tx) {
+    if let Some(f) = form_mut(state) {
+        f.placed = Some(field_key(Field::Name));
+    }
+    tx.focus(field_key(Field::Name), false);
 }
 
 /// Reads the definition into the form: on open, and on Reload after a refused save.
@@ -449,7 +466,7 @@ fn read(state: &mut State, id: i64, reload: bool, tx: &mut Tx) {
                     f.save_error = None;
                     f.stale = false;
                     if !reload {
-                        tx.focus(field_key(Field::Name), false);
+                        place_keyboard(state, tx);
                     }
                 }
                 (Err(why), false) => f.load = Load::Failed(why),
@@ -745,7 +762,11 @@ pub(crate) fn follow_focus(state: &mut State, tx: &mut Tx) -> bool {
     let mut changed = false;
     if focused != f.focused {
         let left = std::mem::replace(&mut f.focused, focused.clone());
-        if let Some(which) = left.as_deref().and_then(field_of_key) {
+        let placed = left.is_some() && f.placed == left;
+        if left.is_some() {
+            f.placed = None;
+        }
+        if let Some(which) = left.as_deref().and_then(field_of_key).filter(|_| !placed) {
             f.check(which);
             changed = true;
         }

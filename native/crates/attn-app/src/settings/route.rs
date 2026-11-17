@@ -544,23 +544,40 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
     if field || !rules.fixed_harness {
         parts.push(("Harness", view.harness_name.clone()));
     }
+    let mark = if view.effective.is_empty() {
+        String::new()
+    } else {
+        TierInfo::mark(view.tier.as_ref(), false)
+    };
     let model = if view.effective.is_empty() {
         "Choose a model".to_owned()
     } else {
-        let mark = TierInfo::mark(view.tier.as_ref(), false);
-        if mark.is_empty() {
-            view.model_label.clone()
-        } else {
-            format!("{} {mark}", view.model_label)
-        }
+        view.model_label.clone()
     };
-    parts.push(("Model", model));
+    let tier = (!mark.is_empty()).then(|| {
+        let quiet = view.tier.as_ref().is_some_and(|t| t.tier.is_some());
+        (
+            mark.clone(),
+            if quiet { t.text_tertiary } else { t.warning },
+        )
+    });
+    parts.push((
+        "Model",
+        if mark.is_empty() || field {
+            model
+        } else {
+            format!("{model} {mark}")
+        },
+    ));
     if let Some(effort) = view.effort_shown() {
         parts.push(("Effort", effort));
     }
     let summary = parts
         .iter()
-        .map(|(_, v)| v.as_str())
+        .map(|(name, v)| match (*name, &tier) {
+            ("Model", Some((mark, _))) if field => format!("{v} {mark}"),
+            _ => v.clone(),
+        })
         .collect::<Vec<_>>()
         .join(" · ");
     let warning = view.missing.then_some(t.warning);
@@ -579,7 +596,7 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
             .w_full()
             .gap(6.0)
             .child(
-                route_field(parts, warning, t)
+                route_field(parts, tier, warning, t)
                     .key(key)
                     .label(label.to_owned())
                     .a11y_value(summary)
@@ -702,7 +719,12 @@ pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
 
 /// The Tauri app's `.route-field`: harness and model on one line beside the caret, and the
 /// effort under a hairline, each under its label.
-fn route_field(parts: Vec<(&str, String)>, warning: Option<Color>, t: &Tokens) -> El {
+fn route_field(
+    parts: Vec<(&str, String)>,
+    tier: Option<(String, Color)>,
+    warning: Option<Color>,
+    t: &Tokens,
+) -> El {
     let k = crate::settings::pages::kit(t);
     let part = |name: &str, value: String| {
         let ink = match (name, warning) {
@@ -712,11 +734,20 @@ fn route_field(parts: Vec<(&str, String)>, warning: Option<Color>, t: &Tokens) -
             _ => t.text_primary,
         };
         let font = if name == "Harness" { CAPTION } else { k.ty.ui };
+        let mut shown = row()
+            .min_w(0.0)
+            .gap(4.0)
+            .items_end()
+            .flex_wrap()
+            .child(text(value).font(font).color(ink).wrap_anywhere());
+        if let ("Model", Some((mark, mark_ink))) = (name, &tier) {
+            shown = shown.child(text(mark.clone()).font(CAPTION).color(*mark_ink));
+        }
         col()
             .gap(4.0)
             .min_w(0.0)
             .child(type_::upper(name, type_::BOLD_CAPS).color(t.text_tertiary))
-            .child(text(value).font(font).color(ink).wrap_anywhere())
+            .child(shown)
     };
     let (effort, line): (Vec<_>, Vec<_>) =
         parts.into_iter().partition(|(name, _)| *name == "Effort");

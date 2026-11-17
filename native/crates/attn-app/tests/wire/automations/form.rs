@@ -377,6 +377,54 @@ fn the_form_holds_while_the_daemon_applies_it() {
 }
 
 #[test]
+fn the_name_the_form_opens_in_stays_quiet_until_the_person_visits_it() {
+    let mut world = open_new();
+    let name_error = format!("{}.error", key("name"));
+    press(&mut world, "trigger-scheduled");
+    assert!(!has(&world, &name_error));
+
+    press(&mut world, "name");
+    press(&mut world, "trigger-manual");
+    assert_eq!(
+        name(&world, &name_error).as_deref(),
+        Some("A name is required.")
+    );
+}
+
+#[test]
+fn the_prompt_s_grip_drags_it_taller_and_never_below_its_least_height() {
+    let grip = key("prompt-grip");
+    let mut world = open_new();
+    let drag = |world: &mut World, by: f64| {
+        let [x, y, w, h] = world.rect(&grip);
+        let to = ((x + w / 2.0) as f32, (y + h / 2.0 + by) as f32);
+        world.gesture(|app| app.drag(Target::key(&grip), to));
+        world.rect(&grip)[1]
+    };
+    let rest = world.rect(&grip)[1];
+    assert_eq!(drag(&mut world, 80.0), rest + 80.0);
+    assert_eq!(drag(&mut world, -500.0), rest);
+}
+
+#[test]
+fn a_schedule_list_opens_under_its_field_from_the_field_s_left_edge() {
+    let mut world = open_new();
+    press(&mut world, "trigger-scheduled");
+    let [fx, fy, _, fh] = world.rect(&key("schedule-days-hour-trigger"));
+    press(&mut world, "schedule-days-hour-trigger");
+    let [lx, ly, ..] = world.rect(&key("schedule-days-hour-content"));
+    assert!(
+        (lx - fx).abs() < 1.0,
+        "the list starts at {lx}, the field at {fx}"
+    );
+    assert!(
+        ly >= fy + fh,
+        "the list's top {ly} is above the field's foot {}",
+        fy + fh
+    );
+}
+
+#[test]
 fn a_rule_speaks_once_its_field_is_left_and_stops_once_it_is_met_and_save_checks_every_rule() {
     let mut world = open_new();
     let prompt_error = format!("{}.error", key("prompt"));

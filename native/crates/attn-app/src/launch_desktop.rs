@@ -302,7 +302,8 @@ pub(crate) fn field(state: &State, t: &Tokens, field: &Field) -> El {
     let mut unused = Vec::new();
     let trigger = select(state, field)
         .build(attn_ui::kit(t), &mut unused)
-        .w_full();
+        .w_full()
+        .fill(t.bg_button);
     let error = state
         .window
         .launch_desktop
@@ -315,7 +316,7 @@ pub(crate) fn field(state: &State, t: &Tokens, field: &Field) -> El {
         .child(
             text("Desktop")
                 .font(rune::TextStyle::new(12.0, 400.0))
-                .color(t.text_secondary)
+                .color(t.text_primary)
                 .a11y_hidden(),
         )
         .child(trigger)

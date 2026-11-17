@@ -6,13 +6,14 @@ use rune::tok::space;
 use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx, col, row, text};
 use rune_kit::ScrollBar;
 use rune_kit::{
-    Button, ButtonVariant, Checkbox, ControlSize, PopupItem, PopupList, SegmentedControl, Select,
+    Button, ButtonVariant, Checkbox, ControlSize, Placement, PopupItem, PopupList, Select,
     TextArea, TextInput,
 };
 
 use super::model::{CatchUp, Continuity, Field, Location, Trigger};
 use super::{Form, KEY, Load, ZoneSuggestions, field_key, form, form_mut};
 use crate::State;
+use crate::automations::look::{self, Look};
 use crate::automations::schedule::{ALL_DAYS, Friendly, Tab, Unit, WEEKDAYS};
 use crate::settings::{Route, RouteHarness, RouteTarget, Rules};
 
@@ -35,6 +36,10 @@ const MONTHS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/// The prompt's least height, the Tauri app's `.automation-form__textarea { min-height: 120px }`.
+pub(super) const PROMPT_HEIGHT: f32 = 120.0;
+/// The width `attn_ui::scroll_bar` takes beside the content, as WebKit's styled scroll bar does.
+const SCROLL_BAR: f32 = 8.0;
 /// attn checks schedules once a minute.
 const SCHEDULER_TICK_MS: i64 = 60_000;
 
@@ -48,16 +53,60 @@ fn key(name: &str) -> String {
 
 fn hint(words: impl Into<String>, t: &Tokens) -> El {
     text(words.into())
-        .font(type_::LABEL)
+        .font(look::SMALL)
         .color(t.text_tertiary)
         .wrap()
+}
+
+fn label(words: &str, t: &Tokens) -> El {
+    text(words.to_owned())
+        .font(look::SMALL)
+        .color(t.text_secondary)
+}
+
+/// The Tauri app's `.schedule-composer__quiet` buttons: underlined words.
+fn link(words: &str, t: &Tokens) -> El {
+    let ink = t.text_tertiary;
+    look::quiet(words, ink, t).spans([rune::Span::new(0, words.len()).underline(ink)])
+}
+
+/// A fact about the trigger, as the Tauri app's `.automation-form__fact-chip`: a pill.
+fn fact(words: &str, t: &Tokens) -> El {
+    text(words.to_owned())
+        .font(look::SMALL)
+        .color(t.text_secondary)
+        .self_start()
+        .px(12.0)
+        .py(4.0)
+        .radius(20.0)
+        .fill(t.bg_elevated)
+}
+
+/// What always holds, as the Tauri app's `.automation-form__invariant`: a box with a brand dot.
+fn invariant(words: &str, t: &Tokens) -> El {
+    row()
+        .w_full()
+        .gap(space::S2)
+        .items_center()
+        .px(12.0)
+        .py(8.0)
+        .radius(6.0)
+        .fill(t.bg_elevated)
+        .child(rune::el().size(6.0, 6.0).radius(3.0).fill(t.brand))
+        .child(
+            text(words.to_owned())
+                .font(look::SMALL)
+                .color(t.text_secondary)
+                .wrap()
+                .grow(1.0),
+        )
 }
 
 fn error(field_key: String, words: &str, t: &Tokens) -> El {
     text(words.to_owned())
         .key(format!("{field_key}.error"))
         .role("alert")
-        .font(type_::LABEL)
+        .font(look::SMALL)
         .color(t.error)
         .wrap()
 }
@@ -71,6 +120,8 @@ fn section(label: &str, t: &Tokens) -> El {
     col()
         .w_full()
         .gap(space::S2)
+        .pb(14.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .child(type_::upper(label, SECTION_LABEL).color(t.text_tertiary))
 }
 
@@ -132,9 +183,8 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
         .w_full()
         .items_center()
         .gap(space::S2)
-        .px(space::S3)
-        .py(space::S2)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+        .pb(8.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .child(
             text(title)
                 .font(type_::TITLE)
@@ -162,7 +212,7 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
                 .fill(t.bg_elevated)
                 .border(1.0, edge)
                 .hover(t.bg_selected)
-                .child(text(word).font(type_::LABEL).color(ink).a11y_hidden())
+                .child(text(word).font(look::SMALL).color(ink).a11y_hidden())
                 .on_press_tx(super::toggle_enabled),
         );
     }
@@ -176,7 +226,10 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
             .key(key("close")),
     );
     let body = match &f.load {
-        Load::Loading => text("Loading…").font(type_::BODY).color(t.text_secondary),
+        Load::Loading => text("Loading…")
+            .font(look::REGULAR)
+            .color(t.text_tertiary)
+            .py(16.0),
         Load::Failed(why) => error(key("load"), why, t),
         Load::Ready => fields(state, f, t),
     };
@@ -187,6 +240,8 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
         .w_full()
         .grow(1.0)
         .min_h(0.0)
+        .gap(10.0)
+        .padding(16.0)
         .child(header)
         .child(
             col()
@@ -194,8 +249,8 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                .gap(space::S3)
-                .padding(space::S3)
+                .pl(2.0)
+                .pr(2.0 + SCROLL_BAR)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
@@ -209,7 +264,7 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
 }
 
 fn fields(state: &State, f: &Form, t: &Tokens) -> El {
-    let mut body = col().w_full().gap(space::S3);
+    let mut body = col().w_full().gap(18.0);
     if f.saving {
         body = body.child(hint("Saving…", t).key(key("saving")));
     }
@@ -244,7 +299,7 @@ fn trigger(f: &Form, t: &Tokens) -> El {
         (Trigger::Scheduled, "scheduled", "Scheduled"),
         (Trigger::GitHub, "github", "PR review requested"),
     ];
-    let mut s = section("Trigger", t).child(
+    let s = section("Trigger", t).child(
         row()
             .key(key("triggers"))
             .role("group")
@@ -273,20 +328,22 @@ fn trigger(f: &Form, t: &Tokens) -> El {
                     .grow(1.0)
             })),
     );
+    let mut details = col().w_full().gap(10.0).pt(4.0);
     match f.trigger {
         Trigger::Manual => {
-            s = s.child(hint("Fresh worker each run", t));
+            details = details.child(fact("Fresh worker each run", t));
             if f.location == Location::Directory {
-                s = s.child(directory(f, t));
+                details = details.child(directory(f, t));
             }
         }
         Trigger::Scheduled => {
-            s = s
+            details = details
                 .child(schedule(f, t))
                 .child(
                     col()
                         .w_full()
                         .gap(space::S1)
+                        .child(label("Only run if", t))
                         .child(input(
                             f,
                             &f.guard,
@@ -303,21 +360,21 @@ fn trigger(f: &Form, t: &Tokens) -> El {
                 )
                 .child(directory(f, t));
         }
-        Trigger::GitHub => s = s.child(github(f, t)),
+        Trigger::GitHub => details = details.child(github(f, t)),
     }
-    s
+    s.child(details)
 }
 
 fn directory(f: &Form, t: &Tokens) -> El {
     col()
         .w_full()
         .gap(space::S1)
-        .child(text("Folder").font(type_::LABEL).color(t.text_secondary))
+        .child(label("Folder", t))
         .child(
             row()
                 .w_full()
                 .gap(space::S2)
-                .items_center()
+                .items_stretch()
                 .child(
                     input(
                         f,
@@ -331,12 +388,12 @@ fn directory(f: &Form, t: &Tokens) -> El {
                     .grow(1.0),
                 )
                 .child(
-                    Button::new("Browse")
-                        .control_size(ControlSize::Small)
-                        .disabled(f.saving)
-                        .on_press_tx(|_: &mut State, tx: &mut Tx| super::browse(tx))
-                        .build(kit(t))
-                        .key(key("browse")),
+                    look::button("Browse", Look::Neutral, t, |b| {
+                        b.disabled(f.saving)
+                            .on_press_tx(|_: &mut State, tx: &mut Tx| super::browse(tx))
+                    })
+                    .key(key("browse"))
+                    .h_full(),
                 ),
         )
         .children(field_error(f, Field::DirectoryPath, t))
@@ -375,7 +432,7 @@ fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
             .fill(t.bg_elevated)
             .child(
                 text(repository.clone())
-                    .font(type_::LABEL)
+                    .font(look::SMALL)
                     .color(if invalid { t.error } else { t.text_primary }),
             )
             .child(
@@ -433,8 +490,8 @@ fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
     col()
         .w_full()
         .gap(space::S1)
-        .child(text(label).font(type_::LABEL).color(t.text_secondary))
-        .child(row().w_full().gap(space::S1).wrap().children(chips))
+        .child(self::label(label, t))
+        .child(row().w_full().gap(space::S1).flex_wrap().children(chips))
         .child(field_input)
         .children(
             errors
@@ -449,10 +506,10 @@ fn github(f: &Form, t: &Tokens) -> El {
         .gap(space::S2)
         .child(repository_list(f, false, t))
         .child(repository_list(f, true, t))
-        .child(hint("One reviewer per PR — later request cycles return to it", t))
-        .child(hint("Existing requests are left alone when enabled", t))
-        .child(hint("Missed while attn was off: latest request still runs", t))
-        .child(hint(
+        .child(fact("One reviewer per PR — later request cycles return to it", t))
+        .child(fact("Existing requests are left alone when enabled", t))
+        .child(fact("Missed while attn was off: latest request still runs", t))
+        .child(invariant(
             "Reviews always run in a fresh worktree checked out at the PR's head commit — your existing clone is never touched.",
             t,
         ))
@@ -525,12 +582,12 @@ fn launch(state: &State, f: &Form, t: &Tokens) -> El {
             "Automation model",
         ));
     if overridden(f) {
-        s = s.child(hint(
+        s = s.child(invariant(
             "Use model and effort IDs accepted by the executable override.",
             t,
         ));
     }
-    s.child(hint(
+    s.child(invariant(
         "Automation sessions always run unattended with the agent's automatic approval mode.",
         t,
     ))
@@ -538,23 +595,39 @@ fn launch(state: &State, f: &Form, t: &Tokens) -> El {
 
 fn prompt(f: &Form, t: &Tokens) -> El {
     let checked = super::field_of_key(&field_key(Field::Prompt));
+    let grip = rune::icon(&attn_ui::icon::RESIZE_GRIP, 10.0)
+        .key(key("prompt-grip"))
+        .color(t.text_tertiary)
+        .cursor(rune::Cursor::ResizeRow)
+        .pin(None, None, Some(3.0), Some(3.0))
+        .on_drag(|state: &mut State, drag: &mut rune::Drag, _: &mut Tx| {
+            let Some(f) = form_mut(state) else { return };
+            match drag.phase {
+                rune::Phase::Down => drag.data = f.prompt_height,
+                rune::Phase::Move => f.prompt_height = (drag.data + drag.dy).max(PROMPT_HEIGHT),
+                rune::Phase::Up => {}
+            }
+        });
     section("Prompt", t)
         .child(
-            TextArea::new(&f.prompt)
-                .key(field_key(Field::Prompt))
-                .label("Prompt")
-                .rows(6)
-                .spellcheck(true)
-                .on_edit(|s: &mut State| field_of(s, |f| &mut f.prompt))
-                .on_change(move |state: &mut State, _: &mut Tx| {
-                    if let (Some(f), Some(which)) = (form_mut(state), checked) {
-                        f.edited(which);
-                    }
-                })
-                .build(kit(t))
-                .fill(t.bg_elevated)
-                .invalid(f.errors.contains_key(&Field::Prompt))
-                .w_full(),
+            col().w_full().child(
+                TextArea::new(&f.prompt)
+                    .key(field_key(Field::Prompt))
+                    .label("Prompt")
+                    .spellcheck(true)
+                    .on_edit(|s: &mut State| field_of(s, |f| &mut f.prompt))
+                    .on_change(move |state: &mut State, _: &mut Tx| {
+                        if let (Some(f), Some(which)) = (form_mut(state), checked) {
+                            f.edited(which);
+                        }
+                    })
+                    .build(kit(t))
+                    .fill(t.bg_elevated)
+                    .invalid(f.errors.contains_key(&Field::Prompt))
+                    .w_full()
+                    .h(f.prompt_height),
+            )
+            .child(grip),
         )
         .child(hint(
             "This is the instruction the agent receives. Trigger details arrive separately as structured context — they can never rewrite this prompt.",
@@ -573,16 +646,82 @@ fn segments<T: Copy + PartialEq + 'static>(
 ) -> El {
     let labels: Vec<&str> = options.iter().map(|(_, _, l)| *l).collect();
     let values: Vec<T> = options.iter().map(|(v, ..)| *v).collect();
-    SegmentedControl::new(&labels, options.iter().position(|(v, ..)| *v == current))
-        .label(label)
-        .fit()
-        .on_pick(move |state: &mut State, i: usize, _: &mut Tx| {
-            if let Some(f) = form_mut(state) {
-                pick(f, values[i]);
-            }
-        })
-        .build(kit(t))
-        .key(key(name))
+    col()
+        .w_full()
+        .gap(space::S1)
+        .child(self::label(label, t))
+        .child(
+            segmented(
+                &labels,
+                options.iter().position(|(v, ..)| *v == current),
+                label,
+                move |state: &mut State, i: usize| {
+                    if let Some(f) = form_mut(state) {
+                        pick(f, values[i]);
+                    }
+                },
+                t,
+            )
+            .key(key(name)),
+        )
+}
+
+/// The Tauri app's `.automation-form__segmented`: joined segments at their own width, the chosen
+/// one in brand on a brand tint.
+fn segmented(
+    labels: &[&str],
+    chosen: Option<usize>,
+    label: &str,
+    pick: impl Fn(&mut State, usize) + Clone + 'static,
+    t: &Tokens,
+) -> El {
+    let last = labels.len().saturating_sub(1);
+    row()
+        .role("radiogroup")
+        .label(label.to_owned())
+        .focus_group()
+        .self_start()
+        .children(labels.iter().enumerate().map(|(i, words)| {
+            let on = chosen == Some(i);
+            let (fill, ink) = if on {
+                (t.brand.alpha(0.15), t.brand)
+            } else {
+                (t.bg_elevated, t.text_secondary)
+            };
+            let radius = match i {
+                0 => [6.0, 0.0, 0.0, 6.0],
+                i if i == last => [0.0, 6.0, 6.0, 0.0],
+                _ => [0.0; 4],
+            };
+            let edges = if i == 0 {
+                [1.0, 1.0, 1.0, 1.0]
+            } else {
+                [1.0, 1.0, 1.0, 0.0]
+            };
+            let pick = pick.clone();
+            row()
+                .key(format!("segment{i}"))
+                .role("radio")
+                .label((*words).to_owned())
+                .checked(on)
+                .position_in_set(i + 1, labels.len())
+                .focusable(true)
+                .focus_selected(on)
+                .focus_ring(2.0, 0.0, t.brand)
+                .px(12.0)
+                .py(5.0)
+                .corners(radius)
+                .fill(fill)
+                .border_sides(edges, t.border)
+                .hover(if on { fill } else { t.bg_selected })
+                .on_press(move |state: &mut State| pick(state, i))
+                .child(
+                    text((*words).to_owned())
+                        .font(look::SMALL)
+                        .color(ink)
+                        .a11y_hidden(),
+                )
+        }))
 }
 
 fn advanced_chips(f: &Form) -> Vec<String> {
@@ -617,29 +756,45 @@ fn advanced(f: &Form, t: &Tokens) -> El {
             Field::CatchUp | Field::OverrideRepository(_) | Field::OverridePath(_)
         )
     });
-    let mut summary = row().gap(space::S2).items_center().child(
-        text("Advanced")
-            .font(type_::LABEL)
-            .color(if failed { t.error } else { t.text_secondary }),
-    );
+    let ink = if failed { t.error } else { t.text_secondary };
     let chips = advanced_chips(f);
-    for chip in &chips {
-        summary = summary.child(text(chip.clone()).font(type_::LABEL).color(t.text_tertiary));
-    }
-    let toggle = Button::new("Advanced")
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .label_with(move |_, _| summary)
+    let toggle = row()
+        .key(key("advanced"))
+        .role("button")
+        .label("Advanced")
+        .description(chips.join(", "))
         .expanded(f.advanced)
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.brand)
+        .self_start()
+        .gap(space::S2)
+        .items_center()
         .on_press(|state: &mut State| {
             if let Some(f) = form_mut(state) {
                 f.advanced = !f.advanced;
             }
         })
-        .build(kit(t))
-        .key(key("advanced"))
-        .description(chips.join(", "));
-    let mut s = col().w_full().gap(space::S2).child(toggle);
+        .child(
+            text(if f.advanced {
+                "▼ Advanced"
+            } else {
+                "▶ Advanced"
+            })
+            .font(look::SMALL)
+            .color(ink)
+            .a11y_hidden(),
+        )
+        .children(chips.iter().map(|chip| {
+            text(chip.clone())
+                .font(look::SMALL)
+                .color(t.text_secondary)
+                .px(7.0)
+                .py(1.0)
+                .radius(999.0)
+                .border(1.0, t.border_subtle)
+                .a11y_hidden()
+        }));
+    let mut s = col().w_full().gap(12.0).child(toggle);
     if !f.advanced {
         return s;
     }
@@ -793,11 +948,7 @@ fn overrides(f: &Form, t: &Tokens) -> El {
     col()
         .w_full()
         .gap(space::S2)
-        .child(
-            text("Local clones")
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
+        .child(label("Local clones", t))
         .children(rows)
         .child(
             Button::new("Add override")
@@ -856,48 +1007,51 @@ fn definition(f: &Form, t: &Tokens) -> El {
 }
 
 fn actions(f: &Form, t: &Tokens) -> El {
-    let mut c = col()
-        .key(key("actions"))
-        .w_full()
-        .gap(space::S2)
-        .px(space::S3)
-        .py(space::S2)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle);
+    let mut c = col().key(key("actions")).w_full().gap(space::S2);
     if f.stale {
         c = c.child(
-            col()
+            row()
                 .key(key("stale"))
                 .role("alert")
-                .gap(space::S1)
-                .child(hint(
-                    "This automation changed elsewhere while you were editing. Reload to pick up the latest revision — your unsaved edits will be replaced.",
-                    t,
-                ))
+                .w_full()
+                .gap(12.0)
+                .items_center()
+                .px(12.0)
+                .py(8.0)
+                .radius(6.0)
+                .fill(t.warning.alpha(0.12))
+                .border(1.0, t.warning.alpha(0.4))
                 .child(
-                    Button::new("Reload")
-                        .control_size(ControlSize::Small)
-                        .on_press_tx(super::reload)
-                        .build(kit(t))
+                    text("This automation changed elsewhere while you were editing. Reload to pick up the latest revision — your unsaved edits will be replaced.")
+                        .font(look::SMALL)
+                        .color(t.warning)
+                        .wrap()
+                        .grow(1.0),
+                )
+                .child(
+                    look::button("Reload", Look::Neutral, t, |b| b.on_press_tx(super::reload))
                         .key(key("reload")),
                 ),
         );
     } else if let Some(why) = &f.save_error {
-        c = c.child(error(key("save"), why, t));
+        c = c.child(
+            error(key("save"), why, t)
+                .w_full()
+                .px(12.0)
+                .py(8.0)
+                .radius(6.0)
+                .fill(t.error.alpha(0.12))
+                .border(1.0, t.error.alpha(0.4)),
+        );
     }
     let mut bar = row().w_full().gap(space::S2).items_center();
     if f.id.is_some() {
-        bar = bar.child(
-            Button::new(if f.delete_armed {
-                "Confirm delete"
-            } else {
-                "Delete"
-            })
-            .variant(ButtonVariant::Danger)
-            .control_size(ControlSize::Small)
-            .on_press_tx(super::delete)
-            .build(kit(t))
-            .key(DELETE),
-        );
+        let (words, look) = if f.delete_armed {
+            ("Confirm delete", Look::Armed)
+        } else {
+            ("Delete", Look::Danger)
+        };
+        bar = bar.child(look::button(words, look, t, |b| b.on_press_tx(super::delete)).key(DELETE));
         if f.delete_armed {
             bar = bar.child(hint("Existing seeds and run history are kept.", t));
         }
@@ -905,25 +1059,21 @@ fn actions(f: &Form, t: &Tokens) -> El {
     bar = bar
         .child(row().grow(1.0))
         .child(
-            Button::new("Cancel")
-                .variant(ButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .on_press_tx(super::close)
-                .build(kit(t))
+            look::button("Cancel", Look::Neutral, t, |b| b.on_press_tx(super::close))
                 .key(key("cancel")),
         )
         .child(
-            Button::new(if f.saving { "Saving…" } else { "Save" })
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .disabled(f.save_blocked())
-                .shortcut("mod+enter")
-                .on_press_tx(super::save)
-                .build(kit(t))
-                .key(key("save"))
-                .radius(6.0)
-                .fill(t.bg_button)
-                .border(1.0, t.brand),
+            look::button(
+                if f.saving { "Saving…" } else { "Save" },
+                Look::Save,
+                t,
+                |b| {
+                    b.disabled(f.save_blocked())
+                        .shortcut("mod+enter")
+                        .on_press_tx(super::save)
+                },
+            )
+            .key(key("save")),
         );
     c.child(bar)
 }
@@ -947,6 +1097,7 @@ fn select(f: &Form, c: Choice) -> Select {
     let pick = c.pick;
     Select::new(c.key.clone(), &c.options)
         .label(c.label)
+        .placement(Placement::BottomStart)
         .current(c.options.get(c.current).map(String::as_str))
         .open(open)
         .disabled(f.saving)
@@ -1267,20 +1418,17 @@ fn day_buttons(schedule: &Friendly, t: &Tokens) -> El {
     let preset = |label: &'static str, name: &str, days: &[u8]| {
         let schedule = schedule.clone();
         let days = days.to_vec();
-        Button::new(label)
-            .variant(ButtonVariant::GhostMuted)
-            .control_size(ControlSize::Small)
+        link(label, t)
             .on_press(move |state: &mut State| {
                 super::set_schedule(state, with_days(&schedule, days.clone()));
             })
-            .build(kit(t))
             .key(key(name))
     };
     row()
         .w_full()
-        .gap(space::S1)
+        .gap(7.0)
         .items_center()
-        .wrap()
+        .flex_wrap()
         .child(row().role("group").label("Days").gap(3.0).children(buttons))
         .child(preset("Every day", "schedule-every-day", &ALL_DAYS))
         .child(preset("Weekdays", "schedule-weekdays", &WEEKDAYS))
@@ -1294,15 +1442,27 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> El {
     let mut next = || triggers.next().map(|(_, el)| el).unwrap_or_else(row);
     let words = |w: &str| {
         text(w.to_owned())
-            .font(type_::LABEL)
+            .font(look::REGULAR)
             .color(t.text_secondary)
     };
-    let line = || row().w_full().gap(space::S2).items_center().wrap();
+    let boxed = |inner: El| {
+        row()
+            .items_center()
+            .px(2.0)
+            .radius(6.0)
+            .fill(t.bg_elevated)
+            .border(1.0, t.border)
+            .child(inner)
+    };
+    let line = || row().w_full().gap(7.0).items_center().flex_wrap();
     match schedule {
         Friendly::Every { unit, window, .. } => {
-            let mut first = line().child(words("Every")).child(next()).child(next());
+            let mut first = line()
+                .child(words("Every"))
+                .child(boxed(next()))
+                .child(boxed(next()));
             if *unit == Unit::Hours {
-                first = first.child(words("at minute")).child(next());
+                first = first.child(words("at minute")).child(boxed(next()));
             }
             let on = window.is_some();
             let schedule_now = schedule.clone();
@@ -1320,7 +1480,10 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> El {
                     .key(key("schedule-window")),
             );
             if on {
-                second = second.child(next()).child(words("and")).child(next());
+                second = second
+                    .child(boxed(next()))
+                    .child(words("and"))
+                    .child(boxed(next()));
             }
             col()
                 .w_full()
@@ -1334,21 +1497,27 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> El {
             .gap(space::S2)
             .child(day_buttons(schedule, t))
             .child(
-                line()
-                    .child(words("at"))
-                    .child(next())
-                    .child(words(":"))
-                    .child(next()),
+                line().child(words("at")).child(boxed(
+                    row()
+                        .items_center()
+                        .child(next())
+                        .child(words(":"))
+                        .child(next()),
+                )),
             ),
         Friendly::Monthly { day, .. } => {
             let mut c = col().w_full().gap(space::S2).child(
                 line()
                     .child(words("On day"))
-                    .child(next())
+                    .child(boxed(next()))
                     .child(words("at"))
-                    .child(next())
-                    .child(words(":"))
-                    .child(next()),
+                    .child(boxed(
+                        row()
+                            .items_center()
+                            .child(next())
+                            .child(words(":"))
+                            .child(next()),
+                    )),
             );
             if *day > 28 {
                 c = c.child(hint("Months without this day are skipped.", t));
@@ -1358,7 +1527,7 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> El {
     }
 }
 
-/// "Tue 17 Nov, 09:00" for an RFC 3339 time, read on the clock its offset names.
+/// "Tue 17 Nov at 09:00" for an RFC 3339 time, read on the clock its offset names.
 fn long_date(time: &str) -> Option<String> {
     let date = time.get(..10)?;
     let day = crate::calendar::day_of_date(date)?;
@@ -1367,7 +1536,7 @@ fn long_date(time: &str) -> Option<String> {
     let dom: u32 = time.get(8..10)?.parse().ok()?;
     let clock = time.get(11..16)?;
     Some(format!(
-        "{weekday} {dom} {}, {clock}",
+        "{weekday} {dom} {} at {clock}",
         MONTHS.get(month - 1)?
     ))
 }
@@ -1412,9 +1581,15 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
                 } else {
                     "Next checks"
                 })
-                .font(type_::LABEL)
+                .font(look::SMALL)
                 .color(t.text_secondary)
                 .grow(1.0),
+            )
+            .child(
+                text("Time zone")
+                    .font(look::SMALL)
+                    .color(t.text_tertiary)
+                    .a11y_hidden(),
             )
             .child(
                 TextInput::new(&f.time_zone)
@@ -1445,7 +1620,7 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
     let list = col()
         .role("list")
         .w_full()
-        .gap(2.0)
+        .gap(3.0)
         .children(times.iter().map(|(time, ms)| {
             let mut when = long_date(time).unwrap_or_else(|| time.clone());
             if elsewhere {
@@ -1454,16 +1629,16 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
             row()
                 .role("listitem")
                 .w_full()
-                .gap(space::S2)
+                .gap(12.0)
                 .child(
                     text(when)
-                        .font(type_::LABEL)
-                        .color(t.text_primary)
+                        .font(look::REGULAR)
+                        .color(t.text_secondary)
                         .grow(1.0),
                 )
                 .child(
                     text(until(*ms, f.preview.at_ms))
-                        .font(type_::LABEL)
+                        .font(look::SMALL)
                         .color(t.text_tertiary),
                 )
         }));
@@ -1473,15 +1648,15 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
 fn schedule(f: &Form, t: &Tokens) -> El {
     let (tab, friendly) = f.schedule();
     let tabs: Vec<&str> = Tab::ALL.iter().map(|(_, _, label)| *label).collect();
-    let mut c = col().key(key("schedule")).w_full().gap(space::S2).child(
-        SegmentedControl::new(&tabs, Tab::ALL.iter().position(|(t, ..)| *t == tab))
-            .label("Schedule type")
-            .fit()
-            .on_pick(|state: &mut State, i: usize, _: &mut Tx| {
-                super::choose_tab(state, Tab::ALL[i].0);
-            })
-            .build(kit(t))
-            .key(key("schedule-tabs")),
+    let mut c = col().key(key("schedule")).w_full().gap(9.0).child(
+        segmented(
+            &tabs,
+            Tab::ALL.iter().position(|(t, ..)| *t == tab),
+            "Schedule type",
+            |state: &mut State, i: usize| super::choose_tab(state, Tab::ALL[i].0),
+            t,
+        )
+        .key(key("schedule-tabs")),
     );
     match (&friendly, tab) {
         (Some(schedule), tab) if tab != Tab::Cron => c = c.child(friendly_controls(f, schedule, t)),
@@ -1501,16 +1676,13 @@ fn schedule(f: &Form, t: &Tokens) -> El {
                 .items_center()
                 .child(hint(format!("Replaced {replaced}."), t))
                 .child(
-                    Button::new("Undo")
-                        .variant(ButtonVariant::GhostMuted)
-                        .control_size(ControlSize::Small)
+                    link("Undo", t)
                         .on_press(super::undo_replace)
-                        .build(kit(t))
                         .key(key("schedule-undo")),
                 ),
         );
     }
-    c = c.child(
+    c = c.child(label("Cron", t)).child(
         TextInput::new(&f.cron)
             .key(key("cron"))
             .label("Cron")
@@ -1541,11 +1713,11 @@ mod tests {
     fn a_next_run_reads_on_its_own_clock_as_the_tauri_app_writes_it() {
         assert_eq!(
             long_date("2026-11-17T09:00:00+01:00").as_deref(),
-            Some("Tue 17 Nov, 09:00")
+            Some("Tue 17 Nov at 09:00")
         );
         assert_eq!(
             long_date("2026-03-01T23:30:00-05:00").as_deref(),
-            Some("Sun 1 Mar, 23:30")
+            Some("Sun 1 Mar at 23:30")
         );
     }
 

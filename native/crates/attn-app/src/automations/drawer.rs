@@ -3,10 +3,15 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Switch, TextInput};
+use rune_kit::{Button, ButtonVariant, Checkbox, ControlSize, TextInput};
 
+use super::look::{self, Look};
 use super::{Automations, DRAWER, form};
 use crate::State;
+
+const NAME: rune::TextStyle = rune::TextStyle::new(13.0, 500.0);
+const BADGE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
+const RUN_STATE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0).mono();
 
 pub(crate) fn pull_request_field(definition: i64) -> String {
     format!("automations.pr-url.{definition}")
@@ -38,12 +43,10 @@ fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 fn new_button(key: &str, t: &Tokens) -> El {
-    Button::new("New automation")
-        .variant(ButtonVariant::Submit)
-        .control_size(ControlSize::Small)
-        .on_press_tx(super::new_form)
-        .build(attn_ui::kit(t))
-        .key(key.to_owned())
+    look::button("New automation", Look::Neutral, t, |b| {
+        b.on_press_tx(super::new_form)
+    })
+    .key(key.to_owned())
 }
 
 fn list(automations: &Automations, t: &Tokens) -> El {
@@ -52,12 +55,11 @@ fn list(automations: &Automations, t: &Tokens) -> El {
         .w_full()
         .items_center()
         .gap(space::S2)
-        .px(space::S3)
-        .py(space::S2)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+        .pb(8.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .child(
             text("Automations")
-                .font(type_::SECTION)
+                .font(look::HEADING)
                 .color(t.text_primary)
                 .grow(1.0),
         )
@@ -76,11 +78,12 @@ fn list(automations: &Automations, t: &Tokens) -> El {
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .gap(space::S3)
-        .padding(space::S3)
+        .gap(12.0)
+        .padding(16.0)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
-        });
+        })
+        .child(header);
     if let Some(error) = &automations.error {
         body = body.child(error_text("automations.error", error, t));
     }
@@ -90,11 +93,13 @@ fn list(automations: &Automations, t: &Tokens) -> El {
         body = body.child(
             col()
                 .key("automations.empty")
-                .gap(space::S2)
+                .items_start()
+                .gap(10.0)
+                .py(16.0)
                 .child(
                     text("No automations yet.")
-                        .font(type_::BODY)
-                        .color(t.text_secondary),
+                        .font(look::REGULAR)
+                        .color(t.text_tertiary),
                 )
                 .child(new_button("automations.new-empty", t)),
         );
@@ -120,28 +125,20 @@ fn list(automations: &Automations, t: &Tokens) -> El {
     {
         body = body.child(runs(automations, selected, t));
     }
-    col()
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .child(header)
-        .child(body)
+    body
 }
 
 fn error_text(key: &str, error: &str, t: &Tokens) -> El {
     text(error.to_owned())
         .key(key.to_owned())
         .role("alert")
-        .font(type_::LABEL)
+        .font(look::SMALL)
         .color(t.error)
         .wrap()
 }
 
 fn quiet_text(words: String, t: &Tokens) -> El {
-    text(words)
-        .font(type_::LABEL)
-        .color(t.text_secondary)
-        .wrap()
+    text(words).font(look::SMALL).color(t.text_tertiary).wrap()
 }
 
 fn definition_row(
@@ -157,20 +154,29 @@ fn definition_row(
         latest.is_some_and(|r| r.state == "failed") || guard.is_some_and(|g| g.outcome == "failed");
     let selected = automations.selected == Some(id);
     let mut summary = row()
-        .w_full()
+        .key(format!("automations.select.{id}"))
+        .role("button")
+        .label(definition.name.clone())
+        .description(super::trigger_label(definition))
+        .checked(selected)
+        .focusable(true)
+        .focus_ring(2.0, 2.0, t.brand)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::select(state, id, tx))
+        .shrink()
         .gap(space::S2)
         .items_center()
         .child(
             text(definition.name.clone())
-                .font(type_::BODY)
+                .font(NAME)
                 .color(t.text_primary)
-                .truncate(),
+                .truncate()
+                .a11y_hidden(),
         )
         .child(
             text(super::trigger_label(definition))
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .truncate(),
+                .font(look::SMALL)
+                .color(t.text_tertiary)
+                .a11y_hidden(),
         );
     if let Some(label) = definition
         .launch_desktop
@@ -179,80 +185,92 @@ fn definition_row(
     {
         summary = summary.child(
             text(label)
-                .font(type_::LABEL)
+                .font(look::SMALL)
                 .color(t.text_tertiary)
-                .truncate(),
+                .a11y_hidden(),
         );
     }
-    let badge = failed.then(|| {
-        text("Failed")
-            .key(format!("automations.failure.{id}"))
-            .role("status")
-            .label("Failed")
-            .font(type_::LABEL)
-            .color(t.error)
-    });
-    let trigger = super::trigger_label(definition);
-    let select = Button::new(definition.name.clone())
-        .variant(if selected {
-            ButtonVariant::Neutral
-        } else {
-            ButtonVariant::GhostMuted
-        })
-        .control_size(ControlSize::Small)
-        .label_with(move |_, _| summary)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::select(state, id, tx))
-        .build(k)
-        .key(format!("automations.select.{id}"))
-        .description(trigger)
-        .checked(selected)
-        .grow(1.0)
-        .min_w(0.0);
+    if failed {
+        summary = summary.child(
+            text("Failed")
+                .key(format!("automations.failure.{id}"))
+                .role("status")
+                .label("Failed")
+                .font(BADGE)
+                .color(t.error)
+                .px(8.0)
+                .py(1.0)
+                .radius(999.0)
+                .fill(t.error.alpha(0.2)),
+        );
+    }
     let enabled = definition.enabled;
-    let toggle = Switch::new(enabled)
-        .label(if enabled { "Enabled" } else { "Disabled" })
-        .control_size(ControlSize::Mini)
-        .disabled(automations.toggling.contains(&id))
-        .on_toggle_tx(move |state: &mut State, tx: &mut Tx| {
-            super::set_enabled(state, id, !enabled, tx);
-        })
-        .build(k)
-        .key(format!("automations.toggle.{id}"));
-    let run_now = Button::new("Run now")
-        .control_size(ControlSize::Small)
-        .disabled(automations.running.contains_key(&id))
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::run_now(state, id, tx))
-        .build(k)
-        .key(format!("automations.run-now.{id}"));
-    let edit = Button::new("Edit")
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::edit(state, id, tx))
-        .build(k)
-        .key(format!("automations.edit.{id}"));
+    let word = if enabled { "Enabled" } else { "Disabled" };
+    let toggling = automations.toggling.contains(&id);
+    let flip = move |state: &mut State, tx: &mut Tx| super::set_enabled(state, id, !enabled, tx);
+    let mut word_el = text(word)
+        .font(look::SMALL)
+        .color(t.text_secondary)
+        .a11y_hidden();
+    if !toggling {
+        word_el = word_el.on_press_tx(flip);
+    }
+    let toggle = row()
+        .gap(6.0)
+        .items_center()
+        .child(
+            Checkbox::new(enabled)
+                .disabled(toggling)
+                .on_toggle_tx(flip)
+                .build(k)
+                .key(format!("automations.toggle.{id}"))
+                .label(word),
+        )
+        .child(word_el);
+    let run_now = look::button("Run now", Look::Neutral, t, |b| {
+        b.disabled(automations.running.contains_key(&id))
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::run_now(state, id, tx))
+    })
+    .key(format!("automations.run-now.{id}"));
+    let edit = look::button("Edit", Look::Outline, t, |b| {
+        b.on_press_tx(move |state: &mut State, tx: &mut Tx| super::edit(state, id, tx))
+    })
+    .key(format!("automations.edit.{id}"));
     let mut item = col()
         .key(format!("automations.row.{id}"))
         .role("listitem")
         .label(definition.name.clone())
         .w_full()
-        .gap(space::S1)
-        .padding(space::S2)
-        .radius(6.0)
-        .fill(if selected {
-            t.bg_selected
-        } else {
-            t.bg_elevated
-        })
+        .gap(space::S2)
+        .px(10.0)
+        .py(8.0)
+        .radius(8.0)
+        .border(
+            1.0,
+            if selected {
+                t.border_hover
+            } else {
+                t.border_subtle
+            },
+        )
         .child(
             row()
                 .w_full()
+                .flex_wrap()
                 .gap(space::S2)
                 .items_center()
-                .child(select)
-                .children(badge)
-                .child(toggle)
-                .child(run_now)
-                .child(edit),
+                .child(summary)
+                .child(row().grow(1.0).self_stretch().on_press_tx(
+                    move |state: &mut State, tx: &mut Tx| super::select(state, id, tx),
+                ))
+                .child(
+                    row()
+                        .gap(space::S2)
+                        .items_center()
+                        .child(toggle)
+                        .child(run_now)
+                        .child(edit),
+                ),
         );
     if let Some(prompt) = automations
         .pull_request
@@ -309,16 +327,20 @@ fn definition_row(
         if let Some(fix) = &run.fix {
             let fix = fix.clone();
             let harness = crate::picker::agents::label(&fix.agent);
+            let help = fix.directory.clone();
             item = item.child(
-                Button::new(format!("Trust folder in {harness}"))
-                    .variant(ButtonVariant::Outline)
-                    .control_size(ControlSize::Small)
-                    .help(fix.directory.clone())
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        super::fix(state, fix.clone(), tx);
-                    })
-                    .build(k)
-                    .key(format!("automations.fix.{id}")),
+                look::button(
+                    &format!("Trust folder in {harness}"),
+                    Look::Outline,
+                    t,
+                    |b| {
+                        b.help(help)
+                            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                                super::fix(state, fix.clone(), tx);
+                            })
+                    },
+                )
+                .key(format!("automations.fix.{id}")),
             );
         }
     }
@@ -401,7 +423,6 @@ fn pull_request_prompt(
 }
 
 fn runs(automations: &Automations, definition: &AutomationDefinitionSummary, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
     let mut runs: Vec<&AutomationRunSummary> = automations
         .runs
         .get(&definition.id)
@@ -413,22 +434,23 @@ fn runs(automations: &Automations, definition: &AutomationDefinitionSummary, t: 
         .role("list")
         .label(format!("{} — runs", definition.name))
         .w_full()
-        .gap(space::S1)
+        .gap(6.0)
         .children(runs.iter().map(|run| run_row(run, t)));
     if runs.is_empty() {
         list = list.child(
             text("No runs yet.")
                 .key("automations.runs-empty")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+                .font(look::SMALL)
+                .color(t.text_tertiary)
+                .py(8.0),
         );
     }
     let mut panel = col()
         .key("automations.runs")
         .w_full()
         .gap(space::S2)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .py(space::S2)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
+        .pt(12.0)
         .child(
             row()
                 .w_full()
@@ -436,17 +458,14 @@ fn runs(automations: &Automations, definition: &AutomationDefinitionSummary, t: 
                 .gap(space::S2)
                 .child(
                     text(format!("{} — runs", definition.name))
-                        .font(type_::LABEL)
+                        .font(type_::TITLE)
                         .color(t.text_primary)
                         .grow(1.0)
                         .truncate(),
                 )
                 .child(
-                    Button::new("Close")
-                        .variant(ButtonVariant::GhostMuted)
-                        .control_size(ControlSize::Small)
+                    look::quiet("Close", t.text_secondary, t)
                         .on_press(super::unselect)
-                        .build(k)
                         .key("automations.runs-close"),
                 ),
         );
@@ -479,38 +498,61 @@ fn run_row(run: &AutomationRunSummary, t: &Tokens) -> El {
         (None, Some(occurrence)) if !occurrence.is_empty() => words.push(occurrence.clone()),
         _ => {}
     }
-    let said = words.join(" · ");
-    let line = text(said.clone())
-        .font(type_::LABEL)
-        .color(t.text_secondary)
-        .wrap();
-    let session = run.session_id.clone().filter(|s| !s.is_empty());
-    let main = match session {
-        Some(session) => Button::new(said)
-            .variant(ButtonVariant::GhostMuted)
-            .control_size(ControlSize::Small)
-            .label_with(move |_, _| line)
+    let state_ink = match run.state.as_str() {
+        "failed" => t.error,
+        "delivered" => t.accent,
+        _ => t.text_primary,
+    };
+    let mut line = row()
+        .w_full()
+        .flex_wrap()
+        .gap(space::S2)
+        .items_center()
+        .child(
+            text(run.state.to_uppercase())
+                .font(RUN_STATE)
+                .color(state_ink)
+                .a11y_hidden(),
+        )
+        .children(words.iter().skip(1).map(|w| {
+            text(w.clone())
+                .font(look::SMALL)
+                .color(t.text_tertiary)
+                .a11y_hidden()
+        }));
+    if let Some(session) = run.session_id.clone().filter(|s| !s.is_empty()) {
+        line = line
+            .key(format!("automations.run-open.{}", run.id))
+            .role("button")
+            .label(words.join(" · "))
+            .focusable(true)
+            .focus_ring(2.0, 2.0, t.brand)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 super::open_run(state, &session, tx);
-            })
-            .build(attn_ui::kit(t))
-            .key(format!("automations.run-open.{}", run.id))
-            .w_full(),
-        None => line,
-    };
+            });
+    } else {
+        line = line.label(words.join(" · "));
+    }
     let mut item = col()
         .key(format!("automations.run.{}", run.id))
         .role("listitem")
         .label(run.state.clone())
         .w_full()
-        .gap(space::S1)
-        .child(main);
+        .gap(4.0)
+        .px(8.0)
+        .py(6.0)
+        .radius(6.0)
+        .border(1.0, t.border_subtle)
+        .child(line);
     if let Some(error) = run.last_error.as_ref().filter(|e| !e.is_empty()) {
-        item = item.child(error_text(
-            &format!("automations.run-error-text.{}", run.id),
-            error,
-            t,
-        ));
+        item = item.child(
+            text(error.clone())
+                .key(format!("automations.run-error-text.{}", run.id))
+                .role("alert")
+                .font(type_::MONO_CAPTION)
+                .color(t.error)
+                .wrap(),
+        );
     }
     item
 }

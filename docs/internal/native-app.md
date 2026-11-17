@@ -91,8 +91,10 @@ close-desktop dialog, the diagnostic report, the command and agent palettes, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
 notebook empty, with a folder opened in its tree, with a note open and with its
 finder over the note, a popped-out tile window, the classic new-session picker, Launcher 2.0
-in its dialog, its Where list and on an empty desktop, a new automation's form, its hour
-picker and suggested time zones, each with a row reached by an arrow key, Home
+in its dialog, its Where list and on an empty desktop, the automations drawer empty,
+listing two automations and with one selected over its runs, a new automation's form on
+its schedule, on a pull request trigger and with Advanced open, an automation's edit form,
+the form's hour picker and suggested time zones, each with a row reached by an arrow key, Home
 with the Chief and a crew member in the sidebar, the queue flow with two turns
 owed and an open ask at Home and on the asking agent's desktop, the queue bar
 with the sidebar collapsed, the desktop flow's rail, Manage crew on each of its

@@ -10,21 +10,22 @@ use std::path::PathBuf;
 use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionsResultMessage,
-    AutomationSchedulePreviewResultMessage, BusConsumerStatus, BusStatusResultMessage,
-    CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
-    CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
+    ActorView, Ask, AskPart, AskQuestion, AutomationDefinitionResultMessage,
+    AutomationDefinitionSummary, AutomationDefinitionsResultMessage, AutomationRunSummary,
+    AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage, BusConsumerStatus,
+    BusStatusResultMessage, CreateWorktreeResultMessage, CrewCharterDocument,
+    CrewCharterGetResultMessage, CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
     DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
     HarnessModel, HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
-    LaunchDesktopResultMessage, NotificationListResultMessage, PR, PartyView, PathInspection,
-    PhoneLink, PhonesUpdatedMessage, Profile, RecentLocation, RecentLocationsResultMessage,
-    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNote, ReviewRow,
-    ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
-    SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
-    SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
+    LaunchDesktopResultMessage, LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView,
+    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RecentLocation,
+    RecentLocationsResultMessage, RecordCommandUsageResultMessage, RepoInfo, ReviewBundle,
+    ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
+    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
+    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
+    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -1422,6 +1423,173 @@ fn automation_time_zones(dark: bool) {
     snap(&mut world, "automation-time-zones", dark);
 }
 
+/// Two automations, a manual one and a scheduled one on a desktop of its own, the scheduled
+/// one with a run that failed and one delivered to its agent.
+fn automations_daemon(dark: bool, definitions: Vec<AutomationDefinitionSummary>) -> Daemon {
+    let daemon =
+        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    daemon
+        .on("automation_definitions_get", move |_: &Request| {
+            message(AutomationDefinitionsResultMessage {
+                success: true,
+                definitions: Some(definitions.clone()),
+                ..AutomationDefinitionsResultMessage::new()
+            })
+        })
+        .on("automation_runs_get", |r: &Request| {
+            let run = |id: &str, state: &str, created: &str, delivered: Option<&str>| {
+                AutomationRunSummary {
+                    id: id.into(),
+                    definition_id: 2,
+                    state: state.into(),
+                    created_at: created.into(),
+                    updated_at: created.into(),
+                    delivered_at: delivered.map(Into::into),
+                    occurrence_key: Some(format!("scheduled:{created}")),
+                    session_id: Some("s0".into()),
+                    last_error: (state == "failed")
+                        .then(|| "the agent exited before it answered".into()),
+                    ..AutomationRunSummary::default()
+                }
+            };
+            message(AutomationRunsResultMessage {
+                success: true,
+                definition_id: r["definition_id"].as_i64().unwrap_or_default(),
+                runs: Some(vec![
+                    run(
+                        "r1",
+                        "delivered",
+                        "2030-06-03T07:00:00Z",
+                        Some("2030-06-03T07:00:04Z"),
+                    ),
+                    run("r2", "failed", "2030-06-02T07:00:00Z", None),
+                ]),
+                ..AutomationRunsResultMessage::new()
+            })
+        })
+        .on("automation_definition_get", |_: &Request| {
+            message(AutomationDefinitionResultMessage {
+                success: true,
+                spec_json: Some(
+                    json!({
+                        "api_version": "attn.dev/automations/v1alpha1",
+                        "id": 2,
+                        "name": "Morning digest",
+                        "trigger": {"type": "scheduled", "schedule": {"cron": "0 9 * * 1-5", "time_zone": "UTC"}, "continuity": "fresh", "catch_up": "latest"},
+                        "prompt": "Summarise what changed overnight.",
+                        "launch": {"driver": "codex", "model": "gpt-5.6-luna", "effort": "medium"},
+                        "location": {"type": "directory", "path": "/repo"},
+                    })
+                    .to_string(),
+                ),
+                spec_yaml: Some(String::new()),
+                definition: Some(scheduled_automation()),
+                ..AutomationDefinitionResultMessage::new()
+            })
+        })
+        .on("automation_schedule_preview", |_: &Request| {
+            message(AutomationSchedulePreviewResultMessage {
+                success: true,
+                times: Some(vec![
+                    "2030-06-03T09:00:00Z".into(),
+                    "2030-06-04T09:00:00Z".into(),
+                    "2030-06-05T09:00:00Z".into(),
+                ]),
+                ..AutomationSchedulePreviewResultMessage::new()
+            })
+        });
+    daemon
+}
+
+fn scheduled_automation() -> AutomationDefinitionSummary {
+    AutomationDefinitionSummary {
+        id: 2,
+        profile_id: PROFILE.into(),
+        name: "Morning digest".into(),
+        enabled: true,
+        revision: 1,
+        trigger_type: "scheduled".into(),
+        schedule_cron: Some("0 9 * * 1-5".into()),
+        schedule_time_zone: Some("UTC".into()),
+        launch_desktop: Some(LaunchDesktopSetting {
+            label: Some("Morning digest (new)".into()),
+            ..LaunchDesktopSetting::default()
+        }),
+        updated_at: "2030-06-01T07:00:00Z".into(),
+        ..AutomationDefinitionSummary::default()
+    }
+}
+
+fn automations() -> Vec<AutomationDefinitionSummary> {
+    vec![
+        AutomationDefinitionSummary {
+            id: 1,
+            profile_id: PROFILE.into(),
+            name: "Review the queue".into(),
+            enabled: true,
+            revision: 1,
+            trigger_type: "manual".into(),
+            launch_desktop: Some(LaunchDesktopSetting {
+                label: Some("Review the queue (new)".into()),
+                ..LaunchDesktopSetting::default()
+            }),
+            updated_at: "2030-06-01T07:00:00Z".into(),
+            ..AutomationDefinitionSummary::default()
+        },
+        scheduled_automation(),
+    ]
+}
+
+fn automations_open(dark: bool, definitions: Vec<AutomationDefinitionSummary>) -> World {
+    let mut world = start(automations_daemon(dark, definitions));
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    world
+}
+
+/// The drawer with no automations defined.
+fn automations_empty(dark: bool) {
+    let mut world = automations_open(dark, Vec::new());
+    snap(&mut world, "automations-empty", dark);
+}
+
+/// The drawer listing a manual and a scheduled automation.
+fn automations_listed(dark: bool) {
+    let mut world = automations_open(dark, automations());
+    snap(&mut world, "automations-listed", dark);
+}
+
+/// The scheduled automation selected, with its runs under the list.
+fn automations_selected(dark: bool) {
+    let mut world = automations_open(dark, automations());
+    world.gesture(|app| app.click(Target::key("automations.select.2")));
+    snap(&mut world, "automations-selected", dark);
+}
+
+/// The scheduled automation's form, read from the daemon.
+fn automation_edit(dark: bool) {
+    let mut world = automations_open(dark, automations());
+    world.gesture(|app| app.click(Target::key("automations.edit.2")));
+    snap(&mut world, "automation-edit", dark);
+}
+
+/// A new automation's form on a pull request trigger.
+fn automation_github(dark: bool) {
+    let mut world = automations_open(dark, Vec::new());
+    for key in ["automations.new", "automations.form.trigger-github"] {
+        world.gesture(|app| app.click(Target::key(key)));
+    }
+    snap(&mut world, "automation-github", dark);
+}
+
+/// A new manual automation's form with Advanced open.
+fn automation_advanced(dark: bool) {
+    let mut world = automations_open(dark, Vec::new());
+    for key in ["automations.new", "automations.form.advanced"] {
+        world.gesture(|app| app.click(Target::key(key)));
+    }
+    snap(&mut world, "automation-advanced", dark);
+}
+
 /// The Chief before its setup, and a member between sessions.
 fn crew() -> Vec<CrewMember> {
     let member = |id: &str, name: &str, chief: bool| CrewMember {
@@ -2118,6 +2286,12 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         settings_bottom(dark, "agents", "agents", &[]);
         settings_bottom(dark, "experimental", "experimental", SWITCHED_ON);
         automation_new(dark);
+        automations_empty(dark);
+        automations_listed(dark);
+        automations_selected(dark);
+        automation_edit(dark);
+        automation_github(dark);
+        automation_advanced(dark);
         diagnostic_report(dark);
         quick_capture(dark);
         quick_capture_mailboxes(dark);
