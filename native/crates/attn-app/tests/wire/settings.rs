@@ -242,6 +242,22 @@ fn the_settings_shortcut_opens_the_dialog_on_github_hosts_and_closes_it() {
 }
 
 #[test]
+fn the_dialog_opens_with_its_search_at_rest_and_tab_enters_the_search() {
+    let (daemon, _) = accepting(&[]);
+    let mut world = World::start(daemon);
+    let focused = |world: &World| world.screen().focused().and_then(|n| n.key);
+
+    open(&mut world);
+    assert_eq!(focused(&world).as_deref(), Some("settings-dialog"));
+
+    press(&mut world, Key::Tab);
+    assert_eq!(focused(&world).as_deref(), Some("settings.search.field"));
+    world.gesture(|app| app.type_text("sweep"));
+    assert_eq!(state(&mut world)["search"], "sweep");
+    rest(&mut world);
+}
+
+#[test]
 fn escape_the_close_button_and_the_backdrop_each_close_the_dialog() {
     let (daemon, _) = accepting(&[]);
     let mut world = World::start(daemon);

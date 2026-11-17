@@ -44,6 +44,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .label("Settings")
         .description("local daemon")
         .modal_tx(true, super::close)
+        .autofocus()
         .w_full()
         .max_w(MAX_WIDTH)
         .h_full()

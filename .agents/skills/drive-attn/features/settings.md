@@ -89,7 +89,7 @@ Preconditions:
 
 Steps:
 
-- **Open and close with the shortcut.** Run `bridge key '{"chord":"mod+shift+,"}'`: `bridge wait '{"target":{"key":"settings-dialog"}}'` answers, `bridge state '{"of":"settings"}'` shows `open: true`, and on the first open `settings.heading` reads "GitHub hosts" with `activeSection: "connectivity"`. Press the chord again: `bridge wait '{"target":{"key":"settings-dialog"},"gone":true}'` answers.
+- **Open and close with the shortcut.** Run `bridge key '{"chord":"mod+shift+,"}'`: `bridge wait '{"target":{"key":"settings-dialog"}}'` answers, `bridge state '{"of":"settings"}'` shows `open: true`, and on the first open `settings.heading` reads "GitHub hosts" with `activeSection: "connectivity"`. Focus is on `settings-dialog` itself, with no caret in `settings.search.field`, as in the Tauri app; `Tab` puts it in the search. Press the chord again: `bridge wait '{"target":{"key":"settings-dialog"},"gone":true}'` answers.
 - **Open from the palette and the home screen.** Press `mod+alt+k`, run `bridge type '{"text":"Settings"}'`, wait for `palette.row.command:settings` and press `Enter`: the dialog opens. Press `Escape`. `bridge press '{"target":{"key":"home.settings"}}'`, the gear, opens it too.
 - **Change in the dialog, read from the shell.** Press `settings.nav.general`: `bridge state '{"of":"settings","includes":"general"}'` answers. Press `{"role":"radio","name":"Light"}`: `./attn settings get theme` prints `light` once the daemon has it.
 - **Text size from the keyboard.** Press `mod+shift+=`: `./attn settings get uiScale` prints `1.1`. `mod+shift+0` puts it back to `1`.

@@ -867,6 +867,7 @@ fn settings_analytics(dark: bool) {
     }
     let mut world = start(Daemon::scripted().state(state));
     press(&mut world, Action::UiOpenSettings);
+    world.gesture(|app| app.click(Target::key("settings.search.field")));
     world.gesture(|app| app.type_text("analytics"));
     world.gesture(|app| app.click(Target::key("settings.nav.analytics")));
     snap(&mut world, "settings-analytics", dark);
@@ -896,6 +897,7 @@ fn settings_section(
     answer(&daemon);
     let mut world = start(daemon);
     press(&mut world, Action::UiOpenSettings);
+    world.gesture(|app| app.click(Target::key("settings.search.field")));
     world.gesture(|app| app.type_text(search));
     world.gesture(|app| app.click(Target::key(format!("settings.nav.{section}"))));
     snap(&mut world, &format!("settings-{section}"), dark);
