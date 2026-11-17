@@ -1907,3 +1907,56 @@ fn a_headers_chain_shown_by_hover_stays_while_the_pointer_rests_on_it_after_comi
     );
     rest(&mut world);
 }
+
+#[test]
+fn escape_closes_a_shown_chain_at_once_while_a_control_holds_the_keyboard() {
+    let mut world = start_from(InitialStateMessage {
+        desktops: Some(vec![Desktop {
+            panes: Vec::new(),
+            ..desktop("a")
+        }]),
+        sessions: Some(vec![
+            with_role(
+                "Orchestrator",
+                "orchestrator",
+                session("a", "Coordinate identity", None),
+            ),
+            with_role(
+                "Builder",
+                "builder",
+                delegate_of("b", "Build navigator", "a"),
+            ),
+        ]),
+        crew: Some(vec![attn_protocol::CrewMember {
+            id: "chief-key".into(),
+            name: "Captain".into(),
+            chief: Some(true),
+            profile_id: "work".into(),
+            revision: 1,
+            resolved_agent: "claude".into(),
+            ..Default::default()
+        }]),
+        ..InitialStateMessage::new()
+    });
+    key(&mut world, Key::Escape);
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("chief-slot"),
+        "dismissing the Chief's first setup leaves the keyboard on its slot"
+    );
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile(),
+        desktops: vec![desktop("a")],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+    rest_on(&mut world, "tile.b.role");
+    assert!(chain(&world).is_some());
+    key(&mut world, Key::Escape);
+    assert_eq!(
+        chain(&world),
+        None,
+        "Escape takes the chain off screen at once"
+    );
+    rest(&mut world);
+}

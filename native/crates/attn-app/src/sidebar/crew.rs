@@ -150,17 +150,18 @@ pub(crate) fn trigger(state: &mut State, row_key: &str, member: &str, tx: &mut T
     }
 }
 
-/// Stands an armed start down.
-pub(crate) fn disarm(state: &mut State) {
-    if state
+/// Stands an armed start down; whether one was armed.
+pub(crate) fn disarm(state: &mut State) -> bool {
+    let armed = state
         .window
         .crew_rows
         .arm
         .as_ref()
-        .is_some_and(|arm| arm.phase == Phase::Armed)
-    {
+        .is_some_and(|arm| arm.phase == Phase::Armed);
+    if armed {
         state.window.crew_rows.arm = None;
     }
+    armed
 }
 
 /// Ends an arm or a flare whose time ran out, and an arm whose focus went to another row;

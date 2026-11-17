@@ -14,6 +14,7 @@ use crate::terminal::Typed;
 /// passed it on. A focused text field has already offered it to `on_field_key` and taken
 /// typing and its edit commands.
 ///
+/// Escape first lets go of an armed crew row and a header popover, then goes on as any key.
 /// The order: a pending sequence takes the next key; the terminal holding the keyboard keeps
 /// what types text and the shell's own Ctrl keys on Linux; then the keymap, unless a text field
 /// passed the key on; then the terminal; then nothing. A modal dialog keeps every bound key
@@ -22,19 +23,23 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
     }
-    if ev.key == Key::Escape {
-        crate::sidebar::crew::disarm(state);
-    }
+    let escape = ev.key == Key::Escape;
+    let disarmed = escape && crate::sidebar::crew::disarm(state);
     if modal(state) {
-        return bound(state, ev, tx);
+        return bound(state, ev, tx) || disarmed;
     }
-    if ev.key == Key::Escape && crate::chief::setup_shows(state) {
+    if escape && crate::chief::setup_shows(state) {
         crate::chief::dismiss(state, true, tx);
         return true;
     }
-    if ev.key == Key::Escape && state.window.desk.header_pop.open.is_some() {
+    let closed = escape && state.window.desk.header_pop.open.is_some();
+    if closed {
         crate::desktop::header_pop::close(state);
     }
+    route(state, ev, tx) || disarmed || closed
+}
+
+fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
         if let Some(action) = second {
             run_shortcut(state, action, tx);
