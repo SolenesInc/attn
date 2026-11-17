@@ -73,7 +73,8 @@ Preconditions:
 ]}
 ```
 
-- Write a manual definition with the folder's paths filled in. Point its `executable` line at the mock agent the instance shell already exports.
+- Trust the run folder in Codex. A Codex run in a folder no agent has worked in fails with `no agent has worked in <dir> ... and Codex does not trust it`. Start a session there and send it one prompt, so a conversation starts: `wsctl add-session --cwd $R --agent codex --label trust-run --id trust-run --place`, find its terminal in `wsctl list`, and run `wsctl input --id <terminal> --text "hello" --enter`. The prompt has to be typed: Codex trusts a folder only after a conversation starts in it. The drawer's "Trust folder in Codex" button on a failed run opens such a session and leaves the typing to you. Wait until `./attn agent peek trust-run` no longer shows `working`.
+- Write a manual definition with the folder's paths filled in. Leave out `launch.executable`: the daemon refuses it for `driver: codex`, because every Codex session runs on its profile's shared app server, and the instance's env already routes Codex to the mock agent.
 
 ```bash
 cat > $P/manual.yaml <<EOF
@@ -86,7 +87,6 @@ prompt: |
 launch:
   driver: codex
   model: mock-agent-1
-  executable: $ATTN_CODEX_EXECUTABLE
 location:
   type: directory
   path: $R
@@ -125,7 +125,6 @@ prompt: |
 launch:
   driver: codex
   model: mock-agent-1
-  executable: $ATTN_CODEX_EXECUTABLE
 location:
   type: directory
   path: $R
@@ -181,7 +180,6 @@ prompt: |
 launch:
   driver: codex
   model: mock-agent-1
-  executable: $ATTN_CODEX_EXECUTABLE
 location:
   type: repository_worktree
   repository_sources:
@@ -194,7 +192,7 @@ EOF
 ./attn automation apply --file $P/review.yaml
 ```
 
-  `<review-id>` is the `id` that `apply` prints. Run `wsctl refresh-prs`. It prints `PR refresh completed` and establishes the automation's initial observation. Existing review requests do not start runs. Withdraw the mock request with `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/requested" -H 'content-type: application/json' -d '{"active":false}'`, then run `wsctl refresh-prs`. Request review again with the same `curl` command carrying `'{"active":true}'`, then run `wsctl refresh-prs`. Re-read `./attn automation runs <review-id>` for up to 45 seconds until a run is `delivered`. `./attn agent list --json` gives the run's session's `directory`, and `git -C <directory> rev-parse HEAD` equals `git -C $G rev-parse HEAD`.
+  `<review-id>` is the `id` that `apply` prints. A repository-worktree run needs the same trust as the run folder: start a Codex session in `$G` and send it one prompt, as the preconditions do for `$R` (`--cwd $G --label trust-review --id trust-review`). Run `wsctl refresh-prs`. It prints `PR refresh completed` and establishes the automation's initial observation. Existing review requests do not start runs. Withdraw the mock request with `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/requested" -H 'content-type: application/json' -d '{"active":false}'`, then run `wsctl refresh-prs`. Request review again with the same `curl` command carrying `'{"active":true}'`, then run `wsctl refresh-prs`. Re-read `./attn automation runs <review-id>` for up to 45 seconds until a run is `delivered`. `./attn agent list --json` gives the run's session's `directory`, and `git -C <directory> rev-parse HEAD` equals `git -C $G rev-parse HEAD`.
 - **A Codex run that exits before its first turn.**
   - Write a stand-in Codex that leaves a screen and exits, `printf '#!/bin/sh\necho "thread/start failed during TUI bootstrap: drive refusal"\nexit 1\n' > $P/codex-exits && chmod +x $P/codex-exits`, and apply `manual.yaml` again with `name: Drive failing launch` and `executable: $P/codex-exits`.
   - Run `./attn automation run <failing-id>`. If Codex has already exited, the command exits 1 and names `codex exited with code 1 before its first turn` and the screen. Otherwise the command prints the run `pending`.

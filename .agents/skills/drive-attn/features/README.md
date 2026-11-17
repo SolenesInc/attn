@@ -179,6 +179,7 @@ In the index, "both" means people and agents.
 - A drawer (attention, asks, automations, garden) stays in the page while
   closed, hidden with `aria-hidden="true"`. Tell open from closed by that
   attribute, not by whether an inner selector is present.
+- In the native app, on the 1200x800 window, `press` and `type` on a field below a scroll view's fold fail with `waited ... for the element to scroll into view`. Until the seed `native-automation-press-type-do-not` (`s-xd8vdz`) lands, run `bridge scroll '{"target":{"key":"<scroll view key>"},"dy":<points>}'` on the view first, such as `settings.body` in Settings, and then press or type.
 - DOM actions (`dom_click`, `dispatch_shortcut`, `settings_select_section`,
   `sessions_set_filter` and the like) are the ones
   [../SKILL.md](../SKILL.md#drive) says to use only to set up.

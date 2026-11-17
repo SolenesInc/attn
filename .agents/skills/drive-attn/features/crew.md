@@ -138,7 +138,8 @@ The native app (`native/`) has Manage crew with the roster, launch settings, Sta
 Preconditions:
 
 - Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
-- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make `P`, `C` and Fern's home `M` as above.
+- Launch with `bridge --launch ping`. Make `P`, `C` and Fern's home `M` as above.
+- Finish the profile migration before the first `bridge wait`. Fern's home exists before the daemon's first start, so a fresh instance's migration is `launch_required`, and the native app opens on the "Finish moving to profiles" gate (`migration-gate`), which only the Tauri app's picker finishes. This setup is not a person's way in. Run `wsctl request --json '{"cmd":"migration_get","request_id":"m1"}' --event migration_result` and read `state.revision`, then `wsctl request --json '{"cmd":"migration_finish","request_id":"m2","expected_revision":<revision>}' --event migration_result`, which answers `"success": true`. Then `bridge wait '{"target":{"key":"home"}}'` answers.
 
 Steps:
 
