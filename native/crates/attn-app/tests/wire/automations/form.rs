@@ -779,7 +779,29 @@ fn an_executable_override_stops_discovery_and_codex_offers_none() {
         "launch",
         json!({"driver": "claude", "model": "override-model", "effort": "override-effort", "executable": "/opt/alternate-claude"}),
     );
-    let world = open_edit(definition(1, "PR reviewer"), spec);
+    let stored = Stored::of(definition(1, "PR reviewer"), spec.clone());
+    let mut world = open_edit_with(&stored, |daemon| {
+        daemon.answer_in_turn("automation_definition_get", [Answer::Hold]);
+    });
+    assert!(
+        !world
+            .daemon
+            .sent_of("delegation_preferences_get")
+            .is_empty()
+    );
+    let read = world.daemon.sent_of("automation_definition_get")[0].clone();
+    world.daemon.reply_to(
+        &read,
+        AutomationDefinitionResultMessage {
+            success: true,
+            spec_json: Some(spec.to_string()),
+            spec_yaml: Some(String::new()),
+            definition: Some(definition(1, "PR reviewer")),
+            ..AutomationDefinitionResultMessage::new()
+        },
+    );
+    world.settle();
+    assert!(has(&world, &key("name")));
     assert!(world.daemon.sent_of("harness_models").is_empty());
 
     let mut world = open_edit(definition(1, "PR reviewer"), manual_spec("PR reviewer"));

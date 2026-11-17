@@ -467,7 +467,7 @@ fn overridden(f: &Form) -> bool {
 }
 
 fn read_route(state: &State, _: &str) -> Option<(Route, Rules)> {
-    let f = form(state)?;
+    let f = form(state).filter(|f| f.load == Load::Ready)?;
     let offered: Vec<&str> = AUTOMATION_HARNESSES
         .into_iter()
         .chain(std::iter::once(f.agent.as_str()))
