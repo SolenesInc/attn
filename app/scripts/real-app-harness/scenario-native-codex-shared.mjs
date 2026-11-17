@@ -25,6 +25,7 @@ const driver = createWindowDriver({ appPath: options.appPath, client });
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerFailureEvidence('native_screenshot', () => driver.screenshot(path.join(runner.runDir, 'failure-native.png')));
+runner.registerFailureEvidence('native_tree', async () => runner.writeJson('failure-tree.json', await driver.tree()));
 
 const CONVERSATION = /Conversation (mock-[0-9a-f-]{36})/g;
 const APPROVAL = 'Allow the command to run?';
@@ -81,7 +82,14 @@ async function setSetting(key, value) {
 }
 
 try {
-  await runner.step('launch', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch', async () => {
+    await launchFreshNativeAppAndConnect(client, observer);
+    await driver.waitFor({ key: 'chief-slot' });
+    if (await driver.find({ key: 'chief-setup' })) {
+      await driver.pressKey('Escape');
+      await driver.waitFor({ key: 'chief-setup' }, { gone: true });
+    }
+  });
 
   let desktop;
   await runner.step('prepare', async () => {
