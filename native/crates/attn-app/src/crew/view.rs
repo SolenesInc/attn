@@ -15,6 +15,9 @@ pub(crate) const RENAME: &str = "crew.rename";
 pub(crate) const RENAME_FIELD: &str = "crew.rename.field";
 const FIND: &str = "crew.find";
 const CHARTER: &str = "crew.charter.editor";
+/// The charter editor's height, as the Tauri app's `.crew-charter-editor`; a longer charter
+/// scrolls inside it.
+const CHARTER_HEIGHT: f32 = 390.0;
 const SEED_FIND: &str = "crew.seeds.find";
 
 fn caption(key: impl Into<String>, words: impl Into<String>, t: &Tokens) -> El {
@@ -661,6 +664,7 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         .key(CHARTER)
         .label(format!("Charter for {}", member.name))
         .rows(16)
+        .max_height(CHARTER_HEIGHT)
         .spellcheck(true)
         .width(None)
         .on_edit(move |state: &mut State| state.window.crew.charters.field_mut(&edited))

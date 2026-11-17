@@ -681,6 +681,24 @@ fn on_charter(world: &mut World) {
 }
 
 #[test]
+fn a_long_charter_scrolls_inside_an_editor_that_keeps_its_height() {
+    let long = (1..=120).map(|i| format!("line {i}\n")).collect::<String>();
+    let d = daemon(vec![member("fern", 1)], Vec::new(), Vec::new());
+    d.answer_in_turn("crew_charter_get", [charter_read("fern", &long, "t1")]);
+    let mut world = World::start_sized(d, (1200.0, 900.0));
+    on_charter(&mut world);
+    assert_eq!(editor(&world), long);
+    let [_, y, _, h] = world
+        .screen()
+        .bounds(Target::key("crew.charter"))
+        .expect("the charter card is drawn");
+    assert!(
+        y + h <= 900.0,
+        "the charter card fits the window rather than growing with the text: {y} + {h}"
+    );
+}
+
+#[test]
 fn the_charter_saves_after_a_pause_against_the_version_it_read_and_at_once_when_the_user_leaves() {
     let d = daemon(
         vec![member("fern", 1)],
