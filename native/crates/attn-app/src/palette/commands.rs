@@ -157,7 +157,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             &["whats new", "intro", "tour", "changes", "release", "help"],
             Action::OpenWhatsNew,
         )
-        .describe("Replay the intro to profiles, desktops, the queue and the palettes"),
+        .describe("Replay the tour of the new look and how to switch back"),
     );
     commands.push(
         Command::new(

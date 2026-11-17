@@ -93,10 +93,10 @@ function IntroBanner({ banner }: { banner?: DashboardProps['introBanner'] }) {
   return (
     <div className="intro-banner" data-testid="intro-banner">
       <span className="intro-banner-text">
-        <strong>New in attn:</strong> profiles, desktops, the agent queue and two palettes.
+        <strong>New in attn:</strong> a new look, and how to switch back.
       </span>
       <button type="button" className="intro-banner-replay" onClick={banner.onReplay}>
-        Replay the intro
+        Show me
       </button>
       <button
         type="button"

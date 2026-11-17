@@ -62,6 +62,11 @@ fn store(state: &State, key: &str, value: String) {
     });
 }
 
+/// Saves `id` as the `color_scheme` setting; an empty id goes back to attn's own scheme.
+pub(crate) fn choose_color_scheme(state: &State, id: &str) {
+    store(state, COLOR_SCHEME, id.to_owned());
+}
+
 /// ⌘=, ⌘- and ⌘0: a tenth larger or smaller, within 70% to 150%, or back to 100%.
 pub(super) fn step_ui_scale(state: &mut State, action: &Action, _: &mut Tx) {
     if let Some(message) = ui_scale_step(&state.facts.settings, action) {
@@ -184,9 +189,7 @@ fn color_schemes(state: &State, t: &Tokens) -> El {
                         .color(ink)
                         .a11y_hidden(),
                 )
-                .on_press_tx(move |state: &mut State, _: &mut Tx| {
-                    store(state, COLOR_SCHEME, id.to_owned())
-                })
+                .on_press_tx(move |state: &mut State, _: &mut Tx| choose_color_scheme(state, id))
         }));
     let overrides = settings.get(COLOR_OVERRIDES).map_or("", String::as_str);
     let custom = has_overrides(overrides).then(|| {

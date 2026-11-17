@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-export const WHATS_NEW_ID = 'profiles-desktops-intro-2026-10';
+export const WHATS_NEW_ID = 'new-look-2026-11';
 export const WHATS_NEW_STORAGE_KEY = 'attn.whats_new.last_seen';
 export const WHATS_NEW_BANNER_STORAGE_KEY = 'attn.whats_new.banner_dismissed';
 

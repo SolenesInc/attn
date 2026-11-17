@@ -131,6 +131,21 @@
   margin: 0;
 }
 
+.whats-new-scheme {
+  margin-top: 14px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 5px 12px;
+  border-radius: 7px;
+}
+
+.whats-new-scheme:hover {
+  border-color: var(--color-border-hover);
+}
+
 .whats-new-keys {
   list-style: none;
   display: flex;

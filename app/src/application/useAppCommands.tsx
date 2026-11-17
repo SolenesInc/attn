@@ -307,7 +307,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       {
         id: 'whats-new',
         title: "What's new",
-        description: 'Replay the intro to profiles, desktops, the queue and the palettes',
+        description: 'Replay the tour of the new look and how to switch back',
         keywords: ['whats new', 'intro', 'tour', 'changes', 'release', 'help'],
         icon: <KeyboardActionIcon />,
         run: whatsNew.open,

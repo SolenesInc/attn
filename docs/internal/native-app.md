@@ -89,7 +89,7 @@ Appearance, Agents and its end, Analytics, Delegation, Outposts,
 Experimental and its end, Phones, Plugins, Updates, Event bus, Files and locations, Attention
 queue, Background agents, Task runner, GitHub hosts and Models, Quick Capture with a
 message typed and with its mailbox list open, the shortcut editor
-and the shortcuts sheet, What's New on its first and its queue step, the
+and the shortcuts sheet, What's New on its first and its Night step, the
 close-desktop dialog, the diagnostic report, the command and agent palettes, the profile switcher, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
 notebook empty, with a folder opened in its tree, with a note open, with its

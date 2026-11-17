@@ -93,10 +93,10 @@ builds don't check for releases.
 
 ## The home screen
 
-Welcome to Attn! On first start, Attn opens a short intro to profiles,
-desktops, the queue and the palettes. You can replay it from the banner on the
-home screen, or with **What's new** in the command palette (Cmd+Shift+K,
-Ctrl+Alt+K on Linux).
+Welcome to Attn! On first start, and once after each update that brings
+something new, Attn opens **What's new**, a short tour of what changed. You can
+replay it from the banner on the home screen, or with **What's new** in the
+command palette (Cmd+Shift+K, Ctrl+Alt+K on Linux).
 
 Then you see your home screen. Cmd+Shift+H (Ctrl+Alt+H on Linux) brings you
 back to it at any time.

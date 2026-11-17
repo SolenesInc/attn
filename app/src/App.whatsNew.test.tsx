@@ -6,6 +6,12 @@ import { daemonSession, soloDesktop } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { savedSettings, serveSettings } from './test/settings';
+import classic from '../../internal/colors/schemes/classic.json';
+
+const FIRST = 'A new look';
+const LAST = 'Night, for the full colors';
+const rootColor = (name: string) => document.documentElement.style.getPropertyValue(`--color-${name}`);
 
 const whatsNew = () => screen.queryByRole('dialog', { name: "What's new" });
 const introBanner = () => screen.queryByTestId('intro-banner');
@@ -15,7 +21,7 @@ const stepKeys = () =>
 
 async function launchAfterUpdate(settings: Record<string, string> = {}) {
   localStorage.setItem(WHATS_NEW_STORAGE_KEY, 'an-earlier-release');
-  return renderApp({ initialState: { settings } });
+  return renderApp({ initialState: { settings }, script: (daemon) => serveSettings(daemon, settings) });
 }
 
 async function press(daemon: ScriptedDaemon, key: string) {
@@ -30,7 +36,7 @@ async function walkToLastStep(daemon: ScriptedDaemon) {
 describe('App what’s new', () => {
   it('greets the first launch after an update with the first step, and never an up-to-date launch', async () => {
     const first = await launchAfterUpdate();
-    expect(stepTitle()).toBe('One profile per world');
+    expect(stepTitle()).toBe(FIRST);
     expect(within(whatsNew()!).getByText(/^1 of \d+$/)).toBeInTheDocument();
 
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
@@ -42,30 +48,30 @@ describe('App what’s new', () => {
     const { daemon } = await launchAfterUpdate();
 
     await press(daemon, 'ArrowRight');
-    expect(stepTitle()).toBe('Desktops arrange your agents');
+    expect(stepTitle()).toBe(LAST);
+    await press(daemon, 'ArrowLeft');
+    expect(stepTitle()).toBe(FIRST);
     await press(daemon, 'Enter');
-    expect(stepTitle()).toBe('Arrange each desktop your way');
+    expect(stepTitle()).toBe(LAST);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Back' })));
+    expect(stepTitle()).toBe(FIRST);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Next' })));
-    expect(stepTitle()).toBe("The queue decides what's next");
+    expect(stepTitle()).toBe(LAST);
 
     await press(daemon, 'ArrowLeft');
-    expect(stepTitle()).toBe('Arrange each desktop your way');
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Back' })));
-    expect(stepTitle()).toBe('Desktops arrange your agents');
     await press(daemon, 'ArrowLeft');
-    await press(daemon, 'ArrowLeft');
-    expect(stepTitle()).toBe('One profile per world');
+    expect(stepTitle()).toBe(FIRST);
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
   });
 
   it('ends on Got it, which stays dismissed across launches', async () => {
     const first = await launchAfterUpdate();
     await walkToLastStep(first.daemon);
-    expect(stepTitle()).toBe('Keep your hands on the keyboard');
+    expect(stepTitle()).toBe(LAST);
     expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
 
     await press(first.daemon, 'ArrowRight');
-    expect(stepTitle()).toBe('Keep your hands on the keyboard');
+    expect(stepTitle()).toBe(LAST);
 
     await gesture(first.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Got it' })));
     expect(whatsNew()).toBeNull();
@@ -103,44 +109,40 @@ describe('App what’s new', () => {
     fireEvent.change(search, { target: { value: ">What's new" } });
     await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
 
-    expect(stepTitle()).toBe('One profile per world');
+    expect(stepTitle()).toBe(FIRST);
   });
 
   it('draws the keycaps the user’s bindings resolve to', async () => {
     const { daemon } = await launchAfterUpdate({
-      keybindings_config: JSON.stringify({ version: 1, overrides: { 'profile.switch': { key: 'y', meta: true, alt: true } } }),
+      keybindings_config: JSON.stringify({ version: 1, overrides: { 'ui.openSettings': { key: 'y', meta: true, alt: true } } }),
     });
-    expect(stepKeys()).toEqual(['⌘⌥YSwitch profile']);
-    expect(screen.getByTestId('whats-new-scene-press')).toHaveTextContent('⌘⌥Y');
+    expect(stepKeys()).toEqual(['⌘⌥YSettings']);
 
     await press(daemon, 'ArrowRight');
-    await press(daemon, 'ArrowRight');
-    expect(stepKeys()).toEqual([
-      '⌘⇧⏎Focus one pane',
-      '⌘⌥1–9Move and follow',
-      '⌘⌥⇧1–9Move and stay',
-    ]);
-    expect(screen.getByTestId('whats-new-scene-press')).toHaveTextContent('⌘⌥2');
-
-    await press(daemon, 'ArrowRight');
-    expect(stepKeys()).toEqual([
-      '⌘⇧ESettle',
-      '⌘↑/⌘↓Step through the queue',
-      '⌘JNext waiting agent',
-      '⌘⇧JNext automation run',
-    ]);
+    expect(stepKeys()).toEqual(['⌘⌥YSettings']);
   });
 
   it('names Linux keys on Linux', async () => {
     onTestFinished(stubNavigatorPlatform('Linux x86_64'));
+    await launchAfterUpdate();
+    expect(stepKeys()).toEqual(['CtrlShift,Settings']);
+  });
+
+  it('puts each step’s scheme on, then offers the default back', async () => {
     const { daemon } = await launchAfterUpdate();
-    expect(stepKeys()).toEqual(['CtrlAltUSwitch profile']);
+    const button = (name: string) => within(whatsNew()!).getByRole('button', { name });
+
+    await gesture(daemon, () => fireEvent.click(button('Switch back to Classic')));
+    expect(savedSettings(daemon)).toEqual([['color_scheme', 'classic']]);
+    expect(rootColor('bg-app')).toBe(classic.dark.ui.bg_app);
+
+    await gesture(daemon, () => fireEvent.click(button('Use the new colors')));
+    expect(savedSettings(daemon)).toEqual([['color_scheme', 'classic'], ['color_scheme', '']]);
 
     await press(daemon, 'ArrowRight');
-    expect(stepKeys()).toEqual([
-      'CtrlShift1–9Switch desktop',
-      'CtrlShiftGSee all desktops',
-    ]);
+    await gesture(daemon, () => fireEvent.click(button('Try Night')));
+    expect(savedSettings(daemon)).toEqual([['color_scheme', 'classic'], ['color_scheme', ''], ['color_scheme', 'night']]);
+    expect(button('Use the default colors')).toBeInTheDocument();
   });
 
   it('keeps its arrow keys away from the terminal underneath', async () => {
@@ -154,7 +156,7 @@ describe('App what’s new', () => {
     await press(daemon, 'ArrowRight');
     await press(daemon, 'ArrowLeft');
 
-    expect(stepTitle()).toBe('One profile per world');
+    expect(stepTitle()).toBe(FIRST);
     expect(daemon.sentOf('pty_input').slice(before)).toEqual([]);
   });
 
@@ -163,9 +165,9 @@ describe('App what’s new', () => {
     const { daemon } = await renderApp();
     expect(whatsNew()).toBeNull();
 
-    await gesture(daemon, () => fireEvent.click(within(introBanner()!).getByRole('button', { name: 'Replay the intro' })));
+    await gesture(daemon, () => fireEvent.click(within(introBanner()!).getByRole('button', { name: 'Show me' })));
 
-    expect(stepTitle()).toBe('One profile per world');
+    expect(stepTitle()).toBe(FIRST);
   });
 
   it('keeps a dismissed banner away across launches, leaving the command palette as the way back', async () => {
@@ -181,6 +183,6 @@ describe('App what’s new', () => {
     const search = within(screen.getByRole('dialog')).getByRole('combobox');
     fireEvent.change(search, { target: { value: ">What's new" } });
     await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
-    expect(stepTitle()).toBe('One profile per world');
+    expect(stepTitle()).toBe(FIRST);
   });
 });

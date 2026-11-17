@@ -1382,8 +1382,9 @@ app/src/App.whatsNew.test.tsx	App what’s new > ends on Got it, which stays dis
 app/src/App.whatsNew.test.tsx	App what’s new > marks the release seen when Escape closes it mid-way	attn-app/tests/wire/whats_new.rs::escape_part_way_marks_the_release_seen	
 app/src/App.whatsNew.test.tsx	App what’s new > hands off to the full shortcut list	attn-app/tests/wire/whats_new.rs::view_all_shortcuts_hands_off_to_the_shortcut_list	
 app/src/App.whatsNew.test.tsx	App what’s new > replays from the command palette, starting over	attn-app/tests/wire/whats_new.rs::the_command_palette_replays_the_tour_from_the_first_step	
-app/src/App.whatsNew.test.tsx	App what’s new > draws the keycaps the user’s bindings resolve to	attn-app/tests/wire/whats_new.rs::keys_and_the_scene_show_the_users_own_bindings	
-app/src/App.whatsNew.test.tsx	App what’s new > names Linux keys on Linux	attn-app/tests/wire/whats_new.rs::a_digit_key_reads_as_the_range_of_desktops	
+app/src/App.whatsNew.test.tsx	App what’s new > draws the keycaps the user’s bindings resolve to	attn-app/tests/wire/whats_new.rs::keys_show_the_users_own_settings_binding	
+app/src/App.whatsNew.test.tsx	App what’s new > names Linux keys on Linux	attn-app/tests/wire/whats_new.rs::keys_show_the_users_own_settings_binding	
+app/src/App.whatsNew.test.tsx	App what’s new > puts each step’s scheme on, then offers the default back	attn-app/tests/wire/whats_new.rs::each_step_puts_its_scheme_on_and_then_offers_the_default_back	
 app/src/App.whatsNew.test.tsx	App what’s new > keeps its arrow keys away from the terminal underneath	attn-app/tests/wire/whats_new.rs::its_arrow_keys_stay_away_from_the_terminal_underneath	
 app/src/App.whatsNew.test.tsx	App what’s new > offers a replay banner on Home for a new release, which replays from the first step	attn-app/tests/wire/whats_new.rs::homes_banner_offers_a_new_release_and_replays_it_from_the_first_step	
 app/src/App.whatsNew.test.tsx	App what’s new > keeps a dismissed banner away across launches, leaving the command palette as the way back	attn-app/tests/wire/whats_new.rs::a_dismissed_banner_stays_away_across_launches_and_the_palette_still_replays	

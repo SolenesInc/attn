@@ -10,7 +10,9 @@ use rune::{Key, KeyEvent, Mods};
 
 use super::keys::{chord, state, two_terminals};
 
-const STEPS: usize = 7;
+const STEPS: usize = 2;
+const FIRST: &str = "A new look";
+const LAST: &str = "Night, for the full colors";
 
 fn daemon(settings: &[(&str, &str)]) -> Daemon {
     super::palette::daemon(state(two_terminals(), settings), vec![])
@@ -80,7 +82,7 @@ fn the_first_launch_after_an_update_opens_on_the_first_step_and_an_up_to_date_la
     let dir = tempfile::tempdir().unwrap();
     let world = launch(&after_update(dir.path()), &[]);
     assert!(open(&world));
-    assert_eq!(title(&world), "One profile per world");
+    assert_eq!(title(&world), FIRST);
     assert_eq!(
         name(&world, "whats-new.count").as_deref(),
         Some(format!("1 of {STEPS}").as_str())
@@ -98,19 +100,19 @@ fn right_enter_and_next_step_forward_and_left_and_back_step_back() {
     let mut world = launch(&after_update(dir.path()), &[]);
 
     press(&mut world, Key::Right);
-    assert_eq!(title(&world), "Desktops arrange your agents");
+    assert_eq!(title(&world), LAST);
+    press(&mut world, Key::Left);
+    assert_eq!(title(&world), FIRST);
     press(&mut world, Key::Enter);
-    assert_eq!(title(&world), "Arrange each desktop your way");
+    assert_eq!(title(&world), LAST);
+    world.gesture(|app| app.click(Target::key("whats-new.back")));
+    assert_eq!(title(&world), FIRST);
     world.gesture(|app| app.click(Target::key("whats-new.primary")));
-    assert_eq!(title(&world), "The queue decides what's next");
+    assert_eq!(title(&world), LAST);
 
     press(&mut world, Key::Left);
-    assert_eq!(title(&world), "Arrange each desktop your way");
-    world.gesture(|app| app.click(Target::key("whats-new.back")));
-    assert_eq!(title(&world), "Desktops arrange your agents");
     press(&mut world, Key::Left);
-    press(&mut world, Key::Left);
-    assert_eq!(title(&world), "One profile per world");
+    assert_eq!(title(&world), FIRST);
     assert!(world.screen().find(Target::key("whats-new.back")).is_none());
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
@@ -157,7 +159,7 @@ fn a_window_too_short_for_the_tour_keeps_next_inside_it() {
         .expect("the Next button");
     assert!(y + h <= 480.0, "Next ends at {} in a 480 pt window", y + h);
     press(&mut world, Key::Enter);
-    assert_eq!(title(&world), "Desktops arrange your agents");
+    assert_eq!(title(&world), LAST);
 }
 
 #[test]
@@ -168,11 +170,11 @@ fn got_it_ends_the_tour_and_a_relaunch_keeps_it_closed() {
     for _ in 1..STEPS {
         press(&mut world, Key::Right);
     }
-    assert_eq!(title(&world), "Keep your hands on the keyboard");
+    assert_eq!(title(&world), LAST);
     assert_eq!(name(&world, "whats-new.primary").as_deref(), Some("Got it"));
 
     press(&mut world, Key::Right);
-    assert_eq!(title(&world), "Keep your hands on the keyboard");
+    assert_eq!(title(&world), LAST);
 
     world.gesture(|app| app.click(Target::key("whats-new.primary")));
     assert!(!open(&world));
@@ -223,7 +225,7 @@ fn the_command_palette_replays_the_tour_from_the_first_step() {
 
     replay_from_palette(&mut world);
 
-    assert_eq!(title(&world), "One profile per world");
+    assert_eq!(title(&world), FIRST);
     assert!(world.runtime_is_at_rest());
 }
 
@@ -233,55 +235,66 @@ fn key_label(keybindings: Option<&str>, action: Action) -> String {
 }
 
 #[test]
-fn keys_and_the_scene_show_the_users_own_bindings() {
+fn keys_show_the_users_own_settings_binding() {
     let dir = tempfile::tempdir().unwrap();
     let rebound =
-        r#"{"version":1,"overrides":{"profile.switch":{"key":"y","meta":true,"alt":true}}}"#;
-    let switch = key_label(Some(rebound), Action::ProfileSwitch);
+        r#"{"version":1,"overrides":{"ui.openSettings":{"key":"y","meta":true,"alt":true}}}"#;
+    let settings = key_label(Some(rebound), Action::UiOpenSettings);
     let mut world = launch(
         &after_update(dir.path()),
         &[("keybindings_config", rebound)],
     );
-    assert_ne!(switch, key_label(None, Action::ProfileSwitch));
-    assert_eq!(keys(&world), [format!("{switch} Switch profile")]);
-    let press_keys = |world: &World| {
-        world
-            .screen()
-            .find(Target::key("whats-new.scene.press"))
-            .and_then(|n| n.name)
-    };
-    assert_eq!(press_keys(&world), Some(switch));
+    assert_ne!(settings, key_label(None, Action::UiOpenSettings));
+    assert_eq!(keys(&world), [format!("{settings} Settings")]);
 
     press(&mut world, Key::Right);
-    assert_eq!(
-        press_keys(&world),
-        Some(key_label(None, Action::DesktopSelect2))
-    );
-    assert_eq!(
-        name(&world, "whats-new.scene").as_deref(),
-        Some("Pressing the desktop 2 shortcut swaps the panes for desktop 2's arrangement")
-    );
+    assert_eq!(keys(&world), [format!("{settings} Settings")]);
+}
+
+fn scheme_button(world: &World) -> String {
+    name(world, "whats-new.scheme").expect("the step offers a color scheme")
+}
+
+fn scheme_writes(world: &World) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("set_setting")
+        .iter()
+        .filter(|r| r["key"] == "color_scheme")
+        .map(|r| r["value"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn scheme_is(world: &mut World, id: &str) {
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some([("color_scheme".to_owned(), id.to_owned())].into()),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
 }
 
 #[test]
-fn a_digit_key_reads_as_the_range_of_desktops() {
+fn each_step_puts_its_scheme_on_and_then_offers_the_default_back() {
     let dir = tempfile::tempdir().unwrap();
     let mut world = launch(&after_update(dir.path()), &[]);
+    assert_eq!(scheme_button(&world), "Switch back to Classic");
+
+    world.gesture(|app| app.click(Target::key("whats-new.scheme")));
+    assert_eq!(scheme_writes(&world), ["classic"]);
+    scheme_is(&mut world, "classic");
+    assert!(open(&world));
+    assert_eq!(scheme_button(&world), "Use the new colors");
+
+    world.gesture(|app| app.click(Target::key("whats-new.scheme")));
+    assert_eq!(scheme_writes(&world), ["classic", ""]);
+    scheme_is(&mut world, "");
 
     press(&mut world, Key::Right);
-    assert_eq!(
-        keys(&world),
-        [
-            format!(
-                "{}–9 Switch desktop",
-                key_label(None, Action::DesktopSelect1)
-            ),
-            format!(
-                "{} See all desktops",
-                key_label(None, Action::DesktopOverview)
-            ),
-        ]
-    );
+    assert_eq!(scheme_button(&world), "Try Night");
+    world.gesture(|app| app.click(Target::key("whats-new.scheme")));
+    assert_eq!(scheme_writes(&world), ["classic", "", "night"]);
+    scheme_is(&mut world, "night");
+    assert_eq!(scheme_button(&world), "Use the default colors");
 }
 
 #[test]
@@ -294,7 +307,7 @@ fn its_arrow_keys_stay_away_from_the_terminal_underneath() {
     press(&mut world, Key::Right);
     press(&mut world, Key::Left);
 
-    assert_eq!(title(&world), "One profile per world");
+    assert_eq!(title(&world), FIRST);
     assert!(world.daemon.sent_of("pty_input")[before..].is_empty());
 }
 
@@ -315,7 +328,7 @@ fn homes_banner_offers_a_new_release_and_replays_it_from_the_first_step() {
 
     world.gesture(|app| app.click(Target::key("home.intro-banner.replay")));
 
-    assert_eq!(title(&world), "One profile per world");
+    assert_eq!(title(&world), FIRST);
 }
 
 #[test]
@@ -341,7 +354,7 @@ fn a_dismissed_banner_stays_away_across_launches_and_the_palette_still_replays()
             .is_none()
     );
     replay_from_palette(&mut world);
-    assert_eq!(title(&world), "One profile per world");
+    assert_eq!(title(&world), FIRST);
 }
 
 #[test]

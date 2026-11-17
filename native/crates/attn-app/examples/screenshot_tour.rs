@@ -2758,7 +2758,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         agent_palette(dark);
         profile_switcher(dark);
         whats_new(dark, 0, "whats-new");
-        whats_new(dark, 3, "whats-new-queue");
+        whats_new(dark, 1, "whats-new-night");
         settings_analytics(dark);
         ledger(dark);
         asks(dark);

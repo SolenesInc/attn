@@ -17,7 +17,7 @@ mod scenes;
 use scenes::Scene;
 
 /// The story this release tells. A new story gets a new id, so everyone sees it once.
-pub const RELEASE: &str = "profiles-desktops-intro-2026-10";
+pub const RELEASE: &str = "new-look-2026-11";
 /// The release whose tour the user finished or closed.
 pub const SEEN_PREF: &str = "attn.whats_new.last_seen";
 /// The release whose Home banner the user dismissed.
@@ -51,7 +51,14 @@ struct Step {
     body: &'static str,
     keys: Vec<(&'static str, Combos)>,
     scene: Scene,
-    press: Option<Combos>,
+    scheme: Scheme,
+}
+
+/// A color scheme a step lets you try on the spot, and the way back to attn's own.
+struct Scheme {
+    id: &'static str,
+    offer: &'static str,
+    back: &'static str,
 }
 
 /// The keys of one entry: as a screen reader says them, and as keycaps, one group per
@@ -64,108 +71,36 @@ pub(super) struct Combos {
 
 /// The tour's steps, with keys as the user's bindings draw them.
 fn steps(keymap: &Keymap) -> Vec<Step> {
-    let label = |action: Action| {
-        keymap.binding(&action).map(|b| Combos {
-            said: keymap.label(b),
-            caps: vec![keymap.keycaps(b)],
-        })
-    };
-    let digits = |action: Action| {
-        label(action).map(|mut combos| {
-            combos.said = format!(
-                "{}1–9",
-                combos.said.strip_suffix('1').unwrap_or(&combos.said)
-            );
-            for caps in &mut combos.caps {
-                caps.pop();
-                caps.push("1–9".into());
-            }
-            combos
-        })
-    };
-    let keys = |entries: Vec<(&'static str, Option<Combos>)>| {
-        entries
-            .into_iter()
-            .filter_map(|(name, keys)| Some((name, keys?)))
-            .collect()
-    };
-    let either = |a: Action, b: Action| match (label(a), label(b)) {
-        (Some(a), Some(b)) => Some(Combos {
-            said: format!("{}/{}", a.said, b.said),
-            caps: [a.caps, b.caps].concat(),
-        }),
-        (a, b) => a.or(b),
-    };
+    let settings = keymap.binding(&Action::UiOpenSettings).map(|b| Combos {
+        said: keymap.label(b),
+        caps: vec![keymap.keycaps(b)],
+    });
+    let keys = settings
+        .clone()
+        .map(|keys| vec![("Settings", keys)])
+        .unwrap_or_default();
     vec![
         Step {
-            title: "One profile per world",
-            body: "Work, personal, that side project: each gets its own agents, crew, automations and desktops, so only the one you're focused on is in front of you. The other profiles' agents disappear from view, so there are no work agents to tune out on a personal evening. Switch freely without interrupting the agents.",
-            keys: keys(vec![("Switch profile", label(Action::ProfileSwitch))]),
-            scene: Scene::Profiles,
-            press: label(Action::ProfileSwitch),
+            title: "A new look",
+            body: "attn has a new logo, a black cat watching over your agents, and new colors to go with it. Magenta marks an agent waiting for you, cyan an agent at work, and violet the main buttons. If you prefer the colors you had, switch back here, or any time in Settings → Appearance → Theme, where they are called Classic.",
+            keys: keys.clone(),
+            scene: Scene::NewLook,
+            scheme: Scheme {
+                id: "classic",
+                offer: "Switch back to Classic",
+                back: "Use the new colors",
+            },
         },
         Step {
-            title: "Desktops arrange your agents",
-            body: "Group related agents on a desktop and flip between desktops with a keystroke. The sidebar keeps listing every agent in the profile, but only the current desktop's agents are on screen.",
-            keys: keys(vec![
-                ("Switch desktop", digits(Action::DesktopSelect1)),
-                ("See all desktops", label(Action::DesktopOverview)),
-            ]),
-            scene: Scene::Desktops,
-            press: label(Action::DesktopSelect2),
-        },
-        Step {
-            title: "Arrange each desktop your way",
-            body: "Drag panes by their header to rearrange them, open a shell beside an agent, or give one pane the whole desktop when you need room. When an agent belongs somewhere else, send it to another desktop and go with it, or leave it there and stay where you are.",
-            keys: keys(vec![
-                ("Focus one pane", label(Action::TerminalToggleMaximize)),
-                ("Move and follow", digits(Action::DesktopSend1)),
-                ("Move and stay", digits(Action::DesktopSendStay1)),
-            ]),
-            scene: Scene::Arrange,
-            press: label(Action::DesktopSend2),
-        },
-        Step {
-            title: "The queue decides what's next",
-            body: "Turn on the agent queue from the command palette and your agents split into waiting for you or busy. When you're done with one, settle it and attn moves you to the next in the queue. You never have to choose which agent to look at next, so you tire less and get more work done.",
-            keys: keys(vec![
-                ("Settle", label(Action::SessionSettle)),
-                (
-                    "Step through the queue",
-                    either(Action::SessionPrev, Action::SessionNext),
-                ),
-                ("Next waiting agent", label(Action::SessionJumpToWaiting)),
-                ("Next automation run", label(Action::SessionNextRun)),
-            ]),
-            scene: Scene::Queue,
-            press: label(Action::SessionSettle),
-        },
-        Step {
-            title: "Hide the sidebar, keep the queue",
-            body: "Since the queue moves you from agent to agent, you rarely need the sidebar. Hide it and a slim bar across the top keeps who's waiting, your automation runs and your desktops, while the rest of the window goes to the agent in front of you.",
-            keys: keys(vec![
-                (
-                    "Show or hide the sidebar",
-                    label(Action::SessionToggleSidebar),
-                ),
-                ("All agents", label(Action::SidebarAgentList)),
-            ]),
-            scene: Scene::QueueBar,
-            press: label(Action::SessionToggleSidebar),
-        },
-        Step {
-            title: "Jump to any agent",
-            body: "Open the agent palette and type a few letters to jump to any agent, tile or crew member, on any desktop. From the list you can settle or snooze an agent without opening it, or type > to switch to commands.",
-            keys: keys(vec![("Agent palette", label(Action::UiActionMenu))]),
-            scene: Scene::AgentPalette,
-            press: label(Action::UiActionMenu),
-        },
-        Step {
-            title: "Keep your hands on the keyboard",
-            body: "Most of what attn can do is in the command palette: make a new desktop, switch profile, turn on the agent queue or auto-settle, open the notebook or the Garden. Commands that have a shortcut show it, so the palette is also where you pick them up.",
-            keys: keys(vec![("Command palette", label(Action::UiCommandPalette))]),
-            scene: Scene::CommandPalette,
-            press: label(Action::UiCommandPalette),
+            title: "Night, for the full colors",
+            body: "The new colors are kept quiet so they stay out of your way. Night shows them at full strength on indigo surfaces, the way the logo does. Try it here, or pick it later under Settings → Appearance → Theme.",
+            keys,
+            scene: Scene::Night,
+            scheme: Scheme {
+                id: "night",
+                offer: "Try Night",
+                back: "Use the default colors",
+            },
         },
     ]
 }
@@ -286,14 +221,14 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
                     .gap(space::S1)
                     .child(text("New in attn:").font(type_::SECTION).color(t.brand))
                     .child(
-                        text("profiles, desktops, the agent queue and two palettes.")
+                        text("a new look, and how to switch back.")
                             .font(type_::BODY)
                             .color(t.text_secondary)
                             .wrap(),
                     ),
             )
             .child(
-                Button::new("Replay the intro")
+                Button::new("Show me")
                     .variant(ButtonVariant::Submit)
                     .control_size(ControlSize::Small)
                     .on_press_tx(open)
@@ -416,7 +351,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .child(scenes::scene(step.scene, step.press.clone(), t))
+        .child(scenes::scene(step.scene, t))
         .child(
             text(step.title)
                 .key("whats-new.title")
@@ -434,6 +369,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .wrap()
                 .mt(6.0),
         )
+        .child(row().mt(14.0).child(scheme_button(state, &step.scheme, k)))
         .children((!step.keys.is_empty()).then(|| keys.mt(14.0)));
     Dialog::new(DIALOG, "What's new", DialogFrame::whats_new(t))
         .width(scenes::WIDTH + 2.0 * INSET)
@@ -456,6 +392,24 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .child(footer),
         )
         .build(t, layers);
+}
+
+/// Puts the step's scheme on, or, while it is on, takes attn's own back.
+fn scheme_button(state: &State, scheme: &Scheme, k: &rune_kit::Kit) -> El {
+    let on = crate::color_scheme(&state.facts.settings).id == scheme.id;
+    let (label, id) = if on {
+        (scheme.back, "")
+    } else {
+        (scheme.offer, scheme.id)
+    };
+    Button::new(label)
+        .variant(ButtonVariant::Outline)
+        .control_size(ControlSize::Small)
+        .on_press(move |state: &mut State| {
+            crate::settings::appearance::choose_color_scheme(state, id)
+        })
+        .build(k)
+        .key("whats-new.scheme")
 }
 
 /// `.whats-new-step`'s and `.whats-new-footer`'s inset.

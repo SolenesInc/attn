@@ -3,7 +3,9 @@ import FocusTrap from './AppFocusTrap';
 import { useKeybindings } from '../contexts/KeybindingsContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { KeyCombos } from './Keycap';
-import { whatsNewSteps } from './whatsNewSteps';
+import { useSettings } from '../contexts/SettingsContext';
+import { COLOR_SCHEME_SETTING } from '../colors/resolve';
+import { whatsNewSteps, type WhatsNewScheme } from './whatsNewSteps';
 import './WhatsNewModal.css';
 
 interface WhatsNewModalProps {
@@ -83,6 +85,7 @@ function WhatsNewTour({ onClose, onViewShortcuts }: Omit<WhatsNewModalProps, 'is
               {step.scene}
               <h2>{step.title}</h2>
               <p>{step.body}</p>
+              <SchemeButton scheme={step.scheme} />
               {step.keys.length > 0 && (
                 <ul className="whats-new-keys">
                   {step.keys.map((entry) => (
@@ -135,5 +138,15 @@ function WhatsNewTour({ onClose, onViewShortcuts }: Omit<WhatsNewModalProps, 'is
         </div>
       </FocusTrap>
     </div>
+  );
+}
+
+function SchemeButton({ scheme }: { scheme: WhatsNewScheme }) {
+  const { settings, setSetting } = useSettings();
+  const on = settings[COLOR_SCHEME_SETTING] === scheme.id;
+  return (
+    <button type="button" className="whats-new-scheme" onClick={() => setSetting(COLOR_SCHEME_SETTING, on ? '' : scheme.id)}>
+      {on ? scheme.back : scheme.offer}
+    </button>
   );
 }
