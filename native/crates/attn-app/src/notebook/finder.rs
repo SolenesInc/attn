@@ -148,38 +148,43 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         None => "Loading notes…",
         Some(_) => "No notes match.",
     };
-    let list = col()
-        .key("notebook.finder.list")
-        .role("listbox")
+    let list = finder::list("notebook.finder.list")
         .label(LABEL)
-        .max_h(finder::LIST_MAX)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
         .gap(2.0)
         .children(
             rows.iter()
                 .enumerate()
                 .map(|(i, path)| option(path, i == finder.highlighted, t)),
         )
-        .children(rows.is_empty().then(|| finder::empty(t, empty)));
-    let panel = finder::panel(t, field, list)
+        .children(
+            rows.is_empty()
+                .then(|| finder::empty(t, "notebook.finder.empty", empty)),
+        );
+    let panel = col()
         .key("notebook.finder")
         .role("dialog")
         .label(LABEL)
+        .max_h(finder::MAX_H)
+        .shrink()
+        .min_h(0.0)
         .on_press_outside(close);
+    let panel = finder::panel(t, panel, finder::input_row(None, field, None), list, None);
     Some(finder::layer(t, "notebook.finder.layer", panel))
 }
 
 fn option(path: &str, highlighted: bool, t: &Tokens) -> El {
     let name = path.rsplit('/').next().unwrap_or(path).to_owned();
     let picked = path.to_owned();
-    finder::option(t, name.clone(), path.to_owned(), highlighted)
-        .key(format!("notebook.finder.row.{path}"))
-        .role("option")
-        .label(format!("{name} {path}"))
-        .focus_selected(highlighted)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, picked.clone(), tx))
+    finder::path_option(
+        t,
+        format!("notebook.finder.row.{path}"),
+        &name,
+        path,
+        highlighted,
+    )
+    .role("option")
+    .label(format!("{name} {path}"))
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, picked.clone(), tx))
 }
 
 /// The surface ⌘P finds a note in: the fullscreen notebook while it shows, else the editor

@@ -43,7 +43,7 @@ pub(crate) fn pops_out(state: &State, desktop: &str, leaf: &str) -> bool {
         .is_some_and(|tree| matches!(tree.find_leaf(leaf), Some(Node::Leaf(_))))
 }
 
-pub(super) fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
+pub(crate) fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
     state
         .facts
         .desktops

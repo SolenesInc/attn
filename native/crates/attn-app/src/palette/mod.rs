@@ -2,13 +2,15 @@ mod agents;
 pub(crate) mod commands;
 mod view;
 
-pub(crate) use view::row_face;
+pub(crate) use view::{Place, row_face};
 
 use attn_protocol::{
     CommandUsage, GetCommandUsageMessage, GetCommandUsageResultMessage, RecordCommandUsageMessage,
     RecordCommandUsageResultMessage, Session,
 };
 use rune::{Key, KeyEvent, TextEdit, Tx};
+
+use attn_ui::finder::Hint;
 
 use crate::keymap::Binding;
 use crate::shell::{Layer, Palette};
@@ -177,13 +179,16 @@ pub(crate) enum Look {
         tag: Option<String>,
     },
     Tile {
+        icon: &'static rune::Icon,
         word: &'static str,
         slot: String,
     },
-    /// A crew member between sessions, or the Chief before its setup.
+    /// A crew member between sessions, with the desktop it starts on when it names one, or
+    /// the Chief before its setup.
     Member {
         chief: bool,
         unconfigured: bool,
+        desk: Option<String>,
     },
     Choice {
         detail: String,
@@ -655,10 +660,14 @@ pub(crate) fn badge(state: &State, mode: &Mode) -> Option<String> {
 }
 
 /// The footer's hint for a queue action: its keys, or why it has none here.
-pub(crate) fn action_hint(state: &State, action: &Action, word: &str) -> String {
+pub(crate) fn action_hint(state: &State, action: &Action, word: &str) -> Hint {
     match state.keymap.binding(action) {
-        Some(binding @ Binding::Chord(_)) => format!("{} {word}", state.keymap.label(binding)),
-        _ => format!("{word} needs a single-key shortcut (chords don't work here)"),
+        Some(binding @ Binding::Chord(_)) => {
+            Hint::keys("", &state.keymap.label(binding), &format!(" {word}"))
+        }
+        _ => Hint::plain(format!(
+            "{word} needs a single-key shortcut (chords don't work here)"
+        )),
     }
 }
 

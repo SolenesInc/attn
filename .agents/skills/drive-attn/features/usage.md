@@ -61,7 +61,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) shows the usage badge in an agent's tile header, previews the breakdown while the pointer rests on it, pins it from a press or the palette, and has the price overrides and the headless cap in Settings. It has no command to cap one session's context window; set the default caps in Settings instead ([harnesses.md](harnesses.md)). `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above.
+The native app (`native/`) shows the usage badge in an agent's tile header, previews the breakdown while the pointer rests on it, pins it from a press or the palette, caps one session's context window from the palette, and has the price overrides and the headless cap in Settings ([harnesses.md](harnesses.md) has the default caps). `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads and native input above.
 
 Preconditions:
 
@@ -75,8 +75,9 @@ Steps:
 - **The breakdown on hover.** `bridge hover '{"target":{"key":"tile.<pane>.usage"}}'`: `tile.<pane>.usage.popover` answers, and its rows in `bridge tree` hold `2,095 tokens` and `mock-agent-1`, with no `esc close`. Hover `terminal.<terminal>`: the popover goes.
 - **The breakdown from the palette.** Press `mod+alt+k`, type `usage-agent usage`, wait for `palette.row.command:show-session-usage` and press `Enter`: the popover opens pinned, and its rows hold `esc close`. Press `Escape`: it goes.
 - **Price the model from the shell.** Set the price as above: the badge's name turns into a dollar amount with no `*`. Clear the price and the badge shows tokens again.
+- **Cap the context window.** Set the `cap set` banner as above. Press `mod+alt+k`, type `Cap usage-agent` and press `Enter`: `bridge find '{"target":{"key":"context-cap-dialog"}}'` answers and `context-cap.field` is focused and empty. Type `1` and press `Enter`: `context-cap.refused` names the daemon's range and the dialog stays. Press `mod+a`, type `500000` and press `Enter`: the dialog goes and `./attn agent peek usage-agent` replays `Measured.` under the `cap set` banner. The palette now offers `palette.row.command:set-session-context-cap` named "Change usage-agent's context window cap", described `Compacts at 500,000 tokens — change or clear the cap`. Run it again, which opens the field holding `500000` selected, press `backspace` and `Enter` to clear the cap. A shell on screen offers no such command.
 - **Background caps.** Open Settings, press `settings.nav.backgroundAgents`, then `settings.input.headless_context_window_cap.field`. Press `mod+a`, type `500000` and press `Enter`: `./attn settings get headless_context_window_cap` prints `500000`. Run `./attn settings set headless_context_window_cap ""` to put it back.
-- **Proof.** Keep `./attn session show usage-agent` after the turn and after pricing, the badge's `bridge find` after each change, the popover's rows from `bridge tree`, and `bridge shot '{"path":"<P>/native-usage-pinned.png"}'` with the breakdown pinned, `<P>` written out. The `native-session-usage` scenario runs the badge, a native subagent and a partly priced model, the hover and the palette.
+- **Proof.** Keep `./attn session show usage-agent` after the turn and after pricing, `./attn agent peek usage-agent` after the cap, the badge's `bridge find` after each change, the popover's rows from `bridge tree`, and `bridge shot '{"path":"<P>/native-usage-pinned.png"}'` with the breakdown pinned, `<P>` written out. The `native-session-usage` scenario runs the badge, a native subagent and a partly priced model, the hover and the palette.
 
 ## Contexts
 

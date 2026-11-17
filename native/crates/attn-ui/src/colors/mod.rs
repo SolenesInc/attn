@@ -177,7 +177,7 @@ tokens!(
     text_primary text_secondary text_tertiary text_muted text_dimmed
     accent brand error warning success merged on_accent on_brand shadow highlight
     state_idle state_working state_waiting state_approval state_scheduled state_unknown
-    inactive find annotation settle settle_ink settle_ink_quiet
+    find annotation settle settle_ink settle_ink_quiet
 );
 
 const ANSI: [&str; 16] = [

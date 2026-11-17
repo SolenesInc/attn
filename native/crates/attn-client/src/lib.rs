@@ -9,7 +9,7 @@ pub use frame::{Frame, KittyFormat};
 pub use link::{
     Commands, FETCH_PR_DETAILS_ID, LIST_PLUGINS, Link, LinkConfig, NotConnected, Parked,
     REFRESH_PRS_ID, Reply, ReplySink, StartDaemon, TerminalEvent, TerminalSink, Traffic,
-    plugin_action, pr_action_id,
+    context_cap_id, plugin_action, pr_action_id,
 };
 pub use pulse::Pulse;
 pub use store::{

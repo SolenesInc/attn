@@ -17,18 +17,18 @@ use attn_protocol::{
     CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
     CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
-    DesktopTileContentMessage, DirectoryEntry, GetCommandUsageResultMessage,
-    GetRepoInfoResultMessage, Harness, HarnessModel, HarnessModelsResultMessage,
-    InitialStateMessage, InspectPathResultMessage, LaunchDesktopResultMessage,
-    LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView, PathInspection, PhoneLink,
-    PhonesUpdatedMessage, Profile, RecentLocation, RecentLocationsResultMessage,
-    RecordCommandUsageResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNotShown,
-    ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge,
-    SeedNote, SeedPlotProgress, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
-    SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree, WorktreeListResult,
-    WorktreeListResultEvent,
+    DesktopTileContentMessage, DirectoryEntry, FileActivity, FsIndexResultMessage,
+    GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
+    HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
+    LaunchDesktopResultMessage, LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView,
+    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RecentFilesResultMessage,
+    RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage, RepoInfo,
+    ReviewBundle, ReviewFile, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Seed,
+    SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
+    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
+    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
+    WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -718,7 +718,12 @@ fn review_stop(dark: bool) {
 }
 
 fn with_document(dark: bool) -> World {
-    garden_world(dark, seeds())
+    with_document_and(dark, |_| {})
+}
+
+/// [`with_document`], its daemon also answering what `answers` registers.
+fn with_document_and(dark: bool, answers: impl FnOnce(&Daemon)) -> World {
+    garden_world_and(dark, seeds(), answers)
 }
 
 /// A log entry on a seed's page, written `kind` by an agent.
@@ -739,11 +744,17 @@ fn log_note(id: &str, kind: &str, body: &str, at: &str) -> SeedNote {
 /// The document tile's world with the garden holding `seeds`, whose pages the daemon reads with
 /// two entries on `s-one`'s log.
 fn garden_world(dark: bool, seeds: Vec<Seed>) -> World {
+    garden_world_and(dark, seeds, |_| {})
+}
+
+/// [`garden_world`], its daemon also answering what `answers` registers.
+fn garden_world_and(dark: bool, seeds: Vec<Seed>, answers: impl FnOnce(&Daemon)) -> World {
     let daemon = Daemon::scripted().state(initial(
         dark,
         document_tile("m", "/repo/plan.md"),
         seeds.clone(),
     ));
+    answers(&daemon);
     let known = seeds;
     daemon.on("seed_document_get", move |r: &Request| {
         let notes = if r["seed_id"] == "s-one" {
@@ -876,6 +887,60 @@ fn palette(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::UiCommandPalette);
     snap(&mut world, "palette", dark);
+}
+
+/// The command palette for a query nothing matches.
+fn palette_no_match(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("nothing matches this"));
+    snap(&mut world, "palette-no-match", dark);
+}
+
+/// The markdown opener over the window, its recent files and the agent's folder listed.
+fn opener(dark: bool) {
+    let mut world = with_document_and(dark, |daemon| {
+        daemon.on("recent_files", |r: &Request| {
+            let recent = |path: &str, at: &str| FileActivity {
+                path: path.into(),
+                last_at: at.into(),
+                count: 1,
+                source: "open".into(),
+                ..FileActivity::default()
+            };
+            message(RecentFilesResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                files: vec![
+                    recent("/repo/plan.md", "2026-07-24T10:00:00Z"),
+                    recent("/repo/docs/colors.md", "2026-07-23T10:00:00Z"),
+                ],
+                ..RecentFilesResultMessage::new()
+            })
+        });
+        daemon.on("fs_index", |r: &Request| {
+            message(FsIndexResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                root: r["root"].as_str().unwrap_or_default().into(),
+                files: ["README.md", "docs/colors.md", "docs/themes.md", "plan.md"]
+                    .map(str::to_owned)
+                    .to_vec(),
+                ..FsIndexResultMessage::new()
+            })
+        });
+    });
+    press(&mut world, Action::FileOpen);
+    snap(&mut world, "opener", dark);
+}
+
+/// The prompt for the agent on screen's context window cap, from the palette.
+fn context_cap(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("context window"));
+    tap(&mut world, Key::Enter);
+    snap(&mut world, "context-cap", dark);
 }
 
 const MESSAGE: &str = "The cache keeps every row it reads until the window closes.";
@@ -3018,6 +3083,9 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         shortcut_editor(dark);
         close_desktop(dark);
         palette(dark);
+        palette_no_match(dark);
+        opener(dark);
+        context_cap(dark);
         terminal_overlays(dark);
         tile_window(dark);
         launcher_dialog(dark);

@@ -3111,6 +3111,35 @@ fn the_pop_out_key_pops_the_active_tile_out_where_it_shows_and_brings_it_back() 
 }
 
 #[test]
+fn the_palette_pops_the_active_tile_out_and_brings_it_back() {
+    let tree = row([pane("a"), document("m", "a")]);
+    let mut world = start(vec![desktop(1, "m", Some(tree))]);
+    world.daemon.on("get_command_usage", |r| {
+        super::palette::history(r, Vec::new())
+    });
+
+    super::palette::run_command(&mut world, "pop out tile");
+    let leaves: Vec<_> = sent(&world, "desktop_pop_out_leaf")
+        .into_iter()
+        .map(|r| r["leaf_id"].clone())
+        .collect();
+    assert_eq!(leaves, ["m"]);
+
+    let out = row([pane("a"), popped(document("m", "a"), OUT)]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "m", Some(out))],
+    );
+    super::palette::run_command(&mut world, "bring back tile");
+    assert_eq!(
+        sent(&world, "desktop_bring_back_leaf"),
+        [serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "m"})]
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_tiles_header_button_pops_it_out() {
     let tree = row([pane("a"), document("m", "a")]);
     let mut world = start(vec![desktop(1, "a", Some(tree))]);

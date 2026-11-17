@@ -90,7 +90,7 @@ fn used(command: &str, score: f64, at: &str) -> CommandUsage {
     }
 }
 
-fn history(request: &Request, entries: Vec<CommandUsage>) -> Value {
+pub(super) fn history(request: &Request, entries: Vec<CommandUsage>) -> Value {
     message(GetCommandUsageResultMessage {
         request_id: request["request_id"].as_str().unwrap().into(),
         profile_id: request["profile_id"].as_str().unwrap().into(),
@@ -1406,4 +1406,146 @@ fn a_list_longer_than_the_palette_shows_its_scroll_bar_at_rest_and_one_that_fits
         thumb(&world, "palette.list").is_none_or(|([.., h], _)| h == 0.0),
         "a list that fits shows no thumb"
     );
+}
+
+#[test]
+fn a_crew_member_between_sessions_names_the_desktop_it_starts_on_beside_its_state() {
+    let member = |id: &str, desk: Option<&str>| attn_protocol::CrewMember {
+        id: id.into(),
+        name: id.into(),
+        profile_id: "work".into(),
+        revision: 1,
+        resolved_agent: "claude".into(),
+        launch_desktop: desk.map(|label| attn_protocol::LaunchDesktopSetting {
+            label: Some(label.into()),
+            ..attn_protocol::LaunchDesktopSetting::default()
+        }),
+        ..attn_protocol::CrewMember::default()
+    };
+    let mut state = one_agent(&[]);
+    state.crew = Some(vec![
+        member("scout", Some("research")),
+        member("keel", None),
+    ]);
+    let mut world = World::start(daemon(state, vec![]));
+    open_agents(&mut world);
+
+    assert_eq!(
+        row_text(&world, "member:scout", "crew").as_deref(),
+        Some("· crew · research")
+    );
+    assert_eq!(
+        row_text(&world, "member:keel", "crew").as_deref(),
+        Some("· crew")
+    );
+    assert_eq!(
+        row_text(&world, "member:scout", "status").as_deref(),
+        Some("between sessions")
+    );
+}
+
+#[test]
+fn the_palette_caps_the_context_window_of_a_claude_agent_and_shows_the_daemons_refusal() {
+    let world_daemon = daemon(one_agent(&[]), vec![]);
+    world_daemon.on("set_session_context_window_cap", |r| {
+        let cap = r["cap"].as_i64().unwrap();
+        let fits = cap == 0 || cap >= 10_000;
+        message(attn_protocol::SessionContextWindowCapResultMessage {
+            session_id: r["session_id"].as_str().unwrap().into(),
+            cap,
+            success: fits,
+            error: (!fits)
+                .then(|| format!("context window cap must be 0 or at least 10000; got {cap}")),
+            ..attn_protocol::SessionContextWindowCapResultMessage::new()
+        })
+    });
+    let mut world = World::start(world_daemon);
+    world.open_desktop();
+
+    run_command(&mut world, "cap s1");
+    let field = world.screen().get(Target::key("context-cap.field"));
+    assert_eq!(field.value.as_deref(), Some(""));
+
+    world.gesture(|app| app.type_text("lots"));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        text_of(&world, "context-cap.refused").as_deref(),
+        Some("Enter a whole number of tokens, or leave blank for no cap")
+    );
+    assert!(
+        world
+            .daemon
+            .sent_of("set_session_context_window_cap")
+            .is_empty()
+    );
+
+    retype_field(&mut world, "context-cap.field", "500");
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        text_of(&world, "context-cap.refused").as_deref(),
+        Some("context window cap must be 0 or at least 10000; got 500")
+    );
+
+    retype_field(&mut world, "context-cap.field", "800000");
+    press(&mut world, Key::Enter);
+    let caps: Vec<_> = world
+        .daemon
+        .sent_of("set_session_context_window_cap")
+        .iter()
+        .map(|r| (r["session_id"].clone(), r["cap"].clone()))
+        .collect();
+    assert_eq!(
+        caps,
+        [(json!("s1"), json!(500)), (json!("s1"), json!(800000))]
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("context-cap-dialog"))
+            .is_none()
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_capped_agent_offers_to_change_its_cap_and_a_shell_offers_none() {
+    let mut state = one_agent(&[]);
+    state.sessions.as_mut().unwrap()[0].context_window_cap = Some(800_000);
+    let mut world = World::start(daemon(state, vec![]));
+    world.open_desktop();
+
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("context window"));
+    assert_eq!(titles(&world), ["Change s1's context window cap"]);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("palette.row.command:set-session-context-cap"))
+            .description
+            .as_deref(),
+        Some("Compacts at 800,000 tokens — change or clear the cap")
+    );
+    press(&mut world, Key::Enter);
+    let field = world.screen().get(Target::key("context-cap.field"));
+    assert_eq!(field.value.as_deref(), Some("800000"));
+    press(&mut world, Key::Escape);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("context-cap-dialog"))
+            .is_none()
+    );
+
+    let shell = initial(
+        vec![desktop("d1", "work", 1, vec![agent_pane("sh")])],
+        vec![Session {
+            agent: "shell".into(),
+            ..session("sh")
+        }],
+    );
+    let mut world = World::start(daemon(shell, vec![]));
+    world.open_desktop();
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("context window"));
+    assert!(titles(&world).is_empty());
 }

@@ -11,6 +11,7 @@ mod cheat_sheet;
 mod chief;
 mod closing;
 mod connection;
+mod context_cap;
 mod crew;
 pub mod daemon;
 mod deep_link;
@@ -258,6 +259,7 @@ pub fn bind(
             sidebar::snooze::follow(state);
             sidebar::session_menu::follow(state);
             sidebar::rename::follow(state);
+            context_cap::follow(state);
             sidebar::width::follow(state);
             palette::follow(state);
             asks::follow(state, tx);

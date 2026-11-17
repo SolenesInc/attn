@@ -25,15 +25,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .on_change(super::edited)
         .on_key(super::on_key)
         .build(attn_ui::kit(t));
-    let list = col()
-        .key("opener.list")
-        .role("listbox")
+    let list = finder::list("opener.list")
         .label(LABEL)
-        .max_h(finder::LIST_MAX)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .gap(2.0)
         .children(
             rows.iter()
                 .enumerate()
@@ -41,22 +34,33 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         )
         .children(
             rows.is_empty()
-                .then(|| finder::empty(t, empty).key("opener.empty")),
+                .then(|| finder::empty(t, "opener.empty", empty)),
         );
-    let panel = finder::panel(t, field, list)
+    let panel = col()
         .key("opener.dialog")
         .role("dialog")
         .label(LABEL)
-        .modal_tx(true, super::close);
-    finder::layer(t, "opener", panel)
+        .modal_tx(true, super::close)
+        .max_h(finder::MAX_H)
+        .shrink()
+        .min_h(0.0);
+    attn_ui::finder::layer(
+        t,
+        "opener",
+        finder::panel(t, panel, finder::input_row(None, field, None), list, None),
+    )
 }
 
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     let picked = r.key.clone();
-    finder::option(t, r.title.clone(), r.detail.clone(), highlighted)
-        .key(format!("opener.row.{}", r.key))
-        .role("option")
-        .label(format!("{} {}", r.title, r.detail))
-        .focus_selected(highlighted)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &picked, tx))
+    finder::path_option(
+        t,
+        format!("opener.row.{}", r.key),
+        &r.title,
+        &r.detail,
+        highlighted,
+    )
+    .role("option")
+    .label(format!("{} {}", r.title, r.detail))
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &picked, tx))
 }

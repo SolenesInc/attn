@@ -45,6 +45,8 @@ macro_rules! actions {
             ShowSessionUsage { session: String },
             /// Pin the delegation chain in an agent's tile header.
             ShowDelegationChain { session: String },
+            /// Ask for the token budget an agent compacts at.
+            CapContextWindow { session: String },
             /// Pin the seeds an agent tends, and the one it reports to, in its tile header.
             ShowSessionSeeds { session: String },
             /// Restart an agent in its pane.
@@ -121,6 +123,7 @@ macro_rules! actions {
                     Action::OpenInEditor { .. } => "session.openInEditor",
                     Action::ShowSessionUsage { .. } => "session.showUsage",
                     Action::ShowDelegationChain { .. } => "session.showDelegationChain",
+                    Action::CapContextWindow { .. } => "session.capContextWindow",
                     Action::ShowSessionSeeds { .. } => "session.showSeeds",
                     Action::WakeSession { .. } => "session.wake",
                     Action::SetSetting { .. } => "setting.set",
@@ -164,6 +167,7 @@ macro_rules! actions {
                     Action::OpenInEditor { .. } => "Open in editor",
                     Action::ShowSessionUsage { .. } => "Show an agent's usage",
                     Action::ShowDelegationChain { .. } => "Show an agent's delegation chain",
+                    Action::CapContextWindow { .. } => "Cap an agent's context window",
                     Action::ShowSessionSeeds { .. } => "Show an agent's seeds",
                     Action::WakeSession { .. } => "Unsnooze an agent",
                     Action::SetSetting { .. } => "Change a setting",

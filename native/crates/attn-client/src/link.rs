@@ -291,6 +291,8 @@ struct Header {
     #[serde(default)]
     id: Option<String>,
     #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
     probe_id: Option<String>,
     #[serde(default)]
     target_path: Option<String>,
@@ -315,6 +317,12 @@ pub fn pr_action_id(action: &str, pr: &str) -> String {
     format!("{action}:{pr}")
 }
 
+/// The id `set_session_context_window_cap` is answered under: its answer names the session,
+/// not a request id.
+pub fn context_cap_id(session: &str) -> String {
+    format!("context_cap:{session}")
+}
+
 /// The id `refresh_prs` is answered under: its answer carries no request id, so refreshes in
 /// flight share it.
 pub const REFRESH_PRS_ID: &str = "refresh_prs";
@@ -325,6 +333,7 @@ pub const FETCH_PR_DETAILS_ID: &str = "fetch_pr_details";
 impl Header {
     /// The request this message answers: its `request_id`, for `spawn_result`,
     /// `rename_result` and `reload_session_result` the session id the request named, for
+    /// `session_context_window_cap_result` [`context_cap_id`] of the session it names, for
     /// `pty_input_probe_result` the input's `probe_id`, for `ensure_repo_result` the folder the
     /// request named, and for `pr_action_result`, `refresh_prs_result` and
     /// `fetch_pr_details_result` the ids above. The plugin commands carry no id:
@@ -336,6 +345,7 @@ impl Header {
             "spawn_result" | "rename_result" | "reload_session_result" => self.id.clone(),
             "plugins_updated" => Some(LIST_PLUGINS.into()),
             "plugin_action_result" => self.action.as_deref().map(plugin_action),
+            "session_context_window_cap_result" => self.session_id.as_deref().map(context_cap_id),
             "pty_input_probe_result" => self.probe_id.clone(),
             "pr_action_result" => Some(pr_action_id(self.action.as_deref()?, self.id.as_deref()?)),
             "refresh_prs_result" => Some(REFRESH_PRS_ID.to_owned()),

@@ -52,8 +52,6 @@ pub struct Tokens {
     pub state_approval: Color,
     pub state_scheduled: Color,
     pub state_unknown: Color,
-    /// Something that is not running, such as a palette row's idle agent.
-    pub inactive: Color,
     /// The wash over what a find or filter matched.
     pub find: Color,
     /// What the person marked to comment on.

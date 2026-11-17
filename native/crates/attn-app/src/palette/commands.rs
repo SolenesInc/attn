@@ -91,6 +91,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
     let turn_actions = on_screen.map(|s| queue::actions(facts, s, state.window.now_ms));
     let mut commands = chief_commands(state);
     commands.extend(crate::shared_codex::commands(state));
+    commands.extend(tile_window_command(state));
     commands.extend([
         Command::new(
             "new-agent",
@@ -661,6 +662,9 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
+        if crate::context_cap::takes_cap(&session.agent) {
+            commands.push(context_cap_command(session, &name));
+        }
         if crate::desktop::seed_chip::shown(session, &state.facts) {
             commands.push(
                 Command::new(
@@ -711,6 +715,79 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         );
     }
     commands
+}
+
+/// Pops the active tile out into a window of its own, or brings it back.
+fn tile_window_command(state: &State) -> Option<Command> {
+    let (desktop, leaf) = state.window.acting(&state.facts)?;
+    let popped = crate::desktop::is_popped(state, &desktop.id, &leaf);
+    if !popped && !crate::desktop::pops_out(state, &desktop.id, &leaf) {
+        return None;
+    }
+    let (id, title, verb) = if popped {
+        ("tile-bring-back", "Bring back tile", "bring back")
+    } else {
+        ("tile-pop-out", "Pop out tile", "pop out")
+    };
+    Some(
+        Command::new(
+            id,
+            title,
+            &["tile", "window", verb, "detach"],
+            Action::TilePopOut,
+        )
+        .shortcut(Some(Action::TilePopOut)),
+    )
+}
+
+/// Asks for the token budget the agent on screen compacts at, or changes the one it has.
+fn context_cap_command(session: &attn_protocol::Session, name: &str) -> Command {
+    let cap = session.context_window_cap.filter(|cap| *cap > 0);
+    let (title, description) = match cap {
+        Some(cap) => (
+            format!("Change {name}'s context window cap"),
+            format!(
+                "Compacts at {} tokens — change or clear the cap",
+                grouped(cap)
+            ),
+        ),
+        None => (
+            format!("Cap {name}'s context window"),
+            "Make this agent compact at a token budget you choose".to_owned(),
+        ),
+    };
+    Command::new(
+        "set-session-context-cap",
+        &title,
+        &[
+            "context",
+            "window",
+            "cap",
+            "compact",
+            "autocompact",
+            "tokens",
+            "agent",
+            "session",
+        ],
+        Action::CapContextWindow {
+            session: session.id.clone(),
+        },
+    )
+    .describe(&description)
+    .pin()
+}
+
+/// `n` with its thousands grouped by commas, as `toLocaleString` writes it in English.
+fn grouped(n: i64) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// What the Chief's phase lets the user do with it.
@@ -830,6 +907,8 @@ fn icon_of(id: &str) -> Option<Icon> {
         | "unsnooze-active-session"
         | "snooze-active-session" => Icon::Attention,
         "keyboard-shortcuts"
+        | "tile-pop-out"
+        | "tile-bring-back"
         | "whats-new"
         | "sidebar-wider"
         | "sidebar-narrower"

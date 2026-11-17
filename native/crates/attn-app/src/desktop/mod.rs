@@ -56,7 +56,7 @@ pub use windows::{
 };
 pub(crate) use windows::{
     follow as follow_windows, follow_title as follow_window_title, forward as forward_to_main,
-    on_focus as window_focus, to_main, view as windows_view,
+    is_popped, on_focus as window_focus, pops_out, to_main, view as windows_view,
 };
 
 use layout::{DEFAULT_NARROWEST_COLS, FirstColumn, Measures, Node, RowInput, RowPlan, View};

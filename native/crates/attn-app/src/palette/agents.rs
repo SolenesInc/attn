@@ -92,7 +92,7 @@ fn anchored(state: &State, bands: &Bands<'_>, list: &mut List<'_>) {
     if let Some(row) = &bands.chief {
         list.agent(row.session);
     } else if let Some(chief) = &chief {
-        list.member(&chief.key, &chief.name, Some(chief.agent.is_none()));
+        list.member(&chief.key, &chief.name, Some(chief.agent.is_none()), None);
     }
     let roster = crate::crew::members(state);
     let mut members: Vec<String> = roster
@@ -118,11 +118,12 @@ fn anchored(state: &State, bands: &Bands<'_>, list: &mut List<'_>) {
             .map(|r| r.session)
             .collect();
         if live.is_empty() {
-            let name = roster
-                .iter()
-                .find(|m| m.id == member)
-                .map_or_else(|| member.clone(), |m| m.name.clone());
-            list.member(&member, &name, None);
+            let known = roster.iter().find(|m| m.id == member);
+            let name = known.map_or_else(|| member.clone(), |m| m.name.clone());
+            let desk = known
+                .and_then(|m| m.launch_desktop.as_ref())
+                .and_then(|d| d.label.clone());
+            list.member(&member, &name, None, desk);
         }
         for session in live {
             list.agent(session);
@@ -240,8 +241,8 @@ impl List<'_> {
     }
 
     /// A member between sessions, which a pick starts; `chief` says whether the Chief still
-    /// needs its setup.
-    fn member(&mut self, member: &str, name: &str, chief: Option<bool>) {
+    /// needs its setup, and `desk` names the desktop a crew member starts on.
+    fn member(&mut self, member: &str, name: &str, chief: Option<bool>, desk: Option<String>) {
         let words = if chief.is_some() { "chief" } else { "" };
         if !self.matches(&[member, name, words]) {
             return;
@@ -260,6 +261,7 @@ impl List<'_> {
             look: Look::Member {
                 chief: chief.is_some(),
                 unconfigured,
+                desk,
             },
             pick: Some(Pick::Open(action)),
         });
@@ -280,6 +282,7 @@ impl List<'_> {
             key: format!("tile:{}:{}", tile.desktop, tile.id),
             label: tile.title.clone(),
             look: Look::Tile {
+                icon: tile.icon(),
                 word: tile.word(),
                 slot: slot_of,
             },

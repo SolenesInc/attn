@@ -169,13 +169,12 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
 
 fn peek_row(peek: &str, r: &Row, t: &Tokens) -> El {
     let key = format!("{peek}.{}", r.key);
-    let face = crate::palette::row_face(r, key, t);
+    let face = crate::palette::row_face(r, key, crate::palette::Place::Peek, t);
     if !r.selectable() {
         return face;
     }
     let picked = r.key.clone();
     face.role("button")
-        .px(10.0)
         .radius(8.0)
         .hover(t.bg_selected)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
