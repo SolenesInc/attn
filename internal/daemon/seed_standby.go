@@ -252,8 +252,8 @@ func (g gardenRead) standbyTender(tender who.Party) *protocol.StandbyTender {
 	view := &protocol.StandbyTender{SessionID: sessionID, Label: entry.Label, Agent: entry.Agent}
 	if dispatcher, dispatched := g.daemon.gardenDispatchersBySession()[sessionID]; dispatched {
 		view.Dispatcher = protocol.Ptr(g.parties.actor(dispatcher))
-		if live, ok := g.daemon.sessionOfActor(dispatcher); ok {
-			view.DispatcherSessionID = protocol.Ptr(live)
+		if party, ok := dispatcher.Party(); ok {
+			view.DispatcherSessionID = g.parties.view(party).SessionID
 		}
 	}
 	return view

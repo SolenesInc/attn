@@ -329,8 +329,8 @@ commands:
         --reopen adds what would bring each closed row back, judging the whole
         page in one call; show explains any one of those verdicts.
   list --tree [--profile <id>]
-        show every live session nested under the session that dispatched it,
-        sorted by label within each profile and branch. Rows carry short ids,
+        show every live session, and each closed agent on standby, nested
+        under the session that dispatched it, sorted by label within each profile and branch. Rows carry short ids,
         agent, state, owed/snoozed turns and seed slugs. A delegate whose
         dispatcher is closed or absent becomes a root. A closed agent whose seed
         is on standby stays under its dispatcher with the state standby, and
