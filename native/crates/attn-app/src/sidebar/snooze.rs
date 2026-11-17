@@ -200,6 +200,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
         .standard()
         .gutter(4.0)
         .min_width(216.0)
+        .separator_inset(0.0)
         .label(title.clone())
         .open(true)
         .on_close(|state: &mut State| state.window.snooze = None)
