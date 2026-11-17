@@ -1081,7 +1081,7 @@ fn attention(dark: bool) {
 
 fn session_menu(dark: bool) {
     let mut world = with_document(dark);
-    world.gesture(|app| app.click(Target::role("button").name("Actions for idle agent")));
+    world.gesture(|app| app.click(Target::key("sidebar.session.s0.actions")));
     snap(&mut world, "session-menu", dark);
 }
 
