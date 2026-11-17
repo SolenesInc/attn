@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { renderPrompt } from "../prompts/render";
 
 export interface QuickLabel {
@@ -8,21 +9,28 @@ export interface QuickLabel {
   tip?: string;
 }
 
-export const LABEL_COLOR_MAP: Record<
-  string,
-  { bg: string; text: string; darkText: string }
-> = {
-  blue: { bg: "rgba(59,130,246,0.15)", text: "#2563eb", darkText: "#60a5fa" },
-  red: { bg: "rgba(239,68,68,0.15)", text: "#dc2626", darkText: "#f87171" },
-  orange: { bg: "rgba(249,115,22,0.15)", text: "#ea580c", darkText: "#fb923c" },
-  yellow: { bg: "rgba(234,179,8,0.15)", text: "#ca8a04", darkText: "#facc15" },
-  purple: { bg: "rgba(147,51,234,0.15)", text: "#9333ea", darkText: "#a78bfa" },
-  teal: { bg: "rgba(20,184,166,0.15)", text: "#0d9488", darkText: "#2dd4bf" },
-  pink: { bg: "rgba(236,72,153,0.15)", text: "#db2777", darkText: "#f472b6" },
-  green: { bg: "rgba(34,197,94,0.15)", text: "#16a34a", darkText: "#4ade80" },
-  cyan: { bg: "rgba(8,145,178,0.15)", text: "#0891b2", darkText: "#22d3ee" },
-  amber: { bg: "rgba(180,83,9,0.15)", text: "#b45309", darkText: "#fbbf24" },
+const LABEL_COLORS: Record<string, string> = {
+  blue: "var(--color-syntax-function)",
+  red: "var(--color-error)",
+  orange: "var(--color-syntax-number)",
+  yellow: "var(--color-syntax-type)",
+  purple: "var(--color-merged)",
+  teal: "var(--color-syntax-atom)",
+  pink: "var(--color-syntax-keyword)",
+  green: "var(--color-success)",
+  cyan: "var(--color-accent)",
+  amber: "var(--color-warning)",
 };
+
+export function labelChipStyle(label: QuickLabel): CSSProperties | undefined {
+  const color = LABEL_COLORS[label.color];
+  return color
+    ? {
+        background: `color-mix(in srgb, ${color} 15%, transparent)`,
+        color: `color-mix(in srgb, ${color} 45%, var(--color-text-primary))`,
+      }
+    : undefined;
+}
 
 export const QUICK_LABEL_GROUPS: QuickLabel[][] = [
   [

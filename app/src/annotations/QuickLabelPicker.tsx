@@ -5,13 +5,12 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { usePortalTarget, useTileWindow } from '../tileWindow';
-import { LABEL_COLOR_MAP, type QuickLabel } from './quickLabels';
+import { labelChipStyle, type QuickLabel } from './quickLabels';
 import { placeQuickLabelPicker, QUICK_LABEL_PICKER_WIDTH } from './quickLabelPlacement';
 import './QuickLabelPicker.css';
 
@@ -140,7 +139,6 @@ function FloatingQuickLabelPicker({
         <Fragment key={group[0].label.id}>
           {groupIndex > 0 ? <hr className="md-quick-label-divider" /> : null}
           {group.map(({ label, index }) => {
-            const color = LABEL_COLOR_MAP[label.color];
             return (
               <button
                 key={label.id}
@@ -156,13 +154,7 @@ function FloatingQuickLabelPicker({
               >
                 <span
                   className="md-ql-chip"
-                  style={color
-                    ? ({
-                        background: color.bg,
-                        '--md-ql-text': color.text,
-                        '--md-ql-text-dark': color.darkText,
-                      } as CSSProperties)
-                    : undefined}
+                  style={labelChipStyle(label)}
                 >
                   {label.emoji}
                 </span>
