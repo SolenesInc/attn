@@ -45,7 +45,14 @@ the range into units, and give each unit a reviewer of its own.
    A reviewer with no confirmed findings is done. Tell it so.
 5. When every reviewer has reported and every finding has been routed, write
    one note on your own seed: the range, the units, where each reviewer ran,
-   and where each finding went.
+   and where each finding went. Give each routed finding a line of its own,
+   starting at the beginning of the line, in this form:
+
+   ```text
+   finding: <sha> <seed id, or - when the commit names none> P0|P1 <title>
+   ```
+
+   `scripts/workflow-scorecard.mjs` counts these lines, so keep the form exact.
 6. `git push origin <head>:refs/heads/reviewed`. A fix still in progress does
    not hold this up. Run `attn turn open` only when the user must decide
    something.
