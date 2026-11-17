@@ -131,6 +131,8 @@ func (r *codexShared) terminalBinary(profile, installed string) string {
 }
 
 func (r *codexShared) refreshInstalled() {
+	r.probing.Lock()
+	defer r.probing.Unlock()
 	version, err := r.installedVersion(r.d.life.Context())
 	if err != nil {
 		r.d.logf("shared Codex: reading the installed version: %v", err)

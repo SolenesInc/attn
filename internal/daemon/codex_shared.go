@@ -56,6 +56,7 @@ type codexShared struct {
 	seq       uint64
 	installed string
 	latest    string
+	probing   sync.Mutex
 
 	archivingAfterClose map[string]int
 }

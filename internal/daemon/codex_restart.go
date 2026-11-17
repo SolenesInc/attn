@@ -259,15 +259,10 @@ func (r *codexShared) beginRestart(s *codexServer, now bool) {
 }
 
 func (r *codexShared) restart(s *codexServer, now bool) {
-	defer func() {
-		s.mu.Lock()
-		s.restart.swapping, s.restart.forceAt = false, time.Time{}
-		s.mu.Unlock()
-		r.versionsChanged(s.profile)
-	}()
 	r.mu.Lock()
 	installed := r.installed
 	r.mu.Unlock()
+	defer r.restarted(s, installed)
 	binary, err := r.binary("")
 	var version string
 	if err == nil {
@@ -283,6 +278,19 @@ func (r *codexShared) restart(s *codexServer, now bool) {
 	}
 	for _, starting := range r.swap(s, binary, installed, now) {
 		r.relaunchStarting(starting)
+	}
+}
+
+func (r *codexShared) restarted(s *codexServer, target string) {
+	s.mu.Lock()
+	s.restart.swapping, s.restart.forceAt = false, time.Time{}
+	s.mu.Unlock()
+	r.versionsChanged(s.profile)
+	r.mu.Lock()
+	superseded := r.installed != target
+	r.mu.Unlock()
+	if superseded {
+		r.restartWhenQuiet(s)
 	}
 }
 
