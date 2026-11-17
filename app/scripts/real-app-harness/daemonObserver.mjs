@@ -256,11 +256,12 @@ export class DaemonObserver {
       this.unregisterSession(session.id);
     }
 
-    const targetIds = new Set(matches.map((session) => session.id));
-    await this.waitFor(() => {
-      const remaining = [...this.sessionsById.values()].filter((session) => targetIds.has(session.id));
-      return remaining.length === 0 ? true : null;
-    }, `daemon unregister for sessions ${[...targetIds].join(', ')}`, timeoutMs);
+    const targetIds = [...new Set(matches.map((session) => session.id))];
+    await this.waitFor(
+      () => (targetIds.some((id) => this.sessionsById.has(id) || this.desktopOf(id)) ? null : true),
+      `daemon unregister and unplacement for sessions ${targetIds.join(', ')}`,
+      timeoutMs,
+    );
 
     return matches;
   }
