@@ -1,7 +1,7 @@
 use attn_testkit::{Target, World};
 use rune::{Key, KeyEvent, Mods, PointerButton};
 
-use super::terminal::{cell, inputs, one_terminal, output, typed};
+use super::terminal::{attn_scheme, cell, inputs, one_terminal, output, typed};
 use super::terminal_view::view;
 
 /// The find key: ⌘F on macOS, Ctrl+Shift+F elsewhere, where Ctrl+F is the shell's.
@@ -11,7 +11,12 @@ const FIND: &str = if cfg!(target_os = "macos") {
     "mod+shift+f"
 };
 
-const YELLOW: &str = "#f5c542";
+fn find_wash() -> String {
+    attn_scheme()["dark"]["terminal"]["find"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
 
 fn open(world: &mut World) {
     world.gesture(|app| app.press(FIND));
@@ -43,7 +48,7 @@ fn matches(world: &mut World) -> Vec<(u64, [u64; 2], u64)> {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|o| o["color"] == YELLOW)
+        .filter(|o| o["color"] == find_wash().as_str())
         .map(|o| {
             let cols = o["cols"].as_array().unwrap();
             (

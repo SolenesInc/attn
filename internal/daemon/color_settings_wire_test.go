@@ -30,7 +30,7 @@ func TestColorSettingsAcceptKnownValuesAndRefuseWithTheVocabulary(t *testing.T) 
 		key, value string
 		wants      []string
 	}{
-		{"color_scheme", "nord", []string{`color_scheme: "nord" is not a color scheme; schemes: attn, catppuccin, catppuccin-frappe`}},
+		{"color_scheme", "nord", []string{`color_scheme: "nord" is not a color scheme; schemes: attn, catppuccin, catppuccin-frappe, classic, night`}},
 		{"color_overrides", `{"dark":{"ui":{"bg_ap":"#24273a"}}}`, []string{"color_overrides: dark.ui.bg_ap is not a color name; ui names: ", "bg_app", "syntax_keyword"}},
 		{"color_overrides", `{"light":{"terminal":{"brite_black":"#000000"}}}`, []string{"color_overrides: light.terminal.brite_black is not a color name; terminal names: ", "bright_black", "seed"}},
 		{"color_overrides", `{"dark":{"terminal":{"bg":"red"}}}`, []string{`color_overrides: dark.terminal.bg: "red" is not a terminal color; use #rrggbb`}},

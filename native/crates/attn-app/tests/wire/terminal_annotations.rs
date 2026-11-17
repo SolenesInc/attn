@@ -9,10 +9,17 @@ use attn_testkit::{Answer, Daemon, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
-use super::terminal::{cell, output, pane, showing};
+use super::terminal::{attn_scheme, cell, output, pane, showing};
 use super::terminal_view::{copied, view};
 
 const MESSAGE: &str = "The cache keeps every row it reads until the window closes.";
+
+fn annotation_color() -> String {
+    attn_scheme()["dark"]["terminal"]["annotation"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
 
 fn agent_pane() -> attn_protocol::DesktopPane {
     attn_protocol::DesktopPane {
@@ -85,7 +92,7 @@ fn violet(world: &mut World) -> Vec<(u64, [u64; 2], String)> {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|o| o["color"] == "#a78bfa")
+        .filter(|o| o["color"] == annotation_color().as_str())
         .map(|o| {
             let cols = o["cols"].as_array().unwrap();
             (
@@ -479,7 +486,7 @@ fn alt_over_a_mark_brightens_it() {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|o| o["color"] == "#a78bfa")
+            .filter(|o| o["color"] == annotation_color().as_str())
             .map(|o| o["alpha"].as_u64().unwrap())
             .collect()
     };

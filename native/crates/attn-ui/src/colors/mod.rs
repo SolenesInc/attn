@@ -67,6 +67,14 @@ const SCHEME_FILES: &[(&str, &str)] = &[
         "catppuccin-frappe",
         include_str!("../../../../../internal/colors/schemes/catppuccin-frappe.json"),
     ),
+    (
+        "classic",
+        include_str!("../../../../../internal/colors/schemes/classic.json"),
+    ),
+    (
+        "night",
+        include_str!("../../../../../internal/colors/schemes/night.json"),
+    ),
 ];
 
 pub static SCHEMES: LazyLock<Vec<ColorScheme>> = LazyLock::new(|| {

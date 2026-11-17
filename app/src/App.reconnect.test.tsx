@@ -1,20 +1,20 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import attn from '../../internal/colors/schemes/attn.json';
 import { agentPane, daemonSession, daemonDesktop, DEFAULT_PROFILE_ID } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
 
+const ANSI = [
+  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'bright_black', 'bright_red', 'bright_green', 'bright_yellow', 'bright_blue', 'bright_magenta', 'bright_cyan', 'bright_white',
+] as const;
 const THEME = {
   cmd: 'set_terminal_theme',
-  foreground: '#d4d4d4',
-  background: '#1e1e1e',
-  cursor: '#d4d4d4',
-  ansi_palette: [
-    '#000000', '#cd3131', '#0dbc79', '#e5e510',
-    '#2472c8', '#bc3fbc', '#11a8cd', '#e5e5e5',
-    '#666666', '#f14c4c', '#23d18b', '#f5f543',
-    '#3b8eea', '#d670d6', '#29b8db', '#ffffff',
-  ],
+  foreground: attn.dark.terminal.fg,
+  background: attn.dark.terminal.bg,
+  cursor: attn.dark.terminal.cursor,
+  ansi_palette: ANSI.map((name) => attn.dark.terminal[name]),
 };
 
 describe('App daemon reconnect', () => {
@@ -40,7 +40,7 @@ describe('App daemon reconnect', () => {
 
     reconnected.emit(initialState({ settings: { theme: 'light' } }));
     await daemon.idle();
-    expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([expect.objectContaining({ background: '#ffffff' })]);
+    expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([expect.objectContaining({ background: attn.light.terminal.bg })]);
   });
 
   it('tells a reconnected daemon its profile and theme, and asks again for what it shows', async () => {

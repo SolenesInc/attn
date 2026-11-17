@@ -3,6 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import attn from '../../../internal/colors/schemes/attn.json' with { type: 'json' };
 import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -102,8 +103,8 @@ try {
     await driver.pressKey(process.platform === 'darwin' ? 'mod+f' : 'ctrl+shift+f');
     await driver.waitFor({ key: `terminal.${runtimeId}.find.field` });
     await driver.typeInto(null, 'NATIVE');
-    const found = await driver.state(`terminal-view:${runtimeId}`, { includes: '#f5c542', timeoutMs: 5_000 });
-    const matches = found.overlays.filter((o) => o.color === '#f5c542');
+    const found = await driver.state(`terminal-view:${runtimeId}`, { includes: attn.dark.terminal.find, timeoutMs: 5_000 });
+    const matches = found.overlays.filter((o) => o.color === attn.dark.terminal.find);
     const rows = await screen('find-3-native');
     const outputs = rows.filter((text) => /^find-\d-native$/.test(text.trim())).length;
     runner.assert(outputs === 3 && matches.length >= 4, 'find washes each output and the command line that printed them', matches);

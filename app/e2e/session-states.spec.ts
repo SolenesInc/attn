@@ -1,4 +1,8 @@
 import { test, expect } from './fixtures';
+import attn from '../../internal/colors/schemes/attn.json' with { type: 'json' };
+
+const cssRgb = (hex: string) => `rgb(${[1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(', ')})`;
+const { state_working: working, state_waiting: waiting, state_idle: idle } = attn.dark.ui;
 
 async function injectLocalSession(
   page: import('@playwright/test').Page,
@@ -51,11 +55,11 @@ test.describe('Session State Changes', () => {
     await expect(workingLead).toHaveAttribute('data-state', 'working');
     await expect(waitingLead).toHaveAttribute('data-state', 'waiting_input');
     await expect(idleLead).toHaveAttribute('data-state', 'idle');
-    await expect(workingLead).toHaveCSS('color', 'rgb(34, 197, 94)');
-    await expect(workingLead.locator('.sidebar-harness-icon')).toHaveCSS('color', 'rgb(34, 197, 94)');
+    await expect(workingLead).toHaveCSS('color', cssRgb(working));
+    await expect(workingLead.locator('.sidebar-harness-icon')).toHaveCSS('color', cssRgb(working));
     await expect(workingLead).toHaveCSS('animation-name', 'none');
-    await expect(waitingLead).toHaveCSS('color', 'rgb(245, 158, 11)');
-    await expect(idleLead).toHaveCSS('color', 'rgb(107, 114, 128)');
+    await expect(waitingLead).toHaveCSS('color', cssRgb(waiting));
+    await expect(idleLead).toHaveCSS('color', cssRgb(idle));
 
     await page.locator('.sidebar').evaluate((sidebar) => sidebar.classList.add('sidebar--hide-harness-logos'));
     const workingDot = workingLead.getByTestId('state-indicator');

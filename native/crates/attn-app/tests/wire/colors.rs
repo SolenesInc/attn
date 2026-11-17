@@ -7,11 +7,20 @@ use serde_json::Value;
 use super::queue::{one_desktop, queue, turn};
 use super::terminal::one_terminal;
 
+const ATTN: &str = include_str!("../../../../../internal/colors/schemes/attn.json");
 const CATPPUCCIN: &str = include_str!("../../../../../internal/colors/schemes/catppuccin.json");
 
-fn catppuccin(group: &str, name: &str) -> String {
-    let file: Value = serde_json::from_str(CATPPUCCIN).unwrap();
+fn dark(scheme: &str, group: &str, name: &str) -> String {
+    let file: Value = serde_json::from_str(scheme).unwrap();
     file["dark"][group][name].as_str().unwrap().to_owned()
+}
+
+fn attn(group: &str, name: &str) -> String {
+    dark(ATTN, group, name)
+}
+
+fn catppuccin(group: &str, name: &str) -> String {
+    dark(CATPPUCCIN, group, name)
 }
 
 fn update(world: &mut World, settings: &[(&str, &str)]) {
@@ -42,8 +51,8 @@ fn terminal_background(world: &World) -> String {
 fn a_scheme_and_an_override_recolor_the_window_and_its_terminals_as_they_arrive() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
-    assert_eq!(window_background(&world), "#0d0d0f");
-    assert_eq!(terminal_background(&world), "#1e1e1e");
+    assert_eq!(window_background(&world), attn("ui", "bg_app"));
+    assert_eq!(terminal_background(&world), attn("terminal", "bg"));
 
     update(&mut world, &[("color_scheme", "catppuccin")]);
     assert_eq!(window_background(&world), catppuccin("ui", "bg_app"));
@@ -63,8 +72,8 @@ fn a_scheme_and_an_override_recolor_the_window_and_its_terminals_as_they_arrive(
     assert_eq!(terminal_background(&world), "#303446");
 
     update(&mut world, &[]);
-    assert_eq!(window_background(&world), "#0d0d0f");
-    assert_eq!(terminal_background(&world), "#1e1e1e");
+    assert_eq!(window_background(&world), attn("ui", "bg_app"));
+    assert_eq!(terminal_background(&world), attn("terminal", "bg"));
 }
 
 fn menu_fill(world: &World, key: &str) -> String {
@@ -83,7 +92,7 @@ fn a_standard_menu_fills_with_the_scheme_s_panel_and_its_override_as_they_arrive
     let mut world =
         World::start(Daemon::scripted().state(queue(one_desktop(vec![turn("t-old", 30)]))));
     world.gesture(|app| app.click(Target::role("button").name("Snooze t-old")));
-    assert_eq!(menu_fill(&world, MENU), "#111113");
+    assert_eq!(menu_fill(&world, MENU), attn("ui", "bg_panel"));
 
     let queue_mode = ("queue_mode_enabled", "true");
     update(&mut world, &[queue_mode, ("color_scheme", "catppuccin")]);

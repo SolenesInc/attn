@@ -450,7 +450,7 @@ export function useSettingsModalState({
             id: 'general',
             label: 'Appearance',
             description: 'Theme, color scheme, text size and layout widths, for the app and for the garden.',
-            keywords: 'theme appearance dark light system color colour scheme catppuccin custom colors overrides reset font size text scale zoom garden layout narrowest tile width columns sidebar width',
+            keywords: 'theme appearance dark light system color colour scheme catppuccin night classic custom colors overrides reset font size text scale zoom garden layout narrowest tile width columns sidebar width',
           },
           {
             id: 'desktop',

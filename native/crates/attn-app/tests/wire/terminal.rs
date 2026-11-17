@@ -54,6 +54,13 @@ pub(crate) fn showing(panes: Vec<DesktopPane>, daemon_instance: &str) -> Initial
     }
 }
 
+pub(crate) fn attn_scheme() -> serde_json::Value {
+    serde_json::from_str(include_str!(
+        "../../../../../internal/colors/schemes/attn.json"
+    ))
+    .unwrap()
+}
+
 pub(crate) fn one_terminal() -> Daemon {
     Daemon::scripted().state(showing(vec![pane("t1", "r1")], "daemon-1"))
 }
@@ -987,17 +994,31 @@ fn the_daemon_hears_the_terminal_colors_after_each_handshake() {
     let mut world = World::start(one_terminal());
     world.reconnect();
 
+    let terminal = &attn_scheme()["dark"]["terminal"];
+    let ansi = [
+        "black",
+        "red",
+        "green",
+        "yellow",
+        "blue",
+        "magenta",
+        "cyan",
+        "white",
+        "bright_black",
+        "bright_red",
+        "bright_green",
+        "bright_yellow",
+        "bright_blue",
+        "bright_magenta",
+        "bright_cyan",
+        "bright_white",
+    ];
     let dark = serde_json::json!({
         "cmd": "set_terminal_theme",
-        "foreground": "#d4d4d4",
-        "background": "#1e1e1e",
-        "cursor": "#d4d4d4",
-        "ansi_palette": [
-            "#000000", "#cd3131", "#0dbc79", "#e5e510",
-            "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5",
-            "#666666", "#f14c4c", "#23d18b", "#f5f543",
-            "#3b8eea", "#d670d6", "#29b8db", "#ffffff",
-        ],
+        "foreground": terminal["fg"],
+        "background": terminal["bg"],
+        "cursor": terminal["cursor"],
+        "ansi_palette": ansi.map(|name| terminal[name].clone()),
     });
     let themes = world.daemon.sent_of("set_terminal_theme");
     assert_eq!(themes.len(), 2);

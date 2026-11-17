@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { PNG } from 'pngjs';
+import attn from '../../../internal/colors/schemes/attn.json' with { type: 'json' };
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
@@ -14,7 +15,9 @@ import { sleep, waitForFirstDesktopPane, waitForPaneInputFocus, waitForPaneShell
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
-const WARNING_RGB = [245, 158, 11];
+const rgb = (hex) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+const WAITING_RGB = rgb(attn.dark.ui.state_waiting);
+const WARNING_RGB = rgb(attn.dark.ui.warning);
 const PIXEL_NOISE = 2;
 const execFileAsync = promisify(execFile);
 const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));
@@ -385,7 +388,7 @@ try {
       runner.assert(sameColor(border, plain, PIXEL_NOISE), `${label} has the border of a plain chip`, { border, plain });
     }
     const agentDot = await looks.centerOf(`${waitingChip} .state-indicator`);
-    runner.assert(sameColor(agentDot, WARNING_RGB), 'a waiting agent shows through its state dot', { agentDot });
+    runner.assert(sameColor(agentDot, WAITING_RGB), 'a waiting agent shows through its state dot', { agentDot });
     const documentMark = await looks.centerOf(`${unseenChip} .desktop-shelf-mark`);
     runner.assert(sameColor(documentMark, WARNING_RGB), 'an unseen document shows through its mark', { documentMark });
     runner.assert(await looks.hasColorIn(needingCap, WARNING_RGB), 'a cap holding one shows through its text', {});

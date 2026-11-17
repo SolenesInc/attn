@@ -10,8 +10,16 @@ both settings.
 
 ## Pick a scheme
 
-Attn comes with three schemes: `attn`, `catppuccin` (Mocha in dark,
-Latte in light) and `catppuccin-frappe` (Frappé in dark, Latte in light).
+Attn comes with five schemes:
+
+- `attn`, the default. Calm, near-neutral grays with the colors of attn's cat
+  logo kept quiet: magenta marks the agents waiting for you, cyan the agents at
+  work, and violet the main buttons and selections.
+- `night`, the same colors at full strength on indigo surfaces.
+- `classic`, attn's colors before the cat logo: neutral grays with an orange
+  brand color.
+- `catppuccin`, Mocha in dark and Latte in light.
+- `catppuccin-frappe`, Frappé in dark and Latte in light.
 
 In the app, open Settings → Appearance and pick one under Theme. Each scheme
 shows a few of its colors for the appearance in effect.

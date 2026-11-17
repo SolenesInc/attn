@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import attn from '../../internal/colors/schemes/attn.json' with { type: 'json' };
 
 declare global {
   interface Window {
@@ -55,7 +56,8 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
     await cursor.waitFor();
     const borderColor = await cursor.evaluate((el) => getComputedStyle(el).borderLeftColor);
     expect(borderColor).not.toBe('rgb(0, 0, 0)');
-    expect(borderColor).toBe('rgb(232, 232, 232)');
+    const primary = attn.dark.ui.text_primary;
+    expect(borderColor).toBe(`rgb(${[1, 3, 5].map((at) => parseInt(primary.slice(at, at + 2), 16)).join(', ')})`);
   });
 
   test('typing edits the document and reports changes', async ({ page }) => {
