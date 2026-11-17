@@ -85,7 +85,7 @@ check_ledger() {
   fork_md="$(git -C "$clone" show "$rev:FORK.md")" || die "$rev has no FORK.md"
   listed_commits="$(ledger_section "$fork_md" "Our changes" | awk -F'|' '{ print $(NF-1) }' | hashes)"
   for commit in $(git -C "$clone" rev-list --no-merges "$rev" "^$upstream_dev"); do
-    git -C "$clone" diff-tree --no-commit-id --name-only -r "$commit" | grep -qxF FORK.md && continue
+    git -C "$clone" diff-tree --quiet --no-commit-id -r "$commit" -- FORK.md || continue
     listed "$commit" <<<"$listed_commits" && continue
     unlisted+="
   $(git -C "$clone" log -1 --format='%h %s' "$commit")"
