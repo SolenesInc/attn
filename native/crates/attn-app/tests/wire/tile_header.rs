@@ -1868,3 +1868,42 @@ fn escape_closes_a_shown_chain_and_still_reaches_the_terminal_and_a_hidden_row_t
     assert_eq!(chain(&world), None, "the chain goes with its row");
     rest(&mut world);
 }
+
+#[test]
+fn a_headers_chain_shown_by_hover_stays_while_the_pointer_rests_on_it_after_coming_from_a_rows_chain()
+ {
+    let mut world = start_with(vec![
+        with_role(
+            "Orchestrator",
+            "orchestrator",
+            session("a", "Coordinate identity", None),
+        ),
+        with_role(
+            "Builder",
+            "builder",
+            delegate_of("b", "Build navigator", "a"),
+        ),
+    ]);
+    rest_on(&mut world, "sidebar.session.s-b.chain");
+    assert!(
+        chain(&world).is_some(),
+        "resting on the row's chip shows its chain"
+    );
+    key(&mut world, Key::Escape);
+    rest_on(&mut world, "tile.b.role");
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        chain(&world).map(|rows| rows.len()),
+        Some(2),
+        "the row the pointer left does not take away the header's chain"
+    );
+    key(&mut world, Key::Up);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.b.role.popover.agent.0"))
+            .is_some_and(|n| n.is("selected")),
+        "and the chain still takes the arrows"
+    );
+    rest(&mut world);
+}

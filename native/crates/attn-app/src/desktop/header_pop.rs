@@ -151,15 +151,27 @@ pub(crate) fn hovers(piece: El, leaf: &str, session: &str, what: What) -> El {
 
 pub(crate) fn hovers_on(piece: El, host: Host, session: &str, what: What) -> El {
     let session = session.to_owned();
+    let left = host.clone();
     piece
         .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
             rest(state, &host, &session, what, tx)
         })
-        .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
+        .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
             if !inside {
-                close_soon(&mut state.window.desk.header_pop, tx);
+                leave(&mut state.window.desk.header_pop, &left, what, tx);
             }
         })
+}
+
+/// The pointer left the piece on `host` that shows `what`: it lets go of its own popover and
+/// of its own pending open, never of another piece's.
+fn leave(pop: &mut HeaderPop, host: &Host, what: What, tx: &mut Tx) {
+    let here = |p: &Pop| p.on(host, what);
+    if pop.open.as_ref().is_some_and(here) {
+        close_soon(pop, tx);
+    } else if matches!(&pop.timer, Some(Timer::Open(p, ..)) if here(p)) {
+        pop.timer = None;
+    }
 }
 
 fn rest(state: &mut State, host: &Host, session: &str, what: What, tx: &mut Tx) {
