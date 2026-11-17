@@ -145,6 +145,7 @@ type Daemon struct {
 	httpListener            net.Listener
 	httpHandler             http.Handler
 	diagServer              *diag.Server
+	diagListener            net.Listener
 	harnessWSListenerFD     string
 	wsHub                   *wsHub
 	startedAt               time.Time
@@ -2469,13 +2470,24 @@ func (d *Daemon) maybeStartDiagServer() {
 	if !enabled {
 		return
 	}
-	srv, err := diag.Start(addr, d.diagStats)
+	srv, err := d.startDiagServer(addr)
 	if err != nil {
 		d.logf("diagnostics endpoint failed to start on %s: %v", addr, err)
 		return
 	}
 	d.diagServer = srv
 	d.logf("diagnostics endpoint listening on http://%s/ (pprof + /debug/vars)", srv.Addr())
+}
+
+func (d *Daemon) startDiagServer(addr string) (*diag.Server, error) {
+	if d.diagListener == nil {
+		return diag.Start(addr, d.diagStats)
+	}
+	if got := d.diagListener.Addr().String(); got != addr {
+		_ = d.diagListener.Close()
+		return nil, fmt.Errorf("diagnostics listener is %s, want %s", got, addr)
+	}
+	return diag.Serve(d.diagListener, d.diagStats), nil
 }
 
 func (d *Daemon) diagStats() diag.Stats {

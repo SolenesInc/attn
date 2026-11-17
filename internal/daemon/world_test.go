@@ -28,16 +28,27 @@ type world struct {
 	bubbled     bool
 	unix        net.Listener
 	ws          net.Listener
+	diag        net.Listener
 	daemon      *daemon.WireDaemon
 	terms       *testworld.Terminals
 	gardenClock func() time.Time
 	clock       *stepclock.Clock
 	pauses      *testworld.Pauses
+	diagHost    string
+	diagPort    string
 }
 
 func newWorld(t testing.TB, agents ...fakeagent.Harness) *world {
 	t.Helper()
 	w := &world{World: prepareWorld(t, agents...)}
+	w.start()
+	return w
+}
+
+// newWorldServingDiagnostics starts a world whose daemon serves its diagnostics on host, at w.diagPort.
+func newWorldServingDiagnostics(t testing.TB, host string, agents ...fakeagent.Harness) *world {
+	t.Helper()
+	w := &world{World: prepareWorld(t, agents...), diagHost: host}
 	w.start()
 	return w
 }
@@ -125,7 +136,7 @@ func (w *world) start() {
 	if os.Getenv("ATTN_TEST_WIRE_ON_PTY_HOST") != "" && !w.bubbled && w.terms == nil {
 		w.T.Cleanup(func() { ptyhost.ReapDataDir(filepath.Dir(w.Socket)) })
 	}
-	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, !w.bubbled, w.clock, w.gardenClock)
+	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, w.diag, terminals, !w.bubbled, w.clock, w.gardenClock)
 	if err != nil {
 		w.T.Fatalf("start daemon: %v", err)
 	}
@@ -182,11 +193,24 @@ func (w *world) listen() {
 	}
 	w.T.Setenv("ATTN_WS_PORT", strconv.Itoa(ws.Addr().(*net.TCPAddr).Port))
 	w.unix, w.ws, w.WSAddr = unix, ws, ws.Addr().String()
+	if w.diagHost != "" {
+		w.listenForDiagnostics()
+	}
 	w.Dial = func(ctx context.Context) (net.Conn, error) {
 		var dialer net.Dialer
 		return dialer.DialContext(ctx, "tcp", ws.Addr().String())
 	}
 	w.DialUnix = func() (net.Conn, error) { return net.Dial("unix", w.Socket) }
+}
+
+func (w *world) listenForDiagnostics() {
+	w.T.Helper()
+	diag, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		w.T.Fatal(err)
+	}
+	w.diag, w.diagPort = diag, strconv.Itoa(diag.Addr().(*net.TCPAddr).Port)
+	w.T.Setenv("ATTN_PPROF", net.JoinHostPort(w.diagHost, w.diagPort))
 }
 
 func (w *world) stop() {

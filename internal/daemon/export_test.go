@@ -27,7 +27,7 @@ type WireDaemon struct {
 	stopped chan error
 }
 
-func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, nativeWatch bool, clock *stepclock.Clock, gardenClock func() time.Time) (*WireDaemon, error) {
+func StartWireDaemonWithTerminals(socketPath string, unix, ws, diag net.Listener, terminals ptybackend.Backend, nativeWatch bool, clock *stepclock.Clock, gardenClock func() time.Time) (*WireDaemon, error) {
 	d := New(socketPath)
 	d.outpost.listen = func(string, string) (net.Listener, error) { return memnet.Listen(), nil }
 	d.notebookSyncWatch = nativeWatch
@@ -59,6 +59,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	}
 	d.listener = unix
 	d.httpListener = ws
+	d.diagListener = diag
 	w := &WireDaemon{d: d, stopped: make(chan error, 1)}
 	go func() { w.stopped <- d.Start() }()
 	select {

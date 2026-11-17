@@ -6,7 +6,6 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -618,10 +617,9 @@ func TestDocumentsOverTheCLIClientDeliverResumeAndEnd(t *testing.T) {
 }
 
 func TestAnAppThatDisconnectsReleasesEveryLiveQueryItHeld(t *testing.T) {
-	t.Setenv("ATTN_PPROF", reserveDiagPort(t))
-	w := newWorld(t)
+	w := newWorldServingDiagnostics(t, "127.0.0.1")
 	defineRequests(t, w.Client(), gateNS)
-	vars := "http://127.0.0.1:" + os.Getenv("ATTN_PPROF") + "/debug/vars"
+	vars := diagVars(w.diagPort)
 
 	app, vanish := peerThatCanVanish(w, w.App)
 	for range 2 {

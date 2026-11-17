@@ -33,6 +33,10 @@ func Start(addr string, stats StatsFunc) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("diag: listen %s: %w", addr, err)
 	}
+	return Serve(ln, stats), nil
+}
+
+func Serve(ln net.Listener, stats StatsFunc) *Server {
 	s := &Server{addr: ln.Addr().String(), stats: stats}
 
 	mux := http.NewServeMux()
@@ -46,7 +50,7 @@ func Start(addr string, stats StatsFunc) (*Server, error) {
 
 	s.httpServer = &http.Server{Handler: mux}
 	go func() { _ = s.httpServer.Serve(ln) }()
-	return s, nil
+	return s
 }
 
 func (s *Server) Addr() string {

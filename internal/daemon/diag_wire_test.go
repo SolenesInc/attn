@@ -15,9 +15,6 @@ import (
 )
 
 func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
-	port := reserveDiagPort(t)
-	loopback := net.JoinHostPort("127.0.0.1", port)
-	vars := "http://" + loopback + "/debug/vars"
 	dial := func(addr string) error {
 		conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 		if err == nil {
@@ -26,24 +23,22 @@ func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
 		return err
 	}
 
-	unsetProbes := []string{loopback}
 	defaultAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(config.DefaultPprofPort))
-	if dial(defaultAddr) == nil {
+	defaultFree := dial(defaultAddr) != nil
+	if !defaultFree {
 		t.Logf("something already listens on %s, so the default port cannot show the server stays off", defaultAddr)
-	} else {
-		unsetProbes = append(unsetProbes, defaultAddr)
 	}
 
 	t.Setenv("ATTN_PPROF", "")
 	w := newWorld(t, fakeagent.Claude)
-	for _, addr := range unsetProbes {
-		if dial(addr) == nil {
-			t.Fatalf("with ATTN_PPROF unset something answered on %s", addr)
-		}
+	if defaultFree && dial(defaultAddr) == nil {
+		t.Fatalf("with ATTN_PPROF unset something answered on %s", defaultAddr)
 	}
 
-	t.Setenv("ATTN_PPROF", net.JoinHostPort("0.0.0.0", port))
+	w.diagHost = "0.0.0.0"
 	w.restart()
+	port := w.diagPort
+	vars := diagVars(port)
 	app := w.App()
 	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("shop")))
 	resp, err := http.Get(vars)
@@ -68,17 +63,8 @@ func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
 	}
 }
 
-func reserveDiagPort(t *testing.T) string {
-	t.Helper()
-	reserved, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := strconv.Itoa(reserved.Addr().(*net.TCPAddr).Port)
-	if err := reserved.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return port
+func diagVars(port string) string {
+	return "http://" + net.JoinHostPort("127.0.0.1", port) + "/debug/vars"
 }
 
 func firstNonLoopbackIPv4ForDiag(t *testing.T) net.IP {
