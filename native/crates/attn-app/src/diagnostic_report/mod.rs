@@ -436,6 +436,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                     }))
             }))
     };
+    let save_words = if saving { "Saving…" } else { "Save report" };
     let footer = row()
         .key("diagnostic-report.footer")
         .w_full()
@@ -457,8 +458,9 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .border(1.0, t.border_hover),
         ))
         .child(footer_button(
-            Button::new(if saving { "Saving…" } else { "Save report" })
+            Button::new(save_words)
                 .variant(ButtonVariant::Submit)
+                .label_with(move |_, ink| text(save_words).font(ACTION).color(ink))
                 .disabled(saving)
                 .on_press_tx(start_saving)
                 .build(k)
