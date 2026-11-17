@@ -1029,14 +1029,12 @@ fn the_destination_menu_lists_the_desktops_sessions_and_retargets_the_tile_at_on
         "Agent b waits for an approval"
     );
 
-    for _ in 0..2 {
-        world.gesture(|app| {
-            app.key(rune::KeyEvent {
-                key: rune::Key::Down,
-                mods: rune::Mods::default(),
-            })
-        });
-    }
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Down,
+            mods: rune::Mods::default(),
+        })
+    });
     world.gesture(|app| {
         app.key(rune::KeyEvent {
             key: rune::Key::Enter,
