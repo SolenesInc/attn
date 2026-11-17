@@ -1830,6 +1830,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         settings_section(dark, "plugins", "plugins", &[], |_| {});
         settings_updates(dark);
         settings_event_bus(dark);
+        settings_section(dark, "desktop", "files", &[], |_| {});
         automation_new(dark);
         diagnostic_report(dark);
         quick_capture(dark);
