@@ -72,7 +72,7 @@ pub use deep_link::open_link;
 pub use dispatch::dispatch;
 pub use editor::{EditorLaunch, record_editor_launches, take_editor_launches};
 pub use frame::{Folders, use_folders, use_prefs};
-pub use keymap::{Binding, Keymap, PageKey, page_key};
+pub use keymap::{Binding, Keymap, PageKey, Zoom, page_key};
 pub use requests::ReplyInbox;
 pub use review::places_built;
 pub use shell::{Drawer, Holder, Layer, View, Window};

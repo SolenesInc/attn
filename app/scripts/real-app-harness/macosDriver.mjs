@@ -186,12 +186,12 @@ export class MacOSDriver extends TargetedWindowDriver {
     return !this.systemInput;
   }
 
-  async #keyboard({ kind, key, keyCode, modifiers, text }) {
+  async #keyboard({ kind, key, keyCode, modifiers, text, queued }) {
     if (this.injectsInApp) {
       if (kind === 'text') {
         await this.#inApp('native_text', { text });
       } else {
-        await this.#inApp('native_key', { ...(kind === 'keycode' ? { keyCode } : { key }), modifiers: modifierNames(modifiers) });
+        await this.#inApp('native_key', { ...(kind === 'keycode' ? { keyCode } : { key }), modifiers: modifierNames(modifiers), ...(queued ? { queued } : {}) });
       }
       return;
     }

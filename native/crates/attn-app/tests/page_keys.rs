@@ -1,4 +1,4 @@
-use attn_app::{Action, Binding, Keymap, PageKey, page_key};
+use attn_app::{Action, Binding, Keymap, PageKey, Zoom, page_key};
 use rune::KeyPlatform;
 
 /// Who takes a key while a web page in a browser tile holds the keyboard.
@@ -29,6 +29,18 @@ const SPLIT: &[(Action, Owner)] = &[
     (
         Action::SessionHistoryForward,
         Owner::Browser(PageKey::Forward),
+    ),
+    (
+        Action::UiIncreaseFontSize,
+        Owner::Browser(PageKey::Zoom(Zoom::In)),
+    ),
+    (
+        Action::UiDecreaseFontSize,
+        Owner::Browser(PageKey::Zoom(Zoom::Out)),
+    ),
+    (
+        Action::UiResetFontSize,
+        Owner::Browser(PageKey::Zoom(Zoom::ActualSize)),
     ),
 ];
 

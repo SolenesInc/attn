@@ -66,6 +66,15 @@ pub enum PageKey {
     Reload,
     Back,
     Forward,
+    Zoom(Zoom),
+}
+
+/// Which way a page's zoom moves, through a browser's zoom steps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Zoom {
+    In,
+    Out,
+    ActualSize,
 }
 
 /// What a key press means to the keymap.
@@ -341,6 +350,9 @@ pub fn page_key(action: &Action) -> Option<PageKey> {
         Action::SessionRefreshPrs => Some(PageKey::Reload),
         Action::SessionHistoryBack => Some(PageKey::Back),
         Action::SessionHistoryForward => Some(PageKey::Forward),
+        Action::UiIncreaseFontSize => Some(PageKey::Zoom(Zoom::In)),
+        Action::UiDecreaseFontSize => Some(PageKey::Zoom(Zoom::Out)),
+        Action::UiResetFontSize => Some(PageKey::Zoom(Zoom::ActualSize)),
         _ => None,
     }
 }

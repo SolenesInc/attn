@@ -414,7 +414,18 @@ pub fn inject<R: Runtime>(
             if let Some(characters) = payload.get("characters").and_then(Value::as_str) {
                 stroke.characters = characters.to_string();
             }
-            platform::send_keys(app, &label, &[stroke], payload.get("window").is_some())
+            let delivery = if payload.get("queued").and_then(Value::as_bool) == Some(true) {
+                platform::Delivery::Queued
+            } else {
+                platform::Delivery::Direct
+            };
+            platform::send_keys(
+                app,
+                &label,
+                &[stroke],
+                payload.get("window").is_some(),
+                delivery,
+            )
         }
         "native_text" => {
             let text = payload
@@ -426,6 +437,7 @@ pub fn inject<R: Runtime>(
                 &label,
                 &text_strokes(text)?,
                 payload.get("window").is_some(),
+                platform::Delivery::Direct,
             )
         }
         "native_mouse" => platform::send_mouse(app, &label, &parse_mouse(payload)?),
@@ -555,6 +567,12 @@ mod platform {
             }
             INJECTED_BUTTONS.with(|state| state.set(self.previous));
         }
+    }
+
+    #[derive(Clone, Copy)]
+    pub enum Delivery {
+        Direct,
+        Queued,
     }
 
     struct Target {
@@ -750,11 +768,21 @@ mod platform {
         Ok(handled_by)
     }
 
+    fn queue_key(target: &Target, stroke: &KeyStroke) -> Result<&'static str, String> {
+        let down = key_event(target, NSEventType::KeyDown, stroke)?;
+        let up = key_event(target, NSEventType::KeyUp, stroke)?;
+        let application = NSApplication::sharedApplication(target.mtm);
+        application.postEvent_atStart(&down, false);
+        application.postEvent_atStart(&up, false);
+        Ok("queue")
+    }
+
     pub fn send_keys<R: Runtime>(
         app: &AppHandle<R>,
         label: &str,
         strokes: &[KeyStroke],
         explicit_target: bool,
+        delivery: Delivery,
     ) -> Result<Value, String> {
         let mut handled = Vec::with_capacity(strokes.len());
         for stroke in strokes {
@@ -774,7 +802,10 @@ mod platform {
                     window: target.window.clone(),
                     mtm: target.mtm,
                 };
-                send_key(&focused, &stroke)
+                match delivery {
+                    Delivery::Direct => send_key(&focused, &stroke),
+                    Delivery::Queued => queue_key(&focused, &stroke),
+                }
             })?);
         }
         Ok(serde_json::json!({ "delivered": strokes.len(), "handledBy": handled }))
@@ -1038,11 +1069,17 @@ mod platform {
         Err("native input state is only supported on macOS".into())
     }
 
+    pub enum Delivery {
+        Direct,
+        Queued,
+    }
+
     pub fn send_keys<R: Runtime>(
         _app: &AppHandle<R>,
         _label: &str,
         _strokes: &[KeyStroke],
         _explicit_target: bool,
+        _delivery: Delivery,
     ) -> Result<Value, String> {
         Err("native input injection is only supported on macOS".into())
     }

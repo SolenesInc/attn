@@ -648,6 +648,7 @@ pub(crate) fn press_page_key(state: &State, action: &crate::action::Action) -> b
         PageKey::Reload => h.reload(page),
         PageKey::Back => h.back(page),
         PageKey::Forward => h.forward(page),
+        PageKey::Zoom(toward) => h.zoom(page, toward),
     });
     true
 }
