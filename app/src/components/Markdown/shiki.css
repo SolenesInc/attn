@@ -1,0 +1,14 @@
+:root {
+  --shiki-foreground: var(--color-text-primary);
+  --shiki-background: transparent;
+  --shiki-token-keyword: var(--color-syntax-keyword);
+  --shiki-token-string: var(--color-syntax-string);
+  --shiki-token-string-expression: var(--color-syntax-string);
+  --shiki-token-comment: var(--color-syntax-comment);
+  --shiki-token-constant: var(--color-syntax-atom);
+  --shiki-token-function: var(--color-syntax-function);
+  --shiki-token-parameter: var(--color-syntax-property);
+  --shiki-token-punctuation: var(--color-text-secondary);
+  --shiki-token-link: var(--color-accent);
+  --shiki-token-inserted: var(--color-success);
+}

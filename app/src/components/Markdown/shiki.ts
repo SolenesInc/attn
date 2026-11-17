@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import type { ThemeRegistration } from 'shiki';
+import './shiki.css';
 
 let shikiModule: Promise<typeof import('shiki') | null> | null = null;
 export function loadShiki() {
@@ -7,6 +9,14 @@ export function loadShiki() {
     return null;
   });
   return shikiModule;
+}
+
+export type Shiki = NonNullable<Awaited<ReturnType<typeof loadShiki>>>;
+
+let schemeTheme: ThemeRegistration | null = null;
+export function schemeCodeTheme(shiki: Shiki): ThemeRegistration {
+  schemeTheme ??= shiki.createCssVariablesTheme({ name: 'attn-scheme' });
+  return schemeTheme;
 }
 
 export interface Highlighted {
@@ -33,8 +43,7 @@ export function useShikiHighlight(
       try {
         const raw = await shiki.codeToHtml(code, {
           lang: language,
-          themes: { light: 'github-light-default', dark: 'github-dark-default' },
-          defaultColor: false,
+          theme: schemeCodeTheme(shiki),
           structure: 'inline',
         });
         // Shiki renders line breaks as <br> elements, leaving no '\n' text;

@@ -26,10 +26,11 @@ const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(async (code: string) =>
     code
       .split('\n')
-      .map((line) => `<span style="--shiki-light:#000;--shiki-dark:#fff">${line}</span>`)
+      .map((line) => `<span style="color:var(--shiki-foreground)">${line}</span>`)
       .join('<br>')),
   codeToTokens: vi.fn(async (code: string) => ({ tokens: code.split('\n').map((line) => [{ content: line }]) })),
   bundledLanguages: { go: {} },
+  createCssVariablesTheme: vi.fn(() => ({ name: 'attn-scheme' })),
 }));
 vi.mock('shiki', () => shikiMock);
 

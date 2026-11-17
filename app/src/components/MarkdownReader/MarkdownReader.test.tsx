@@ -6,7 +6,8 @@ import { fileMarkdownSource } from './documentSource';
 
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(async (code: string) =>
-    `<span style="--shiki-light:#000;--shiki-dark:#fff">${code}</span>`),
+    `<span style="color:var(--shiki-foreground)">${code}</span>`),
+  createCssVariablesTheme: vi.fn(() => ({ name: 'attn-scheme' })),
 }));
 vi.mock('shiki', () => shikiMock);
 
