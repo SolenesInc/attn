@@ -523,7 +523,7 @@ fn written(note: &SeedNote) -> i64 {
 
 fn caption(words: &str, t: &Tokens) -> El {
     text(words.to_owned())
-        .font(type_::LABEL)
+        .font(attn_ui::kit(t).ty.caption())
         .color(t.text_tertiary)
 }
 
@@ -560,7 +560,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .child(body)
         .children((pop.pinned && !single).then(|| {
             text("↑ ↓ move · ↵ open · esc close")
-                .font(type_::LABEL)
+                .font(attn_ui::kit(t).ty.caption())
                 .color(t.text_muted)
         }));
     let surface = if pop.pinned {
@@ -618,12 +618,7 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
                         .font(type_::TITLE)
                         .color(t.text_primary),
                 )
-                .child(
-                    text(state_meaning(status))
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .wrap(),
-                ),
+                .child(caption(state_meaning(status), t).wrap()),
         )
         .children((!elapsed.is_empty()).then(|| caption(&elapsed, t)));
     let latest = latest_note(document);

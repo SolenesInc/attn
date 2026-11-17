@@ -162,10 +162,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         })
         .child(summary)
         .children(usage.models.iter().map(|m| model(m, t)))
-        .children(
-            pop.pinned
-                .then(|| text("esc close").font(type_::LABEL).color(t.text_tertiary)),
-        );
+        .children(pop.pinned.then(|| caption("esc close", t)));
     let surface = if pop.pinned {
         surface
             .modal_tx(true, |state: &mut State, _: &mut Tx| {
@@ -228,11 +225,10 @@ fn model(model: &SessionUsageModel, t: &Tokens) -> El {
                         .color(t.text_primary)
                         .grow(1.0),
                 )
-                .child(
-                    text(format!("{} tokens{cost}", grouped(model.total_tokens)))
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                ),
+                .child(caption(
+                    &format!("{} tokens{cost}", grouped(model.total_tokens)),
+                    t,
+                )),
         )
         .child(count("Input", model.input_tokens))
         .child(count("Output", model.output_tokens))
@@ -249,8 +245,12 @@ fn model(model: &SessionUsageModel, t: &Tokens) -> El {
                 .as_deref()
                 .filter(|r| !r.is_empty())
                 .unwrap_or("Some usage has no price.");
-            text(format!("* {reason}"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
+            caption(&format!("* {reason}"), t)
         }))
+}
+
+fn caption(words: &str, t: &Tokens) -> El {
+    text(words.to_owned())
+        .font(attn_ui::kit(t).ty.caption())
+        .color(t.text_tertiary)
 }
