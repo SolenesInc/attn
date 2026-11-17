@@ -93,29 +93,7 @@ fn cap(key: String, look: Look, colors: Option<[Color; 3]>, t: &Tokens) -> El {
         .color(ink);
     let cap = row().center().a11y_hidden().child(face);
     match look {
-        Look::Raised => cap
-            .min_w(18.0)
-            .h(RAISED_H)
-            .px(6.0)
-            .radius(5.0)
-            .fill(fill)
-            .box_shadow(Shadow {
-                y: 1.0,
-                blur: 2.0,
-                color: t.shadow.alpha(0.35),
-                ..Shadow::default()
-            })
-            .box_shadow(Shadow {
-                spread: 1.0,
-                color: t.highlight.alpha(0.07),
-                ..Shadow::default()
-            })
-            .box_shadow(Shadow {
-                y: 1.0,
-                color: t.highlight.alpha(0.08),
-                inset: true,
-                ..Shadow::default()
-            }),
+        Look::Raised => raised_cap(cap, fill),
         Look::Outlined | Look::Ledged => {
             let bottom = if look == Look::Ledged { 2.0 } else { 1.0 };
             cap.px(5.0)
@@ -126,6 +104,43 @@ fn cap(key: String, look: Look, colors: Option<[Color; 3]>, t: &Tokens) -> El {
                 .border_layout()
         }
     }
+}
+
+/// The Tauri app's `.keycap`: a chip lifted by a drop shadow, a faint ring and a top light,
+/// in `Keycap.css`'s literal black and white.
+fn raised_cap(cap: El, fill: Color) -> El {
+    cap.min_w(18.0)
+        .h(RAISED_H)
+        .px(6.0)
+        .radius(5.0)
+        .fill(fill)
+        .box_shadow(Shadow {
+            y: 1.0,
+            blur: 2.0,
+            color: Color::BLACK.alpha(0.35),
+            ..Shadow::default()
+        })
+        .box_shadow(Shadow {
+            spread: 1.0,
+            color: Color::WHITE.alpha(0.07),
+            ..Shadow::default()
+        })
+        .box_shadow(Shadow {
+            y: 1.0,
+            color: Color::WHITE.alpha(0.08),
+            inset: true,
+            ..Shadow::default()
+        })
+}
+
+/// One raised key in the kit's colors, which `crate::kit` paints from the tokens: what rune-kit's
+/// `Keybind`, and so the shortcut recorder, draws each key with.
+pub(crate) fn kit_cap(k: &rune_kit::Kit, key: String) -> El {
+    let face = text(key).font(RAISED_TYPE).color(k.c.text_base);
+    raised_cap(
+        row().center().a11y_hidden().child(face),
+        k.c.bg_button_neutral,
+    )
 }
 
 /// Alternative shortcuts for one action, such as `⌘ ↑ / ⌘ ↓`: each a group of keycaps, a dim
