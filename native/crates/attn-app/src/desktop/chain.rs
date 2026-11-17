@@ -248,7 +248,6 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
                 .grow(1.0),
         )
         .child(close);
-    let ids: Vec<String> = rows.iter().map(|(s, _)| s.id.clone()).collect();
     let agents = col()
         .key(agents_key(pop))
         .role("tree")
@@ -296,9 +295,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         );
     let surface = if pop.pinned {
         surface
-            .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                chain_key(state, &ids, ev, tx)
-            })
+            .on_key(chain_key)
             .modal_tx(true, |state: &mut State, _: &mut Tx| {
                 header_pop::close(state)
             })
@@ -393,7 +390,36 @@ fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool,
         .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
 }
 
-fn chain_key(state: &mut State, ids: &[String], ev: &KeyEvent, tx: &mut Tx) -> bool {
+/// Up, Down, Home, End and Enter on a chain shown by hover, which takes them the way a pinned
+/// chain does.
+pub(crate) fn hover_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let shown = state
+        .window
+        .desk
+        .header_pop
+        .open
+        .as_ref()
+        .is_some_and(|p| !p.pinned && p.what == What::Chain);
+    let m = ev.mods;
+    shown && !(m.shift || m.cmd || m.alt || m.ctrl || m.logo) && chain_key(state, ev, tx)
+}
+
+fn chain_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let Some(session) = state
+        .window
+        .desk
+        .header_pop
+        .open
+        .as_ref()
+        .map(|p| p.session.clone())
+    else {
+        return false;
+    };
+    let ids: Vec<String> = tree(&session, &state.facts.sessions)
+        .0
+        .iter()
+        .map(|(s, _)| s.id.clone())
+        .collect();
     let pop = &mut state.window.desk.header_pop;
     let last = ids.len().saturating_sub(1);
     match &ev.key {

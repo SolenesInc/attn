@@ -1716,6 +1716,57 @@ fn a_sidebar_rows_chain_opens_beside_it_on_hover_stays_shut_under_a_still_pointe
 }
 
 #[test]
+fn a_chain_shown_by_hover_takes_the_arrows_and_enter_before_the_terminal() {
+    let mut world = start_with(vec![
+        session("a", "root session", None),
+        with_role(
+            "Builder",
+            "builder",
+            delegate_of("b", "Build navigator", "a"),
+        ),
+    ]);
+    let picked = |world: &World| {
+        (0..2).position(|i| {
+            world
+                .screen()
+                .find(Target::key(format!(
+                    "sidebar.session.s-b.chain.popover.agent.{i}"
+                )))
+                .is_some_and(|n| n.is("selected"))
+        })
+    };
+    let typed = world.daemon.sent_of("pty_input").len();
+    rest_on(&mut world, "sidebar.session.s-b");
+    assert_eq!(picked(&world), Some(1), "hover picks the agent of the row");
+    key(&mut world, Key::Up);
+    assert_eq!(
+        picked(&world),
+        Some(0),
+        "Up moves the pick on the hovered chain"
+    );
+    key(&mut world, Key::End);
+    key(&mut world, Key::Home);
+    assert_eq!(picked(&world), Some(0));
+    assert_eq!(
+        world.daemon.sent_of("pty_input").len(),
+        typed,
+        "the terminal hears none of the chain's keys"
+    );
+    key(&mut world, Key::Enter);
+    assert_eq!(chain(&world), None, "Enter closes the chain");
+    assert_eq!(
+        world
+            .daemon
+            .sent_of("desktop_show_session")
+            .last()
+            .map(|r| r["session_id"].clone()),
+        Some("s-a".into()),
+        "and opens the picked agent"
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_press_on_a_headers_chain_opens_it_without_selecting_its_pane() {
     let mut world = start_with(vec![
         with_role(
