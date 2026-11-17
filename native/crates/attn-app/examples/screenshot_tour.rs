@@ -14,12 +14,13 @@ use attn_protocol::{
     AutomationSchedulePreviewResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, Desktop, DesktopPane, DesktopTileContentMessage,
     GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, InitialStateMessage,
-    PartyView, Profile, RecentLocation, RecentLocationsResultMessage, RepoInfo, ReviewBundle,
+    NotificationListResultMessage, PartyView, Profile, RecentLocation,
+    RecentLocationsResultMessage, RecordCommandUsageResultMessage, RepoInfo, ReviewBundle,
     ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
-    SeedDocumentGetResultMessage, SeedEdge, SeedPlotProgress, Session,
+    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
     SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
     SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    Worktree,
+    SessionUsage, SessionUsageModel, Worktree,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -1145,6 +1146,242 @@ fn markdown_selection(dark: bool) {
     snap(&mut world, "markdown-selection", dark);
 }
 
+fn request_id(r: &Request) -> String {
+    r["request_id"].as_str().unwrap_or_default().into()
+}
+
+/// The tour's daemon with `edit` made to its first state and `serve` adding to what it answers,
+/// which always includes the palette's history.
+fn popover_daemon(
+    dark: bool,
+    edit: impl FnOnce(&mut InitialStateMessage),
+    serve: impl FnOnce(&Daemon),
+) -> Daemon {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    edit(&mut state);
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("get_command_usage", |r: &Request| {
+            message(GetCommandUsageResultMessage {
+                request_id: request_id(r),
+                profile_id: r["profile_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                ..GetCommandUsageResultMessage::new()
+            })
+        })
+        .on("record_command_usage", |r: &Request| {
+            message(RecordCommandUsageResultMessage {
+                request_id: request_id(r),
+                success: true,
+                ..RecordCommandUsageResultMessage::new()
+            })
+        });
+    serve(&daemon);
+    daemon
+}
+
+/// The tour's window on desktop 1 over [`popover_daemon`].
+fn popover_world(
+    dark: bool,
+    edit: impl FnOnce(&mut InitialStateMessage),
+    serve: impl FnOnce(&Daemon),
+) -> World {
+    let mut world = start(popover_daemon(dark, edit, serve));
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    world
+}
+
+fn plain(dark: bool) -> World {
+    popover_world(dark, |_| {}, |_| {})
+}
+
+fn first_session(state: &mut InitialStateMessage) -> &mut Session {
+    &mut state.sessions.as_mut().expect("the tour's sessions")[0]
+}
+
+/// The queue with two owed turns; the times the menu offers count from the world's fixed clock.
+fn snooze_menu(dark: bool) {
+    let daemon = popover_daemon(
+        dark,
+        |state| {
+            if let Some(settings) = state.settings.as_mut() {
+                settings.insert("queue_mode_enabled".into(), "true".into());
+            }
+            for (session, opened) in state
+                .sessions
+                .iter_mut()
+                .flatten()
+                .zip(["2026-11-12T08:55:00Z", "2026-11-12T07:00:00Z"])
+            {
+                session.state = "waiting_input".into();
+                session.turn_owed = Some(true);
+                session.turn_opened_at = Some(opened.into());
+            }
+        },
+        |_| {},
+    );
+    let mut world = World::start_sized(daemon, SIZE);
+    deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
+    let name = "Snooze working agent";
+    world.gesture(|app| app.click(Target::role("button").name(name)));
+    snap(&mut world, "snooze-menu", dark);
+}
+
+fn rename_session(dark: bool) {
+    let mut world = plain(dark);
+    world.gesture(|app| app.click(Target::key("tile.a.rename")));
+    snap(&mut world, "rename-session", dark);
+}
+
+fn model_usage(purpose: &str, counts: SessionUsageModel) -> SessionUsageModel {
+    SessionUsageModel {
+        model: "claude-opus-5".into(),
+        purpose: purpose.into(),
+        ..counts
+    }
+}
+
+/// The agent's usage with a guardian beside it and a part that has no price.
+fn usage() -> SessionUsage {
+    SessionUsage {
+        total_tokens: 186_197,
+        cost_usd: Some(1.2345),
+        has_unpriced_usage: true,
+        models: vec![
+            model_usage(
+                "agent",
+                SessionUsageModel {
+                    input_tokens: 12_345,
+                    output_tokens: 6_789,
+                    cache_read_tokens: 150_000,
+                    cache_write_5m_tokens: 10_000,
+                    cache_write_1h_tokens: 5_000,
+                    cache_write_unclassified_tokens: 187,
+                    total_tokens: 184_321,
+                    cost_usd: Some(1.234),
+                    has_unpriced_usage: true,
+                    unpriced_reason: Some("Cache write duration is unavailable.".into()),
+                    ..SessionUsageModel::default()
+                },
+            ),
+            model_usage(
+                "guardian",
+                SessionUsageModel {
+                    input_tokens: 1_746,
+                    output_tokens: 130,
+                    total_tokens: 1_876,
+                    cost_usd: Some(0.0005),
+                    ..SessionUsageModel::default()
+                },
+            ),
+        ],
+        ..SessionUsage::default()
+    }
+}
+
+fn session_usage(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| first_session(state).usage = Some(usage()),
+        |_| {},
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.usage")));
+    snap(&mut world, "session-usage", dark);
+}
+
+/// Terminal `a`'s agent tends one seed, whose latest note the popover reads.
+fn session_seed_context(dark: bool) {
+    let tended = Seed {
+        status: "growing".into(),
+        claimed: true,
+        tender: Some(PartyView {
+            name: "Builder".into(),
+            r#ref: "session:s0".into(),
+            session_id: Some("s0".into()),
+        }),
+        ..seed("s-one", "Colors in one place", "growing", None)
+    };
+    let known = tended.clone();
+    let mut world = popover_world(
+        dark,
+        |state| {
+            state.seeds_total = Some(1);
+            state.seeds = Some(vec![tended]);
+        },
+        move |daemon| {
+            daemon.on("seed_document_get", move |r: &Request| {
+                message(SeedDocumentGetResultMessage {
+                    request_id: request_id(r),
+                    success: true,
+                    document: Some(SeedDocument {
+                        seed: known.clone(),
+                        notes_total: 1,
+                        notes: vec![SeedNote {
+                            id: "n-1".into(),
+                            kind: "note".into(),
+                            body: "Every view now reads its colors from **one module** in attn-ui."
+                                .into(),
+                            created_at: "2026-11-12T08:30:00Z".into(),
+                            author: ActorView {
+                                name: "Builder".into(),
+                                r#ref: "session:s0".into(),
+                            },
+                            ..SeedNote::default()
+                        }],
+                        ..SeedDocument::default()
+                    }),
+                    ..SeedDocumentGetResultMessage::new()
+                })
+            });
+        },
+    );
+    press(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("Show working agent's seeds"));
+    world.gesture(|app| app.press("enter"));
+    snap(&mut world, "session-seed-context", dark);
+}
+
+fn notifications_empty(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |_| {},
+        |daemon| {
+            daemon.on("notification_list", |r: &Request| {
+                message(NotificationListResultMessage {
+                    request_id: request_id(r),
+                    success: true,
+                    notifications: Some(Vec::new()),
+                    ..NotificationListResultMessage::new()
+                })
+            });
+        },
+    );
+    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    snap(&mut world, "notifications-empty", dark);
+}
+
+/// The overview over two desktops: terminal `a` beside the document, and one agent.
+fn desktop_overview(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            state
+                .desktops
+                .as_mut()
+                .expect("the tour's desktops")
+                .truncate(2);
+            state
+                .sessions
+                .as_mut()
+                .expect("the tour's sessions")
+                .truncate(2);
+        },
+        |_| {},
+    );
+    press(&mut world, Action::DesktopOverview);
+    snap(&mut world, "desktop-overview", dark);
+}
+
 fn shoot(out: PathBuf, scheme: Option<String>) {
     if let Some(id) = &scheme {
         let ids: Vec<&str> = attn_ui::colors::SCHEMES.iter().map(|s| s.id).collect();
@@ -1194,6 +1431,12 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         queue_agent_list(dark);
         session_seeds(dark);
         markdown_selection(dark);
+        snooze_menu(dark);
+        rename_session(dark);
+        session_usage(dark);
+        session_seed_context(dark);
+        notifications_empty(dark);
+        desktop_overview(dark);
     }
 }
 

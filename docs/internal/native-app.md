@@ -89,8 +89,10 @@ notebook, a popped-out tile window, the classic new-session picker, Launcher 2.0
 in its dialog, its Where list and on an empty desktop, a new automation's hour
 picker and suggested time zones, each with a row reached by an arrow key, Home
 with the Chief and a crew member in the sidebar, the command palette offering
-the Chief's setup, the notifications panel, the PRs drawer and an agent's
-actions menu. The `screenshot_tour` example of `attn-app`
+the Chief's setup, the notifications panel, also with no notifications, the PRs drawer, an
+agent's actions menu, and the other floating surfaces: a session's snooze and
+rename popovers, a tile header's usage popover and its seeds popover for one
+seed, and the desktop overview. The `screenshot_tour` example of `attn-app`
 sets each one up on the wire-test world and draws it on Rune's offscreen GPU
 renderer, so it needs no window and no VM, and two runs of the same source match
 pixel for pixel.
