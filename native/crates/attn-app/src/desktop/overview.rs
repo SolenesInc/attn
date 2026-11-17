@@ -5,6 +5,7 @@ use attn_protocol::{
     Desktop, DesktopCreateMessage, DesktopMoveLeafMessage, ProfileActionResultMessage,
 };
 use attn_ui::Tokens;
+use attn_ui::frame::{self, Frame};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text};
@@ -297,7 +298,13 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 .pb(12.0),
         )
         .child(grid);
-    let dialog = rune_kit::popover::raised(attn_ui::kit(t), dialog, 12.0);
+    let dialog = Frame {
+        edge: t.border_hover,
+        radius: 12.0,
+        shadow: frame::shadow(t, 20.0, 60.0, 0.5),
+        ..Frame::menu(t)
+    }
+    .draw(dialog);
     Some(
         el().key("overview")
             .absolute(0.0, 0.0)

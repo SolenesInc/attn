@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use attn_client::Facts;
 use attn_protocol::{Seed, SeedDocument, SeedNote, Session};
+use attn_ui::Tokens;
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{Color, El, Key, KeyEvent, TextStyle, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Placement};
@@ -534,13 +534,6 @@ fn prose(words: String, t: &Tokens) -> El {
 /// The open seed popover, under its chip.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let chip = of_facts(&pop.session, &state.facts)?;
-    let close = GlyphButton::new("×", "Close seeds")
-        .variant(ButtonVariant::GhostFaint)
-        .font(type_::LABEL)
-        .side(type_::LABEL.line_px())
-        .on_press(|state: &mut State| header_pop::close(state))
-        .build(attn_ui::kit(t))
-        .key(format!("{}.close", pop.surface()));
     let single = chip.single();
     let body = if single {
         context(state, pop, &chip, t)
@@ -555,15 +548,15 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         } else {
             "Seeds this agent is tending"
         })
-        .w(320.0)
-        .padding(space::S2)
+        .w(360.0)
+        .padding(5.0)
         .gap(space::S2)
         .min_h(0.0)
         .focusable(true)
+        .no_focus_ring()
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
         })
-        .child(row().w_full().child(rune::el().grow(1.0)).child(close))
         .child(body)
         .children((pop.pinned && !single).then(|| {
             text("↑ ↓ move · ↵ open · esc close")
@@ -586,7 +579,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
-        rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
+        attn_ui::Frame::panel(t).draw(surface),
         &pop.anchor(),
         Placement::BottomStart,
         4.0,
@@ -622,7 +615,7 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
                 .grow(1.0)
                 .child(
                     text(state_label(status))
-                        .font(type_::LABEL)
+                        .font(type_::TITLE)
                         .color(t.text_primary),
                 )
                 .child(
@@ -716,6 +709,9 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
         .children(reports_here.then(|| caption("This agent reports to this seed.", t)))
         .children(reports_to)
         .child(open_seed)
+        .pt(11.0)
+        .px(11.0)
+        .pb(4.0)
 }
 
 fn kit_link(

@@ -156,6 +156,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .padding(space::S2)
         .gap(space::S2)
         .focusable(true)
+        .no_focus_ring()
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
         })
@@ -163,7 +164,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .children(usage.models.iter().map(|m| model(m, t)))
         .children(
             pop.pinned
-                .then(|| text("esc close").font(type_::LABEL).color(t.text_muted)),
+                .then(|| text("esc close").font(type_::LABEL).color(t.text_tertiary)),
         );
     let surface = if pop.pinned {
         surface
@@ -176,7 +177,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
-        rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
+        attn_ui::Frame::panel(t).draw(surface),
         &pop.anchor(),
         Placement::BottomEnd,
         4.0,
@@ -230,7 +231,7 @@ fn model(model: &SessionUsageModel, t: &Tokens) -> El {
                 .child(
                     text(format!("{} tokens{cost}", grouped(model.total_tokens)))
                         .font(type_::LABEL)
-                        .color(t.text_secondary),
+                        .color(t.text_tertiary),
                 ),
         )
         .child(count("Input", model.input_tokens))

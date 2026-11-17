@@ -3,10 +3,11 @@
 
 use attn_protocol::{GetSettingsMessage, HarnessModel};
 use attn_ui::Tokens;
+use attn_ui::frame::{self, Frame};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, FileDialogOptions, Tx, col, row, text};
-use rune_kit::popover::{anchored, raised};
+use rune_kit::popover::anchored;
 use rune_kit::{Button, ButtonVariant, ControlSize, Placement, RadioItem};
 
 use super::{Phase, View};
@@ -739,8 +740,13 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         }
         body = body.child(row().justify_end().child(button));
     }
-    let surface = raised(
-        k,
+    let frame = Frame {
+        edge: t.border_hover,
+        radius: 10.0,
+        shadow: frame::shadow(t, 18.0, 40.0, 0.38),
+        ..Frame::menu(t)
+    };
+    let surface = frame.draw(
         col()
             .key(POP)
             .role("dialog")
@@ -749,15 +755,13 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             .no_focus_ring()
             .padding(space::S3)
             .gap(space::S3)
-            .w(320.0)
-            .fill(t.bg_elevated)
+            .w(280.0)
             .child(head)
             .child(body)
             .on_press_outside(|state: &mut State, tx: &mut Tx| {
                 let over_the_window = state.window.layer.is_some();
                 super::dismiss(state, !over_the_window, tx)
             }),
-        k.radius.md,
     );
     layers.push(anchored(k, surface, &anchor, Placement::RightStart, 10.0));
 }

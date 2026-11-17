@@ -6,6 +6,7 @@ use attn_protocol::{
     Profile, ProfileActionResultMessage, ProfileCreateMessage, ProfileDeleteMessage,
     ProfileRenameMessage, ProfileSelectMessage,
 };
+use attn_ui::frame::{self, Frame};
 use attn_ui::keycap;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
@@ -462,7 +463,13 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     }
     Some(popover::anchored(
         k,
-        popover::raised(k, menu, k.radius.md),
+        Frame {
+            fill: t.bg_elevated,
+            edge: t.border_hover,
+            shadow: frame::shadow(t, 12.0, 36.0, 0.45),
+            ..Frame::menu(t)
+        }
+        .draw(menu),
         PILL,
         Placement::BottomEnd,
         4.0,

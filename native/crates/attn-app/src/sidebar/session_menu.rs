@@ -189,7 +189,7 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         .anchor(menu.under.clone())
         .placement(Placement::BottomEnd)
         .gutter(4.0)
-        .min_width(200.0)
+        .min_width(190.0)
         .label(format!("Actions for {}", menu.name))
         .open(true)
         .on_close(|state: &mut State| state.window.session_menu = None);

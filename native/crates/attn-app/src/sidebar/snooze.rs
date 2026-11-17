@@ -199,7 +199,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     let mut kit_menu = rune_kit::Menu::new(format!("{MENU}.{mode}"))
         .standard()
         .gutter(4.0)
-        .min_width(260.0)
+        .min_width(216.0)
         .label(title.clone())
         .open(true)
         .on_close(|state: &mut State| state.window.snooze = None)

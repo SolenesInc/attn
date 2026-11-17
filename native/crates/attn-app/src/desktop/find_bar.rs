@@ -1,3 +1,4 @@
+use attn_ui::frame::{self, Frame};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
@@ -68,10 +69,16 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
         .key(format!("terminal.{id}.find"))
         .items_center()
         .gap(4.0)
-        .px(6.0)
-        .py(4.0)
+        .px(7.0)
+        .py(5.0)
         .children([field, case, count, older, newer, close]);
-    let bar = rune_kit::popover::raised(attn_ui::kit(t), bar, 6.0);
+    let bar = Frame {
+        fill: t.bg_tile.alpha(0.95),
+        edge: t.border,
+        radius: 6.0,
+        shadow: frame::shadow(t, 2.0, 8.0, 0.25),
+    }
+    .draw(bar);
     el().absolute(0.0, 6.0)
         .w_full()
         .pr(14.0)

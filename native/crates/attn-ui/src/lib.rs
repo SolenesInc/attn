@@ -173,14 +173,8 @@ fn input_ring(t: &Tokens) -> Shadow {
     }
 }
 
-/// The Tauri app's popover shadow, `0 16px 36px rgba(0, 0, 0, 0.42)` in both appearances.
 fn popover_shadow(t: &Tokens) -> Shadow {
-    Shadow {
-        y: 16.0,
-        blur: 36.0,
-        color: t.shadow.alpha(0.42),
-        ..Shadow::default()
-    }
+    Frame::menu(t).shadow
 }
 
 /// The faces attn draws its text in: Inter for the interface, and Symbols Nerd Font Mono for
@@ -203,6 +197,8 @@ pub const FAMILIES: (&str, &str) = (
     "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, ui-monospace, Symbols Nerd Font Mono",
 );
 
+pub mod frame;
+pub use frame::Frame;
 pub mod glyph;
 mod glyph_button;
 pub mod icon;

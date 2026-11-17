@@ -1,5 +1,6 @@
 use attn_client::Notifications;
 use attn_protocol::Notification;
+use attn_ui::frame::{self, Frame};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
@@ -11,7 +12,7 @@ use crate::State;
 
 pub(crate) const PANEL: &str = "notifications.panel";
 const BELL: &str = "titlebar.notifications";
-const WIDTH: f32 = 380.0;
+const WIDTH: f32 = 360.0;
 const MAX_HEIGHT: f32 = 520.0;
 
 /// The title bar's bell: it opens or closes the panel, and marks unread and critical
@@ -109,7 +110,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         .items_center()
         .gap(space::S2)
         .px(space::S3)
-        .py(space::S2)
+        .py(11.0)
         .child(
             type_::upper("Notifications", type_::BOLD_CAPS)
                 .color(t.text_primary)
@@ -163,7 +164,13 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         .child(body);
     popover::anchored(
         k,
-        popover::raised(k, surface, k.radius.md),
+        Frame {
+            fill: t.bg_elevated,
+            radius: 12.0,
+            shadow: frame::shadow(t, 18.0, 48.0, 0.36),
+            ..Frame::menu(t)
+        }
+        .draw(surface),
         BELL,
         Placement::BottomEnd,
         4.0,
@@ -200,7 +207,13 @@ fn body(state: &State, k: &rune_kit::Kit, t: &Tokens) -> Vec<El> {
         return vec![note("Loading…".into()).py(space::S2)];
     };
     if list.is_empty() {
-        return vec![note("No notifications.".into()).py(space::S2)];
+        return vec![
+            row()
+                .w_full()
+                .justify_center()
+                .py(16.0)
+                .child(note("No notifications.".into()).color(t.text_dimmed)),
+        ];
     }
     list.iter().map(|n| notification(state, n, k, t)).collect()
 }

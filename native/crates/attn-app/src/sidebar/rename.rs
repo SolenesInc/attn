@@ -1,6 +1,6 @@
 use attn_protocol::{DesktopRenameMessage, RenameResultMessage, RenameSessionMessage};
-use attn_ui::Tokens;
 use attn_ui::type_;
+use attn_ui::{Frame, Tokens};
 use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, text};
 use rune_kit::{Placement, TextInput};
@@ -207,7 +207,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     Some(
         rune_kit::popover::anchored(
             attn_ui::kit(t),
-            rune_kit::popover::raised(attn_ui::kit(t), popover(rename, t), 6.0),
+            Frame::menu(t).draw(popover(rename, t)),
             &rename.under,
             Placement::BottomEnd,
             4.0,
@@ -244,7 +244,7 @@ fn popover(rename: &Rename, t: &Tokens) -> El {
         .role("dialog")
         .label(label)
         .w(240.0)
-        .padding(space::S2)
+        .padding(10.0)
         .gap(space::S1)
         .modal_tx(true, |state: &mut State, _: &mut Tx| {
             state.window.rename = None
