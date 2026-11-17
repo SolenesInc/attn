@@ -704,6 +704,47 @@ fn a_press_outside_the_first_setup_closes_it_and_hiding_and_showing_the_sidebar_
 }
 
 #[test]
+fn a_press_on_an_agent_row_outside_the_first_setup_gives_that_agent_the_keyboard() {
+    let mut world = start(initial(false, chief(false), Vec::new()));
+    assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    let agent = super::sidebar::session("shop", "idle");
+    let arranged = state(
+        vec![agent.clone()],
+        vec![desktop(
+            "d1",
+            "a",
+            "",
+            vec![attn_protocol::DesktopPane {
+                runtime_id: "r-shop".into(),
+                ..pane("d1", "p0", "shop")
+            }],
+        )],
+    );
+    world.daemon.emit(SessionsUpdatedMessage {
+        sessions: Some(vec![agent]),
+        ..SessionsUpdatedMessage::new()
+    });
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: arranged.profiles.unwrap().remove(0),
+        desktops: arranged.desktops.unwrap(),
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+    assert!(shows(&world, SETUP));
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.shop")));
+    world.gesture(|app| app.type_text("x"));
+
+    assert!(!shows(&world, SETUP));
+    assert_eq!(focused(&world), None);
+    let typed: Vec<_> = sent(&world, "pty_input")
+        .iter()
+        .map(|input| (input["id"].clone(), input["data"].clone()))
+        .collect();
+    assert_eq!(typed, [(json!("r-shop"), json!("x"))]);
+}
+
+#[test]
 fn the_palettes_offer_the_chiefs_setup_and_nothing_is_sent_until_the_user_acts() {
     let mut world = start(initial(true, chief(false), Vec::new()));
     press(&mut world, Key::Escape);
