@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap, State};
 use attn_protocol::{
-    ActorView, DelegationPreferences, DelegationPreferencesResultMessage, Desktop, DesktopPane,
+    ActorView, AutomationDefinitionsResultMessage, AutomationSchedulePreviewResultMessage,
+    DelegationPreferences, DelegationPreferencesResultMessage, Desktop, DesktopPane,
     DesktopTileContentMessage, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness,
     InitialStateMessage, Profile, RecentLocation, RecentLocationsResultMessage, RepoInfo,
     ReviewBundle, ReviewFile, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
@@ -734,6 +735,59 @@ fn launcher_empty_desktop(dark: bool) {
     snap(&mut world, "launcher-empty-desktop", dark);
 }
 
+/// A new scheduled automation's form, with nothing defined yet and the daemon previewing
+/// every schedule it is asked about.
+fn automation_form(dark: bool) -> World {
+    let daemon =
+        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    daemon
+        .on("automation_definitions_get", |_: &Request| {
+            message(AutomationDefinitionsResultMessage {
+                success: true,
+                definitions: Some(Vec::new()),
+                ..AutomationDefinitionsResultMessage::new()
+            })
+        })
+        .on("automation_schedule_preview", |_: &Request| {
+            message(AutomationSchedulePreviewResultMessage {
+                success: true,
+                times: Some(vec!["2030-06-03T09:00:00Z".into()]),
+                ..AutomationSchedulePreviewResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    for key in [
+        "titlebar.automations",
+        "automations.new",
+        "automations.form.trigger-scheduled",
+    ] {
+        world.gesture(|app| app.click(Target::key(key)));
+    }
+    world
+}
+
+/// The hour picker opened from the keyboard on its hour, with Up on the one before.
+fn automation_hour(dark: bool) {
+    let mut world = automation_form(dark);
+    world.gesture(|app| app.click(Target::key("automations.form.schedule-days-hour-trigger")));
+    world.gesture(|app| app.press("escape"));
+    world.gesture(|app| app.press("down"));
+    world.gesture(|app| app.press("up"));
+    snap(&mut world, "automation-hour", dark);
+}
+
+/// The zones that match what is typed, with Down on the first.
+fn automation_time_zones(dark: bool) {
+    let mut world = automation_form(dark);
+    world.gesture(|app| {
+        app.click(Target::key("automations.form.time-zone"));
+        app.press("mod+a");
+        app.type_text("america/n");
+        app.press("down");
+    });
+    snap(&mut world, "automation-time-zones", dark);
+}
+
 fn shoot(out: PathBuf, scheme: Option<String>) {
     if let Some(id) = &scheme {
         let ids: Vec<&str> = attn_ui::colors::SCHEMES.iter().map(|s| s.id).collect();
@@ -755,6 +809,8 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         launcher_dialog(dark);
         launcher_where(dark);
         launcher_empty_desktop(dark);
+        automation_hour(dark);
+        automation_time_zones(dark);
     }
 }
 
@@ -826,6 +882,8 @@ fn compare(base: PathBuf, after: PathBuf, diff: PathBuf) -> bool {
 }
 
 fn main() -> std::process::ExitCode {
+    // SAFETY: no other thread runs yet. A new schedule takes this machine's zone.
+    unsafe { std::env::set_var("TZ", "Europe/Stockholm") };
     let args: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
     let words: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
     match (words.first().copied(), &args[..]) {
