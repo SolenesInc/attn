@@ -5,6 +5,10 @@ use rune::{El, TextStyle, text};
 
 pub use rune::tok::type_::{BODY, LABEL, SECTION, TITLE};
 
+/// The Tauri app's small text, `font-size: var(--font-size-sm)`: what a surface says about
+/// itself, such as states, counts, ages and who did what. The native app draws it a point larger.
+pub const CAPTION: TextStyle = TextStyle::new(12.0, 400.0);
+
 /// The Tauri app's small monospace text, `font-family: 'JetBrains Mono', …`: key hints, ids,
 /// paths, counts, ages and other values read as data rather than prose.
 pub const MONO_CAPTION: TextStyle = TextStyle::new(12.0, 400.0).mono();

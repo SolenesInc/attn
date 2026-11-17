@@ -128,13 +128,15 @@ impl Sheet<'_> {
         let spot = spot(self, seed);
         let opened = spot.clone();
         Some(
-            kit_button("Handover")
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::view::head_button(
+                kit_button("Handover").on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     let draft = Handover::suggested(Some(&continuation));
                     opened.write_with(state, "", Some(draft), tx)
-                })
-                .build(attn_ui::kit(self.t))
-                .key(spot.key("open")),
+                }),
+                "Handover",
+                self.t,
+            )
+            .key(spot.key("open")),
         )
     }
 

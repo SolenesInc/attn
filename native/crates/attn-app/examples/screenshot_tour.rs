@@ -324,9 +324,16 @@ fn seeds() -> Vec<Seed> {
                 ready: 1,
                 ..SeedPlotProgress::default()
             }),
+            body: "Three steps, in order. Each lands on its own.\n\n\
+                   - D2. The waiting mark is orange in both themes.\n\
+                   - F1. Rows read their state from a dot.\n"
+                .into(),
             ..seed("s-plot", "Catppuccin for attn", "growing", None)
         },
-        seed("s-one", "Colors in one place", "growing", Some("s-plot")),
+        Seed {
+            body: "Every view reads its colors from one module.".into(),
+            ..seed("s-one", "Colors in one place", "growing", Some("s-plot"))
+        },
         seed(
             "s-two",
             "Catppuccin color schemes",
@@ -502,10 +509,47 @@ fn review_stop(dark: bool) {
 }
 
 fn with_document(dark: bool) -> World {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), seeds()));
-    let known = seeds();
+    garden_world(dark, seeds())
+}
+
+/// A log entry on a seed's page, written `kind` by an agent.
+fn log_note(id: &str, kind: &str, body: &str, at: &str) -> SeedNote {
+    SeedNote {
+        id: id.into(),
+        kind: kind.into(),
+        body: body.into(),
+        created_at: at.into(),
+        author: ActorView {
+            name: "reviewer".into(),
+            r#ref: "session:s0".into(),
+        },
+        ..SeedNote::default()
+    }
+}
+
+/// The document tile's world with the garden holding `seeds`, whose pages the daemon reads with
+/// two entries on `s-one`'s log.
+fn garden_world(dark: bool, seeds: Vec<Seed>) -> World {
+    let daemon = Daemon::scripted().state(initial(
+        dark,
+        document_tile("m", "/repo/plan.md"),
+        seeds.clone(),
+    ));
+    let known = seeds;
     daemon.on("seed_document_get", move |r: &Request| {
+        let notes = if r["seed_id"] == "s-one" {
+            vec![
+                log_note(
+                    "n-2",
+                    "note",
+                    "Tauri row is 28 pt, native row is 29 pt.",
+                    "2026-11-13T09:10:00Z",
+                ),
+                log_note("n-1", "move", "tended", "2026-11-13T09:05:00Z"),
+            ]
+        } else {
+            Vec::new()
+        };
         message(SeedDocumentGetResultMessage {
             request_id: r["request_id"].as_str().unwrap_or_default().into(),
             success: true,
@@ -515,6 +559,8 @@ fn with_document(dark: bool) -> World {
                 .cloned()
                 .map(|seed| SeedDocument {
                     seed,
+                    notes_total: notes.len() as i64,
+                    notes,
                     ..SeedDocument::default()
                 }),
             ..SeedDocumentGetResultMessage::new()
@@ -545,6 +591,37 @@ fn garden_dock(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
     snap(&mut world, "garden-dock", dark);
+}
+
+/// A seed's page beside the columns that walked to it.
+fn garden_seed(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
+    world.gesture(|app| app.click(Target::key("garden.row.s-one")));
+    snap(&mut world, "garden-seed", dark);
+}
+
+fn garden_dock_seed(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
+    world.gesture(|app| app.click(Target::key("garden.row.s-one")));
+    snap(&mut world, "garden-dock-seed", dark);
+}
+
+fn garden_empty(dark: bool) {
+    let mut world = garden_world(dark, Vec::new());
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    snap(&mut world, "garden-empty", dark);
+}
+
+fn garden_dock_empty(dark: bool) {
+    let mut world = garden_world(dark, Vec::new());
+    press(&mut world, Action::BoardOpen);
+    snap(&mut world, "garden-dock-empty", dark);
 }
 
 fn garden_dock_plot(dark: bool) {
@@ -2488,6 +2565,10 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         garden(dark);
         garden_dock(dark);
         garden_dock_plot(dark);
+        garden_seed(dark);
+        garden_dock_seed(dark);
+        garden_empty(dark);
+        garden_dock_empty(dark);
         settings_page(dark);
         settings_agents(dark);
         shortcut_editor(dark);

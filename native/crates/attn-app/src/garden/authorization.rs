@@ -1,10 +1,10 @@
 use attn_protocol::{Seed, SeedAuthorization, SeedAuthorizationMessage};
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, KeyEvent, Tx, col, row, text, text_input};
+use rune::{El, KeyEvent, Tx, row, text, text_input};
 
 use super::model;
-use super::sheet::{Sheet, meta_word};
+use super::sheet::{Sheet, meta_word, page_heading, page_region};
 use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
@@ -19,45 +19,51 @@ impl Sheet<'_> {
         let shown = self.garden.shown(&spot);
         let authorization = here.authorization.as_ref();
         let words = authorization.map_or("", |a| a.text.as_str()).to_owned();
-        let mut head = row().w_full().items_center().gap(space::S2).child(
-            text("Authorization")
-                .role("heading")
-                .label("Authorization")
-                .font(type_::SECTION)
-                .color(t.text_tertiary)
-                .grow(1.0),
-        );
+        let mut head = row()
+            .w_full()
+            .items_center()
+            .gap(10.0)
+            .child(page_heading("Authorization", t));
+        let action = |label: &'static str| {
+            let ink = t.text_muted;
+            kit_button(label)
+                .disabled(shown.busy)
+                .variant(rune_kit::ButtonVariant::Ghost)
+                .label_with(move |_, _| text(label).font(type_::CAPTION).color(ink))
+        };
+        let quiet = |button: El| {
+            button
+                .h(18.0)
+                .px(6.0)
+                .radius(4.0)
+                .fill(rune::Color::TRANSPARENT)
+                .hover(t.bg_button)
+        };
         if !shown.writing {
             let opened = (spot.clone(), words.clone());
-            head = head.child(
-                kit_button(if words.is_empty() { "Set" } else { "Change" })
-                    .disabled(shown.busy)
+            let mut actions = row().gap(4.0).child(quiet(
+                action(if words.is_empty() { "Set" } else { "Change" })
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                         opened.0.write(state, &opened.1, tx)
                     })
                     .build(kit)
                     .key(spot.key("edit")),
-            );
+            ));
             if !words.is_empty() {
                 let cleared = spot.clone();
-                head = head.child(
-                    kit_button("Clear")
-                        .disabled(shown.busy)
+                actions = actions.child(quiet(
+                    action("Clear")
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             authorize(&cleared, state, None, tx)
                         })
                         .build(kit)
                         .key(spot.key("clear")),
-                );
+                ));
             }
+            head = head.child(actions);
         }
-        let mut section = col()
-            .key(self.key("authorization"))
-            .role("region")
-            .label("Authorization")
-            .w_full()
-            .gap(space::S1)
-            .pt(space::S3)
+        let mut section = page_region(&self.key("authorization"), "Authorization", t)
+            .gap(6.0)
             .child(head);
         if !words.is_empty() {
             section = section.child(
@@ -66,13 +72,20 @@ impl Sheet<'_> {
                     .label(words.clone())
                     .font(type_::BODY)
                     .color(t.text_primary)
-                    .wrap(),
+                    .wrap()
+                    .mx(2.0)
+                    .pl(9.0)
+                    .border_sides([0.0, 0.0, 0.0, 2.0], t.brand),
             );
         } else if !shown.writing {
-            section = section.child(self.note(
-                "authorization.empty",
-                "No authorization from the user for this task.",
-            ));
+            section = section.child(
+                super::sheet::quiet_note(
+                    &self.key("authorization.empty"),
+                    "No authorization from the user for this task.",
+                    t.text_dimmed,
+                )
+                .mx(2.0),
+            );
         }
         if let Some(authorization) = authorization {
             let said = self.said(authorization);
@@ -80,9 +93,10 @@ impl Sheet<'_> {
                 text(said.clone())
                     .key(spot.key("meta"))
                     .label(said)
-                    .font(type_::LABEL)
-                    .color(t.text_secondary)
-                    .wrap(),
+                    .font(type_::CAPTION)
+                    .color(t.text_dimmed)
+                    .wrap()
+                    .mx(2.0),
             );
         }
         if let Some(written) = shown.words {

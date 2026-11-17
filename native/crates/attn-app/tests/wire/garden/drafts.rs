@@ -29,7 +29,7 @@ fn page() -> World {
         chief_of_staff: Some(true),
         ..session("chief1", "Chief")
     };
-    let mut world = open_garden_with(daemon(vec![seed], vec![chief]));
+    let mut world = open_garden_sized(daemon(vec![seed], vec![chief]), (960.0, 800.0));
     open_row(&mut world, SEED);
     world
 }

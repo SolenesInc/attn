@@ -51,7 +51,6 @@ impl Sheet<'_> {
         if held.is_some_and(|h| h.rev != seed.rev) || model::is_closed(seed) {
             return Vec::new();
         }
-        let kit = attn_ui::kit(self.t);
         let mut actions = Vec::new();
         if let Some(continuation) = &seed.continuation {
             let unreachable =
@@ -59,12 +58,12 @@ impl Sheet<'_> {
             let outpost = continuation.outpost.as_deref();
             if continuation.resume_available || (outpost.is_some() && unreachable) {
                 let id = seed.id.clone();
-                let button = match outpost {
-                    Some(outpost) => kit_button(format!("Resume on {outpost}")).label_with({
-                        let words = format!("Resume · {outpost}");
-                        move |font, ink| text(words).font(font).color(ink)
-                    }),
-                    None => kit_button("Resume"),
+                let (button, shown) = match outpost {
+                    Some(outpost) => (
+                        kit_button(format!("Resume on {outpost}")),
+                        format!("Resume · {outpost}"),
+                    ),
+                    None => (kit_button("Resume"), "Resume".to_owned()),
                 };
                 let button = match continuation
                     .resume_reason
@@ -75,10 +74,14 @@ impl Sheet<'_> {
                     None => button,
                 };
                 actions.push(
-                    button
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| resume(state, &id, tx))
-                        .build(kit)
-                        .key(self.key("resume")),
+                    super::view::head_button(
+                        button.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            resume(state, &id, tx)
+                        }),
+                        shown,
+                        self.t,
+                    )
+                    .key(self.key("resume")),
                 );
             }
         }
@@ -90,10 +93,14 @@ impl Sheet<'_> {
         if self.chief {
             let opened = chief.clone();
             actions.push(
-                kit_button("Send to Chief")
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| opened.write(state, "", tx))
-                    .build(kit)
-                    .key(chief.key("open")),
+                super::view::head_button(
+                    kit_button("Send to Chief").on_press_tx(
+                        move |state: &mut State, tx: &mut Tx| opened.write(state, "", tx),
+                    ),
+                    "Send to Chief",
+                    self.t,
+                )
+                .key(chief.key("open")),
             );
         }
         actions

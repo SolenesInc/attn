@@ -509,28 +509,36 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             .px(space::S2),
             t,
         ),
-        tool(
-            "titlebar.garden",
-            if crate::garden::mode(state) == crate::garden::Mode::Closed {
-                "Show the garden"
-            } else {
-                "Hide the garden"
-            },
-            &attn_ui::icon::GARDEN,
+        opens(
+            tool(
+                "titlebar.garden",
+                if crate::garden::mode(state) == crate::garden::Mode::Closed {
+                    "Show the garden"
+                } else {
+                    "Hide the garden"
+                },
+                &attn_ui::icon::GARDEN,
+                t,
+                crate::garden::toggle_from_icon,
+            ),
+            crate::garden::mode(state) != crate::garden::Mode::Closed,
             t,
-            crate::garden::toggle_from_icon,
         ),
         ledger_button(state, t),
-        tool(
-            "titlebar.automations",
-            if crate::automations::is_open(state) {
-                "Hide Automations"
-            } else {
-                "Show Automations"
-            },
-            &attn_ui::icon::AUTOMATIONS,
+        opens(
+            tool(
+                "titlebar.automations",
+                if crate::automations::is_open(state) {
+                    "Hide Automations"
+                } else {
+                    "Show Automations"
+                },
+                &attn_ui::icon::AUTOMATIONS,
+                t,
+                crate::automations::toggle,
+            ),
+            crate::automations::is_open(state),
             t,
-            crate::automations::toggle,
         ),
         tool_button(
             "titlebar.commands",
@@ -571,13 +579,26 @@ fn ledger_button(state: &State, t: &Tokens) -> El {
         .binding(&crate::Action::SessionsOpen)
         .map(|b| format!(" ({})", state.keymap.label(b)))
         .unwrap_or_default();
-    tool(
-        "titlebar.ledger",
-        &format!("Open Ledger{keys}"),
-        &attn_ui::icon::LEDGER,
+    opens(
+        tool(
+            "titlebar.ledger",
+            &format!("Open Ledger{keys}"),
+            &attn_ui::icon::LEDGER,
+            t,
+            crate::ledger::open_last,
+        ),
+        crate::ledger::is_open(state),
         t,
-        crate::ledger::open_last,
     )
+}
+
+/// A title bar button for a panel, filled while the panel `open`s, as the Tauri app's
+/// `.title-bar-panel-button.active`.
+fn opens(button: El, open: bool, t: &Tokens) -> El {
+    if !open {
+        return button;
+    }
+    button.checked(true).fill(t.bg_elevated)
 }
 
 fn tool(

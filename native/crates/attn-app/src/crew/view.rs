@@ -1272,7 +1272,7 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
                 std::rc::Rc::default(),
                 state.readings.kept(&view),
                 None,
-                None,
+                crate::markdown::look(t),
                 t,
             )
             .key("crew.handoff.letter")

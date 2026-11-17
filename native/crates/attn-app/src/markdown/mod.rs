@@ -149,7 +149,7 @@ pub(crate) fn body(
             pictures,
             kept.clone(),
             marking,
-            text_width,
+            text_width.map_or_else(|| look(t), |width| look(t).text_width(width)),
             t,
         )
     };
@@ -269,7 +269,7 @@ pub(crate) fn seed_reader(
     (reading, marking)
 }
 
-/// `source` as a document at `document.path` reads: its links go where the reader sends them,
+/// `source` drawn in `style` as a document at `document.path` reads: its links go where the reader sends them,
 /// its headings are keyed by their slugs for `#fragment` links, and its local images show the
 /// ready `pictures` by the paths they resolve to, opening larger on a press. Its `<details>`
 /// blocks open as their tags say, or as `folds` says people left them, by their order in the
@@ -282,7 +282,7 @@ pub(crate) fn reader(
     pictures: Rc<HashMap<String, Option<Image>>>,
     kept: annotating::Kept,
     marking: Option<Marking>,
-    text_width: Option<f32>,
+    style: MarkdownStyle,
     t: &Tokens,
 ) -> El {
     let mut document = document;
@@ -324,11 +324,7 @@ pub(crate) fn reader(
             move |_, yaml| front_matter::card(yaml, &t)
         });
     let markdown = linked(markdown, document, pictures, t);
-    let style = look(t);
-    let markdown = markdown.style(match text_width {
-        Some(width) => style.text_width(width),
-        None => style,
-    });
+    let markdown = markdown.style(style);
     let (
         Some(Marking {
             tile,
