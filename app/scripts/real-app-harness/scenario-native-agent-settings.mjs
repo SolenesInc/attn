@@ -136,7 +136,6 @@ try {
 
   await runner.step('a_price_override_saves_and_removes', async () => {
     if (!(await expanded('settings.pricing'))) await driver.click({ key: 'settings.pricing' });
-    await driver.scroll({ key: 'settings.body' }, 3000);
     const setting = `session_cost.price.${MODEL}`;
     const expected = JSON.stringify(Object.fromEntries(Object.entries(RATES).map(([k, v]) => [k, Number(v)])));
     await replaceText('settings.price-new.model', MODEL);

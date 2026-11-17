@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use attn_protocol::{
     AutomationApplyResultMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary,
@@ -9,7 +10,7 @@ use attn_testkit::{Answer, Daemon, Target, World, message};
 use serde_json::{Value, json};
 
 use super::super::settings::harness_catalogs::{self, harnesses};
-use super::{Scene, changed, click, definition, has, is, name, opened_with};
+use super::{Scene, changed, click, definition, has, is, name, opened_in, opened_with};
 
 const API_VERSION: &str = "attn.dev/automations/v1alpha1";
 const NEXT_RUNS: [&str; 5] = [
@@ -259,6 +260,50 @@ fn list_items(world: &World, list: &str) -> usize {
         .iter()
         .filter(|n| n.role == "list-item")
         .count()
+}
+
+#[test]
+fn typing_into_the_prompt_below_the_fold_scrolls_the_form_to_it() {
+    let stored = Stored::of(definition(1, "PR reviewer"), manual_spec("PR reviewer"));
+    let scene = Scene::of(vec![stored.definition.lock().unwrap().clone()]);
+    let mut world = opened_in((1200.0, 400.0), &scene, |daemon| serve(daemon, &stored));
+    click(&mut world, "automations.new");
+    let prompt = key("prompt");
+    let span = |world: &mut World, key: &str| {
+        let rect = world
+            .automate("find", json!({"target": {"key": key}}))
+            .unwrap()["rect"]
+            .clone();
+        (
+            rect[1].as_f64().unwrap(),
+            rect[1].as_f64().unwrap() + rect[3].as_f64().unwrap(),
+        )
+    };
+    let (_, fold) = span(&mut world, &key("body"));
+    let (field, _) = span(&mut world, &prompt);
+    assert!(
+        field > fold,
+        "the prompt starts below the fold: {field} under {fold}"
+    );
+
+    world
+        .automate(
+            "type",
+            json!({"target": {"key": key("name")}, "text": "Reviewer"}),
+        )
+        .unwrap();
+
+    world.advance(Duration::from_secs(10));
+    assert!(world.runtime_is_at_rest(), "the form comes to rest");
+
+    world
+        .automate(
+            "type",
+            json!({"target": {"key": prompt}, "text": "Review it"}),
+        )
+        .unwrap();
+
+    assert_eq!(value(&world, "prompt"), "Review it");
 }
 
 #[test]

@@ -691,16 +691,25 @@ impl World {
     }
 
     /// Answers one automation request on this world's runtime, as the app's server would,
-    /// settling after each attempt. A request that waits again on a screen that did not
-    /// change fails with what it waited for: nothing in a quiet world would move it.
+    /// settling after each attempt. The app's server tries again only after the window beats:
+    /// for input the attempt queued, a frame while something moves, or a change from the
+    /// daemon. A request that waits with none of those, or waits again on a screen that did
+    /// not change, fails with what it waited for, as it would time out in the app.
     pub fn automate(&mut self, action: &str, payload: Value) -> Result<Value, String> {
         let mut last = None;
         loop {
             let attempt = attn_automation::act(&mut self.runtime, &AppHooks, action, &payload);
+            let beats = self.runtime.has_pending_input() || self.runtime.animating;
+            let seen = self.pulse.count();
             self.settle();
             match attempt {
                 Attempt::Done(value) => return Ok(value),
                 Attempt::Fail(why) => return Err(why),
+                Attempt::Wait(what) if !beats && self.pulse.count() == seen => {
+                    return Err(format!(
+                        "{action}: the world is quiet and still waits for {what}"
+                    ));
+                }
                 Attempt::Wait(what) => {
                     let screen = self.runtime.accessibility_json();
                     if last.as_ref() == Some(&screen) {

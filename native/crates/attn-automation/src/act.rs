@@ -1,3 +1,4 @@
+use rune::accesskit::Action;
 use rune::{Chord, GesturePhase, Key, KeyEvent, Mods, PhysicalInput, Runtime, Tx, WheelEvent};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -338,24 +339,31 @@ fn pointer<S: 'static>(
     }))
 }
 
-/// Wheels the nearest ancestor that shows anything by how far the element sits outside it.
+/// Asks the window, as assistive technology does, to scroll the element's nearest keyed
+/// element into view: input the window handles and draws, through Rune's own reveal.
 fn scroll_into_view<S: 'static>(rt: &mut Runtime<S>, found: &Found) -> Attempt {
     let elements = rt.elements();
-    let mut parent = elements[found.index].parent;
-    while let Some(p) = parent {
-        let [x, y, w, h] = elements[p].visible;
-        if w > 0.0 && h > 0.0 {
-            let [_, ty, _, th] = found.rect;
-            let dy = if ty < y { y - ty } else { (y + h) - (ty + th) };
-            rt.wheel(x + w / 2.0, y + h / 2.0, dy);
-            return Attempt::Wait("the element to scroll into view".into());
-        }
-        parent = elements[p].parent;
+    let lineage = || std::iter::successors(Some(found.index), |&i| elements[i].parent);
+    let shown = lineage().skip(1).any(|p| {
+        let [_, _, w, h] = elements[p].visible;
+        w > 0.0 && h > 0.0
+    });
+    if !shown {
+        return Attempt::Fail(format!(
+            "{:?} is laid out but nothing of it shows",
+            found.key
+        ));
     }
-    Attempt::Fail(format!(
-        "{:?} is laid out but nothing of it shows",
-        found.key
-    ))
+    let asked = lineage()
+        .filter_map(|i| elements[i].key.as_deref())
+        .any(|key| rt.accessibility_action(key, Action::ScrollIntoView, None));
+    if !asked {
+        return Attempt::Fail(format!(
+            "{:?} is outside its scroll view and nothing keyed around it scrolls into view",
+            found.key
+        ));
+    }
+    Attempt::Wait("the element to scroll into view".into())
 }
 
 #[cfg(test)]

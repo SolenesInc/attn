@@ -88,10 +88,14 @@ fn two_agents() -> InitialStateMessage {
 }
 
 pub(super) fn opened_with(scene: &Scene, script: impl FnOnce(&Daemon)) -> World {
+    opened_in(TALL, scene, script)
+}
+
+pub(super) fn opened_in(size: (f32, f32), scene: &Scene, script: impl FnOnce(&Daemon)) -> World {
     let daemon = super::palette::daemon(two_agents(), vec![]);
     scene.serve(&daemon);
     script(&daemon);
-    let mut world = World::start_sized(daemon, TALL);
+    let mut world = World::start_sized(daemon, size);
     click(&mut world, "titlebar.automations");
     world
 }
