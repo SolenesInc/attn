@@ -153,6 +153,13 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     kit.elevation.md = vec![popover_shadow(t)];
     kit.elevation.overlay = vec![popover_shadow(t)];
     kit.standard_menu = standard_menu(&kit, t);
+    kit.standard_menu_label = Some(rune_kit::MenuLabel {
+        font: rune::TextStyle {
+            weight: 400.0,
+            ..kit.ty.text_small_medium
+        },
+        ink: t.text_secondary,
+    });
     kit
 }
 

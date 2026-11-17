@@ -208,12 +208,12 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
         kit_menu = kit_menu.item(
             MenuItem::new(choice.label())
                 .key(format!("{MENU}.{mode}.{}", choice.id()))
-                .badge(choice.detail(menu.opened_ms))
+                .detail(choice.detail(menu.opened_ms))
                 .on_select(move |state: &mut State| choose(state, choice)),
         );
     }
     if !menu.standby {
-        kit_menu = kit_menu.item(
+        kit_menu = kit_menu.separator().item(
             MenuItem::new("Standby until…")
                 .key(format!("{MENU}.standby"))
                 .on_select_tx(|state: &mut State, tx: &mut Tx| {
@@ -224,7 +224,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
                 }),
         );
     }
-    let kit_menu = kit_menu.group_label(format!("↑ ↓ choose · ↵ {mode} · esc cancel"));
+    let kit_menu = kit_menu.note(format!("↑ ↓ choose · ↵ {mode} · esc cancel"));
     let mut layer = Vec::new();
     let anchored = match &menu.under {
         Some(under) => kit_menu.anchor(under.clone()),
