@@ -807,12 +807,11 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
 }
 
 fn name_edit(state: &mut State, which: Which) -> &mut rune::TextEdit {
-    let launching = &mut state.window.launching;
-    let has_chooser = launching.picker(which).is_some_and(|p| p.chooser.is_some());
-    if !has_chooser {
-        return launching.input_mut(which);
-    }
-    let picker = launching.picker_mut(which).expect("the picker is open");
+    let picker = state
+        .window
+        .launching
+        .picker_mut(which)
+        .expect("the picker is open");
     &mut picker.chooser.as_mut().expect("the chooser shows").name
 }
 

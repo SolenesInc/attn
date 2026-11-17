@@ -333,14 +333,14 @@ fn definition_row(
     item
 }
 
-/// The prompt's URL, or the drawer's spare once the prompt is gone, so the field's last edit as
-/// focus leaves it has somewhere to land.
 fn pull_request_url(state: &mut State) -> &mut TextEdit {
-    let automations = &mut state.window.automations;
-    match automations.pull_request.as_mut() {
-        Some(prompt) => &mut prompt.url,
-        None => &mut automations.spare,
-    }
+    &mut state
+        .window
+        .automations
+        .pull_request
+        .as_mut()
+        .expect("the prompt shows")
+        .url
 }
 
 fn pull_request_prompt(

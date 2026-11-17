@@ -232,8 +232,6 @@ pub struct Launching {
     pub(crate) catalog: Catalog,
     pub(crate) worktree: Option<repo::Setup>,
     openings: u64,
-    /// The text field of a picker that is gone, so a late edit has somewhere to land.
-    spare: TextEdit,
 }
 
 impl Launching {
@@ -272,7 +270,6 @@ impl Default for Launching {
             catalog: Catalog::Unasked,
             worktree: None,
             openings: 0,
-            spare: TextEdit::default(),
         }
     }
 }
@@ -485,20 +482,7 @@ impl Launching {
     }
 
     pub(crate) fn input_mut(&mut self, which: Which) -> &mut TextEdit {
-        match which {
-            Which::Dialog => self.dialog.as_mut(),
-            Which::Inline => self.inline.as_mut(),
-        }
-        .and_then(|opened| match opened {
-            Opened::Classic(picker) => Some(&mut picker.input),
-            Opened::Launcher(_) => None,
-        })
-        .unwrap_or(&mut self.spare)
-    }
-
-    /// The field of a picker that is gone, so a late edit has somewhere to land.
-    pub(crate) fn spare(&mut self) -> &mut TextEdit {
-        &mut self.spare
+        &mut self.picker_mut(which).expect("the picker shows").input
     }
 }
 

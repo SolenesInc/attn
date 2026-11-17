@@ -128,9 +128,13 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         .width(None)
         .label(LABEL)
         .placeholder("Find a note…")
-        .on_edit(|state: &mut State| match state.notebook.finder.as_mut() {
-            Some(finder) => &mut finder.query,
-            None => &mut state.notebook.scratch,
+        .on_edit(|state: &mut State| {
+            &mut state
+                .notebook
+                .finder
+                .as_mut()
+                .expect("the finder shows")
+                .query
         })
         .on_change(|state: &mut State, _: &mut Tx| {
             if let Some(finder) = state.notebook.finder.as_mut() {

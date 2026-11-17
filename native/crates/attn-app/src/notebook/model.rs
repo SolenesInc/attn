@@ -26,8 +26,6 @@ pub struct Notebook {
     pub(crate) after_save: BTreeMap<SurfaceId, super::io::Then>,
     /// The editor tile whose "Editor root" list is open.
     pub(crate) root_picker: Option<String>,
-    /// What a text field edits while its file is gone from the surface.
-    pub(crate) scratch: TextEdit,
     /// Rises with every change a view could show, for the memos that read the notebook.
     pub(crate) revision: u64,
     next_write: u64,

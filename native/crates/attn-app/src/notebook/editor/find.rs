@@ -134,13 +134,10 @@ pub(crate) fn bar(
         .label("Find")
         .placeholder("Find")
         .on_edit(move |state: &mut State| {
-            if access(state, &edit_key).is_none_or(|e| e.find.is_none()) {
-                return &mut state.notebook.scratch;
-            }
-            match access(state, &edit_key).and_then(|e| e.find.as_mut()) {
-                Some(find) => &mut find.query,
-                None => unreachable!("checked above"),
-            }
+            &mut access(state, &edit_key)
+                .and_then(|e| e.find.as_mut())
+                .expect("the find bar shows")
+                .query
         })
         .on_change(move |state: &mut State, _: &mut Tx| {
             let _ = &change_key;

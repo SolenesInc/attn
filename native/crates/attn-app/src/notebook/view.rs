@@ -612,10 +612,7 @@ fn draft_of<'a>(state: &'a mut State, id: &SurfaceId) -> &'a mut rune::TextEdit 
         },
         _ => None,
     });
-    match open {
-        Some(draft) => draft,
-        None => &mut notebook.scratch,
-    }
+    open.expect("the draft field shows only while its file is open as one")
 }
 
 fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {

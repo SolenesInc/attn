@@ -103,14 +103,15 @@ fn input(
         .w_full()
 }
 
-/// The form's field `pick` names, or a spare once the form is gone, so a late edit has somewhere
-/// to land.
 fn field_of(state: &mut State, pick: impl FnOnce(&mut Form) -> &mut TextEdit) -> &mut TextEdit {
-    let automations = &mut state.window.automations;
-    match automations.form.as_mut() {
-        Some(f) => pick(f),
-        None => &mut automations.spare,
-    }
+    pick(
+        state
+            .window
+            .automations
+            .form
+            .as_mut()
+            .expect("the form shows"),
+    )
 }
 
 pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {

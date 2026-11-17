@@ -1163,11 +1163,11 @@ pub(crate) fn tick(state: &mut State, tx: &mut Tx) -> bool {
 /// The text field the launcher shows: the path, or the new worktree's name while the Where
 /// list shows.
 pub(crate) fn field_mut(state: &mut State, which: Which) -> &mut TextEdit {
-    let launching = &mut state.window.launching;
-    if launching.launcher(which).is_none() {
-        return launching.spare();
-    }
-    let launcher = launching.launcher_mut(which).expect("the launcher is open");
+    let launcher = state
+        .window
+        .launching
+        .launcher_mut(which)
+        .expect("the launcher is open");
     match &mut launcher.place {
         Some(place) => &mut place.branch,
         None => &mut launcher.query,

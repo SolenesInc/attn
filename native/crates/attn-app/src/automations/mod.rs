@@ -63,9 +63,6 @@ pub struct Automations {
     pub(crate) run_keys: HashMap<i64, String>,
     pub(crate) pull_request: Option<PullRequestPrompt>,
     pub(crate) form: Option<form::Form>,
-    /// Where an edit lands that a field of the form or the pull request prompt sends after it is
-    /// gone.
-    pub(crate) spare: TextEdit,
 }
 
 impl Automations {
