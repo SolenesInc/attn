@@ -1153,8 +1153,8 @@ fn diagnostic_report(dark: bool) {
     snap(&mut world, "diagnostic-report", dark);
 }
 
-/// Quick Capture open with a message typed, so Send is its primary action. It keeps drafts
-/// only for a profile whose id is a `profile-` uuid.
+/// Quick Capture open on an empty message, so Send is unavailable. It keeps drafts only for a
+/// profile whose id is a `profile-` uuid.
 fn quick_capture_world(dark: bool) -> World {
     const CAPTURE_PROFILE: &str = "profile-0b7f2a3c-1111-4222-8333-444455556666";
     let crew = crew()
@@ -1177,18 +1177,25 @@ fn quick_capture_world(dark: bool) -> World {
     };
     let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
     run(&mut world, Action::OpenQuickCapture);
-    world.capture_gesture(|panel| panel.type_text("Ship the cache fix"));
     world
 }
 
+fn quick_capture_empty(dark: bool) {
+    let mut world = quick_capture_world(dark);
+    snap_capture(&mut world, "quick-capture-empty", dark);
+}
+
+/// Quick Capture with a message typed, so Send is its primary action.
 fn quick_capture(dark: bool) {
     let mut world = quick_capture_world(dark);
+    world.capture_gesture(|panel| panel.type_text("Ship the cache fix"));
     snap_capture(&mut world, "quick-capture", dark);
 }
 
 /// Quick Capture's mailbox list, with the chosen mailbox marked.
 fn quick_capture_mailboxes(dark: bool) {
     let mut world = quick_capture_world(dark);
+    world.capture_gesture(|panel| panel.type_text("Ship the cache fix"));
     world.capture_gesture(|panel| panel.click(Target::key("capture.to")));
     snap_capture(&mut world, "quick-capture-mailboxes", dark);
 }
@@ -2815,6 +2822,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         automation_github(dark);
         automation_advanced(dark);
         diagnostic_report(dark);
+        quick_capture_empty(dark);
         quick_capture(dark);
         quick_capture_mailboxes(dark);
         notebook_file(dark);

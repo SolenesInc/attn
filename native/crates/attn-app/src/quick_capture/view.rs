@@ -10,6 +10,9 @@ use super::{Busy, Face, Panel, history};
 /// The key of the message field, which holds the keyboard while the draft shows.
 pub(crate) const MESSAGE: &str = "capture.message";
 
+/// The message as the Tauri panel sets it, the panel's one big input.
+const MESSAGE_TYPE: rune::TextStyle = rune::TextStyle::new(20.0, 400.0).lh(30.0).tracking(-0.25);
+
 pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
     cx.controls_keep_focus();
     let t = crate::colors(&panel.facts.settings, cx.system_dark()).ui;
@@ -18,7 +21,7 @@ pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
         Face::Compose => compose(panel, &t),
         Face::Recent => recent(panel, &t),
     };
-    col()
+    let frame = col()
         .key("capture")
         .role("dialog")
         .label("Quick Capture")
@@ -26,9 +29,12 @@ pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
         .h_full()
         .fill(t.bg_panel)
         .radius(12.0)
-        .border(1.0, t.border)
-        .padding(space::S3)
-        .gap(space::S2)
+        .border(1.0, t.border);
+    let frame = match panel.face {
+        Face::Compose => frame.pt(18.0).px(22.0).pb(16.0),
+        Face::Recent => frame.padding(space::S3).gap(space::S2),
+    };
+    frame
         .window_drag()
         .preserve_focus_on_press(panel.face == Face::Compose)
         .on_drop_files(
@@ -46,7 +52,10 @@ pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
         .on_drop_hover(|panel: &mut Panel, over: bool, _: &mut Tx| panel.dropping = over)
         .on_window_focus(|panel: &mut Panel, focused: bool, _: &mut Tx| panel.key_window = focused)
         .child(body)
-        .children(alert(panel, &t))
+        .children(alert(panel, &t).map(|a| match panel.face {
+            Face::Compose => a.pt(5.0).pb(8.0),
+            Face::Recent => a,
+        }))
         .children((panel.face == Face::Compose).then(|| footer(panel, &t)))
         .children(panel.picking.map(|at| picker(panel, at, &t)))
         .children(panel.dropping.then(|| drop_zone(&t)))
@@ -60,42 +69,57 @@ fn file_name(path: &std::path::Path) -> String {
 }
 
 fn compose(panel: &Panel, t: &Tokens) -> El {
-    let to = format!("To: {}", panel.label(&panel.mailbox()));
+    let picking = panel.picking.is_some();
+    let to = row()
+        .key("capture.to")
+        .role("button")
+        .label("Send to")
+        .description("⌘K")
+        .expanded(picking)
+        .disabled(!panel.editable())
+        .items_center()
+        .gap(5.0)
+        .ml(-2.0)
+        .px(6.0)
+        .py(4.0)
+        .radius(6.0)
+        .fill(if picking {
+            t.bg_elevated
+        } else {
+            rune::Color::TRANSPARENT
+        })
+        .hover(t.bg_elevated)
+        .focus_ring(2.0, 1.0, t.accent)
+        .on_press_tx(|panel: &mut Panel, _: &mut Tx| super::toggle_picker(panel))
+        .child(
+            text(format!("To: {}", panel.label(&panel.mailbox())))
+                .font(type_::TITLE)
+                .color(t.text_primary),
+        )
+        .child(rune::icon(&attn_ui::icon::CHEVRON_DOWN, 10.0).color(t.text_muted));
+    let recent = row()
+        .key("capture.recent")
+        .role("button")
+        .label("Recent messages")
+        .focus_ring(2.0, 1.0, t.accent)
+        .on_press_tx(|panel: &mut Panel, tx: &mut Tx| history::open(panel, tx))
+        .child(text("Recent").font(type_::CAPTION).color(t.text_secondary));
     let header = row()
         .key("capture.top")
+        .h(28.0)
         .items_center()
-        .gap(space::S2)
-        .child(button(
-            "capture.recent",
-            "Recent messages",
-            "Recent",
-            t,
-            |panel, tx| {
-                history::open(panel, tx);
-            },
-        ))
+        .gap(6.0)
+        .child(to)
         .child(el().grow(1.0))
-        .child(
-            button(
-                "capture.to",
-                "Send to",
-                &format!("{to} ⌄"),
-                t,
-                |panel, _| {
-                    super::toggle_picker(panel);
-                },
-            )
-            .disabled(!panel.editable())
-            .description("⌘K"),
-        );
+        .child(recent);
     let placeholder = format!("Message {}", panel.label(&panel.mailbox()));
     let editable = panel.editable();
-    let field = text_input(&panel.draft.text, type_::BODY)
+    let field = text_input(&panel.draft.text, MESSAGE_TYPE)
         .key(MESSAGE)
         .label("Message")
         .w_full()
         .color(t.text_primary)
-        .placeholder(placeholder, t.text_tertiary)
+        .placeholder(placeholder, t.text_muted)
         .caret(t.text_primary, attn_ui::kit(t).selection())
         .return_breaks_line()
         .disabled(!editable)
@@ -112,6 +136,8 @@ fn compose(panel: &Panel, t: &Tokens) -> El {
         .key("capture.field")
         .w_full()
         .grow(1.0)
+        .pt(10.0)
+        .pb(6.0)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
@@ -119,10 +145,9 @@ fn compose(panel: &Panel, t: &Tokens) -> El {
     col()
         .w_full()
         .grow(1.0)
-        .gap(space::S2)
         .child(header)
         .child(message)
-        .children((!panel.draft.files.is_empty()).then(|| files(panel, t)))
+        .children((!panel.draft.files.is_empty()).then(|| files(panel, t).pt(4.0).pb(12.0)))
 }
 
 /// Pasted files attach to the draft, and so does a pasted image, whether it came alone, as a
@@ -288,9 +313,9 @@ fn footer(panel: &Panel, t: &Tokens) -> El {
             .map(|m| format!("Saved for {}", panel.label(m))),
     };
     let send = if panel.draft.uncertain {
-        "Retry ↵"
+        "Retry"
     } else {
-        "Send ↵"
+        "Send"
     };
     row()
         .key("capture.footer")
@@ -321,24 +346,39 @@ fn footer(panel: &Panel, t: &Tokens) -> El {
                         .color(t.text_muted),
                 ),
         )
-        .child(if panel.can_send() {
-            primary_button(
-                "capture.send",
-                send.trim_end_matches(" ↵"),
-                send,
-                t,
-                super::send,
-            )
-        } else {
-            button(
-                "capture.send",
-                send.trim_end_matches(" ↵"),
-                send,
-                t,
-                super::send,
-            )
-            .disabled(true)
-        })
+        .child(send_button(send, panel.can_send(), t))
+}
+
+/// The panel's primary action: filled `brand` while there is something to send, a quiet chip
+/// while there is not.
+fn send_button(face: &str, enabled: bool, t: &Tokens) -> El {
+    let (fill, ink) = if enabled {
+        (t.brand, t.on_brand)
+    } else {
+        (t.bg_elevated, t.text_muted)
+    };
+    row()
+        .key("capture.send")
+        .role("button")
+        .label(face.to_owned())
+        .disabled(!enabled)
+        .items_center()
+        .gap(10.0)
+        .py(7.0)
+        .pl(14.0)
+        .pr(12.0)
+        .radius(8.0)
+        .fill(fill)
+        .focus_ring(2.0, 1.0, t.accent)
+        .on_press_tx(super::send)
+        .child(text(face.to_owned()).font(type_::TITLE).color(ink))
+        .child(
+            text("↵")
+                .font(rune::TextStyle::new(11.0, 400.0).mono())
+                .color(ink)
+                .opacity(0.7)
+                .a11y_hidden(),
+        )
 }
 
 fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
@@ -357,25 +397,25 @@ fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
             .focus_selected(index == at)
             .w_full()
             .items_center()
-            .gap(space::S2)
-            .px(space::S2)
-            .py(space::S1)
-            .radius(4.0)
+            .gap(10.0)
+            .px(9.0)
+            .py(7.0)
+            .radius(6.0)
             .fill(if index == at {
-                t.bg_selected
-            } else {
                 t.bg_elevated
+            } else {
+                rune::Color::TRANSPARENT
             })
             .on_press_tx(move |panel: &mut Panel, tx: &mut Tx| {
                 super::pick(panel, picked.clone(), tx);
             })
             .child(text(m.name.clone()).font(type_::BODY).color(t.text_primary))
-            .child(text(detail).font(type_::LABEL).color(t.text_tertiary))
+            .child(text(detail).font(type_::CAPTION).color(t.text_muted))
             .child(el().grow(1.0))
             .children((index < 4).then(|| {
                 text(format!("⌘{}", index + 1))
                     .font(type_::MONO_CAPTION)
-                    .color(t.text_tertiary)
+                    .color(t.text_muted)
             }))
             .children((m.id == chosen).then(|| {
                 text("✓")
@@ -389,22 +429,19 @@ fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
         .key("capture.mailboxes")
         .role("listbox")
         .label("Send to")
-        .w(260.0)
-        .padding(space::S1)
-        .gap(2.0)
+        .w(236.0)
+        .padding(5.0)
+        .radius(10.0)
+        .fill(t.bg_panel)
+        .border(1.0, t.border)
+        .shadow(12.0, 32.0, t.shadow.alpha(0.4))
+        .outline(2.0, 1.0, t.accent)
         .children(options);
     el().absolute(0.0, 0.0)
         .w_full()
         .h_full()
         .on_press_tx(|panel: &mut Panel, _: &mut Tx| panel.picking = None)
-        .child(
-            col()
-                .w_full()
-                .items_end()
-                .pt(44.0)
-                .px(space::S3)
-                .child(rune_kit::popover::raised(attn_ui::kit(t), list, 8.0)),
-        )
+        .child(col().w_full().items_start().pt(48.0).pl(18.0).child(list))
 }
 
 fn drop_zone(t: &Tokens) -> El {
@@ -709,33 +746,6 @@ fn button(
     t: &Tokens,
     press: impl Fn(&mut Panel, &mut Tx) + 'static,
 ) -> El {
-    painted_button(
-        key,
-        name,
-        face,
-        (t.bg_button, t.border, t.text_primary),
-        press,
-    )
-}
-
-/// The panel's primary action, filled `brand`.
-fn primary_button(
-    key: &str,
-    name: &str,
-    face: &str,
-    t: &Tokens,
-    press: impl Fn(&mut Panel, &mut Tx) + 'static,
-) -> El {
-    painted_button(key, name, face, (t.brand, t.brand, t.on_brand), press)
-}
-
-fn painted_button(
-    key: &str,
-    name: &str,
-    face: &str,
-    (fill, edge, ink): (rune::Color, rune::Color, rune::Color),
-    press: impl Fn(&mut Panel, &mut Tx) + 'static,
-) -> El {
     row()
         .key(key.to_owned())
         .role("button")
@@ -744,10 +754,14 @@ fn painted_button(
         .px(space::S2)
         .py(space::S1)
         .radius(6.0)
-        .fill(fill)
-        .border(1.0, edge)
+        .fill(t.bg_button)
+        .border(1.0, t.border)
         .on_press_tx(press)
-        .child(text(face.to_owned()).font(type_::LABEL).color(ink))
+        .child(
+            text(face.to_owned())
+                .font(type_::LABEL)
+                .color(t.text_primary),
+        )
 }
 
 fn kind(name: &str, image: bool) -> String {

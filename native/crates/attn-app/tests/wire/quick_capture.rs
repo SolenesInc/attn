@@ -419,6 +419,25 @@ fn the_mailbox_list_opens_with_cmd_k_and_picks_with_the_arrows() {
 }
 
 #[test]
+fn the_send_to_button_says_whether_its_mailbox_list_is_open() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    let expanded = |world: &World| {
+        world
+            .capture_screen()
+            .get(Target::key("capture.to"))
+            .is("expanded")
+    };
+    assert!(!expanded(&world));
+    world.capture_gesture(|d| d.click(Target::key("capture.to")));
+    assert!(expanded(&world));
+    press(&mut world, "escape");
+    assert!(!expanded(&world));
+    rest(&mut world);
+}
+
+#[test]
 fn a_disconnected_send_stays_editable_without_marking_it_uncertain() {
     let (daemon, _) = home();
     let mut world = World::start(daemon);
