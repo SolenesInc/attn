@@ -89,7 +89,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 	until := fs.String("until", "", "only sessions before this date or RFC3339 instant")
 	reopen := fs.Bool("reopen", false, "judge every closed row and print what would bring it back")
 	jsonOut := fs.Bool("json", false, "print the page as JSON")
-	tree := fs.Bool("tree", false, "show every live session nested under its dispatcher")
+	tree := fs.Bool("tree", false, "show every live session, and each closed agent on standby, nested under its dispatcher")
 	if err := parseFlags(fs, args); err != nil {
 		return sessionListArgs{}, err
 	}

@@ -332,7 +332,9 @@ commands:
         show every live session nested under the session that dispatched it,
         sorted by label within each profile and branch. Rows carry short ids,
         agent, state, owed/snoozed turns and seed slugs. A delegate whose
-        dispatcher is closed or absent becomes a root. Shell split provenance
+        dispatcher is closed or absent becomes a root. A closed agent whose seed
+        is on standby stays under its dispatcher with the state standby, and
+        its seed column adds what it waits for. Shell split provenance
         is labeled separately. Ledger filters, paging and --json do not apply;
         use attn list --json for the live session data.
         Inside attn, the tree is limited to your session's profile. Outside

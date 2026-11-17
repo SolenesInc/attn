@@ -20,7 +20,7 @@ stays open and hidden.
 - `rename`: the name people read in the sidebar and the ledger.
 - `transcript`: a session's conversation as timestamped, redacted events.
 - `session-question`: ask a question of a Codex session's conversation and get exact excerpts back.
-- `session-tree`: every live session under the session that dispatched it.
+- `session-tree`: every live session, and each closed agent on standby, under the session that dispatched it.
 - `conversation-move`: /clear, /new, /resume or Codex /agents move a terminal to that conversation's session.
 - `hidden-sessions`: live over a link with no tile showing them, marked hidden.
 - `kept-conversations`: attn's own copy of a Claude conversation its harness would delete: keep the copy forever, release it, or forget it.

@@ -5,6 +5,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
@@ -14,6 +15,46 @@ type sessionTreeNode struct {
 	session  protocol.Session
 	seedSlug string
 	children []*sessionTreeNode
+}
+
+func dormantTreeNode(profileID string, seed protocol.SeedRow, now time.Time) *sessionTreeNode {
+	tender := seed.Standby.Tender
+	return &sessionTreeNode{
+		session: protocol.Session{
+			ID: tender.SessionID, Label: tender.Label, Agent: protocol.SessionAgent(tender.Agent), ProfileID: profileID,
+			State: "standby", SeedID: protocol.Ptr(seed.ID),
+			DispatcherSessionID: tender.DispatcherSessionID, Dispatcher: tender.Dispatcher,
+		},
+		seedSlug: seed.StepSlug + " · " + standbyWaitsFor(seed, now),
+	}
+}
+
+func standbyWaitsFor(seed protocol.SeedRow, now time.Time) string {
+	standby := seed.Standby
+	if protocol.Deref(standby.ResumeBlocked) != "" {
+		return "resume blocked"
+	}
+	if seed.Reminder != nil {
+		if at, err := time.Parse(time.RFC3339, seed.Reminder.At); err == nil {
+			return "until " + shortClock(at.Local(), now)
+		}
+	}
+	if len(standby.PullRequests) > 0 {
+		numbers := make([]string, len(standby.PullRequests))
+		for i, pr := range standby.PullRequests {
+			numbers[i] = "PR " + pr.PRID[strings.LastIndex(pr.PRID, "#"):]
+		}
+		return strings.Join(numbers, ", ")
+	}
+	note, _, _ := strings.Cut(standby.Note, "\n")
+	return note
+}
+
+func shortClock(at, now time.Time) string {
+	if at.Year() == now.Year() && at.YearDay() == now.YearDay() {
+		return at.Format("15:04")
+	}
+	return at.Format("Jan 2 15:04")
 }
 
 func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
@@ -78,6 +119,20 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 		}
 		nodes = append(nodes, node)
 		byID[session.ID] = node
+	}
+	for _, profile := range listed.Profiles {
+		if callerProfileID != "" && profile.ID != callerProfileID || profileID != "" && profile.ID != profileID {
+			continue
+		}
+		onStandby, err := cli.WithGardenProfile(profile.ID, "").SeedListStandby("")
+		if err != nil {
+			return fmt.Errorf("read seeds on standby in profile %s: %w", profile.ID, err)
+		}
+		for _, seed := range onStandby.Seeds {
+			if seed.Standby != nil && seed.Standby.Tender != nil {
+				nodes = append(nodes, dormantTreeNode(profile.ID, seed, time.Now()))
+			}
+		}
 	}
 	if len(nodes) == 0 {
 		fmt.Fprintln(w, emptySessionListMessage(sessionListArgs{profile: profileID}))

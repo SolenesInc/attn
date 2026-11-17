@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -229,4 +230,55 @@ func TestSessionTreeKeepsAgentReadsInTheirProfileWithoutConsumingSeedNotificatio
 		}
 	}
 	t.Fatalf("tree consumed the pending seed notification: %+v", inbox.Items)
+}
+
+func TestSessionTreeShowsAClosedDelegateOnStandbyUnderItsDispatcherWithWhatItWaitsFor(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	cwd := s.Path("shop")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := s.Spawn(app, fakeagent.Claude, cwd, labelled("orchestrator"))
+	s.Launched(source)
+	settle(app, source)
+	started := s.Run(testworld.Invocation{Session: source, Args: []string{
+		"delegate", "--brief", "Merge the discount field", "--cwd", cwd, "--name", "merger", "--model", "default",
+	}})
+	if started.Code != 0 {
+		t.Fatalf("delegate exited %d: %s", started.Code, started.Stderr)
+	}
+	var result delegated
+	started.JSON(t, &result)
+	run := s.Launched(result.SessionID)
+	run.Prompted()
+	run.Reply("Waiting on CI. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, result.SessionID, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+
+	standby := s.Run(testworld.Invocation{Session: result.SessionID, Args: []string{"seed", "standby", result.SeedID, "-m", "Merge once CI is green\nThen tell the orchestrator."}})
+	if standby.Code != 0 {
+		t.Fatalf("seed standby exited %d: %s", standby.Code, standby.Stderr)
+	}
+	testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == result.SessionID
+	})
+
+	got := s.Attn("session", "list", "--tree")
+	if got.Code != 0 {
+		t.Fatalf("session tree exited %d: %s", got.Code, got.Stderr)
+	}
+	var row string
+	for _, line := range strings.Split(got.Stdout, "\n") {
+		if strings.HasPrefix(line, "└─ "+result.SessionID[:8]+"  merger") {
+			row = line
+		}
+	}
+	if row == "" || !strings.Contains(got.Stdout, "\n"+source[:8]+"  orchestrator") {
+		t.Fatalf("tree is missing the dormant row under the orchestrator:\n%s", got.Stdout)
+	}
+	if fields := strings.Fields(row); !strings.Contains(row, "claude") || !slices.Contains(fields, "standby") || !strings.HasSuffix(row, "· Merge once CI is green") {
+		t.Errorf("the dormant row is missing its harness, standby state or what it waits for: %s", row)
+	}
 }

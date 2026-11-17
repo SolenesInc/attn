@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "6b761e3365a4";
+pub const PROTOCOL_VERSION: &str = "6068891eddc4";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -11199,6 +11199,8 @@ pub struct SeedStandbyView {
     pub resume_blocked: Option<String>,
     pub set_at: String,
     pub set_by: ActorView,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tender: Option<StandbyTender>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedTransitionMessage {
@@ -12914,6 +12916,16 @@ impl StandbySessionMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StandbyTender {
+    pub agent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatcher: Option<ActorView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatcher_session_id: Option<SessionID>,
+    pub label: String,
+    pub session_id: SessionID,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StartUpdateMessage {

@@ -17,7 +17,9 @@ address for `peek`, `msg` and `reload`.
 short ids, labels, harnesses, states, owed or snoozed turns, and seed slugs. Use
 it to see which agents belong to the same delegation chain before you act on
 them. A delegate whose dispatcher is closed or absent appears at the root, with a
-label that says so. Shells stay at the root with their split provenance labeled. A crew
+label that says so. A closed agent whose seed is on standby stays in the tree
+with the state `standby`, and its seed column adds what it waits for: a blocked
+resume, its reminder's time, its watched pull requests, or its note. Shells stay at the root with their split provenance labeled. A crew
 dispatcher follows the member's current session. Inside attn, the tree is
 limited to your session's profile. Outside attn, the tree includes all
 profiles. `--profile <id>` narrows either view. Ledger filters and paging do

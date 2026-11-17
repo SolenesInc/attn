@@ -236,6 +236,26 @@ func (g gardenRead) standbyView(seed garden.Seed) *protocol.SeedStandbyView {
 	if blocked := g.daemon.tenderResumes.blockedReason(seed.ID); blocked != "" {
 		view.ResumeBlocked = protocol.Ptr(blocked)
 	}
+	view.Tender = g.standbyTender(seed.Tender)
+	return view
+}
+
+func (g gardenRead) standbyTender(tender who.Party) *protocol.StandbyTender {
+	sessionID, isSession := tender.Session()
+	if !isSession || g.parties.sessions[sessionID].open {
+		return nil
+	}
+	entry := g.daemon.store.SessionLedgerEntry(sessionID)
+	if entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		return nil
+	}
+	view := &protocol.StandbyTender{SessionID: sessionID, Label: entry.Label, Agent: entry.Agent}
+	if dispatcher, dispatched := g.daemon.gardenDispatchersBySession()[sessionID]; dispatched {
+		view.Dispatcher = protocol.Ptr(g.parties.actor(dispatcher))
+		if live, ok := g.daemon.sessionOfActor(dispatcher); ok {
+			view.DispatcherSessionID = protocol.Ptr(live)
+		}
+	}
 	return view
 }
 

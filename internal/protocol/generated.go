@@ -12200,6 +12200,9 @@ type SeedStandbyView struct {
 
 	// SetBy corresponds to the JSON schema field "set_by".
 	SetBy ActorView `json:"set_by"`
+
+	// Tender corresponds to the JSON schema field "tender".
+	Tender *StandbyTender `json:"tender,omitempty,omitzero"`
 }
 
 type SeedTransitionMessage struct {
@@ -14100,6 +14103,24 @@ type StandbySessionMessage struct {
 
 	// Until corresponds to the JSON schema field "until".
 	Until time.Time `json:"until"`
+}
+
+type StandbyTender struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Dispatcher corresponds to the JSON schema field "dispatcher".
+	Dispatcher *ActorView `json:"dispatcher,omitempty,omitzero"`
+
+	// DispatcherSessionID corresponds to the JSON schema field
+	// "dispatcher_session_id".
+	DispatcherSessionID *SessionID `json:"dispatcher_session_id,omitempty,omitzero"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
 }
 
 type StartUpdateMessage struct {

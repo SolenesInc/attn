@@ -343,6 +343,18 @@ tender. To keep an agent closed, park or wither its seed.
 requests the seed watches with their readiness, the seed's reminder, and why
 Attn can't resume the agent when it is blocked.
 
+`attn session list --tree` keeps a closed agent on standby under the agent that
+delegated to it, with the state `standby`. Its seed column names what it waits
+for: "resume blocked", "until" its reminder's time, the pull requests it
+watches, or the first line of its note.
+
+```
+Default (profile-b156a44b-2749-4a0f-9302-f6874ff272be)
+SESSION               AGENT   STATE    TURN  SEED
+dispatch  dispatcher  claude  idle     owed  -
+└─ 6c808e54  merger   claude  standby  -     merger · until 16:50
+```
+
 A resumed agent ends its turn by going on standby again, by harvesting the seed,
 by asking you with `attn ask`, or by reporting. Like any agent that stops, it is
 owed a turn in your queue.

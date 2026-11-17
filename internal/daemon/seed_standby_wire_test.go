@@ -1429,3 +1429,64 @@ func TestAnAnswerResumesATenderOnStandbyAtOnceAfterAnEarlierAnswerResumedIt(t *t
 		resumedAndTypedTheAnswer("the answer 2 minutes after the first resume")
 	})
 }
+
+func standbyTenderIn(m protocol.GardenSeedsChangedMessage, seed string, want func(*protocol.StandbyTender) bool) bool {
+	for _, s := range m.Seeds {
+		if s.ID == seed && s.Standby != nil && want(s.Standby.Tender) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestTheStandbyViewNamesItsTenderWithItsDispatcherOnlyWhileTheTenderIsClosed(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "parent")
+	cwd := w.Path("api")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.SetCodexFolderTrust(cwd, "trusted")
+	request := brief(cwd, "Investigate the tracked task.")
+	request.Agent = protocol.Ptr(string(fakeagent.Codex))
+	request.SourceSessionID = protocol.Ptr(protocol.SessionID("parent"))
+	delegated, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatalf("parent delegates: %v", err)
+	}
+	session, seed := delegated.SessionID, delegated.SeedID
+	first := w.Launched(string(session))
+	first.Prompted()
+
+	if _, err := standbyAs(t, cli, delegated, false); err != nil {
+		t.Fatalf("seed standby --stay: %v", err)
+	}
+	if standby := lifeShow(t, cli, seed).Seed.Standby; standby == nil || standby.Tender != nil {
+		t.Fatalf("the standby of %s while its tender's session is open = %+v, want it on standby with no tender", seed, standby)
+	}
+
+	mark := len(app.Log())
+	onStandbyAndClosed(t, w, cli, delegated, first)
+	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return standbyTenderIn(m, seed, func(tender *protocol.StandbyTender) bool { return tender != nil })
+	})
+	tender := lifeShow(t, cli, seed).Seed.Standby.Tender
+	if tender == nil || tender.SessionID != session || tender.Agent != string(fakeagent.Codex) || tender.Label == "" {
+		t.Fatalf("the standby tender of %s = %+v, want closed session %s running codex, with its label", seed, tender, session)
+	}
+	if protocol.Deref(tender.DispatcherSessionID) != "parent" || tender.Dispatcher == nil || !strings.Contains(string(tender.Dispatcher.Ref), "parent") {
+		t.Fatalf("the standby tender of %s is dispatched by %+v (session %q), want the live session parent", seed, tender.Dispatcher, protocol.Deref(tender.DispatcherSessionID))
+	}
+
+	mark = len(app.Log())
+	registerSessions(t, w, cli, "sender")
+	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
+	w.Launched(string(session))
+	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return standbyTenderIn(m, seed, func(tender *protocol.StandbyTender) bool { return tender == nil })
+	})
+	if standby := lifeShow(t, cli, seed).Seed.Standby; standby == nil || standby.Tender != nil {
+		t.Fatalf("the standby of %s after its tender resumed = %+v, want it on standby with no tender until the tender reads its mail", seed, standby)
+	}
+}

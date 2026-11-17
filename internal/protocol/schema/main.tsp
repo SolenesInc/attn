@@ -6253,6 +6253,21 @@ model SeedStandbyView {
   // Why the last tender resume could not happen and will not retry by itself.
   // Absent while nothing blocks a resume.
   "resume_blocked"?: string;
+  // The closed session attn resumes when mail reaches the seed. Absent while
+  // the tender's session is open, and when a crew member tends the seed.
+  "tender"?: StandbyTender;
+}
+
+// A closed session that tends a seed on standby, as chain views show it under
+// its dispatcher.
+model StandbyTender {
+  "session_id": SessionID;
+  "label": string;
+  "agent": string;
+  // Set while the dispatcher's session is live.
+  "dispatcher_session_id"?: SessionID;
+  // The agent that dispatched the tender. Absent when nobody dispatched it.
+  "dispatcher"?: ActorView;
 }
 
 // A pull request a seed's mailbox watches. `state` is the pull request's own
