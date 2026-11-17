@@ -19,12 +19,6 @@ macro_rules! outline {
     };
 }
 
-outline!(
-    RESIZE_GRIP,
-    10.0,
-    "1",
-    r#"<path d="M9 3 3 9"/><path d="M9 6.5 6.5 9"/>"#
-);
 outline!(CHEVRON_DOWN, 10.0, "1.5", r#"<path d="M2 3.5l3 3 3-3"/>"#);
 outline!(
     GARDEN,

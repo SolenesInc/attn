@@ -4,8 +4,8 @@ use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, TextStyle, Tx, col, memo, row, text};
-use rune_kit::MarkdownStyle;
+use rune::{El, KeyEvent, TextEdit, TextStyle, Tx, col, memo, row, text};
+use rune_kit::{MarkdownStyle, TextArea};
 
 use super::model::{self, Relation, SessionNames};
 use crate::State;
@@ -535,6 +535,55 @@ pub(super) fn quiet_note(key: &str, words: impl Into<String>, ink: rune::Color) 
         .font(type_::CAPTION)
         .color(ink)
         .wrap()
+}
+
+/// How a seed page's words field draws: its type, its padding inside its 1 pt border, its least
+/// height and its corner radius.
+pub(super) struct FieldLook {
+    pub font: TextStyle,
+    pub padding: (f32, f32),
+    pub min_height: f32,
+    pub radius: f32,
+}
+
+pub(super) const FORM_FIELD: FieldLook = FieldLook {
+    font: type_::BODY,
+    padding: (space::S1, space::S1),
+    min_height: 56.0,
+    radius: 4.0,
+};
+
+/// The kit draws a field's border as a ring outside the box's layout, so the padding holds it.
+const FIELD_EDGE: f32 = 1.0;
+
+/// A seed page's form field for words, which its grip drags taller.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn words_field(
+    words: &TextEdit,
+    key: String,
+    label: &str,
+    placeholder: &str,
+    look: &FieldLook,
+    lens: impl for<'a> Fn(&'a mut State) -> &'a mut TextEdit + 'static,
+    keyed: impl Fn(&mut State, &KeyEvent, &mut Tx) -> bool + 'static,
+    t: &Tokens,
+) -> El {
+    TextArea::new(words)
+        .key(key)
+        .width(None)
+        .font(look.font)
+        .padding(look.padding.0 + FIELD_EDGE, look.padding.1 + FIELD_EDGE)
+        .rows(1)
+        .min_height(look.min_height)
+        .resizable()
+        .label(label.to_owned())
+        .placeholder(placeholder.to_owned())
+        .placeholder_ink(t.text_muted)
+        .on_edit(lens)
+        .on_key(keyed)
+        .build(attn_ui::kit(t))
+        .radius(look.radius)
+        .fill(t.bg_input)
 }
 
 pub(super) fn note(key: &str, words: impl Into<String>, t: &Tokens) -> El {

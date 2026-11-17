@@ -8,7 +8,7 @@ use rune::tok::space;
 use rune::{El, KeyEvent, TextEdit, Tx, col, row, text, text_input};
 use rune_kit::{Checkbox, RadioGroup, RadioItem};
 
-use super::sheet::Sheet;
+use super::sheet::{FORM_FIELD, Sheet, words_field};
 use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
@@ -267,16 +267,17 @@ struct Field<'a> {
 impl Field<'_> {
     fn note(&self, words: &TextEdit) -> El {
         let (typed, edited) = (self.spot.clone(), self.spot.clone());
-        self.boxed(
-            text_input(words, type_::BODY)
-                .key(self.spot.field())
-                .return_breaks_line()
-                .label("What should the new agent know? (optional)")
-                .on_edit(move |state: &mut State| edited.words_mut(state))
-                .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                    keyed(&typed, state, ev, Sends::CmdReturn, tx)
-                })
-                .min_h(56.0),
+        words_field(
+            words,
+            self.spot.field(),
+            "What should the new agent know? (optional)",
+            "",
+            &FORM_FIELD,
+            move |state: &mut State| edited.words_mut(state),
+            move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                keyed(&typed, state, ev, Sends::CmdReturn, tx)
+            },
+            self.t,
         )
     }
 

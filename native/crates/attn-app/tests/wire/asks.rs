@@ -1471,23 +1471,24 @@ fn the_note_starts_three_lines_high_and_its_grip_drags_it_taller_but_never_short
     let mut world = start(vec![release_day()], vec![api_working(), web_waiting()]);
     open_drawer(&mut world);
     scroll_to(&mut world, "asks.note.field");
-    let height = |world: &mut World| world.rect("asks.note.field")[3];
-    assert_eq!(height(&mut world), 72.0);
+    let height = |world: &mut World| world.rect("asks.note.field-resizable")[3];
+    let three_lines = 3.0 * 18.0 + 2.0 * (8.0 + 1.0);
+    assert_eq!(height(&mut world), three_lines);
 
-    let [x, y, w, h] = world.rect("asks.note.field.grip");
+    let [x, y, w, h] = world.rect("asks.note.field-grip");
     let grip = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
-    world.gesture(|app| app.drag(Target::key("asks.note.field.grip"), (grip.0, grip.1 + 40.0)));
-    assert_eq!(height(&mut world), 112.0);
+    world.gesture(|app| app.drag(Target::key("asks.note.field-grip"), (grip.0, grip.1 + 40.0)));
+    assert_eq!(height(&mut world), three_lines + 40.0);
 
-    let [x, y, w, h] = world.rect("asks.note.field.grip");
+    let [x, y, w, h] = world.rect("asks.note.field-grip");
     let grip = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
     world.gesture(|app| {
         app.drag(
-            Target::key("asks.note.field.grip"),
+            Target::key("asks.note.field-grip"),
             (grip.0, grip.1 - 200.0),
         )
     });
-    assert_eq!(height(&mut world), 72.0);
+    assert_eq!(height(&mut world), three_lines);
     rest_but_for_ages(&mut world);
 }
 

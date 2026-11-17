@@ -8,7 +8,7 @@ use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Image, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
 use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown};
+use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown, TextArea};
 
 use super::{Chip, Item, Kind, Lists, mentions, questions};
 use crate::State;
@@ -466,15 +466,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     Some(answers) => Shown::Replied(answers.iter().find(|a| a.key == question.key)),
                     None => Shown::Draft(draft.and_then(|d| d.answers.get(&question.key))),
                 };
-                question_card(
-                    &ask.id,
-                    index,
-                    question,
-                    answer,
-                    &prose,
-                    &state.window.asks.heights,
-                    t,
-                )
+                question_card(&ask.id, index, question, answer, &prose, t)
             }
             None => col()
                 .key(format!("asks.part.{at}"))
@@ -495,11 +487,12 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         None => {
             let edit = draft.map(|d| &d.note);
             let id = ask.id.clone();
-            Some(written_area(
-                field(edit, NOTE, "Note", &note_placeholder, t)
-                    .on_edit(move |state: &mut State| state.note(&id)),
+            Some(written_field(
+                edit,
                 NOTE,
-                &state.window.asks.heights,
+                "Note",
+                &note_placeholder,
+                move |state: &mut State| state.note(&id),
                 t,
             ))
         }
@@ -622,7 +615,6 @@ fn question_card(
     question: &AskQuestion,
     answer: Shown<'_>,
     prose: &Prose<'_>,
-    heights: &HashMap<String, f32>,
     t: &Tokens,
 ) -> El {
     let kind = Kind::of(question);
@@ -660,7 +652,7 @@ fn question_card(
         .filter(|c| !c.is_empty())
         .map(|c| prose.markdown(c).w_full());
     let body = match kind {
-        Kind::Text => written(ask, question, &answer, heights, t),
+        Kind::Text => written(ask, question, &answer, t),
         Kind::One | Kind::Any => choices(ask, question, kind, &answer, t),
     };
     col()
@@ -693,13 +685,7 @@ const INDEX_TYPE: rune::TextStyle = rune::TextStyle {
 const PADDING_Y: f32 = 14.0;
 const QUESTION_GAP: f32 = 10.0;
 
-fn written(
-    ask: &str,
-    question: &AskQuestion,
-    answer: &Shown<'_>,
-    heights: &HashMap<String, f32>,
-    t: &Tokens,
-) -> El {
+fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) -> El {
     let key = question.key.clone();
     match answer {
         Shown::Replied(answer) => replied_text(
@@ -717,11 +703,12 @@ fn written(
             };
             let (ask_id, q) = (ask.to_owned(), key.clone());
             let field_key = text_key(&key);
-            let field = written_area(
-                field(edit, &field_key, &question.prompt, &placeholder, t)
-                    .on_edit(move |state: &mut State| &mut state.answer(&ask_id, &q).text),
+            let field = written_field(
+                edit,
                 &field_key,
-                heights,
+                &question.prompt,
+                &placeholder,
+                move |state: &mut State| &mut state.answer(&ask_id, &q).text,
                 t,
             );
             let suggestion = question
@@ -737,7 +724,8 @@ fn written(
                         t,
                     )
                     .on_press(move |state: &mut State| {
-                        state.answer(&ask_id, &q).text = rune::TextEdit::new(r.clone());
+                        let answer = state.answer(&ask_id, &q);
+                        answer.text = super::rewritten(&answer.text, r.clone());
                     })
                 });
             col()
@@ -941,33 +929,41 @@ fn field(
         .on_input_key(field_key)
 }
 
-/// The Tauri app's `textarea rows={3}` with `resize: vertical`: `input` three lines high, with a
-/// grip in its corner that drags it taller.
-fn written_area(input: El, key: &str, heights: &HashMap<String, f32>, t: &Tokens) -> El {
-    let height = heights.get(key).copied().unwrap_or(WRITTEN_HEIGHT);
-    let dragged = key.to_owned();
-    let grip = rune::icon(&attn_ui::icon::RESIZE_GRIP, 10.0)
-        .key(format!("{key}.grip"))
-        .color(t.text_tertiary)
-        .cursor(rune::Cursor::ResizeRow)
-        .pin(None, None, Some(3.0), Some(3.0))
-        .on_drag(
-            move |state: &mut State, drag: &mut rune::Drag, _: &mut Tx| {
-                let heights = &mut state.window.asks.heights;
-                match drag.phase {
-                    rune::Phase::Down => drag.data = height,
-                    rune::Phase::Move => {
-                        heights.insert(dragged.clone(), (drag.data + drag.dy).max(WRITTEN_HEIGHT));
-                    }
-                    rune::Phase::Up => {}
-                }
-            },
-        );
-    col().w_full().child(input.h(height)).child(grip)
+/// The Tauri app's `.asks-note`, a `textarea rows={3}` with `resize: vertical`.
+fn written_field(
+    edit: Option<&rune::TextEdit>,
+    key: &str,
+    label: &str,
+    placeholder: &str,
+    lens: impl for<'a> Fn(&'a mut State) -> &'a mut rune::TextEdit + 'static,
+    t: &Tokens,
+) -> El {
+    let empty = rune::TextEdit::default();
+    TextArea::new(edit.unwrap_or(&empty))
+        .key(key.to_owned())
+        .width(None)
+        .font(WRITTEN_TYPE)
+        .padding(10.0 + EDGE, 8.0 + EDGE)
+        .min_height(0.0)
+        .resizable()
+        .label(label.to_owned())
+        .placeholder(placeholder.to_owned())
+        .placeholder_ink(t.text_muted)
+        .on_edit(lens)
+        .on_key(field_key)
+        .build(attn_ui::kit(t))
+        .radius(8.0)
+        .fill(t.bg_input)
 }
 
-/// Three lines of `--font-size-md` text at 1.4, inside the field's padding and edge.
-const WRITTEN_HEIGHT: f32 = 72.0;
+/// The Tauri field's 1 px border, which the kit draws as a ring outside the box's layout.
+const EDGE: f32 = 1.0;
+
+/// `--font-size-md` at the Tauri field's `line-height: 1.4`.
+const WRITTEN_TYPE: rune::TextStyle = rune::TextStyle {
+    line_height: 18.0,
+    ..type_::BODY
+};
 
 /// A drawer field's keys it does not take as text: ⌘↩ sends and Escape closes.
 fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {

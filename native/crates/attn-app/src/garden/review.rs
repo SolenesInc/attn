@@ -9,12 +9,12 @@ use attn_protocol::{
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
-use rune::{Align, El, Key, KeyEvent, TextEdit, TextStyle, Tx, col, row, text, text_input};
+use rune::{Align, El, Key, KeyEvent, TextEdit, TextStyle, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, ScrollBar};
 
 use super::handover::Handover;
 use super::model::{self, Index};
-use super::sheet::Sheet;
+use super::sheet::{FieldLook, Sheet, words_field};
 use super::spot::{Sends, Spot};
 use super::view::{kit_button, text_button};
 use super::{BODY, Mode};
@@ -816,6 +816,14 @@ const SEED_TITLE: TextStyle = TextStyle::new(25.0, 570.0).lh(30.0).tracking(-0.5
 
 /// The review's running text, `.garden-review__problem p` and its kin.
 const PROSE: TextStyle = type_::BODY.lh(18.85);
+
+/// `.garden-review__composer textarea`.
+const COMPOSER_FIELD: FieldLook = FieldLook {
+    font: PROSE,
+    padding: (10.0, 8.0),
+    min_height: 82.0,
+    radius: 5.0,
+};
 
 const RAIL_WIDTH: f32 = 248.0;
 const RAIL_NUMBER: TextStyle = TextStyle::new(10.0, 400.0).mono();
@@ -1808,31 +1816,25 @@ fn lifecycle_form(state: &State, spot: &Spot, kind: Kind, t: &Tokens) -> El {
                 )
                 .child(small("optional", t.text_muted)),
         )
-        .child(
-            text_input(written, PROSE)
-                .key(spot.field())
-                .return_breaks_line()
-                .label(kind.prompt())
-                .on_edit(move |state: &mut State| edited.words_mut(state))
-                .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                    let home = typed.key("open");
-                    typed.field_key(
-                        state,
-                        ev,
-                        (&home, Sends::CmdReturn),
-                        |state, words, tx| lifecycle(&typed, kind, state, words, tx),
-                        tx,
-                    )
-                })
-                .w_full()
-                .min_h(82.0)
-                .color(t.text_primary)
-                .fill(t.bg_input)
-                .border(1.0, t.brand)
-                .radius(5.0)
-                .px(10.0)
-                .py(8.0),
-        );
+        .child(words_field(
+            written,
+            spot.field(),
+            kind.prompt(),
+            "",
+            &COMPOSER_FIELD,
+            move |state: &mut State| edited.words_mut(state),
+            move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                let home = typed.key("open");
+                typed.field_key(
+                    state,
+                    ev,
+                    (&home, Sends::CmdReturn),
+                    |state, words, tx| lifecycle(&typed, kind, state, words, tx),
+                    tx,
+                )
+            },
+            t,
+        ));
     if let Some(failure) = shown.failure {
         form = form.child(failed(&spot.key("error"), failure, t));
     }

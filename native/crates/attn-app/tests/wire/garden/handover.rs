@@ -347,3 +347,31 @@ fn dismisses_a_composer_before_the_dock_after_returning_from_fullscreen() {
     assert!(garden_shown(&world));
     assert!(rests(&mut world));
 }
+
+#[test]
+fn the_note_s_grip_drags_it_taller_and_back_without_losing_its_words() {
+    let mut world = opened(vec![continued(placed())], |r| Some(handed_over(r)));
+    click(&mut world, "Handover");
+    world.gesture(|app| app.type_text("Continue from the parser tests."));
+    let height = |world: &mut World| world.rect("garden.handover.field-resizable")[3];
+    let least = height(&mut world);
+
+    let drag = |world: &mut World, by: f32| {
+        let [x, y, w, h] = world.rect("garden.handover.field-grip");
+        let grip = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+        world.gesture(|app| {
+            app.drag(
+                Target::key("garden.handover.field-grip"),
+                (grip.0, grip.1 + by),
+            )
+        });
+    };
+    drag(&mut world, 40.0);
+    assert_eq!(height(&mut world), least + 40.0);
+    drag(&mut world, -200.0);
+    assert_eq!(height(&mut world), least);
+    assert_eq!(
+        value(&world, "field").as_deref(),
+        Some("Continue from the parser tests.")
+    );
+}

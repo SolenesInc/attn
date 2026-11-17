@@ -4,10 +4,10 @@ use attn_protocol::{
 };
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, KeyEvent, Tx, col, row, text, text_input};
+use rune::{El, KeyEvent, Tx, col, row, text};
 
 use super::model;
-use super::sheet::Sheet;
+use super::sheet::{FORM_FIELD, Sheet, words_field};
 use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
@@ -161,30 +161,25 @@ impl Sheet<'_> {
                     .color(t.text_secondary)
                     .a11y_hidden(),
             )
-            .child(
-                text_input(written, type_::BODY)
-                    .key(spot.field())
-                    .return_breaks_line()
-                    .label("What should Chief know? (optional)")
-                    .on_edit(move |state: &mut State| edited.words_mut(state))
-                    .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                        let home = typed.key("open");
-                        typed.field_key(
-                            state,
-                            ev,
-                            (&home, Sends::CmdReturn),
-                            |state, words, tx| send_to_chief(&typed, state, rev, words, tx),
-                            tx,
-                        )
-                    })
-                    .w_full()
-                    .min_h(56.0)
-                    .color(t.text_primary)
-                    .fill(t.bg_input)
-                    .border(1.0, t.border_focus)
-                    .radius(4.0)
-                    .padding(space::S1),
-            );
+            .child(words_field(
+                written,
+                spot.field(),
+                "What should Chief know? (optional)",
+                "",
+                &FORM_FIELD,
+                move |state: &mut State| edited.words_mut(state),
+                move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                    let home = typed.key("open");
+                    typed.field_key(
+                        state,
+                        ev,
+                        (&home, Sends::CmdReturn),
+                        |state, words, tx| send_to_chief(&typed, state, rev, words, tx),
+                        tx,
+                    )
+                },
+                t,
+            ));
         if let Some(failure) = shown.failure {
             form = form.child(
                 text(failure.to_owned())

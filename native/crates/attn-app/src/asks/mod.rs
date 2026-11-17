@@ -28,8 +28,6 @@ pub struct Asks {
     pub(crate) sending: Option<String>,
     /// Why the daemon refused the answer to an ask, shown under that ask.
     pub(crate) error: Option<(String, String)>,
-    /// The written fields' heights, by field key, once their grips dragged them taller.
-    pub(crate) heights: HashMap<String, f32>,
     /// The ask, and whether it was replied, that the keyboard last moved into.
     focused_on: Option<(String, bool)>,
     /// The keyboard moves into the drawer at the next follow, whatever it shows.
@@ -41,6 +39,13 @@ pub struct Asks {
 pub(crate) struct Draft {
     pub answers: BTreeMap<String, Answer>,
     pub note: TextEdit,
+}
+
+/// `edit` holding `text` instead, at the height its grip was dragged to.
+pub(crate) fn rewritten(edit: &TextEdit, text: String) -> TextEdit {
+    let mut rewritten = TextEdit::new(text);
+    rewritten.set_dragged_height(edit.dragged_height());
+    rewritten
 }
 
 #[derive(Default)]
@@ -498,7 +503,7 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
         let answer = state.answer(ask, &key);
         match kind {
             Kind::Text => {
-                answer.text = TextEdit::new(value);
+                answer.text = rewritten(&answer.text, value);
                 answer.picked.clear();
                 answer.other = TextEdit::default();
             }

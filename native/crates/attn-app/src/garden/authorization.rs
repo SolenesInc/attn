@@ -1,10 +1,9 @@
 use attn_protocol::{Seed, SeedAuthorization, SeedAuthorizationMessage};
 use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, KeyEvent, Tx, row, text, text_input};
+use rune::{El, KeyEvent, Tx, row, text};
 
 use super::model;
-use super::sheet::{Sheet, meta_word, page_heading, page_region};
+use super::sheet::{FORM_FIELD, Sheet, meta_word, page_heading, page_region, words_field};
 use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
@@ -102,37 +101,29 @@ impl Sheet<'_> {
         if let Some(written) = shown.words {
             let (typed, edited) = (spot.clone(), spot.clone());
             section = section
-                .child(
-                    text_input(written, type_::BODY)
-                        .key(spot.field())
-                        .label(format!(
-                            "Authorize {}: the steps agents take beyond the project's guidance, and where they stop",
-                            here.id
-                        ))
-                        .placeholder(
-                            "Land on main once the checks pass. Ask me before releasing.",
-                            t.text_muted,
+                .child(words_field(
+                    written,
+                    spot.field(),
+                    &format!(
+                        "Authorize {}: the steps agents take beyond the project's guidance, and where they stop",
+                        here.id
+                    ),
+                    "Land on main once the checks pass. Ask me before releasing.",
+                    &FORM_FIELD,
+                    move |state: &mut State| edited.words_mut(state),
+                    move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                        let home = typed.key("edit");
+                        let had = !words.is_empty();
+                        typed.field_key(
+                            state,
+                            ev,
+                            (&home, Sends::Return),
+                            |state, words, tx| commit(&typed, state, words, had, tx),
+                            tx,
                         )
-                        .on_edit(move |state: &mut State| edited.words_mut(state))
-                        .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                            let home = typed.key("edit");
-                            let had = !words.is_empty();
-                            typed.field_key(
-                                state,
-                                ev,
-                                (&home, Sends::Return),
-                                |state, words, tx| commit(&typed, state, words, had, tx),
-                                tx,
-                            )
-                        })
-                        .w_full()
-                        .min_h(56.0)
-                        .color(t.text_primary)
-                        .fill(t.bg_input)
-                        .border(1.0, t.accent)
-                        .radius(4.0)
-                        .padding(space::S1),
-                )
+                    },
+                    t,
+                ))
                 .child(meta_word("⏎ save · ⇧⏎ new line · esc cancel", t).a11y_hidden());
         }
         if let Some(failure) = shown.failure {
