@@ -17,6 +17,7 @@ pub trait BrowserHost {
     /// Goes back one page in the page's history, if it has one.
     fn back(&mut self, page: &TileKey);
     fn forward(&mut self, page: &TileKey);
+    fn zoom(&mut self, page: &TileKey, toward: crate::keymap::Zoom);
     /// Frees the page, so its web content process ends.
     fn close(&mut self, page: &TileKey);
     /// Shows the page over `at` in window points, clipped to `at`'s visible part, or hides it.

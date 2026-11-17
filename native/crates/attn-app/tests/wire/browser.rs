@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use attn_app::browser::{self, Alert, AlertKind, BrowserHost, Control, Heard, Placement};
-use attn_app::{Action, Binding, Keymap};
+use attn_app::{Action, Binding, Keymap, Zoom};
 use attn_client::TileKey;
 use attn_protocol::{
     BrowserControlRequestMessage, CalloutShowRequestMessage, CalloutStep, Desktop, DesktopPane,
@@ -28,6 +28,7 @@ enum Asked {
     Reload,
     Back,
     Forward,
+    Zoom(Zoom),
     Close,
     Place(Option<Placement>),
     Focus(bool),
@@ -84,6 +85,9 @@ impl BrowserHost for Scripted {
     }
     fn forward(&mut self, _: &TileKey) {
         self.0.0.borrow_mut().push(Asked::Forward);
+    }
+    fn zoom(&mut self, _: &TileKey, toward: Zoom) {
+        self.0.0.borrow_mut().push(Asked::Zoom(toward));
     }
     fn close(&mut self, _: &TileKey) {
         self.0.0.borrow_mut().push(Asked::Close);
@@ -881,7 +885,8 @@ fn a_click_in_the_page_gives_it_the_keyboard_and_the_window_takes_back_only_the_
 }
 
 #[test]
-fn the_browser_keys_reload_the_focused_page_and_walk_its_history_instead_of_their_attn_actions() {
+fn the_browser_keys_reload_zoom_and_walk_the_history_of_the_focused_page_instead_of_their_attn_actions()
+ {
     let (mut world, engine) = start(START);
     page_says(&mut world, Heard::Focused { page: page() });
     engine.take();
@@ -890,6 +895,9 @@ fn the_browser_keys_reload_the_focused_page_and_walk_its_history_instead_of_thei
         (Action::SessionRefreshPrs, Asked::Reload),
         (Action::SessionHistoryBack, Asked::Back),
         (Action::SessionHistoryForward, Asked::Forward),
+        (Action::UiIncreaseFontSize, Asked::Zoom(Zoom::In)),
+        (Action::UiDecreaseFontSize, Asked::Zoom(Zoom::Out)),
+        (Action::UiResetFontSize, Asked::Zoom(Zoom::ActualSize)),
     ] {
         press(&mut world, action.clone());
         assert_eq!(engine.take(), vec![asked], "{}", action.id());

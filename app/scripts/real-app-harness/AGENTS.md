@@ -84,6 +84,11 @@ repository root.
   key and paste text as one keystroke; the driver refuses them unreceipted.
   Pass `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers`
   for `pressKey` and `pressKeyCode`.
+- On macOS, the in-app `pressKey` hands a chord straight to the focused
+  webview and the menu, so it skips AppKit's event queue and the app's local
+  key monitor, which is where a browser tile's page keys are taken. Pass
+  `{ queued: true }` to post the key into the queue instead, as a real key
+  arrives. A queued key has no receipt, so wait for its effect.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need

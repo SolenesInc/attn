@@ -136,7 +136,7 @@ export class TargetedWindowDriver {
   }
 
   async pressKey(key, modifiers = {}, opts = {}) {
-    return this.#keys({ kind: 'key', key, modifiers }, 1, `pressKey(${JSON.stringify(key)}, ${JSON.stringify(modifiers)})`, opts);
+    return this.#keys({ kind: 'key', key, modifiers, queued: opts.queued }, 1, `pressKey(${JSON.stringify(key)}, ${JSON.stringify(modifiers)})`, opts);
   }
 
   async pressKeyCode(keyCode, modifiers = {}, opts = {}) {

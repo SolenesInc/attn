@@ -5,6 +5,7 @@ use std::sync::{LazyLock, Mutex};
 use block2::RcBlock;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSEvent, NSEventMask, NSEventModifierFlags};
+use objc2_web_kit::WKWebView;
 use serde::Deserialize;
 use tauri::{AppHandle, Manager};
 
@@ -37,10 +38,27 @@ pub struct Chord {
     then: Combo,
 }
 
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PageAction {
+    Back,
+    Forward,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
+}
+
+#[derive(Deserialize)]
+pub struct PageKey {
+    action: PageAction,
+    combo: Combo,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Configuration {
     pop_out: Option<Binding>,
+    page_keys: Vec<PageKey>,
     chords: Vec<Chord>,
     timeout_ms: f64,
     default_menu: bool,
@@ -213,16 +231,23 @@ fn key(event: &NSEvent) -> Key {
     }
 }
 
-fn decide(state: &mut State, label: &str, key: &Key) -> (bool, Option<String>) {
+enum Decision {
+    Pass,
+    Swallow,
+    Shortcut(String),
+    Page(PageAction),
+}
+
+fn decide(state: &mut State, label: &str, key: &Key) -> Decision {
     if state.capture_suspended {
-        return (false, None);
+        return Decision::Pass;
     }
     if key.meta && !key.ctrl && !key.alt && !key.shift && key.key.eq_ignore_ascii_case("w") {
         state.pending = None;
-        return (false, None);
+        return Decision::Pass;
     }
     let Some(config) = state.config.as_ref() else {
-        return (false, None);
+        return Decision::Pass;
     };
     if state.pending.as_ref().is_some_and(|pending| {
         pending.label != label || (key.timestamp - pending.started) * 1000.0 >= config.timeout_ms
@@ -232,7 +257,7 @@ fn decide(state: &mut State, label: &str, key: &Key) -> (bool, Option<String>) {
     if let Some(pending) = state.pending.as_mut() {
         if key.key == "Escape" {
             state.pending = None;
-            return (true, None);
+            return Decision::Swallow;
         }
         if let Some(candidate) = pending
             .candidates
@@ -241,17 +266,26 @@ fn decide(state: &mut State, label: &str, key: &Key) -> (bool, Option<String>) {
         {
             let id = candidate.id.clone();
             state.pending = None;
-            return (true, Some(id));
+            return Decision::Shortcut(id);
         }
         if key.repeat || pending.leader.matches(key) {
             pending.started = key.timestamp;
-            return (true, None);
+            return Decision::Swallow;
         }
         state.pending = None;
-        return (true, None);
+        return Decision::Swallow;
+    }
+    if let Some(page_key) = config
+        .page_keys
+        .iter()
+        .find(|page_key| page_key.combo.matches(key))
+    {
+        return Decision::Page(page_key.action);
     }
     match config.pop_out.as_ref() {
-        Some(Binding::Single(combo)) if combo.matches(key) => (true, Some("tile.popOut".into())),
+        Some(Binding::Single(combo)) if combo.matches(key) => {
+            Decision::Shortcut("tile.popOut".into())
+        }
         Some(Binding::Chord { leader, .. }) if leader.matches(key) => {
             let candidates = config
                 .chords
@@ -265,9 +299,38 @@ fn decide(state: &mut State, label: &str, key: &Key) -> (bool, Option<String>) {
                 candidates,
                 started: key.timestamp,
             });
-            (true, None)
+            Decision::Swallow
         }
-        _ => (false, None),
+        _ => Decision::Pass,
+    }
+}
+
+const PAGE_ZOOM_STEPS: [f64; 11] = [0.5, 0.75, 0.85, 1.0, 1.15, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+
+fn zoom_step_above(current: f64) -> f64 {
+    PAGE_ZOOM_STEPS
+        .into_iter()
+        .find(|step| *step > current + f64::EPSILON)
+        .unwrap_or(current)
+}
+
+fn zoom_step_below(current: f64) -> f64 {
+    PAGE_ZOOM_STEPS
+        .into_iter()
+        .rev()
+        .find(|step| *step < current - f64::EPSILON)
+        .unwrap_or(current)
+}
+
+fn act_on_page(web: &WKWebView, action: PageAction) {
+    unsafe {
+        match action {
+            PageAction::Back => web.goBack_(None),
+            PageAction::Forward => web.goForward_(None),
+            PageAction::ZoomIn => web.setPageZoom(zoom_step_above(web.pageZoom())),
+            PageAction::ZoomOut => web.setPageZoom(zoom_step_below(web.pageZoom())),
+            PageAction::ZoomReset => web.setPageZoom(1.0),
+        }
     }
 }
 
@@ -313,16 +376,17 @@ pub fn install(app: &AppHandle) {
             return event.as_ptr();
         }
         state.previous = Some(fingerprint);
-        let (consumed, id) = decide(&mut state, &label, &key);
+        let decision = decide(&mut state, &label, &key);
         drop(state);
-        if let Some(id) = id {
-            dispatch(&app, &label, &id);
+        match decision {
+            Decision::Pass => return event.as_ptr(),
+            Decision::Swallow => {}
+            Decision::Shortcut(id) => dispatch(&app, &label, &id),
+            Decision::Page(action) => {
+                act_on_page(unsafe { &*(responder as *const WKWebView) }, action)
+            }
         }
-        if consumed {
-            std::ptr::null_mut()
-        } else {
-            event.as_ptr()
-        }
+        std::ptr::null_mut()
     });
     let monitor = unsafe {
         NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &block)

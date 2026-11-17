@@ -35,6 +35,7 @@ use rune::{Key, KeyEvent, Mods};
 use serde_json::{Map, Value, json};
 
 use super::{Alert, AlertKind, BrowserHost, Control, Heard, Placement};
+use crate::keymap::Zoom;
 
 /// The agent's page script, built from `app/src/browser/runtime.ts` for both apps.
 const RUNTIME_JS: &str = include_str!("../../../../../app/src-tauri/generated/browser-runtime.js");
@@ -281,6 +282,12 @@ impl BrowserHost for WebKitHost {
         }
     }
 
+    fn zoom(&mut self, page: &TileKey, toward: Zoom) {
+        if let Some(web) = self.web(page) {
+            unsafe { web.setPageZoom(next_zoom(web.pageZoom(), toward)) };
+        }
+    }
+
     fn close(&mut self, page: &TileKey) {
         let Some(shown) = self.pages.remove(page) else {
             return;
@@ -385,6 +392,22 @@ impl BrowserHost for WebKitHost {
 }
 
 /// Runs `action` in the agent's script world on the page, with `done` given its JSON answer.
+const ZOOM_STEPS: [f64; 11] = [0.5, 0.75, 0.85, 1.0, 1.15, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+
+fn next_zoom(current: f64, toward: Zoom) -> f64 {
+    let step = match toward {
+        Zoom::In => ZOOM_STEPS
+            .into_iter()
+            .find(|step| *step > current + f64::EPSILON),
+        Zoom::Out => ZOOM_STEPS
+            .into_iter()
+            .rev()
+            .find(|step| *step < current - f64::EPSILON),
+        Zoom::ActualSize => Some(1.0),
+    };
+    step.unwrap_or(current)
+}
+
 fn run_page_action(
     web: &WKWebView,
     world: &WKContentWorld,

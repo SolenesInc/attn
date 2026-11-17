@@ -28,6 +28,14 @@ import {
   findConflict,
 } from '../shortcuts/resolver';
 
+const BROWSER_PAGE_KEYS = [
+  ['session.historyBack', 'back'],
+  ['session.historyForward', 'forward'],
+  ['ui.increaseFontSize', 'zoomIn'],
+  ['ui.decreaseFontSize', 'zoomOut'],
+  ['ui.resetFontSize', 'zoomReset'],
+] as const satisfies ReadonlyArray<readonly [ShortcutId, string]>;
+
 // binding -> rebind, null -> unbind, undefined -> reset to default (drop override).
 export type OverrideChange = Binding | null | undefined;
 
@@ -92,8 +100,12 @@ export function KeybindingsProvider({ children }: { children: ReactNode }) {
       && !!popOut.alt === !!defaultBinding.alt && !!popOut.shift === !!defaultBinding.shift;
     const chords = resolvedShortcutEntries().flatMap(([id, binding]) =>
       isChord(binding) ? [{ id, leader: binding.leader, then: binding.then }] : []);
+    const pageKeys = BROWSER_PAGE_KEYS.flatMap(([id, action]) => {
+      const combo = resolveBinding(id);
+      return combo && !isChord(combo) ? [{ action, combo }] : [];
+    });
     void invoke('browser_shortcut_configure', {
-      config: { popOut, chords, timeoutMs: LEADER_TIMEOUT_MS, defaultMenu },
+      config: { popOut, pageKeys, chords, timeoutMs: LEADER_TIMEOUT_MS, defaultMenu },
     }).catch((error) => console.error('[BrowserHost] Failed to configure shortcuts:', error));
   }, [config]);
 
