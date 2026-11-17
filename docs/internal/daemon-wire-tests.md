@@ -156,6 +156,10 @@ On a `fakeagent.Run`:
   waits until the job runner is idle, moves the clock one schedule tick, and
   waits until the runner is idle again, so `done` reads settled state. It fails
   after `scheduleTickLimit` ticks.
+- A test that counts the facts job runs publish, such as `task.changed`, calls
+  `w.awaitJobsSettled()` before it counts. `testworld.AwaitTaskDone` returns as
+  soon as the task list shows the run done, and the runner publishes that
+  run's last `task.changed` fact after saving it done.
 - `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A terminal's
   `WorkerReportsItsProcessRunning()` sends what a PTY worker sends once the
   daemon watches it, before the agent has started. Each hold on a terminal

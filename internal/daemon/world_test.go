@@ -364,6 +364,20 @@ func (w *world) tickSchedulesUntil(what string, done func() bool) {
 	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
 }
 
+// awaitJobsSettled waits until the job runner has no work in hand. A run is in hand until it has published its last
+// task.changed fact, which comes after the task list already shows the run done.
+func (w *world) awaitJobsSettled() {
+	w.T.Helper()
+	if w.bubbled {
+		w.T.Fatal("awaitJobsSettled reads the stepped clock, which a world inBubble does not have")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if !w.clock.AwaitIdle(ctx) {
+		w.T.Fatalf("the job runner was still busy after %s", fakeagent.HangGuard)
+	}
+}
+
 func (w *world) tickSchedulesUntilPaused(what string, pause *testworld.Pause) {
 	w.T.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)

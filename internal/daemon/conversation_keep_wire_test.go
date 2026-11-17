@@ -788,7 +788,7 @@ func TestSeedNotesLeaveConversationKeepIdleAndHarvestStillReleasesTheCopy(t *tes
 	first := w.Launched(string(delegated.SessionID))
 	first.Prompted()
 	closePane(app, sessionPane{session: string(delegated.SessionID)})
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	w.awaitJobsSettled()
 	kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if kept == nil || kept.DeleteAfter != nil {
 		t.Fatalf("open seed's kept conversation: %+v", kept)
