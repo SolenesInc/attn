@@ -41,7 +41,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
-        if let Some(action) = second {
+        if let Some(action) = second
+            && !crate::browser::press_page_key(state, &action, tx)
+        {
             run_shortcut(state, action, tx);
         }
         return true;
@@ -107,7 +109,7 @@ fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => {
-            crate::browser::press_page_key(state, &action)
+            crate::browser::press_page_key(state, &action, tx)
                 || run_shortcut(state, action, tx)
                 || send_to_terminal(state, terminal, ev, tx)
         }

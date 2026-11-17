@@ -98,14 +98,21 @@ export function KeybindingsProvider({ children }: { children: ReactNode }) {
       && popOut.key === defaultBinding.key && popOut.code === defaultBinding.code
       && !!popOut.meta === !!defaultBinding.meta && !!popOut.ctrl === !!defaultBinding.ctrl
       && !!popOut.alt === !!defaultBinding.alt && !!popOut.shift === !!defaultBinding.shift;
+    const pageActions = new Map<ShortcutId, string>(BROWSER_PAGE_KEYS);
     const chords = resolvedShortcutEntries().flatMap(([id, binding]) =>
-      isChord(binding) ? [{ id, leader: binding.leader, then: binding.then }] : []);
+      isChord(binding) ? [{ id, leader: binding.leader, then: binding.then, page: pageActions.get(id) }] : []);
     const pageKeys = BROWSER_PAGE_KEYS.flatMap(([id, action]) => {
       const combo = resolveBinding(id);
       return combo && !isChord(combo) ? [{ action, combo }] : [];
     });
     void invoke('browser_shortcut_configure', {
-      config: { popOut, pageKeys, chords, timeoutMs: LEADER_TIMEOUT_MS, defaultMenu },
+      config: {
+        popOut: popOut && !isChord(popOut) ? popOut : null,
+        pageKeys,
+        chords,
+        timeoutMs: LEADER_TIMEOUT_MS,
+        defaultMenu,
+      },
     }).catch((error) => console.error('[BrowserHost] Failed to configure shortcuts:', error));
   }, [config]);
 

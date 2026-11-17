@@ -129,7 +129,7 @@ Steps:
 
 ## Tests
 
-- Scenario: `browser-page-keys`, macOS only, presses, through AppKit's event queue, ⌘[ and ⌘] in a focused page to go back and forward, and ⌘=, ⌘- and ⌘0 to zoom it, leaving the app's text size alone.
+- Scenario: `browser-page-keys`, macOS only, presses, through AppKit's event queue, ⌘[ and ⌘] in a focused page to go back and forward, and ⌘=, ⌘- and ⌘0 to zoom it, leaving the app's text size alone, then does the same with those actions rebound to leader sequences.
 - Packaged CLI: `browser-wait-navigation` checks the verbs on a tile that opened on the shelf, with the screen unchanged and the page kept when the tile comes on screen. It checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks that closing the tile frees its web view: a request the page holds open ends when the tile closes. It also checks `command wait_for` immediately after navigation. It starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending. It also verifies that an asynchronous action executes once, and that later actions keep the action's element reference.
 
 - Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`, and `native/crates/attn-app/tests/wire/browser.rs` for the native app.

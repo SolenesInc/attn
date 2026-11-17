@@ -25,18 +25,27 @@ pub struct Combo {
 }
 
 #[derive(Clone, Deserialize)]
-#[serde(untagged)]
-pub enum Binding {
-    Chord { leader: Combo },
-    Single(Combo),
-}
-
-#[derive(Clone, Deserialize)]
 pub struct Chord {
     id: String,
     leader: Combo,
     then: Combo,
+    page: Option<PageAction>,
 }
+
+impl Chord {
+    fn taken_from_page(&self) -> bool {
+        self.page.is_some() || self.id == POP_OUT
+    }
+
+    fn decision(&self) -> Decision {
+        match self.page {
+            Some(action) => Decision::Page(action),
+            None => Decision::Shortcut(self.id.clone()),
+        }
+    }
+}
+
+const POP_OUT: &str = "tile.popOut";
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,7 +66,7 @@ pub struct PageKey {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Configuration {
-    pop_out: Option<Binding>,
+    pop_out: Option<Combo>,
     page_keys: Vec<PageKey>,
     chords: Vec<Chord>,
     timeout_ms: f64,
@@ -264,9 +273,9 @@ fn decide(state: &mut State, label: &str, key: &Key) -> Decision {
             .iter()
             .find(|candidate| candidate.then.matches(key))
         {
-            let id = candidate.id.clone();
+            let decision = candidate.decision();
             state.pending = None;
-            return Decision::Shortcut(id);
+            return decision;
         }
         if key.repeat || pending.leader.matches(key) {
             pending.started = key.timestamp;
@@ -282,27 +291,34 @@ fn decide(state: &mut State, label: &str, key: &Key) -> Decision {
     {
         return Decision::Page(page_key.action);
     }
-    match config.pop_out.as_ref() {
-        Some(Binding::Single(combo)) if combo.matches(key) => {
-            Decision::Shortcut("tile.popOut".into())
-        }
-        Some(Binding::Chord { leader, .. }) if leader.matches(key) => {
-            let candidates = config
-                .chords
-                .iter()
-                .filter(|candidate| candidate.leader.matches(key))
-                .cloned()
-                .collect();
-            state.pending = Some(Pending {
-                label: label.into(),
-                leader: leader.clone(),
-                candidates,
-                started: key.timestamp,
-            });
-            Decision::Swallow
-        }
-        _ => Decision::Pass,
+    if config
+        .pop_out
+        .as_ref()
+        .is_some_and(|combo| combo.matches(key))
+    {
+        return Decision::Shortcut(POP_OUT.into());
     }
+    let Some(leader) = config
+        .chords
+        .iter()
+        .find(|chord| chord.taken_from_page() && chord.leader.matches(key))
+        .map(|chord| chord.leader.clone())
+    else {
+        return Decision::Pass;
+    };
+    let candidates = config
+        .chords
+        .iter()
+        .filter(|candidate| candidate.leader.matches(key))
+        .cloned()
+        .collect();
+    state.pending = Some(Pending {
+        label: label.into(),
+        leader,
+        candidates,
+        started: key.timestamp,
+    });
+    Decision::Swallow
 }
 
 const PAGE_ZOOM_STEPS: [f64; 11] = [0.5, 0.75, 0.85, 1.0, 1.15, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];

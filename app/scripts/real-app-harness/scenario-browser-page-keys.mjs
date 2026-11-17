@@ -53,8 +53,13 @@ try {
   const page = id => `http://127.0.0.1:${server.address().port}/${id}`;
   const showsPage = id => inBrowser('wait', '--using', 'css', '--value', `#${id}`, '--state', 'visible');
   const width = () => script('return window.innerWidth;');
-  const widthAfter = async (key, from) => {
-    await driver.pressKey(key, { command: true }, THROUGH_APPKIT);
+  const command = key => driver.pressKey(key, { command: true }, THROUGH_APPKIT);
+  const sequence = async then => {
+    await driver.pressKey('y', { command: true, shift: true }, THROUGH_APPKIT);
+    await driver.pressKey(then, {}, THROUGH_APPKIT);
+  };
+  const widthAfter = async (press, from) => {
+    await press();
     return JSON.parse(await inBrowser('command', 'execute_async_script', '--params', JSON.stringify({
       script: `const [from, done] = arguments;
         const settle = () => { if (window.innerWidth !== from) done(window.innerWidth); };
@@ -87,13 +92,37 @@ try {
 
   await runner.step('command_plus_minus_and_zero_zoom_the_page_not_the_app', async () => {
     const actual = await width();
-    const zoomedIn = await widthAfter('=', actual);
+    const zoomedIn = await widthAfter(() => command('='), actual);
     runner.assert(zoomedIn < actual, '⌘= zooms the page in', { actual, zoomedIn });
-    const backToActual = await widthAfter('-', zoomedIn);
-    const zoomedOut = await widthAfter('-', backToActual);
+    const backToActual = await widthAfter(() => command('-'), zoomedIn);
+    const zoomedOut = await widthAfter(() => command('-'), backToActual);
     runner.assert(backToActual === actual && zoomedOut > actual, '⌘- zooms the page out a step at a time', { actual, backToActual, zoomedOut });
-    const reset = await widthAfter('0', zoomedOut);
+    const reset = await widthAfter(() => command('0'), zoomedOut);
     runner.assert(reset === actual, '⌘0 puts the page back at actual size', { actual, reset });
+    runner.assert((observer.getSetting('uiScale') || '') === uiScale, 'the app\'s own text size stays the same', { before: uiScale, after: observer.getSetting('uiScale') });
+  });
+
+  await runner.step('keys_rebound_to_sequences_walk_history_and_zoom_the_page', async () => {
+    queueDaemonSettingRestore(observer, 'keybindings_config');
+    const leader = { key: 'y', meta: true, shift: true };
+    await client.request('set_setting', {
+      key: 'keybindings_config',
+      value: JSON.stringify({ version: 1, overrides: {
+        'session.historyBack': { leader, then: { key: 'b' } },
+        'session.historyForward': { leader, then: { key: 'f' } },
+        'ui.increaseFontSize': { leader, then: { key: 'i' } },
+        'ui.resetFontSize': { leader, then: { key: 'r' } },
+      } }),
+    });
+    await sequence('b');
+    await showsPage('first');
+    await sequence('f');
+    await showsPage('second');
+    const actual = await width();
+    const zoomedIn = await widthAfter(() => sequence('i'), actual);
+    runner.assert(zoomedIn < actual, 'the rebound zoom-in sequence zooms the page in', { actual, zoomedIn });
+    const reset = await widthAfter(() => sequence('r'), zoomedIn);
+    runner.assert(reset === actual, 'the rebound reset sequence puts the page back at actual size', { actual, reset });
     runner.assert((observer.getSetting('uiScale') || '') === uiScale, 'the app\'s own text size stays the same', { before: uiScale, after: observer.getSetting('uiScale') });
   });
 

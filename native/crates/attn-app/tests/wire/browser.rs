@@ -954,6 +954,29 @@ fn a_leader_sequence_reaches_attn_from_a_focused_page_even_for_a_key_the_page_ke
 }
 
 #[test]
+fn a_browser_key_rebound_to_a_leader_sequence_acts_on_the_focused_page() {
+    let rebound = r#"{"version":1,"overrides":{
+        "session.historyBack":{"leader":{"key":"y","meta":true,"shift":true},"then":{"key":"b"}},
+        "ui.increaseFontSize":{"leader":{"key":"y","meta":true,"shift":true},"then":{"key":"i"}}}}"#;
+    let (mut world, engine) = start_on(daemon_with(
+        with_browser(START),
+        &[("keybindings_config", rebound)],
+    ));
+    page_says(&mut world, Heard::Focused { page: page() });
+    engine.take();
+
+    let leader = key_event(&rune::Chord::parse("mod+shift+y").unwrap());
+    for (then, asked) in [("b", Asked::Back), ("i", Asked::Zoom(Zoom::In))] {
+        world.gesture(|app| app.key(leader.clone()));
+        world.gesture(|app| app.type_text(then));
+        assert!(engine.take().contains(&asked), "{then} after the leader");
+    }
+    assert_eq!(shortcut_records(&world), Vec::<String>::new());
+    assert!(world.daemon.sent_of("set_setting").is_empty());
+    rest(&mut world);
+}
+
+#[test]
 fn close_from_a_focused_page_closes_the_browser_tile_it_targets() {
     let (mut world, _engine) = start(START);
     page_says(&mut world, Heard::Focused { page: page() });

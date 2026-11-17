@@ -326,7 +326,7 @@ describe('a terminal in its own window', () => {
     expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'browser_shortcut_configure').pop()?.[1]).toMatchObject({
       config: {
         defaultMenu: false,
-        popOut: { leader: { key: 'y', meta: true, shift: true }, then: { key: 'j' } },
+        popOut: null,
         chords: expect.arrayContaining([expect.objectContaining({ id: 'tile.popOut' })]),
       },
     });
@@ -344,11 +344,31 @@ describe('a terminal in its own window', () => {
     await gesture(daemon, () => daemon.emit({
       event: 'settings_updated', settings: { keybindings_config: JSON.stringify({ version: 1, overrides: { 'tile.popOut': chord } }) },
     }));
-    expect(nativeConfig()).toMatchObject({ config: { defaultMenu: false, popOut: chord } });
+    expect(nativeConfig()).toMatchObject({
+      config: { defaultMenu: false, popOut: null, chords: expect.arrayContaining([{ id: 'tile.popOut', ...chord }]) },
+    });
     await gesture(daemon, () => daemon.emit({
       event: 'settings_updated', settings: { keybindings_config: JSON.stringify({ version: 1, overrides: { 'tile.popOut': null } }) },
     }));
     expect(nativeConfig()).toMatchObject({ config: { defaultMenu: false, popOut: null } });
+  });
+
+  it('hands a browser page the history and zoom keys rebound to sequences', async () => {
+    const leader = { key: 'y', meta: true, shift: true };
+    const settings = { keybindings_config: JSON.stringify({ version: 1, overrides: {
+      'session.historyBack': { leader, then: { key: 'b' } },
+      'ui.increaseFontSize': { leader, then: { key: 'i' } },
+    } }) };
+    await openPoppedTerminal(settings);
+    const config = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'browser_shortcut_configure').pop()?.[1];
+    expect(config).toMatchObject({
+      config: {
+        chords: expect.arrayContaining([
+          { id: 'session.historyBack', leader, then: { key: 'b' }, page: 'back' },
+          { id: 'ui.increaseFontSize', leader, then: { key: 'i' }, page: 'zoomIn' },
+        ]),
+      },
+    });
   });
 
   it('opens find in the popped terminal rather than the main terminal', async () => {

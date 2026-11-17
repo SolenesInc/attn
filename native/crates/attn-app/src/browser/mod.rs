@@ -293,19 +293,7 @@ fn page_focused(state: &mut State, page: TileKey, tx: &mut Tx) -> bool {
 /// has focus, no sequence waits for its second key, and the page shows; any other page gives it
 /// back to the window.
 fn hand_keys(state: &mut State, tx: &Tx) {
-    let holder = state.window.keyboard.as_ref().map(|h| TileKey {
-        desktop: h.desktop.clone(),
-        tile: h.pane.clone(),
-    });
-    let wanted = holder.filter(|page| {
-        tx.focused().is_none()
-            && state.window.leader.is_none()
-            && state
-                .browser
-                .pages
-                .get(page)
-                .is_some_and(|p| p.shown.is_some())
-    });
+    let wanted = keyboard_page(state, tx).filter(|_| state.window.leader.is_none());
     if wanted == state.browser.focused {
         return;
     }
@@ -633,22 +621,39 @@ pub(crate) fn claim_keys(keymap: &crate::keymap::Keymap) {
     host::claim_keys(keymap.claimed_from_pages().collect());
 }
 
+/// The shown page whose tile holds the window's keyboard while no control of the window's has
+/// focus: the page the browser keys act on, also while a sequence waits for its second key.
+fn keyboard_page(state: &State, tx: &Tx) -> Option<TileKey> {
+    let holder = state.window.keyboard.as_ref()?;
+    let page = TileKey {
+        desktop: holder.desktop.clone(),
+        tile: holder.pane.clone(),
+    };
+    let shown = state
+        .browser
+        .pages
+        .get(&page)
+        .is_some_and(|p| p.shown.is_some());
+    (tx.focused().is_none() && shown).then_some(page)
+}
+
 /// Whether a page holds the window's keyboard.
 pub(crate) fn holds_keys(state: &State) -> bool {
     state.browser.focused.is_some()
 }
 
-/// Runs `action`'s browser key on the page that holds the keyboard: false when no page holds
-/// it or `action` is no browser key.
-pub(crate) fn press_page_key(state: &State, action: &crate::action::Action) -> bool {
-    let (Some(page), Some(key)) = (&state.browser.focused, crate::keymap::page_key(action)) else {
+/// Runs `action`'s browser key on the page the keyboard is with: false when it is with no page
+/// or `action` is no browser key.
+pub(crate) fn press_page_key(state: &State, action: &crate::action::Action, tx: &Tx) -> bool {
+    let (Some(page), Some(key)) = (keyboard_page(state, tx), crate::keymap::page_key(action))
+    else {
         return false;
     };
     host::with_host(|h| match key {
-        PageKey::Reload => h.reload(page),
-        PageKey::Back => h.back(page),
-        PageKey::Forward => h.forward(page),
-        PageKey::Zoom(toward) => h.zoom(page, toward),
+        PageKey::Reload => h.reload(&page),
+        PageKey::Back => h.back(&page),
+        PageKey::Forward => h.forward(&page),
+        PageKey::Zoom(toward) => h.zoom(&page, toward),
     });
     true
 }

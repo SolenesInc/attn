@@ -2,7 +2,7 @@ export const scenarioCatalog = [
   {
     id: 'browser-page-keys',
     runnerId: 'BROWSER-PAGE-KEYS',
-    label: 'In a focused browser tile, ⌘[ and ⌘] go back and forward and ⌘=, ⌘- and ⌘0 zoom the page, not the app',
+    label: 'In a focused browser tile, ⌘[ and ⌘] go back and forward and ⌘=, ⌘- and ⌘0 zoom the page, not the app, and so do those actions rebound to sequences',
     command: ['node', 'scripts/real-app-harness/scenario-browser-page-keys.mjs'],
     skipOn: { linux: 'The Tauri app hands these keys to the page from an AppKit key monitor, which only macOS has' },
   },
