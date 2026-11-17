@@ -98,9 +98,17 @@ impl Sheet<'_> {
                         .color(t.text_primary)
                         .wrap()
                         .grow(1.0)
-                        .min_w(0.0),
+                        .min_w(TITLE_MIN_WIDTH),
                 )
-                .child(action.gap(6.0).mt(1.0)),
+                .child(
+                    action
+                        .gap(6.0)
+                        .mt(1.0)
+                        .flex_wrap()
+                        .justify_end()
+                        .shrink()
+                        .min_w(0.0),
+                ),
         );
         let mut meta = row()
             .key(self.key("head.meta"))
@@ -453,6 +461,9 @@ impl Sheet<'_> {
 
 /// The page's title, `.garden-head__title`.
 const PAGE_TITLE: TextStyle = TextStyle::new(18.0, 600.0).lh(22.5);
+
+/// How narrow a seed's title gets before its actions wrap under one another instead.
+const TITLE_MIN_WIDTH: f32 = 160.0;
 
 /// A section's heading on a seed's page, `.garden-section h3`.
 const HEADING: TextStyle = TextStyle::new(12.0, 600.0).tracking(0.72);

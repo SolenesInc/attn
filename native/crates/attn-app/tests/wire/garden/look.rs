@@ -1,3 +1,4 @@
+use attn_protocol::SeedContinuation;
 use attn_testkit::{Target, World};
 
 use super::*;
@@ -90,5 +91,45 @@ fn a_seeds_short_title_keeps_one_line_beside_its_actions_in_the_dock() {
         (tile_y - title_y).abs() < 6.0,
         "Open as tile sits beside the title"
     );
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn every_action_beside_a_long_title_stays_inside_the_docked_page() {
+    let title = "Move the cache store to the new region before the quarter closes";
+    let seed = with(seed("s-aaa111", title), |s| {
+        s.status = "growing".into();
+        s.continuation = Some(SeedContinuation {
+            agent: "claude".into(),
+            cwd: "/tmp/placed".into(),
+            resume_available: true,
+            directory_state: "present".into(),
+            ..SeedContinuation::default()
+        });
+    });
+    let chief = Session {
+        chief_of_staff: Some(true),
+        ..session("chief1", "Chief")
+    };
+    let mut world = open_garden_with(daemon(vec![seed], vec![chief]));
+    open_row(&mut world, title);
+
+    let [page_x, _, page_w, _] = bounds(&world, "garden.page");
+    for key in [
+        "garden.open-tile",
+        "garden.resume",
+        "garden.handover.open",
+        "garden.chief.open",
+    ] {
+        let [x, _, w, _] = bounds(&world, key);
+        assert!(
+            x >= page_x && x + w <= page_x + page_w,
+            "{key} spans {x}..{} outside the page {page_x}..{}",
+            x + w,
+            page_x + page_w
+        );
+    }
+    let [_, _, title_w, _] = bounds(&world, "garden.head.title");
+    assert!(title_w >= 160.0, "the title keeps room to read: {title_w}");
     assert!(rests(&mut world));
 }
