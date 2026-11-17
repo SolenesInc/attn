@@ -18,7 +18,10 @@ pub(crate) const SENT_SECONDS: f64 = 4.0;
 /// How long "Clear all" waits for its confirmation.
 const CLEAR_SECONDS: f64 = 3.0;
 const MENU_W: f32 = 260.0;
-const NOTES_W: f32 = 360.0;
+/// The review notes' width and how far inside the reader they sit: `.md-annotations-sidebar`,
+/// whose 22rem the Tauri app draws 308 points wide.
+const NOTES_W: f32 = 308.0;
+const NOTES_INSET: f32 = 10.0;
 
 fn key(tile: &str, part: &str) -> String {
     format!("tile.{tile}.document.{part}")
@@ -544,7 +547,7 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
             out.extend(shown);
         }
         if reading.notes
-            && let Some(at) = cx.layout(&format!("tile.{tile}"))
+            && let Some(at) = cx.layout(&format!("tile.{tile}.document"))
         {
             let marks = state
                 .drafts
@@ -553,7 +556,9 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
                 .unwrap_or_default();
             out.push(
                 notes(tile, marks, reading, t)
-                    .absolute((at[0] + at[2] - NOTES_W - 12.0).max(8.0), at[1] + 40.0),
+                    .absolute(at[0] + NOTES_INSET, at[1] + NOTES_INSET)
+                    .w(NOTES_W.min(at[2] - 2.0 * NOTES_INSET))
+                    .h(at[3] - 2.0 * NOTES_INSET),
             );
         }
     }
@@ -716,14 +721,14 @@ fn notes(
         .key(key(tile, "notes.dialog"))
         .role("dialog")
         .label("Review notes")
-        .w(NOTES_W)
-        .max_h(480.0)
         .gap(8.0)
         .padding(10.0)
         .on_press(|_: &mut State| {})
         .child(head)
         .child(
             col()
+                .grow(1.0)
+                .min_h(0.0)
                 .gap(6.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,

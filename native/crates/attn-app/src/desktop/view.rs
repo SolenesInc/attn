@@ -1392,7 +1392,10 @@ fn rename_button(key: &str, session: &Session, title: &str, t: &Tokens) -> El {
         &attn_ui::icon::PENCIL,
         HeaderLook::agent(t),
         t,
-        move |state, tx| crate::sidebar::rename::session(state, &id, under.clone(), tx),
+        move |state, tx| {
+            let opener = crate::sidebar::rename::Opener::Control(under.clone());
+            crate::sidebar::rename::session(state, &id, opener, tx)
+        },
     )
 }
 

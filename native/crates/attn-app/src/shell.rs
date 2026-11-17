@@ -484,6 +484,19 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
     let middle = connected
         .then(|| crate::sidebar::title_middle(state, t))
         .flatten();
+    let parts = controls
+        .into_iter()
+        .chain(middle)
+        .chain([crate::desktop::shelf_slot(state, t)])
+        .chain(connected.then(|| crate::notifications::title_button(state, t)))
+        .chain(
+            connected
+                .then(|| crate::asks::title_button(state, t))
+                .flatten(),
+        )
+        .chain(instance_marker(state, t))
+        .chain(connected.then(|| crate::profile_switcher::pill(state, t)));
+    let covered = title_bar_covered(state);
     row()
         .key("titlebar")
         .role("banner")
@@ -496,8 +509,6 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .items_center()
         .gap(space::S2)
-        .children(controls)
-        .children(middle)
         .window_drag()
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
             if state.window.desk.window_w == Some(w) {
@@ -506,16 +517,24 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
             }
             state.window.desk.window_w = Some(w);
         })
-        .child(crate::desktop::shelf_slot(state, t))
-        .children(connected.then(|| crate::notifications::title_button(state, t)))
-        .children(
-            connected
-                .then(|| crate::asks::title_button(state, t))
-                .flatten(),
-        )
-        .children(instance_marker(state, t))
-        .children(connected.then(|| crate::profile_switcher::pill(state, t)))
+        .children(parts.map(|part| {
+            if covered {
+                part.layer_opacity(COVERED_OPACITY)
+            } else {
+                part
+            }
+        }))
 }
+
+/// Whether something holds the window so that the title bar's controls fade, as the Tauri
+/// app's `.title-bar--covered`: every layer but the notifications panel, and the garden
+/// over the whole window.
+fn title_bar_covered(state: &State) -> bool {
+    !matches!(state.window.layer, None | Some(Layer::Notifications))
+        || crate::garden::mode(state) == crate::garden::Mode::Full
+}
+
+const COVERED_OPACITY: f32 = 0.45;
 
 /// The name of a non-production instance, so its window never passes for production's.
 fn instance_marker(state: &State, t: &Tokens) -> Option<El> {
@@ -535,6 +554,28 @@ fn instance_marker(state: &State, t: &Tokens) -> Option<El> {
 }
 
 const INSTANCE_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
+
+/// `control` in a slot keyed `key` as tall as the title bar, for a popover that hangs a set gap
+/// under the title bar, as the Tauri app's `top: calc(var(--title-bar-height) + …)` does.
+pub(crate) fn title_bar_slot(key: &str, control: El) -> El {
+    col()
+        .key(key)
+        .h(TITLE_BAR_HEIGHT)
+        .justify_center()
+        .child(control)
+}
+
+/// A surface that holds the window under the title bar, as the Tauri app's `.ledger-shell`,
+/// `.notebook-browser-shell` and `.garden-frame-backdrop` do: the app background over
+/// everything below the title bar, and `panel` `inset` points inside it.
+pub(crate) fn under_title_bar(key: &str, inset: f32, panel: El, t: &Tokens) -> El {
+    col()
+        .key(key)
+        .pin(Some(0.0), Some(TITLE_BAR_HEIGHT), Some(0.0), Some(0.0))
+        .fill(t.bg_app)
+        .padding(inset)
+        .child(panel)
+}
 
 fn centered(t: &Tokens, content: El) -> El {
     col()

@@ -20,6 +20,7 @@ use crate::{Action, State};
 
 pub(crate) const MENU: &str = "profile-switcher";
 pub(crate) const PILL: &str = "titlebar.profile";
+const PILL_SLOT: &str = "titlebar.profile.slot";
 const NAME_FIELD: &str = "profile-switcher.name";
 const CHOOSE: &str = "profile-switcher.choose.";
 const WIDTH: f32 = 260.0;
@@ -390,12 +391,13 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
                 .child(icon(chevron, 12.0).color(ink))
         })
         .on_press_tx(toggle);
-    match keys {
+    let pill = match keys {
         Some(keys) => button.shortcut(keys),
         None => button,
     }
     .build(attn_ui::kit(t))
-    .key(PILL)
+    .key(PILL);
+    crate::shell::title_bar_slot(PILL_SLOT, pill)
 }
 
 /// The switcher under the pill, while it is open.
@@ -470,7 +472,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             ..Frame::menu(t)
         }
         .draw(menu),
-        PILL,
+        PILL_SLOT,
         Placement::BottomEnd,
         4.0,
     ))

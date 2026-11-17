@@ -298,6 +298,13 @@ fn a_plot_chip_counts_its_seeds_and_a_press_pins_their_list_until_a_second_press
             "second step · Growing"
         ]
     );
+    let [cx, _, cw, _] = world.rect("tile.a.seed");
+    let [px, _, pw, _] = world.rect("tile.a.seed.popover");
+    assert_eq!(
+        px + pw,
+        cx + cw,
+        "the list hangs from the chip's right end, reaching left"
+    );
     let [x, y, w, h] = world
         .runtime()
         .presented("tile.a.seed")

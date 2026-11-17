@@ -12,6 +12,7 @@ use crate::State;
 
 pub(crate) const PANEL: &str = "notifications.panel";
 const BELL: &str = "titlebar.notifications";
+const BELL_SLOT: &str = "titlebar.notifications.slot";
 const WIDTH: f32 = 360.0;
 const MAX_HEIGHT: f32 = 520.0;
 
@@ -25,27 +26,28 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> El {
     } else {
         "Show Notifications"
     };
-    let bell = if counts.unread_critical > 0 {
+    let ink = if counts.unread_critical > 0 {
         t.error
     } else {
         t.text_secondary
     };
     let unread = counts.unread > 0;
     let dot = t.accent;
-    Button::new(label)
+    let bell = Button::new(label)
         .variant(ButtonVariant::Ghost)
         .expanded(open)
         .label_with(move |_, _| {
             row()
                 .items_center()
                 .gap(2.0)
-                .child(rune::icon(&icon::BELL, 13.0).color(bell))
+                .child(rune::icon(&icon::BELL, 13.0).color(ink))
                 .children(unread.then(|| el().size(6.0, 6.0).radius(3.0).fill(dot)))
         })
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
         .build(attn_ui::kit(t))
         .key(BELL)
-        .a11y_value(counts.unread.to_string())
+        .a11y_value(counts.unread.to_string());
+    crate::shell::title_bar_slot(BELL_SLOT, bell)
 }
 
 /// The strip that names the newest unread critical notification above the sidebar's rows,
@@ -171,9 +173,9 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
             ..Frame::menu(t)
         }
         .draw(surface),
-        BELL,
+        BELL_SLOT,
         Placement::BottomEnd,
-        4.0,
+        8.0,
     )
 }
 

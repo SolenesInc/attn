@@ -581,7 +581,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         attn_ui::kit(t),
         attn_ui::Frame::panel(t).draw(surface),
         &pop.anchor(),
-        Placement::BottomStart,
+        Placement::BottomEnd,
         4.0,
     ))
 }

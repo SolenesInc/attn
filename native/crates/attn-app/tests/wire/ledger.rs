@@ -1072,6 +1072,18 @@ fn the_title_bar_opens_the_ledger_and_its_close_button_closes_it() {
     click(&mut world, "titlebar.ledger");
     assert_eq!(shown_list(&world).as_deref(), Some("sessions"));
     assert_eq!(rows(&world), ["api", "docs", "ledger"]);
+    let [bx, by, bw, bh] = world.rect("titlebar");
+    let height = world.rect("window")[3];
+    assert_eq!(
+        world.rect("ledger.panel"),
+        [
+            bx + 10.0,
+            by + bh + 10.0,
+            bw - 20.0,
+            height - (by + bh) - 20.0
+        ],
+        "the ledger holds the window under the title bar, 10 points in"
+    );
 
     click(&mut world, "ledger.close");
     assert!(!has(&world, "ledger.panel"));

@@ -49,13 +49,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
             .w_full()
             .h_full()
             .child(
-                el().key("new-session.scrim")
-                    .absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .backdrop_blur(2.0)
-                    .fill(t.shadow.alpha(0.5))
-                    .a11y_hidden()
+                attn_ui::Backdrop::launcher(t)
+                    .draw("new-session.scrim")
                     .on_press_tx(|state: &mut State, tx: &mut Tx| {
                         if state.window.launching.launcher(Which::Dialog).is_some() {
                             crate::launcher::dismiss(state, tx)
@@ -100,10 +95,16 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
             .w_full()
             .h_full()
             .items_center()
-            .pt(80.0)
+            .pt(EMPTY_DESKTOP_DROP * crate::shell::TITLE_BAR_HEIGHT)
+            .child(el().h_frac(EMPTY_DESKTOP_DROP))
             .child(frame.key("launcher").role("group").label("New agent")),
     )
 }
+
+/// How far down the window an empty desktop's launcher starts, as a share of the window's
+/// height: `.empty-desktop-launcher`'s `12vh`. The desktop starts under the title bar, so the
+/// title bar's share comes first and the desktop's share follows.
+const EMPTY_DESKTOP_DROP: f32 = 0.12;
 
 fn frame(state: &State, picker: &Picker, t: &Tokens) -> El {
     let which = picker.which;

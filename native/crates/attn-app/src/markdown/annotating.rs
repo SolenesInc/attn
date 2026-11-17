@@ -666,7 +666,8 @@ fn composer_box(
 ) -> El {
     let width = COMPOSER_W.min(window[2] - 2.0 * EDGE);
     let around = around.unwrap_or([window[2] / 2.0, window[3] / 3.0, 0.0, 0.0]);
-    let left = around[0].clamp(EDGE, (window[2] - width - EDGE).max(EDGE));
+    let left =
+        (around[0] + (around[2] - width) / 2.0).clamp(EDGE, (window[2] - width - EDGE).max(EDGE));
     let below = around[1] + around[3] + 8.0;
     let above = around[1] - COMPOSER_ROOM;
     let top = if window[3] - below < COMPOSER_ROOM && above >= EDGE {

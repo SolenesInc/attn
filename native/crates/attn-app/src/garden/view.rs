@@ -6,7 +6,7 @@ use attn_protocol::Seed;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
-use rune::{El, GrowthSpec, ScrollSpec, Span, Tx, col, el, memo, rich, row, text, text_input};
+use rune::{El, GrowthSpec, ScrollSpec, Span, Tx, col, memo, rich, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use super::model::{self, Index, SessionNames};
@@ -290,28 +290,7 @@ pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {
         .fill(t.bg_panel)
         .border(1.0, t.border)
         .child(content);
-    el().key("garden.full")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(
-            el().key("garden.full.scrim")
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(t.bg_overlay)
-                .a11y_hidden(),
-        )
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .pt(crate::shell::TITLE_BAR_HEIGHT + FULL_INSET)
-                .pl(FULL_INSET)
-                .pr(FULL_INSET)
-                .pb(FULL_INSET)
-                .child(dialog),
-        )
+    crate::shell::under_title_bar("garden.full", FULL_INSET, dialog, t)
 }
 
 fn body(state: &State, t: &Tokens) -> El {

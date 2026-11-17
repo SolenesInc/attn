@@ -30,9 +30,28 @@ impl Named {
     }
 }
 
+/// What opened the popover, which it opens beside.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Opener {
+    /// A control keyed so, which the popover hangs under, its right edges lined up.
+    Control(String),
+    /// A command about the agent in the tile whose header is keyed so: the popover opens at
+    /// the top left corner of the tile's body, as the Tauri app opens it over the terminal the
+    /// command came from.
+    Tile(String),
+}
+
+impl Opener {
+    fn key(&self) -> &str {
+        match self {
+            Opener::Control(key) | Opener::Tile(key) => key,
+        }
+    }
+}
+
 pub struct Rename {
     pub named: Named,
-    pub under: String,
+    pub under: Opener,
     pub was: String,
     pub edit: TextEdit,
     pub default_name: Option<String>,
@@ -40,7 +59,7 @@ pub struct Rename {
     pub saving: bool,
 }
 
-pub(crate) fn session(state: &mut State, session: &str, under: String, tx: &mut Tx) {
+pub(crate) fn session(state: &mut State, session: &str, under: Opener, tx: &mut Tx) {
     let Some(label) = state
         .facts
         .sessions
@@ -60,7 +79,7 @@ pub(crate) fn session(state: &mut State, session: &str, under: String, tx: &mut 
     );
 }
 
-pub(crate) fn desktop(state: &mut State, desktop: &str, under: String, tx: &mut Tx) {
+pub(crate) fn desktop(state: &mut State, desktop: &str, under: Opener, tx: &mut Tx) {
     let desktops = &state.facts.desktops;
     let Some(found) = desktops.iter().find(|d| d.id == desktop) else {
         return;
@@ -80,7 +99,7 @@ pub(crate) fn desktop(state: &mut State, desktop: &str, under: String, tx: &mut 
 fn open(
     state: &mut State,
     named: Named,
-    under: String,
+    under: Opener,
     was: String,
     default_name: Option<String>,
     tx: &mut Tx,
@@ -208,11 +227,17 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         rune_kit::popover::anchored(
             attn_ui::kit(t),
             Frame::menu(t).draw(popover(rename, t)),
-            &rename.under,
-            Placement::BottomEnd,
-            4.0,
+            rename.under.key(),
+            match rename.under {
+                Opener::Control(_) => Placement::BottomEnd,
+                Opener::Tile(_) => Placement::BottomStart,
+            },
+            match rename.under {
+                Opener::Control(_) => 4.0,
+                Opener::Tile(_) => 0.0,
+            },
         )
-        .focus_return(rename.under.clone()),
+        .focus_return(rename.under.key().to_owned()),
     )
 }
 

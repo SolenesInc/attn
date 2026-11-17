@@ -11,7 +11,7 @@ use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations, worktrees};
 use crate::State;
 use crate::sidebar::model::AgentState;
 
-const INSET: f32 = 24.0;
+const INSET: f32 = 10.0;
 pub(super) const INSPECTOR_WIDTH: f32 = 340.0;
 
 /// The open row's verb menu, beside its More button, for the shell's layers.
@@ -158,26 +158,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .child(toolbar)
         .child(body)
         .child(status);
-    el().key("ledger")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(
-            el().absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(t.bg_overlay)
-                .a11y_hidden(),
-        )
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .pt(crate::shell::TITLE_BAR_HEIGHT + INSET)
-                .px(INSET)
-                .pb(INSET)
-                .child(panel),
-        )
+    crate::shell::under_title_bar("ledger", INSET, panel, t)
 }
 
 fn header(state: &State, t: &Tokens) -> El {

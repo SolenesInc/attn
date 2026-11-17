@@ -1275,6 +1275,27 @@ fn renaming_from_the_header_sends_nothing_for_the_same_name_or_escape_and_refuse
 }
 
 #[test]
+fn renaming_from_the_palette_opens_the_field_at_the_agents_terminal_under_its_header_and_from_the_header_under_the_pencil()
+ {
+    let mut world = start(
+        session("a", "ledger sweep", None),
+        session("b", "docs", None),
+    );
+    run_command(&mut world, "rename");
+    let [hx, hy, _, hh] = world.rect("tile.a.header");
+    let [rx, ry, _, _] = world.rect("session.rename");
+    assert_eq!((rx, ry), (hx, hy + hh));
+    key(&mut world, Key::Escape);
+
+    world.gesture(|app| app.click(Target::key("tile.a.rename")));
+    let [px, py, pw, ph] = world.rect("tile.a.rename");
+    let [rx, ry, rw, _] = world.rect("session.rename");
+    assert_eq!((rx + rw, ry), (px + pw, py + ph + 4.0));
+    key(&mut world, Key::Escape);
+    rest(&mut world);
+}
+
+#[test]
 fn a_header_warns_while_another_terminal_has_its_conversation_open_naming_where_until_it_closes() {
     let reviews = Desktop {
         id: "work/desktop_2".into(),

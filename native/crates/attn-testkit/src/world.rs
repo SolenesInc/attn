@@ -750,6 +750,15 @@ impl World {
         }
     }
 
+    /// Where the element keyed `key` sits once it stops moving, `[x, y, width, height]` in
+    /// points, as automation's `find` reports it.
+    pub fn rect(&mut self, key: &str) -> [f64; 4] {
+        let found = self
+            .automate("find", serde_json::json!({"target": {"key": key}}))
+            .unwrap_or_else(|why| panic!("{why}"));
+        serde_json::from_value(found["rect"].clone()).unwrap_or_else(|e| panic!("{key}: {e}"))
+    }
+
     /// Leaves home for the current desktop the way a person does, by its sidebar row, then
     /// takes the pointer out of the window and lets the row's hover fade out: the app opens on
     /// home, as the Tauri app does.

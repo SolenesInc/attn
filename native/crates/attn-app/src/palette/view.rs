@@ -140,14 +140,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
-        .child(
-            el().key("palette.scrim")
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(t.bg_overlay)
-                .a11y_hidden(),
-        )
+        .child(attn_ui::Backdrop::palette(t).draw("palette.scrim"))
         .child(
             col()
                 .w_full()

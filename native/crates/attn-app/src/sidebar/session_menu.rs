@@ -73,7 +73,12 @@ fn target(state: &mut State) -> Option<Session> {
 
 fn rename(state: &mut State, tx: &mut Tx) {
     if let Some(menu) = state.window.session_menu.take() {
-        super::rename::session(state, &menu.session, menu.under, tx);
+        super::rename::session(
+            state,
+            &menu.session,
+            super::rename::Opener::Control(menu.under),
+            tx,
+        );
     }
 }
 

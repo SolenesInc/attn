@@ -6,7 +6,7 @@ use attn_ui::Tokens;
 use attn_ui::frame::{self, Frame};
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, FileDialogOptions, Tx, col, row, text};
+use rune::{El, FileDialogOptions, Tx, col, el, row, text};
 use rune_kit::popover::anchored;
 use rune_kit::{Button, ButtonVariant, ControlSize, Placement, RadioItem};
 
@@ -774,5 +774,32 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 super::dismiss(state, !over_the_window, tx)
             }),
     );
-    layers.push(anchored(k, surface, &anchor, Placement::RightStart, 10.0));
+    let notch = el()
+        .key(format!("{POP}.notch"))
+        .size(NOTCH, NOTCH)
+        .fill(frame.fill)
+        .border_sides([0.0, 0.0, 1.0, 1.0], frame.edge)
+        .rotate(std::f32::consts::FRAC_PI_4)
+        .a11y_hidden();
+    let beside_row = SIDEBAR_INSET + BESIDE_SIDEBAR;
+    layers.push(
+        anchored(k, surface, &anchor, Placement::RightStart, beside_row).offset(0.0, -ABOVE_ROW),
+    );
+    layers.push(anchored(
+        k,
+        notch,
+        &anchor,
+        Placement::Right,
+        beside_row - NOTCH / 2.0,
+    ));
 }
+
+/// How far the popover sits from the sidebar's edge, and how far its top rises above the
+/// row it opens from: `.chief-pop` at the sidebar's right plus 10 px and the row's top less
+/// 10 px.
+const BESIDE_SIDEBAR: f32 = 10.0;
+const ABOVE_ROW: f32 = 10.0;
+/// How far the row ends inside the sidebar: the sidebar's padding.
+const SIDEBAR_INSET: f32 = space::S2;
+/// The square turned into the notch that points at the row: `.chief-pop-notch`.
+const NOTCH: f32 = 10.0;

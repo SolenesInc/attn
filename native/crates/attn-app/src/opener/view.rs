@@ -1,7 +1,7 @@
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, Tx, col, el, row, text};
+use rune::{El, Tx, col, row, text};
 use rune_kit::TextInput;
 
 use super::Row;
@@ -52,34 +52,15 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .role("dialog")
         .label(LABEL)
         .modal_tx(true, super::close)
-        .w_full()
-        .max_w(640.0)
         .padding(space::S3)
         .gap(space::S2)
         .child(field)
         .child(list);
-    let panel = rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0);
-    el().key("opener")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(
-            el().key("opener.scrim")
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(t.bg_overlay)
-                .a11y_hidden(),
-        )
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .px(16.0)
-                .pt(80.0)
-                .items_center()
-                .child(panel),
-        )
+    attn_ui::finder::layer(
+        t,
+        "opener",
+        rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0),
+    )
 }
 
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {

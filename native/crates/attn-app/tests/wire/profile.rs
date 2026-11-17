@@ -575,15 +575,14 @@ fn the_title_bars_profile_pill_names_the_profile_and_opens_the_list_under_it() {
     click(&mut world, "titlebar.profile");
 
     assert!(switcher_open(&world));
-    let rect = |world: &mut World, key: &str| -> [f64; 4] {
-        let found = world
-            .automate("find", json!({"target": {"key": key}}))
-            .unwrap();
-        serde_json::from_value(found["rect"].clone()).unwrap()
-    };
-    let [px, py, pw, ph] = rect(&mut world, "titlebar.profile");
-    let [mx, my, mw, _] = rect(&mut world, "profile-switcher");
-    assert!(my >= py + ph, "the list opens under the pill");
+    let [px, _, pw, _] = world.rect("titlebar.profile");
+    let [_, by, _, bh] = world.rect("titlebar");
+    let [mx, my, mw, _] = world.rect("profile-switcher");
+    assert_eq!(
+        my,
+        by + bh + 4.0,
+        "the list opens 4 points under the title bar"
+    );
     assert!(
         (mx + mw - (px + pw)).abs() <= 1.0,
         "the list's right edge meets the pill's"

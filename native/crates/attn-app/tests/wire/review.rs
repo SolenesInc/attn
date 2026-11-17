@@ -523,6 +523,17 @@ fn shows_the_keys_in_a_key_line_and_a_sheet() {
             .any(|k| k.contains("Fill the tile with the file")),
         "{sheet:?}"
     );
+    let [rx, ry, rw, rh] = world.rect("tile.m.review");
+    let [sx, sy, sw, _] = world.rect("tile.m.review.sheet");
+    assert_eq!(sw, 560.0_f64.min(rw * 0.9), "the sheet floats at its width");
+    assert!(
+        (sx + sw / 2.0 - (rx + rw / 2.0)).abs() <= 0.5,
+        "the sheet is centered across the reader: {sx} {sw} {rx} {rw}"
+    );
+    assert!(
+        (sy - (ry + rh * 0.1)).abs() <= 0.5,
+        "the sheet starts a tenth of the way down: {sy} {ry} {rh}"
+    );
     press(&mut world, Key::Escape);
     assert!(
         world

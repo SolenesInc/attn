@@ -100,7 +100,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         Action::SidebarAgentList => crate::palette::open(state, crate::palette::Face::Agents, tx),
         Action::SessionSettle => actions::settle_key(state, tx),
         Action::RenameSession { session } => {
-            let under = tile_header_of(state, session);
+            let under = rename::Opener::Tile(tile_header_of(state, session));
             rename::session(state, session, under, tx)
         }
         Action::ReloadSession { session } => session_menu::reload_session(state, session, tx),
@@ -627,7 +627,7 @@ fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> 
         format!("Rename {}", desktop.title),
         attn_ui::glyph::PENCIL,
         t,
-        move |state, tx| rename::desktop(state, &id, under.clone(), tx),
+        move |state, tx| rename::desktop(state, &id, rename::Opener::Control(under.clone()), tx),
     )
 }
 

@@ -5,7 +5,7 @@ use attn_ui::Tokens;
 use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{Color, El, ScrollSpec, TextStyle, Tx, col, el, row, text, text_input};
+use rune::{Color, El, ScrollSpec, TextStyle, Tx, col, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use super::file_kind::FileKind;
@@ -23,6 +23,7 @@ const INDENT: f32 = 12.0;
 const NOTE: TextStyle = TextStyle::new(14.0, 400.0).lh(23.0);
 const HEADING: TextStyle = TextStyle::new(18.0, 600.0);
 const INSET: f32 = 24.0;
+const SHELL_INSET: f32 = 12.0;
 
 pub(super) fn key(id: &SurfaceId, part: &str) -> String {
     match id {
@@ -59,26 +60,7 @@ pub(crate) fn fullscreen(state: &State, t: &Tokens) -> El {
         .border(1.0, t.border)
         .child(header(state, t))
         .child(body.grow(1.0).min_h(0.0));
-    el().key("notebook")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(
-            el().absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(t.bg_overlay)
-                .a11y_hidden(),
-        )
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .pt(crate::shell::TITLE_BAR_HEIGHT + INSET)
-                .px(INSET)
-                .pb(INSET)
-                .child(panel),
-        )
+    crate::shell::under_title_bar("notebook", SHELL_INSET, panel, t)
 }
 
 fn header(state: &State, t: &Tokens) -> El {

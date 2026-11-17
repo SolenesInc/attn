@@ -7,7 +7,7 @@ use attn_protocol::{ReviewBundle, ReviewFile};
 use attn_ui::Tokens;
 use attn_ui::keycap;
 use attn_ui::type_;
-use rune::tok::{radius, space};
+use rune::tok::space;
 use rune::{El, TextStyle, col, row, text};
 
 use super::frames::Frame;
@@ -455,13 +455,13 @@ pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
         .key(format!("{prefix}.sheet"))
         .role("dialog")
         .label("Review keys")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .padding(space::S3)
+        .px(20.0)
+        .py(16.0)
         .gap(space::S2)
-        .radius(radius::LG)
+        .radius(8.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
+        .box_shadow(attn_ui::frame::shadow(t, 18.0, 40.0, 0.32))
         .child(text("Keys").font(type_::TITLE).color(t.text_primary))
         .children(read_only.then(|| {
             text("This file is outside the repository and read-only: c, a and i do nothing here.")

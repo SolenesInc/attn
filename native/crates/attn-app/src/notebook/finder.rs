@@ -6,7 +6,7 @@ use attn_ui::Tokens;
 use attn_ui::colors::mix_srgb;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, el, row, text};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
 use super::io;
@@ -174,8 +174,6 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         .role("dialog")
         .label(LABEL)
         .on_press_outside(close)
-        .w_full()
-        .max_w(640.0)
         .radius(8.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
@@ -183,28 +181,7 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         .gap(space::S2)
         .child(field)
         .child(list);
-    Some(
-        el().key("notebook.finder.layer")
-            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-            .w_full()
-            .h_full()
-            .child(
-                el().absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .fill(t.bg_overlay)
-                    .a11y_hidden(),
-            )
-            .child(
-                col()
-                    .w_full()
-                    .h_full()
-                    .px(16.0)
-                    .pt(80.0)
-                    .items_center()
-                    .child(panel),
-            ),
-    )
+    Some(attn_ui::finder::layer(t, "notebook.finder.layer", panel))
 }
 
 fn option(path: &str, highlighted: bool, t: &Tokens) -> El {
