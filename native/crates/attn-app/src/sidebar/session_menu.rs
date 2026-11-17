@@ -85,6 +85,10 @@ fn rename(state: &mut State, tx: &mut Tx) {
 /// An item's mark: `.session-actions-popover button > span`, 13 px monospace.
 const MARK: rune::TextStyle = rune::TextStyle::new(13.0, 400.0).mono();
 
+/// A marked item's height: the mark's 13 px line makes the Tauri app's rows 31 points, two
+/// more than the snooze menu's unmarked rows.
+const MARKED_ROW: f32 = 31.0;
+
 /// A reload with no terminal of a usable size asks for this one, as the Tauri app does, since
 /// the daemon needs a size to restart an agent that has no live worker.
 const FALLBACK_SIZE: (u16, u16) = (80, 24);
@@ -170,11 +174,14 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == menu.session);
     let priority = session.is_some_and(|s| s.priority == Some(true));
     let chief = session.is_some_and(|s| s.chief_of_staff == Some(true));
+    let kit = attn_ui::kit(t);
+    let mark_h = MARKED_ROW - 2.0 * kit.standard_menu.row_padding.1;
     let item = |id: &str, glyph: attn_ui::Glyph, label: &str| {
         MenuItem::new(label).key(format!("{MENU}.{id}")).lead(
             row()
                 .w(14.0)
-                .justify_center()
+                .h(mark_h)
+                .center()
                 .child(glyph.draw(13.0, MARK, t.text_secondary)),
         )
     };
@@ -261,6 +268,6 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
             .item(item("close", attn_ui::glyph::TIMES.into(), "Close session").on_select_tx(close));
     }
     let mut layer = Vec::new();
-    kit_menu.build(attn_ui::kit(t), &mut layer);
+    kit_menu.build(kit, &mut layer);
     layer
 }

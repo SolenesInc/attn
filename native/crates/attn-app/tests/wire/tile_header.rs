@@ -324,6 +324,30 @@ fn the_usage_breakdown_counts_each_model_exactly_with_the_guardian_beside_the_ag
 }
 
 #[test]
+fn the_usage_badge_reads_as_expanded_while_its_breakdown_is_open() {
+    let mut world = start(
+        session("a", "ledger sweep", Some(priced(0.42))),
+        session("b", "docs", None),
+    );
+    let expanded = |world: &World| {
+        world
+            .screen()
+            .get(Target::key("tile.a.usage"))
+            .is("expanded")
+    };
+    assert!(!expanded(&world));
+    rest_on(&mut world, "tile.a.usage");
+    world.advance(Duration::from_millis(160));
+    assert!(breakdown(&world, "a").is_some());
+    assert!(expanded(&world));
+    rest_on(&mut world, "tile.b.header");
+    world.advance(Duration::from_millis(400));
+    assert_eq!(breakdown(&world, "a"), None);
+    assert!(!expanded(&world));
+    rest(&mut world);
+}
+
+#[test]
 fn the_usage_preview_waits_for_the_pointer_to_rest_and_stays_open_while_the_pointer_moves_into_it()
 {
     let mut world = start(

@@ -1,9 +1,8 @@
 use attn_protocol::{DesktopRenameMessage, RenameResultMessage, RenameSessionMessage};
 use attn_ui::type_;
 use attn_ui::{Frame, Tokens};
-use rune::tok::space;
-use rune::{El, TextEdit, Tx, col, text};
-use rune_kit::{Placement, TextInput};
+use rune::{El, TextEdit, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant, Placement, TextInput};
 
 use crate::State;
 use crate::requests::Answer;
@@ -264,17 +263,29 @@ fn popover(rename: &Rename, t: &Tokens) -> El {
         Some(default_name) => field.placeholder(default_name.clone()),
         None => field,
     };
+    let edge = if rename.edit.focused {
+        t.accent
+    } else {
+        t.border
+    };
+    let framed = row()
+        .w_full()
+        .px(8.0)
+        .py(6.0)
+        .radius(6.0)
+        .fill(t.bg_input)
+        .border(1.0, edge)
+        .child(field.build(attn_ui::kit(t)).grow(1.0));
     col()
         .key(key)
         .role("dialog")
         .label(label)
         .w(240.0)
         .padding(10.0)
-        .gap(space::S1)
         .modal_tx(true, |state: &mut State, _: &mut Tx| {
             state.window.rename = None
         })
-        .child(field.build(attn_ui::kit(t)))
+        .child(framed)
         .children(rename.refused.as_deref().map(|why| {
             text(why.to_owned())
                 .key(format!("{key}.refused"))
@@ -282,5 +293,57 @@ fn popover(rename: &Rename, t: &Tokens) -> El {
                 .color(t.error)
                 .wrap()
                 .w_full()
+                .mt(6.0)
         }))
+        .child(
+            row()
+                .w_full()
+                .justify_end()
+                .gap(6.0)
+                .mt(8.0)
+                .child(action(
+                    key,
+                    "cancel",
+                    "Cancel",
+                    false,
+                    rename.saving,
+                    t,
+                    cancel,
+                ))
+                .child(action(key, "save", "Save", true, rename.saving, t, submit)),
+        )
+}
+
+fn cancel(state: &mut State, _: &mut Tx) {
+    state.window.rename = None;
+}
+
+/// `.rename-popover-btn`: a bordered monospace button, filled with the accent for Save.
+fn action(
+    key: &str,
+    part: &str,
+    title: &str,
+    save: bool,
+    saving: bool,
+    t: &Tokens,
+    press: fn(&mut State, &mut Tx),
+) -> El {
+    let (fill, edge, ink) = if save {
+        (t.accent, t.accent, t.on_brand)
+    } else {
+        (rune::Color::TRANSPARENT, t.border, t.text_muted)
+    };
+    let face = title.to_owned();
+    Button::new(title)
+        .variant(ButtonVariant::Ghost)
+        .disabled(saving)
+        .on_press_tx(press)
+        .label_with(move |_, _| text(face).font(type_::MONO_CAPTION).color(ink))
+        .build(attn_ui::kit(t))
+        .key(format!("{key}.{part}"))
+        .h(type_::MONO_CAPTION.line_px() + 10.0)
+        .px(12.0)
+        .radius(6.0)
+        .fill(fill)
+        .border(1.0, edge)
 }

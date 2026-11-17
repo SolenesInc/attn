@@ -1,7 +1,6 @@
 use attn_protocol::{Session, SessionUsage, SessionUsageModel};
 use attn_ui::Tokens;
 use attn_ui::type_;
-use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::Placement;
 
@@ -97,24 +96,32 @@ pub(crate) fn grouped(n: i64) -> String {
 }
 
 /// The usage badge in the header of `leaf`, which previews the breakdown on hover and pins it
-/// on a press.
+/// on a press, lit while its breakdown is open.
 pub(crate) fn piece(
     leaf: &str,
     session: &str,
     badge: &Badge,
+    open: bool,
     font: rune::TextStyle,
     t: &Tokens,
 ) -> El {
     let pressed = (leaf.to_owned(), session.to_owned());
+    let ink = if open {
+        t.text_primary
+    } else {
+        t.text_tertiary
+    };
     let badge = header_pop::link(
         badge.label.clone(),
         badge.text.clone(),
         font,
-        t.text_tertiary,
+        ink,
         t,
         move |state, tx| header_pop::press(state, &pressed.0, &pressed.1, What::Usage, tx),
     )
-    .key(header_pop::anchor(leaf, What::Usage));
+    .key(header_pop::anchor(leaf, What::Usage))
+    .expanded(open);
+    let badge = if open { badge.fill(t.bg_button) } else { badge };
     header_pop::hovers(badge, leaf, session, What::Usage)
 }
 
@@ -127,24 +134,29 @@ pub(super) fn width(badge: &Badge, font: rune::TextStyle) -> super::fit::Widths 
     }
 }
 
+/// The weight of `.session-usage-summary strong` and `.session-usage-model header strong`.
+const STRONG: rune::TextStyle = rune::TextStyle {
+    weight: 600.0,
+    ..type_::LABEL
+};
+
 /// The breakdown of the open usage popover, under its badge.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == pop.session)?;
     let usage = shown(session)?;
     let summary = row()
         .w_full()
-        .items_center()
-        .gap(space::S2)
+        .padding(10.0)
+        .gap(12.0)
         .child(
-            text("Session usage")
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
-        .child(
-            text(format!("{} tokens", grouped(usage.total_tokens)))
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .grow(1.0),
+            col()
+                .grow(1.0)
+                .gap(4.0)
+                .child(text("Session usage").font(STRONG).color(t.text_primary))
+                .child(caption(
+                    &format!("{} tokens", grouped(usage.total_tokens)),
+                    t,
+                )),
         )
         .children(usage.cost_usd.map(|cost| {
             text(format!(
@@ -152,24 +164,31 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
                 dollars(cost),
                 unpriced_mark(usage.has_unpriced_usage)
             ))
-            .font(type_::LABEL)
+            .font(STRONG)
             .color(t.text_primary)
         }));
     let surface = col()
         .key(pop.surface())
         .role("dialog")
         .label("Session usage breakdown")
-        .w(300.0)
-        .padding(space::S2)
-        .gap(space::S2)
+        .w(390.0)
+        .padding(6.0)
         .focusable(true)
         .no_focus_ring()
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
         })
         .child(summary)
-        .children(usage.models.iter().map(|m| model(m, t)))
-        .children(pop.pinned.then(|| caption("esc close", t)));
+        .child(
+            col()
+                .w_full()
+                .gap(6.0)
+                .children(usage.models.iter().map(|m| model(m, t))),
+        )
+        .children(
+            pop.pinned
+                .then(|| caption("esc close", t).pt(8.0).px(10.0).pb(3.0)),
+        );
     let surface = if pop.pinned {
         surface
             .modal_tx(true, |state: &mut State, _: &mut Tx| {
@@ -188,6 +207,8 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     ))
 }
 
+/// One model's card, `.session-usage-model`: its name and total over its counts in two
+/// columns.
 fn model(model: &SessionUsageModel, t: &Tokens) -> El {
     let name = if model.purpose == "guardian" {
         format!("Guardian · {}", model.model)
@@ -206,7 +227,10 @@ fn model(model: &SessionUsageModel, t: &Tokens) -> El {
         .unwrap_or_default();
     let count = |label: &str, value: i64| {
         row()
-            .w_full()
+            .w_frac(0.5)
+            .shrink()
+            .min_w(0.0)
+            .gap(8.0)
             .child(
                 text(label.to_owned())
                     .font(type_::LABEL)
@@ -219,17 +243,23 @@ fn model(model: &SessionUsageModel, t: &Tokens) -> El {
                     .color(t.text_secondary),
             )
     };
+    let pair = |left: El, right: El| row().w_full().gap(18.0).child(left).child(right);
     col()
         .w_full()
-        .gap(2.0)
+        .padding(10.0)
+        .fill(t.bg_panel)
+        .border(1.0, t.border_subtle)
+        .radius(7.0)
         .child(
             row()
                 .w_full()
-                .gap(space::S2)
+                .items_center()
+                .gap(12.0)
                 .child(
                     text(name)
-                        .font(type_::LABEL)
+                        .font(STRONG)
                         .color(t.text_primary)
+                        .truncate()
                         .grow(1.0),
                 )
                 .child(caption(
@@ -237,22 +267,34 @@ fn model(model: &SessionUsageModel, t: &Tokens) -> El {
                     t,
                 )),
         )
-        .child(count("Input", model.input_tokens))
-        .child(count("Output", model.output_tokens))
-        .child(count("Cache read", model.cache_read_tokens))
-        .child(count("Cache write, 5m", model.cache_write_5m_tokens))
-        .child(count("Cache write, 1h", model.cache_write_1h_tokens))
-        .child(count(
-            "Cache write, unknown",
-            model.cache_write_unclassified_tokens,
-        ))
+        .child(
+            col()
+                .w_full()
+                .mt(10.0)
+                .gap(7.0)
+                .child(pair(
+                    count("Input", model.input_tokens),
+                    count("Output", model.output_tokens),
+                ))
+                .child(pair(
+                    count("Cache read", model.cache_read_tokens),
+                    count("Cache write, 5m", model.cache_write_5m_tokens),
+                ))
+                .child(pair(
+                    count("Cache write, 1h", model.cache_write_1h_tokens),
+                    count(
+                        "Cache write, unknown",
+                        model.cache_write_unclassified_tokens,
+                    ),
+                )),
+        )
         .children(model.has_unpriced_usage.then(|| {
             let reason = model
                 .unpriced_reason
                 .as_deref()
                 .filter(|r| !r.is_empty())
                 .unwrap_or("Some usage has no price.");
-            caption(&format!("* {reason}"), t)
+            caption(&format!("* {reason}"), t).mt(9.0)
         }))
 }
 

@@ -222,6 +222,7 @@ struct Subline {
     role: Option<super::chain::Trigger>,
     host: Option<String>,
     usage: Option<super::usage::Badge>,
+    usage_open: bool,
     provenance: Option<super::provenance::Line>,
     levels: Vec<(Piece, Level)>,
     ask: Option<crate::asks::Chip>,
@@ -303,6 +304,12 @@ fn sublines(
                 role: super::chain::trigger(s, &facts.sessions),
                 host: super::host::name(s, &facts.outposts),
                 usage: super::usage::badge(s),
+                usage_open: desk.header_pop.open.as_ref().is_some_and(|pop| {
+                    pop.on(
+                        &super::header_pop::Host::Tile(p.pane_id.clone()),
+                        super::header_pop::What::Usage,
+                    )
+                }),
                 provenance: super::provenance::line(s),
                 levels: Vec::new(),
                 ask: crate::asks::chip_of(facts, s),
@@ -1394,6 +1401,7 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
             leaf,
             session,
             sub.usage.as_ref()?,
+            sub.usage_open,
             SUBLINE_TYPE,
             t,
         ))

@@ -125,6 +125,7 @@ fn state_meaning(status: &str) -> &'static str {
     }
 }
 
+/// The Tauri app's `--seed-state-color`: each state's hue mixed into a text color.
 pub(crate) fn state_color(status: &str, t: &Tokens) -> Color {
     let mix = attn_ui::colors::mix_srgb;
     match status {
@@ -134,7 +135,7 @@ pub(crate) fn state_color(status: &str, t: &Tokens) -> Color {
         "harvested" => mix(t.text_primary, t.warning, 0.55),
         "withered" => mix(t.text_secondary, t.error, 0.34),
         "plot" => t.text_secondary,
-        _ => t.text_muted,
+        _ => t.text_tertiary,
     }
 }
 
@@ -636,7 +637,7 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
                 .child(
                     text(state_label(status))
                         .font(type_::TITLE)
-                        .color(t.text_primary),
+                        .color(state_color(status, t)),
                 )
                 .child(caption(state_meaning(status), t).wrap()),
         )
@@ -650,6 +651,7 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
     };
     let note_head = row()
         .w_full()
+        .justify_between()
         .gap(space::S2)
         .child(caption(
             if latest.is_some_and(|n| n.kind == "handoff") {
@@ -663,7 +665,14 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
     let note = col()
         .key(format!("{}.note", pop.surface()))
         .label("Latest note")
-        .gap(2.0)
+        .w_full()
+        .mt(16.0)
+        .py(11.0)
+        .px(12.0)
+        .gap(7.0)
+        .fill(t.bg_panel)
+        .border(1.0, t.border_subtle)
+        .radius(7.0)
         .child(note_head)
         .child(prose(note_words, t));
     let reason = seed
@@ -703,31 +712,45 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
             row()
                 .w_full()
                 .gap(space::S2)
-                .child(text("Open seed ↗").font(type_::LABEL).color(ink).grow(1.0))
+                .child(text("Open seed ↗").font(OPEN_TYPE).color(ink).grow(1.0))
                 .child(text(face).font(type_::MONO_CAPTION).color(id_ink))
         })
         .build(attn_ui::kit(t))
         .key(format!("{}.open", pop.surface()))
-        .w_full();
-    col()
         .w_full()
-        .gap(space::S2)
+        .h(OPEN_TYPE.line_px() + 20.0)
+        .px(11.0)
+        .mt(7.0)
+        .radius(6.0)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle);
+    let told = col()
+        .w_full()
         .child(standing)
         .child(note)
         .children(outcome.map(|(head, words)| {
             col()
                 .key(format!("{}.outcome", pop.surface()))
-                .gap(2.0)
+                .mt(14.0)
+                .gap(7.0)
                 .child(caption(head, t))
                 .child(prose(words, t))
         }))
-        .children(reports_here.then(|| caption("This agent reports to this seed.", t)))
-        .children(reports_to)
-        .child(open_seed)
+        .children(reports_here.then(|| caption("This agent reports to this seed.", t).mt(13.0)))
         .pt(11.0)
         .px(11.0)
-        .pb(4.0)
+        .pb(4.0);
+    col()
+        .w_full()
+        .child(told)
+        .children(reports_to)
+        .child(open_seed)
 }
+
+/// `.pane-seed-context-open`: the popover's own text, at regular weight.
+const OPEN_TYPE: TextStyle = TextStyle {
+    weight: 400.0,
+    ..type_::LABEL
+};
 
 fn kit_link(
     label: String,

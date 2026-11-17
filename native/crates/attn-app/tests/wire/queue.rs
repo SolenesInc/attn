@@ -1503,6 +1503,41 @@ fn rename_session_sends_the_typed_name_and_refuses_an_empty_one() {
 }
 
 #[test]
+fn rename_sessions_cancel_closes_sending_nothing_and_save_sends_the_typed_name() {
+    let daemon = Daemon::scripted().state(the_queue());
+    daemon.on("rename_session", |r| {
+        attn_testkit::message(attn_protocol::RenameResultMessage {
+            cmd: "rename_session".into(),
+            id: r["session_id"].as_str().unwrap().into(),
+            success: true,
+            ..attn_protocol::RenameResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    actions_for(&mut world, "queue-turn.t-old");
+    world.gesture(|app| app.click(Target::key("session.menu.rename")));
+    world.gesture(|app| app.type_text("docs pass"));
+    world.gesture(|app| app.click(Target::role("button").name("Cancel")));
+    assert!(world.screen().find(Target::role("dialog")).is_none());
+    assert!(world.daemon.sent_of("rename_session").is_empty());
+
+    actions_for(&mut world, "queue-turn.t-old");
+    world.gesture(|app| app.click(Target::key("session.menu.rename")));
+    world.gesture(|app| app.type_text("docs pass"));
+    world.gesture(|app| app.click(Target::role("button").name("Save")));
+
+    let renamed = world.daemon.sent_of("rename_session");
+    assert_eq!(
+        (
+            renamed[0]["session_id"].as_str(),
+            renamed[0]["label"].as_str()
+        ),
+        (Some("t-old"), Some("docs pass"))
+    );
+    assert!(world.screen().find(Target::role("dialog")).is_none());
+}
+
+#[test]
 fn the_actions_menu_closes_when_its_agent_goes_away() {
     let mut world = World::start(Daemon::scripted().state(the_queue()));
     actions_for(&mut world, "queue-turn.t-old");
