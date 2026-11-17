@@ -12,7 +12,7 @@ if [[ "$ID" != ubuntu || "$VERSION_ID" != 24.04 ]]; then
   exit 1
 fi
 sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
-sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl ca-certificates unzip python3 iproute2 nodejs npm
+sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl ca-certificates unzip python3 iproute2
 bun_version="$(awk '$1 == "bun" {print $2}' "$root/.tool-versions")"
 if [[ "$(bun --version 2>/dev/null || true)" != "$bun_version" ]]; then
   curl -fsSL https://bun.sh/install | bash -s -- "bun-v$bun_version"
@@ -20,9 +20,15 @@ fi
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq software-properties-common
 sudo add-apt-repository -y ppa:fish-shell/release-4
 sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
-sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential pkg-config bash coreutils desktop-file-utils fish \
-  gh imagemagick libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
-  libxdo-dev neovim sqlite3 xauth xclip xdg-utils xdotool xvfb zsh dbus-x11
+mapfile -t ci_packages < <(grep -v '^#' "$root/.github/actions/setup-linux-app-deps/packages.txt")
+sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential pkg-config gh dbus-x11 "${ci_packages[@]}"
+# A run holds its turn on a checkout through an SSH session. Probing clients
+# drops one that vanished without closing, such as a laptop gone to sleep,
+# after 2 minutes instead of the 2 hours TCP keepalive takes.
+if [[ -d /etc/ssh/sshd_config.d ]]; then
+  printf 'ClientAliveInterval 30\nClientAliveCountMax 4\n' | sudo tee /etc/ssh/sshd_config.d/attn-linux-runner.conf >/dev/null
+  sudo systemctl try-reload-or-restart ssh
+fi
 case "$(uname -m)" in
   aarch64) go_arch=arm64; node_arch=arm64 ;;
   x86_64) go_arch=amd64; node_arch=x64 ;;
@@ -66,6 +72,7 @@ if ! command -v rustup >/dev/null; then
 fi
 rust_version="$(awk -F '"' '/^channel =/ {print $2}' "$root/rust-toolchain.toml")"
 rustup toolchain install "$rust_version" --profile minimal
+rustup toolchain install "$(awk -F '"' '/^channel =/ {print $2}' "$root/native/rust-toolchain.toml")" --profile minimal
 rustup default "$rust_version"
 printf '\nRunner tools:\n'
 go version

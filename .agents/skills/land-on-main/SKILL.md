@@ -45,7 +45,7 @@ landing, as `AGENTS.md` "Commands and verification" says.
 
 When the machine has the capacity, you may run the scenarios that cover an
 app-observable change on a non-production instance. When no scenario covers
-the change, add one or tell the user. `scripts/land.sh` runs on CI's Linux each
+the change, add one or tell the user. `scripts/land.sh` runs on Linux each
 scenario you add or change and, when you change product code, each scenario
 listed by a feature file you change, so a scenario you ran on a Mac still gets
 its Linux run before the push.
@@ -123,7 +123,7 @@ scripts/land.sh
 ```
 
 Push with `scripts/land.sh`. It rebases onto `origin/main`, runs the scenarios
-your change selects on CI's Linux beside a fast gate for the changed paths, and
+your change selects on Linux beside a fast gate for the changed paths, and
 pushes. `.githooks/pre-push` refuses a plain
 `git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
 after you run its checks yourself.

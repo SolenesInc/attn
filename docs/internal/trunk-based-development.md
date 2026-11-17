@@ -22,7 +22,7 @@ dispatches a fixer. The release process writes release notes from the commits.
 ### What land.sh does
 
 `scripts/land.sh` rebases onto `origin/main`, runs the catalog scenarios the
-landing selects on CI's Linux beside a fast gate for the paths the landing
+landing selects on Linux beside a fast gate for the paths the landing
 changes, and pushes.
 
 A landing selects two kinds of scenario:
@@ -35,8 +35,16 @@ A landing selects two kinds of scenario:
   expecting the old behavior
 
 `land.sh` starts the Acceptance soak workflow for them on a temporary
-`land-scenarios/` branch, waits for it, and deletes the branch. Every machine
-lands through this one path. Scenarios skipped on Linux are not run.
+`land-scenarios/` branch, waits for it, and deletes the branch. Scenarios
+skipped on Linux are not run.
+
+A clone with `git config attn.landRunner ssh:<target>` runs them on a landing
+runner instead: a Linux machine that keeps its build output between landings.
+[Linux runner](linux-runner.md#landing-runner) says how to set one up. When the
+machine cannot be reached, the landing says so and uses the Acceptance soak
+workflow. A scenario that fails on the landing runner runs again on the
+workflow, and only that run blocks the landing. Unset, or `github`, is the
+workflow.
 
 A scenario that passed for the landing's diff does not run again. The diff is
 `git diff origin/main...HEAD`, identified by `git patch-id --verbatim`, so it

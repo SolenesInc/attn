@@ -86,6 +86,26 @@ case "$1 $2" in
 esac
 EOF
 chmod +x "$work/bin/gh"
+cat >"$work/bin/pnpm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+args="$*"
+case "$args" in
+  *"real-app:linux status --provider ssh --target runner.invalid") exit "${LAND_RUNNER_REACH_EXIT:-0}" ;;
+  *"real-app:linux soak "*)
+    printf 'runner %s\n' "${args#*real-app:linux }" >>"$LAND_CHECK_LOG"
+    if [ -n "${LAND_RUNNER_HOLD:-}" ]; then
+      bash -c 'trap "echo \"runner child stopped\" >>\"\$LAND_CHECK_LOG\"; exit 143" TERM
+        echo running >"$LAND_RUNNER_HOLD/watching"
+        read -r _ <>"$LAND_RUNNER_HOLD/release"' &
+      wait
+    fi
+    [[ " $args " != *" --scenario ${LAND_RUNNER_FAIL:-} "* ]] || exit 1
+    ;;
+  *) echo "unexpected pnpm $*" >&2; exit 2 ;;
+esac
+EOF
+chmod +x "$work/bin/pnpm"
 cat >"$work/bin/attn" <<'EOF'
 #!/usr/bin/env bash
 [ "$*" = "seed show s-fix123" ]
@@ -470,6 +490,55 @@ git commit -q --amend --no-edit
 bash "$root/scripts/land.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; exit 1; }
 [ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
 grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'a changed diff did not run its scenario again' >&2; cat "$work/output" >&2; exit 1; }
+
+git config attn.landRunner ssh:runner.invalid
+printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+land 'Change a scenario on the landing runner'
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --scenario shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed on the landing runner ran on CI' >&2; exit 1; fi
+expect_output 'scenario shelf-moves passed on runner.invalid'
+grep -rqE '^shelf-moves ssh:runner.invalid /.*/shelf-moves.log$' "$records" || { echo 'a scenario that passed on the landing runner left no pass record' >&2; exit 1; }
+
+printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+land 'Change a scenario while the landing runner is down' LAND_RUNNER_REACH_EXIT=255
+if grep -qF runner "$LAND_CHECK_LOG"; then echo 'a scenario ran on an unreachable landing runner' >&2; exit 1; fi
+grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'an unreachable landing runner did not fall back to CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'the landing runner runner.invalid cannot be reached'
+
+printf '\n' >>internal/example/example.go
+printf '\n' >>.agents/skills/drive-attn/features/example.md
+land 'Change the product while a scenario fails on the landing runner' LAND_RUNNER_FAIL=shelf-peek
+grep -qF -- '--scenario shelf-layout ' "$LAND_CHECK_LOG" && grep -qF -- '--scenario shelf-peek ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run each scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'only the scenario that failed on the landing runner should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'scenario shelf-peek failed on runner.invalid, so it runs again on CI'
+no_land_scenario_refs
+
+export LAND_RUNNER_FAIL=shelf-moves
+refuses 'a scenario that fails on the landing runner and on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
+unset LAND_RUNNER_FAIL
+grep -qF 'gh run view 7 --log-failed' "$work/failure" || { echo 'the scenario that failed on CI did not block the landing' >&2; cat "$work/failure" >&2; exit 1; }
+no_land_scenario_refs
+
+mkdir "$work/runner-hold"
+mkfifo "$work/runner-hold/watching" "$work/runner-hold/release"
+printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+git add -A
+git commit -qm 'Scenario change whose gate fails while it runs on the landing runner'
+: >"$LAND_CHECK_LOG"
+before="$(git --git-dir="$work/remote" rev-parse main)"
+if env LAND_RUNNER_HOLD="$work/runner-hold" LAND_GATE_AWAITS_SOAK="$work/runner-hold/watching" LAND_CHECK_EXIT=1 bash "$root/scripts/land.sh" >"$work/output" 2>&1; then
+  echo 'a landing whose gate failed pushed' >&2
+  exit 1
+fi
+[ "$before" = "$(git --git-dir="$work/remote" rev-parse main)" ]
+grep -qxF 'runner child stopped' "$LAND_CHECK_LOG" || { echo 'a failed gate did not stop the processes of the scenario on the landing runner' >&2; cat "$LAND_CHECK_LOG" "$work/output" >&2; exit 1; }
+[ ! -e "$(record_for_landing)" ] || { echo 'a scenario stopped on the landing runner recorded a pass' >&2; exit 1; }
+git reset -q --hard origin/main
+
+git config attn.landRunner runner.invalid
+refuses 'a landing runner that names no runner' GIT_CONFIG_NOSYSTEM=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
+grep -qF 'set it to github or ssh:<target>' "$work/failure" || { cat "$work/failure" >&2; exit 1; }
+git config --unset attn.landRunner
 
 hold="$work/hold" second="$work/second"
 mkdir "$hold"

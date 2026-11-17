@@ -23,7 +23,8 @@ repository root.
   empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and explicit approval.
 - Install the current checkout first; a stale build fails its fingerprint check.
 - `scripts/land.sh` runs each scenario a landing adds or changes on CI's Linux
-  before the push, through the Acceptance soak workflow. When the landing also
+  before the push, through the Acceptance soak workflow, or on the clone's
+  [landing runner](../../../docs/internal/linux-runner.md#landing-runner). When the landing also
   changes product code, it runs the scenarios listed by each feature file the
   landing changes in `.agents/skills/drive-attn/features/`.
 - Hunt CI flakes with

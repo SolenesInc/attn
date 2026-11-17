@@ -47,21 +47,36 @@ and non-ignored new files. These commands do not copy Git configuration, hooks,
 host tool caches, or ignored files. They send Git history in a bundle, without
 host credentials. The guest keeps a separate managed checkout per host checkout
 under
-`~/.local/share/attn-linux-runner/<checkout hash>/source`.
+`~/.local/share/attn-linux-runner/<checkout>/source`. `<checkout>` is a hash of
+the host checkout's path; `--checkout <name>` picks another, so several host
+checkouts can share one guest checkout and its build output.
 
 **Sync replaces changes made inside that managed checkout.** Edit on the host.
 Guest build caches excluded by the repository's ignore rules survive sync.
 A lock prevents sync and commands from changing the same checkout concurrently.
+`test` and `soak` take turns on a checkout: a run that finds another one using
+it says so and waits, from any host, until that run ends.
 
 `run` uses the last synced source, so run `sync` after you edit. `build` syncs
 and installs the packaged app. The app's existing build fingerprint check
 rejects stale installs. Commands run with a clean environment and the named
-`linux-<checkout hash>` instance. `--instance` selects another non-production
+`linux-<checkout>` instance. `--instance` selects another non-production
 name. The guest receives no host routing variables or provider credentials.
 
 `test` syncs, removes the guest instance with `attn instance clean`, installs the
 instance again, and runs the existing serial matrix under Xvfb, so every run
-starts from empty instance data, like CI. `test` copies the artifacts even when a scenario fails, and it exits with the failing command's exit status. Pass `--out <directory>` to choose the results directory. Without `--out`, `test` writes results under the host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
+starts from empty instance data, like CI. `test` copies the artifacts even when a scenario fails, and it exits with the failing command's exit status. Pass `--out <directory>` to choose the results directory. Without `--out`, `test` writes results under the host temporary directory in `attn-linux-artifacts/<provider>/<checkout>`.
+
+`soak --scenario <id>` runs one scenario the way CI's Acceptance soak does: it
+syncs, cleans the instance, installs the app the scenario needs (Tauri or
+native), and runs the scenario once under Xvfb. It also runs scenarios that the
+serial matrix leaves to the soak. Artifacts and the exit status work as for
+`test`.
+
+After its scenarios, `test` and `soak` run `scripts/native-build-clean` on the
+guest, which keeps native build output within the budget
+[Native app](native-app.md#build-output) describes, as `land.sh` does after a
+push.
 
 The runner starts Xvfb with `-noreset`, so short-lived window probes cannot reset the display while GTK initializes the app. CI acceptance and soak runs use the same setting.
 
@@ -80,6 +95,38 @@ pnpm --dir app real-app:linux stop
 
 `clean` removes only the selected installed instance, using the guest CLI.
 `stop` preserves source and caches. `up` starts the VM again without provisioning.
+
+## Landing runner
+
+`scripts/land.sh` can run a landing's scenarios on a Linux machine of your own
+instead of the Acceptance soak workflow. The machine keeps its build output
+between landings, so a landing waits for an incremental build instead of a
+cold one on a fresh GitHub runner.
+
+1. Take an Ubuntu 24.04 machine you reach with `ssh <target>` without a
+   password prompt, and whose user has passwordless sudo.
+2. Provision it from a checkout of attn:
+   `pnpm --dir app real-app:linux provision --provider ssh --target <target>`.
+   It installs CI's app packages from
+   `.github/actions/setup-linux-app-deps/packages.txt` and the pinned Go, Node,
+   pnpm, bun and Rust. A machine that already has Node keeps it; the runner
+   uses its own.
+3. In the clone you land from, run `git config attn.landRunner ssh:<target>`.
+   Every worktree of the clone uses it. `git config --unset attn.landRunner`
+   goes back to GitHub.
+
+Each scenario then runs as `real-app:linux soak --checkout land` on that
+machine, from an empty instance. Every landing, from any clone or host, uses
+that one guest checkout and its build output, so the machine holds one build
+of each app however many worktrees land. Landings take turns on it, one
+scenario at a time.
+
+The landing prints where it keeps each scenario's log from the machine.
+[What land.sh does](trunk-based-development.md#what-landsh-does) says what
+happens when the machine is down or a scenario fails there.
+
+Reprovision after a change to `packages.txt`, `go.mod`, `.tool-versions` or a
+`rust-toolchain.toml`.
 
 ## Extending providers
 
