@@ -1,5 +1,6 @@
 import fs from 'node:fs';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { promisify } from 'node:util';
 import {
   daemonPidFilePathForInstance,
@@ -306,6 +307,26 @@ export async function stopDaemon(instance) {
   }
   try { process.kill(pid, 'SIGKILL'); } catch {}
   return pid;
+}
+
+const HOLD_ENSURE_LOCK = 'use Fcntl qw(:flock); $| = 1; open(my $lock, ">>", $ARGV[0]) or die "$!\\n"; flock($lock, LOCK_EX) or die "$!\\n"; print "held\\n"; <STDIN>;';
+
+async function holdEnsureLock(instance) {
+  const holder = spawn('perl', ['-e', HOLD_ENSURE_LOCK, `${daemonPidFilePathForInstance(instance)}.ensure`], { stdio: ['pipe', 'pipe', 'inherit'] });
+  const exited = once(holder, 'exit');
+  const [held] = await Promise.race([once(holder.stdout, 'data'), exited]);
+  if (String(held).trim() !== 'held') throw new Error(`could not hold the daemon ensure lock (exit ${held})`);
+  return async () => { holder.stdin.end(); await exited; };
+}
+
+export async function stopDaemonHeldDown(instance) {
+  const release = await holdEnsureLock(instance);
+  try {
+    return { pid: await stopDaemon(instance), release };
+  } catch (error) {
+    await release();
+    throw error;
+  }
 }
 
 export async function stopDaemonKeepingTerminals(instance) {

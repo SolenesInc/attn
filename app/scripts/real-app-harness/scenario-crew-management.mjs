@@ -18,6 +18,7 @@ import {
   readProcessTable,
   snapshot,
   stopDaemon,
+  stopDaemonHeldDown,
 } from './perfMeasure.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -506,14 +507,18 @@ try {
 
   await runner.step('a_disconnected_save_recovers_after_the_socket_reconnects', async () => {
     const disconnected = observer.waitForDisconnect();
-    const stopped = await stopDaemon(instance);
-    runner.assert(Number.isInteger(stopped), 'the scenario stopped its isolated daemon by captured pid', { stopped });
-    await disconnected;
-    await click('[data-testid="crew-route"]');
-    await click('dialog[aria-label="Choose a model"] [data-effort="low"]');
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Not saved' });
-    runner.assert((await panelText()).includes('WebSocket not connected'), 'the panel explains the transport failure');
-    await screenshot('08-save-disconnected.png');
+    const down = await stopDaemonHeldDown(instance);
+    try {
+      runner.assert(Number.isInteger(down.pid), 'the scenario stopped its isolated daemon by captured pid', { stopped: down.pid });
+      await disconnected;
+      await click('[data-testid="crew-route"]');
+      await click('dialog[aria-label="Choose a model"] [data-effort="low"]');
+      await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Not saved' });
+      runner.assert((await panelText()).includes('WebSocket not connected'), 'the panel explains the transport failure');
+      await screenshot('08-save-disconnected.png');
+    } finally {
+      await down.release();
+    }
     runAttn(['daemon', 'ensure']);
     await observer.connect();
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Saved' }, 45_000);

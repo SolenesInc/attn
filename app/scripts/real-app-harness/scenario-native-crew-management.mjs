@@ -8,7 +8,7 @@ import { crewManagementFixture, modelAwareWrapperSource, transcriptLaunches } fr
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
-import { stopDaemon } from './perfMeasure.mjs';
+import { stopDaemonHeldDown } from './perfMeasure.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -355,13 +355,18 @@ try {
 
   await runner.step('a_save_lost_with_the_daemon_goes_once_it_returns', async () => {
     const gone = observer.waitForDisconnect();
-    runner.assert(Number.isInteger(await stopDaemon(instance)), 'the scenario stopped its own daemon');
-    await gone;
-    await driver.click({ key: `settings.route.crew.${inSession}` });
-    await driver.click({ role: 'button', name: 'low' });
-    if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
-    await named('crew.launch.status', 'Not saved');
-    await shot('08-not-saved.png');
+    const down = await stopDaemonHeldDown(instance);
+    try {
+      runner.assert(Number.isInteger(down.pid), 'the scenario stopped its own daemon');
+      await gone;
+      await driver.click({ key: `settings.route.crew.${inSession}` });
+      await driver.click({ role: 'button', name: 'low' });
+      if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
+      await named('crew.launch.status', 'Not saved');
+      await shot('08-not-saved.png');
+    } finally {
+      await down.release();
+    }
     attn('daemon', 'ensure');
     await observer.connect();
     await named('crew.launch.status', 'Saved', 45_000);
