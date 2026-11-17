@@ -90,9 +90,9 @@ runs:
     - name: Cache Rust build
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: app-acceptance-fast-profile
+        shared-key: ${{ inputs.app == 'native' && 'app-acceptance-native-fast-profile' || 'app-acceptance-fast-profile' }}
         workspaces: |
-          app/src-tauri
+          ${{ inputs.app == 'native' && 'native' || 'app/src-tauri' }}
           pty-host
 
     - name: Ensure the attn CLI

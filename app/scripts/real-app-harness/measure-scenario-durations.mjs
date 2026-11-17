@@ -89,7 +89,7 @@ function main() {
     throw new Error(`The spool holds ${runs.length} CI runs of ${JOB}, fewer than the ${runCount} asked for; run go tool test-history sync`);
   }
   const samples = passingFirstAttempts(runs);
-  const ids = resolveScenarios([], 'tauri')
+  const ids = ['tauri', 'native'].flatMap((app) => resolveScenarios([], app))
     .filter((scenario) => !scenarioSkipReason(scenario, 'linux', {}))
     .map((scenario) => scenario.id)
     .sort();
