@@ -545,6 +545,12 @@ fn shortcut_editor(dark: bool) {
     snap(&mut world, "shortcut-editor", dark);
 }
 
+fn diagnostic_report(dark: bool) {
+    let mut world = with_document(dark);
+    run(&mut world, Action::CreateDiagnosticReport);
+    snap(&mut world, "diagnostic-report", dark);
+}
+
 fn close_desktop(dark: bool) {
     let mut world = with_document(dark);
     run(
@@ -1451,6 +1457,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         settings_agents(dark);
         shortcut_editor(dark);
         close_desktop(dark);
+        diagnostic_report(dark);
         palette(dark);
         terminal_overlays(dark);
         tile_window(dark);

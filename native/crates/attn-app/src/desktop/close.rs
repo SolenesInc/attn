@@ -1,8 +1,7 @@
 use attn_protocol::{Desktop, DesktopCloseMessage};
-use attn_ui::Tokens;
-use rune::tok::space;
-use rune::{El, Tx, row};
-use rune_kit::{Button, ButtonVariant, Dialog};
+use attn_ui::{Dialog, DialogFrame, Tokens, type_};
+use rune::{El, Tx, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use super::layout::Node;
 use crate::State;
@@ -113,32 +112,51 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     };
     let k = attn_ui::kit(t);
     let mut layer = Vec::new();
-    Dialog::new("close_desktop", format!("Close {}?", closing.title))
-        .description("Close this desktop and everything inside it?")
-        .open(true)
-        .fit()
-        .on_close_tx(cancel)
-        .child(
-            row()
-                .w_full()
-                .gap(space::S2)
-                .padding(space::S3)
-                .child(row().grow(1.0))
-                .child(
-                    Button::new("Cancel")
-                        .on_press_tx(cancel)
-                        .build(k)
-                        .key("close_desktop.cancel")
-                        .autofocus(),
-                )
-                .child(
-                    Button::new("Close desktop")
-                        .variant(ButtonVariant::Submit)
-                        .on_press_tx(confirm)
-                        .build(k)
-                        .key("close_desktop.confirm"),
-                ),
-        )
-        .build(k, &mut layer);
+    Dialog::new(
+        "close_desktop",
+        format!("Close {}?", closing.title),
+        DialogFrame::prompt(t),
+    )
+    .on_close_tx(cancel)
+    .width(620.0)
+    .child(
+        text("Close this desktop and everything inside it?")
+            .key("close_desktop.question")
+            .font(type_::BODY)
+            .color(t.text_primary)
+            .wrap()
+            .px(24.0)
+            .pb(24.0),
+    )
+    .child(
+        row()
+            .w_full()
+            .gap(10.0)
+            .px(24.0)
+            .pb(22.0)
+            .justify_end()
+            .child(
+                Button::new("Cancel")
+                    .on_press_tx(cancel)
+                    .build(k)
+                    .key("close_desktop.cancel")
+                    .h(PROMPT_BUTTON_HEIGHT)
+                    .px(12.0)
+                    .autofocus(),
+            )
+            .child(
+                Button::new("Close desktop")
+                    .variant(ButtonVariant::Submit)
+                    .on_press_tx(confirm)
+                    .build(k)
+                    .key("close_desktop.confirm")
+                    .h(PROMPT_BUTTON_HEIGHT)
+                    .px(12.0),
+            ),
+    )
+    .build(t, &mut layer);
     layer
 }
+
+/// `.mp-button`: 7 points above and below 13 point text, inside a 1 point edge.
+const PROMPT_BUTTON_HEIGHT: f32 = 31.0;

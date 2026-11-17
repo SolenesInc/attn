@@ -4,8 +4,13 @@ use attn_ui::Tokens;
 use rune::tok::TextStyle;
 use rune::{Color, El, text};
 
-pub(super) const WIDTH: f32 = 520.0;
+/// The Tauri scenes' `viewBox="0 0 520 250"`, which each scene is painted in.
+const PAINTED_WIDTH: f32 = 520.0;
 const HEIGHT: f32 = 250.0;
+
+/// The width a scene is drawn at: `.whats-new-step`'s 552 point column, which the Tauri SVG
+/// fills.
+pub(super) const WIDTH: f32 = 552.0;
 
 #[derive(Clone, Copy)]
 enum Agent {
@@ -471,15 +476,21 @@ pub(super) fn scene(scene: Scene, press: Option<super::Combos>, t: &Tokens) -> E
             .border(1.0, t.border)
             .child(super::keycaps(&keys, t).a11y_hidden())
     });
-    rune::el()
+    let drawn = WIDTH / PAINTED_WIDTH;
+    let painted = rune::el()
         .key("whats-new.scene")
         .role("img")
         .label(scene.label())
-        .size(WIDTH, HEIGHT)
+        .size(PAINTED_WIDTH, HEIGHT)
         .radius(10.0)
         .clip_rounded(10.0)
         .fill(t.bg_panel)
         .border(1.0, t.border_subtle)
         .children(paint.out.into_iter().map(El::a11y_hidden))
         .children(press)
+        .scale(drawn);
+    rune::el()
+        .size(WIDTH, HEIGHT * drawn)
+        .center()
+        .child(painted)
 }

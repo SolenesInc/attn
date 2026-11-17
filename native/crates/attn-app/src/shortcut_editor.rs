@@ -6,16 +6,15 @@
 use std::collections::BTreeMap;
 
 use attn_protocol::SetSettingMessage;
-use attn_ui::Tokens;
-use attn_ui::type_;
+use attn_ui::{Dialog, DialogFrame, Tokens, type_};
 use rune::tok::space;
 use rune::{
     Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx, col, row,
     text,
 };
 use rune_kit::{
-    Badge, BadgeVariant, Button, ButtonVariant, Dialog, Kit, ShortcutRecorder,
-    ShortcutRecorderState, TextInput, shortcut_error_message,
+    Badge, BadgeVariant, Button, ButtonVariant, Kit, ShortcutRecorder, ShortcutRecorderState,
+    TextInput, shortcut_error_message,
 };
 use serde_json::{Map, Value, json};
 
@@ -27,7 +26,11 @@ use crate::shell::Layer;
 const THEN_RECORDER: &str = "shortcut-editor.then";
 const FILTER: &str = "shortcut-editor.filter";
 /// The kit dialog's own inset, which the editor's filter, list and footer line up with.
-const PAD: f32 = 16.0;
+/// `.shortcut-editor-modal`'s inset, which its header, filter, list and footer share.
+const INSET: f32 = 20.0;
+
+/// `.shortcut-editor-category { margin-top: 16px }`.
+const SECTION_GAP: f32 = 16.0;
 
 /// The editor's recordings, its filter and a reassignment waiting for the user's answer. They
 /// start over each time the editor opens.
@@ -614,9 +617,12 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let body = col()
         .key("shortcut-editor.body")
         .w_full()
-        .h(440.0)
-        .px(PAD)
-        .gap(PAD)
+        .grow(1.0)
+        .min_h(0.0)
+        .px(INSET)
+        .pt(8.0)
+        .pb(16.0)
+        .gap(SECTION_GAP)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
@@ -626,9 +632,12 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let footer = row()
         .key("shortcut-editor.footer")
         .w_full()
-        .padding(PAD)
-        .gap(space::S2)
-        .justify_end()
+        .px(INSET)
+        .py(12.0)
+        .items_center()
+        .justify_between()
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+        .border_layout()
         .child(
             Button::new("Restore Defaults")
                 .on_press_tx(restore_defaults)
@@ -647,16 +656,28 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .key("shortcut-editor.done"),
             t,
         ));
-    Dialog::new("shortcut-editor", "Customize Shortcuts")
-        .description("Click a shortcut to rebind it. Changes save automatically.")
-        .open(true)
-        .fit()
-        .width(760.0)
-        .on_close(close)
-        .child(col().w_full().px(PAD).pb(space::S3).child(filter))
-        .child(body)
-        .child(footer)
-        .build(k, layers);
+    Dialog::new(
+        "shortcut-editor",
+        "Customize Shortcuts",
+        DialogFrame::sheet(t),
+    )
+    .subtitle("Click a shortcut to rebind it. Changes save automatically.")
+    .width(720.0)
+    .window_height(0.84)
+    .on_close(close)
+    .child(
+        col()
+            .key("shortcut-editor.filter")
+            .w_full()
+            .px(INSET)
+            .py(12.0)
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+            .border_layout()
+            .child(filter),
+    )
+    .child(body)
+    .child(footer)
+    .build(t, layers);
 }
 
 fn action_row(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit) -> El {

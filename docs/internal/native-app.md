@@ -83,7 +83,7 @@ selected command block and find matches, a Markdown file with code and a Mermaid
 diagram, a review stop with its key line, the review's key sheet and file view,
 the Garden fullscreen and in the dock at its root and on a plot, the Chief's setup, Settings on Appearance, Agents and Analytics, the shortcut editor
 and the shortcuts sheet, What's New on its first and its queue step, the
-close-desktop dialog, the command and agent palettes, the profile switcher, the
+close-desktop dialog, the diagnostic report, the command and agent palettes, the profile switcher, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
 notebook empty and with a folder opened in its tree, a popped-out tile window, the classic new-session picker, Launcher 2.0
 in its dialog, its Where list and on an empty desktop, a new automation's hour

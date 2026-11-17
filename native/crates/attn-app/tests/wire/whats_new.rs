@@ -117,6 +117,35 @@ fn right_enter_and_next_step_forward_and_left_and_back_step_back() {
 }
 
 #[test]
+fn the_dialog_and_its_next_button_hold_still_from_step_to_step() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut world = launch(&after_update(dir.path()), &[]);
+    let place = |world: &mut World| {
+        world.advance(Duration::from_secs(1));
+        let screen = world.screen();
+        let next = screen
+            .bounds(Target::key("whats-new.primary"))
+            .map(|[x, y, w, h]| (x + w, y, h));
+        (
+            screen.bounds(Target::role("dialog").name("What's new")),
+            next,
+        )
+    };
+    let first = place(&mut world);
+    assert!(first.0.is_some() && first.1.is_some(), "{first:?}");
+    for step in 1..STEPS {
+        press(&mut world, Key::Right);
+        assert_eq!(
+            place(&mut world),
+            first,
+            "step {}: {}",
+            step + 1,
+            title(&world)
+        );
+    }
+}
+
+#[test]
 fn got_it_ends_the_tour_and_a_relaunch_keeps_it_closed() {
     let dir = tempfile::tempdir().unwrap();
     let path = after_update(dir.path());

@@ -1,12 +1,12 @@
 //! What's new: a short tour of the release's ideas, one step at a time, shown on the first
 //! launch of a release, replayable from the command palette and from Home's banner.
 
-use attn_ui::Tokens;
 use attn_ui::keycap;
 use attn_ui::type_;
+use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, Mods, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Dialog};
+use rune::{El, Key, KeyEvent, Mods, TextStyle, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use crate::State;
 use crate::action::Action;
@@ -369,6 +369,11 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .w_full()
         .items_center()
         .gap(space::S3)
+        .px(INSET)
+        .py(14.0)
+        .fill(t.shadow.alpha(0.2))
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+        .border_layout()
         .child(
             Button::new("View all shortcuts →")
                 .variant(ButtonVariant::Ghost)
@@ -391,41 +396,45 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .child(
             Button::new(if last { "Got it" } else { "Next" })
                 .variant(ButtonVariant::Submit)
-                .control_size(ControlSize::Small)
                 .on_press_tx(advance)
                 .build(k)
                 .key(PRIMARY)
-                .default_button(),
+                .default_button()
+                .h(32.0)
+                .px(18.0)
+                .radius(8.0),
         );
-    let body = col()
+    let step_view = col()
         .key("whats-new.step")
         .w_full()
-        .gap(space::S3)
-        .padding(space::S6)
-        .pt(0.0)
-        .on_key(on_key)
+        .h(LIVE_HEIGHT)
+        .pt(12.0)
+        .px(INSET)
+        .pb(4.0)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
         .child(scenes::scene(step.scene, step.press.clone(), t))
         .child(
             text(step.title)
                 .key("whats-new.title")
                 .role("heading")
                 .level(2)
-                .font(type_::TITLE)
-                .color(t.text_primary),
+                .font(STEP_TITLE)
+                .color(t.text_primary)
+                .mt(18.0),
         )
         .child(
             text(step.body)
                 .key("whats-new.body")
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap(),
+                .font(STEP_BODY)
+                .color(t.text_tertiary)
+                .wrap()
+                .mt(6.0),
         )
-        .children((!step.keys.is_empty()).then_some(keys))
-        .child(footer);
-    Dialog::new(DIALOG, "What's new")
-        .open(true)
-        .fit()
-        .width(scenes::WIDTH + 2.0 * space::S6)
+        .children((!step.keys.is_empty()).then(|| keys.mt(14.0)));
+    Dialog::new(DIALOG, "What's new", DialogFrame::whats_new(t))
+        .width(scenes::WIDTH + 2.0 * INSET)
         .click_outside(true)
         .header(
             text(format!("{} of {}", index + 1, steps.len()))
@@ -434,9 +443,29 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .color(t.text_tertiary),
         )
         .on_close_tx(dismiss)
-        .child(body)
-        .build(k, layers);
+        .child(
+            col()
+                .key("whats-new.tour")
+                .w_full()
+                .on_key(on_key)
+                .child(step_view)
+                .child(footer),
+        )
+        .build(t, layers);
 }
+
+/// `.whats-new-step`'s and `.whats-new-footer`'s inset.
+const INSET: f32 = 24.0;
+
+/// `.whats-new-live { flex: 0 1 480px }`: the tallest step, so the footer holds still while
+/// stepping.
+const LIVE_HEIGHT: f32 = 480.0;
+
+/// `.whats-new-step h2`.
+const STEP_TITLE: TextStyle = TextStyle::new(19.0, 600.0).tracking(-0.19);
+
+/// `.whats-new-step p`.
+const STEP_BODY: TextStyle = TextStyle::new(13.0, 400.0).lh(20.15);
 
 pub(super) fn keycaps(keys: &Combos, t: &Tokens) -> El {
     keycap::alternatives(

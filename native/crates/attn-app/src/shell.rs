@@ -1,14 +1,13 @@
 use attn_client::{Connection, Facts, Refusal};
 use attn_protocol::Desktop;
-use attn_ui::Tokens;
 use attn_ui::type_;
+use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::tok::space;
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
 use rune_kit::popover::raised;
-use rune_kit::{Button, ButtonVariant, Dialog};
+use rune_kit::{Button, ButtonVariant};
 
 use crate::action::Action;
-use crate::keymap::Keymap;
 use crate::{State, connection};
 
 /// A sequence's second key must follow its leader within this long, as in the Tauri app.
@@ -717,17 +716,20 @@ fn close_layer(state: &mut State, tx: &mut Tx) {
 }
 
 fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
-    let k = attn_ui::kit(t);
-    Dialog::new("shortcuts", "Keyboard shortcuts")
-        .open(true)
+    let edit = rune_kit::Button::new("Edit shortcuts")
+        .on_press_tx(crate::shortcut_editor::open)
+        .build(attn_ui::kit(t))
+        .key("shortcuts.edit");
+    Dialog::new("shortcuts", "Keyboard shortcuts", DialogFrame::sheet(t))
         .width(560.0)
         .max_height(600.0)
+        .header(edit)
         .on_close_tx(close_layer)
         .child(
             col()
                 .key("shortcuts.list")
                 .w_full()
-                .grow(1.0)
+                .shrink()
                 .min_h(0.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
@@ -736,20 +738,13 @@ fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                     col()
                         .w_full()
                         .gap(space::S2)
-                        .padding(space::S6)
-                        .children(cheat_sheet(&state.keymap, t)),
+                        .px(20.0)
+                        .pt(12.0)
+                        .pb(20.0)
+                        .children(crate::cheat_sheet::sections(&state.keymap, t)),
                 ),
         )
-        .build(k, layers);
-}
-
-fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
-    let edit = rune_kit::Button::new("Edit shortcuts")
-        .on_press_tx(crate::shortcut_editor::open)
-        .build(attn_ui::kit(t))
-        .key("shortcuts.edit");
-    let sections = crate::cheat_sheet::sections(keymap, t);
-    std::iter::once(edit).chain(sections).collect()
+        .build(t, layers);
 }
 
 /// A notice that only tells: a card at the window's bottom right, as the Tauri app's toast.

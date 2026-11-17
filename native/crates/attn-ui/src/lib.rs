@@ -213,6 +213,8 @@ pub const FAMILIES: (&str, &str) = (
     "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, ui-monospace, Symbols Nerd Font Mono",
 );
 
+pub mod dialog;
+pub use dialog::{Dialog, DialogFrame};
 pub mod frame;
 pub use frame::Frame;
 pub mod glyph;

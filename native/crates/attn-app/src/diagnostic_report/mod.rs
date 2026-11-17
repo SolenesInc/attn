@@ -8,11 +8,10 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use attn_protocol::SupportSnapshotMessage;
-use attn_ui::Tokens;
-use attn_ui::type_;
+use attn_ui::{Dialog, DialogFrame, Tokens, type_};
 use rune::tok::space;
-use rune::{El, FileDialogOptions, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Checkbox, ControlSize, Dialog};
+use rune::{El, FileDialogOptions, TextStyle, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant, Checkbox, ControlSize};
 use serde_json::{Value, json};
 
 use crate::State;
@@ -377,13 +376,13 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .gap(space::S1)
                 .child(
                     text("Recent terminal output")
-                        .font(type_::LABEL)
+                        .font(HEADING)
                         .color(t.text_primary),
                 )
                 .child(
                     text("Optional. Output may contain private text or secrets.")
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
+                        .font(SMALL_PRINT)
+                        .color(t.text_muted),
                 ),
         )
         .children((!draft.selected.is_empty()).then(|| {
@@ -403,8 +402,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         col().child(
             text("No mounted terminal panes are available.")
                 .key("diagnostic-report.empty")
-                .font(type_::BODY)
-                .color(t.text_secondary),
+                .font(SMALL_PRINT)
+                .color(t.text_muted),
         )
     } else {
         col()
@@ -438,60 +437,69 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             }))
     };
     let footer = row()
+        .key("diagnostic-report.footer")
         .w_full()
         .gap(space::S2)
-        .child(rune::el().grow(1.0))
-        .child(
+        .pt(16.0)
+        .pb(20.0)
+        .px(INSET)
+        .justify_end()
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+        .border_layout()
+        .child(footer_button(
             Button::new("Cancel")
                 .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
                 .disabled(saving)
                 .on_press_tx(close)
                 .build(k)
                 .key("diagnostic-report.cancel"),
-        )
-        .child(
+        ))
+        .child(footer_button(
             Button::new(if saving { "Saving…" } else { "Save report" })
                 .variant(ButtonVariant::Submit)
-                .control_size(ControlSize::Small)
                 .disabled(saving)
                 .on_press_tx(start_saving)
                 .build(k)
                 .key(SAVE)
                 .default_button(),
-        );
+        ));
+    let paragraph = |said: &str| {
+        text(said.to_owned())
+            .font(CALLOUT)
+            .color(t.text_tertiary)
+            .wrap()
+    };
     let body = col()
         .key("diagnostic-report.body")
         .w_full()
-        .gap(space::S3)
-        .padding(space::S6)
-        .pt(0.0)
-        .child(
-            text("Save one file with the evidence needed to trace a stuck terminal.")
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap(),
-        )
+        .shrink()
+        .min_h(0.0)
         .child(
             col()
                 .key("diagnostic-report.included")
-                .gap(space::S1)
-                .child(text("Included automatically").font(type_::LABEL).color(t.text_primary))
-                .child(
-                    text("App and daemon versions, session and pane metadata, shortened working directories, and the daemon's terminal health.")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .wrap(),
-                )
-                .child(
-                    text("Environment variables, credentials, clipboard data, raw prompt bodies, raw terminal bytes, logs, and error text stay out.")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .wrap(),
-                ),
+                .mt(18.0)
+                .px(INSET)
+                .gap(5.0)
+                .child(text("Included automatically").font(HEADING).color(t.text_primary))
+                .child(paragraph("App and daemon versions, session and pane metadata, shortened working directories, and the daemon's terminal health."))
+                .child(paragraph("Environment variables, credentials, clipboard data, raw prompt bodies, raw terminal bytes, logs, and error text stay out.")),
         )
-        .child(output_heading)
-        .child(choices)
+        .child(
+            col()
+                .key("diagnostic-report.output")
+                .w_full()
+                .shrink()
+                .min_h(0.0)
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                })
+                .pt(18.0)
+                .pb(8.0)
+                .px(INSET)
+                .gap(space::S3)
+                .child(output_heading)
+                .child(choices),
+        )
         .children(draft.error.as_ref().map(|why| {
             text(why.clone())
                 .key("diagnostic-report.error")
@@ -499,14 +507,34 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .font(type_::BODY)
                 .color(t.error)
                 .wrap()
+                .mt(4.0)
+                .px(INSET)
         }))
         .child(footer);
-    Dialog::new(DIALOG, "Create diagnostic report")
-        .open(true)
-        .fit()
-        .width(520.0)
+    Dialog::new(DIALOG, "Create diagnostic report", DialogFrame::report(t))
+        .subtitle("Save one file with the evidence needed to trace a stuck terminal.")
+        .width(620.0)
+        .max_height(760.0)
         .click_outside(!saving)
         .on_close_tx(close)
         .child(body)
-        .build(k, layers);
+        .build(t, layers);
+}
+
+/// `.diagnostic-report-sheet`'s inset, which its header, callout, output and footer share.
+const INSET: f32 = 24.0;
+
+/// `.diagnostic-report-included strong`, `.diagnostic-report-output strong`.
+const HEADING: TextStyle = TextStyle::new(13.0, 600.0);
+
+/// `.diagnostic-report-included p`.
+const CALLOUT: TextStyle = TextStyle::new(12.0, 400.0).lh(18.6);
+
+/// `.diagnostic-report-output-heading span` and `.diagnostic-report-empty`, at the native app's
+/// least text size.
+const SMALL_PRINT: TextStyle = TextStyle::new(12.0, 400.0);
+
+/// `.diagnostic-report-actions button`: at least 96 points wide and 32 high.
+fn footer_button(button: El) -> El {
+    button.h(32.0).min_w(96.0).px(14.0)
 }

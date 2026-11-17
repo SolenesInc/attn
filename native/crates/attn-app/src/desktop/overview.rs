@@ -288,13 +288,14 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 "{profile} · {count} {}",
                 if count == 1 { "desktop" } else { "desktops" }
             ))
-            .font(type_::TITLE)
+            .font(rune::TextStyle::new(14.0, 600.0))
             .color(t.text_primary),
         )
         .child(
             text("Arrows move · ↵ switch · ⇧↵ send the focused pane · digits switch · Esc closes")
-                .font(type_::LABEL)
+                .font(rune::TextStyle::new(12.0, 400.0))
                 .color(t.text_tertiary)
+                .mt(4.0)
                 .pb(12.0),
         )
         .child(grid);
