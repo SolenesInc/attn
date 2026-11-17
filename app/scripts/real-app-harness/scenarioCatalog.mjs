@@ -231,11 +231,28 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-codex-shared',
+    runnerId: 'NATIVE-CODEX-SHARED',
+    label: 'In the native app a shared Codex terminal moves between conversations in one tile; the session it leaves stays hidden in the queue and ledger, a hidden approval is answered from the queue and after /resume, and closing the last tile closes it',
+    command: ['node', 'scripts/real-app-harness/scenario-native-codex-shared.mjs'],
+    app: 'native',
+    freshWorldAfter: true,
+  },
+  {
     id: 'native-codex-update',
     runnerId: 'NATIVE-CODEX-UPDATE',
     label: "The native app's Codex updates band offers a newer Codex, installs it in a tile, and reloads the tile still on the older Codex",
     command: ['node', 'scripts/real-app-harness/scenario-native-codex-update.mjs'],
     app: 'native',
+    freshWorldAfter: true,
+  },
+  {
+    id: 'native-crew-management',
+    runnerId: 'NATIVE-CREW-MANAGEMENT',
+    label: "Manage crew in the native app: members' seeds open as readers and Back returns, the member menu saves and clears launch settings, the full charter saves, recovers and meets an outside edit, a letter's seed link opens, a save lost with the daemon goes once it returns, and Close then Start carries the saved settings",
+    command: ['node', 'scripts/real-app-harness/scenario-native-crew-management.mjs'],
+    app: 'native',
+    timeoutMs: 300_000,
     freshWorldAfter: true,
   },
   {
@@ -251,6 +268,13 @@ export const scenarioCatalog = [
     runnerId: 'NATIVE-DELEGATION-CHAIN',
     label: 'In the native app delegates carry their roles into the header and the delegation chain, opened from a row, the header and the palette; a delegate to a missing numbered desktop leaves the caller on screen',
     command: ['node', 'scripts/real-app-harness/scenario-native-delegation-chain.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-delegation-preferences',
+    runnerId: 'NATIVE-DELEGATION-PREFERENCES',
+    label: "The native app's Delegation settings: opt in, an instance refusing the workflow install, a custom role's model, effort and alternative, delete and undo, one launch's effort override, and off and on again",
+    command: ['node', 'scripts/real-app-harness/scenario-native-delegation-preferences.mjs'],
     app: 'native',
   },
   {

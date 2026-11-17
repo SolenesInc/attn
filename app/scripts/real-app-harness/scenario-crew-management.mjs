@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
-import { crewManagementFixture } from './crewManagementFixture.mjs';
+import { crewManagementFixture, modelAwareWrapperSource, transcriptLaunches } from './crewManagementFixture.mjs';
 import { appCliInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import {
@@ -130,40 +130,6 @@ async function sampleIdle(webkitBaseline) {
 async function pressEscapeAndWaitFor(testId) {
   await driver.pressKeyCode(53);
   return waitForDom(`[data-testid="${testId}"]`, { focused: true });
-}
-
-function modelAwareWrapperSource(mockPath) {
-  return `#!/usr/bin/env node
-import { spawn } from 'node:child_process';
-import readline from 'node:readline';
-const args = process.argv.slice(2);
-if (args[0] === 'app-server') {
-  const input = readline.createInterface({ input: process.stdin });
-  input.on('line', line => {
-    const request = JSON.parse(line);
-    if (request.id === 1) console.log(JSON.stringify({ id: 1, result: {} }));
-    if (request.method === 'model/list') console.log(JSON.stringify({ id: request.id, result: { data: [{ id: 'crew-codex', model: 'crew-codex', displayName: 'Crew Codex', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }] }], nextCursor: null } }));
-  });
-} else if (args.includes('--print')) {
-  process.stdin.once('data', () => {
-    console.log(JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: 'attn-model-discovery', response: { models: [{ value: 'crew-claude', displayName: 'Crew Claude', supportsEffort: true, supportedEffortLevels: ['low', 'high'] }] } } }));
-  });
-} else {
-  const child = spawn(process.execPath, [${JSON.stringify(mockPath)}, ...args], { stdio: 'inherit', env: process.env });
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
-  child.on('exit', (code, signal) => signal ? process.kill(process.pid, signal) : process.exit(code ?? 1));
-}
-`;
-}
-
-function transcriptLaunches(home) {
-  const dir = path.join(home, '.attn-mock-agent');
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((name) => name.endsWith('.jsonl')).flatMap((name) => {
-    const file = path.join(dir, name);
-    const records = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
-    return records.filter((record) => record.type === 'session_meta').map((record) => ({ file, ...record.payload }));
-  });
 }
 
 const wrapper = path.join(runner.sessionDir, 'model-aware-mock.mjs');

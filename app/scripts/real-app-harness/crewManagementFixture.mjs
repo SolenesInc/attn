@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 const fixtureText = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 
@@ -16,3 +17,37 @@ export const crewManagementFixture = {
     "letter": fixtureText('trellis-2026-09-01T21-37Z.md')
   }
 };
+
+export function modelAwareWrapperSource(mockPath) {
+  return `#!/usr/bin/env node
+import { spawn } from 'node:child_process';
+import readline from 'node:readline';
+const args = process.argv.slice(2);
+if (args[0] === 'app-server') {
+  const input = readline.createInterface({ input: process.stdin });
+  input.on('line', line => {
+    const request = JSON.parse(line);
+    if (request.id === 1) console.log(JSON.stringify({ id: 1, result: {} }));
+    if (request.method === 'model/list') console.log(JSON.stringify({ id: request.id, result: { data: [{ id: 'crew-codex', model: 'crew-codex', displayName: 'Crew Codex', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }] }], nextCursor: null } }));
+  });
+} else if (args.includes('--print')) {
+  process.stdin.once('data', () => {
+    console.log(JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: 'attn-model-discovery', response: { models: [{ value: 'crew-claude', displayName: 'Crew Claude', supportsEffort: true, supportedEffortLevels: ['low', 'high'] }] } } }));
+  });
+} else {
+  const child = spawn(process.execPath, [${JSON.stringify(mockPath)}, ...args], { stdio: 'inherit', env: process.env });
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
+  child.on('exit', (code, signal) => signal ? process.kill(process.pid, signal) : process.exit(code ?? 1));
+}
+`;
+}
+
+export function transcriptLaunches(home) {
+  const dir = path.join(home, '.attn-mock-agent');
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((name) => name.endsWith('.jsonl')).flatMap((name) => {
+    const file = path.join(dir, name);
+    const records = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    return records.filter((record) => record.type === 'session_meta').map((record) => ({ file, ...record.payload }));
+  });
+}
