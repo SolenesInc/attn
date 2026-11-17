@@ -32,6 +32,7 @@ fn on_standby(pull_request: SeedWatchedPullRequest, resume_blocked: Option<&str>
                 name: "the user".into(),
                 r#ref: "user".into(),
             },
+            tender: None,
         });
         s.reminder = Some(SeedReminder {
             at: "2026-11-12T09:30:00Z".into(),
