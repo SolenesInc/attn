@@ -157,8 +157,6 @@ fn accessible_name(e: &ElementInfo) -> Option<&String> {
 }
 
 impl Found {
-    /// The point `at` (fractions of the box, from its top left) inside the part of it its
-    /// ancestors' clips leave visible; none when nothing of it shows.
     /// Whether window point `(x, y)` is inside its drawn, clipped box, whatever is drawn above.
     /// A part of a text has no box of its own, and its visible part is already clipped to the
     /// text's.
@@ -166,6 +164,8 @@ impl Found {
         self.drawn_by != self.path || rt.contains(self.key.as_deref().unwrap_or(&self.path), x, y)
     }
 
+    /// The point `at` (fractions of the box, from its top left) inside the part of it its
+    /// ancestors' clips leave visible; none when nothing of it shows.
     pub(crate) fn point(&self, at: (f32, f32)) -> Option<(f32, f32)> {
         let [x, y, w, h] = self.visible;
         (w > 0.0 && h > 0.0).then_some((x + w * at.0, y + h * at.1))

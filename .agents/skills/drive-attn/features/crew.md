@@ -131,6 +131,28 @@ Preconditions:
 - **Heartbeat.** With Fern in session and idle after at least one turn, run `./attn settings set crew.cache_ttl_seconds 60` and `./attn settings set crew.heartbeat_lead_seconds 30`, the smallest values the daemon accepts. Within two lifecycle ticks (about two minutes), re-read `./attn agent peek fern` until it shows `[attn] This is a cache heartbeat.` typed into the session. Set the keys back to their defaults with `./attn settings set crew.cache_ttl_seconds 3600` and `./attn settings set crew.heartbeat_lead_seconds 300`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code. Also keep `./attn crew list --json` after each start and close, `./attn agent peek fern` after each ring and each letter, `ls "$M/handoffs"`, `cat "$M/CHARTER.md"`, the `grep -l "## How you work"` output before and after the prompts step's start. Capture `bridge capture_screenshot '{"path":"<P>/crew-panel.png"}'` with the panel open, where `<P>` is the folder's path written out. Name each file after the way in, such as `crew-sidebar-start-list.json`.
 
+### In the native app
+
+The native app (`native/`) has Manage crew with the roster, launch settings, Start, Close, Apply, Rename, the charter, the letters and the Seeds list; the sidebar's Crew rows with Start and the member menu; and the Chief's slot with its setup. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make `P`, `C` and Fern's home `M` as above.
+
+Steps:
+
+- **The roster from the shell, start, close and the letters' flags.** As above: these run on the daemon and read the same in either app.
+- **Manage crew.** `bridge run '{"name":"ui.commandPalette"}'`, `bridge type '{"text":"Manage crew"}'` and `bridge key '{"chord":"Enter"}'` open Manage crew on the profile's first member: `crew.heading` names it. The sidebar's Crew header button "Manage crew" opens it too. `bridge press '{"target":{"key":"crew.roster.fern"}}'`: `crew.presence` reads `Between sessions` or `In session`, and `crew.tab.launch`, `crew.tab.charter`, `crew.tab.handoffs` and `crew.tab.seeds` switch the tabs. Escape closes Manage crew and hands the focus back to where it was.
+- **Launch settings.** Press `settings.route.crew.fern`: the model picker `settings.route-picker` opens. Press `settings.route-picker.harness.claude`, then a model under `settings.route-picker.models`, then an effort button under `settings.route-picker.effort`. `crew.launch.status` reads `Saved`, and `./attn crew list --json` shows the model and effort. `settings.route-picker.harness.none` clears every pin back to the crew default. While Fern is in session, `crew.running.route` names what the session runs now.
+- **Start and close.** With Fern between sessions, press `crew.start`: Manage crew closes and `./attn crew list` shows Fern in session. Open Manage crew on Fern again and press `crew.close`, then send `drive-close` to Fern's terminal as above: `crew.presence` reads `Between sessions`.
+- **The charter.** Press `crew.tab.charter`. `crew.charter.editor` holds the whole `CHARTER.md` and scrolls inside when it is long. Press it, `bridge key '{"chord":"ctrl+End"}'` and type: `crew.charter.status` reads `Saving…`, then `Saved`, and the file has the edit. Edit the file from the shell, then type in the editor: `crew.charter.keep-mine` and `crew.charter.use-file` ask which version wins.
+- **The letters.** Press `crew.tab.handoffs`. `crew.handoff.<i>` lists the letters newest first, and `crew.handoff.letter` reads one in full. A link to a seed in a letter is a `link` element named by its text; pressing it opens that seed beside Fern's session while Fern is in session, or as a standalone reader whose `tile.<tile>.crew-back` returns to Manage crew on the same member and tab.
+- **Seeds.** Press `crew.tab.seeds`. `crew.seed.<id>` lists what Fern tends, `crew.seeds.planted` switches to what Fern planted, and `crew.seeds.find` narrows the list. Pressing a row opens the seed as the letter's links do.
+- **The sidebar.** With the queue on, a member between sessions has a row `queue-crew.member.<id>`, a member in session `queue-crew.<session>`, and with the queue off `sidebar.crew.<id>`. A row between sessions arms on its first press and starts on its `.confirm`. Hover a row and press its `.actions`: a member between sessions gets `crew-member-menu.details`, and a member in session the session menu's `session.menu.member-details`, each opening Manage crew on the member. The Chief's menu adds `crew-member-menu.route`, "Harness and model…".
+- **The Chief's slot.** A new profile's slot `chief-slot` opens `chief-setup` with `chief-setup.primary` ("Start Chief") focused. The Chief in session draws as `queue-chief.<session>`, and its row's `session.menu.route` opens the Chief's harness setup.
+- **Proof.** In `$P`, keep each `./attn` and `bridge` answer with its exit code, and `bridge shot '{"path":"<P>/crew-panel.png"}'` with Manage crew open.
+
 ## Contexts
 
 - **Durability across restarts**: charters and letters are files in the member home, and the roster, launch settings and bindings are the daemon's records. A daemon crash during a clear still leaves the member in session in the new session. A member's live session comes back like any session, and unread mailbox items stay for the member's next session.
@@ -145,9 +167,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/crew_*_wire_test.go` (create, retire and restore in `crew_retire_wire_test.go`), `internal/daemon/crew_wire_test.go`, `internal/daemon/crew_resume_wire_test.go` (a member's earlier session brought back), `internal/daemon/chief_member_wire_test.go`, `internal/daemon/chief_nudge_quiet_wire_test.go`, `internal/daemon/seed_send_to_chief_wire_test.go`, `internal/daemon/garden_handoff_wire_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/crew_start_test.go`, `internal/daemon/conversation_keep_crew_wire_test.go`.
+- Wire: `internal/daemon/crew_*_wire_test.go` (create, retire and restore in `crew_retire_wire_test.go`), `internal/daemon/crew_wire_test.go`, `internal/daemon/crew_resume_wire_test.go` (a member's earlier session brought back), `internal/daemon/chief_member_wire_test.go`, `internal/daemon/chief_nudge_quiet_wire_test.go`, `internal/daemon/seed_send_to_chief_wire_test.go`, `internal/daemon/garden_handoff_wire_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/crew_start_test.go`, `internal/daemon/conversation_keep_crew_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/crew.rs`, `crew_start.rs` and `chief.rs`.
 - Stack: `cmd/attnd/crew_stack_test.go` (`TestCrewCreateRetireAndRestoreCommands`, `TestAClearedMemberKeepsItsDayAcrossADaemonCrash`), `internal/daemon/crew_retired_clear_stack_test.go`, `cmd/attnd/handoff_stack_test.go`, `cmd/attnd/crew_day_transcript_stack_test.go`, `scripts/verify-handoff.mjs`, `scripts/verify-crew-operating-model.mjs`.
-- Scenario: `crew-management`, `crew-seed-header`, `chief-slot`.
+- Scenario: `crew-management`, `crew-seed-header`, `chief-slot`; in the native app `native-crew-management`, `native-crew-seed-header` and `native-chief-slot`.
 - Kernel: `internal/crew/lifecycle_test.go`, `internal/crew/priming_test.go`, `internal/crew/prompt_compatibility_test.go`.
 - App: `app/src/App.chiefSlot.test.tsx`, `app/src/App.crewCharter.test.tsx`, `app/src/App.crewLaunchSettings.test.tsx`, `app/src/App.crewRoster.test.tsx`, `app/src/App.crewStart.test.tsx`, `app/src/components/CrewPanel.test.tsx`, `app/src/utils/crewName.test.ts`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
 

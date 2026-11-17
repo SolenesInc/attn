@@ -97,6 +97,24 @@ bridge --launch --wait-ready ping
 - **The app-server stops.** Close every other shared session, hidden ones included (`wsctl rm-session --id <session>` for each in `./attn session list`): `./attn codex status` prints `server     not running; the next shared Codex terminal starts it`.
 - **Proof.** In `$P`, keep each `./attn codex` command with its output and exit code, `./attn session show shared-one` after the switch, `./attn agent peek shared-one` during the approval, `bridge dom_text '{"selector":"[aria-label=\"Codex updates\"]"}'` at each banner stage, and `bridge capture_screenshot '{"path":"<P>/codex-banner.png"}'` with the banner showing. Name each file for its way in, such as `codex-banner-install.txt`.
 
+### In the native app
+
+The native app (`native/`) has the shared Codex tile, the queue rows and ledger rows of the hidden sessions a switch leaves behind, the approval in the queue, and the Codex updates band (`codex-updates`) with Install, Reload tiles and their confirmation. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make the folders and fixtures as above.
+
+Steps:
+
+- **The shell's commands.** `./attn codex status`, `restart`, `update` and the app-server's start and stop run on the daemon and read the same in either app.
+- **A switch leaves a hidden session.** With the queue on, each session is a row `queue-turn.<session>`. Type `/new` into the shared tile's `terminal.<runtime>`: the tile shows the new session at once, the old one keeps its row with `.slot` reading that it has no tile, and its ledger row `ledger.row.<session>.meta` reads `hidden`. Switching back by id keeps the keyboard in the tile.
+- **A hidden approval.** Press a hidden session's row in the queue: its tile lands with the keyboard, so Enter answers the approval in the tile.
+- **The updates band.** With a newer Codex out, `codex-updates.text` names it. Press `codex-updates.install`: the install runs in a tile and the band moves to `codex-updates.reload`. Press it, then `shared-codex-confirm.confirm` in `shared-codex-confirm-dialog`: the open shared tiles move to the new Codex.
+- **Last tile closes into the ledger.** `bridge run '{"name":"session.close"}'` on the shared tile closes it, and `bridge run '{"name":"sessions.open"}'` shows the session closed in the ledger.
+- **Proof.** In `$P`, keep each `./attn codex` and `bridge` answer with its exit code, and `bridge shot '{"path":"<P>/shared-codex.png"}'` with the band showing.
+
 ## Contexts
 
 - **Durability across restarts**: the app-server runs as a terminal of its own, so it keeps running through app and daemon restarts, and the terminals reconnect and resume the conversations they show. When Linux's `/tmp` cleanup removes the app-server's socket link, attn keeps reaching the same app-server. If the app-server crashes, its running turns stop. attn starts the app-server again on the next connection, and hidden sessions whose turns stopped go idle.
@@ -109,9 +127,9 @@ bridge --launch --wait-ready ping
 
 ## Tests
 
-- Wire: `internal/daemon/codex_*_wire_test.go`, `internal/daemon/slow_launch_wire_test.go`.
+- Wire: `internal/daemon/codex_*_wire_test.go`, `internal/daemon/slow_launch_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/shared_codex.rs` and the hidden-agent tests in `queue.rs`.
 - Stack: `cmd/attnd/codex_shared_stack_test.go`.
-- Scenario: `codex-shared`, `codex-update`.
+- Scenario: `codex-shared`, `codex-update`; in the native app `native-codex-shared` and `native-codex-update`.
 - App: `app/src/components/BannerStack.sharedCodex.test.tsx`, `app/src/components/SettingsModal.experimental.test.tsx`, `app/src/App.hiddenSessions.test.tsx`.
 
 ## Gotchas

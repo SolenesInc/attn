@@ -121,6 +121,24 @@ Preconditions:
 - **Retired flags.** Run `./attn delegate --ticket x --source-session dispatcher --model mock-agent-1 --cwd $D`. It exits 2 with `--ticket retired:` and names `attn seed plant` and `attn delegate --seed <seed-id> --cwd <path>`. `--plot x`, `--worktree x`, `--repo x`, `--preferences-revision 1`, `--confirm` and `--no-worktree` each answer `<flag> retired:` with their replacement. `./attn seed handover <seed>` answers `seed: unknown command "handover"`.
 - **Proof.** In `$P`, keep each `./attn` command's output with its exit code, `./attn agent peek dispatcher` after each delegation, `./attn seed show <seed> --json` after the first delegation and after each handover, `./attn session list --tree`, `wsctl list` before and after the placement and the move, `bridge get_state` after the jump and after Enter in the card, and `bridge capture_screenshot '{"path":"<P>/delegation-chain.png"}'` with the card open, where `<P>` is the folder's path written out. Name each file for its way in, such as `delegation-palette-chain.png`.
 
+### In the native app
+
+The native app (`native/`) has Settings → Delegation with its switch, the roles table, each role's alternatives, the fallback "Anything else", delete with Undo and the workflow install; the role on the tile header and the delegation chain card from a tile header, a sidebar row and the palette. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make the folders and fixtures as above.
+
+Steps:
+
+- **Roles from the shell, delegating and the chain from the shell.** As above: these run on the daemon and read the same in either app.
+- **Roles in Settings.** `bridge run '{"name":"ui.openSettings"}'` opens `settings-dialog`; press `settings.nav.delegation`. With preferences off, the switch named "Delegation preferences" is off and the table is hidden; turning it on shows the roles. `settings.delegation.adopt` installs the workflow's roles, and an instance that cannot install them shows why in `settings.delegation.error`. `settings.delegation.add` adds a role. Its fields are `settings.delegation.field.name.<role>` and `settings.delegation.field.when.<role>/<alternative>`, each with a `.label`. Its model chip opens `settings.route-picker`: press `settings.route-picker.harness.<id>`, a model `settings.route-picker.model.<i>` (0 is the harness default) and an effort button under `settings.route-picker.effort`; `settings.route-picker.harness.none` clears the pin. The button "+ Alternative model" adds an alternative with its own model and effort, and "Delete" removes a role until "Undo". `settings.delegation.live` says how many roles agents see, how many need a model and how many are off, or `Off. Agents choose harness and model themselves. Your table is kept.`, and `./attn delegate roles show` lists what the table shows.
+- **The role on the tile header.** Press the delegate's row `sidebar.session.<delegate>`: `tile.<leaf>.role.name` reads the role's name. Hover `tile.<leaf>.role`: its card `tile.<leaf>.role.popover` lists the chain with the delegate picked. ↑ and ↓ move the pick, Enter opens the picked agent and Escape closes the card. A chain shown by hover takes these keys before the terminal does.
+- **The chain from a sidebar row.** Hover `sidebar.session.<dispatcher>.chain`: `sidebar.session.<dispatcher>.chain.popover` names both agents.
+- **The chain from the palette.** `bridge run '{"name":"ui.commandPalette"}'`, `bridge type '{"text":"delegation chain"}'`, wait for `palette.row.command:show-delegation-chain` and `bridge key '{"chord":"Enter"}'`: the shown agent's card opens with that agent picked. ↓ and Enter open the delegate, and `bridge state '{"of":"window"}'` names it `on_screen`.
+- **Proof.** In `$P`, keep each `./attn` and `bridge` answer with its exit code, and `bridge shot '{"path":"<P>/delegation-chain.png"}'` with a card open.
+
 ## Contexts
 
 - **Durability across restarts**: a delegation operation, its request id and its seed are the daemon's records. `attn delegate status` reads them after a restart, and a retry with the same `--request-id` returns the accepted operation instead of starting another operation. A delegation that a restart interrupts finishes on the same session once the daemon is back. Delegates come back like any session.
@@ -135,9 +153,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/delegate*_wire_test.go`, `internal/daemon/delegation*_wire_test.go`, `internal/daemon/garden_authorization_wire_test.go`, `internal/daemon/session_delegation_roles_wire_test.go`, `internal/daemon/seed_handover_wire_test.go`, `internal/daemon/garden_profile_delegation_delete_wire_test.go`.
+- Wire: `internal/daemon/delegate*_wire_test.go`, `internal/daemon/delegation*_wire_test.go`, `internal/daemon/garden_authorization_wire_test.go`, `internal/daemon/session_delegation_roles_wire_test.go`, `internal/daemon/seed_handover_wire_test.go`, `internal/daemon/garden_profile_delegation_delete_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/settings/delegation.rs` and the chain tests in `tile_header.rs`.
 - Stack: `cmd/attnd/delegate_stack_test.go`, `cmd/attnd/seed_authorization_stack_test.go`, `cmd/attnd/delegate_restart_stack_test.go`, `cmd/attnd/delegate_outpost_stack_test.go`, `cmd/attnd/session_tree_stack_test.go`, `app/e2e/delegation-chain.spec.ts`, `scripts/verify-delegation-placement.sh`.
-- Scenario: `delegation-chain`, `delegation-preferences`.
+- Scenario: `delegation-chain`, `delegation-preferences`; in the native app `native-delegation-chain` and `native-delegation-preferences`.
 - Kernel: `internal/prompts/delegation_preferences_test.go`.
 - App: `app/src/App.delegationChain.test.tsx`, `app/src/App.delegationSettings.test.tsx`, `app/src/components/DelegationSettings.autosave.test.tsx`, `app/src/components/DelegationSettings.editing.test.tsx`.
 
