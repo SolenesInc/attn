@@ -2495,12 +2495,6 @@ fn notifications(dark: bool) {
     snap(&mut world, "notifications", dark);
 }
 
-fn attention(dark: bool) {
-    let mut world = with_document(dark);
-    press(&mut world, Action::DockAttention);
-    snap(&mut world, "attention", dark);
-}
-
 fn session_menu(dark: bool) {
     let mut world = with_document(dark);
     world.gesture(|app| app.click(Target::key("sidebar.session.s0.actions")));
@@ -3198,7 +3192,6 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         manage_crew(dark, "scout", "handoffs", "crew-handoffs");
         manage_crew(dark, "scout", "seeds", "crew-seeds");
         notifications(dark);
-        attention(dark);
         session_menu(dark);
         queue_home(dark);
         queue_agent_list(dark);

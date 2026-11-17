@@ -20,11 +20,6 @@ describe('App dock on home', () => {
     expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Hide Automations' })).toBeInTheDocument();
 
-    await gesture(daemon, () => pressShortcut('dock.attention'));
-    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' }));
-    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
-    expect(screen.getByRole('button', { name: 'Hide Automations' })).toBeInTheDocument();
-
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' }));
 
     expect(screen.getByRole('button', { name: 'Show Automations' })).toBeInTheDocument();

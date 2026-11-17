@@ -1,4 +1,5 @@
 mod model;
+pub(crate) mod pull_requests;
 
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
@@ -81,7 +82,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                         .gap(16.0)
                         .flex_wrap()
                         .child(sessions)
-                        .child(crate::attention::home_card(state, t)),
+                        .child(pull_requests::home_card(state, t)),
                 ),
         )
 }

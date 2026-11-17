@@ -608,15 +608,11 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
 
     assert_eq!(
         dock_chips(&world),
-        [
-            format!("{} PRs", keys_of(Action::DockAttention)),
-            format!("{} sidebar", keys_of(Action::SessionToggleSidebar)),
-        ],
+        [format!("{} sidebar", keys_of(Action::SessionToggleSidebar))],
         "a chip for an agent's keys waits for an agent on screen"
     );
     world.gesture(|app| app.key(chord(Action::DesktopSelect1)));
     let docked = [
-        format!("{} PRs", keys_of(Action::DockAttention)),
         format!("{} split v", keys_of(Action::TerminalSplitVertical)),
         format!("{} split h", keys_of(Action::TerminalSplitHorizontal)),
         format!("{} session h", keys_of(Action::SessionNewHorizontal)),
@@ -624,18 +620,6 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
         format!("{} sidebar", keys_of(Action::SessionToggleSidebar)),
     ];
     assert_eq!(dock_chips(&world), docked, "{}", world.screen());
-
-    world
-        .automate(
-            "press",
-            serde_json::json!({"target": {"key": "sidebar.dock.chip.dock.attention"}}),
-        )
-        .unwrap();
-    let prs = world
-        .screen()
-        .get(Target::key("sidebar.dock.chip.dock.attention"));
-    assert_eq!(prs.value.as_deref(), Some("active"));
-    assert!(world.screen().find(Target::key("attention")).is_some());
 
     world
         .automate(
@@ -648,9 +632,9 @@ fn the_sidebar_goes_to_the_desktop_overview_and_docks_the_chosen_shortcuts() {
     let config: serde_json::Value =
         serde_json::from_str(written.last().unwrap()["value"].as_str().unwrap()).unwrap();
     assert_eq!(config["dock"]["collapsed"], true);
-    assert_eq!(config["dock"]["items"].as_array().unwrap().len(), 6);
+    assert_eq!(config["dock"]["items"].as_array().unwrap().len(), 5);
     world.gesture(|app| app.click(Target::role("button").name("Show dock")));
-    assert_eq!(dock_chips(&world).len(), 6);
+    assert_eq!(dock_chips(&world).len(), 5);
 
     world
         .automate(

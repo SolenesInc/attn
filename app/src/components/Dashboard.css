@@ -542,8 +542,8 @@
 }
 
 /* Home no longer carries a shortcut strip, but .shortcut/.shortcut kbd are the
-   app's only definition of a keyboard hint and the LocationPicker and
-   AttentionDrawer footers still render them. They live here for that reason. */
+   app's only definition of a keyboard hint and the LocationPicker footer still
+   renders them. They live here for that reason. */
 .shortcut {
   font-size: var(--font-size-sm);
   color: var(--color-text-dimmed);

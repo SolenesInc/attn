@@ -619,7 +619,6 @@ export function useAppController({
     onToggleSidebar: toggleSidebarCollapse,
     onShowAgentList: queueSidebarShown ? toggleAgentList : () => handleOpenPalette('agents'),
     onRefreshPRs: handleRefreshPRs,
-    onToggleAttentionPanel: () => toggleDockPanel('attention'),
     onToggleAsksPanel: asksAvailable ? () => toggleDockPanel('asks') : undefined,
     onOpenSettings: useCallback(() => {
       if (settingsOpen) void settingsModalRef.current?.close();

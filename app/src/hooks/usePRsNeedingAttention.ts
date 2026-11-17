@@ -5,8 +5,6 @@ import { useDaemonStore } from '../store/daemonSessions';
 interface FilteredPRs {
   activePRs: DaemonPR[];
   needsAttention: DaemonPR[];
-  reviewRequested: DaemonPR[];
-  yourPRs: DaemonPR[];
 }
 
 export function usePRsNeedingAttention(
@@ -27,9 +25,6 @@ export function usePRsNeedingAttention(
       (p) => !p.approved_by_me || p.has_new_changes
     );
 
-    const reviewRequested = needsAttention.filter((p) => p.role === 'reviewer');
-    const yourPRs = needsAttention.filter((p) => p.role === 'author');
-
-    return { activePRs, needsAttention, reviewRequested, yourPRs };
+    return { activePRs, needsAttention };
   }, [prs, isRepoMuted, isAuthorMuted, repoStates, authorStates, hiddenPRs]);
 }

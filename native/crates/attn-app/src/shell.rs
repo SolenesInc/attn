@@ -82,7 +82,7 @@ pub struct Window {
     pub(crate) tile: Option<crate::desktop::TileWindow>,
     pub(crate) garden: crate::garden::Garden,
     pub(crate) asks: crate::asks::Asks,
-    pub(crate) attention: crate::attention::Attention,
+    pub(crate) pull_requests: crate::home::pull_requests::PullRequests,
     pub(crate) automations: crate::automations::Automations,
     pub(crate) ledger: crate::ledger::Ledger,
     pub(crate) notifications: crate::notifications::Panel,
@@ -110,7 +110,6 @@ pub enum View {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Drawer {
-    Attention,
     Automations,
     Asks,
     Garden,
@@ -121,7 +120,6 @@ impl Drawer {
     /// `clamp(min, share of vw, max)` for its panel.
     pub(crate) fn width(self, window: f32) -> f32 {
         let (min, share, max) = match self {
-            Drawer::Attention => (360.0, 0.48, 600.0),
             Drawer::Asks => (420.0, 0.46, 720.0),
             Drawer::Automations => (420.0, 0.42, 640.0),
             Drawer::Garden => (380.0, 0.34, 560.0),
@@ -248,7 +246,6 @@ pub(crate) fn escape_drawers(state: &mut State, tx: &mut Tx) -> bool {
     match state.window.newest_drawer() {
         Some(Drawer::Garden) => crate::garden::close(state),
         Some(Drawer::Asks) => crate::asks::close(state, tx),
-        Some(Drawer::Attention) => crate::attention::close(state, tx),
         Some(Drawer::Automations) => crate::automations::close(state, tx),
         None => return false,
     }
@@ -708,7 +705,6 @@ fn dock(state: &State, t: &Tokens) -> Vec<El> {
                 }
                 Drawer::Garden => crate::garden::panel(state, t),
                 Drawer::Asks => crate::asks::drawer(state, t),
-                Drawer::Attention => crate::attention::drawer(state, t),
                 Drawer::Automations => crate::automations::drawer(state, t),
             };
             let at = right;
@@ -819,7 +815,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::SharedCodex) => crate::shared_codex::confirm(state, t, &mut layers),
         None => {}
     }
-    layers.extend(crate::attention::merge_confirmation(state, t));
+    layers.extend(crate::home::pull_requests::merge_confirmation(state, t));
     layers.extend(crate::garden::frame_layer(state, t));
     crate::notebook::root_picker_overlay(state, t, &mut layers);
     crate::automations::form::overlay(state, t, &mut layers);

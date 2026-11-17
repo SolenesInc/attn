@@ -150,5 +150,4 @@ export interface DockItem {
   label: string;
   keys: string;
   active?: boolean;
-  onClick?: () => void;
 }

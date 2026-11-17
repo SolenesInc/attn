@@ -5,8 +5,8 @@ ready. An agent records the pull request it opens, and attn shows the pull
 request on the agent's tile header and keeps the pull request's status fresh.
 An agent can also watch a pull request: readiness, failed checks and new review
 feedback arrive in the agent's inbox. Apart from the pull requests that agents
-open, the home screen and the attention drawer list the user's own pull
-requests and review requests from GitHub, with approve, merge and mute.
+open, the home screen lists the user's own pull requests and review requests
+from GitHub, with approve, merge and mute.
 
 ## Sub-features
 
@@ -16,7 +16,7 @@ requests and review requests from GitHub, with approve, merge and mute.
 - `pr-refresh`: attn refreshes a recorded pull request less often as it cools, and stops once the pull request is merged.
 - `pr-watch`: a durable watch in green, codex or formal-review mode. Updates arrive as inbox notices.
 - `pr-wait-ready`: wait in the foreground for the next actionable update, outside the daemon.
-- `pr-list`: the user's pull requests and review requests polled from GitHub, on the home screen and in the attention drawer.
+- `pr-list`: the user's pull requests and review requests polled from GitHub, on the home screen.
 - `pr-actions`: approve, merge, mute a pull request, mute its author or its repository, and unmute them in Settings.
 - `pr-open`: open a pull request in a new worktree session.
 - `pr-guidance`: what attn tells agents whose harness cannot report pull requests.
@@ -25,10 +25,7 @@ requests and review requests from GitHub, with approve, merge and mute.
 
 ### People
 
-- ⌘⇧P (`dock.attention`, labelled "PRs drawer", `app/src/shortcuts/registry.ts`) toggles the attention drawer: sessions needing attention, then "Review Requested" and "Your PRs", each pull request with Approve, Merge and Mute (`app/src/components/AttentionDrawer.tsx`).
 - ⌘R (`session.refreshPRs`) polls GitHub for the list now.
-- Palette (`app/src/application/useAppCommands.tsx`): `attention` ("Open attention drawer").
-- The sidebar dock's "PRs" chip opens the same drawer (`app/src/components/SidebarChrome.tsx`). The recipe for the dock is in [shortcuts.md](shortcuts.md).
 - Home screen (`app/src/components/Dashboard.tsx`): the "Yours" and "Review requested" sections. Each card opens the pull request on GitHub and carries "New worktree session", Approve, Merge (with a confirmation), Mute and mute-author buttons (`app/src/components/PRActions.tsx`). A review group's ⊘ mutes the repository. The recipe for the home screen is in [home.md](home.md).
 - **Settings → Attention queue**: muted repositories and authors, each with Unmute (`app/src/components/SettingsModalSections.tsx`). **Settings → Files and locations**: the Projects Directory where "New worktree session" finds the repository.
 - **Settings → Agents and models**: the "Ring on my own PR comments" switch, `[data-testid="settings-own-pr-comments-toggle"]`, which saves `pull_requests.own_comments` as `ring` or `quiet` (`app/src/components/SettingsModalSections.tsx`).
@@ -80,12 +77,8 @@ Preconditions:
 `<url>` below is `https://mock.github.local/northwind/atlas/pull/418`. `<terminal>` is the agent's terminal id from `wsctl list`.
 
 - **The home screen lists the user's pull requests.** Press ⌘⇧H (`bridge native_key '{"key":"h","modifiers":["command","shift"]}'`) so the home screen shows, then run `bridge home_get_state`. Away from home, the `prs` sections read `null`. `prs.yours.rows` lists the fixture's own pull requests by number, `#412` and `#418` among them, and `prs.review.repoGroups` names the repositories with review requests.
-- **Open the drawer with the shortcut.** Press ⌘⇧P: `bridge native_key '{"key":"p","modifiers":["command","shift"]}'`, then `bridge dom_wait '{"selector":".attention-drawer[aria-hidden=\"false\"]","timeoutMs":5000}'`. `bridge dom_text '{"selector":".attention-drawer-panel"}'` reads "Needs Attention", "Your PRs" and the fixture's titles. Press ⌘⇧P again: `bridge dom_wait '{"selector":".attention-drawer[aria-hidden=\"true\"]","timeoutMs":5000}'` matches.
-- **Open the drawer from the palette.** Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'`, `bridge native_text '{"text":"Open attention drawer"}'` and `bridge native_key '{"key":"Enter"}'`. `.attention-drawer[aria-hidden="false"]` appears.
-- **Open the drawer from the dock.** Close it with ⌘⇧P. The collapsed sidebar has no dock: when `[aria-label="Show sidebar"]` shows, click it natively first. Resolve the chip's point with `bridge dom_native_point '{"selector":".sidebar-dock-items [title=\"PRs\"]"}'` and run `bridge native_mouse '{"action":"click","x":<x>,"y":<y>}'`. `.attention-drawer[aria-hidden="false"]` appears. Close it again.
 - **Refresh with ⌘R.** Add a pull request on the mock GitHub: `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/seed" -H 'content-type: application/json' -d '{"replace":false,"prs":[{"repo":"northwind/atlas","number":500,"title":"Drive the refresh","roles":["author"],"author":"harness-user"}]}'` prints the new count. Press ⌘R: `bridge native_key '{"key":"r","modifiers":["command"]}'`. `bridge home_get_state` lists `#500` with "Drive the refresh" under `prs.yours.rows`. `wsctl refresh-prs` asks for the same poll over the protocol and prints `PR refresh completed`.
 - **Approve, merge and mute.** Read the first row of `prs.yours.rows` from `bridge home_get_state`, then click `[data-testid="pr-section-yours"] [data-testid="approve-button"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"pr-section-yours\"] [data-testid=\"approve-button\"][data-success=\"true\"]","timeoutMs":5000}'` matches, and `curl -s "$ATTN_MOCK_GH_URL/__control"` lists a `POST` to `/repos/<repo>/pulls/<number>/reviews` in `requests`. Click `[data-testid="pr-section-yours"] [data-testid="merge-button"]`, then the dialog's `.merge-confirm-modal .modal-btn-primary` ("Merge"): `requests` gains a `PUT` to `.../merge`, and the row fades and leaves `prs.yours.rows`. Click `[data-testid="pr-section-yours"] [data-testid="mute-button"]`: that row leaves the list too.
-- **Approve, merge and mute from the drawer.** Press ⌘⇧P. The drawer's rows show their actions without hovering. Click the first `.attention-drawer [data-testid="approve-button"]` natively: `bridge dom_wait '{"selector":".attention-drawer [data-testid=\"approve-button\"][data-success=\"true\"]","timeoutMs":5000}'` matches and `/__control` gains a `POST` to that pull request's `/reviews`. Click the first `.attention-drawer [data-testid="merge-button"]`, then `.merge-confirm-modal .modal-btn-primary`: `/__control` gains a `PUT` to its `/merge`. Once that row has left, click the first `.attention-drawer [data-testid="mute-button"]`: that row leaves `.attention-drawer-panel` and the Review Requested count drops by one. Press ⌘⇧P to close the drawer.
 - **Mute a repository and an author, then unmute them.** Click the first `[data-testid="pr-section-review"] .repo-mute-btn` natively: its repository leaves `prs.review.repoGroups`. Click the first `[data-testid="pr-section-review"] [data-testid="mute-author-button"]` natively: every review request by that author leaves `prs.review.rows`. Press ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`) and click `[data-testid="settings-nav-hygiene"]` natively. `bridge dom_text '{"selector":"[data-testid=\"settings-muted-repositories-list\"]"}'` names the repository and `bridge dom_text '{"selector":"[data-testid=\"settings-muted-authors-list\"]"}'` names the author. Click `[data-testid="settings-unmute-repository-button"]` and `[data-testid="settings-unmute-author-button"]` natively, then close Settings with Escape. The group and the author's rows are back in `bridge home_get_state`.
 - **An agent records its pull request.** Run `wsctl add-session --cwd $A --agent claude --label pr-agent --id pr-agent --place`, find its terminal in `wsctl list`, and run `wsctl input --id <terminal> --text "record pr" --enter`. `./attn agent peek pr-agent` shows `recorded <url> for session pr-agent`. `./attn pr ls --session pr-agent` lists `mock.github.local/northwind/atlas#418` with `<url>`. Within one 30-second refresh, the row's STATE reads `open`.
 - **The pull request on the agent's tile.** Select the agent for setup with `bridge select_session '{"sessionId":"pr-agent"}'`, then `bridge dom_wait '{"selector":"[aria-label=\"Pull request atlas#418 details\"]","timeoutMs":5000}'`. Click that button natively: `bridge dom_wait '{"selector":"[role=\"dialog\"][aria-label=\"Pull request atlas#418\"]","timeoutMs":5000}'` matches, and its `dom_text` reads `state` and `open`. Press Escape to close it.
@@ -104,59 +97,55 @@ Preconditions:
   - `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge
   - `./attn agent peek pr-agent` after each agent turn and after the ring
   - `./attn pr ls --session pr-agent --json` after the record and the forget
-  - `bridge capture_screenshot '{"path":"<P>/pr-drawer.png"}'` with the drawer open and `<P>/pr-header.png` with the agent's tile, where `<P>` is the folder's path written out
+  - `bridge capture_screenshot '{"path":"<P>/pr-home.png"}'` with the home screen's pull requests showing and `<P>/pr-header.png` with the agent's tile, where `<P>` is the folder's path written out
 
-  Name each file for its way in, such as `pr-shortcut-drawer.txt`.
+  Name each file for its way in, such as `pr-refresh-key.txt`.
 
 ### In the native app
 
-The native app (`native/`) has the attention drawer, `attention`, a region named "Needs Attention": the agents waiting for the user, then "Review Requested" and "Your PRs", each pull request with Approve, Merge and Mute. Home has the Pull Requests card, `home.prs`: "Yours", then "Review requested" grouped by repository, each group folding and muting its repository from its header. A card row, `home.pr.<id>`, opens the pull request and marks it visited, shows `.updated`, `.approved` and `.ci` marks, dims once the user approved it with no new changes, and carries New worktree session (`.new`), Approve, Merge, Mute and the author's name (`.mute-author`, "Mute all PRs by <author>"). It has no pull requests on a tile header or in Settings yet.
+The native app (`native/`) lists the user's pull requests in Home's Pull Requests card, `home.prs`: "Yours", then "Review requested" grouped by repository, each group folding and muting its repository from its header. A card row, `home.pr.<id>`, opens the pull request and marks it visited, shows `.updated`, `.approved` and `.ci` marks, dims once the user approved it with no new changes, and carries New worktree session (`.new`), Approve, Merge, Mute and the author's name (`.mute-author`, "Mute all PRs by <author>"). It has no pull requests on a tile header or in Settings yet.
 
 Preconditions:
 
-- Install the instance with `make install INSTANCE=<name> APP=native`, with the mock GitHub running as for the Tauri app. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and use the Linux chords: `mod+alt+p` for the drawer, `mod+shift+r` to refresh and `mod+alt+k` for the command palette.
+- Install the instance with `make install INSTANCE=<name> APP=native`, with the mock GitHub running as for the Tauri app. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and use the Linux chords: `mod+shift+r` to refresh and `mod+alt+k` for the command palette.
 - Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
 - Each `bridge` call takes a few seconds. Wait for a short-lived state with `bridge wait` on the role and name, as below, instead of reading the tree after a sleep.
 
 Steps:
 
-- **Open the drawer with its key.** Press `mod+shift+p` (`bridge key '{"chord":"mod+shift+p"}'`), then `bridge wait '{"target":{"key":"attention"}}'`. The drawer holds the keyboard. `attention.count` is named "<n> need attention", and `attention.review` and `attention.yours` list the fixture's pull requests as `attention.pr.<id>`, each with `.open` named "<repo> #<number>: <title>". Press Escape: `attention` goes.
-- **Open it from the palette.** Press `mod+shift+k`, run `bridge type '{"text":"attention"}'` and press `Enter`: `attention` shows with the keyboard.
-- **The agents waiting for the user.** Run `wsctl add-session --cwd $A --agent claude --label waiting-agent --id waiting-agent --place` and wait until `./attn agent list` shows it idle with a turn owed. Run `./attn settings set queue_mode_enabled true`: `attention.session.waiting-agent` shows under "Sessions Needing Attention". Outside the queue, the drawer lists only agents waiting for input or approval. Press that row: the agent's desktop shows, and the daemon log has `desktop_show_session`.
 - **Refresh.** Press `mod+r`: the `requestCount` in `curl -s "$ATTN_MOCK_GH_URL/__control"` grows. A failed poll shows its reason in `notice.text`, after "Refresh failed: ".
-- **Approve.** Press a review request's `attention.pr.<id>.approve`: `bridge wait '{"target":{"role":"button","name":"Approved"}}'` answers, and `requests` in `/__control` gains a `POST` to that pull request's `/reviews`. The button reads "Approve" again 1.5 s later. Once the daemon marks it approved, the pull request leaves the drawer.
-- **Merge asks first.** Press one of your pull requests' `attention.pr.<id>.merge`: `attention.merge-dialog` shows, a dialog named "Merge PR #<number>?". Press Escape: the dialog goes and the Merge button holds the keyboard. Press Merge again, then `attention.merge.confirm`: `bridge wait '{"target":{"role":"button","name":"Merged"}}'` answers and `requests` gains a `PUT` to its `/merge`.
-- **Mute.** Press a pull request's `attention.pr.<id>.mute`: it leaves the drawer at once and `attention.count` drops by one. Mute toggles in the daemon, so the row stays hidden until the daemon reports the pull request muted.
+- **Approve.** Press a review request's `home.pr.<id>.approve`: `bridge wait '{"target":{"role":"button","name":"Approved"}}'` answers, and `requests` in `/__control` gains a `POST` to that pull request's `/reviews`. The button reads "Approve" again 1.5 s later. Once the daemon marks it approved, the row shows `.approved` and dims, and `home.prs.count` drops by one.
+- **Merge asks first.** Press one of your pull requests' `home.pr.<id>.merge`: `home.prs.merge-dialog` shows, a dialog named "Merge PR #<number>?". Press Escape: the dialog goes and the Merge button holds the keyboard. Press Merge again, then `home.prs.merge.confirm`: `bridge wait '{"target":{"role":"button","name":"Merged"}}'` answers, `requests` gains a `PUT` to its `/merge`, and the row leaves the card once its check has shown.
+- **Mute.** Press a pull request's `home.pr.<id>.mute`: it leaves the card at once. Mute toggles in the daemon, so the row stays hidden until the daemon reports the pull request muted.
 - **Home's card marks a visit.** Press a review request's `home.pr.<id>.open`: the daemon log has `Marking PR <id> as visited`. Seed the mock GitHub again with `replace:true`, every pull request the recipe uses in one payload and this one with a new `headSHA`, and press `home.prs.refresh`: `bridge wait` on `home.pr.<id>.updated` answers, named "Updated". Press `.open` again: `.updated` goes.
 - **Home's card marks approval and CI.** A row the user approved, by pressing its Approve or from a seeded `reviews` entry of `APPROVED`, shows `.approved` and dims. `.ci` follows the mock's `mergeableState`: `clean` reads "CI success", `blocked` or `unstable` "CI pending", and `dirty` "CI failure".
 - **Mute an author from Home.** Press `home.pr.<id>.mute-author`: every pull request by that author leaves the card, and the daemon log has `mute_author`.
 - **New worktree session from Home.** Set `./attn settings set projects_directory <dir>` to a folder holding a clone, named for the repository, whose `origin` has the pull request's `headRef` and no local branch of that name. Press `home.pr.<id>.new`: the corner `worktree-setup` names each step, then the agent starts in `<dir>/<repo>--<branch>`, labelled `<repo>#<number>`, and `home` goes. With no clone, the mock's clone URL does not resolve: the corner reads "Create failed: <repo>#<number> failed", and pressing it opens the reason.
-- **Proof.** In `$P`, keep `bridge tree` with the drawer open and at the end, `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge, and `bridge shot '{"path":"<P>/native-attention-drawer.png"}'` with the drawer open, with `<P>` written out. For Home, keep `bridge shot` with an Updated and an approved row showing, and with the failed corner.
+- **Proof.** In `$P`, keep `bridge tree` with Home showing at the start and at the end, `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge, and `bridge shot '{"path":"<P>/native-home-prs.png"}'` with an Updated and an approved row showing, with `<P>` written out. Keep another `bridge shot` with the failed corner.
 
 ## Contexts
 
 - **Durability across restarts**: recorded pull requests, watches and what each watch already reported, and muted pull requests, repositories and authors are daemon records and come back after any restart. A watch made by a crew member or the chief belongs to the mailbox of the crew member or chief who made it, and outlives the session that made it. `wait-ready` keeps its cursor in the data folder's `pr-wait`, so a later run reports only what is new until `--reset` or `--since`.
 - **GitHub hosts**: a refresh or poll changes the list only for the hosts it heard from. A pull request of a host that discovery has not found yet, whose token `gh` refuses, or that `gh auth status` reports as failing keeps its row and its mute. Only a host missing from a `gh auth status` that lists other hosts loses its rows. When `gh` lists no hosts at all, the list stays as it was.
-- **Linux**: `attn pr` works the same where the daemon and CLI run on Linux. `dock.attention` is Ctrl+Alt+P and `session.refreshPRs` is Ctrl+Shift+R there (`LINUX_SHORTCUTS`).
+- **Linux**: `attn pr` works the same where the daemon and CLI run on Linux. `session.refreshPRs` is Ctrl+Shift+R there (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent on an outpost runs `attn pr` through its outpost daemon, and the agent's pull request links reach the home like the agent's state and cost.
-- **Profiles**: a session's pull requests belong to the session, and so to the session's profile. The GitHub list on the home screen and in the drawer, and the muted repositories and authors, belong to the daemon: every profile shows the same list. A watch reads `pull_requests.own_comments` from the profile of the session that recorded the pull request.
-- **Performance and idle cost**: two sessions on one pull request share one fetch, attn sends no request to a rate-limited host until the host's limit resets, and attn does not ask about a merged pull request again. The GitHub list polls every 90 seconds. Nothing measures the idle cost of the drawer or the header. When a change touches the rendering of either, check the rendering for repaints with `docs/internal/perf-testing.md`.
+- **Profiles**: a session's pull requests belong to the session, and so to the session's profile. The GitHub list on the home screen, and the muted repositories and authors, belong to the daemon: every profile shows the same list. A watch reads `pull_requests.own_comments` from the profile of the session that recorded the pull request.
+- **Performance and idle cost**: two sessions on one pull request share one fetch, attn sends no request to a rate-limited host until the host's limit resets, and attn does not ask about a merged pull request again. The GitHub list polls every 90 seconds. Nothing measures the idle cost of the home screen's list or the header. When a change touches the rendering of either, check the rendering for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: Claude Code and Codex record a pull request from `gh pr create` on their own. Plugin harnesses read the self-report guidance and run `attn pr record`. Every harness gets watch notices in its own inbox.
-- **Keyboard and native input**: ⌘⇧P toggles the drawer and ⌘R polls. The tile header's popover takes ↑, ↓, Enter (open on GitHub) and `c` (copy the URL) only after a click. While the pointer only hovers, those keys reach the terminal. No macOS menu item claims ⌘⇧P or ⌘R.
+- **Keyboard and native input**: ⌘R polls. The tile header's popover takes ↑, ↓, Enter (open on GitHub) and `c` (copy the URL) only after a click. While the pointer only hovers, those keys reach the terminal. No macOS menu item claims ⌘R.
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/attention.rs` (the native app's attention drawer and Home's Pull Requests card), `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/home_pull_requests.rs` (the native app's Home Pull Requests card), `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attnd/pr_stack_test.go`, `app/e2e/pr-actions.spec.ts`.
 - Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `cli/attn/src/hooks/detect.rs`.
 - App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`, `app/src/components/SettingsModal.agents.test.tsx`.
 
 ## Gotchas
 
-- The drawer stays in the page while closed, hidden. `.attention-drawer-panel` is always present, so wait on `.attention-drawer[aria-hidden="false"]` or `"true"` to tell open from closed.
 - The mock GitHub answers no GraphQL. A watch on the baseline always reads HEALTH `delayed`, and you cannot drive the watch's ready, failed-checks and feedback notices live. The wire tests cover them.
 - `pr wait-ready` runs the user's own `gh` against real GitHub and never reaches the mock. On the baseline you can drive only its usage refusals.
-- A daemon started without the mock exports on a named instance polls nothing: the home screen says "GitHub polling is off for instance <name>" and the drawer lists no pull requests.
+- A daemon started without the mock exports on a named instance polls nothing: the home screen says "GitHub polling is off for instance <name>".
 - Record URLs on a host attn has a client for. With the mock that is `mock.github.local`. attn records a `github.com` URL but never refreshes it.
 - The mock agent runs no harness hook, so drive `gh pr create` detection by calling `./attn _hook-tool-use <terminal>` with the tool call on stdin, as Claude Code's hook would.
 - `attn pr` verbs other than `wait-ready` need a session. From a plain shell, pass `--session <id>`.
@@ -166,4 +155,4 @@ Steps:
 - In the native app, a New worktree session onto a clone whose checkout holds the pull request's branch fails at `git worktree add`, which says the branch already exists. Give the clone another branch.
 - The mock GitHub keeps a merged pull request open. The merged row leaves the list for this run of the app, and comes back after a relaunch.
 - Approve and Merge on the baseline reach only the mock, so prove them through its `/__control` `requests`, not through GitHub. Their ✓ (`data-success="true"`) shows for 1.5 seconds, so start the `dom_wait` right after the click.
-- Working but wrong: a muted pull request has no way back. Settings lists muted repositories and authors, never single pull requests. The drawer's footer shows the agent palette's key (⌘K) as the drawer's toggle, while the real toggle is ⌘⇧P. The same drawer is "PRs drawer" in the shortcut list and "Open attention drawer" in the palette, and its own title reads "Needs Attention".
+- Working but wrong: a muted pull request has no way back. Settings lists muted repositories and authors, never single pull requests.

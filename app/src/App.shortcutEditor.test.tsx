@@ -165,7 +165,7 @@ describe('App shortcut editor', () => {
   });
 
   it.each([
-    ['a shortcut on the same keys', { key: 'p', code: 'KeyP', metaKey: true, shiftKey: true }, 'PRs drawer'],
+    ['a shortcut on the same keys', { key: 'k', code: 'KeyK', metaKey: true, shiftKey: true }, 'Command palette'],
     ['a shortcut on the same physical key', { key: '&', code: 'Digit1', metaKey: true }, 'Switch to desktop 1'],
   ])('asks before taking the keys of %s', async (_, keys, holder) => {
     const { daemon } = await renderEditor();
@@ -360,18 +360,18 @@ describe('App shortcut editor', () => {
   });
 
   it('pins, reorders and removes dock shortcuts, and the sidebar dock follows', async () => {
-    const { daemon } = await renderEditor({ withSession: true, config: { dock: { collapsed: false, items: ['terminal.toggleZoom', 'dock.attention'] } } });
+    const { daemon } = await renderEditor({ withSession: true, config: { dock: { collapsed: false, items: ['terminal.toggleZoom', 'session.toggleSidebar'] } } });
     const dock = () => Array.from(document.querySelectorAll('.sidebar-dock-items .shortcut-hint'), (item) => item.getAttribute('title') ?? item.textContent);
 
     await gesture(daemon, () => fireEvent.click(within(row('New session on this desktop')).getByLabelText('Add to dock')));
-    expect(saved(daemon).dock.items).toEqual(['terminal.toggleZoom', 'dock.attention', 'session.new']);
+    expect(saved(daemon).dock.items).toEqual(['terminal.toggleZoom', 'session.toggleSidebar', 'session.new']);
     expect(within(row('New session on this desktop')).getByLabelText('Remove from dock')).toBeInTheDocument();
 
     await gesture(daemon, () => fireEvent.click(screen.getByLabelText('Move Zoom active pane down')));
-    expect(saved(daemon).dock.items).toEqual(['dock.attention', 'terminal.toggleZoom', 'session.new']);
+    expect(saved(daemon).dock.items).toEqual(['session.toggleSidebar', 'terminal.toggleZoom', 'session.new']);
 
     await gesture(daemon, () => fireEvent.click(screen.getByLabelText('Remove Zoom active pane from dock')));
-    expect(saved(daemon).dock.items).toEqual(['dock.attention', 'session.new']);
+    expect(saved(daemon).dock.items).toEqual(['session.toggleSidebar', 'session.new']);
     expect(dock()).toHaveLength(2);
     expect(dock()[1]).toContain('New session');
   });

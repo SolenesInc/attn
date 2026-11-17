@@ -109,7 +109,6 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'markdown.sendAnnotations': { label: 'Send annotations to session', category: 'markdown', dockLabel: 'send notes' },
   'terminal.sendAnnotations': { label: 'Send terminal annotations to session', category: 'markdown', dockLabel: 'send marks', requiresTerminal: true },
 
-  'dock.attention': { label: 'PRs drawer', category: 'review', dockLabel: 'PRs' },
   'session.refreshPRs': { label: 'Refresh PRs', category: 'review' },
 
   'ui.actionMenu': { label: 'Agent palette', category: 'app' },

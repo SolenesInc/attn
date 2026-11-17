@@ -15,13 +15,11 @@ interface PRActionsProps {
   number: number;
   prId: string;
   author?: string;
-  compact?: boolean;
-  onMuted?: () => void;
   onActionComplete?: (prId: string, action: 'approve' | 'merge') => void;
   onOpen?: () => void;
 }
 
-export function PRActions({ number, prId, author, compact = false, onMuted, onActionComplete, onOpen }: PRActionsProps) {
+export function PRActions({ number, prId, author, onActionComplete, onOpen }: PRActionsProps) {
   const { sendPRAction, sendMutePR, sendMuteAuthor } = useDaemonContext();
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const portalTarget = usePortalTarget();
@@ -81,7 +79,6 @@ export function PRActions({ number, prId, author, compact = false, onMuted, onAc
     e.preventDefault();
     e.stopPropagation();
     sendMutePR(prId);
-    onMuted?.();
   };
 
   const handleOpen = (e: React.MouseEvent) => {
@@ -95,7 +92,6 @@ export function PRActions({ number, prId, author, compact = false, onMuted, onAc
     state: { loading?: boolean; success?: boolean; error?: string | null } | undefined,
     onClick: (e: React.MouseEvent) => void,
     label: string,
-    icon: string
   ) => {
     const isLoading = state?.loading;
     const isSuccess = state?.success;
@@ -103,7 +99,7 @@ export function PRActions({ number, prId, author, compact = false, onMuted, onAc
 
     return (
       <button
-        className={`pr-action-btn ${compact ? 'compact' : ''}`}
+        className="pr-action-btn"
         data-testid={`${action}-button`}
         data-action={action}
         data-loading={isLoading}
@@ -118,7 +114,7 @@ export function PRActions({ number, prId, author, compact = false, onMuted, onAc
         ) : isSuccess ? (
           '✓'
         ) : (
-          compact ? icon : label
+          label
         )}
       </button>
     );
@@ -126,30 +122,30 @@ export function PRActions({ number, prId, author, compact = false, onMuted, onAc
 
   return (
     <>
-      <div className={`pr-actions ${compact ? 'compact' : ''}`}>
+      <div className="pr-actions">
         {onOpen && (
           <button
-            className={`pr-action-btn ${compact ? 'compact' : ''}`}
+            className="pr-action-btn"
             data-testid="open-button"
             data-action="open"
             onClick={handleOpen}
             title="New worktree session"
           >
-            {compact ? '↗' : 'New'}
+            New
           </button>
         )}
-        {renderButton('approve', approveState, handleApprove, 'Approve', '✓')}
-        {renderButton('merge', mergeState, handleMerge, 'Merge', '⇋')}
+        {renderButton('approve', approveState, handleApprove, 'Approve')}
+        {renderButton('merge', mergeState, handleMerge, 'Merge')}
         <button
-          className={`pr-action-btn ${compact ? 'compact' : ''}`}
+          className="pr-action-btn"
           data-testid="mute-button"
           data-action="mute"
           onClick={handleMute}
           title="Mute this PR"
         >
-          {compact ? '⊘' : 'Mute'}
+          Mute
         </button>
-        {author && !compact && (
+        {author && (
           <button
             className="author-mute-btn"
             data-testid="mute-author-button"

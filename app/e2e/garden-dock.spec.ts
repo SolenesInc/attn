@@ -5,8 +5,8 @@ test('the docked garden opens beside a drawer that is already open', async ({ pa
   await page.goto('/');
   await page.waitForSelector('.dashboard');
 
-  await page.keyboard.press('Meta+Shift+p');
-  const drawer = page.locator('.side-panel-shell.is-open .attention-drawer');
+  await page.getByRole('button', { name: 'Show Automations' }).click();
+  const drawer = page.locator('.side-panel-shell.is-open .dock-panel--automations');
   await expect(drawer).toBeVisible();
   await page.getByRole('button', { name: 'Show the garden' }).click();
   const garden = page.getByTestId('garden-frame');

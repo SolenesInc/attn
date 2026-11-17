@@ -114,7 +114,6 @@ describe('shortcut registry', () => {
         'session.settle',
         'session.snooze',
         'session.toggleSidebar',
-        'dock.attention',
         'board.open',
       ];
       for (const id of rehomed) {

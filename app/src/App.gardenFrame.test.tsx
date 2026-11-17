@@ -25,19 +25,19 @@ const escape = (daemon: ScriptedDaemon) => gesture(daemon, () => fireEvent.keyDo
 
 describe('App garden frame', () => {
   it.each([
-    ['attention', 'list'],
-    ['attention', 'board'],
+    ['automations', 'list'],
+    ['automations', 'board'],
     ['garden', 'list'],
     ['garden', 'board'],
   ])('preserves opening order after restoring the garden (%s first, %s fullscreen)', async (first, view) => {
     const { daemon } = await renderGarden(seeds);
-    const attention = () => gesture(daemon, () => pressShortcut('dock.attention'));
-    if (first === 'attention') {
-      await attention();
+    const automations = () => click(daemon, 'Show Automations');
+    if (first === 'automations') {
+      await automations();
       await click(daemon, 'Show the garden');
     } else {
       await click(daemon, 'Show the garden');
-      await attention();
+      await automations();
     }
     await click(daemon, 'Expand the garden');
     if (view === 'board') await click(daemon, 'board');
@@ -46,24 +46,24 @@ describe('App garden frame', () => {
 
     await escape(daemon);
 
-    expect(shown()).toBe(first === 'attention' ? 'closed' : 'dock');
-    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')?.classList.contains('is-open')).toBe(first === 'attention');
+    expect(shown()).toBe(first === 'automations' ? 'closed' : 'dock');
+    expect(document.querySelector('.dock-panel--automations')?.closest('.side-panel-shell')?.classList.contains('is-open')).toBe(first === 'automations');
     await escape(daemon);
     expect(shown()).toBe('closed');
-    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
+    expect(document.querySelector('.dock-panel--automations')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
   });
 
   it('dismisses an expanded garden before a dock panel opened after its list', async () => {
     const { daemon } = await openGarden(seeds);
-    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await click(daemon, 'Show Automations');
     await click(daemon, 'Expand the garden');
 
     await escape(daemon);
 
     expect(shown()).toBe('closed');
-    expect(screen.getByText('Needs Attention')).toBeVisible();
+    expect(document.querySelector('.dock-panel--automations')?.closest('.side-panel-shell')).toHaveClass('is-open');
     await escape(daemon);
-    expect(screen.queryByRole('button', { name: 'Hide PRs Drawer' })).toBeNull();
+    expect(document.querySelector('.dock-panel--automations')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
   });
 
   it('holds the window as a modal only once expanded, and offers the board only there', async () => {

@@ -24,15 +24,15 @@ describe('parseKeybindingsConfig', () => {
       { overrides: { 'session.new': { key: 'm', meta: true }, 'app.quit': null } },
     ],
     ['an override without a key', JSON.stringify({ overrides: { 'session.new': { meta: true } } }), { overrides: {} }],
-    ['a chord', JSON.stringify({ overrides: { 'dock.attention': CHORD } }), { overrides: { 'dock.attention': CHORD } }],
-    ['a chord without a follow key', JSON.stringify({ overrides: { 'dock.attention': { leader: { key: 'k', meta: true } } } }), { overrides: {} }],
+    ['a chord', JSON.stringify({ overrides: { 'terminal.toggleZoom': CHORD } }), { overrides: { 'terminal.toggleZoom': CHORD } }],
+    ['a chord without a follow key', JSON.stringify({ overrides: { 'terminal.toggleZoom': { leader: { key: 'k', meta: true } } } }), { overrides: {} }],
     ['overrides without a dock', JSON.stringify({ overrides: {} }), { dock: DEFAULT_DOCK }],
     ['a dock that is not an object', JSON.stringify({ dock: 'nope' }), { dock: DEFAULT_DOCK }],
     ['a dock whose items are not a list', JSON.stringify({ dock: { items: 5 } }), { dock: DEFAULT_DOCK }],
     [
       'a dock with unknown and repeated ids',
-      JSON.stringify({ dock: { collapsed: true, items: ['dock.attention', 'bogus.id', 'dock.attention', 'session.new'] } }),
-      { dock: { collapsed: true, items: ['dock.attention', 'session.new'] } },
+      JSON.stringify({ dock: { collapsed: true, items: ['terminal.toggleZoom', 'bogus.id', 'terminal.toggleZoom', 'session.new'] } }),
+      { dock: { collapsed: true, items: ['terminal.toggleZoom', 'session.new'] } },
     ],
     ['a dock collapsed flag that is not a boolean', JSON.stringify({ dock: { collapsed: 'yes', items: [] } }), { dock: { collapsed: false, items: [] } }],
     [
@@ -40,11 +40,11 @@ describe('parseKeybindingsConfig', () => {
       JSON.stringify({
         version: 1,
         overrides: { 'workspace.select2': { key: '2', code: 'Digit2', ctrl: true }, 'workspace.select3': null },
-        dock: { collapsed: false, items: ['workspace.select1', 'dock.attention'] },
+        dock: { collapsed: false, items: ['workspace.select1', 'terminal.toggleZoom'] },
       }),
       {
         overrides: { 'desktop.select2': { key: '2', code: 'Digit2', ctrl: true }, 'desktop.select3': null },
-        dock: { collapsed: false, items: ['desktop.select1', 'dock.attention'] },
+        dock: { collapsed: false, items: ['desktop.select1', 'terminal.toggleZoom'] },
       },
     ],
     [
@@ -62,8 +62,8 @@ describe('parseKeybindingsConfig', () => {
   it('reads back what it saved', () => {
     const config: KeybindingsConfig = {
       version: 1,
-      overrides: { 'session.new': { key: 'm', meta: true }, 'app.quit': null, 'dock.attention': CHORD },
-      dock: { collapsed: true, items: ['dock.attention', 'session.toggleSidebar'] },
+      overrides: { 'session.new': { key: 'm', meta: true }, 'app.quit': null, 'terminal.toggleZoom': CHORD },
+      dock: { collapsed: true, items: ['terminal.toggleZoom', 'session.toggleSidebar'] },
     };
 
     expect(parseKeybindingsConfig(serializeKeybindingsConfig(config))).toEqual(config);

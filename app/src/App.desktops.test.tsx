@@ -145,7 +145,6 @@ vi.mock('./components/SessionTerminalDesktop', async () => {
 });
 
 vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
-vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
 const { mockShowError } = vi.hoisted(() => ({ mockShowError: vi.fn() }));
 vi.mock('./components/Toast', () => ({

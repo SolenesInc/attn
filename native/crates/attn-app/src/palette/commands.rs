@@ -144,16 +144,6 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
     }
     commands.push(
         Command::new(
-            "attention",
-            "Open attention drawer",
-            &["waiting", "pull requests", "prs", "notifications"],
-            Action::OpenAttention,
-        )
-        .describe("Show sessions and pull requests that need a response")
-        .shortcut(Some(Action::DockAttention)),
-    );
-    commands.push(
-        Command::new(
             "whats-new",
             "What's new",
             &["whats new", "intro", "tour", "changes", "release", "help"],

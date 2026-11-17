@@ -177,7 +177,6 @@ fn the_former_cmd_shift_letter_actions_sit_on_ctrl_alt_on_linux() {
         Action::SessionSettle,
         Action::SessionSnooze,
         Action::SessionToggleSidebar,
-        Action::DockAttention,
         Action::BoardOpen,
     ] {
         let mods = chord(&linux, &action).mods_on(KeyPlatform::Linux);

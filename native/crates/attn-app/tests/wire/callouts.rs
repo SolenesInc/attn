@@ -474,7 +474,7 @@ fn a_request_while_settings_are_open_is_refused_for_every_step() {
 #[test]
 fn a_callout_shows_beside_an_open_drawer() {
     let mut world = start(two());
-    world.gesture(|app| app.key(chord(Action::DockAttention)));
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
 
     assert_eq!(
         show(

@@ -108,7 +108,7 @@ the Chief between sessions and two automation runs that need the user, the queue
 with the sidebar collapsed, the desktop flow's rail, Manage crew on each of its
 four tabs, naming a new desktop from its launch settings, Home's merge confirmation, the shared
 Codex restart prompt, the dialog for a worktree that could not be made, the command palette offering
-the Chief's setup, the notifications panel, also with no notifications, the PRs drawer, an
+the Chief's setup, the notifications panel, also with no notifications, an
 agent's actions menu, and the other floating surfaces: a session's snooze and
 rename popovers, a tile header's usage popover and its seeds popover for one
 seed, and the desktop overview. The `screenshot_tour` example of `attn-app`

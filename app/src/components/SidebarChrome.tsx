@@ -111,30 +111,16 @@ export function SidebarFooter() {
         </div>
         {!dockCollapsed && (
           <div className="sidebar-dock-items">
-            {dockItems.map((item) =>
-              item.onClick ? (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`shortcut-hint shortcut-hint--action ${item.active ? 'active' : ''}`.trim()}
-                  data-active={item.active ? 'true' : 'false'}
-                  onClick={item.onClick}
-                  title={item.label}
-                >
-                  {item.keys && <span className="shortcut-hint-keys">{item.keys}</span>}
-                  {item.label}
-                </button>
-              ) : (
-                <span
-                  key={item.id}
-                  className={`shortcut-hint ${item.active ? 'active' : ''}`.trim()}
-                  data-active={item.active ? 'true' : 'false'}
-                >
-                  {item.keys && <span className="shortcut-hint-keys">{item.keys}</span>}
-                  {item.label}
-                </span>
-              ),
-            )}
+            {dockItems.map((item) => (
+              <span
+                key={item.id}
+                className={`shortcut-hint ${item.active ? 'active' : ''}`.trim()}
+                data-active={item.active ? 'true' : 'false'}
+              >
+                {item.keys && <span className="shortcut-hint-keys">{item.keys}</span>}
+                {item.label}
+              </span>
+            ))}
           </div>
         )}
       </div>

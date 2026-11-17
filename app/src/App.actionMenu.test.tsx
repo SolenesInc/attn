@@ -126,26 +126,25 @@ describe('App action menu', () => {
     });
   });
 
-  it('holds app shortcuts while open, and opens the attention drawer on the sessions waiting for the user', async () => {
+  it('holds app shortcuts while open, and runs the command picked from it', async () => {
     const { daemon } = await renderApp({
       initialState: {
-        sessions: [daemonSession('s1', { state: 'working' }), daemonSession('s2', { state: 'waiting_input' }), daemonSession('s3', { state: 'idle' })],
-        desktops: ['s1', 's2', 's3'].map((id) => soloDesktop(id)),
+        sessions: [daemonSession('s1', { state: 'working' }), daemonSession('s2', { state: 'waiting_input' })],
+        desktops: ['s1', 's2'].map((id) => soloDesktop(id)),
       },
     });
-    const drawer = screen.getByText('Needs Attention').closest('aside')!;
+    daemon.on('automation_definitions_get', () => ({ event: 'automation_definitions_result', success: true, definitions: [] }));
+    const automations = () => document.querySelector('.dock-panel--automations')!.closest('.side-panel-shell')!;
     await openActionMenu(daemon);
-    expect(drawer).toHaveAttribute('aria-hidden', 'true');
 
     pressShortcut('session.new');
     await daemon.idle();
     expect(screen.queryByTestId('location-picker-overlay')).toBeNull();
 
-    fireEvent.mouseDown(screen.getByText('Open attention drawer'));
+    fireEvent.mouseDown(screen.getByText('Show automations'));
     await daemon.idle();
 
     expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
-    expect(drawer).toHaveAttribute('aria-hidden', 'false');
-    expect([...drawer.querySelectorAll('[data-testid^="attention-session-"]')].map((item) => item.getAttribute('data-testid'))).toEqual(['attention-session-s2']);
+    expect(automations()).toHaveClass('is-open');
   });
 });

@@ -181,10 +181,7 @@ const SECTIONS: &[Section] = &[
     Section {
         key: "Review",
         title: "Review & Git",
-        lines: &[
-            line("PRs drawer", &[Of(Action::DockAttention)]),
-            line("Refresh PRs", &[Of(Action::SessionRefreshPrs)]),
-        ],
+        lines: &[line("Refresh PRs", &[Of(Action::SessionRefreshPrs)])],
     },
     Section {
         key: "App",

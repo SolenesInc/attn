@@ -69,17 +69,8 @@ try {
     await screenshot('home-after-escape');
   });
 
-  await runner.step('attention_also_opens_over_home', async () => {
-    await pressShortcutKeys(client, driver, 'dock.attention');
-    await waitDom('.side-panel-shell.is-open .attention-drawer-panel');
-    await screenshot('attention-over-home');
-    await driver.click('.side-panel-shell.is-open .drawer-close');
-    await waitDom('.side-panel-shell.is-open .attention-drawer-panel', { absent: true });
-    runner.assert((await client.request('home_get_state')).onScreen, 'home remains usable after closing the dock');
-  });
-
   await runner.step('garden_keeps_its_dismissal_order_after_fullscreen', async () => {
-    await pressShortcutKeys(client, driver, 'dock.attention');
+    await driver.click('[aria-label="Show Automations"]');
     await driver.click('[aria-label="Show the garden"]');
     await waitDom('.garden-frame.is-dock');
     await driver.click('[aria-label="Expand the garden"]');
@@ -88,10 +79,10 @@ try {
     await waitDom('.garden-frame.is-dock');
     await driver.pressKey('Escape');
     await waitDom('[aria-label="Show the garden"]');
-    await waitDom('.side-panel-shell.is-open .attention-drawer-panel');
-    await screenshot('garden-closed-before-attention');
+    await waitDom('.side-panel-shell.is-open [data-testid="automations-panel"]');
+    await screenshot('garden-closed-before-automations');
     await driver.pressKey('Escape');
-    await waitDom('.side-panel-shell.is-open .attention-drawer-panel', { absent: true });
+    await waitDom('.side-panel-shell.is-open [data-testid="automations-panel"]', { absent: true });
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

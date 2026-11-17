@@ -1,37 +1,22 @@
-//! The attention drawer: the agents waiting for the user, then the pull requests the user was
-//! asked to review and the user's own, each with Approve, Merge and Mute. Home lists the same
-//! pull requests in its Pull Requests card, as the Tauri app's dashboard does.
+//! Home's Pull Requests card, as the Tauri app's dashboard has: the user's own pull requests,
+//! then the review requests by repository, each with Approve, Merge and Mute.
 
 use std::collections::{HashMap, HashSet};
 
 use attn_client::{Facts, REFRESH_PRS_ID, pr_action_id};
 use attn_protocol::{
     ApprovePRMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, PR,
-    PRVisitedMessage, RefreshPRsMessage, Session,
+    PRVisitedMessage, RefreshPRsMessage,
 };
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, memo, row, text};
+use rune::{El, TextStyle, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use crate::State;
 use crate::requests::{Answer, Refused};
-use crate::shell::Drawer;
-use crate::sidebar::model::AgentRow;
-use crate::sidebar::queue;
-
-pub(crate) const DRAWER: &str = "attention";
 const DONE_SHOWS_SECONDS: f64 = 1.5;
-
-/// Where a pull request row shows. Home's rows are the Tauri dashboard's: opening one marks it
-/// visited, they show whether it is approved, updated or has CI, and they start a worktree
-/// session or mute its author. The drawer's rows are its compact ones.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Place {
-    Drawer,
-    Home,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Act {
@@ -75,7 +60,7 @@ struct Merging {
 }
 
 #[derive(Default)]
-pub(crate) struct Attention {
+pub(crate) struct PullRequests {
     acts: HashMap<(Act, String), Phase>,
     /// The pull request whose merge waits for the user's yes.
     merging: Option<Merging>,
@@ -89,40 +74,6 @@ pub(crate) struct Attention {
     folded_repos: HashSet<String>,
 }
 
-/// What the drawer lists: the agents waiting for the user, then the pull requests needing them.
-struct Lists<'a> {
-    sessions: Vec<&'a Session>,
-    review: Vec<&'a PR>,
-    yours: Vec<&'a PR>,
-}
-
-impl<'a> Lists<'a> {
-    fn of(facts: &'a Facts, attention: &Attention) -> Lists<'a> {
-        let sessions = queue::wanting(facts);
-        let needing: Vec<&PR> = active(facts, attention)
-            .into_iter()
-            .filter(|p| needs_the_user(p))
-            .collect();
-        Lists {
-            sessions,
-            review: needing
-                .iter()
-                .copied()
-                .filter(|p| p.role == "reviewer")
-                .collect(),
-            yours: needing
-                .iter()
-                .copied()
-                .filter(|p| p.role == "author")
-                .collect(),
-        }
-    }
-
-    fn total(&self) -> usize {
-        self.sessions.len() + self.review.len() + self.yours.len()
-    }
-}
-
 const SECTION_TITLE: rune::TextStyle = rune::TextStyle {
     weight: 500.0,
     tracking: 1.4,
@@ -131,13 +82,13 @@ const SECTION_TITLE: rune::TextStyle = rune::TextStyle {
 
 /// The pull requests nobody muted, not the pull request, its repository or its author, and not
 /// merged here.
-fn active<'a>(facts: &'a Facts, attention: &Attention) -> Vec<&'a PR> {
+fn active<'a>(facts: &'a Facts, tracked: &PullRequests) -> Vec<&'a PR> {
     let pulls = &facts.pull_requests;
     pulls
         .prs
         .iter()
-        .filter(|p| !p.muted && !attention.muting.contains(&p.id))
-        .filter(|p| !attention.merged.contains(&p.id))
+        .filter(|p| !p.muted && !tracked.muting.contains(&p.id))
+        .filter(|p| !tracked.merged.contains(&p.id))
         .filter(|p| !pulls.repos.iter().any(|r| r.repo == p.repo && r.muted))
         .filter(|p| {
             !pulls
@@ -163,40 +114,29 @@ pub(crate) fn refresh(state: &mut State, tx: &mut Tx) {
     );
 }
 
-pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
-    if state.window.shows(Drawer::Attention) {
-        close(state, tx);
-    } else {
-        open(state, tx);
-    }
-}
-
-/// Opens the drawer and takes the keyboard into it.
-pub(crate) fn open(state: &mut State, tx: &mut Tx) {
-    state.window.open_drawer(Drawer::Attention);
-    tx.focus(DRAWER, false);
-}
-
-pub(crate) fn close(state: &mut State, tx: &mut Tx) {
-    state.window.close_drawer(Drawer::Attention);
-    tx.blur();
-}
-
 fn act(state: &mut State, act: Act, pr: &str, tx: &mut Tx) {
     let key = (act, pr.to_owned());
-    if state.window.attention.acts.contains_key(&key) {
+    if state.window.pull_requests.acts.contains_key(&key) {
         return;
     }
-    state.window.attention.acts.insert(key.clone(), Phase::Busy);
+    state
+        .window
+        .pull_requests
+        .acts
+        .insert(key.clone(), Phase::Busy);
     let id = pr_action_id(act.wire(), pr);
     let answered = move |state: &mut State, answer: Answer, tx: &mut Tx| match answer.outcome() {
         Ok(_) => {
             let until = tx.clock() + DONE_SHOWS_SECONDS;
-            state.window.attention.acts.insert(key, Phase::Done(until));
+            state
+                .window
+                .pull_requests
+                .acts
+                .insert(key, Phase::Done(until));
             tx.wake_at(until);
         }
         Err(reason) => {
-            state.window.attention.acts.remove(&key);
+            state.window.pull_requests.acts.remove(&key);
             state.window.notify(reason, tx);
         }
     };
@@ -227,29 +167,27 @@ fn act(state: &mut State, act: Act, pr: &str, tx: &mut Tx) {
 /// Lets a done action's check lapse when its time is up, a merged pull request with it, and
 /// forgets a mute the daemon has taken and a merge the daemon no longer reports.
 pub(crate) fn poll(state: &mut State, now: f64) -> bool {
-    let attention = &mut state.window.attention;
-    let before = attention.acts.len();
+    let tracked = &mut state.window.pull_requests;
+    let before = tracked.acts.len();
     let mut merged = Vec::new();
-    attention.acts.retain(|(act, pr), phase| {
+    tracked.acts.retain(|(act, pr), phase| {
         let lapsed = matches!(phase, Phase::Done(until) if now >= *until);
         if lapsed && *act == Act::Merge {
             merged.push(pr.clone());
         }
         !lapsed
     });
-    attention.merged.extend(merged);
+    tracked.merged.extend(merged);
     let prs = &state.facts.pull_requests.prs;
-    attention
+    tracked
         .muting
         .retain(|id| prs.iter().any(|p| &p.id == id && !p.muted));
-    attention
-        .merged
-        .retain(|id| prs.iter().any(|p| &p.id == id));
-    attention.acts.len() != before
+    tracked.merged.retain(|id| prs.iter().any(|p| &p.id == id));
+    tracked.acts.len() != before
 }
 
 fn mute(state: &mut State, pr: &str) {
-    if !state.window.attention.muting.insert(pr.to_owned()) {
+    if !state.window.pull_requests.muting.insert(pr.to_owned()) {
         return;
     }
     let _ = state.daemon.send(&MutePRMessage {
@@ -259,7 +197,7 @@ fn mute(state: &mut State, pr: &str) {
 }
 
 fn ask_merge(state: &mut State, pr: &str, number: i64, button: String) {
-    state.window.attention.merging = Some(Merging {
+    state.window.pull_requests.merging = Some(Merging {
         pr: pr.to_owned(),
         number,
         button,
@@ -274,144 +212,13 @@ fn confirm_merge(state: &mut State, tx: &mut Tx) {
 
 /// Closes the merge confirmation and hands the keyboard back to the button that opened it.
 fn end_merge(state: &mut State, tx: &mut Tx) -> Option<String> {
-    let Merging { pr, button, .. } = state.window.attention.merging.take()?;
+    let Merging { pr, button, .. } = state.window.pull_requests.merging.take()?;
     tx.focus(button, true);
     Some(pr)
 }
 
 fn cancel_merge(state: &mut State, tx: &mut Tx) {
     end_merge(state, tx);
-}
-
-pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
-    let lists = Lists::of(&state.facts, &state.window.attention);
-    let total = lists.total();
-    let k = attn_ui::kit(t);
-    let mut body = col()
-        .key("attention.body")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .gap(space::S3)
-        .padding(space::S3)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        });
-    if !lists.sessions.is_empty() {
-        body = body.child(section(
-            "attention.sessions",
-            "Sessions Needing Attention",
-            lists.sessions.len(),
-            lists
-                .sessions
-                .iter()
-                .map(|s| session_row(s, &state.facts.outposts, t))
-                .collect(),
-            t,
-        ));
-    }
-    if !lists.review.is_empty() {
-        body = body.child(section(
-            "attention.review",
-            "Review Requested",
-            lists.review.len(),
-            lists
-                .review
-                .iter()
-                .map(|p| {
-                    pr_row(
-                        state,
-                        p,
-                        Place::Drawer,
-                        false,
-                        format!("attention.pr.{}", p.id),
-                        named(p),
-                        t,
-                    )
-                })
-                .collect(),
-            t,
-        ));
-    }
-    if !lists.yours.is_empty() {
-        body = body.child(section(
-            "attention.yours",
-            "Your PRs",
-            lists.yours.len(),
-            lists
-                .yours
-                .iter()
-                .map(|p| {
-                    pr_row(
-                        state,
-                        p,
-                        Place::Drawer,
-                        true,
-                        format!("attention.pr.{}", p.id),
-                        named(p),
-                        t,
-                    )
-                })
-                .collect(),
-            t,
-        ));
-    }
-    if total == 0 {
-        body = body.child(
-            text("Nothing needs attention")
-                .key("attention.empty")
-                .role("status")
-                .font(type_::BODY)
-                .color(t.text_tertiary),
-        );
-    }
-    col()
-        .key(DRAWER)
-        .role("region")
-        .label("Needs Attention")
-        .focusable(true)
-        .on_key(drawer_key)
-        .h_full()
-        .min_h(0.0)
-        .child(
-            row()
-                .key("attention.header")
-                .w_full()
-                .items_center()
-                .gap(12.0)
-                .px(20.0)
-                .pt(20.0)
-                .pb(16.0)
-                .fill(if t.dark {
-                    t.shadow.alpha(0.2)
-                } else {
-                    rune::Color::TRANSPARENT
-                })
-                .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-                .child(
-                    type_::upper("Needs Attention", type_::DRAWER_TITLE)
-                        .color(t.text_muted)
-                        .grow(1.0),
-                )
-                .child(
-                    text(total.to_string())
-                        .key("attention.count")
-                        .role("status")
-                        .label(format!("{total} need attention"))
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .child(
-                    GlyphButton::new(glyph::TIMES, "Close")
-                        .font(glyph::LARGE)
-                        .color(t.text_dimmed)
-                        .help("Close (Esc)")
-                        .on_press_tx(close)
-                        .build(k)
-                        .key("attention.close"),
-                ),
-        )
-        .child(body)
 }
 
 fn section(key: &str, title: &str, count: usize, rows: Vec<El>, t: &Tokens) -> El {
@@ -434,39 +241,6 @@ fn section(key: &str, title: &str, count: usize, rows: Vec<El>, t: &Tokens) -> E
         .children(rows)
 }
 
-fn session_row(session: &Session, outposts: &[attn_protocol::OutpostInfo], t: &Tokens) -> El {
-    let agent = AgentRow::of(session, outposts, false);
-    let key = format!("attention.session.{}", session.id);
-    let id = session.id.clone();
-    Button::new(agent.name.clone())
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .label_with({
-            let mark_key = key.clone();
-            let agent = agent.clone();
-            let t = *t;
-            move |font, ink| {
-                row()
-                    .w_full()
-                    .gap(space::S2)
-                    .items_center()
-                    .child(crate::sidebar::state_mark(
-                        &mark_key,
-                        &agent,
-                        crate::sidebar::MARK,
-                        &t,
-                    ))
-                    .child(text(agent.name.clone()).font(font).color(ink).truncate())
-            }
-        })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            crate::sidebar::open_agent(state, &id, tx)
-        })
-        .build(attn_ui::kit(t))
-        .key(key)
-        .w_full()
-}
-
 /// A pull request by its repository's name and number: "attn #20".
 fn named(pr: &PR) -> String {
     format!("{} #{}", repo_name(&pr.repo), pr.number)
@@ -476,18 +250,10 @@ fn repo_name(repo: &str) -> &str {
     repo.rsplit('/').next().unwrap_or(repo)
 }
 
-fn pr_row(
-    state: &State,
-    pr: &PR,
-    place: Place,
-    yours: bool,
-    key: String,
-    heading: String,
-    t: &Tokens,
-) -> El {
+fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: &Tokens) -> El {
     let k = attn_ui::kit(t);
     let url = pr.url.clone();
-    let visited = (place == Place::Home).then(|| pr.id.clone());
+    let visited = pr.id.clone();
     let open = Button::new(format!("{heading}: {}", pr.title))
         .variant(ButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
@@ -501,9 +267,7 @@ fn pr_row(
             }
         })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            if let Some(id) = &visited {
-                visit(state, id);
-            }
+            visit(state, &visited);
             open_url(state, &url, tx)
         })
         .build(k)
@@ -514,12 +278,7 @@ fn pr_row(
         .items_center()
         .gap(space::S1)
         .child(open)
-        .children(
-            (place == Place::Home)
-                .then(|| marks(pr, &key, t))
-                .into_iter()
-                .flatten(),
-        );
+        .children(marks(pr, &key, t));
     let title = text(pr.title.clone())
         .font(type_::BODY)
         .color(t.text_primary)
@@ -529,7 +288,7 @@ fn pr_row(
     let phase = |act: Act| {
         state
             .window
-            .attention
+            .pull_requests
             .acts
             .get(&(act, pr.id.clone()))
             .copied()
@@ -550,8 +309,7 @@ fn pr_row(
             .key(button)
     };
     let mute_id = pr.id.clone();
-    let home = place == Place::Home;
-    let new_session = home.then(|| {
+    let new_session = {
         let pr = pr.clone();
         GlyphButton::new(glyph::POP_OUT, "New worktree session")
             .help("New worktree session")
@@ -560,8 +318,8 @@ fn pr_row(
             })
             .build(k)
             .key(format!("{key}.new"))
-    });
-    let mute_author = (home && !pr.author.is_empty()).then(|| {
+    };
+    let mute_author = (!pr.author.is_empty()).then(|| {
         let author = pr.author.clone();
         Button::new(author.clone())
             .variant(ButtonVariant::GhostMuted)
@@ -587,7 +345,7 @@ fn pr_row(
             .color(t.text_tertiary)
             .grow(1.0),
         )
-        .children(new_session)
+        .child(new_session)
         .child(action(Act::Approve))
         .child(action(Act::Merge))
         .child(
@@ -598,7 +356,7 @@ fn pr_row(
                 .key(format!("{key}.mute")),
         )
         .children(mute_author);
-    let settled = home && pr.approved_by_me && !pr.has_new_changes;
+    let settled = pr.approved_by_me && !pr.has_new_changes;
     col()
         .key(key)
         .role("group")
@@ -691,7 +449,7 @@ fn mute_repo(state: &mut State, repo: &str) {
 }
 
 fn fold_repo(state: &mut State, repo: &str) {
-    let folded = &mut state.window.attention.folded_repos;
+    let folded = &mut state.window.pull_requests.folded_repos;
     if !folded.remove(repo) {
         folded.insert(repo.to_owned());
     }
@@ -700,8 +458,8 @@ fn fold_repo(state: &mut State, repo: &str) {
 /// Home's Pull Requests card: the user's own pull requests, then the review requests by
 /// repository, each repository folding away or muted from its header.
 pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
-    let attention = &state.window.attention;
-    let mut acts: Vec<(Act, String, Option<u64>)> = attention
+    let tracked = &state.window.pull_requests;
+    let mut acts: Vec<(Act, String, Option<u64>)> = tracked
         .acts
         .iter()
         .map(|((act, pr), phase)| {
@@ -713,11 +471,11 @@ pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
         })
         .collect();
     acts.sort();
-    let mut muting: Vec<&String> = attention.muting.iter().collect();
+    let mut muting: Vec<&String> = tracked.muting.iter().collect();
     muting.sort();
-    let mut folded: Vec<&String> = attention.folded_repos.iter().collect();
+    let mut folded: Vec<&String> = tracked.folded_repos.iter().collect();
     folded.sort();
-    let mut merged: Vec<&String> = attention.merged.iter().collect();
+    let mut merged: Vec<&String> = tracked.merged.iter().collect();
     merged.sort();
     let reads = (
         std::sync::Arc::as_ptr(&state.facts.pull_requests) as usize,
@@ -734,8 +492,8 @@ pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
 fn pr_card(state: &State, t: &Tokens) -> El {
     let k = attn_ui::kit(t);
     let facts = &state.facts;
-    let attention = &state.window.attention;
-    let active = active(facts, attention);
+    let tracked = &state.window.pull_requests;
+    let active = active(facts, tracked);
     let needing = active.iter().filter(|p| needs_the_user(p)).count();
     let yours: Vec<&PR> = active
         .iter()
@@ -763,17 +521,7 @@ fn pr_card(state: &State, t: &Tokens) -> El {
                 yours.len(),
                 yours
                     .iter()
-                    .map(|p| {
-                        pr_row(
-                            state,
-                            p,
-                            Place::Home,
-                            true,
-                            format!("home.pr.{}", p.id),
-                            named(p),
-                            t,
-                        )
-                    })
+                    .map(|p| pr_row(state, p, true, format!("home.pr.{}", p.id), named(p), t))
                     .collect(),
                 t,
             ));
@@ -820,7 +568,7 @@ fn pr_card(state: &State, t: &Tokens) -> El {
 
 fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
     let k = attn_ui::kit(t);
-    let folded = state.window.attention.folded_repos.contains(repo);
+    let folded = state.window.pull_requests.folded_repos.contains(repo);
     let key = format!("home.prs.repo.{repo}");
     let name = repo_name(repo);
     let (fold_repo_id, mute_repo_id) = (repo.to_owned(), repo.to_owned());
@@ -876,7 +624,6 @@ fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
                             pr_row(
                                 state,
                                 p,
-                                Place::Home,
                                 false,
                                 format!("home.pr.{}", p.id),
                                 format!("#{}", p.number),
@@ -900,12 +647,12 @@ fn open_url(state: &mut State, url: &str, tx: &mut Tx) {
 
 /// The yes the user gives before a merge, over the window.
 pub(crate) fn merge_confirmation(state: &State, t: &Tokens) -> Vec<El> {
-    let Some(Merging { number, .. }) = &state.window.attention.merging else {
+    let Some(Merging { number, .. }) = &state.window.pull_requests.merging else {
         return Vec::new();
     };
     let mut layer = Vec::new();
     Dialog::new(
-        "attention.merge",
+        "home.prs.merge",
         format!("Merge PR #{number}?"),
         DialogFrame::merge(t),
     )
@@ -913,7 +660,7 @@ pub(crate) fn merge_confirmation(state: &State, t: &Tokens) -> Vec<El> {
     .on_close_tx(cancel_merge)
     .child(
         text("This will merge the pull request and delete the branch.")
-            .key("attention.merge.said")
+            .key("home.prs.merge.said")
             .font(type_::LABEL)
             .color(t.text_tertiary)
             .wrap()
@@ -927,8 +674,8 @@ pub(crate) fn merge_confirmation(state: &State, t: &Tokens) -> Vec<El> {
             .justify_end()
             .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
             .border_layout()
-            .child(merge_button("Cancel", false, t, cancel_merge).key("attention.merge.cancel"))
-            .child(merge_button("Merge", true, t, confirm_merge).key("attention.merge.confirm")),
+            .child(merge_button("Cancel", false, t, cancel_merge).key("home.prs.merge.cancel"))
+            .child(merge_button("Merge", true, t, confirm_merge).key("home.prs.merge.confirm")),
     )
     .build(t, &mut layer);
     layer
@@ -970,12 +717,4 @@ fn merge_button(
         .fill(fill)
         .border(1.0, edge)
         .hover(hover)
-}
-
-fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if ev.key == Key::Escape {
-        crate::shell::escape_drawers(state, tx);
-        return true;
-    }
-    false
 }

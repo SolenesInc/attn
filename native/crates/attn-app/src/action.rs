@@ -95,8 +95,6 @@ macro_rules! actions {
             ConfirmSharedCodexRestart,
             /// Ask before reloading the Codex tiles on an older Codex.
             ConfirmReloadCodexTiles,
-            /// Open the attention drawer and take the keyboard into it.
-            OpenAttention,
             /// Open the automations drawer, or close it.
             ToggleAutomations,
             /// Make a desktop and switch to it.
@@ -148,7 +146,6 @@ macro_rules! actions {
                     Action::RetrySharedCodex => "codex.retryRestart",
                     Action::ConfirmSharedCodexRestart => "codex.restartNow",
                     Action::ConfirmReloadCodexTiles => "codex.reloadOldTiles",
-                    Action::OpenAttention => "attention.open",
                     Action::ToggleAutomations => "automations.toggle",
                     Action::CreateDesktop => "desktop.create",
                     Action::OpenWhatsNew => "whatsNew.open",
@@ -193,7 +190,6 @@ macro_rules! actions {
                     Action::RetrySharedCodex => "Retry shared Codex restart",
                     Action::ConfirmSharedCodexRestart => "Restart shared Codex now",
                     Action::ConfirmReloadCodexTiles => "Reload old Codex tiles",
-                    Action::OpenAttention => "Open attention drawer",
                     Action::ToggleAutomations => "Show or hide automations",
                     Action::CreateDesktop => "New desktop",
                     Action::OpenWhatsNew => "What's new",
@@ -293,7 +289,6 @@ actions! {
     TerminalSendAnnotations = "terminal.sendAnnotations", Markdown, "Send terminal annotations to session";
 
     SessionRefreshPrs = "session.refreshPRs", Review, "Refresh PRs";
-    DockAttention = "dock.attention", Review, "PRs drawer";
 
     AppQuit = "app.quit", App, "Quit attn";
     UiActionMenu = "ui.actionMenu", App, "Agent palette";

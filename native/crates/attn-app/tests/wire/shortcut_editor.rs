@@ -54,7 +54,7 @@ fn keeping(settings: &[(&str, &str)]) -> Daemon {
 }
 
 fn config(overrides: Value) -> String {
-    json!({"version": 1, "overrides": overrides, "dock": {"collapsed": false, "items": ["dock.attention"]}})
+    json!({"version": 1, "overrides": overrides, "dock": {"collapsed": false, "items": ["session.toggleSidebar"]}})
         .to_string()
 }
 
@@ -429,8 +429,8 @@ fn unbinding_a_shortcut_frees_its_keys_for_another_action() {
 fn taking_the_keys_of_another_shortcut_asks_first_naming_what_they_run() {
     for (holder, keys) in [
         (
-            Action::DockAttention,
-            default_chord(&Action::DockAttention).to_string(),
+            Action::UiCommandPalette,
+            default_chord(&Action::UiCommandPalette).to_string(),
         ),
         (
             Action::DesktopSelect1,
@@ -1015,8 +1015,7 @@ fn reopening_starts_with_no_filter_and_nothing_recording() {
     assert!(writes(&world).is_empty());
 }
 
-const DEFAULT_DOCK: [&str; 6] = [
-    "dock.attention",
+const DEFAULT_DOCK: [&str; 5] = [
     "terminal.splitVertical",
     "terminal.splitHorizontal",
     "session.newHorizontal",
@@ -1059,7 +1058,7 @@ fn saved_dock(world: &World) -> Vec<String> {
 #[test]
 fn the_dock_section_lists_the_docked_shortcuts_and_reorders_and_removes_them() {
     let mut world = with_dock(&[
-        "dock.attention",
+        "session.new",
         "terminal.toggleZoom",
         "session.toggleSidebar",
     ]);
@@ -1067,22 +1066,22 @@ fn the_dock_section_lists_the_docked_shortcuts_and_reorders_and_removes_them() {
     assert_eq!(
         docked(&world),
         [
-            "dock.attention",
+            "session.new",
             "terminal.toggleZoom",
             "session.toggleSidebar"
         ]
     );
     let first_up = world
         .screen()
-        .get(Target::key("shortcut-editor.dock.up.dock.attention"));
+        .get(Target::key("shortcut-editor.dock.up.session.new"));
     assert!(first_up.is("disabled"), "the first item cannot move up");
 
-    click(&mut world, "shortcut-editor.dock.down.dock.attention");
+    click(&mut world, "shortcut-editor.dock.down.session.new");
     assert_eq!(
         saved_dock(&world),
         [
             "terminal.toggleZoom",
-            "dock.attention",
+            "session.new",
             "session.toggleSidebar"
         ]
     );
@@ -1094,7 +1093,7 @@ fn the_dock_section_lists_the_docked_shortcuts_and_reorders_and_removes_them() {
         [
             "terminal.toggleZoom",
             "session.toggleSidebar",
-            "dock.attention"
+            "session.new"
         ]
     );
 
@@ -1102,14 +1101,14 @@ fn the_dock_section_lists_the_docked_shortcuts_and_reorders_and_removes_them() {
         &mut world,
         "shortcut-editor.dock.remove.terminal.toggleZoom",
     );
-    assert_eq!(docked(&world), ["session.toggleSidebar", "dock.attention"]);
+    assert_eq!(docked(&world), ["session.toggleSidebar", "session.new"]);
     assert_eq!(saved(&world)["overrides"], json!({}));
     rest(&mut world);
 }
 
 #[test]
 fn the_star_on_a_row_pins_its_shortcut_to_the_dock_and_unpins_it() {
-    let mut world = with_dock(&["dock.attention"]);
+    let mut world = with_dock(&["session.new"]);
     open_editor(&mut world);
     let star = |world: &World| {
         world
@@ -1119,12 +1118,12 @@ fn the_star_on_a_row_pins_its_shortcut_to_the_dock_and_unpins_it() {
     assert_eq!(star(&world).name.as_deref(), Some("Add to dock"));
 
     click(&mut world, "shortcut-editor.dock-pin.desktop.overview");
-    assert_eq!(saved_dock(&world), ["dock.attention", "desktop.overview"]);
-    assert_eq!(docked(&world), ["dock.attention", "desktop.overview"]);
+    assert_eq!(saved_dock(&world), ["session.new", "desktop.overview"]);
+    assert_eq!(docked(&world), ["session.new", "desktop.overview"]);
     assert_eq!(star(&world).name.as_deref(), Some("Remove from dock"));
 
     click(&mut world, "shortcut-editor.dock-pin.desktop.overview");
-    assert_eq!(saved_dock(&world), ["dock.attention"]);
+    assert_eq!(saved_dock(&world), ["session.new"]);
     rest(&mut world);
 }
 
@@ -1177,7 +1176,7 @@ fn each_category_lists_its_shortcuts_in_the_tauri_apps_order() {
         rows("Sessions").last().map(String::as_str),
         Some("dock.asks")
     );
-    assert_eq!(rows("Review"), ["session.refreshPRs", "dock.attention"]);
+    assert_eq!(rows("Review"), ["session.refreshPRs"]);
     assert_eq!(rows("App")[0], "app.quit");
 }
 

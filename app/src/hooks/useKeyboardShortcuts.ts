@@ -29,7 +29,6 @@ interface KeyboardShortcutsConfig {
   onToggleSidebar?: () => void;
   onShowAgentList: () => void;
   onRefreshPRs?: () => void;
-  onToggleAttentionPanel?: () => void;
   onToggleAsksPanel?: () => void;
   onOpenSettings?: () => void;
   onShowShortcuts?: () => void;
@@ -73,7 +72,6 @@ export function useKeyboardShortcuts({
   onToggleSidebar,
   onShowAgentList,
   onRefreshPRs,
-  onToggleAttentionPanel,
   onToggleAsksPanel,
   onOpenSettings,
   onShowShortcuts,
@@ -143,7 +141,6 @@ export function useKeyboardShortcuts({
   useShortcut('desktop.select9', () => onSwitchToDesktopSlot(9), enabled);
   useShortcut('desktop.send9', () => onMoveToDesktopSlot(9, true), enabled);
   useShortcut('desktop.sendStay9', () => onMoveToDesktopSlot(9, false), enabled);
-  useShortcut('dock.attention', onToggleAttentionPanel ?? (() => {}), enabled && !!onToggleAttentionPanel);
   useShortcut('dock.asks', onToggleAsksPanel ?? (() => {}), enabled && !!onToggleAsksPanel);
 
   useShortcut('ui.actionMenu', () => onOpenPalette('agents'), !blocked);

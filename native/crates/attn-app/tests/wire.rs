@@ -3,7 +3,6 @@ static ALLOCATOR: attn_testkit::allocations::Counting = attn_testkit::allocation
 
 mod wire {
     mod asks;
-    mod attention;
     mod automation;
     mod automations;
     mod browser;
@@ -24,6 +23,7 @@ mod wire {
     mod frame_cost;
     mod garden;
     mod home;
+    mod home_pull_requests;
     mod keys;
     mod launcher;
     mod launcher_outposts;

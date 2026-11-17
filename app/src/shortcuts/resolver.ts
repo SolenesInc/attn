@@ -24,7 +24,6 @@ export interface KeybindingsConfig {
 }
 
 export const DEFAULT_DOCK_ITEMS: ShortcutId[] = [
-  'dock.attention',
   'terminal.splitVertical',
   'terminal.splitHorizontal',
   'session.newHorizontal',

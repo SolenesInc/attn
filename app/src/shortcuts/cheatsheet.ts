@@ -108,7 +108,6 @@ export function buildCheatsheet(): CheatsheetCategory[] {
     {
       title: 'Review & Git',
       rows: [
-        { label: 'PRs drawer', combos: [fromId('dock.attention')] },
         { label: 'Refresh PRs', combos: [fromId('session.refreshPRs')] },
       ],
     },

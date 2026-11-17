@@ -20,16 +20,6 @@
   pointer-events: auto;
 }
 
-/* Compact mode (in AttentionDrawer) - always visible, no overlay */
-.pr-actions.compact {
-  position: static;
-  transform: none;
-  opacity: 1;
-  pointer-events: auto;
-  background: none;
-  padding: 0;
-}
-
 .pr-action-btn {
   background: var(--color-bg-button);
   border: 1px solid var(--color-border-hover);
@@ -44,14 +34,6 @@
   align-items: center;
   justify-content: center;
   min-width: 56px;
-}
-
-.pr-action-btn.compact {
-  min-width: 24px;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  font-size: 12px;
 }
 
 .pr-action-btn:hover {

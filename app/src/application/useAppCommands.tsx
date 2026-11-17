@@ -465,15 +465,6 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
         shortcut: [shortcutTokens('sessions.open')],
         run: () => openLedger('sessions'),
       },
-      {
-        id: 'attention',
-        title: 'Open attention drawer',
-        description: 'Show sessions and pull requests that need a response',
-        keywords: ['waiting', 'pull requests', 'prs', 'notifications'],
-        icon: <AttentionActionIcon />,
-        shortcut: [shortcutTokens('dock.attention')],
-        run: () => openDockPanel('attention'),
-      },
       ...(asksAvailable
         ? [{
             id: 'asks',

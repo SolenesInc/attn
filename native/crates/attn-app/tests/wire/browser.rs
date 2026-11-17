@@ -313,8 +313,8 @@ fn a_drawer_over_the_page_cuts_the_page_back_to_the_part_it_leaves_uncovered() {
     let (mut world, engine) = start(START);
     let rect = page_rect(&world);
 
-    press(&mut world, Action::DockAttention);
-    let drawer = world.screen().bounds(Target::key("attention")).unwrap();
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    let drawer = world.screen().bounds(Target::key("automations")).unwrap();
     let shown = engine
         .shown()
         .expect("the page still shows beside the drawer");
@@ -328,7 +328,7 @@ fn a_drawer_over_the_page_cuts_the_page_back_to_the_part_it_leaves_uncovered() {
         "only the part left of the drawer shows"
     );
 
-    press(&mut world, Action::DockAttention);
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
     assert_eq!(engine.shown().expect("the page shows").visible, rect);
     rest(&mut world);
 }

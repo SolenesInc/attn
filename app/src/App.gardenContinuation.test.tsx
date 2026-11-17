@@ -100,7 +100,7 @@ function selectedSessions(daemon: ScriptedDaemon) {
 describe('App garden continuation', () => {
   it('dismisses a composer before the dock after returning from fullscreen', async () => {
     const { daemon } = await openSeedInGarden();
-    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show Automations' })));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand the garden' })));
     await composeHandover(daemon);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Return the garden to the dock' })));
@@ -108,10 +108,10 @@ describe('App garden continuation', () => {
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
 
     expect(screen.queryByLabelText(/What should the new agent know\?/)).toBeNull();
-    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')).toHaveClass('is-open');
+    expect(document.querySelector('.dock-panel--automations')?.closest('.side-panel-shell')).toHaveClass('is-open');
     expect(screen.getByRole('button', { name: 'Hide the garden' })).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
-    expect(document.querySelector('.dock-panel--attention')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
+    expect(document.querySelector('.dock-panel--automations')?.closest('.side-panel-shell')).not.toHaveClass('is-open');
     expect(screen.getByRole('button', { name: 'Hide the garden' })).toBeInTheDocument();
   });
 

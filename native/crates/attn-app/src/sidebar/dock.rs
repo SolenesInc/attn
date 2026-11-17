@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 
 use crate::State;
 use crate::action::Action;
-use crate::shell::Drawer;
 
 const KEYS: rune::TextStyle = rune::TextStyle {
     weight: 600.0,
@@ -24,7 +23,6 @@ const HEADING: rune::TextStyle = rune::TextStyle {
 };
 
 const DEFAULT_ITEMS: &[&str] = &[
-    "dock.attention",
     "terminal.splitVertical",
     "terminal.splitHorizontal",
     "session.newHorizontal",
@@ -91,7 +89,6 @@ fn chip_label(action: &Action) -> &'static str {
         Action::TerminalToggleZoom => "zoom",
         Action::MarkdownSendAnnotations => "send notes",
         Action::TerminalSendAnnotations => "send marks",
-        Action::DockAttention => "PRs",
         other => other.label(),
     }
 }
@@ -175,7 +172,6 @@ pub(crate) fn of(state: &State) -> Dock {
         .filter_map(|action| {
             let keys = crate::palette::label_of(state, &action)?;
             let active = match action {
-                Action::DockAttention => state.window.shows(Drawer::Attention),
                 Action::TerminalToggleZoom => zoomed,
                 _ => false,
             };
@@ -266,23 +262,14 @@ fn chip_view(chip: &Chip, t: &Tokens) -> El {
                     t.text_tertiary
                 }),
         );
-    let face = match chip.action == Action::DockAttention || chip.active {
-        true => face.px(8.0).py(2.0),
-        false => face,
-    };
     let face = match chip.active {
         true => face
+            .px(8.0)
+            .py(2.0)
             .a11y_value("active")
             .fill(t.brand.alpha(0.12))
             .border(1.0, t.brand.alpha(0.35)),
         false => face,
     };
-    match chip.action {
-        Action::DockAttention => face
-            .role("button")
-            .focusable(true)
-            .hover(t.bg_elevated)
-            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::attention::toggle(state, tx)),
-        _ => face.role("listitem"),
-    }
+    face.role("listitem")
 }

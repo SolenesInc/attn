@@ -2,6 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentPane, daemonDesktop, daemonSession, DEFAULT_PROFILE_ID, soloDesktop } from './test/daemonFixtures';
+import { openActionMenu } from './test/appFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import type { EventMessage } from './test/protocol';
@@ -24,6 +25,11 @@ async function launch(queue = false) {
   serveSettings(view.daemon, settings);
   view.daemon.on('callout_result', () => undefined);
   return view;
+}
+
+async function toggleAutomations(daemon: ScriptedDaemon) {
+  await openActionMenu(daemon);
+  await gesture(daemon, () => fireEvent.mouseDown(screen.getByText(/^(Show|Hide) automations$/)));
 }
 
 async function show(daemon: ScriptedDaemon, steps: EventMessage<'callout_show_request'>['steps'], requestId = 'callout-1') {
@@ -201,11 +207,11 @@ describe('App callouts', () => {
 
   it('keeps a callout visible beside a drawer, including after the drawer has been used', async () => {
     const { daemon } = await launch();
-    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await toggleAutomations(daemon);
     expect(await show(daemon, [{ anchor: 'sidebar', text: 'Alongside a drawer' }])).not.toHaveProperty('missing');
     expect(card()).toHaveTextContent('Alongside a drawer');
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
-    await gesture(daemon, () => pressShortcut('dock.attention'));
+    await toggleAutomations(daemon);
     await show(daemon, [{ anchor: 'sidebar', text: 'After a drawer' }], 'after-drawer');
     expect(card()).toHaveTextContent('After a drawer');
   });

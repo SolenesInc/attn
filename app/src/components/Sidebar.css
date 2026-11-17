@@ -680,21 +680,6 @@
   font-weight: 600;
 }
 
-.shortcut-hint--action {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 2px 8px;
-  cursor: pointer;
-  transition: all 120ms ease-out;
-}
-
-.shortcut-hint--action:hover {
-  color: var(--color-text-primary);
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--color-border);
-}
-
 .shortcut-hint.active {
   color: var(--color-text-primary);
   background: color-mix(in srgb, var(--color-brand) 12%, transparent);

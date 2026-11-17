@@ -32,7 +32,6 @@ export function useAppSidebarActions() {
   const { hasCriticalNotification, zoomModeBySessionId } = useAppShell();
   const {
     toggleDockPanel,
-    attentionPanelOpen,
     notebookOpen,
     openNotebookBrowser,
     notificationsPanelOpen,
@@ -130,7 +129,6 @@ export function useAppSidebarActions() {
       Record<
         ShortcutId,
         {
-          run?: () => void;
           isActive?: boolean;
           available?: boolean;
         }
@@ -138,16 +136,12 @@ export function useAppSidebarActions() {
     >
   >(
     () => ({
-      'dock.attention': {
-        run: () => toggleDockPanel('attention'),
-        isActive: attentionPanelOpen,
-      },
       'terminal.splitVertical': { available: Boolean(shownAgentId) },
       'terminal.splitHorizontal': { available: Boolean(shownAgentId) },
       'session.newHorizontal': { available: Boolean(shownAgentId) },
       'terminal.toggleZoom': { isActive: activeSessionZoomed, available: Boolean(shownAgentId) },
     }),
-    [shownAgentId, attentionPanelOpen, activeSessionZoomed, toggleDockPanel],
+    [shownAgentId, activeSessionZoomed],
   );
 
   const dockItems = useMemo<DockItem[]>(
@@ -163,7 +157,6 @@ export function useAppSidebarActions() {
             label: dockShortcutLabel(id),
             keys,
             active: action?.isActive ?? false,
-            onClick: action?.run,
           },
         ];
       }),

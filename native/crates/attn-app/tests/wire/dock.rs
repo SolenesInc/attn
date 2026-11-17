@@ -10,6 +10,10 @@ fn open(world: &mut World, action: Action) {
     world.gesture(|app| app.key(chord(action)));
 }
 
+fn toggle_automations(world: &mut World) {
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+}
+
 fn bounds(world: &World, key: &str) -> [f32; 4] {
     world
         .screen()
@@ -23,11 +27,11 @@ fn drawers_lie_over_home_at_the_tauri_widths_and_stack_leftward_from_the_window_
     let sessions = bounds(&world, "home.sessions");
     let prs = bounds(&world, "home.prs");
 
-    open(&mut world, Action::DockAttention);
-    let attention = bounds(&world, "attention");
-    assert_eq!(attention[2], 600.0, "48% of 1440, capped at 600");
+    toggle_automations(&mut world);
+    let automations = bounds(&world, "automations");
+    assert_eq!(automations[2], 1440.0 * 0.42, "42% of 1440");
     assert_eq!(
-        attention[0] + attention[2],
+        automations[0] + automations[2],
         WINDOW.0,
         "against the window's edge"
     );
@@ -43,17 +47,17 @@ fn drawers_lie_over_home_at_the_tauri_widths_and_stack_leftward_from_the_window_
     assert_eq!(asks[2], 1440.0 * 0.46, "46% of 1440");
     assert_eq!(
         asks[0] + asks[2],
-        attention[0],
+        automations[0],
         "the newer drawer to the older one's left"
     );
-    assert_eq!(bounds(&world, "attention"), attention);
+    assert_eq!(bounds(&world, "automations"), automations);
 
-    open(&mut world, Action::DockAttention);
+    toggle_automations(&mut world);
     let asks = bounds(&world, "asks.drawer");
     assert_eq!(
         asks[0] + asks[2],
         WINDOW.0,
-        "the edge is free once attention closes"
+        "the edge is free once automations closes"
     );
     assert_eq!(bounds(&world, "home.sessions"), sessions);
 

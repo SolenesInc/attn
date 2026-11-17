@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use attn_app::Action;
 use attn_app::whats_new::{BANNER_PREF, RELEASE, SEEN_PREF};
 use attn_testkit::{Target, World};
 use rune::Key;
@@ -12,12 +11,12 @@ fn seeds() -> Vec<Seed> {
     vec![seed("s-alone1", "unrelated work")]
 }
 
-fn toggle_attention(world: &mut World) {
-    world.gesture(|app| app.key(super::super::sidebar::chord(Action::DockAttention)));
+fn toggle_automations(world: &mut World) {
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
 }
 
-fn attention_open(world: &World) -> bool {
-    world.screen().find(Target::key("attention")).is_some()
+fn automations_open(world: &World) -> bool {
+    world.screen().find(Target::key("automations")).is_some()
 }
 
 fn board_shown(world: &World) -> bool {
@@ -33,15 +32,15 @@ fn launch(prefs: &Path) -> World {
 
 #[test]
 fn preserves_opening_order_after_restoring_the_garden() {
-    for (attention_first, board) in [(true, false), (true, true), (false, false), (false, true)] {
-        let case = format!("attention first: {attention_first}, board: {board}");
+    for (automations_first, board) in [(true, false), (true, true), (false, false), (false, true)] {
+        let case = format!("automations first: {automations_first}, board: {board}");
         let mut world = World::start(daemon(seeds(), Vec::new()));
-        if attention_first {
-            toggle_attention(&mut world);
+        if automations_first {
+            toggle_automations(&mut world);
             click(&mut world, "Show the garden");
         } else {
             click(&mut world, "Show the garden");
-            toggle_attention(&mut world);
+            toggle_automations(&mut world);
         }
         click(&mut world, "Expand the garden");
         if board {
@@ -53,12 +52,12 @@ fn preserves_opening_order_after_restoring_the_garden() {
 
         key(&mut world, Key::Escape);
 
-        let expected = if attention_first { "closed" } else { "dock" };
+        let expected = if automations_first { "closed" } else { "dock" };
         assert_eq!(shown(&world), expected, "{case}");
-        assert_eq!(attention_open(&world), attention_first, "{case}");
+        assert_eq!(automations_open(&world), automations_first, "{case}");
         key(&mut world, Key::Escape);
         assert_eq!(shown(&world), "closed", "{case}");
-        assert!(!attention_open(&world), "{case}");
+        assert!(!automations_open(&world), "{case}");
         assert!(rests(&mut world), "{case}");
     }
 }
@@ -66,15 +65,15 @@ fn preserves_opening_order_after_restoring_the_garden() {
 #[test]
 fn dismisses_an_expanded_garden_before_a_dock_panel_opened_after_its_list() {
     let mut world = open_garden(seeds());
-    toggle_attention(&mut world);
+    toggle_automations(&mut world);
     click(&mut world, "Expand the garden");
 
     key(&mut world, Key::Escape);
 
     assert_eq!(shown(&world), "closed");
-    assert!(attention_open(&world));
+    assert!(automations_open(&world));
     key(&mut world, Key::Escape);
-    assert!(!attention_open(&world));
+    assert!(!automations_open(&world));
     assert!(rests(&mut world));
 }
 

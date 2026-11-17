@@ -405,15 +405,11 @@ describe('App sidebar', () => {
   });
 
   describe('dock', () => {
-    it('shows the configured shortcuts with their keys and runs one on click', async () => {
-      const { daemon } = await launch({ sessions: [daemonSession('s1')] });
+    it('shows the configured shortcuts with their keys', async () => {
+      await launch({ sessions: [daemonSession('s1')] });
       const dock = () => Array.from(document.querySelectorAll('.sidebar-dock-items .shortcut-hint'), (item) => item.textContent);
 
-      expect(dock()).toContain('⌘⇧PPRs');
-      const dockItems = within(document.querySelector<HTMLElement>('.sidebar-dock-items')!);
-      await gesture(daemon, () => fireEvent.click(dockItems.getByRole('button', { name: /PRs/ })));
-
-      expect(document.querySelector('.sidebar-dock-items [data-active="true"]')).toHaveTextContent('PRs');
+      expect(dock()).toEqual(['⌘Bsidebar']);
     });
 
     it('collapses the dock and remembers it', async () => {

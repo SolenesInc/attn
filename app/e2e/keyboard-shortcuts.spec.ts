@@ -161,7 +161,7 @@ test.describe('Keyboard Shortcuts', () => {
   });
 
   test.describe('Palette', () => {
-    test('⌘K opens agents, > switches to commands, ⌘⇧K toggles commands and keeps attention drawer access', async ({ page, daemon }) => {
+    test('⌘K opens agents, > switches to commands, ⌘⇧K toggles commands and runs a command picked from it', async ({ page, daemon }) => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
@@ -171,7 +171,7 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(input).toBeFocused();
       await page.keyboard.type('>');
       await expect(page.getByRole('dialog', { name: 'Commands' })).toBeVisible();
-      await expect(page.getByText('Open attention drawer')).toBeVisible();
+      await expect(page.getByText('Show automations')).toBeVisible();
       await page.keyboard.press('Backspace');
       await expect(page.getByRole('dialog', { name: 'Agents' })).toBeVisible();
 
@@ -184,8 +184,8 @@ test.describe('Keyboard Shortcuts', () => {
       await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
 
-      await page.getByText('Open attention drawer').click();
-      await expect(page.locator('.side-panel-shell.is-open .attention-drawer .attention-drawer-panel')).toBeVisible();
+      await page.getByText('Show automations').click();
+      await expect(page.locator('.side-panel-shell.is-open .dock-panel--automations')).toBeVisible();
     });
   });
 

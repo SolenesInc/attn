@@ -1,7 +1,6 @@
 mod action;
 pub mod annotations;
 mod asks;
-mod attention;
 pub mod automation;
 mod automations;
 pub mod browser;
@@ -364,7 +363,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let updating = update_run::poll(state, now, tx)
         | outpost_updates::poll(state, now, tx)
         | shared_codex::poll(state, tx)
-        | attention::poll(state, now);
+        | home::pull_requests::poll(state, now);
     let automated = automations::poll(state, now, tx);
     let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);
     let reported = diagnostic_report::poll(state, now, tx);

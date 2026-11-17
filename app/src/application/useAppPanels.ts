@@ -47,7 +47,6 @@ export function useAppPanels() {
 
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
-  const attentionPanelOpen = openDockPanels.attention;
   const asksPanelOpen = openDockPanels.asks;
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
@@ -121,7 +120,6 @@ export function useAppPanels() {
     toggleAgentList,
     closeAgentList,
     dockPanelStack,
-    attentionPanelOpen,
     asksPanelOpen,
     automationsPanelOpen,
     gardenPanelOpen,

@@ -65,8 +65,6 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
     let window = &mut state.window;
     match action {
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
-        Action::DockAttention => crate::attention::toggle(state, tx),
-        Action::OpenAttention => crate::attention::open(state, tx),
         Action::ToggleAutomations => crate::automations::toggle(state, tx),
         Action::SessionNextRun => crate::automations::runs::next_run(state, tx),
         Action::CreateDesktop => crate::desktop::create_desktop(state, tx),
@@ -76,7 +74,7 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         Action::CapContextWindow { session } => crate::context_cap::open(state, &session, tx),
         Action::NotebookOpenFullscreen => crate::notebook::open_fullscreen(state, tx),
         Action::CreateDiagnosticReport => crate::diagnostic_report::open(state, tx),
-        Action::SessionRefreshPrs => crate::attention::refresh(state, tx),
+        Action::SessionRefreshPrs => crate::home::pull_requests::refresh(state, tx),
         Action::DockAsks if crate::asks::available(&state.facts) => crate::asks::toggle(state, tx),
         Action::DockAsks => return Outcome::Unavailable,
         Action::ShowAsks { ask } if crate::asks::available(&state.facts) => {

@@ -1,12 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { AttentionDrawer } from '../components/AttentionDrawer';
 import { AsksDrawer } from '../components/Asks/AsksDrawer';
 import { AutomationsPanel } from '../components/AutomationsPanel';
 import { RightDock } from '../components/RightDock';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import {
   useAppGardenActionsContext,
-  useAppInputs,
   useAppPanelsContext,
   useAppSessionsContext,
   useAttentionQueueContext,
@@ -37,7 +35,6 @@ export function AppDock() {
   const {
     dockPanelStack,
     closeDockPanel,
-    attentionPanelOpen,
     asksPanelOpen,
     automationsPanelOpen,
     gardenPanelOpen,
@@ -45,8 +42,7 @@ export function AppDock() {
     gardenSlotRef,
     closeGarden,
   } = useAppPanelsContext();
-  const { waitingLocalSessions, openSnoozeFromControl } = useAttentionQueueContext();
-  const { prs } = useAppInputs();
+  const { openSnoozeFromControl } = useAttentionQueueContext();
   const { handleSelectSession } = useNavigationContext();
   const { launchAgent } = useSessionLaunchContext();
   const { handleRevealSeedInGarden } = useAppGardenActionsContext();
@@ -62,7 +58,6 @@ export function AppDock() {
     sendWakeTurn,
   } = useDaemonApi();
   const openPanels = {
-    attention: attentionPanelOpen,
     asks: asksPanelOpen,
     automations: automationsPanelOpen,
     garden: gardenPanelOpen,
@@ -78,20 +73,6 @@ export function AppDock() {
       <RightDock
         panelOrder={dockPanelStack}
         panels={[
-          {
-            id: 'attention',
-            isOpen: openPanels.attention,
-            width: 'clamp(360px, 48vw, 600px)',
-            className: 'dock-panel dock-panel--attention attention-drawer',
-            children: (
-              <AttentionDrawer
-                onClose={() => closeDockPanel('attention')}
-                waitingSessions={waitingLocalSessions}
-                prs={prs}
-                onSelectSession={handleSelectSession}
-              />
-            ),
-          },
           {
             id: 'asks',
             isOpen: openPanels.asks,
