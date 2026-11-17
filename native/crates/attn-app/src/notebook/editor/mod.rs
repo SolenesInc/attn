@@ -44,17 +44,16 @@ pub(crate) struct Editor {
     pub(crate) preedit: Option<String>,
     /// A press that toggled a task box: the rest of its gesture moves nothing.
     pub(crate) toggling: bool,
-    /// The notes the links point at that the daemon said are missing, the ones it said exist,
-    /// and every note asked about since files last changed, by path from the root.
+    /// The notes the links point at that the daemon said are missing, and every note asked
+    /// about since files last changed, by path from the root.
     pub(crate) missing: std::collections::BTreeSet<String>,
     /// The note's folder, which its links resolve from.
     dir: String,
-    pub(crate) found: std::collections::BTreeSet<String>,
     pub(crate) checked: std::collections::BTreeSet<String>,
     /// The document revision whose links were last looked at.
     pub(crate) links_revision: Option<u64>,
-    /// Rises when files on disk change, which asks again about every note not found, while
-    /// the missing ones keep their marks; an answer asked before the latest change is dropped.
+    /// Rises when files on disk change, which asks again about every note linked, while the
+    /// marks stay until the answers come; an answer asked before the latest change is dropped.
     pub(crate) links_generation: u64,
     /// The find bar's query, while it is open.
     pub(crate) find: Option<find::Find>,
@@ -74,7 +73,6 @@ impl Editor {
             toggling: false,
             missing: Default::default(),
             dir: String::new(),
-            found: Default::default(),
             checked: Default::default(),
             links_revision: None,
             links_generation: 0,
@@ -220,15 +218,20 @@ impl Editor {
         extend: bool,
         step: impl Fn(&Selection, &rune::parley::Layout<rune::text::Ink>) -> Selection,
     ) {
+        let to = self.in_row(step);
+        self.move_to(to, extend, false);
+    }
+
+    /// Where `step` takes a caret standing alone at the caret, within its row.
+    pub(crate) fn in_row(
+        &self,
+        step: impl Fn(&Selection, &rune::parley::Layout<rune::text::Ink>) -> Selection,
+    ) -> Pos {
         let caret = self.doc.caret;
         let (selection, layout) = self.cursor(caret);
         let moved = step(&selection, &layout);
         let (_, shown) = self.layout(caret.line);
-        self.move_to(
-            Pos::new(caret.line, shown.to_source(moved.focus().index())),
-            extend,
-            false,
-        );
+        Pos::new(caret.line, shown.to_source(moved.focus().index()))
     }
 
     pub(crate) fn move_to(&mut self, p: Pos, extend: bool, keep_goal: bool) {

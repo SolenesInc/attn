@@ -219,6 +219,24 @@ impl Doc {
     /// as `kind` says, at time `now` in seconds.
     pub(crate) fn replace(&mut self, text: &str, kind: Kind, now: f64) {
         let (a, b) = self.range();
+        self.replace_between(a, b, text, kind, now);
+    }
+
+    /// Removes the selection, or the text between the caret and `to`; undo puts back the
+    /// selection the user had, not the removed span.
+    pub(crate) fn delete_to(&mut self, to: Pos, kind: Kind, now: f64) {
+        let (a, b) = if self.has_selection() {
+            self.range()
+        } else {
+            let to = self.clamp(to);
+            (to.min(self.caret), to.max(self.caret))
+        };
+        self.replace_between(a, b, "", kind, now);
+    }
+
+    /// Replaces the text from `a` to `b` with `text` as one undoable edit; undo puts back the
+    /// selection the user had, not the replaced span.
+    pub(crate) fn replace_between(&mut self, a: Pos, b: Pos, text: &str, kind: Kind, now: f64) {
         let removed = self.slice(a, b);
         if removed.is_empty() && text.is_empty() {
             return;
@@ -237,40 +255,36 @@ impl Doc {
 
     /// Removes the character before the caret, or the selection.
     pub(crate) fn backspace(&mut self, now: f64) {
-        if !self.has_selection() {
-            let c = self.caret;
-            self.anchor = if c.col > 0 {
-                let col = self.lines[c.line][..c.col]
-                    .char_indices()
-                    .last()
-                    .map_or(0, |(i, _)| i);
-                Pos::new(c.line, col)
-            } else if c.line > 0 {
-                Pos::new(c.line - 1, self.lines[c.line - 1].len())
-            } else {
-                return;
-            };
-        }
-        self.replace("", Kind::Deleting, now);
+        let c = self.caret;
+        let to = if c.col > 0 {
+            let col = self.lines[c.line][..c.col]
+                .char_indices()
+                .last()
+                .map_or(0, |(i, _)| i);
+            Pos::new(c.line, col)
+        } else if c.line > 0 {
+            Pos::new(c.line - 1, self.lines[c.line - 1].len())
+        } else {
+            c
+        };
+        self.delete_to(to, Kind::Deleting, now);
     }
 
     /// Removes the character after the caret, or the selection.
     pub(crate) fn delete_forward(&mut self, now: f64) {
-        if !self.has_selection() {
-            let c = self.caret;
-            let line = &self.lines[c.line];
-            self.anchor = if c.col < line.len() {
-                Pos::new(
-                    c.line,
-                    c.col + line[c.col..].chars().next().map_or(0, char::len_utf8),
-                )
-            } else if c.line + 1 < self.lines.len() {
-                Pos::new(c.line + 1, 0)
-            } else {
-                return;
-            };
-        }
-        self.replace("", Kind::Other, now);
+        let c = self.caret;
+        let line = &self.lines[c.line];
+        let to = if c.col < line.len() {
+            Pos::new(
+                c.line,
+                c.col + line[c.col..].chars().next().map_or(0, char::len_utf8),
+            )
+        } else if c.line + 1 < self.lines.len() {
+            Pos::new(c.line + 1, 0)
+        } else {
+            c
+        };
+        self.delete_to(to, Kind::Other, now);
     }
 
     fn record(&mut self, edit: Edit, before: (Pos, Pos), kind: Kind, now: f64) {

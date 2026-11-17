@@ -120,29 +120,32 @@ pub(crate) fn on_key(editor: &mut Editor, ev: &KeyEvent, now: f64, tx: &mut Tx) 
     true
 }
 
-/// Moves the caret a word back or forward; at a line's edge the line break is the word, so the
-/// caret crosses to the neighbouring line, as CodeMirror moves by group.
+/// Moves the caret a word back or forward.
 fn move_word(editor: &mut Editor, back: bool, extend: bool) {
+    let to = word_edge(editor, back);
+    editor.move_to(to, extend, false);
+}
+
+/// Where the word before or after the caret ends; at a line's edge the line break is the word,
+/// so it lies on the neighbouring line, as CodeMirror moves by group.
+fn word_edge(editor: &Editor, back: bool) -> Pos {
     let c = editor.doc.caret;
     let len = editor.doc.line(c.line).len();
     if back && c.col == 0 && c.line > 0 {
-        let to = Pos::new(c.line - 1, editor.doc.line(c.line - 1).len());
-        editor.move_to(to, extend, false);
+        Pos::new(c.line - 1, editor.doc.line(c.line - 1).len())
     } else if !back && c.col == len && c.line + 1 < editor.doc.len() {
-        editor.move_to(Pos::new(c.line + 1, 0), extend, false);
+        Pos::new(c.line + 1, 0)
     } else if back {
-        editor.within_row(extend, |s, l| s.previous_visual_word(l, extend));
+        editor.in_row(|s, l| s.previous_visual_word(l, false))
     } else {
-        editor.within_row(extend, |s, l| s.next_visual_word(l, extend));
+        editor.in_row(|s, l| s.next_visual_word(l, false))
     }
 }
 
 /// Removes the selection, or the word before or after the caret as one undo step.
 fn delete_word(editor: &mut Editor, back: bool, now: f64) {
-    if !editor.doc.has_selection() {
-        move_word(editor, back, true);
-    }
-    editor.doc.replace("", Kind::Other, now);
+    let to = word_edge(editor, back);
+    editor.doc.delete_to(to, Kind::Other, now);
 }
 
 /// Pastes `text` over the selection.
@@ -165,10 +168,8 @@ fn newline(editor: &mut Editor, now: f64) {
         return editor.doc.replace("\n", Kind::Other, now);
     }
     if line[marker.len()..].trim().is_empty() {
-        editor
-            .doc
-            .select(Pos::new(c.line, 0), Pos::new(c.line, line.len()));
-        return editor.doc.replace("", Kind::Other, now);
+        let (start, end) = (Pos::new(c.line, 0), Pos::new(c.line, line.len()));
+        return editor.doc.replace_between(start, end, "", Kind::Other, now);
     }
     editor.doc.replace(&format!("\n{next}"), Kind::Other, now);
 }
@@ -224,8 +225,9 @@ fn toggle(editor: &mut Editor, mark: &str, now: f64) {
     let inner = line[a.col..b.col].to_owned();
     let at = |col: usize| Pos::new(a.line, col);
     if wrapped {
-        editor.doc.select(at(a.col - n), at(b.col + n));
-        editor.doc.replace(&inner, Kind::Other, now);
+        editor
+            .doc
+            .replace_between(at(a.col - n), at(b.col + n), &inner, Kind::Other, now);
         if had {
             editor
                 .doc
@@ -234,10 +236,9 @@ fn toggle(editor: &mut Editor, mark: &str, now: f64) {
             editor.doc.select(at(caret.col - n), at(caret.col - n));
         }
     } else {
-        editor.doc.select(a, b);
         editor
             .doc
-            .replace(&format!("{mark}{inner}{mark}"), Kind::Other, now);
+            .replace_between(a, b, &format!("{mark}{inner}{mark}"), Kind::Other, now);
         if had {
             editor.doc.select(at(a.col + n), at(b.col + n));
         } else {

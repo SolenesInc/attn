@@ -1491,6 +1491,112 @@ fn word_motion_and_word_deletion_cross_line_breaks_and_a_join_undoes_in_one_step
 }
 
 #[test]
+fn undoing_a_deletion_puts_the_caret_back_where_it_stood_without_selecting_the_restored_text() {
+    let text = "# Index\n\nfirst words\nsecond line\n";
+    let disk = Disk::with(&[("knowledge/index.md", text)]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    let cases = [
+        ("end", "backspace".to_owned(), "first words|\nsecond line"),
+        ("home", "delete".to_owned(), "|first words\nsecond line"),
+        ("end", word("backspace"), "first words|\nsecond line"),
+        ("end", word("delete"), "first words|\nsecond line"),
+    ];
+    for (edge, delete, caret_at) in cases {
+        world.gesture(|d| {
+            d.click(Target::key("notebook.editor.line.2"));
+            d.press(edge);
+        });
+        world.gesture(|d| d.press(&delete));
+        assert_ne!(editor_text(&world, "notebook.editor"), text, "{delete}");
+        world.gesture(|d| d.press("mod+z"));
+        world.gesture(|d| d.type_text("|"));
+        assert!(
+            editor_text(&world, "notebook.editor").contains(caret_at),
+            "{delete}: {}",
+            editor_text(&world, "notebook.editor")
+        );
+        world.gesture(|d| d.press("mod+z"));
+        assert_eq!(editor_text(&world, "notebook.editor"), text, "{delete}");
+    }
+
+    world.gesture(|d| d.press("end"));
+    for _ in 0..3 {
+        world.gesture(|d| d.press("backspace"));
+    }
+    world.gesture(|d| d.press("mod+z"));
+    world.gesture(|d| d.type_text("|"));
+    assert!(
+        editor_text(&world, "notebook.editor").contains("first words|\nsecond line"),
+        "{}",
+        editor_text(&world, "notebook.editor")
+    );
+    world.gesture(|d| d.press("mod+z"));
+
+    world.gesture(|d| {
+        d.press("down");
+        d.press("home");
+    });
+    world.gesture(|d| d.press(&word("backspace")));
+    world.gesture(|d| d.press("mod+z"));
+    world.gesture(|d| d.type_text("|"));
+    assert!(
+        editor_text(&world, "notebook.editor").contains("first words\n|second line"),
+        "{}",
+        editor_text(&world, "notebook.editor")
+    );
+    world.advance(Duration::from_millis(700));
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn undoing_an_ended_list_or_a_bold_word_puts_the_caret_back_without_selecting_the_restored_text() {
+    let text = "# Index\n\n- \nbold me\n";
+    let disk = Disk::with(&[("knowledge/index.md", text)]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor"));
+        d.press("mod+up");
+        d.press("down");
+        d.press("down");
+        d.press("end");
+    });
+    world.gesture(|d| d.press("return"));
+    assert_eq!(
+        editor_text(&world, "notebook.editor"),
+        "# Index\n\n\nbold me\n"
+    );
+    world.gesture(|d| d.press("mod+z"));
+    world.gesture(|d| d.type_text("|"));
+    assert_eq!(
+        editor_text(&world, "notebook.editor"),
+        "# Index\n\n- |\nbold me\n"
+    );
+    world.gesture(|d| d.press("mod+z"));
+
+    world.gesture(|d| {
+        d.press("down");
+        d.press("home");
+        d.press("right");
+        d.press("right");
+    });
+    world.gesture(|d| d.press("mod+b"));
+    assert!(editor_text(&world, "notebook.editor").contains("**bold** me"));
+    world.gesture(|d| d.press("mod+z"));
+    world.gesture(|d| d.type_text("|"));
+    assert!(
+        editor_text(&world, "notebook.editor").contains("\nbo|ld me\n"),
+        "{}",
+        editor_text(&world, "notebook.editor")
+    );
+    world.advance(Duration::from_millis(700));
+    world.advance(Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn pressing_a_task_box_checks_it_without_moving_the_caret() {
     let disk = Disk::with(&[("knowledge/index.md", "- [ ] todo\n- [x] done\n")]);
     let mut world = start(&disk);
@@ -1941,6 +2047,7 @@ fn a_broken_mark_stays_while_a_disk_change_asks_again_and_clears_when_the_note_a
             exists("journal/2026-11-14.md", true),
             exists("knowledge/gone.md", false),
             Answer::Hold,
+            Answer::Hold,
         ],
     );
     open_fullscreen(&mut world);
@@ -1962,20 +2069,58 @@ fn a_broken_mark_stays_while_a_disk_change_asks_again_and_clears_when_the_note_a
     });
     world.settle();
     let asked = world.daemon.sent_of("fs_exists");
-    assert_eq!(asked.len(), 3, "only the missing note is asked about again");
-    assert_eq!(asked[2]["path"], "knowledge/gone.md");
+    assert_eq!(asked.len(), 4, "every linked note is asked about again");
+    assert_eq!(asked[3]["path"], "knowledge/gone.md");
     assert!(
         broken(&world),
         "the mark stays while the answer is on its way"
     );
 
     world.daemon.reply_to(
-        &asked[2],
+        &asked[3],
         json!({ "event": "fs_exists_result", "success": true,
         "result": { "path": "knowledge/gone.md", "exists": true } }),
     );
     world.settle();
     assert!(!broken(&world), "the note now exists");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_linked_note_deleted_while_the_note_is_open_is_marked_missing() {
+    let disk = Disk::with(&[
+        ("knowledge/index.md", "[other](other.md)\n"),
+        ("knowledge/other.md", "# Other\n"),
+    ]);
+    let mut world = start(&disk);
+    let gone = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let deleted = gone.clone();
+    world.daemon.on("fs_exists", move |req| {
+        json!({ "event": "fs_exists_result", "success": true,
+            "result": { "path": req["path"], "exists": !deleted.load(std::sync::atomic::Ordering::Relaxed) } })
+    });
+    open_fullscreen(&mut world);
+    let broken = |world: &World| {
+        world
+            .screen()
+            .get(Target::key("notebook.editor.line.0"))
+            .description
+            .as_deref()
+            == Some("Link target not found in the notebook")
+    };
+    assert!(!broken(&world));
+
+    gone.store(true, std::sync::atomic::Ordering::Relaxed);
+    world.daemon.emit(FsChangedMessage {
+        paths: vec!["knowledge/other.md".into()],
+        origin: "agent".into(),
+        root: NOTEBOOK.into(),
+        ..FsChangedMessage::new()
+    });
+    world.settle();
+    assert!(broken(&world), "{}", world.screen());
+    assert_eq!(world.daemon.sent_of("fs_exists").len(), 2);
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
