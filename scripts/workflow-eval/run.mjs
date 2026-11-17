@@ -6,7 +6,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { checkGraders, grade, graderLabel } from './lib/graders.mjs';
 import { answerAsks, type } from './lib/standin.mjs';
-import { cleanWorld, createWorld, preflight, readAccessToken, repository, startWorld } from './lib/world.mjs';
+import { cleanWorld, createWorld, preflight, readAccessToken, repository, snapshotClaudeConfig, startWorld } from './lib/world.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -15,16 +15,17 @@ const { values: options } = parseArgs({
     only: { type: 'string' },
     runs: { type: 'string', default: '3' },
     level: { type: 'string' },
-    history: { type: 'string' },
+    record: { type: 'string' },
   },
 });
 if (!options.base || !options.candidate) {
-  console.error(`usage: node scripts/workflow-eval/run.mjs --base <git ref> --candidate <git ref> [--only <case,...>] [--runs <n>] [--level 1|2] [--history <file>]
+  console.error(`usage: node scripts/workflow-eval/run.mjs --base <git ref> --candidate <git ref> [--only <case,...>] [--runs <n>] [--level 1|2] [--record <file>]
 
 Builds attn at each ref, then runs every case once per run on each build, each
-on a fresh instance with a fresh tool home, and prints passes per grader, cost
-and minutes per arm. Each run appends one line to the history file: by default
-workflow-sessions.jsonl in the artifact folder of seed s-4z5bcq.`);
+on a fresh instance with a tool home made from one snapshot of ~/.claude, and
+prints passes per grader, cost and minutes per arm. Each run appends one line
+to the record file: by default workflow-eval-runs.jsonl in the artifact folder
+of seed s-4z5bcq.`);
   process.exit(2);
 }
 
@@ -41,10 +42,10 @@ function loadCases() {
     .filter(testCase => !options.level || String(testCase.level) === options.level);
 }
 
-function historyFile() {
-  if (options.history) return path.resolve(options.history);
+function recordFile() {
+  if (options.record) return path.resolve(options.record);
   const { artifact_dir } = JSON.parse(execFileSync('attn', ['seed', 'show', 's-4z5bcq', '--json'], { encoding: 'utf8' }));
-  return path.join(artifact_dir, 'workflow-sessions.jsonl');
+  return path.join(artifact_dir, 'workflow-eval-runs.jsonl');
 }
 
 function buildArm(root, label, ref) {
@@ -126,7 +127,7 @@ function transcriptOf(world, session) {
     .filter(line => line.startsWith('{')).map(line => JSON.parse(line)).filter(event => event.kind);
 }
 
-function historyLine({ world, testCase, arm, run, session, transcript, started, closed, graded, limit }) {
+function runLine({ world, testCase, arm, run, session, transcript, started, closed, graded, limit }) {
   const entry = sessions(world).find(e => e.id === session);
   const calls = transcript.filter(event => event.kind === 'tool_call');
   const loaded = calls.findIndex(event => event.tool_name === 'Skill' && /"attn-workflow"/.test(event.text));
@@ -140,7 +141,7 @@ function historyLine({ world, testCase, arm, run, session, transcript, started, 
   };
 }
 
-async function runCase(root, testCase, arm, run, history) {
+async function runCase({ root, snapshot, record }, testCase, arm, run) {
   const prefix = `${testCase.name} ${arm.label} ${run}/${runs}`;
   const log = message => console.log(`[${prefix}] ${message}`);
   const world = createWorld({ root, arm, accessToken: readAccessToken(testCase.limits.minutes) });
@@ -148,7 +149,7 @@ async function runCase(root, testCase, arm, run, history) {
   current = world;
   const started = new Date();
   try {
-    startWorld(world, testCase);
+    startWorld(world, testCase, snapshot);
     const session = delegate(world, testCase);
     log(`instance ${world.instance}, session ${session}`);
     const limit = await waitForStop(world, session, testCase, log);
@@ -157,8 +158,8 @@ async function runCase(root, testCase, arm, run, history) {
     fs.writeFileSync(path.join(world.dir, 'transcript.jsonl'), transcript.map(event => JSON.stringify(event)).join('\n'));
     const graded = grade(testCase.graders, { world, testCase, transcript });
     const usd = spent(world);
-    const line = historyLine({ world, testCase, arm, run, session, transcript, started: started.toISOString(), closed: closed.toISOString(), graded, limit });
-    fs.appendFileSync(history, `${JSON.stringify(line)}\n`);
+    const line = runLine({ world, testCase, arm, run, session, transcript, started: started.toISOString(), closed: closed.toISOString(), graded, limit });
+    fs.appendFileSync(record, `${JSON.stringify(line)}\n`);
     fs.writeFileSync(path.join(world.dir, 'result.json'), `${JSON.stringify(line, null, 2)}\n`);
     log(`${limit ? `stopped: ${limit}, ` : ''}$${usd.toFixed(2)}, ${((closed - started) / 60_000).toFixed(1)} min, ${graded.filter(g => g.pass).length}/${graded.length} graders`);
     for (const g of graded.filter(g => !g.pass)) log(`  failed: ${g.label}${g.error ? ` (${g.error})` : ''}`);
@@ -197,9 +198,10 @@ preflight();
 const cases = loadCases();
 if (!cases.length) throw new Error('no case matches --only and --level');
 for (const testCase of cases) checkGraders(testCase.graders);
-const history = historyFile();
-fs.mkdirSync(path.dirname(history), { recursive: true });
+const record = recordFile();
+fs.mkdirSync(path.dirname(record), { recursive: true });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-eval-'));
+const snapshot = snapshotClaudeConfig(root);
 execFileSync('go', ['build', '-o', path.join(root, 'wsctl'), './scripts/wsctl'], { cwd: repository });
 const results = [];
 try {
@@ -209,7 +211,7 @@ try {
   }
   for (const testCase of cases) {
     for (let run = 1; run <= runs; run++) {
-      for (const arm of arms) results.push(await runCase(root, testCase, arm, run, history));
+      for (const arm of arms) results.push(await runCase({ root, snapshot, record }, testCase, arm, run));
     }
   }
 } finally {
@@ -217,4 +219,4 @@ try {
 }
 printTable(cases, results);
 const total = results.reduce((sum, r) => sum + r.usd, 0);
-console.log(`\n${results.length} runs, $${total.toFixed(2)} in all. History: ${history}. Logs: ${root}`);
+console.log(`\n${results.length} runs, $${total.toFixed(2)} in all. Record: ${record}. Logs: ${root}`);

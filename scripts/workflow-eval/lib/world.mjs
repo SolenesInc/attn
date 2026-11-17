@@ -61,31 +61,37 @@ export function createWorld({ root, arm, accessToken }) {
   return world;
 }
 
-function copyClaudeConfig(target, trustedFolder) {
-  fs.mkdirSync(path.join(target, 'skills'), { recursive: true });
+export function snapshotClaudeConfig(root) {
+  const dir = path.join(root, 'claude-config');
+  fs.mkdirSync(path.join(dir, 'skills'), { recursive: true });
   for (const name of ['CLAUDE.md', 'agents', 'commands', 'output-styles']) {
     const source = path.join(realClaude, name);
-    if (fs.existsSync(source)) fs.cpSync(source, path.join(target, name), { recursive: true, dereference: true });
+    if (fs.existsSync(source)) fs.cpSync(source, path.join(dir, name), { recursive: true, dereference: true });
   }
   for (const skill of fs.readdirSync(path.join(realClaude, 'skills'))) {
-    if (skill !== 'attn-workflow') fs.cpSync(path.join(realClaude, 'skills', skill), path.join(target, 'skills', skill), { recursive: true, dereference: true });
+    if (skill !== 'attn-workflow') fs.cpSync(path.join(realClaude, 'skills', skill), path.join(dir, 'skills', skill), { recursive: true, dereference: true });
   }
   const { hooks, statusLine, enabledPlugins, extraKnownMarketplaces, ...settings } = JSON.parse(fs.readFileSync(path.join(realClaude, 'settings.json'), 'utf8'));
-  fs.writeFileSync(path.join(target, 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`);
+  fs.writeFileSync(path.join(dir, 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`);
   const version = execFileSync('claude', ['--version'], { encoding: 'utf8' }).match(/\d+\.\d+\.\d+/)?.[0] ?? '';
+  return { dir, version };
+}
+
+function installClaudeConfig(snapshot, target, trustedFolder) {
+  fs.cpSync(snapshot.dir, target, { recursive: true });
   fs.writeFileSync(path.join(target, '.claude.json'), `${JSON.stringify({
     hasCompletedOnboarding: true,
-    lastOnboardingVersion: version,
-    lastReleaseNotesSeen: version,
+    lastOnboardingVersion: snapshot.version,
+    lastReleaseNotesSeen: snapshot.version,
     hasSeenAutoDefaultNotice: true,
     autoModeClassifierBillingNoticeAcknowledgedAt: Date.now(),
     projects: { [trustedFolder]: { hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true } },
   }, null, 2)}\n`, { mode: 0o600 });
 }
 
-export function startWorld(world, testCase) {
+export function startWorld(world, testCase, snapshot) {
   fs.mkdirSync(world.repo);
-  copyClaudeConfig(world.env.CLAUDE_CONFIG_DIR, fs.realpathSync(world.repo));
+  installClaudeConfig(snapshot, world.env.CLAUDE_CONFIG_DIR, fs.realpathSync(world.repo));
   world.attn(['daemon', 'ensure'], { env: world.daemonEnv });
   world.attn(['delegate', 'roles', 'install']);
   for (const role of stubRoles) {
