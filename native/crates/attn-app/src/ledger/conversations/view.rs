@@ -237,7 +237,7 @@ pub(crate) fn inspector(state: &State, selected: Option<&KeptConversationRow>, t
         fields.push(field("Source at last copy", &amount(bytes), t));
     }
     fields.push(group("conversation", "Conversation", t).child(
-        parts::link("ledger.inspector.conversation", &resume, t).on_press_tx(
+        parts::link("ledger.inspector.conversation.copy", &resume, t).on_press_tx(
             move |state: &mut State, tx: &mut Tx| super::super::copy(state, resume.clone(), tx),
         ),
     ));

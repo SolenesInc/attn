@@ -556,7 +556,7 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     }) {
         let id = entry.id.clone();
         fields.push(group("seed", "Seed", t).child(
-            parts::link("ledger.inspector.seed", &title, t).on_press_tx(
+            parts::link("ledger.inspector.seed.open", &title, t).on_press_tx(
                 move |state: &mut State, tx: &mut Tx| super::run(state, &id, seed.clone(), tx),
             ),
         ));
@@ -670,7 +670,7 @@ fn directory_field(
     let copied = copied == Some(entry.directory.as_str());
     group("directory", "Directory", t)
         .child(copy_path(
-            "ledger.inspector.directory",
+            "ledger.inspector.directory.copy",
             &query::tilde_path(&entry.directory),
             copied,
             t,

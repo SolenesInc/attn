@@ -833,8 +833,7 @@ fn the_keys_walk_rows_open_the_menu_copy_the_path_and_back_out_one_layer_at_a_ti
     assert!(!has(&world, "ledger.panel"));
 }
 
-#[test]
-fn a_seed_the_session_tends_opens_from_its_row() {
+fn tending_a_seed() -> World {
     let mut initial = state(vec![session("api", "waiting_input")], vec![]);
     initial.seeds = Some(vec![Seed {
         id: "s-cache1".into(),
@@ -847,6 +846,24 @@ fn a_seed_the_session_tends_opens_from_its_row() {
     }]);
     let mut world = World::start(ledger_daemon(initial, vec![live_api()]));
     open(&mut world);
+    world
+}
+
+#[test]
+fn the_inspector_names_the_seed_the_session_tends_and_opens_it() {
+    let mut world = tending_a_seed();
+    assert_eq!(
+        name(&world, "ledger.inspector.seed.open"),
+        "Cache store migration"
+    );
+    click(&mut world, "ledger.inspector.seed.open");
+    assert!(!has(&world, "ledger.panel"));
+    assert_eq!(world.daemon.sent_of("open_seed")[0]["seed_id"], "s-cache1");
+}
+
+#[test]
+fn a_seed_the_session_tends_opens_from_its_row() {
+    let mut world = tending_a_seed();
     letter(&mut world, ".");
     assert_eq!(
         name(&world, "ledger.row.api.menu.1"),

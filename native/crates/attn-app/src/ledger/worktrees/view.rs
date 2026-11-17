@@ -341,7 +341,7 @@ fn swept_row(state: &State, e: &WorktreeSweepEntry, selected: bool, t: &Tokens) 
 fn copy_path(path: &str, copied: bool, t: &Tokens) -> El {
     let p = path.to_owned();
     super::super::view::copy_path(
-        "ledger.inspector.path",
+        "ledger.inspector.path.copy",
         &tilde_path(path),
         copied,
         t,
