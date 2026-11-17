@@ -817,11 +817,12 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                     .is_some_and(|d| d.sendable(ask));
             let word = if sending { "Sending…" } else { "Send" };
             let edge = t.bg_app.alpha(0.4);
+            let ink = t.bg_app;
             Button::new(format!("{word} {}", send_chord()))
-                .variant(ButtonVariant::Submit)
+                .variant(ButtonVariant::Neutral)
                 .disabled(!sendable)
                 .on_press_tx(super::send)
-                .label_with(move |font, ink| {
+                .label_with(move |font, _| {
                     row()
                         .gap(4.0)
                         .items_center()
@@ -834,6 +835,10 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                 })
                 .build(attn_ui::kit(t))
                 .key("asks.send")
+                .fill(t.accent)
+                .radius(8.0)
+                .h(27.0)
+                .px(14.0)
         }
     };
     col()
