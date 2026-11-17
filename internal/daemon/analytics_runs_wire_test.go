@@ -132,14 +132,13 @@ func TestACodexRunThroughAnApprovalIsOneRunRecord(t *testing.T) {
 	setAnalyticsEnabled(app, "true")
 	session, codex, working := codexAtWork(t, w, app)
 	before := queriedSession(t, w.Client(), session).Usage
-	owedBefore := protocol.Deref(working.TurnOwed)
 
 	codex.AskApproval()
 	asking := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+	answering := settleFromApp(app, asking)
 	codex.Dismiss()
-	working = testworld.AwaitStateAfter(app, asking, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	stopped := runEnds(w, app, codex, working, "Ran the migration. <!-- attn:state=idle -->")
-	opened := !owedBefore && protocol.Deref(stopped.TurnOwed)
+	working = testworld.AwaitStateAfter(app, answering, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	runEnds(w, app, codex, working, "Ran the migration. <!-- attn:state=idle -->")
 
 	after := queriedSession(t, w.Client(), session).Usage
 	spent := after.TotalTokens
@@ -147,7 +146,7 @@ func TestACodexRunThroughAnApprovalIsOneRunRecord(t *testing.T) {
 		spent -= before.TotalTokens
 	}
 	assertRuns(t, runRecords(t, w, app, session), []string{
-		fmt.Sprintf("started_by=user ended=idle opened_turn=%v approvals=1 usage=known tokens=%d harness=codex", opened, spent),
+		fmt.Sprintf("started_by=user ended=idle opened_turn=true approvals=1 usage=known tokens=%d harness=codex", spent),
 	})
 }
 
