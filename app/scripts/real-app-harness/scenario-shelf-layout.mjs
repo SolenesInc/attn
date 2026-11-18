@@ -39,6 +39,7 @@ const waitDom = (selector, extra = {}) => request('dom_wait', { selector, timeou
 const press = (shortcutId) => pressShortcutKeys(client, driver, shortcutId);
 const shot = async (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
 const sessions = [];
+let desktopsBeforeTheScenario;
 let firstSession;
 let desktop;
 
@@ -219,6 +220,14 @@ runner.registerCleanup('close_server', () => new Promise((resolve) => {
   server.closeAllConnections();
 }));
 runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('close_the_scenarios_desktops', async () => {
+  if (!desktopsBeforeTheScenario) return;
+  for (const { id } of observer.desktops.filter((made) => !desktopsBeforeTheScenario.has(made.id))) {
+    await observer.waitFor(() => !observer.desktop(id)?.panes.length, `no terminals left on desktop ${id}`);
+    const left = observer.desktop(id);
+    if (left && observer.desktops.length > 1) await observer.profileCommand('desktop_close', { desktop_id: id, expected_revision: left.revision });
+  }
+});
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
@@ -230,6 +239,8 @@ try {
 
   await runner.step('launch', async () => {
     await launchFreshAppAndConnect(client, observer);
+    await observer.closeLeftoverNumberedDesktops();
+    desktopsBeforeTheScenario = new Set(observer.desktops.map((existing) => existing.id));
     queueDaemonSettingRestore(observer, 'queue_mode_enabled');
     await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
