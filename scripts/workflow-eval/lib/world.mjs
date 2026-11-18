@@ -36,6 +36,7 @@ export function createWorld({ root, arm, accessToken }) {
   const toolHome = path.join(dir, 'toolhome');
   const repo = path.join(dir, 'repo');
   fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'gitconfig'), '[user]\n\tname = eval\n\temail = eval@example.invalid\n');
   const env = {
     ...scrubbedEnv(),
     PATH: `${arm.bin}:${process.env.PATH}`,
@@ -47,6 +48,7 @@ export function createWorld({ root, arm, accessToken }) {
     ATTN_TOOL_HOME: toolHome,
     CLAUDE_CONFIG_DIR: path.join(toolHome, '.claude'),
     ATTN_CODEX_EXECUTABLE: mockAgent,
+    GIT_CONFIG_GLOBAL: path.join(dir, 'gitconfig'),
   };
   const world = {
     instance, dir, toolHome, repo, env, arm, seeds: {}, answered: [],
@@ -105,6 +107,7 @@ export function startWorld(world, testCase, snapshot) {
     env: { ...world.env, PATH: `${world.arm.bin}:${process.env.PATH}`, EVAL_SEEDS: seedsFile, EVAL_REPOSITORY: repository },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  world.startCommit = execFileSync('git', ['-C', world.repo, 'rev-parse', 'HEAD'], { env: world.env, encoding: 'utf8' }).trim();
   for (const line of fs.readFileSync(seedsFile, 'utf8').trim().split('\n')) {
     const [name, id] = line.split(/\s+/);
     world.seeds[name] = id;

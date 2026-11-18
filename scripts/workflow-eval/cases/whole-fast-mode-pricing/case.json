@@ -1,0 +1,7 @@
+{"level": 2, "role": "pathfinder", "model": "sonnet",
+ "opening": {"seed": "request", "authorization": "Take this from request to landed without me: do not show me a plan or wait for my review, and dispatch any plan as soon as it is ready. Land with the land-on-main skill: check, review, then scripts/land.sh. The work is done when scripts/land.sh pushes. origin is a local copy of attn made for this task, so pushing to its main is safe; push nowhere else."},
+ "standin": [],
+ "limits": {"minutes": 120, "usd": 25},
+ "graders": [
+   {"kind": "landed"},
+   {"kind": "test", "ref": "origin/main", "run": "ATTN_DATA_DIR=$(mktemp -d) go test -count=1 -tags workfloweval -run 'TestClaudeFastModeRates|TestUsageExtractorReadsClaudeSpeed|TestFastModeRatesAndContextTiers' ./internal/sessioncost ./internal/transcript"}]}

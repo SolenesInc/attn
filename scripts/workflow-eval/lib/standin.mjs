@@ -10,14 +10,18 @@ function recommendedAnswer(question) {
   return { key: question.key, picked: [question.recommended || question.choices[0].label] };
 }
 
-export function openAsks(world, session) {
-  const { asks, overseen } = world.attnJson(['ask', 'list', '--session', session]);
-  return [...asks, ...overseen.map(entry => entry.ask)].filter(ask => !ask.reply);
+export function openAsks(world, sessions) {
+  const found = new Map();
+  for (const session of sessions) {
+    const { asks, overseen } = world.attnJson(['ask', 'list', '--session', session]);
+    for (const ask of [...asks, ...overseen.map(entry => entry.ask)]) if (!ask.reply) found.set(ask.id, ask);
+  }
+  return [...found.values()];
 }
 
-export function answerAsks(world, session) {
+export function answerAsks(world, sessions) {
   const answered = [];
-  for (const ask of openAsks(world, session)) {
+  for (const ask of openAsks(world, sessions)) {
     const answers = ask.parts.filter(part => part.question).map(part => recommendedAnswer(part.question));
     const reply = JSON.parse(wsctl(world, ['request', '--event', 'ask_answer_result', '--json',
       JSON.stringify({ cmd: 'ask_answer', request_id: randomUUID(), ask_id: ask.id, answers })]).replace(/^\[wsctl[^\n]*\n/, ''));

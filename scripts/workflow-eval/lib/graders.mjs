@@ -38,6 +38,17 @@ function delegations(world) {
   }));
 }
 
+function checkoutOf(world, ref) {
+  const dir = path.join(world.dir, `graded-${ref.replaceAll('/', '-')}`);
+  if (!fs.existsSync(dir)) {
+    const git = args => spawnSync('git', ['-C', world.repo, ...args], { env: world.env, encoding: 'utf8' });
+    git(['fetch', '-q', 'origin']);
+    const added = git(['worktree', 'add', '--quiet', '--detach', dir, ref]);
+    if (added.status !== 0) throw new Error(`git worktree add ${ref}: ${added.stderr.trim()}`);
+  }
+  return dir;
+}
+
 function firstCall(transcript, pattern) {
   return transcript.findIndex(event => event.kind === 'tool_call' && pattern.test(`${event.tool_name} ${event.text}`));
 }
@@ -81,7 +92,7 @@ const kinds = {
   ask: {
     label: g => `ask ${g.state}`,
     grade: (g, { world, session }) => {
-      const open = openAsks(world, session).length;
+      const open = openAsks(world, [session]).length;
       if (g.state === 'none') return open + world.answered.length === 0;
       if (g.state === 'open') return open > 0;
       if (g.state === 'any') return open + world.answered.length > 0;
@@ -108,10 +119,19 @@ const kinds = {
     },
   },
   test: {
-    label: g => `test ${g.run}`,
+    label: g => `test ${g.run}${g.ref ? ` on ${g.ref}` : ''}`,
     grade: (g, { world, testCase }) => {
-      fs.cpSync(path.join(testCase.dir, 'hidden'), world.repo, { recursive: true });
-      return spawnSync('bash', ['-c', g.run], { cwd: world.repo, env: world.env, stdio: 'ignore' }).status === 0;
+      const dir = g.ref ? checkoutOf(world, g.ref) : world.repo;
+      fs.cpSync(path.join(testCase.dir, 'hidden'), dir, { recursive: true, dereference: true });
+      return spawnSync('bash', ['-c', g.run], { cwd: dir, env: world.env, stdio: 'ignore' }).status === 0;
+    },
+  },
+  landed: {
+    label: () => 'origin/main moved past the world\'s start',
+    grade: (g, { world }) => {
+      const git = args => spawnSync('git', ['-C', world.repo, ...args], { env: world.env, encoding: 'utf8' });
+      git(['fetch', '-q', 'origin']);
+      return git(['rev-parse', 'origin/main']).stdout.trim() !== world.startCommit;
     },
   },
 };

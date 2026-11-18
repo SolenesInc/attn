@@ -18,8 +18,8 @@ const { values: options } = parseArgs({
     record: { type: 'string' },
   },
 });
-if (!options.base || !options.candidate) {
-  console.error(`usage: node scripts/workflow-eval/run.mjs --base <git ref> --candidate <git ref> [--only <case,...>] [--runs <n>] [--level 1|2] [--record <file>]
+if (!options.candidate) {
+  console.error(`usage: node scripts/workflow-eval/run.mjs [--base <git ref>] --candidate <git ref> [--only <case,...>] [--runs <n>] [--level 1|2] [--record <file>]
 
 Builds attn at each ref, then runs every case once per run on each build, each
 on a fresh instance with a tool home made from one snapshot of ~/.claude, and
@@ -78,7 +78,8 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => c
 
 function delegate(world, testCase) {
   const { opening } = testCase;
-  const args = ['delegate', '--seed', world.seeds[opening.seed], '--role', testCase.role, '--cwd', world.repo, '--reuse-checkout', '--branch', 'main', '--allow-worktree-reuse'];
+  const agent = testCase.role ? ['--role', testCase.role] : ['--agent', 'claude', '--model', testCase.model];
+  const args = ['delegate', '--seed', world.seeds[opening.seed], ...agent, '--cwd', world.repo, '--reuse-checkout', '--branch', 'main', '--allow-worktree-reuse'];
   if (opening.authorization) args.push('--authorization', opening.authorization);
   const result = spawnSync(path.join(world.arm.bin, 'attn'), args, { env: world.env, encoding: 'utf8' });
   const session = `${result.stdout}${result.stderr}`.match(/session_id[=":\s]+([0-9a-f-]{36})/)?.[1];
@@ -94,8 +95,13 @@ function spent(world) {
   return sessions(world).reduce((sum, entry) => sum + (entry.usage?.cost_usd ?? 0), 0);
 }
 
-function agentState(world, session) {
-  return world.attnJson(['agent', 'list']).find(row => row.id === session)?.state ?? 'gone';
+function watched(world, session, testCase) {
+  return testCase.level === 2 ? world.attnJson(['agent', 'list']).map(row => row.id) : [session];
+}
+
+function busy(world, sessions) {
+  const states = new Map(world.attnJson(['agent', 'list']).map(row => [row.id, row.state]));
+  return sessions.some(id => ['launching', 'working'].includes(states.get(id)));
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -106,11 +112,11 @@ async function waitForStop(world, session, testCase, log) {
   let quiet = 0;
   for (;;) {
     await sleep(pollMs);
-    const answered = testCase.answer_asks === false ? [] : answerAsks(world, session);
+    const watching = watched(world, session, testCase);
+    const answered = testCase.answer_asks === false ? [] : answerAsks(world, watching);
     world.answered.push(...answered);
     for (const ask of answered) log(`answered ask ${ask.id} "${ask.subject}": ${JSON.stringify(ask.answers)}`);
-    const state = agentState(world, session);
-    quiet = answered.length || state === 'launching' || state === 'working' ? 0 : quiet + 1;
+    quiet = answered.length || busy(world, watching) ? 0 : quiet + 1;
     if (quiet >= 2) {
       const next = script.shift();
       if (!next) return '';
@@ -145,6 +151,7 @@ function runLine({ world, testCase, arm, run, session, transcript, started, clos
     seed: world.seeds[testCase.opening.seed], started, closed, tool_calls: calls.length, cost_usd: entry?.usage?.cost_usd ?? 0,
     loaded_skill_at_call: loaded < 0 ? null : loaded + 1, references: read('references'), principles: read('principles'),
     eval: { case: testCase.name, arm: arm.label, ref: arm.ref, commit: arm.commit, run, instance: world.instance, limit: limit || null,
+      total_usd: spent(world), sessions: sessions(world).length, asks_answered: world.answered.length,
       ...(voided ? { void: voided } : { graders: Object.fromEntries(graded.map(g => [g.label, g.pass])) }) },
   };
 }
@@ -164,7 +171,13 @@ async function runCase({ root, snapshot, record }, testCase, arm, run) {
     const closed = new Date();
     const transcript = transcriptOf(world, session);
     fs.writeFileSync(path.join(world.dir, 'transcript.jsonl'), transcript.map(event => JSON.stringify(event)).join('\n'));
-    const voided = permissionDenial(transcript);
+    const others = testCase.level === 2 ? sessions(world).map(entry => entry.id).filter(id => id !== session) : [];
+    const transcripts = [transcript, ...others.map(id => {
+      const events = transcriptOf(world, id);
+      fs.writeFileSync(path.join(world.dir, `transcript-${id}.jsonl`), events.map(event => JSON.stringify(event)).join('\n'));
+      return events;
+    })];
+    const voided = transcripts.map(permissionDenial).find(Boolean) ?? '';
     const graded = voided ? [] : grade(testCase.graders, { world, testCase, transcript, session });
     const usd = spent(world);
     const line = runLine({ world, testCase, arm, run, session, transcript, started: started.toISOString(), closed: closed.toISOString(), graded, limit, voided });
@@ -173,7 +186,7 @@ async function runCase({ root, snapshot, record }, testCase, arm, run) {
     const outcome = voided ? `void, not graded: ${voided}` : `${graded.filter(g => g.pass).length}/${graded.length} graders`;
     log(`${limit ? `stopped: ${limit}, ` : ''}$${usd.toFixed(2)}, ${((closed - started) / 60_000).toFixed(1)} min, ${outcome}`);
     for (const g of graded.filter(g => !g.pass)) log(`  failed: ${g.label}${g.error ? ` (${g.error})` : ''}`);
-    return { case: testCase.name, arm: arm.label, graded, usd, minutes: (closed - started) / 60_000, voided };
+    return { case: testCase.name, arm: arm.label, graded, usd, minutes: (closed - started) / 60_000, voided, sessions: line.eval.sessions, asks: line.eval.asks_answered };
   } catch (error) {
     log(`error: ${error.message}`);
     return { case: testCase.name, arm: arm.label, graded: testCase.graders.map(g => ({ label: graderLabel(g), pass: false })), usd: 0, minutes: 0, error: error.message };
@@ -201,6 +214,10 @@ function printTable(cases, results) {
     if (labels.some(voided)) rows.push(['  void, not graded', ...labels.map(arm => String(voided(arm)))]);
     rows.push(['  cost, median', ...labels.map(arm => `$${median(mine(arm).map(r => r.usd)).toFixed(2)}`)]);
     rows.push(['  minutes, median', ...labels.map(arm => median(mine(arm).map(r => r.minutes)).toFixed(1))]);
+    if (testCase.level === 2) {
+      rows.push(['  sessions, median', ...labels.map(arm => String(median(mine(arm).map(r => r.sessions))))]);
+      rows.push(['  asks answered, median', ...labels.map(arm => String(median(mine(arm).map(r => r.asks))))]);
+    }
     const width = Math.max(...rows.map(row => row[0].length)) + 2;
     console.log(`\n${rows.map(([first, ...rest]) => first.padEnd(width) + rest.map(cell => cell.padEnd(10)).join('')).join('\n')}`);
   }
@@ -217,7 +234,7 @@ const snapshot = snapshotClaudeConfig(root);
 execFileSync('go', ['build', '-o', path.join(root, 'wsctl'), './scripts/wsctl'], { cwd: repository });
 const results = [];
 try {
-  for (const [label, ref] of [['base', options.base], ['candidate', options.candidate]]) {
+  for (const [label, ref] of [['base', options.base], ['candidate', options.candidate]].filter(([, ref]) => ref)) {
     const arm = buildArm(root, label, ref);
     console.log(`arm ${label}: ${ref} at ${arm.commit}`);
   }
