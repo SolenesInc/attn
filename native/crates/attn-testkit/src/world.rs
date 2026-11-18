@@ -377,12 +377,15 @@ impl World {
         LEFT.get()
     }
 
-    /// Runs a user action, then returns once the app and the daemon have stopped exchanging
-    /// messages.
+    /// Runs a user action, then returns once the app's poll has seen what the action changed
+    /// and the app and the daemon have stopped exchanging messages. Rune polls at the start of
+    /// a frame, before its input, as a window's next frame after a keystroke does.
     pub fn gesture(&mut self, f: impl FnOnce(&mut Driver)) {
         f(&mut Driver {
             runtime: &mut self.runtime,
         });
+        self.settle();
+        self.main_frame(0.0);
         self.settle();
     }
 
