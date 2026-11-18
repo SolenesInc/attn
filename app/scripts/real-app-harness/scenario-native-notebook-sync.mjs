@@ -157,12 +157,12 @@ try {
   });
   await runner.step('removed_conflict_and_missing_marker', async () => {
     if (!observer.outposts.some(item => item.name === 'Studio' && item.notebook?.state === 'in_sync')) await receive(notebook => notebook?.state === 'in_sync');
-    const cleared = receive(notebook => notebook?.conflicts === 0);
+    const cleared = receive(notebook => notebook?.conflicts === 0 && notebook.state === 'in_sync');
     const copy = fs.readdirSync(homeRoot).find(name => name.includes('.sync-conflict-'));
     fs.unlinkSync(path.join(homeRoot, copy));
     await cleared;
     await driver.waitFor({ key: `${row}.notebook.conflicts` }, { gone: true });
-    await shows('state', 'Notebook: in sync');
+    await shows('state', 'Notebook: in sync', 'in_sync');
 
     await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
     await off(false);

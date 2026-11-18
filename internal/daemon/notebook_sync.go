@@ -548,13 +548,11 @@ func (d *Daemon) startNotebookSync(home string, peers []string, ready, unindexed
 						folder, _ := data["folder"].(string)
 						paths, _ := data["filenames"].([]string)
 						d.updateNotebookConflicts(run, folder, paths)
-						d.refreshNotebookRows()
 					}
 					queueRefresh()
 				case <-sub.Overflow():
 					d.logf("Notebook sync event overflow; refreshing conflicts and health")
 					d.refreshNotebookConflicts(run)
-					d.refreshNotebookRows()
 					queueRefresh()
 				case <-refreshReady:
 					refresh = nil

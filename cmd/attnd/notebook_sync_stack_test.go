@@ -765,23 +765,29 @@ func TestNotebookConflictsUnderDotDirectoriesFollowTheFiles(t *testing.T) {
 	pair.App = home.App()
 	name := filepath.Join(".private", "note.sync-conflict-20261027-120000-device.md")
 	writeNotebookFile(t, home, name, "conflict copy")
-	state := testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-		_, err := os.Stat(filepath.Join(copied, name))
-		return err == nil && len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync && protocol.Deref(m.Outposts[0].Notebook.Conflicts) == 2
-	})
-	if count := protocol.Deref(state.Outposts[0].Notebook.Conflicts); count != 2 {
-		t.Fatalf("dot-directory conflict count=%d, want 2", count)
-	}
+	awaitInSyncWithConflicts(t, pair, 2, filepath.Join(copied, name), false)
 	pair.App = home.App()
 	if err := os.RemoveAll(notebookPath(home, ".private")); err != nil {
 		t.Fatal(err)
 	}
-	state = testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-		_, err := os.Stat(filepath.Join(copied, name))
-		return os.IsNotExist(err) && len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync && protocol.Deref(m.Outposts[0].Notebook.Conflicts) == 0
+	awaitInSyncWithConflicts(t, pair, 0, filepath.Join(copied, name), true)
+}
+
+func awaitInSyncWithConflicts(t *testing.T, pair *testworld.OutpostPair, conflicts int, outpostFile string, absent bool) {
+	t.Helper()
+	var outpostUpdated bool
+	testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		for _, row := range m.Outposts {
+			if row.ID == pair.Host && row.Notebook != nil && row.Notebook.State == protocol.OutpostNotebookStateInSync && protocol.Deref(row.Notebook.Conflicts) == conflicts {
+				_, err := os.Stat(outpostFile)
+				outpostUpdated = os.IsNotExist(err) == absent
+				return true
+			}
+		}
+		return false
 	})
-	if count := protocol.Deref(state.Outposts[0].Notebook.Conflicts); count != 0 {
-		t.Fatalf("deleted directory conflict count=%d, want 0", count)
+	if !outpostUpdated {
+		t.Fatalf("the row said in sync with %d conflict copies before the outpost's %s caught up", conflicts, outpostFile)
 	}
 }
 
