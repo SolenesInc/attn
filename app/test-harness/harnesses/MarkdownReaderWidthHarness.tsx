@@ -27,6 +27,11 @@ This note gives the main aggregates in each bounded context, how they relate, an
 \`\`\`ts
 export const billStatus = (bill: Bill, payments: readonly Payment[]): BillStatus => deriveStatus(bill.storedStatus, payments.filter((payment) => payment.billId === bill.id));
 \`\`\`
+
+\`\`\`mermaid
+flowchart LR
+  Bill --> Approval --> Payment --> Settlement
+\`\`\`
 `;
 
 export function MarkdownReaderWidthHarness({ onReady }: HarnessProps) {
