@@ -43,6 +43,9 @@ async function launchTerminal(which, dir) {
   await driver.waitFor({ key: `${which}.agent.shell` });
   const terminal = await states(`${which}.agent.shell`);
   runner.assert(terminal.includes('checked'), 'alt+t chooses a terminal', terminal);
+  await driver.click({ key: `${which}.path.field` });
+  await driver.pressKey('mod+a');
+  await driver.pressKey('Backspace');
   await driver.typeInto({ key: `${which}.path.field` }, `${dir}/`);
   await driver.pressKey('Enter');
   const session = await observer.waitForSession({ directory: dir, timeoutMs: 30_000 });
