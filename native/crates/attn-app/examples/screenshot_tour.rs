@@ -633,8 +633,9 @@ fn sidebar_and_terminal(dark: bool) {
 
 /// An agent's header while a document tile is active: lit in the brand colour, with its one
 /// seed's state in a pill and its open ask's chip, beside the document's header and controls;
-/// the agent's terminal draws a rounded box beside a square one.
-fn tile_headers(dark: bool) {
+/// the agent's terminal draws a rounded box beside a square one. Hovered, the document's Focus
+/// pill deepens its tint.
+fn tile_headers(dark: bool, hovered: bool) {
     let mut state = tended_agent(dark);
     if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
         desktop.active_pane_id = "m".into();
@@ -642,7 +643,21 @@ fn tile_headers(dark: bool) {
     let mut world = start(Daemon::scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     write(&mut world, BOXES);
-    snap(&mut world, "tile-headers", dark);
+    if hovered {
+        world.gesture(|app| {
+            let pill = app
+                .runtime
+                .find("tile.m.focus")
+                .expect("the Focus pill is laid out");
+            app.move_to(pill);
+        });
+    }
+    let name = if hovered {
+        "tile-headers-focus-hovered"
+    } else {
+        "tile-headers"
+    };
+    snap(&mut world, name, dark);
 }
 
 /// Agent `a` active beside a document tile, marked in each tile focus style.
@@ -3220,7 +3235,8 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
     SCHEME.set(scheme);
     for dark in [true, false] {
         sidebar_and_terminal(dark);
-        tile_headers(dark);
+        tile_headers(dark, false);
+        tile_headers(dark, true);
         tile_focus(dark);
         shelf(dark);
         review_stop(dark);

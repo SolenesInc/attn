@@ -1567,14 +1567,17 @@ fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) 
 fn focus_document_button(key: &str, desktop: &str, leaf: &str, cx: &TileCx) -> El {
     let room = Room::of(leaf);
     let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
-    let ink = cx.t.text_secondary;
+    let (ink, hovered_ink) = (cx.t.text_secondary, cx.t.text_primary);
     let button = Button::new("Focus document")
         .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| match room {
-            Room::Wide => text("Focus").font(FOCUS_PILL_TYPE).color(ink),
-            Room::Medium | Room::Narrow => {
-                rune::icon(&attn_ui::icon::FOCUS_DOCUMENT, 14.0).color(ink)
+        .label_with(move |_, _| {
+            match room {
+                Room::Wide => text("Focus").font(FOCUS_PILL_TYPE).color(ink),
+                Room::Medium | Room::Narrow => {
+                    rune::icon(&attn_ui::icon::FOCUS_DOCUMENT, 14.0).color(ink)
+                }
             }
+            .group_color(hovered_ink)
         })
         .help(with_key("Focus document", cx.keys.focus.as_ref()))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -1584,11 +1587,19 @@ fn focus_document_button(key: &str, desktop: &str, leaf: &str, cx: &TileCx) -> E
         .key(format!("{key}.focus"))
         .h(24.0)
         .border(1.0, cx.t.brand.alpha(0.36))
-        .fill(cx.t.brand.alpha(0.08));
+        .fill(cx.t.brand.alpha(0.08))
+        .hover(cx.t.brand.alpha(raise_tint(0.08, 0.15)))
+        .hover_border(cx.t.brand.alpha(0.58));
     match room {
         Room::Wide => button.px(9.0).radius(12.0),
         Room::Medium | Room::Narrow => button.w(24.0).px(0.0).center().radius(5.0),
     }
+}
+
+/// The alpha of a colour laid over a tint of itself at `rest` that shows it at `raised`, as a
+/// CSS hover that swaps the tint does over a hover overlay.
+fn raise_tint(rest: f32, raised: f32) -> f32 {
+    1.0 - (1.0 - raised) / (1.0 - rest)
 }
 
 /// The Tauri app's Focus pill: 11 px, semibold.
