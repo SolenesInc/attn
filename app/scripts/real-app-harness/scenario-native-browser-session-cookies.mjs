@@ -29,10 +29,13 @@ const tauriJar = [
   { name: 'tauri_sess', value: 'from-tauri', domain: '127.0.0.1', path: '/', secure: false, httpOnly: true, sameSite: 'Lax', expiry: null },
 ];
 
-const signOutInPlace = `<button id="signout">Sign out</button><script>
+const signOutInPlace = `<button id="forget">Forget</button><button id="signout">Sign out</button><script>
 document.cookie = 'js_sess=from-script; path=/';
-document.getElementById('signout').onclick = async () => {
+document.getElementById('forget').onclick = () => {
   document.cookie = 'js_sess=; path=/; max-age=0';
+  document.body.insertAdjacentHTML('beforeend', '<p id="forgotten">forgotten</p>');
+};
+document.getElementById('signout').onclick = async () => {
   await fetch('/signout');
   document.body.insertAdjacentHTML('beforeend', '<p id="signedout">signed out</p>');
 };
@@ -146,9 +149,12 @@ try {
     await browser('open', at('app'));
     await waitForPage('app');
     await observer.waitFor(() => jarNames().includes('js_sess'), "the jar keeps the page script's session cookie");
+    await browser('click', '--selector', '#forget');
+    await waitForPage('forgotten');
+    await observer.waitFor(() => !jarNames().includes('js_sess'), 'the jar lets go of the cookie a script deleted');
     await browser('click', '--selector', '#signout');
     await waitForPage('signedout');
-    await observer.waitFor(() => !jarNames().some((name) => name === 'js_sess' || name === 'native_sess'), 'the jar lets go of the cookies the page deleted');
+    await observer.waitFor(() => !jarNames().includes('native_sess'), 'the jar lets go of the cookie a request deleted');
     const since = requests.length;
     await client.quitApp();
     await client.launchFreshApp();

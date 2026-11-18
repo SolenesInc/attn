@@ -1041,6 +1041,7 @@ define_class!(
             let url = url.to_string();
             let scheme = url.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
             if matches!(scheme.as_deref(), Some("http" | "https")) {
+                session_cookies::changed();
                 tell(Heard::Located { page: self.ivars().clone(), url });
             }
         }

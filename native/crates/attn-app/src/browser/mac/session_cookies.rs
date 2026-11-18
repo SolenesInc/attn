@@ -3,9 +3,12 @@
 //! keeps the session cookies. The jar is the Tauri app's file, in its format, so the first
 //! launch on a home the Tauri app used restores what that app kept.
 //!
-//! The jar is written when a page finishes loading, when a page's script or one of its requests
-//! changes a cookie, and after the agent changes cookies. The cookie store's change notifications
-//! cannot drive it: for a data store opened by identifier, WebKit sends only the first of them.
+//! The jar is written when a page finishes loading or changes its address, when a page's script
+//! or one of its requests changes a cookie, and after the agent changes cookies. The cookie
+//! store's change notifications cannot drive it: for a data store opened by identifier, WebKit
+//! sends only the first of them. A page's script is heard only where the page has `cookieStore`,
+//! which WebKit gives secure pages: on a plain `http` page the jar hears of a script's change at
+//! the page's next request, load or address change.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -17,7 +20,7 @@ use std::rc::Rc;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
-use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send};
+use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send, sel};
 use objc2_foundation::{
     NSArray, NSHTTPCookie, NSKeyValueObservingOptions, NSObject,
     NSObjectNSKeyValueObserverRegistration, NSString, ns_string,
@@ -28,15 +31,23 @@ use objc2_web_kit::{
 };
 use serde_json::{Map, Value};
 
+const COOKIE_SIGNALS: &str = "attnSessionCookies";
+/// How often a page busy with requests has the jar saved. Each save reads the whole store on the
+/// main thread, about 1.4 ms with 300 cookies; the Tauri app saved every 2 s.
+const PAUSE_BETWEEN_SAVES_SECONDS: f64 = 1.0;
+
 /// Tells the keeper each time a page's cookies may have changed: a response arrived, which can
 /// set or delete any cookie, httpOnly ones included, or a script changed one. A site that signs
 /// out in place does one of these without loading a page.
-const COOKIE_SIGNALS_JS: &str = r#"(() => {
-  const changed = () => webkit.messageHandlers.attnSessionCookies.postMessage(null);
-  new PerformanceObserver(changed).observe({ type: 'resource' });
+fn cookie_signals_js() -> String {
+    format!(
+        r#"(() => {{
+  const changed = () => webkit.messageHandlers.{COOKIE_SIGNALS}.postMessage(null);
+  new PerformanceObserver(changed).observe({{ type: 'resource' }});
   globalThis.cookieStore?.addEventListener('change', changed);
-})()"#;
-const COOKIE_SIGNALS: &str = "attnSessionCookies";
+}})()"#
+    )
+}
 
 thread_local! {
     static KEEPER: RefCell<Option<Retained<JarKeeper>>> = const { RefCell::new(None) };
@@ -66,7 +77,7 @@ pub(super) fn restore_then_keep(
         pages.addUserScript(
             &WKUserScript::initWithSource_injectionTime_forMainFrameOnly_inContentWorld(
                 WKUserScript::alloc(mtm),
-                &NSString::from_str(COOKIE_SIGNALS_JS),
+                &NSString::from_str(&cookie_signals_js()),
                 WKUserScriptInjectionTime::AtDocumentStart,
                 false,
                 world,
@@ -161,7 +172,9 @@ pub(super) fn unwatch(web: &WKWebView) {
     });
 }
 
-/// Saves the jar after the agent's cookie commands, which no page hears of.
+/// Saves the jar after a change no page script reports: the agent's cookie commands, or a page
+/// changing its address, as a script on a plain `http` page that signs out and changes the
+/// route does.
 pub(super) fn changed() {
     let keeper = KEEPER.with_borrow(Clone::clone);
     if let Some(keeper) = keeper {
@@ -230,6 +243,16 @@ define_class!(
         }
     }
 
+    impl JarKeeper {
+        #[unsafe(method(saveAfterPause))]
+        fn save_after_pause(&self) {
+            let keeping = self.ivars();
+            keeping.changed_while_saving.set(false);
+            keeping.saving.set(false);
+            self.save();
+        }
+    }
+
     unsafe impl NSObjectProtocol for JarKeeper {}
 
     unsafe impl WKScriptMessageHandler for JarKeeper {
@@ -258,7 +281,7 @@ impl JarKeeper {
     }
 
     /// Writes the store's session cookies to the jar when they differ from what it last wrote.
-    /// A save asked for while one reads the store runs again after it.
+    /// Saves asked for while one reads the store run once, a pause after it.
     fn save(&self) {
         let keeping = self.ivars();
         if !keeping.restored.get() {
@@ -287,9 +310,17 @@ impl JarKeeper {
                     ),
                 }
             }
-            keeping.saving.set(false);
             if keeping.changed_while_saving.replace(false) {
-                this.save();
+                let _: () = unsafe {
+                    msg_send![
+                        &*this,
+                        performSelector: sel!(saveAfterPause),
+                        withObject: std::ptr::null::<AnyObject>(),
+                        afterDelay: PAUSE_BETWEEN_SAVES_SECONDS
+                    ]
+                };
+            } else {
+                keeping.saving.set(false);
             }
         });
         unsafe { keeping.store.getAllCookies(&handler) };
