@@ -25,7 +25,7 @@ dispatches a fixer. The release process writes release notes from the commits.
 landing selects on Linux beside a fast gate for the paths the landing
 changes, and pushes.
 
-A landing selects two kinds of scenario:
+A landing selects three kinds of scenario:
 
 - each scenario it adds or changes, because a scenario can pass on the Mac where
   its author ran it and fail on Linux
@@ -33,6 +33,11 @@ A landing selects two kinds of scenario:
   feature file it changes in `.agents/skills/drive-attn/features/`, because a
   landing that changes a feature's behavior can leave that feature's scenarios
   expecting the old behavior
+- each scenario that failed on `main` and has since passed there, until it
+  clears, when the landing runs landing tests (below): the landing tests choose
+  it as they choose any test with that history, and `land.sh` hands it to the
+  scenario step. A landing prints each scenario of this kind that does not run
+  on Linux or is gone from the scenario catalog.
 
 `land.sh` starts the Acceptance soak workflow for them on a temporary
 `land-scenarios/` branch, waits for it, and deletes the branch. Scenarios
@@ -57,7 +62,7 @@ passed runs followed by another run of the same change from 6 to 17 November
 after a push. A pass record ignores what `main` gained since the pass, as a
 rebase under the queue already does.
 
-Over 884 `main` commits ending at 582e27999, this selection runs a scenario for
+Over 884 `main` commits ending at 582e27999, the first two kinds run a scenario for
 17% of landings, up from 8% for changed scenarios alone, with a median of 3
 scenarios, 13 at the 90th percentile and 57 at most. On CI, 1 scenario took a
 median of 291s over 28 runs, 16 took 704s and 23 took 1024s, in single runs. Of
@@ -68,7 +73,7 @@ because the landing changed no feature file that lists the scenario, or because
 the scenario failed only after other scenarios ran in the same shard. Running
 the whole matrix for every product change would catch them, on 58% of landings,
 at 48 times this selection's scenario time.
-A landing that edits only a shared harness file selects no scenario. The
+A shared harness file selects no scenario of its own. The
 fast gate:
 
 - Go: vet all packages and their tests, which type-checks everything without
@@ -104,11 +109,13 @@ fast gate:
   [Test history](test-history.md#selection) specifies the choice, and
   `scripts/land.sh --baseline` lands with the baseline groups alone.
 
-The Go checks and the landing tests run side by side. `land.sh` first compiles
-the changed packages and the packages of the matching groups' Go tests in one
-process, while it chooses the landing tests. Both then read that one build. It
-waits for both and prints both outcomes, and a failure in either stops the
-push. The other checks run before them, because some rewrite tracked files.
+`land.sh` chooses the landing tests before it starts the scenarios and the gate,
+because the choice names scenarios for the scenario step. The Go checks and the
+landing tests run side by side. `land.sh` first compiles the changed packages
+and the packages of the matching groups' Go tests in one process. Both then
+read that one build. It waits for both and prints both outcomes, and a failure
+in either stops the push. The other checks run before them, because some
+rewrite tracked files.
 
 Before all of this, `land.sh` refuses a landing that changes `app/src` or
 `app/src-tauri`, other than files generated from the protocol schema or the

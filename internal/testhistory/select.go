@@ -89,15 +89,18 @@ func hasAnySuffix(name string, suffixes []string) bool {
 
 type Inventory map[string]bool
 
+func runsInTheScenarioStep(unit string) bool {
+	return UnitRunner(unit) == RunnerNative
+}
+
 func (inventory Inventory) Has(unit string) bool {
 	_, present := inventory[unit]
 	return present
 }
 
 func (inventory Inventory) Unavailable(unit string) string {
-	switch {
-	case UnitRunner(unit) == RunnerNative:
-		return "native scenarios have no landing recipe; broad CI runs them"
+	if runsInTheScenarioStep(unit) {
+		return ""
 	}
 	runs, present := inventory[unit]
 	switch {
@@ -196,9 +199,9 @@ func Select(request SelectRequest) Selection {
 		case !choice.Baseline && !choice.Changed && choice.PassesLeft() == 0:
 			choice.Status = Cleared
 			choice.Note = fmt.Sprintf("passed on %d main revisions since, %d clear it", choice.Standing.PassesSince, ClearedAfter)
-		case choice.Baseline && UnitRunner(unit) != RunnerNative && !request.Inventory.Has(unit):
+		case choice.Baseline && !runsInTheScenarioStep(unit) && !request.Inventory.Has(unit):
 			choice.Status, choice.Note = Missing, "not in this checkout; requested anyway, so the run fails until its baseline line names a test"
-		case !choice.Changed && UnitRunner(unit) != RunnerNative && !request.Inventory.Has(unit):
+		case !choice.Changed && !runsInTheScenarioStep(unit) && !request.Inventory.Has(unit):
 			choice.Status, choice.Note = Missing, "failed on main, and no longer in this checkout"
 		case request.Inventory.Unavailable(unit) != "":
 			choice.Status, choice.Note = Unavailable, request.Inventory.Unavailable(unit)

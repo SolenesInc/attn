@@ -244,7 +244,7 @@ expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>go.mod
 land 'Module change'
-expect_checks 'check-types' 'check-go GO_PACKAGES=./...' "${go_choice[@]}" sync
+expect_checks "${go_choice[0]}" 'check-types' 'check-go GO_PACKAGES=./...' "${go_choice[1]}" sync
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
@@ -259,7 +259,7 @@ expect_output 'ATTN_FREEZE_EXCEPTION=s-nope00 names no seed'
 git reset -q --soft HEAD^
 export ATTN_FREEZE_EXCEPTION=s-fix123
 land 'App change'
-expect_checks check-frontend 'land --group app' "landing-tests $selected_units" sync
+expect_checks 'land --group app' check-frontend "landing-tests $selected_units" sync
 expect_output 'changing the frozen Tauri app under the exception for seed s-fix123'
 unset ATTN_FREEZE_EXCEPTION
 
@@ -272,16 +272,16 @@ printf '[workspace]\n' >native/Cargo.toml
 printf '[package]\n' >native/crates/demo/Cargo.toml
 printf '\n' >native/crates/demo/src/lib.rs
 land 'Native workspace arrives'
-expect_checks 'check-native NATIVE_CLIPPY=--workspace' 'land --group native' "landing-tests $selected_units" sync
+expect_checks 'land --group native' 'check-native NATIVE_CLIPPY=--workspace' "landing-tests $selected_units" sync
 
 printf '\n' >>native/crates/demo/src/lib.rs
 land 'Native crate change'
-expect_checks 'check-native NATIVE_CLIPPY=-p demo' 'land --group native' "landing-tests $selected_units" sync
+expect_checks 'land --group native' 'check-native NATIVE_CLIPPY=-p demo' "landing-tests $selected_units" sync
 export ATTN_FREEZE_EXCEPTION=s-fix123
 
 printf '\n' >>app/src/example.ts
 land 'App change while a Vitest file is red on main' "LAND_SELECTED=$(printf 'vitest .\nred vitest src/red.test.ts')"
-expect_checks check-frontend 'land --group app' 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
+expect_checks 'land --group app' check-frontend 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
@@ -293,7 +293,7 @@ printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
-expect_checks 'check-types check-prompts check-native NATIVE_CLIPPY=' 'land --group prompts --group native' "landing-tests $selected_units" sync
+expect_checks 'land --group prompts --group native' 'check-types check-prompts check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
 expect_output 'the checkout has no script tests'
 
 mkdir -p internal/setting
@@ -303,7 +303,7 @@ expect_checks 'check-types' sync
 
 printf 'Home Gateway\n' >internal/protocol/schema/home_gateway.tsp
 land 'HomeGateway API change'
-expect_checks 'check-types check-home-gateway-compat check-native NATIVE_CLIPPY=' 'land --group old-phones --group native' "landing-tests $selected_units" sync
+expect_checks 'land --group old-phones --group native' 'check-types check-home-gateway-compat check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
 
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh
@@ -407,7 +407,7 @@ expect_output 'running the baseline landing tests (--baseline)'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing fails' LAND_SELECT_EXIT=1
-expect_checks 'check-go GO_PACKAGES=./internal/example' 'land --group go --group prompts' 'landing-tests --no-go-vet go prompts' sync
+expect_checks 'land --group go --group prompts' 'check-go GO_PACKAGES=./internal/example' 'landing-tests --no-go-vet go prompts' sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 printf '\n' >>internal/example/example.go
@@ -417,7 +417,7 @@ expect_output "this landing's test receipts upload at the next sync"
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing writes nothing' LAND_SELECTED=
-expect_checks 'check-go GO_PACKAGES=./internal/example' 'land --group go --group prompts' 'landing-tests --no-go-vet go prompts' sync
+expect_checks 'land --group go --group prompts' 'check-go GO_PACKAGES=./internal/example' 'landing-tests --no-go-vet go prompts' sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {
@@ -501,7 +501,26 @@ bash "$root/scripts/land.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; e
 [ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
 grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'a changed diff did not run its scenario again' >&2; cat "$work/output" >&2; exit 1; }
 
+recently_failed="$selected"$'\nnative shelf-peek\nnative focusless-native\nnative retired-scenario'
+expect_recent_scenarios_ran() {
+  grep -qxF "${go_choice[1]}" "$LAND_CHECK_LOG" || { echo 'the landing tests were not handed exactly the units that are not scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+  expect_output 'scenario focusless-native failed on main recently and does not run on Linux'
+  expect_output 'scenario retired-scenario failed on main recently and is no longer in the scenario catalog'
+}
+printf '\n' >>internal/example/example.go
+land 'Go change while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
+grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the scenario step did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'land: scenarios shelf-peek passed on CI'"'"'s Linux'
+expect_recent_scenarios_ran
+no_land_scenario_refs
+
 git config attn.landRunner ssh:runner.invalid
+printf '// on the landing runner\n' >>internal/example/example.go
+land 'Go change on the landing runner while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --scenario shelf-peek --out ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'scenario shelf-peek passed on runner.invalid in 2s'
+expect_recent_scenarios_ran
+
 printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
 land 'Change a scenario on the landing runner' LAND_RUNNER_WAITED=7
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --scenario shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }

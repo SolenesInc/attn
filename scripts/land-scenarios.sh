@@ -66,7 +66,7 @@ run_on_github() {
     finished=1
     cat >&2 <<MESSAGE
 land: scenarios $scenarios failed on CI's Linux, so nothing was pushed to main.
-land: a landing runs each scenario it changes and, when it changes product code, each scenario a feature file it changes lists under ## Tests.
+land: a landing runs each scenario it changes, each scenario that failed on main and has since passed there and, when it changes product code, each scenario a feature file it changes lists under ## Tests.
 land: when the product change is right, update the scenario in this landing.
 land: read the failure with: gh run view $run_id --log-failed
 land: evidence: $url
@@ -127,13 +127,14 @@ run_on_ssh() {
 }
 
 run_landing_scenarios() {
-  usage="usage: scripts/land-scenarios.sh <base>"
-  [ "$#" -eq 1 ] || { echo "$usage" >&2; exit 2; }
+  usage="usage: scripts/land-scenarios.sh <base> [<scenario that failed on main recently>...]"
+  [ "$#" -ge 1 ] || { echo "$usage" >&2; exit 2; }
   base="$1"
+  shift
 
   cd "$(git rev-parse --show-toplevel)"
 
-  scenarios="$(git diff --name-only "$base...HEAD" | node app/scripts/real-app-harness/landing-scenarios.mjs)"
+  scenarios="$(git diff --name-only "$base...HEAD" | node app/scripts/real-app-harness/landing-scenarios.mjs "$@")"
   [ -n "$scenarios" ] || exit 0
   record="$(git rev-parse --git-common-dir)/attn-land-scenarios/$(git diff "$base...HEAD" | git patch-id --verbatim | cut -d' ' -f1)"
   scenarios="$(unrecorded_scenarios)"

@@ -320,11 +320,15 @@ A failed test that is no longer in the checkout, such as a renamed or removed
 test, is `MISSING`. `land` prints only a count of such tests and runs none of them. A baseline unit missing from the
 checkout is also `MISSING`, and `land` requests it anyway, as above. A test
 whose file does not build on this platform, such as a `_linux_test.go` test on
-a Mac, is `UNAVAILABLE`, with the reason. A native scenario that has not
-cleared is also `UNAVAILABLE`, because no group runs native scenarios. Broad CI
-runs them, and `scripts/land-scenarios.sh` runs the ones a landing selects
-outside this selection, as
+a Mac, is `UNAVAILABLE`, with the reason.
+
+A native scenario is chosen like any other test, though no group lists one and
+the checkout's inventory does not hold them. `land` writes it as
+`native <scenario>`, and `land.sh` hands it to `scripts/land-scenarios.sh`,
+which runs it with the scenarios the landing selects for other reasons, as
 [Trunk-based development](trunk-based-development.md#what-landsh-does) says.
+The scenario step, not this selection, says when one does not run on Linux or
+is gone from the scenario catalog.
 
 ### Cost
 

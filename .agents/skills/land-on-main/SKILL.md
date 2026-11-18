@@ -165,8 +165,9 @@ The landing tests of the gate come from the shared test history. They are the
 groups of `scripts/landing-tests` that the changed paths match, which include
 the whole Vitest suite for a change under `app/`, the tests you
 changed, and every test that failed on `main` and has since passed there. A
-test stays in the gate until it has passed on 30 later `main` commits. The
-gate prints each test it added, and why. It lists the tests that are still red
+test stays in the gate until it has passed on 30 later `main` commits. A
+catalog scenario with that history runs in the scenario step instead, with the
+scenarios your change selects. The gate prints each test it added, and why. It lists the tests that are still red
 on `main` without running them, because the sheriff owns those.
 
 A failing landing test stops the push like any other check, whether you

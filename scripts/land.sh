@@ -182,10 +182,18 @@ script_tests_for() {
   if [ "${#selected[@]}" -gt 0 ]; then echo "${selected[*]}"; fi
 }
 
+touches() { grep -qE "$1" <<<"$changed"; }
+
+choose_landing_groups() {
+  local group pattern
+  landing_groups=()
+  while read -r _ group pattern; do
+    if touches "$pattern"; then landing_groups+=("$group"); fi
+  done < <(awk '$1 == "group"' scripts/landing-tests)
+}
+
 run_checks() {
-  local changed file dir group pattern script_tests packages="" targets=() go_checks=() landing_groups=()
-  changed="$(git diff --name-only origin/main...HEAD)"
-  touches() { grep -qE "$1" <<<"$changed"; }
+  local file dir script_tests packages="" targets=() go_checks=()
   scripts/check-cloud-relay-privacy
   if touches '\.go$|^go\.(mod|sum)$'; then
     packages='./...'
@@ -216,9 +224,6 @@ run_checks() {
   elif touches '^scripts/'; then
     echo "land: the checkout has no script tests"
   fi
-  while read -r _ group pattern; do
-    touches "$pattern" && landing_groups+=("$group")
-  done < <(awk '$1 == "group"' scripts/landing-tests)
   if [ "${#targets[@]}" -gt 0 ]; then
     make "${targets[@]}"
   fi
@@ -238,28 +243,16 @@ native_clippy_scope() {
 }
 
 run_go_checks_beside_landing_tests() {
-  local go_checks_log go_checks_job choosing_job="" status=0 units_file
-  units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
-  if [ "${#landing_groups[@]}" -gt 0 ]; then
-    choose_landing_tests "$units_file" &
-    choosing_job=$!
-  fi
+  local go_checks_log go_checks_job status=0
   if [ "${#go_checks[@]}" -gt 0 ]; then
-    make -s compile-go "GO_PACKAGES=$packages $(landing_test_packages)" || status=$?
-    if [ "$status" -ne 0 ]; then
-      [ -z "${choosing_job:-}" ] || wait "$choosing_job" || true
-      rm -f "$units_file"
-      return "$status"
-    fi
+    make -s compile-go "GO_PACKAGES=$packages $(landing_test_packages)" || return
     go_checks_log="$(mktemp "${TMPDIR:-/tmp}/attn-land-go-checks.XXXXXX")"
     make "${go_checks[@]}" >"$go_checks_log" 2>&1 &
     go_checks_job=$!
   fi
   if [ "${#landing_groups[@]}" -gt 0 ]; then
-    wait "$choosing_job"
     run_landing_tests "$units_file" "${landing_groups[@]}" || status=$?
   fi
-  rm -f "$units_file"
   if [ "${#go_checks[@]}" -gt 0 ]; then
     wait "$go_checks_job" || status=$?
     cat "$go_checks_log"
@@ -280,9 +273,13 @@ landing_test_packages() {
 
 choose_landing_tests() {
   local group group_options=()
-  [ "$landing_tests" = selected ] || return 0
+  [ "$landing_tests" = selected ] && [ "${#landing_groups[@]}" -gt 0 ] || return 0
   for group in "${landing_groups[@]}"; do group_options+=(--group "$group"); done
   go tool test-history land --units-out "$1" "${group_options[@]}" || : >"$1"
+}
+
+scenarios_failed_on_main() {
+  sed -n 's/^native //p' "$1"
 }
 
 landing_tests_vetting_go_unless_check_go_runs() {
@@ -305,6 +302,7 @@ run_landing_tests() {
     case "$unit" in
       "") ;;
       "red "*) units+=(--red "${unit#red }") ;;
+      "native "*) ;;
       *) units+=(--unit "$unit") ;;
     esac
   done <"$units_file"
@@ -450,12 +448,18 @@ stop_scenario_step() {
 }
 
 check_beside_scenarios() {
+  local scenario scenarios=()
   rebase_onto_main
   [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
-  scripts/land-scenarios.sh origin/main &
-  scenario_step=$!
-  trap stop_scenario_step EXIT
+  changed="$(git diff --name-only origin/main...HEAD)"
+  choose_landing_groups
+  units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
+  trap 'stop_scenario_step; rm -f "$units_file"' EXIT
   trap 'exit 130' INT TERM
+  choose_landing_tests "$units_file"
+  while IFS= read -r scenario || [ -n "$scenario" ]; do scenarios+=("$scenario"); done < <(scenarios_failed_on_main "$units_file")
+  scripts/land-scenarios.sh origin/main ${scenarios[@]+"${scenarios[@]}"} &
+  scenario_step=$!
   run_checks
   local step="$scenario_step"
   scenario_step=""

@@ -214,8 +214,8 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 		if nominated.Status != testhistory.Red || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != firstMain {
 			t.Fatalf("a failure in another lane, cleared only by passes there, has not passed since and must stand red, listed and not run: %+v %+v", nominated, standing)
 		}
-		if native := choiceOf(t, selection, "native agent-reload"); native.Status != testhistory.Unavailable || !strings.Contains(native.Note, "no landing recipe") {
-			t.Fatalf("an uncleared native failure must be unavailable for want of a landing recipe: %+v", native)
+		if native := choiceOf(t, selection, "native agent-reload"); native.Status != testhistory.Red {
+			t.Fatalf("a native scenario red on main must stand red like any other test, not unavailable: %+v", native)
 		}
 		if gone := choiceOf(t, selection, "go ./p TestGone"); gone.Status != testhistory.Missing || gone.Note == "" {
 			t.Fatalf("missing baseline test: %+v", gone)

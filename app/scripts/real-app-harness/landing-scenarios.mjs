@@ -27,6 +27,7 @@ function scenariosListedBy(featureFile) {
   return [...scenarioLine.matchAll(/`([a-z0-9-]+)`/g)].map((match) => match[1]);
 }
 
+const recentlyFailedOnMain = new Set(process.argv.slice(2));
 const changedPaths = readFileSync(0, 'utf8').split('\n').filter(Boolean);
 const changedFiles = new Set(changedPaths);
 const listed = new Set(
@@ -38,7 +39,8 @@ const listed = new Set(
 const runnable = [];
 for (const scenario of scenarioCatalog) {
   const changed = changedFiles.has(scenarioFile(scenario));
-  if (!changed && !listed.has(scenario.id)) {
+  const recentlyFailed = recentlyFailedOnMain.delete(scenario.id);
+  if (!changed && !recentlyFailed && !listed.has(scenario.id)) {
     continue;
   }
   const skipReason = scenarioSkipReason(scenario, 'linux', {});
@@ -46,6 +48,11 @@ for (const scenario of scenarioCatalog) {
     runnable.push(scenario.id);
   } else if (changed) {
     console.error(`land: scenario ${scenario.id} changed and does not run on Linux: ${skipReason}`);
+  } else if (recentlyFailed) {
+    console.error(`land: scenario ${scenario.id} failed on main recently and does not run on Linux: ${skipReason}`);
   }
+}
+for (const id of recentlyFailedOnMain) {
+  console.error(`land: scenario ${id} failed on main recently and is no longer in the scenario catalog`);
 }
 console.log(runnable.join(','));

@@ -48,6 +48,7 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	share("cleared-fails", failedAt, "go ./q TestCleared", testhistory.Fail)
 	share("still-red-fails", failedAt, "go ./q TestStillRed", testhistory.Fail)
 	share("elsewhere-fails", failedAt, "go ./q TestElsewhere", testhistory.Fail)
+	share("scenario-fails", failedAt, "native native-chief-slot", testhistory.Fail)
 	for i := range testhistory.ClearedAfter {
 		repo.gitAt(start.Add(time.Duration(i+1)*time.Second), "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("main %d", i))
 		commit := repo.git("rev-parse", "HEAD")
@@ -55,6 +56,7 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 		if i == 0 {
 			share("recent-passes", commit, "go ./q TestRecent", testhistory.Pass)
 			share("elsewhere-passes", commit, "go ./q TestElsewhere", testhistory.Pass)
+			share("scenario-passes", commit, "native native-chief-slot", testhistory.Pass)
 		}
 	}
 	repo.git("checkout", "-q", "-b", "change")
@@ -97,12 +99,13 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	service.down = false
 	service.mu.Unlock()
 	out, units, code = land("go")
-	if code != 0 || units != "go ./p TestA, go ./p TestRenamed, go ./q TestRecent" {
-		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failure:\n%s", code, units, out)
+	if code != 0 || units != "go ./p TestA, go ./p TestRenamed, go ./q TestRecent, native native-chief-slot" {
+		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failures, the native scenario's included, for land.sh's scenario step:\n%s", code, units, out)
 	}
 	for _, want := range []string{
 		"landing tests for " + short(head) + ":",
 		"ADDED       go ./q TestRecent",
+		"ADDED       native native-chief-slot",
 		fmt.Sprintf("failed on %s at %s; passed on 1 main revisions since, runs until %d more pass", otherLane(), short(failedAt), testhistory.ClearedAfter-1),
 		"RED         go ./q TestStillRed",
 		"still red on main: the sheriff owns it; landings run it once it passes on main",
