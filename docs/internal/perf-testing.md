@@ -46,13 +46,15 @@ both apps get the same work. Each run launches the app fresh, places it
 unfocused at 1710×956 with 20 px on screen and above every other window, so
 nothing covers it and it draws as a window in view does, waits 20 s, then samples every
 process the app is responsible for, the daemon and the PTY host once a second
-with `proc_pid_rusage`: CPU as a share of one core and physical footprint, the
-number that counts graphics memory. It compiles `procUsage.c` with `cc` on first
-use, so it runs only on macOS.
+with `proc_pid_rusage`: CPU as a share of one core, instructions retired per
+second, the share of cycles on performance cores, and physical footprint, the
+number that counts graphics memory. CPU time depends on which cores macOS
+schedules the work on, so compare instructions when two runs' CPU disagree. It
+compiles `procUsage.c` with `cc` on first use, so it runs only on macOS.
 
 ```bash
 ATTN_HARNESS_INSTANCE=<name> node app/scripts/real-app-harness/scenario-perf-gates.mjs \
-  [--workloads idle1,quiet4,paint1,paint4,stream,flood,switches,rest,launch] [--runs 5] [--seconds 30]
+  [--workloads idle1,quiet4,paint1,paint4,stream,flood,switches,rest,launch] [--runs 5] [--seconds 30] [--profile]
 ```
 
 | Workload | Measures |
@@ -68,7 +70,8 @@ ATTN_HARNESS_INSTANCE=<name> node app/scripts/real-app-harness/scenario-perf-gat
 It prints one JSON line per run and a summary per workload with the median,
 minimum and maximum over runs. Painting workloads on the native app quit it
 while it still paints and add the frame-time distribution from its frame
-recorder.
+recorder. `--profile` adds an 8 s `sample` of the app after each painting
+window, while it still paints.
 
 ## Native frames
 

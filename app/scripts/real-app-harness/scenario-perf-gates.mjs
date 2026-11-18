@@ -39,7 +39,7 @@ const REST_SIGNS = {
 
 function parseArgs(argv) {
   const args = argv.filter((arg) => arg !== '--');
-  const extras = { workloads: Object.keys(WORKLOADS), runs: 5, seconds: 30, settle: 20, out: null };
+  const extras = { workloads: Object.keys(WORKLOADS), runs: 5, seconds: 30, settle: 20, out: null, profile: false };
   const passthrough = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -52,6 +52,7 @@ function parseArgs(argv) {
     else if (arg === '--runs') extras.runs = Number(value());
     else if (arg === '--seconds') extras.seconds = Number(value());
     else if (arg === '--settle') extras.settle = Number(value());
+    else if (arg === '--profile') extras.profile = true;
     else passthrough.push(arg);
   }
   for (const name of extras.workloads) if (!WORKLOADS[name]) throw new Error(`--workloads takes ${Object.keys(WORKLOADS).join(',')}; got ${name}`);
@@ -81,6 +82,7 @@ CPU and footprint come from proc_pid_rusage once a second, per process role.
   --runs N          fresh launches per workload (default 5)
   --seconds S       measured window (default 30)
   --settle S        wait after launch before measuring (default 20)
+  --profile         after a painting window, an 8 s \`sample\` of the app while it still paints
 
 The native app's frame recorder writes perf.json when it quits; painting
 workloads quit it while still painting and report its frame-time distribution.
@@ -105,8 +107,8 @@ function usageProbe(runDir) {
   return () => {
     const rows = new Map();
     for (const line of execFileSync(binary, { encoding: 'utf8', maxBuffer: 1 << 24 }).trim().split('\n')) {
-      const [pid, ppid, responsible, footprint, cpuNs] = line.split(' ').map(Number);
-      rows.set(pid, { pid, ppid, responsible, footprint, cpuNs });
+      const [pid, ppid, responsible, footprint, cpuNs, instructions, pCycles, cycles] = line.split(' ').map(Number);
+      rows.set(pid, { pid, ppid, responsible, footprint, cpuNs, instructions, pCycles, cycles });
     }
     return rows;
   };
@@ -153,7 +155,7 @@ async function measureWindow(probe, roles, seconds) {
       const row = rows.get(pid);
       if (!row) continue;
       byRole[role] = (byRole[role] ?? 0) + row.footprint;
-      cpu.set(pid, row.cpuNs);
+      cpu.set(pid, row);
     }
     return { at, byRole, cpu };
   };
@@ -167,16 +169,22 @@ async function measureWindow(probe, roles, seconds) {
   const wallS = (last.at - first.at) / 1000;
   const result = { seconds: round(wallS), roles: {} };
   for (const role of new Set(roles.values())) {
-    let cpuNs = 0;
-    for (const [pid, r] of roles) if (r === role && last.cpu.has(pid) && first.cpu.has(pid)) cpuNs += last.cpu.get(pid) - first.cpu.get(pid);
+    const spent = { cpuNs: 0, instructions: 0, pCycles: 0, cycles: 0 };
+    for (const [pid, r] of roles) {
+      if (r !== role || !last.cpu.has(pid) || !first.cpu.has(pid)) continue;
+      for (const key of Object.keys(spent)) spent[key] += last.cpu.get(pid)[key] - first.cpu.get(pid)[key];
+    }
     result.roles[role] = {
-      cpuPct: round(cpuNs / 1e7 / wallS, 2),
+      cpuPct: round(spent.cpuNs / 1e7 / wallS, 2),
+      mInstructionsPerS: round(spent.instructions / 1e6 / wallS),
+      pCoreCyclesPct: spent.cycles ? round((100 * spent.pCycles) / spent.cycles) : null,
       footprintMiB: mib(median(samples.map((s) => s.byRole[role]))),
     };
   }
   const appSide = [...new Set(roles.values())].filter((role) => !OWN_ROLES.includes(role));
   result.app = {
     cpuPct: round(appSide.reduce((sum, role) => sum + (result.roles[role]?.cpuPct ?? 0), 0), 2),
+    mInstructionsPerS: round(appSide.reduce((sum, role) => sum + (result.roles[role]?.mInstructionsPerS ?? 0), 0)),
     footprintMiB: mib(median(samples.map((s) => appSide.reduce((sum, role) => sum + (s.byRole[role] ?? 0), 0)))),
   };
   return result;
@@ -315,6 +323,7 @@ async function runWorkload(name, desks, index) {
     for (const s of painters) type(s, `${workload.paint === 'flood' ? FLOOD_COMMAND : PAINT_COMMAND}\r`);
     await sleep(3000);
     row.window = await measureWindow(probe, roles(), extras.seconds);
+    if (extras.profile) row.profile = await sampleApp(launched.pid, 8, path.join(runner.runDir, `${name}-${shell}-${index}.sample.txt`));
     row.frames = await frameTimes();
     for (const s of painters) type(s, '\u0003');
   } else if (workload.switches) {
@@ -330,12 +339,15 @@ async function runWorkload(name, desks, index) {
     row.after = await measureWindow(probe, set, 10);
     row.growthMiB = round(row.after.app.footprintMiB - row.before.app.footprintMiB);
   } else if (workload.sample) {
-    const file = path.join(runner.runDir, `rest-${shell}-${index}.sample.txt`);
-    await new Promise((resolve, reject) => spawn('sample', [String(launched.pid), String(workload.sample), '-file', file], { stdio: 'ignore' })
-      .on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`sample exited ${code}`)))));
+    const file = await sampleApp(launched.pid, workload.sample, path.join(runner.runDir, `rest-${shell}-${index}.sample.txt`));
     row.rest = { file, ...readRestSample(file) };
   }
   return row;
+}
+
+function sampleApp(pid, seconds, file) {
+  return new Promise((resolve, reject) => spawn('sample', [String(pid), String(seconds), '-file', file], { stdio: 'ignore' })
+    .on('exit', (code) => (code === 0 ? resolve(file) : reject(new Error(`sample exited ${code}`)))));
 }
 
 function summarize(name, rows) {
@@ -346,6 +358,7 @@ function summarize(name, rows) {
   return {
     type: 'summary', shell, workload: name, runs: rows.length,
     cpuPct: pick((r) => r.window?.app.cpuPct),
+    mInstructionsPerS: pick((r) => r.window?.app.mInstructionsPerS),
     footprintMiB: pick((r) => r.window?.app.footprintMiB),
     growthMiB: pick((r) => r.growthMiB),
     firstTerminalMs: pick((r) => r.firstTerminalMs),
