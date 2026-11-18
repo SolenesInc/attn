@@ -2046,7 +2046,7 @@ fn switch_frame(
     }
     if frame != Frame::Map {
         if let Some((stop, line)) = here {
-            review.cursor = stop_spot(reading.bundle, stop, line);
+            review.cursor = stop_spot(reading, stop, line);
         }
         return None;
     }
@@ -2066,7 +2066,7 @@ fn switch_frame(
     }
     review.map = frames::map_place(bundle, &list, index.unwrap_or(0));
     review.cursor = match (index, here) {
-        (Some(_), Some((stop, line))) => stop_spot(bundle, stop, line),
+        (Some(_), Some((stop, line))) => stop_spot(reading, stop, line),
         _ => None,
     };
     None
@@ -2113,13 +2113,13 @@ fn switch_side(review: &mut Review, reading: &Reading, cursor: Option<usize>) {
     }
 }
 
-/// The spot of stop `stop`'s row at line `line`, else its first row.
-fn stop_spot(bundle: &ReviewBundle, stop: usize, line: Option<i64>) -> Option<Spot> {
-    let s = &bundle.stops[stop];
+/// The spot of the row at line `line` among the rows stop `stop` shows, else of its first row.
+fn stop_spot(reading: &Reading, stop: usize, line: Option<i64>) -> Option<Spot> {
+    let rows = reading.rows_of(stop);
     let row = line
-        .and_then(|l| s.rows.iter().find(|r| r.now == Some(l)))
-        .or(s.rows.first())?;
-    Some(row_spot(&s.path, row))
+        .and_then(|l| rows.iter().find(|r| r.now == Some(l)))
+        .or(rows.first())?;
+    Some(row_spot(&reading.bundle.stops[stop].path, row))
 }
 
 /// The first place of the next stop after the cursor, or of the one before it.

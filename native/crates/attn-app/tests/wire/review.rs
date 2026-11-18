@@ -2391,6 +2391,30 @@ fn switches_frames_with_1_2_and_3_and_keeps_the_stop_and_line_the_cursor_is_on()
     );
 }
 
+#[test]
+fn keeps_a_walkthrough_cursor_on_a_line_e_widened_into_the_stop_when_switching_frames() {
+    let (mut world, _, _) = open_marking(presented());
+    press(&mut world, Key::Right);
+    type_key(&mut world, "e");
+    type_key(&mut world, "2");
+    for _ in 0..10 {
+        if file_cursor(&world).as_deref() == Some("unchanged line 1: package calc") {
+            break;
+        }
+        press(&mut world, Key::Up);
+    }
+    assert_eq!(
+        file_cursor(&world).as_deref(),
+        Some("unchanged line 1: package calc")
+    );
+
+    type_key(&mut world, "1");
+    assert_eq!(
+        cursor(&world).name.as_deref(),
+        Some("unchanged line 1: package calc")
+    );
+}
+
 fn serve_search(world: &World) {
     world.daemon.on("review_search", |r| {
         let calc = r["query"] == "calc";
