@@ -125,6 +125,10 @@ export class MacOSDriver extends TargetedWindowDriver {
     return this.runInputDriverCapture(['frontmost']);
   }
 
+  async appHidden() {
+    return (await this.runInputDriverCapture(['hidden'])) === 'true';
+  }
+
   async displayState() {
     return JSON.parse(await this.runInputDriverCapture(['display_state']));
   }

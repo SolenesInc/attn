@@ -55,7 +55,7 @@ func parseOptions() throws -> Options {
     while index < args.count {
         let arg = args[index]
         switch arg {
-        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "wait_window_centre", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
+        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "pointer_top_edge", "wait_window_centre", "drag_between", "permissions", "wait_frontmost", "wait_hidden", "hidden":
             options.command = arg
         case "--centre":
             index += 1
@@ -156,6 +156,7 @@ func parseOptions() throws -> Options {
               InputDriver.swift activate [--bundle-id com.attn.manager]
               InputDriver.swift activate_background [--bundle-id ...]
               InputDriver.swift frontmost
+              InputDriver.swift hidden [--bundle-id ...]
               InputDriver.swift display_state
               InputDriver.swift windowid [--bundle-id ...] [--window-title <substring>]
               InputDriver.swift windowlist [--bundle-id ...]
@@ -1070,6 +1071,11 @@ do {
         print(frontmostBundleIdentifier())
     case "wait_hidden":
         try waitForHidden(bundleId: options.bundleId)
+    case "hidden":
+        guard let app = findRunningApp(bundleId: options.bundleId) else {
+            throw DriverError.appNotRunning(options.bundleId)
+        }
+        print(app.isHidden)
     case "frontmost":
         print(frontmostBundleIdentifier())
     case "display_state":

@@ -71,7 +71,7 @@ async function screenshot(name) {
   assert.ok(windowId, 'Capture window id is required; never capture the whole display');
   await driver.screenshot(path.join(runner.runDir, name), { windowId });
 }
-const appVisible = () => execFileSync('osascript', ['-e', `tell application "System Events" to get visible of (first application process whose bundle identifier is "${client.bundleId}")`], { encoding: 'utf8' }).trim() === 'true';
+const appVisible = async () => !(await driver.appHidden());
 const mainTitle = path.basename(options.appPath, '.app');
 const captureEditor = { webview: 'capture', selector: '.capture textarea' };
 const captureRecent = { webview: 'capture', selector: '[aria-label="Recent messages"]' };
@@ -308,29 +308,29 @@ try {
     await driver.runInputDriver(['wait_hidden']);
     await fixture.activateApp();
     await fixture.runInputDriver(['wait_frontmost']);
-    assert.equal(appVisible(), false);
+    assert.equal(await appVisible(), false);
     await openCapture();
     const openedWindows = await driver.windowList();
     assert.equal(await fixture.frontmostBundleId(), fixtureId);
     if (openedWindows.some(window => window.name === mainTitle)) {
       nativeFindings.push(new Error('Opening capture surfaces the hidden main window'));
     }
-    runner.writeJson('hidden-open-host.json', { appVisible: appVisible(), frontmost: await fixture.frontmostBundleId(), windows: openedWindows });
+    runner.writeJson('hidden-open-host.json', { appVisible: await appVisible(), frontmost: await fixture.frontmostBundleId(), windows: openedWindows });
     await key('escape');
     await fixture.runInputDriver(['wait_frontmost']);
     assert.equal(await fixture.frontmostBundleId(), fixtureId);
     assert.equal((await hidden()).visible, false);
-    assert.equal(appVisible(), false, 'Escape must restore the app-hidden state, not surface the main window');
-    runner.writeJson('hidden-dismiss.json', { appVisible: appVisible(), frontmost: await fixture.frontmostBundleId(), windows: await driver.windowList() });
+    assert.equal(await appVisible(), false, 'Escape must restore the app-hidden state, not surface the main window');
+    runner.writeJson('hidden-dismiss.json', { appVisible: await appVisible(), frontmost: await fixture.frontmostBundleId(), windows: await driver.windowList() });
   });
   await runner.step('hidden_origin_dismiss_after_switching_apps', async () => {
-    assert.equal(appVisible(), false);
+    assert.equal(await appVisible(), false);
     await openCapture();
     await otherFixture.activateApp();
     await otherFixture.runInputDriver(['wait_frontmost']);
     await client.request('capture_dismiss');
     assert.equal(await otherFixture.frontmostBundleId(), otherFixtureId);
-    assert.equal(appVisible(), false);
+    assert.equal(await appVisible(), false);
     await fixture.activateApp();
   });
   await runner.step('deliberate_main_window_switch_stays_visible', async () => {
@@ -339,14 +339,14 @@ try {
     await driver.runInputDriver(['wait_frontmost']);
     const main = (await driver.windowList()).find(window => window.name === mainTitle);
     assert.ok(main);
+    const { logicalBounds } = await client.request('get_window_bounds');
     await driver.parkWindow(Math.ceil(main.width * 0.2), { windowTitle: mainTitle });
-    runner.registerCleanup('main-position', () => execFileSync('osascript', ['-e',
-      `tell application "System Events" to tell (first application process whose bundle identifier is "${client.bundleId}") to set position of first window to {${main.x}, ${main.y}}`]));
+    runner.registerCleanup('main-position', () => client.request('set_window_bounds', { logicalBounds }));
     await driver.click({ selector: 'body', at: { x: 0.1, y: 0.1 } }, { windowTitle: mainTitle, withoutReceipt: 'the first click on a window that is not key only makes it key; macOS does not deliver it to the page' });
     assert.equal((await state()).nativeFocused, false, 'The deliberate main-window click must transfer native key focus');
     await client.request('capture_dismiss');
     assert.equal(await driver.frontmostBundleId(), driver.bundleId);
-    assert.equal(appVisible(), true, 'Dismissal must preserve a deliberate switch to the main window');
+    assert.equal(await appVisible(), true, 'Dismissal must preserve a deliberate switch to the main window');
     await fixture.activateApp();
   });
   await runner.step('reopen_retains_text_and_native_focus', async () => {
