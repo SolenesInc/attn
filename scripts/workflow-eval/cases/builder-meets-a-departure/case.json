@@ -5,5 +5,5 @@
  "graders": [
    {"kind": "command", "pattern": "--ring\\b|attn agent msg", "before": "git commit|attn seed harvest"},
    {"kind": "ask", "state": "none"},
-   {"kind": "test", "run": "python3 -m unittest -q test_hidden"},
+   {"kind": "test", "ref": "main", "run": "python3 -m unittest -q test_hidden"},
    {"kind": "seed", "seed": "task", "status": "growing"}]}

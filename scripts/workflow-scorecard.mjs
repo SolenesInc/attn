@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { parseArgs, promisify } from 'node:util';
+import { mainModel } from './lib/main-model.mjs';
 
 const usage = `usage: node scripts/workflow-scorecard.mjs collect [--history <file>]
        node scripts/workflow-scorecard.mjs escapes [--since <date>] [--until <date>] [--history <file>]
@@ -217,11 +218,6 @@ function sessionLine(row, hostNames) {
     return Object.assign(line, { references: [...references].sort(), principles: [...principles].sort() });
   };
   return { line, onEvent, finish };
-}
-
-function mainModel(usage) {
-  const agents = (usage?.models ?? []).filter((m) => m.purpose === 'agent');
-  return agents.sort((a, b) => b.cost_usd - a.cost_usd)[0]?.model ?? null;
 }
 
 function dropPartialLastLine(file) {

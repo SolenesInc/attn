@@ -64,11 +64,11 @@ const kinds = {
     },
   },
   planted: {
-    label: g => `an untended seed planted${g.title ? ` titled ${g.title}` : ''}`,
+    label: g => `a seed planted${g.title ? ` titled ${g.title}` : ''}`,
     grade: (g, { world }) => {
       const known = new Set(Object.values(world.seeds));
       return world.attnJson(['seed', 'ls', '--flat']).seeds.some(seed =>
-        !known.has(seed.id) && !seed.tender && (!g.title || new RegExp(g.title, 'i').test(seed.title)));
+        !known.has(seed.id) && (!g.title || new RegExp(g.title, 'i').test(seed.title)));
     },
   },
   any: {

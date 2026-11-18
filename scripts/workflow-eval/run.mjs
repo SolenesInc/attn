@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { mainModel } from '../lib/main-model.mjs';
 import { checkGraders, grade, graderLabel } from './lib/graders.mjs';
 import { answerAsks, type } from './lib/standin.mjs';
 import { cleanWorld, createWorld, preflight, readAccessToken, repository, snapshotClaudeConfig, startWorld } from './lib/world.mjs';
@@ -147,7 +148,7 @@ function runLine({ world, testCase, arm, run, session, transcript, started, clos
   const loaded = calls.findIndex(event => event.tool_name === 'Skill' && /"attn-workflow"/.test(event.text));
   const read = kind => [...new Set(calls.flatMap(event => [...event.text.matchAll(new RegExp(`attn-workflow/${kind}/([\\w-]+)\\.md`, 'g'))].map(m => m[1])))];
   return {
-    session, host: os.hostname(), agent: entry?.agent, model: entry?.usage?.models?.[0]?.model, role: testCase.role,
+    session, host: os.hostname(), agent: entry?.agent, model: mainModel(entry?.usage), role: testCase.role,
     seed: world.seeds[testCase.opening.seed], started, closed, tool_calls: calls.length, cost_usd: entry?.usage?.cost_usd ?? 0,
     loaded_skill_at_call: loaded < 0 ? null : loaded + 1, references: read('references'), principles: read('principles'),
     eval: { case: testCase.name, arm: arm.label, ref: arm.ref, commit: arm.commit, run, instance: world.instance, limit: limit || null,
