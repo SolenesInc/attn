@@ -2292,3 +2292,116 @@ fn a_restored_draft_uploads_and_sends_while_the_panels_app_starts_and_binds_its_
     assert_eq!(kept.lock().unwrap().bytes[IMAGE], png());
     rest(&mut world);
 }
+
+fn capture_focus(world: &World) -> Option<String> {
+    world.capture_screen().focused().and_then(|n| n.key)
+}
+
+#[test]
+fn a_keyboard_alone_reaches_every_control_of_the_panel_and_typing_stays_with_the_message() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    send(&mut world, "first");
+    open(&mut world);
+    type_text(&mut world, "draft");
+
+    let mut visited = Vec::new();
+    for _ in 0..3 {
+        press(&mut world, "tab");
+        visited.extend(capture_focus(&world));
+    }
+    assert_eq!(
+        visited,
+        ["capture.send", "capture.recent", "capture.message"],
+        "To stays out of the Tab order: its shortcut opens it"
+    );
+    assert_eq!(message_text(&world), "draft");
+
+    press(&mut world, "shift+tab");
+    press(&mut world, "space");
+    assert!(shows(&world, "first"), "Space presses the focused Recent");
+    assert_eq!(
+        capture_focus(&world).as_deref(),
+        Some("capture.history.back")
+    );
+    press(&mut world, "tab");
+    assert_eq!(
+        capture_focus(&world).as_deref(),
+        Some("capture.history.discard")
+    );
+    press(&mut world, "space");
+    assert_eq!(
+        capture_focus(&world).as_deref(),
+        Some("capture.history.back"),
+        "the discarded draft's button gives focus back to the history"
+    );
+    press(&mut world, "escape");
+    assert_eq!(capture_focus(&world).as_deref(), Some("capture.message"));
+
+    type_text(&mut world, "second");
+    press(&mut world, "shift+tab");
+    assert_eq!(capture_focus(&world).as_deref(), Some("capture.recent"));
+    press(&mut world, "enter");
+    let sent = world.daemon.sent_of("quick_capture_send");
+    assert_eq!(
+        sent.last().unwrap()["content"],
+        "second",
+        "Return presses Send, the panel's default button"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn removing_a_file_from_the_keyboard_leaves_typing_with_the_message() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    let dropped = world.data_dir().with_file_name("notes.txt");
+    std::fs::write(&dropped, b"notes").unwrap();
+    open(&mut world);
+    type_text(&mut world, "hi");
+    world.capture_gesture(|d| {
+        d.runtime
+            .drop_files(vec![dropped.clone()], Some((200.0, 200.0)))
+    });
+    let remove = world
+        .capture_screen()
+        .get(Target::role("button").name("Remove notes.txt"))
+        .key
+        .unwrap();
+    while capture_focus(&world).as_deref() != Some(remove.as_str()) {
+        press(&mut world, "tab");
+    }
+    press(&mut world, "space");
+    assert!(
+        world
+            .capture_screen()
+            .find(Target::role("list-item").name("notes.txt"))
+            .is_none()
+    );
+    type_text(&mut world, " more");
+    assert_eq!(message_text(&world), "hi more");
+    rest(&mut world);
+}
+
+#[test]
+fn return_in_the_mailbox_list_picks_a_mailbox_even_when_a_button_had_the_keyboard() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    type_text(&mut world, "draft");
+    assert!(shows(&world, "To: Ada"));
+    press(&mut world, "shift+tab");
+    assert_eq!(capture_focus(&world).as_deref(), Some("capture.recent"));
+
+    press(&mut world, "mod+k");
+    press(&mut world, "down");
+    press(&mut world, "enter");
+    assert!(world.daemon.sent_of("quick_capture_send").is_empty());
+    assert!(
+        !shows(&world, "To: Ada"),
+        "Down and Return picked another mailbox"
+    );
+    assert_eq!(message_text(&world), "draft");
+    assert_eq!(capture_focus(&world).as_deref(), Some("capture.message"));
+    rest(&mut world);
+}

@@ -700,6 +700,7 @@ pub(crate) fn discard(panel: &mut Panel, tx: &mut Tx) {
         Ok(()) => {
             panel.error = None;
             attach::forget(panel, &discarded, tx);
+            tx.focus(view::BACK, false);
         }
         Err(why) => {
             panel.replace_draft(discarded);
@@ -718,10 +719,12 @@ pub(crate) fn pick(panel: &mut Panel, mailbox: String, tx: &mut Tx) {
     tx.focus(view::MESSAGE, false);
 }
 
-pub(crate) fn toggle_picker(panel: &mut Panel) {
+/// Opens or closes the mailbox list, which the message field steers, so the field takes focus.
+pub(crate) fn toggle_picker(panel: &mut Panel, tx: &mut Tx) {
     if !panel.editable() {
         return;
     }
+    tx.focus(view::MESSAGE, false);
     panel.face = Face::Compose;
     panel.picking = match panel.picking {
         Some(_) => None,
@@ -855,7 +858,7 @@ fn shortcut(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
             return true;
         }
         if typed == 'k' {
-            toggle_picker(panel);
+            toggle_picker(panel, tx);
             return true;
         }
         if typed == 'w' {

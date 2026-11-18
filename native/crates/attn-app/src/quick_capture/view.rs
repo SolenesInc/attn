@@ -10,6 +10,7 @@ use super::{Busy, Face, Panel, history};
 
 /// The key of the message field, which holds the keyboard while the draft shows.
 pub(crate) const MESSAGE: &str = "capture.message";
+pub(crate) const BACK: &str = "capture.history.back";
 
 /// The message as the Tauri panel sets it, the panel's one big input.
 const MESSAGE_TYPE: rune::TextStyle = rune::TextStyle::new(20.0, 400.0).lh(30.0).tracking(-0.25);
@@ -91,7 +92,7 @@ fn compose(panel: &Panel, t: &Tokens) -> El {
         })
         .hover(t.bg_elevated)
         .focus_ring(2.0, 1.0, t.accent)
-        .on_press_tx(|panel: &mut Panel, _: &mut Tx| super::toggle_picker(panel))
+        .on_press_tx(super::toggle_picker)
         .child(
             text(format!("To: {}", panel.label(&panel.mailbox())))
                 .font(type_::TITLE)
@@ -101,6 +102,7 @@ fn compose(panel: &Panel, t: &Tokens) -> El {
     let recent = row()
         .key("capture.recent")
         .role("button")
+        .focusable(true)
         .label("Recent messages")
         .focus_ring(2.0, 1.0, t.accent)
         .on_press_tx(|panel: &mut Panel, tx: &mut Tx| history::open(panel, tx))
@@ -369,6 +371,8 @@ fn send_button(face: &str, enabled: bool, t: &Tokens) -> El {
     row()
         .key("capture.send")
         .role("button")
+        .focusable(true)
+        .default_button()
         .label(face.to_owned())
         .disabled(!enabled)
         .items_center()
@@ -497,7 +501,7 @@ fn recent(panel: &Panel, t: &Tokens) -> El {
         )
         .child(el().grow(1.0))
         .child(button(
-            "capture.history.back",
+            BACK,
             "Back to draft",
             "Back to draft  esc",
             t,
@@ -764,6 +768,7 @@ fn button(
     row()
         .key(key.to_owned())
         .role("button")
+        .focusable(true)
         .label(name.to_owned())
         .items_center()
         .px(space::S2)
@@ -771,6 +776,7 @@ fn button(
         .radius(6.0)
         .fill(t.bg_button)
         .border(1.0, t.border)
+        .focus_ring(2.0, 1.0, t.accent)
         .on_press_tx(press)
         .child(
             text(face.to_owned())

@@ -283,11 +283,12 @@ fn discard_removed(panel: &mut Panel, id: String, tx: &mut Tx) {
         panel,
         capture,
         id,
-        |panel, failure| {
+        |panel, failure, tx| {
             panel.busy = Busy::Idle;
             if let Some(why) = failure {
                 panel.error = Some(format!("Cannot remove file: {why}"));
             }
+            tx.focus(super::view::MESSAGE, false);
         },
         tx,
     );
@@ -304,7 +305,7 @@ pub(super) fn forget(panel: &mut Panel, discarded: &Draft, tx: &mut Tx) {
             panel,
             discarded.id.clone(),
             file.id.clone(),
-            |panel, failure| {
+            |panel, failure, _| {
                 if failure.is_some() {
                     panel.error =
                         Some("Draft discarded. Uploaded files could not be cleaned up.".into());
@@ -319,7 +320,7 @@ fn discard_one(
     panel: &mut Panel,
     capture: String,
     attachment: String,
-    then: impl FnOnce(&mut Panel, Option<String>) + 'static,
+    then: impl FnOnce(&mut Panel, Option<String>, &mut Tx) + 'static,
     tx: &mut Tx,
 ) {
     panel.ask(
@@ -331,7 +332,7 @@ fn discard_one(
                 ..QuickCaptureAttachmentDiscardMessage::new()
             })
         },
-        move |panel, answer, _| then(panel, result(answer).err().map(|f| f.say())),
+        move |panel, answer, tx| then(panel, result(answer).err().map(|f| f.say()), tx),
         tx,
     );
 }

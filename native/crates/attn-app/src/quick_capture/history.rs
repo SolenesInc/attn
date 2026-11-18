@@ -62,6 +62,7 @@ pub(crate) fn open(panel: &mut Panel, tx: &mut Tx) {
         unread: true,
         ..History::default()
     };
+    tx.focus(view::BACK, false);
     follow(panel, tx);
 }
 
