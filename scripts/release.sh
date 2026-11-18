@@ -9,7 +9,7 @@ usage: $0 <version-tag> [--dry-run]
 example: $0 v0.12.0
 
 Cut release/vX.Y.Z from the newest ${remote}/main commit that has green
-Acceptance and that ${remote}/reviewed contains, compile its changelog, bump versions, write the release manifest, and open a
+Acceptance, a VERSION file, and that ${remote}/reviewed contains, compile its changelog, bump versions, write the release manifest, and open a
 PR to main.
 Once merged, Acceptance on the release commit tags and publishes it. This
 command never merges, tags, or starts a release.
@@ -112,6 +112,9 @@ previous_release_sha="$(
 main_sha=""
 acceptance_url=""
 for commit in $(git rev-list --first-parent "${previous_release_sha}..${reviewed_main_sha}"); do
+  if ! git cat-file -e "${commit}:VERSION" 2>/dev/null; then
+    continue
+  fi
   acceptance_url="$(
     gh api --method GET \
       "repos/{owner}/{repo}/commits/${commit}/check-runs?check_name=Acceptance&filter=latest" \
@@ -123,7 +126,7 @@ for commit in $(git rev-list --first-parent "${previous_release_sha}..${reviewed
   fi
 done
 if [[ -z "$main_sha" ]]; then
-  echo "prepare release: no commit in ${previous_release_sha:0:12}..${reviewed_main_sha:0:12} has green Acceptance" >&2
+  echo "prepare release: no commit in ${previous_release_sha:0:12}..${reviewed_main_sha:0:12} has green Acceptance and the VERSION file the release train reads" >&2
   echo "run the review-main skill, or wait for a reviewed commit to pass Acceptance" >&2
   exit 1
 fi

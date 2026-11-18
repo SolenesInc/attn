@@ -181,6 +181,22 @@ run_release v99.98.97 --dry-run >"$work/red-head.out"
 grep -Fq "accepted main: $reviewed_sha" "$work/red-head.out"
 export FAKE_ACCEPTANCE_RED=
 
+git -C "$work/updater" pull -q --ff-only origin main
+git -C "$work/updater" rm -q VERSION
+git -C "$work/updater" commit -q -m 'chore: a source from before VERSION'
+git -C "$work/updater" push -q origin main
+git -C "$fixture_repo" fetch -q origin main
+git -C "$fixture_repo" merge -q --ff-only origin/main
+git --git-dir="$fixture_origin" update-ref refs/heads/reviewed "$(git -C "$fixture_repo" rev-parse HEAD)"
+run_release v99.98.97 --dry-run >"$work/no-version-head.out"
+grep -Fq "accepted main: $main_sha" "$work/no-version-head.out"
+git -C "$work/updater" revert --no-edit HEAD >/dev/null
+git -C "$work/updater" push -q origin main
+git -C "$fixture_repo" fetch -q origin main
+git -C "$fixture_repo" merge -q --ff-only origin/main
+main_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+git --git-dir="$fixture_origin" update-ref refs/heads/reviewed "$main_sha"
+
 printf '%s\n' newer >"$work/updater/newer.txt"
 git -C "$work/updater" add newer.txt
 git -C "$work/updater" commit -q -m 'fix(release): move main past the reviewed commit'
