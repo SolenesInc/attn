@@ -747,3 +747,40 @@ fn a_home_that_comes_back_with_outposts_off_drops_the_old_rows_for_its_own() {
         assert!(world.daemon.sent_of(cmd).is_empty());
     }
 }
+
+#[test]
+fn a_connection_terminal_stays_out_of_the_queue_and_home_in_either_flow() {
+    for queue in ["true", "false"] {
+        let connection = Session {
+            agent: "shell".into(),
+            command_terminal: Some(true),
+            label: "Connect to studio".into(),
+            ..crate::wire::queue::turn("connection", 5)
+        };
+        let mut state =
+            crate::wire::queue::one_desktop(vec![connection, crate::wire::queue::turn("agent", 5)]);
+        state.settings = Some([("queue_mode_enabled".into(), queue.into())].into());
+        let world = World::start(Daemon::scripted().state(state));
+        let shows = |key: &str| world.screen().find(Target::key(key)).is_some();
+        assert!(
+            shows("home.session.agent"),
+            "queue {queue}: home lost the agent"
+        );
+        if queue == "true" {
+            assert!(shows("queue-turn.agent"), "the agent's turn is missing");
+        }
+        for hidden in [
+            "home.session.connection",
+            "queue-turn.connection",
+            "queue-settled.connection",
+        ] {
+            assert!(!shows(hidden), "queue {queue}: {hidden} shows");
+        }
+        if queue == "false" {
+            assert!(
+                world.runtime_is_at_rest(),
+                "desktop flow has no ages to wake for"
+            );
+        }
+    }
+}

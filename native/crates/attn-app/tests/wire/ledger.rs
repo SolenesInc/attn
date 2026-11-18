@@ -1263,3 +1263,43 @@ fn a_member_row_takes_the_members_name_and_follows_a_rename_without_reading_agai
     );
     assert_eq!(world.daemon.sent_of("session_list").len(), reads);
 }
+
+#[test]
+fn a_remote_row_names_its_outpost_reopens_by_session_and_shows_why_the_outpost_refused() {
+    let mut remote = closed_docs();
+    remote.host = Some("host-linux".into());
+    let mut initial = state(vec![], vec![]);
+    initial.outposts = Some(vec![OutpostInfo {
+        id: "host-linux".into(),
+        name: "Linux studio".into(),
+        destination: "studio:2200".into(),
+        state: "connected".into(),
+        reach: "reachable".into(),
+        ..OutpostInfo::default()
+    }]);
+    let mut world = World::start(ledger_daemon(initial, vec![remote]));
+    refuse_with(
+        &world,
+        None,
+        "Linux studio is unreachable; this needs it now",
+    );
+    open(&mut world);
+    assert!(name(&world, "ledger.row.docs.meta").contains("Linux studio"));
+    assert_eq!(name(&world, "ledger.row.docs.verb"), "Reopen");
+    let before = reads(&world).len();
+
+    click(&mut world, "ledger.row.docs.verb");
+    let asked: Vec<_> = world
+        .daemon
+        .sent_of("session_reopen")
+        .iter()
+        .map(|r| (r["session_id"].clone(), r["action"].clone()))
+        .collect();
+    assert_eq!(asked, [("docs".into(), "reopen".into())]);
+    assert_eq!(
+        name(&world, "ledger.row.docs.note"),
+        "Linux studio is unreachable; this needs it now"
+    );
+    assert_eq!(reads(&world).len(), before + 1);
+    assert!(world.runtime_is_at_rest());
+}
