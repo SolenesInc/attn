@@ -1,0 +1,80 @@
+# CI's job groups and the tracked files none of their jobs read. A group's
+# inputs key hashes every other tracked file, so a path belongs here only when
+# no job in the group can read it. A '!' entry keeps a path that a broader entry
+# leaves out. Files under .github/ are inputs of every group.
+every_group:
+  - 'website/**'
+  - 'docs/internal/**'
+  - '.agents/**'
+  - '.claude/**'
+  - '.codex/**'
+  - '.kass/**'
+  - 'Casks/**'
+  - 'README.md'
+  - 'AGENTS.md'
+  - 'CLAUDE.md'
+  - 'CONTRIBUTING.md'
+  - 'CODE_OF_CONDUCT.md'
+  - 'LICENSE'
+  - 'CHANGELOG.md'
+cli:
+  - 'app/**'
+  - 'native/**'
+  - 'mobile/**'
+  - 'cmd/**'
+  - 'internal/**'
+  - 'pty-host/**'
+  - 'sdk/**'
+  - 'test/**'
+  - 'tools/**'
+  - 'docs/**'
+generated:
+  - 'native/**'
+  - 'pty-host/**'
+  - 'sdk/**'
+  - 'test/**'
+  - 'app/**'
+  - '!app/src/types/**'
+  - 'mobile/**'
+  - '!mobile/src/homeGateway/**'
+daemon:
+  - 'native/**'
+  - 'mobile/**'
+  - 'app/**'
+  - '!app/src/prompts/**'
+  - '!app/src/ghostty/testdata/**'
+frontend:
+  - 'native/**'
+  - 'mobile/**'
+mobile:
+  - 'app/**'
+  - 'native/**'
+  - 'cmd/**'
+  - 'internal/**'
+  - '!internal/cloudlink/testdata/**'
+  - 'cli/**'
+  - 'pty-host/**'
+  - 'sdk/**'
+  - 'test/**'
+  - 'tools/**'
+  - 'docs/**'
+tauri:
+  - 'native/**'
+  - 'mobile/**'
+  - 'sdk/**'
+  - 'app/e2e/**'
+native:
+  - 'mobile/**'
+  - 'sdk/**'
+app_acceptance:
+  - 'mobile/**'
+app_acceptance_tauri:
+  - 'mobile/**'
+  - 'native/**'
+release_preflight:
+  - 'native/**'
+  - 'mobile/**'
+  - 'sdk/**'
+  - 'test/**'
+  - 'app/**'
+  - '!app/src/prompts/**'

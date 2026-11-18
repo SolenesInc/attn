@@ -169,13 +169,14 @@ suite, the Playwright specs and the Linux scenario matrices of both app
 shells, Tauri and native, run in CI on `main` after landing, and so do the
 combinations of changes that landed together. A push runs each job group, such
 as the four `Daemon` jobs, unless the group already passed with the same
-inputs: the files its filter in `.github/path-filters.yml` matches, plus every
-file under `.github/`. When every job of a group passes on `main`, `Acceptance`
+inputs: every tracked file except those `.github/ci-inputs.yml` names as
+unread by any job of the group. A file the list leaves out is a claim that no
+job of the group reads it; a file it misses only makes the group run. When every job of a group passes on `main`, `Acceptance`
 saves a pass record for those inputs in the Actions cache, and later runs carry
 the group instead of running it. `Acceptance` names each carried group and the
 run that passed it. Pull requests read `main`'s pass records and write none.
 CI runs every job nightly, on dispatch, on a release commit and on a
-`release/v*` pull request, so a group that a filter skipped by mistake fails
+`release/v*` pull request, so a group carried past a file it does read fails
 within a day. The macOS jobs run in their own workflow, `CI macOS`, so
 waiting for a macOS runner never holds up Linux's Acceptance. `CI macOS` runs
 each macOS job on a push only when the commits since its last green push run

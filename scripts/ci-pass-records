@@ -6,9 +6,9 @@ usage() {
 usage: ci-pass-records keys
        ci-pass-records passed
 
-keys    prints "<group> <inputs key>" for each group in .github/path-filters.yml.
-        The key hashes the index entries (mode, blob, path) of the files the
-        group's globs match, plus every file under .github/.
+keys    prints "<group> <inputs key>" for each group in .github/ci-inputs.yml.
+        The key hashes the index entries (mode, blob, path) of every tracked
+        file except those the group and every_group leave out.
 passed  prints "<group> <inputs key>" for each group whose CI jobs all
         succeeded. NEEDS_JSON is the Acceptance job's needs; JOB_GROUPS maps
         each gated job to the groups that gate it.
@@ -17,34 +17,45 @@ EOF
 }
 
 root="$(git rev-parse --show-toplevel)"
-filters="$root/.github/path-filters.yml"
+inputs="$root/.github/ci-inputs.yml"
 
-group_globs() {
-  awk -v file="$filters" '
+group_entries() {
+  awk -v file="$inputs" '
     /^[[:space:]]*(#.*)?$/ { next }
-    /^[a-z_]+:$/ { group = substr($0, 1, length($0) - 1); next }
-    /^  - \x27[^\x27]+\x27$/ && group != "" {
+    /^[a-z_]+:$/ { group = substr($0, 1, length($0) - 1); print group "\tgroup"; next }
+    /^  - \x27!?[^\x27!]+\x27$/ && group != "" {
       glob = substr($0, 6, length($0) - 6)
-      if (glob ~ /[][{}()!+@\\]/ || glob ~ /[^\/]\*\*|\*\*[^\/]/) {
-        printf "ci-pass-records: %s: %s uses glob syntax git pathspecs do not match like picomatch\n", file, glob > "/dev/stderr"
+      kind = "unread"
+      if (substr(glob, 1, 1) == "!") { kind = "read"; glob = substr(glob, 2) }
+      if (kind == "unread" && glob ~ /^(\.github(\/|$)|\*\*)/) {
+        printf "ci-pass-records: %s: %s leaves out files under .github/, which every group reads\n", file, glob > "/dev/stderr"
         exit 1
       }
-      print group "\t" glob
+      print group "\t" kind "\t" glob
       next
     }
     { printf "ci-pass-records: %s:%d: cannot read \"%s\"\n", file, NR, $0 > "/dev/stderr"; exit 1 }
-  ' "$filters"
+  ' "$inputs"
 }
 
 keys() {
-  local globs group
-  globs="$(group_globs)"
-  for group in $(cut -f1 <<<"$globs" | uniq); do
-    local pathspecs=(':(glob).github/**')
-    while IFS=$'\t' read -r _ glob; do
-      pathspecs+=(":(glob)$glob")
-    done < <(awk -F'\t' -v g="$group" '$1 == g' <<<"$globs")
-    printf '%s %s\n' "$group" "$(git -C "$root" ls-files -s -- "${pathspecs[@]}" | sha256sum | cut -d' ' -f1)"
+  local entries group
+  entries="$(group_entries)"
+  for group in $(awk -F'\t' '$2 == "group" && $1 != "every_group" { print $1 }' <<<"$entries"); do
+    local unread=() kept=()
+    while IFS=$'\t' read -r _ kind glob; do
+      if [ "$kind" = unread ]; then
+        unread+=(":(exclude,glob)$glob")
+      else
+        kept+=(":(glob)$glob")
+      fi
+    done < <(awk -F'\t' -v g="$group" '($1 == g || $1 == "every_group") && $2 != "group"' <<<"$entries")
+    printf '%s %s\n' "$group" "$(
+      {
+        git -C "$root" ls-files -s -- . "${unread[@]}"
+        if [ "${#kept[@]}" -gt 0 ]; then git -C "$root" ls-files -s -- "${kept[@]}"; fi
+      } | sha256sum | cut -d' ' -f1
+    )"
   done
 }
 

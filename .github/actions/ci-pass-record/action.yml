@@ -7,7 +7,7 @@ description: >-
   unless it already exists.
 inputs:
   group:
-    description: The job group, as named in .github/path-filters.yml.
+    description: The job group, as named in .github/ci-inputs.yml.
     required: true
   key:
     description: The group's inputs key, from scripts/ci-pass-records.

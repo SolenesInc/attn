@@ -112,8 +112,8 @@ skips the macOS jobs that the commits since its last green push run cannot
 break, so a failed macOS job also runs again on every push until it passes.
 The nightly runs of both workflows, and their runs on a release commit, run
 every job. When a full run fails in a group that push runs carried, and the
-failure is not a flake, the group's filter in `.github/path-filters.yml` misses
-one of its inputs: fix the break, and add the input to the filter. A green push run after a red nightly
+failure is not a flake, `.github/ci-inputs.yml` leaves out a file the group
+reads: fix the break, and remove that file from the group's list. A green push run after a red nightly
 run does not clear it: only the next green nightly run does, so treat a red
 nightly run like a red push run, and find its culprit among the commits since
 the last green nightly run.
