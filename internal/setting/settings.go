@@ -112,7 +112,7 @@ var (
 	CodexExecutable              = add(&Setting{Key: "codex_executable", Class: Machine, Kind: Checked, Description: "Executable for Codex. Empty finds the default executable on PATH."})
 	ModelTierOverrides           = add(&Setting{Key: "model_tier_overrides", Class: Home, Kind: Checked, Description: "Models for each intelligence tier as a JSON object. Empty uses harness defaults."})
 	ProjectsDirectory            = add(&Setting{Key: "projects_directory", Class: Home, Kind: Checked, Default: "~/projects", Description: "Folder used to discover projects. Absolute or ~/ path; ~/projects by default."})
-	UIScale                      = add(&Setting{Key: "uiScale", Class: Home, Kind: Checked, Description: "App interface scale, from 0.5 to 2.0."})
+	UIScale                      = add(&Setting{Key: "uiScale", Class: Home, Kind: Checked, Default: "1", Description: "App interface scale, from 0.5 to 2.0. 1 by default."})
 	GardenScale                  = add(&Setting{Key: "gardenScale", Class: Home, Kind: Checked, Description: "Garden text scale, from 0.5 to 2.0. Empty uses the app scale."})
 	EditorExecutable             = add(&Setting{Key: "editor_executable", Class: Home, Kind: Checked, Description: "Command to open files in your editor. Empty uses the default editor."})
 	NewSessionAgent              = add(&Setting{Key: "new_session_agent", Class: Home, Kind: Checked, Description: "Harness selected for new sessions. Empty uses the default harness."})

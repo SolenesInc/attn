@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
-import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp } from './common.mjs';
+import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp, queueDaemonSettingRestore } from './common.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -223,6 +223,7 @@ try {
     await client.quitApp();
     runAttn(['daemon', 'stop']);
     await launchFreshAppAndConnect(client, observer, { agentExecutables: { codex: MOCK_AGENT_EXECUTABLE, claude: MOCK_AGENT_EXECUTABLE } });
+    queueDaemonSettingRestore(observer, 'uiScale');
     const initialBinding = (await state()).binding;
     assert.ok(initialBinding === '' || initialBinding === testBinding, 'This named instance must be Off or retain its own test binding');
     runner.writeJson('initial-binding.json', { binding: initialBinding, testBinding });

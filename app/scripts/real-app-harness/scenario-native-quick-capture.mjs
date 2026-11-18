@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
-import { parseCommonArgs, launchFreshNativeAppAndConnect, printCommonHelp } from './common.mjs';
+import { parseCommonArgs, launchFreshNativeAppAndConnect, printCommonHelp, queueDaemonSettingRestore } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -251,6 +251,7 @@ try {
     await client.quitApp();
     runAttn(['daemon', 'stop']);
     await launchFreshNativeAppAndConnect(client, observer);
+    queueDaemonSettingRestore(observer, 'uiScale');
     await panel.waitForManifest(20_000);
     await panel.waitForReady(20_000);
     const previousCodex = runAttn(['settings', 'get', 'codex_executable']).trim();

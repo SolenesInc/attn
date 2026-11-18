@@ -26,6 +26,8 @@ func TestTheDaemonAcceptsOnlyValidSettingValues(t *testing.T) {
 		{"claude_executable", "not-a-real-binary-123", false},
 		{"reviewer_model", "", true},
 		{"reviewer_model", "claude-sonnet-4-6", true},
+		{"uiScale", "", true},
+		{"uiScale", "3.0", false},
 		{"gardenScale", "1.2", true},
 		{"gardenScale", "", true},
 		{"gardenScale", "3.0", false},
