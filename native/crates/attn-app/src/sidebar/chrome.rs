@@ -43,6 +43,8 @@ pub struct Extras {
     pub waiting: usize,
     /// The window's desktop is one of them.
     pub selected: bool,
+    /// They include slotted desktops a crowded bar has no room for.
+    pub crowded: bool,
 }
 
 /// A chip for every desktop, in the sidebar's order. `waiting_on` names a desktop once for
@@ -85,15 +87,18 @@ pub fn chips<'a>(state: &'a State, waiting_on: impl IntoIterator<Item = &'a str>
 }
 
 /// The chips of the desktops that have a shortcut slot, in slot order, and the desktops
-/// that have none, as the queue's chips show them.
-fn slotted(chips: Vec<Chip>) -> (Vec<Chip>, Extras) {
-    let (mut slotted, rest): (Vec<Chip>, Vec<Chip>) =
-        chips.into_iter().partition(|c| c.slot.is_some());
+/// that have none, as the queue's chips show them. A crowded bar slots only the selected
+/// desktop.
+fn slotted(chips: Vec<Chip>, crowded: bool) -> (Vec<Chip>, Extras) {
+    let (mut slotted, rest): (Vec<Chip>, Vec<Chip>) = chips
+        .into_iter()
+        .partition(|c| c.slot.is_some() && (!crowded || c.selected));
     slotted.sort_by_key(|c| c.slot);
     let extras = Extras {
         count: rest.len(),
         waiting: rest.iter().map(|c| c.waiting).sum(),
         selected: rest.iter().any(|c| c.selected),
+        crowded,
     };
     (slotted, extras)
 }
@@ -258,6 +263,7 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
         count,
         waiting,
         selected,
+        crowded,
     } = extras;
     (count > 0).then(|| {
         queue_chip_face(look, selected, false, t)
@@ -265,8 +271,9 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
             .role("button")
             .focusable(true)
             .label(format!(
-                "{count} more desktop{} without a shortcut{}",
+                "{count} more desktop{}{}{}",
                 if count == 1 { "" } else { "s" },
+                if crowded { "" } else { " without a shortcut" },
                 waiting_words(waiting, look)
             ))
             .px(if look == Look::Strip { 5.0 } else { 6.0 })
@@ -313,7 +320,7 @@ fn overview_chip(keys: Option<String>, t: &Tokens) -> El {
 pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
     let all = chips(state, turns_on(bands));
     let current = all.iter().find(|c| c.selected).map(|c| c.title.clone());
-    let (chips, extras) = slotted(all);
+    let (chips, extras) = slotted(all, false);
     let overview_keys = crate::palette::label_of(state, &crate::Action::DesktopOverview);
     col()
         .key("queue.strip")
@@ -689,9 +696,11 @@ fn title_button(button: GlyphButton, t: &Tokens) -> El {
         .hover(t.bg_elevated)
 }
 
-/// Queue flow with the sidebar collapsed: the waiting pill in the title bar, as the Tauri
-/// app's `.queue-bar-pill`: a dot, the count, then the agents whose turns wait.
-pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
+/// Queue flow with the sidebar collapsed: the title bar's middle as the Tauri app's `.queue-bar`,
+/// with the waiting pill, the critical notification, the tile shelf, the runs chip and the
+/// desktop chips. The pill is the Tauri app's `.queue-bar-pill`: a dot, the count, then the
+/// agents whose turns wait.
+pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens) -> El {
     let owed = bands.owed();
     let crumbs: Vec<String> = bands
         .turns
@@ -781,22 +790,29 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                 .font(rune::TextStyle::new(9.0, 400.0))
                 .color(t.text_dimmed),
         );
+    let crowded = super::crowding::crowded(state);
     row()
         .key("queue-bar")
         .role("group")
         .label("Queue bar")
-        .shrink()
+        .grow(1.0)
+        .min_w(0.0)
         .h_full()
         .items_center()
         .gap(6.0)
+        .on_layout(super::crowding::bar_laid_out)
         .child(pill)
-        .children(runs_chip(state, t))
+        .children(
+            crate::notifications::critical_strip(&state.facts.notifications, t).map(|s| s.w(240.0)),
+        )
+        .child(shelf)
+        .children((!crowded).then(|| runs_chip(state, t)).flatten())
+        .child(desktops(state, bands, crowded, t))
 }
 
-/// The queue bar's desktop chips, which the title bar holds after the tile shelf, as the
-/// Tauri app's `.queue-bar-desktops`.
-pub(crate) fn queue_bar_desktops(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
-    let (chips, extras) = slotted(chips(state, turns_on(bands)));
+/// The queue bar's desktop chips, as the Tauri app's `.queue-bar-desktops`.
+fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
+    let (chips, extras) = slotted(chips(state, turns_on(bands)), crowded);
     row()
         .key("queue-bar.desktops")
         .role("group")
@@ -804,6 +820,9 @@ pub(crate) fn queue_bar_desktops(state: &State, bands: &Bands<'_>, t: &Tokens) -
         .h_full()
         .items_center()
         .gap(4.0)
+        .on_layout(move |state: &mut State, rect| {
+            super::crowding::chips_laid_out(state, rect, crowded)
+        })
         .children(chips.iter().map(|c| {
             let drop = drop_on(state, &c.desktop);
             chip("queue-bar.desktop", c, Look::Bar, drop, t)

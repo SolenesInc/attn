@@ -2133,3 +2133,151 @@ fn hidden_agents_stay_out_of_the_queue_with_the_setting_off() {
     assert!(world.screen().find(Target::key("queue-turn.s1")).is_some());
     assert!(world.screen().find(Target::key("queue-turn.h1")).is_none());
 }
+
+fn crowding_desktops(count: usize) -> InitialStateMessage {
+    let run = Session {
+        automation: Some(AutomationProvenance {
+            definition_id: 1,
+            definition_name: "Review".into(),
+            run_id: "r1".into(),
+            trigger_type: "manual".into(),
+            ..AutomationProvenance::default()
+        }),
+        ..turn("r1", 9)
+    };
+    let long = Session {
+        label: "rework the crowded queue bar".into(),
+        ..turn("t1", 5)
+    };
+    let mut message = queue(one_desktop(vec![long, run]));
+    message
+        .desktops
+        .as_mut()
+        .unwrap()
+        .extend((2..=count).map(|n| {
+            let id = format!("d{n}");
+            let pane = pane(&id, &format!("p{n}"), &format!("t{n}"));
+            slotted(desktop(&id, &format!("{n:02}"), "", vec![pane]), n as i64)
+        }));
+    message
+        .sessions
+        .as_mut()
+        .unwrap()
+        .extend((2..=count).map(|n| turn(&format!("t{n}"), 5)));
+    message
+}
+
+/// The queue bar's chips by key, left to right.
+fn bar_chips(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .children(Target::key("queue-bar.desktops"))
+        .into_iter()
+        .filter_map(|n| n.key)
+        .filter(|k| k.starts_with("queue-bar.desktop"))
+        .collect()
+}
+
+fn every_bar_chip(count: usize) -> Vec<String> {
+    (1..=count)
+        .map(|n| format!("queue-bar.desktop.{n}"))
+        .collect()
+}
+
+fn arranged_on(world: &mut World, message: &InitialStateMessage, current: &str, count: usize) {
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            current_desktop_id: current.into(),
+            ..message.profiles.clone().unwrap().remove(0)
+        },
+        desktops: message.desktops.clone().unwrap()[..count].to_vec(),
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+}
+
+/// Wide enough for every chip of eight desktops, the runs chip and the waiting pill.
+const ROOMY: (f32, f32) = (1400.0, 900.0);
+/// Too narrow for the chips of eight desktops beside the waiting pill.
+const CROWDED: (f32, f32) = (800.0, 900.0);
+
+/// The queue bar crowded by eight desktops, on desktop 1 where its tiles leave the shelf
+/// beside the chips, or at Home.
+fn crowded_bar(on_desktop: bool) -> (World, InitialStateMessage) {
+    let message = crowding_desktops(8);
+    let mut world = World::start(Daemon::scripted().state(message.clone()));
+    if on_desktop {
+        world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+    }
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    world.resize(ROOMY);
+    assert_eq!(bar_chips(&world), every_bar_chip(8));
+    world.resize(CROWDED);
+    (world, message)
+}
+
+#[test]
+fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_extras_chip() {
+    let (mut world, message) = crowded_bar(true);
+    let has = |world: &World, key: &str| world.screen().find(Target::key(key)).is_some();
+
+    assert_eq!(
+        bar_chips(&world),
+        ["queue-bar.desktop.1", "queue-bar.desktop-extras"]
+    );
+    assert_eq!(
+        name(&world, "queue-bar.desktop-extras"),
+        "7 more desktops, 7 turns waiting"
+    );
+    assert!(
+        !has(&world, "queue-bar.runs"),
+        "a crowded bar leaves out the runs chip"
+    );
+    let [x, _, w, _] = world
+        .screen()
+        .bounds(Target::key("queue-bar.desktop-extras"))
+        .unwrap();
+    let [toolbar, ..] = world
+        .screen()
+        .bounds(Target::key("titlebar.right"))
+        .unwrap();
+    assert!(x + w <= toolbar, "the extras chip stays off the toolbar");
+    let [_, _, pill, _] = world
+        .screen()
+        .bounds(Target::key("queue-bar.pill"))
+        .unwrap();
+    assert!(pill >= 124.0, "the waiting pill keeps its width: {pill}");
+    let bounds = |key: &str| world.screen().bounds(Target::key(key)).unwrap();
+    let [cap_x, _, cap_w, _] = bounds("shelf.cap.after");
+    let [current, ..] = bounds("queue-bar.desktop.1");
+    assert!(
+        cap_x + cap_w <= current,
+        "the shelf's cap stops before the desktop chips"
+    );
+
+    arranged_on(&mut world, &message, "d3", 8);
+    assert_eq!(
+        bar_chips(&world),
+        ["queue-bar.desktop.3", "queue-bar.desktop-extras"]
+    );
+
+    world.gesture(|app| app.click(Target::key("queue-bar.desktop-extras")));
+    assert!(has(&world, "overview.dialog"));
+    world.gesture(|app| app.key(chord(Action::DesktopOverview)));
+
+    world.resize(ROOMY);
+    assert_eq!(bar_chips(&world), every_bar_chip(8));
+    assert!(has(&world, "queue-bar.runs"));
+}
+
+#[test]
+fn a_crowded_queue_bar_shows_every_chip_again_when_its_desktops_change_and_fit_at_the_same_width() {
+    let (mut world, message) = crowded_bar(false);
+    assert_eq!(
+        bar_chips(&world),
+        ["queue-bar.desktop.1", "queue-bar.desktop-extras"]
+    );
+
+    arranged_on(&mut world, &message, "d1", 3);
+    assert_eq!(bar_chips(&world), every_bar_chip(3));
+}

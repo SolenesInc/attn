@@ -2628,14 +2628,22 @@ fn queue_agent_list(dark: bool) {
 
 /// The queue flow with turns owed, as the audit seeded it: two agents waiting, the first with
 /// an open ask, the first three desktops on shortcut slots, and the crew.
-fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool) -> World {
+fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool, slots: usize) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.crew = Some(crew());
     if let Some(settings) = state.settings.as_mut() {
         settings.insert("queue_mode_enabled".to_owned(), "true".to_owned());
     }
-    for (n, desktop) in state.desktops.iter_mut().flatten().enumerate() {
-        desktop.shortcut_slot = (n < 3).then_some(n as i64 + 1);
+    let desktops = state.desktops.get_or_insert_default();
+    for n in desktops.len()..slots {
+        let id = format!("work/desktop_{}", n + 1);
+        let mut empty = desktop(&id, &format!("9{n}"), Value::Null, vec![]);
+        empty.tree_json = String::new();
+        empty.name = format!("Desktop {}", n + 1);
+        desktops.push(empty);
+    }
+    for (n, desktop) in desktops.iter_mut().enumerate() {
+        desktop.shortcut_slot = (n < slots).then_some(n as i64 + 1);
     }
     for (session, opened) in state
         .sessions
@@ -2669,7 +2677,7 @@ fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool) -> World {
 
 /// The seeded queue at Home: the waiting card, the ask on a row, the desktop strip.
 fn queue_seeded_home(dark: bool) {
-    let mut world = queue_seeded(dark, true, false);
+    let mut world = queue_seeded(dark, true, false, 3);
     snap(&mut world, "queue-seeded-home", dark);
 }
 
@@ -2706,14 +2714,29 @@ fn queue_runs(dark: bool) {
 
 /// The seeded queue with the asking agent's desktop open: its row in view, its desktop current.
 fn queue_seeded_agent(dark: bool) {
-    let mut world = queue_seeded(dark, false, false);
+    let mut world = queue_seeded(dark, false, false, 3);
     snap(&mut world, "queue-seeded-agent", dark);
 }
 
 /// The seeded queue with the sidebar collapsed: the queue bar in the title bar.
 fn queue_bar(dark: bool) {
-    let mut world = queue_seeded(dark, false, true);
+    let mut world = queue_seeded(dark, false, true, 3);
     snap(&mut world, "queue-bar", dark);
+}
+
+/// The queue bar in the narrowest window, too narrow for a chip per desktop: the window's
+/// desktop's chip and the rest gathered into the extras chip.
+fn queue_bar_crowded(dark: bool) {
+    let mut world = queue_seeded(dark, false, true, 11);
+    world.resize((800.0, SIZE.1));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-bar.desktop.2"))
+            .is_none(),
+        "the bar crowds"
+    );
+    snap(&mut world, "queue-bar-crowded", dark);
 }
 
 /// The desktop flow with the sidebar collapsed to its rail.
@@ -3304,6 +3327,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         queue_runs(dark);
         queue_seeded_agent(dark);
         queue_bar(dark);
+        queue_bar_crowded(dark);
         rail(dark);
         session_seeds(dark);
         markdown_selection(dark);

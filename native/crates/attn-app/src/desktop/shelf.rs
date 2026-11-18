@@ -192,6 +192,8 @@ pub(crate) struct Shelf {
     before: Vec<Chip>,
     screen: Vec<Chip>,
     after: Vec<Chip>,
+    /// The width of the live dots and the caps, under which the shelf overflows its slot.
+    least_px: f32,
     /// How many of `before`, from its start, wait in the before cap.
     capped_before: usize,
     /// How many of `after`, from its start, show as chips.
@@ -244,6 +246,7 @@ impl Shelf {
         Some(Shelf {
             desktop: desktop.id.clone(),
             active: desktop.active_pane_id.clone(),
+            least_px: live + CAPS_PX,
             capped_before: before.len() - left,
             shown_after: right,
             before,
@@ -314,8 +317,8 @@ impl Shelf {
     }
 }
 
-pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    let Some(shelf) = Shelf::of(state) else {
+fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
+    let Some(shelf) = shelf else {
         return holding(state, Owner::Shelf).then(owner);
     };
     let desk = &state.window.desk;
@@ -402,12 +405,14 @@ fn record(state: &mut State, key: &str, rect: [f32; 4], tx: &mut Tx) {
     rects.insert(key.to_owned(), rect);
 }
 
-/// The title bar's middle, which the shelf sits in and measures for its chips.
+/// The title bar's middle, which the shelf sits in and measures for its chips. It keeps room
+/// for the shelf's live dots and caps, so what follows it moves aside.
 pub(crate) fn slot(state: &State, t: &Tokens) -> El {
+    let shelf = Shelf::of(state);
     row()
         .key("shelf.slot")
         .grow(1.0)
-        .min_w(0.0)
+        .min_w(shelf.as_ref().map_or(0.0, |s| s.least_px))
         .h_full()
         .items_center()
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
@@ -417,7 +422,7 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
             }
             state.window.desk.shelf_px = Some(w);
         })
-        .children(view(state, t))
+        .children(view(state, shelf, t))
 }
 
 /// A column's chip. The pointer resting on it peeks at the tile it brings, or at the tile whose

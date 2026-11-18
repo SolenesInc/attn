@@ -69,6 +69,7 @@ pub struct Window {
     pub(crate) countdowns: std::collections::HashMap<String, crate::sidebar::Countdown>,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
     pub(crate) bar_peek: crate::sidebar::bar_peek::Hover,
+    pub(crate) queue_bar_room: crate::sidebar::crowding::Room,
     pub(crate) launching: crate::picker::Launching,
     pub(crate) closing_desktop: Option<crate::desktop::Closing>,
     /// Links opened before the current desktop arrived, in the order they came.
@@ -537,6 +538,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
                 .into_iter()
                 .flatten(),
         );
+    let shelf = crate::desktop::shelf_slot(state, t);
     let middle = row()
         .key("titlebar.middle")
         .grow(1.0)
@@ -544,18 +546,11 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .h_full()
         .px(6.0)
         .items_center()
-        .gap(space::S2)
-        .children(
-            connected
-                .then(|| crate::sidebar::title_middle(state, t))
-                .flatten(),
-        )
-        .child(crate::desktop::shelf_slot(state, t))
-        .children(
-            connected
-                .then(|| crate::sidebar::title_desktops(state, t))
-                .flatten(),
-        );
+        .child(if connected {
+            crate::sidebar::title_middle(state, shelf, t)
+        } else {
+            shelf
+        });
     let right = row()
         .key("titlebar.right")
         .items_center()

@@ -71,7 +71,7 @@ fn fixed_keys(anchor: &str) -> &'static [&'static str] {
             "rail.desktops",
             "queue-bar.desktops",
         ],
-        "queue" => &["sidebar.queue", "queue-bar"],
+        "queue" => &["sidebar.queue", "queue-bar.pill"],
         "settings-button" => &["home.settings"],
         _ => &[],
     }

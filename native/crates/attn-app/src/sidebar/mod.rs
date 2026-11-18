@@ -2,6 +2,7 @@ pub(crate) mod actions;
 pub(crate) mod bar_peek;
 mod chrome;
 pub(crate) mod crew;
+pub(crate) mod crowding;
 pub(crate) mod dock;
 mod harness_icon;
 pub(crate) mod model;
@@ -73,31 +74,15 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     )
 }
 
-/// What the title bar's middle holds for the sidebar: the queue bar, in queue flow with the
-/// sidebar collapsed.
-pub(crate) fn title_middle(state: &State, t: &Tokens) -> Option<El> {
-    (actions::queue_flow(state) && state.window.sidebar_hidden).then(|| {
+/// What the title bar's middle holds around the tile shelf: the queue bar, in queue flow with
+/// the sidebar collapsed, or only the shelf.
+pub(crate) fn title_middle(state: &State, shelf: El, t: &Tokens) -> El {
+    if actions::queue_flow(state) && state.window.sidebar_hidden {
         let bands = queue::bands(&state.facts, state.window.now_ms);
-        row()
-            .shrink()
-            .h_full()
-            .items_center()
-            .gap(space::S2)
-            .children(
-                crate::notifications::critical_strip(&state.facts.notifications, t)
-                    .map(|s| s.w(240.0)),
-            )
-            .child(chrome::queue_bar(state, &bands, t))
-    })
-}
-
-/// What the title bar holds after the tile shelf for the sidebar: the queue bar's desktop
-/// chips, in queue flow with the sidebar collapsed.
-pub(crate) fn title_desktops(state: &State, t: &Tokens) -> Option<El> {
-    (actions::queue_flow(state) && state.window.sidebar_hidden).then(|| {
-        let bands = queue::bands(&state.facts, state.window.now_ms);
-        chrome::queue_bar_desktops(state, &bands, t)
-    })
+        chrome::queue_bar(state, &bands, shelf, t)
+    } else {
+        shelf
+    }
 }
 
 /// Runs the actions the sidebar, the queue and home own; false for any other.
