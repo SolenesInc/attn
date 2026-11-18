@@ -34,6 +34,12 @@ raw-window-handle = "0.6"
 rusqlite = "0.42"
 tempfile = "3"
 
+# Not used directly: holds zbus (Rune's accessibility bus) below blocking 1.7.0,
+# whose idle pool threads never exit and wake every 500 ms
+# (https://github.com/smol-rs/blocking/issues/83). Lift once a release fixes it.
+[target.'cfg(target_os = "linux")'.dependencies]
+blocking = ">=1.6.2, <1.7"
+
 [dev-dependencies]
 attn-testkit = { path = "../attn-testkit" }
 sha2 = "0.10"
