@@ -67,11 +67,18 @@ impl Target {
     /// ancestor still moves.
     pub fn find<S>(&self, rt: &Runtime<S>) -> Option<Found> {
         let elements = rt.elements();
-        let mut read: HashMap<String, AccessibleElement> = rt
-            .accessible_elements()
-            .into_iter()
-            .map(|a| (a.path.clone(), a))
-            .collect();
+        let reads_tree = matches!(
+            self,
+            Target::Role { .. } | Target::Key { name: Some(_), .. }
+        );
+        let mut read: HashMap<String, AccessibleElement> = if reads_tree {
+            rt.accessible_elements()
+                .into_iter()
+                .map(|a| (a.path.clone(), a))
+                .collect()
+        } else {
+            HashMap::new()
+        };
         let matching: Vec<usize> = (0..elements.len())
             .filter(|&i| {
                 !elements[i].exiting && self.matches(&elements[i], read.get(&elements[i].path))
@@ -184,7 +191,7 @@ impl Found {
     /// A part of a text has no box of its own, and its visible part is already clipped to the
     /// text's.
     pub(crate) fn drawn_at<S>(&self, rt: &Runtime<S>, (x, y): (f32, f32)) -> bool {
-        self.drawn_by != self.path || rt.contains(self.key.as_deref().unwrap_or(&self.path), x, y)
+        self.drawn_by != self.path || rt.contains(&self.path, x, y)
     }
 
     /// The point `at` (fractions of the box, from its top left) inside the part of it its

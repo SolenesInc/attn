@@ -522,4 +522,40 @@ mod tests {
         assert_eq!(receipt["target"]["role"], "list-box-option", "{receipt}");
         assert!(*rt.state(), "the option that shows was pressed");
     }
+
+    #[test]
+    fn a_press_by_a_key_two_elements_share_lands_on_the_one_that_shows() {
+        fn twice(_: &bool, _: &mut Cx<bool>) -> El {
+            col()
+                .child(
+                    col()
+                        .h(20.0)
+                        .scroll(ScrollSpec {
+                            stick_bottom: false,
+                        })
+                        .child(col().h(40.0))
+                        .child(el().key("save").w(40.0).h(20.0).on_press(|_: &mut bool| {})),
+                )
+                .child(
+                    el().key("save")
+                        .w(40.0)
+                        .h(20.0)
+                        .on_press(|saved: &mut bool| *saved = true),
+                )
+        }
+        let mut rt = Runtime::new(false, twice, (300.0, 200.0), Env::default());
+        rt.frame(0.0);
+
+        let Attempt::Done(receipt) = act(
+            &mut rt,
+            &Hooksless,
+            "press",
+            &json!({"target": {"key": "save"}}),
+        ) else {
+            panic!("the press did not land");
+        };
+        rt.frame(0.016);
+        assert_eq!(receipt["matched"], true, "{receipt}");
+        assert!(*rt.state(), "the save that shows was pressed");
+    }
 }
