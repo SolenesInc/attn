@@ -576,7 +576,7 @@ fn hash(text: &str) -> u64 {
 /// card.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn body(
-    (tile, view, title, padding): (&str, &str, &str, f32),
+    (tile, view, title, padding, held): (&str, &str, &str, f32, bool),
     (source, bundle, revision): (&str, &ReviewBundle, u64),
     readings: &crate::markdown::Readings,
     (document, pictures, pictured): (
@@ -814,6 +814,7 @@ pub(crate) fn body(
         .key(view)
         .role("document")
         .label(title)
+        .holds_keys(held)
         .min_h(0.0)
         .scroll(ScrollSpec {
             stick_bottom: false,

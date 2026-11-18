@@ -1310,3 +1310,30 @@ fn a_wide_document_tile_fills_with_its_card_while_prose_keeps_its_reading_measur
         );
     }
 }
+
+#[test]
+fn a_screen_reader_is_on_the_terminal_or_document_that_holds_the_keyboard() {
+    let mut world = start();
+    world.daemon.emit(content("# Plan\n\nFirst step."));
+    world.settle();
+    let focused = |world: &World| {
+        let node = world.screen().focused()?;
+        Some((node.key?, node.name?))
+    };
+
+    world.gesture(|app| app.click(Target::key("terminal.r-a")));
+    assert_eq!(
+        focused(&world),
+        Some(("terminal.r-a".to_owned(), "Agent a".to_owned()))
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.document")));
+    assert_eq!(
+        focused(&world),
+        Some(("tile.m.document".to_owned(), "Plan".to_owned()))
+    );
+    world.gesture(|app| app.press("mod+k"));
+    assert_eq!(
+        focused(&world).map(|(key, _)| key).as_deref(),
+        Some("palette.field")
+    );
+}

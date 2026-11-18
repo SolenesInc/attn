@@ -62,7 +62,7 @@ fn card_fit(area: Option<u32>, widest: f32) -> (f32, Option<f32>) {
 /// The body of the document tile `tile`, opened for `session`, from what the daemon last sent
 /// for it. `outposts` names the outpost a document is on.
 pub(crate) fn body(
-    tile: &str,
+    (tile, held): (&str, bool),
     title: &str,
     session: Option<&str>,
     content: Option<&attn_client::TileContent>,
@@ -116,6 +116,7 @@ pub(crate) fn body(
             .key(view.clone())
             .role("document")
             .label(title)
+            .holds_keys(held)
             .w_full()
             .grow(1.0)
             .min_h(0.0)
@@ -186,7 +187,7 @@ pub(crate) fn body(
         let card = crate::review::card_key(tile);
         let marking = annotating::in_document(readings, tile, &card, 0.0, t);
         return crate::review::body(
-            (tile, &view, title, padding),
+            (tile, &view, title, padding, held),
             (&content.content, bundle, *revision),
             readings,
             (

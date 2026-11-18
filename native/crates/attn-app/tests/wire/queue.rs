@@ -1810,7 +1810,11 @@ fn opening_an_agent_from_its_row_hands_the_keyboard_to_its_terminal() {
         })
         .collect();
     assert_eq!(typed, [("r-b".to_owned(), "x".to_owned())]);
-    assert_eq!(reached(&world), None, "the list lets go of the keyboard");
+    assert_eq!(
+        reached(&world).as_deref(),
+        Some("terminal.r-b"),
+        "the list lets go of the keyboard"
+    );
 }
 
 #[test]

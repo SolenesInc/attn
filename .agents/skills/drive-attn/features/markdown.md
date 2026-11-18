@@ -144,7 +144,7 @@ Known differences from the Tauri app: H5 and H6 draw as H4, `console` and `tsp` 
 - **Performance and idle cost**: each open markdown tile keeps checking its file while it is open, so tiles nobody reads still cost a little. Close them. attn refuses files over 1 MiB and names the size and the limit. Large Mermaid diagrams scroll instead of shrinking (`app/e2e/mermaid-diagram.spec.ts`). A review reader colors each stop's file once after it opens, one file at a time, and keeps the colors of the files it has shown while their content is unchanged, up to 25,000 lines, so a file opened again is colored at once.
 - **Harnesses**: every harness opens files with the same `attn open`.
 - **Keyboard and native input**: ⌘P opens the opener from anywhere except a focused editor tile. In the opener, use the arrow keys, Enter and Escape. ⌘⇧↩ focuses the active document and Escape returns.
-- **Accessibility**: in the native app the review search field names its picked result as its active descendant, so VoiceOver reads each result as ↑ and ↓ move. The opener's field does the same for the highlighted file. The review's prose parts are groups, not buttons: a press still places the cursor, and the document names the cursor's part as its active descendant.
+- **Accessibility**: in the native app the review search field names its picked result as its active descendant, so VoiceOver reads each result as ↑ and ↓ move. The opener's field does the same for the highlighted file. The review's prose parts are groups, not buttons: a press still places the cursor, and the document names the cursor's part as its active descendant. While a document or a review holds the keyboard, it is the accessibility focus, so VoiceOver names it and follows its cursor.
 
 ## Tests
 

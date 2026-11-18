@@ -782,7 +782,7 @@ fn a_press_on_an_agent_row_outside_the_first_setup_gives_that_agent_the_keyboard
     world.gesture(|app| app.type_text("x"));
 
     assert!(!shows(&world, SETUP));
-    assert_eq!(focused(&world), None);
+    assert_eq!(focused(&world).as_deref(), Some("terminal.r-shop"));
     let typed: Vec<_> = sent(&world, "pty_input")
         .iter()
         .map(|input| (input["id"].clone(), input["data"].clone()))

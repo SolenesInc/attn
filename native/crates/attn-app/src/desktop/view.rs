@@ -957,6 +957,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 || cx.terminals.pointing_mark(&pane.runtime_id);
             let slot = terminal_slot(
                 (&pane.runtime_id, &pane.session_id),
+                (&title, held),
                 holder.clone(),
                 caret,
                 pointing_link,
@@ -1045,7 +1046,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 tile: leaf.id.clone(),
             };
             crate::markdown::body(
-                &leaf.id,
+                (&leaf.id, held),
                 &title,
                 session.as_deref(),
                 cx.contents.get(&key),
@@ -1956,6 +1957,7 @@ fn ime_caret(terminals: &Terminals, runtime_id: &str, theme: &TerminalColors) ->
 /// `caret`.
 fn terminal_slot(
     (runtime_id, session): (&str, &str),
+    (title, held): (&str, bool),
     tile: Holder,
     caret: Option<El>,
     pointing_link: bool,
@@ -1966,6 +1968,9 @@ fn terminal_slot(
     let (moved_over, left) = (session.to_owned(), session.to_owned());
     let slot = el()
         .key(format!("terminal.{runtime_id}"))
+        .role("group")
+        .label(title.to_owned())
+        .holds_keys(held)
         .w_full()
         .grow(1.0)
         .min_h(0.0)

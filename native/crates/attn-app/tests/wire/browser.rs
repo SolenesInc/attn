@@ -1308,7 +1308,10 @@ fn a_press_on_a_control_in_another_tile_takes_the_keys_off_the_address_field() {
     world.gesture(|app| app.click(Target::key("tile.a.id")));
     world.gesture(|app| app.type_text("zz"));
 
-    assert_eq!(world.screen().focused().and_then(|n| n.key), None);
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("terminal.r-a")
+    );
     assert_eq!(address(&world), START);
     assert_eq!(
         world.automate("state", json!({"of": "window"})).unwrap()["keyboard"]["pane"],
