@@ -354,6 +354,9 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
         .on_edit(move |state: &mut State| interval_edit(state, part))
         .on_change(intervals_typed)
         .on_submit(|state: &mut State, tx: &mut Tx| autosave::commit(state, ACTIVITY_INTERVALS, tx))
+        .on_blur(|state: &mut State, tx: &mut Tx| {
+            autosave::commit_on_leave(state, ACTIVITY_INTERVALS, tx)
+        })
         .width(None)
         .trailing(arrows(&key, t, move |state, up, tx| {
             let edit = interval_edit(state, part);

@@ -37,8 +37,6 @@ pub(crate) struct Plugins {
     finishing: Option<Option<String>>,
     /// Each plugin whose priority just saved, and until when its Saved mark shows.
     saved: BTreeMap<String, f64>,
-    /// The plugin whose priority field the focus was in at the last frame.
-    editing: Option<String>,
 }
 
 fn panel(state: &mut State) -> &mut Plugins {
@@ -224,28 +222,12 @@ fn priority_key(name: &str) -> String {
     format!("{PRIORITY_PREFIX}{name}{PRIORITY_SUFFIX}")
 }
 
-/// Before each frame: commits the priority field the focus just left, and lets Saved marks
-/// go; whether one went.
-pub(super) fn poll(state: &mut State, focused: Option<&str>, now: f64, tx: &mut Tx) -> bool {
-    let editing = focused
-        .and_then(|key| {
-            key.strip_prefix(PRIORITY_PREFIX)?
-                .strip_suffix(PRIORITY_SUFFIX)
-        })
-        .map(str::to_owned);
+/// Before each frame: lets Saved marks go; whether one went.
+pub(super) fn poll(state: &mut State, now: f64) -> bool {
     let plugins = panel(state);
-    let left = plugins
-        .editing
-        .clone()
-        .filter(|was| Some(was) != editing.as_ref());
-    plugins.editing = editing;
     let marks = plugins.saved.len();
     plugins.saved.retain(|_, until| now < *until);
-    let went = plugins.saved.len() != marks;
-    if let Some(name) = left {
-        commit_priority(state, &name, tx);
-    }
-    went
+    plugins.saved.len() != marks
 }
 
 /// The state a plugin's runtime is in, as the Tauri page words it.
@@ -327,6 +309,10 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
                 .or_insert_with(|| TextEdit::new(fallback.clone()))
         })
         .on_submit({
+            let name = name.clone();
+            move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, tx)
+        })
+        .on_blur({
             let name = name.clone();
             move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, tx)
         })

@@ -129,14 +129,9 @@ pub(super) fn fields(state: &State) -> Vec<(String, Codec)> {
     fields
 }
 
-/// Follows the drafts the pricing fields show, and adds a new override once its form leaves
-/// focus complete.
+/// Follows the drafts the pricing fields show.
 pub(super) fn follow(state: &mut State) -> bool {
     pricing::follow(state)
-}
-
-pub(super) fn poll(state: &mut State, tx: &mut Tx) {
-    pricing::poll(state, tx);
 }
 
 pub(super) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
@@ -245,7 +240,7 @@ fn field(
     let drafts = &state.window.settings.autosave;
     let field = drafts.field(&key);
     let empty = rune::TextEdit::default();
-    let (edit, submit) = (key.clone(), key.clone());
+    let (edit, submit, left) = (key.clone(), key.clone(), key.clone());
     let mut input = TextInput::new(field.map_or(&empty, |f| &f.draft))
         .key(super::field_key(&key))
         .label(label.to_owned())
@@ -253,6 +248,7 @@ fn field(
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(&edit))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
+        .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, &left, tx))
         .width(None);
     if let Some(step) = step {
         input = input.trailing(super::pages::setting_arrows(&key, step, t));

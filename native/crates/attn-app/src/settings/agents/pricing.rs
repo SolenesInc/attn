@@ -61,8 +61,6 @@ struct New {
     rates: [TextEdit; 5],
     /// The override sent and the value it was sent with, until it lands.
     adding: Option<(String, String)>,
-    /// The form field the focus was in at the last frame.
-    focus: Option<String>,
 }
 
 type Rates = [f64; 5];
@@ -211,20 +209,6 @@ pub(super) fn follow(state: &mut State) -> bool {
     changed
 }
 
-/// Adds the new override when the focus leaves its form.
-pub(super) fn poll(state: &mut State, tx: &mut Tx) {
-    let focused = tx.focused().filter(|k| k.starts_with(NEW));
-    let new = &mut state.window.settings.agents.pricing.new;
-    if new.focus.as_deref() == focused {
-        return;
-    }
-    let left = new.focus.is_some();
-    new.focus = focused.map(str::to_owned);
-    if left {
-        add(state, tx);
-    }
-}
-
 fn typed(new: &New) -> Vec<String> {
     new.rates.iter().map(|r| r.text.clone()).collect()
 }
@@ -254,28 +238,14 @@ fn add(state: &mut State, tx: &mut Tx) {
     autosave::commit(state, &key, tx);
 }
 
-fn rate_input(
-    key: String,
-    label: &str,
-    edit: &TextEdit,
-    t: &Tokens,
-    on_edit: impl for<'a> Fn(&'a mut State) -> &'a mut TextEdit + 'static,
-    on_change: impl Fn(&mut State, &mut Tx) + 'static,
-    on_submit: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
+/// One rate's field, `input` named for its rate under `label` and saving as its form does.
+fn rate_input(label: &str, input: TextInput, t: &Tokens) -> El {
     let name = format!("{label} · USD/MTok");
     col()
         .gap(space::S1)
         .child(text(name.clone()).font(CAPTION).color(t.text_secondary))
         .child(crate::settings::pages::input(
-            TextInput::new(edit)
-                .key(key)
-                .label(name)
-                .placeholder("0")
-                .on_edit(on_edit)
-                .on_change(on_change)
-                .on_submit(on_submit)
-                .width(Some(110.0)),
+            input.label(name).placeholder("0").width(Some(110.0)),
             t,
         ))
 }
@@ -306,13 +276,11 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
         .get(model)
         .unwrap_or(&empty);
     let rates = RATES.iter().enumerate().map(|(i, (rate, label))| {
-        let (edit, change, submit) = (model.to_owned(), model.to_owned(), key.clone());
-        rate_input(
-            super::super::part_field_key(&key, rate),
-            label,
-            &card.rates[i],
-            t,
-            move |state: &mut State| {
+        let (edit, change, submit, left) =
+            (model.to_owned(), model.to_owned(), key.clone(), key.clone());
+        let input = TextInput::new(&card.rates[i])
+            .key(super::super::part_field_key(&key, rate))
+            .on_edit(move |state: &mut State| {
                 &mut state
                     .window
                     .settings
@@ -322,10 +290,13 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
                     .entry(edit.clone())
                     .or_default()
                     .rates[i]
-            },
-            move |state: &mut State, _: &mut Tx| card_typed(state, &change),
-            move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx),
-        )
+            })
+            .on_change(move |state: &mut State, _: &mut Tx| card_typed(state, &change))
+            .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
+            .on_blur(move |state: &mut State, tx: &mut Tx| {
+                autosave::commit_on_leave(state, &left, tx)
+            });
+        rate_input(label, input, t)
     });
     let remove = key.clone();
     let refusal = refusal_beside(
@@ -433,15 +404,14 @@ fn new_form(state: &State, t: &Tokens) -> El {
     let card = card_from(&typed(new));
     let exists = !model.is_empty() && overrides(state).iter().any(|(m, _)| m == model);
     let rates = RATES.iter().enumerate().map(|(i, (rate, label))| {
-        rate_input(
-            format!("{NEW}{rate}"),
-            label,
-            &new.rates[i],
-            t,
-            move |state: &mut State| &mut state.window.settings.agents.pricing.new.rates[i],
-            |_: &mut State, _: &mut Tx| {},
-            add,
-        )
+        let input = TextInput::new(&new.rates[i])
+            .key(format!("{NEW}{rate}"))
+            .on_edit(move |state: &mut State| {
+                &mut state.window.settings.agents.pricing.new.rates[i]
+            })
+            .on_submit(add)
+            .on_blur(add);
+        rate_input(label, input, t)
     });
     let failure = new
         .adding
@@ -470,6 +440,7 @@ fn new_form(state: &State, t: &Tokens) -> El {
                             &mut state.window.settings.agents.pricing.new.model
                         })
                         .on_submit(add)
+                        .on_blur(add)
                         .width(Some(280.0)),
                         t,
                     ),

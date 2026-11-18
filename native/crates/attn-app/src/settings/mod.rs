@@ -175,8 +175,6 @@ pub(crate) struct Dialog {
     /// Whether what the page lists changed since it was last brought up to date: the
     /// settings, plugins, harnesses or connection, or the page itself.
     stale: bool,
-    /// The key of the text field the focus was in at the last frame.
-    editing: Option<String>,
     /// What waits for the fields to land: the dialog closing, or another page.
     after_flush: Option<Leave>,
 }
@@ -199,11 +197,6 @@ pub(crate) fn field_key(setting: &str) -> String {
 /// edit together.
 pub(crate) fn part_field_key(setting: &str, part: &str) -> String {
     format!("{FIELD_PREFIX}{setting}#{part}{FIELD_SUFFIX}")
-}
-
-fn setting_of_field(key: &str) -> Option<&str> {
-    let field = key.strip_prefix(FIELD_PREFIX)?.strip_suffix(FIELD_SUFFIX)?;
-    field.split('#').next()
 }
 
 /// The fields the page shows besides the dialog's own, each with how it reads and saves.
@@ -389,38 +382,20 @@ pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
     senders::follow(state, changed);
 }
 
-/// Before each frame: commits a text field the focus just left, reads the event bus when its
-/// refresh is due, forgets unmutes the daemon has taken, cancels pairing codes the Phones page
-/// left, and lets Saved marks go; whether one went.
+/// Before each frame: reads the event bus when its refresh is due, forgets unmutes the daemon
+/// has taken, cancels pairing codes the Phones page left, and lets Saved marks go; whether one
+/// went.
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     hygiene::poll(state);
     phones::poll(state, tx);
     route::follow_layer(state, tx);
-    let open = is_open(state);
-    let focused = tx
-        .focused()
-        .filter(|key| open && setting_of_field(key).is_some());
-    if state.window.settings.editing.as_deref() != focused {
-        let was = std::mem::replace(
-            &mut state.window.settings.editing,
-            focused.map(str::to_owned),
-        );
-        if let Some(key) = was.as_deref().and_then(setting_of_field) {
-            let key = key.to_owned();
-            autosave::commit_on_leave(state, &key, tx);
-        }
-    }
-    let focus = tx.focused().map(str::to_owned).filter(|_| open);
     let mut shown = false;
-    if is_open(state) {
-        if std::mem::take(&mut state.window.settings.stale) {
-            shown |= refresh(state, tx);
-        }
-        agents::poll(state, tx);
+    if is_open(state) && std::mem::take(&mut state.window.settings.stale) {
+        shown |= refresh(state, tx);
     }
     bus::poll(state, now, tx);
     shown |= delegation::poll(state, tx);
-    let plugin_marks_went = plugins::poll(state, focus.as_deref(), now, tx);
+    let plugin_marks_went = plugins::poll(state, now);
     state.window.settings.autosave.expire(now) | plugin_marks_went | shown
 }
 

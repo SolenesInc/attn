@@ -418,6 +418,7 @@ pub(super) fn number_field(
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
+        .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx))
         .trailing(setting_arrows(key, step, t))
         .width(Some(width));
     col()
@@ -498,6 +499,7 @@ pub(super) fn wide_setting_field(
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
+        .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx))
         .width(None);
     if let Some(step) = step {
         draft = draft.trailing(setting_arrows(key, step, t));
