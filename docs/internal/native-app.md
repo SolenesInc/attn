@@ -126,10 +126,20 @@ scripts/native-screenshot-tour shoot --scheme catppuccin /tmp/tour/catppuccin
 ```
 
 `--scheme` shoots the tour with the `color_scheme` setting at that id. `shoot`
-with a revision builds it in a temporary worktree with this checkout's
-tour, then removes the worktree and its build output. `diff` writes an image of
-each changed screen, with the changed pixels in red, and fails when any pixel
-differs.
+with a revision checks it out, with this checkout's tour, in the checkout's base
+worktree, `native/target/screenshot-tour-base`. The base worktree stays between
+runs and builds in the checkout's own build directory, so a pair compiles only
+what the revision changes. `diff` writes an image of each changed screen, with
+the changed pixels in red, and fails when any pixel differs. Both build in
+release; a debug tour draws the same pixels several times slower.
+
+A pair of the full tour, with the base already built once, takes about two
+minutes on a quiet 24-core Linux machine and about six on ai-sandbox under load,
+where the GPU is software and shooting competes for the CPU. The first pair of a
+checkout also builds the release dependencies and the base, about ten minutes
+more. Shoot every
+screen: the diff is what catches the screen a change was not expected to touch.
+`cargo clean` removes the base worktree with the rest of `native/target`.
 
 ## Automation
 

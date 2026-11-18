@@ -542,7 +542,14 @@ fn pixels<S: 'static>(
     rt: &mut Runtime<S>,
     compositor: &mut impl Compositor<S>,
 ) -> (u32, u32, Vec<u8>) {
-    let gpu = Gpu::headless();
+    GPU.with(|gpu| draw(gpu, rt, compositor))
+}
+
+fn draw<S: 'static>(
+    gpu: &Gpu,
+    rt: &mut Runtime<S>,
+    compositor: &mut impl Compositor<S>,
+) -> (u32, u32, Vec<u8>) {
     let (w, h) = rt.window_viewport();
     let scale = rt.env.scale;
     let size = ((w * scale).round() as u32, (h * scale).round() as u32);
@@ -576,6 +583,7 @@ fn pixels<S: 'static>(
 }
 
 thread_local! {
+    static GPU: Gpu = Gpu::headless();
     static OUT: std::cell::RefCell<PathBuf> = std::cell::RefCell::default();
     static SCHEME: std::cell::RefCell<Option<String>> = std::cell::RefCell::default();
 }
@@ -3516,30 +3524,66 @@ fn marked(base: &Image, after: &Image) -> (usize, Image) {
 fn compare(base: PathBuf, after: PathBuf, diff: PathBuf) -> bool {
     let names = pngs(&base);
     assert_eq!(names, pngs(&after), "the two runs shot different screens");
+    let workers = std::thread::available_parallelism().map_or(1, usize::from);
+    let per_worker = names.len().div_ceil(workers).max(1);
+    let results: Vec<Result<usize, String>> = std::thread::scope(|threads| {
+        let workers: Vec<_> = names
+            .chunks(per_worker)
+            .map(|chunk| {
+                let (base, after, diff) = (&base, &after, &diff);
+                threads.spawn(move || {
+                    chunk
+                        .iter()
+                        .map(|name| compare_screen(name, base, after, diff))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().expect("a compare worker"))
+            .collect()
+    });
     let mut changed = Vec::new();
-    for name in &names {
-        let read =
-            |dir: &PathBuf| Image::read_png(&dir.join(name)).unwrap_or_else(|e| panic!("{e}"));
-        let (b, a) = (read(&base), read(&after));
-        if (b.width, b.height) != (a.width, a.height) {
-            changed.push(format!(
-                "{name}: {}x{} became {}x{}",
-                b.width, b.height, a.width, a.height
-            ));
-            continue;
+    for (name, result) in names.iter().zip(results) {
+        match result {
+            Err(resized) => changed.push(resized),
+            Ok(differ) => {
+                if differ > 0 {
+                    changed.push(format!("{name}: {differ} pixels differ"));
+                }
+                println!("{name}: {differ} pixels differ");
+            }
         }
-        let (differ, image) = marked(&b, &a);
-        if differ > 0 {
-            changed.push(format!("{name}: {differ} pixels differ"));
-            std::fs::create_dir_all(&diff).expect("the diff folder");
-            image.write_png(&diff.join(name)).expect("a diff image");
-        }
-        println!("{name}: {differ} pixels differ");
     }
     for change in &changed {
         eprintln!("{change}");
     }
     changed.is_empty()
+}
+
+/// The number of pixels that differ, with an image of them in DIFF, or how the size changed.
+fn compare_screen(
+    name: &str,
+    base: &std::path::Path,
+    after: &std::path::Path,
+    diff: &std::path::Path,
+) -> Result<usize, String> {
+    let read =
+        |dir: &std::path::Path| Image::read_png(&dir.join(name)).unwrap_or_else(|e| panic!("{e}"));
+    let (b, a) = (read(base), read(after));
+    if (b.width, b.height) != (a.width, a.height) {
+        return Err(format!(
+            "{name}: {}x{} became {}x{}",
+            b.width, b.height, a.width, a.height
+        ));
+    }
+    let (differ, image) = marked(&b, &a);
+    if differ > 0 {
+        std::fs::create_dir_all(diff).expect("the diff folder");
+        image.write_png(&diff.join(name)).expect("a diff image");
+    }
+    Ok(differ)
 }
 
 fn main() -> std::process::ExitCode {

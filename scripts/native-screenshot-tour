@@ -6,17 +6,19 @@
 #       the tour of this checkout, or of REV, with the color_scheme setting at ID
 #   scripts/native-screenshot-tour diff BASE AFTER DIFF
 #
-# shoot REV builds REV in a temporary worktree with this checkout's tour, so a revision from
-# before the tour existed can be shot too. diff writes one image per changed screen to DIFF,
-# each changed pixel in red, and exits 1 when any pixel differs.
+# shoot REV checks REV out in this checkout's base worktree, native/target/screenshot-tour-base,
+# with this checkout's tour, so a revision from before the tour existed can be shot too. The
+# base worktree stays between runs and builds in this checkout's build directory, so only what
+# REV changed compiles. diff writes one image per changed screen to DIFF, each changed pixel
+# in red, and exits 1 when any pixel differs. Both build in release.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tour="native/crates/attn-app/examples/screenshot_tour.rs"
-worktree=""
+base="$root/native/target/screenshot-tour-base"
 
 usage() {
-  sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -35,18 +37,31 @@ vt_archive() {
   echo "third_party/ghostty-vt/${os}_${arch}/lib/libghostty-vt.a"
 }
 
-remove_worktree() {
-  [ -n "$worktree" ] || return 0
-  local build
-  build="${CARGO_HOME:-$HOME/.cargo}/attn-native-build$(cd "$worktree" && pwd -P)"
-  git -C "$root" worktree remove --force "$worktree"
-  rm -rf "$build"
+build_dir() {
+  echo "${CARGO_HOME:-$HOME/.cargo}/attn-native-build$(cd "$root/native" && pwd -P)"
+}
+
+check_out_base() {
+  local rev
+  rev="$(git -C "$root" rev-parse --verify "$1^{commit}")"
+  if [ -e "$base/.git" ]; then
+    git -C "$base" checkout --quiet --force --detach "$rev"
+  else
+    git -C "$root" worktree prune
+    git -C "$root" worktree add --detach "$base" "$rev" >/dev/null
+  fi
+  mkdir -p "$(dirname "$base/$tour")"
+  cp -p "$root/$tour" "$base/$tour"
+  if [ -d "$root/third_party/ghostty-vt" ] && [ ! -e "$base/third_party/ghostty-vt" ]; then
+    mkdir -p "$base/third_party"
+    cp -Rp "$root/third_party/ghostty-vt" "$base/third_party/"
+  fi
 }
 
 run_tour() {
   local checkout="$1"
   shift
-  (cd "$checkout/native" && cargo run --locked -q -p attn-app --example screenshot_tour -- "$@")
+  (cd "$checkout/native" && CARGO_BUILD_BUILD_DIR="$(build_dir)" cargo run --release --locked -q -p attn-app --example screenshot_tour -- "$@")
 }
 
 shoot() {
@@ -59,16 +74,8 @@ shoot() {
   local out rev="${2:-}" checkout="$root"
   out="$(absolute "$1")"
   if [ -n "$rev" ]; then
-    worktree="$(mktemp -d "${TMPDIR:-/tmp}/attn-tour.XXXXXX")"
-    trap remove_worktree EXIT
-    git -C "$root" worktree add --detach "$worktree" "$rev" >/dev/null
-    mkdir -p "$(dirname "$worktree/$tour")"
-    cp "$root/$tour" "$worktree/$tour"
-    if [ -d "$root/third_party/ghostty-vt" ]; then
-      mkdir -p "$worktree/third_party"
-      cp -R "$root/third_party/ghostty-vt" "$worktree/third_party/"
-    fi
-    checkout="$worktree"
+    check_out_base "$rev"
+    checkout="$base"
   fi
   make -C "$checkout" -s "$(vt_archive)"
   find "$out" -name '*.png' -delete
