@@ -20,9 +20,12 @@ pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
 /// `.notifications-panel` at `left: var(--title-bar-lights)`.
 pub(crate) const TITLE_BAR_LEFT: &str = "titlebar.left";
 /// Where the close button sits, in points from the window's top left, as the Tauri app's overlay
-/// title bar puts it: the lights end 70 points in, so the title bar's first control starts at
-/// the 78 points `TitleBar.tsx` leaves them.
+/// title bar puts it.
 pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (9.0, 9.0);
+/// Where the title bar's first control starts, as `TitleBar.tsx` pads it: past the traffic
+/// lights, or at the edge when the window shows none (full screen, Linux).
+const TITLE_BAR_START_PAST_LIGHTS: f32 = 78.0;
+const TITLE_BAR_START_WITHOUT_LIGHTS: f32 = 8.0;
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
 /// desktop are the daemon's; this is the window's own.
@@ -520,7 +523,11 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         state.facts.connection,
         Connection::Connected | Connection::Reconnecting { .. }
     ) && !crate::migration_gate::holds(state);
-    let lights = cx.chrome_insets().leading + 8.0;
+    let lights = if cx.chrome_insets().leading > 0.0 {
+        TITLE_BAR_START_PAST_LIGHTS
+    } else {
+        TITLE_BAR_START_WITHOUT_LIGHTS
+    };
     let beside_sidebar =
         !state.window.sidebar_hidden && !crate::desktop::shows_an_agent_alone(state);
     let left = row()

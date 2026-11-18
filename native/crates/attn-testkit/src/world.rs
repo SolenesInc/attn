@@ -372,6 +372,15 @@ impl World {
         self.settle();
     }
 
+    /// The window's own controls take `leading` points of the title bar's leading edge, as a
+    /// macOS window reports its traffic lights (0 in full screen), then the window settles.
+    pub fn window_controls_take(&mut self, leading: f32) {
+        let mut insets = self.runtime.chrome_insets();
+        insets.leading = leading;
+        self.runtime.set_chrome_insets(insets);
+        self.settle();
+    }
+
     /// The system's Reduce Motion preference turns on, then the window settles.
     pub fn reduce_motion(&mut self) {
         self.runtime.set_system_reduced_motion(true);

@@ -56,3 +56,13 @@ fn the_title_bar_keeps_its_tools_left_and_its_panels_right_in_the_tauri_apps_ord
         "the profile pill ends the title bar"
     );
 }
+
+#[test]
+fn the_first_title_bar_control_starts_where_the_tauri_app_starts_it_past_the_traffic_lights() {
+    let mut world = world();
+    world.window_controls_take(69.0);
+    assert_eq!(world.rect("titlebar.new")[0], 78.0);
+
+    world.window_controls_take(0.0);
+    assert_eq!(world.rect("titlebar.new")[0], 8.0);
+}
