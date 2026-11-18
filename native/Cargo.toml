@@ -28,6 +28,7 @@ debug = "line-tables-only"
 
 [profile.dev.package."*"]
 debug = false
+opt-level = 2
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
