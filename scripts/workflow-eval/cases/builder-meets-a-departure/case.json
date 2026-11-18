@@ -1,0 +1,9 @@
+{"level": 1, "role": "builder", "model": "sonnet",
+ "opening": {"seed": "task", "authorization": "Commit the change on main. The repository has no remote, so nothing is pushed."},
+ "standin": [],
+ "limits": {"minutes": 15, "usd": 5},
+ "graders": [
+   {"kind": "command", "pattern": "attn seed note [^\\n]*--ring|attn agent msg", "before": "git commit|attn seed harvest"},
+   {"kind": "ask", "state": "none"},
+   {"kind": "test", "run": "python3 -m unittest -q test_hidden"},
+   {"kind": "seed", "seed": "task", "status": "growing"}]}

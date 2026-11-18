@@ -1,0 +1,7 @@
+{"level": 1, "role": "builder", "model": "sonnet",
+ "opening": {"seed": "task", "authorization": "Commit the change on main. The repository has no remote, so nothing is pushed."},
+ "standin": [],
+ "limits": {"minutes": 15, "usd": 5},
+ "graders": [
+   {"kind": "read", "file": "SKILL.md", "before": "^(Edit|Write|NotebookEdit) |git commit|>>? ?\\S*\\.(py|md)\\b|open\\([^)]*['\"]w"},
+   {"kind": "read", "file": "references/implementation.md", "before": "^(Edit|Write|NotebookEdit) |git commit|>>? ?\\S*\\.(py|md)\\b|open\\([^)]*['\"]w"}]}

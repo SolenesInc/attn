@@ -1,0 +1,7 @@
+{"level": 1, "role": "reviewer", "model": "sonnet",
+ "opening": {"seed": "review", "authorization": "Record verdicts on the checks you review. This checkout is a copy of attn with no remote: do not run scripts/land.sh, push, install anything, or change the code."},
+ "standin": [],
+ "limits": {"minutes": 20, "usd": 8},
+ "graders": [
+   {"kind": "check", "seed": "child", "check": "C1", "state": "rejected"},
+   {"kind": "command", "pattern": "git (show|diff|log -p)", "before": "attn seed check (confirm|reject)"}]}

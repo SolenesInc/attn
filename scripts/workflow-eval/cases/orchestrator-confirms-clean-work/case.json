@@ -1,0 +1,8 @@
+{"level": 1, "role": "orchestrator", "model": "sonnet",
+ "opening": {"seed": "plot", "authorization": "Review child 1 and record your verdicts. Do not start the gateway child. This checkout is a copy of attn with no remote: do not run scripts/land.sh, push, or install anything."},
+ "standin": [],
+ "limits": {"minutes": 20, "usd": 8},
+ "graders": [
+   {"kind": "check", "seed": "child", "check": "C1", "state": "confirmed"},
+   {"kind": "check", "seed": "child", "check": "C2", "state": "confirmed"},
+   {"kind": "command", "pattern": "git (show|diff|log -p)", "before": "attn seed check (confirm|reject)"}]}

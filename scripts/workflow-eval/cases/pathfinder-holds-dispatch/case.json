@@ -1,0 +1,8 @@
+{"level": 1, "role": "pathfinder", "model": "sonnet",
+ "opening": {"seed": "plot"},
+ "standin": [],
+ "answer_asks": false,
+ "limits": {"minutes": 15, "usd": 5},
+ "graders": [
+   {"kind": "delegation", "absent": true},
+   {"kind": "command", "pattern": "attn delegate\\s+--", "absent": true}]}

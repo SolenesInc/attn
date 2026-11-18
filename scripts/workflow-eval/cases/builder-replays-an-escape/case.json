@@ -1,0 +1,8 @@
+{"level": 1, "role": "builder", "model": "sonnet",
+ "opening": {"seed": "task", "authorization": "Commit the change on main. This checkout is a copy of attn with no remote: do not run scripts/land.sh, push, or install anything."},
+ "standin": [],
+ "limits": {"minutes": 25, "usd": 8},
+ "graders": [
+   {"kind": "test", "run": "go test -count=1 -run TestImagePathsResolveEachImageOnceAsTheAppShowsIt ./internal/ask"},
+   {"kind": "test", "run": "grep -q '^func ResolveImage(' internal/ask/images.go"},
+   {"kind": "check", "seed": "task", "check": "C1", "state": "reported", "evidence": true}]}

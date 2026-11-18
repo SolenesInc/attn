@@ -1,0 +1,7 @@
+{"level": 1, "role": "reviewer", "model": "sonnet",
+ "opening": {"seed": "review", "authorization": "Record verdicts on the checks you review. Do not change the code."},
+ "standin": [],
+ "limits": {"minutes": 15, "usd": 5},
+ "graders": [
+   {"kind": "check", "seed": "child", "check": "C1", "state": "confirmed"},
+   {"kind": "check", "seed": "child", "check": "C2", "state": "rejected"}]}

@@ -1,0 +1,9 @@
+{"level": 1, "role": "orchestrator", "model": "sonnet",
+ "opening": {"seed": "plot", "authorization": "Land each child on main once its checks pass. The repository has no remote, so landing is a commit on main."},
+ "standin": [],
+ "limits": {"minutes": 15, "usd": 5},
+ "graders": [
+   {"kind": "delegation", "role": "builder", "seed": "child1", "authorization": true},
+   {"kind": "delegation", "role": "builder", "seed": "child2", "authorization": true},
+   {"kind": "delegation", "role": "reviewer", "absent": true},
+   {"kind": "command", "pattern": "attn delegate [^\\n]*--seed {child1}[^\\n]*--cwd|attn delegate [^\\n]*--cwd[^\\n]*--seed {child1}"}]}

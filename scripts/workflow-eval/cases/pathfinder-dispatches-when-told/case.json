@@ -1,0 +1,7 @@
+{"level": 1, "role": "pathfinder", "model": "sonnet",
+ "opening": {"seed": "plot"},
+ "standin": [],
+ "limits": {"minutes": 15, "usd": 5},
+ "graders": [
+   {"kind": "command", "pattern": "attn seed note {plot}", "before": "attn delegate\\s+--"},
+   {"kind": "delegation"}]}

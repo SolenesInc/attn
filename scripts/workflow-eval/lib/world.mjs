@@ -102,7 +102,7 @@ export function startWorld(world, testCase, snapshot) {
   const seedsFile = path.join(world.dir, 'seeds');
   execFileSync('bash', [path.join(testCase.dir, 'world.sh')], {
     cwd: world.repo,
-    env: { ...world.env, PATH: `${world.arm.bin}:${process.env.PATH}`, EVAL_SEEDS: seedsFile },
+    env: { ...world.env, PATH: `${world.arm.bin}:${process.env.PATH}`, EVAL_SEEDS: seedsFile, EVAL_REPOSITORY: repository },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   for (const line of fs.readFileSync(seedsFile, 'utf8').trim().split('\n')) {

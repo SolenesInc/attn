@@ -78,7 +78,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => c
 
 function delegate(world, testCase) {
   const { opening } = testCase;
-  const args = ['delegate', '--seed', world.seeds[opening.seed], '--role', testCase.role, '--cwd', world.repo, '--reuse-checkout', '--branch', 'main'];
+  const args = ['delegate', '--seed', world.seeds[opening.seed], '--role', testCase.role, '--cwd', world.repo, '--reuse-checkout', '--branch', 'main', '--allow-worktree-reuse'];
   if (opening.authorization) args.push('--authorization', opening.authorization);
   const result = spawnSync(path.join(world.arm.bin, 'attn'), args, { env: world.env, encoding: 'utf8' });
   const session = `${result.stdout}${result.stderr}`.match(/session_id[=":\s]+([0-9a-f-]{36})/)?.[1];
@@ -106,7 +106,7 @@ async function waitForStop(world, session, testCase, log) {
   let quiet = 0;
   for (;;) {
     await sleep(pollMs);
-    const answered = answerAsks(world, session);
+    const answered = testCase.answer_asks === false ? [] : answerAsks(world, session);
     for (const ask of answered) log(`answered ask ${ask.id} "${ask.subject}": ${JSON.stringify(ask.answers)}`);
     const state = agentState(world, session);
     quiet = answered.length || state === 'launching' || state === 'working' ? 0 : quiet + 1;
@@ -156,7 +156,7 @@ async function runCase({ root, snapshot, record }, testCase, arm, run) {
     const closed = new Date();
     const transcript = transcriptOf(world, session);
     fs.writeFileSync(path.join(world.dir, 'transcript.jsonl'), transcript.map(event => JSON.stringify(event)).join('\n'));
-    const graded = grade(testCase.graders, { world, testCase, transcript });
+    const graded = grade(testCase.graders, { world, testCase, transcript, session });
     const usd = spent(world);
     const line = runLine({ world, testCase, arm, run, session, transcript, started: started.toISOString(), closed: closed.toISOString(), graded, limit });
     fs.appendFileSync(record, `${JSON.stringify(line)}\n`);
