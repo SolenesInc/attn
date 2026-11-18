@@ -95,15 +95,18 @@ case "$args" in
   *"real-app:linux soak "*)
     printf 'runner %s\n' "${args#*real-app:linux }" >>"$LAND_CHECK_LOG"
     echo "Waited ${LAND_RUNNER_WAITED:-0}s for the guest checkout land" >&2
+    scenarios="${args#*--scenario }"
+    scenarios="${scenarios%% *}"
     if [ -n "${LAND_RUNNER_HOLD:-}" ]; then
+      echo "Scenario ${scenarios%%,*} passed in 2s"
       bash -c 'trap "echo \"runner child stopped\" >>\"\$LAND_CHECK_LOG\"; exit 143" TERM
         echo running >"$LAND_RUNNER_HOLD/watching"
         read -r _ <>"$LAND_RUNNER_HOLD/release"' &
       wait
     fi
-    scenarios="${args#*--scenario }"
     status=0
-    for scenario in $(tr , ' ' <<<"${scenarios%% *}"); do
+    for scenario in ${scenarios//,/ }; do
+      [ "$scenario" != "${LAND_RUNNER_CRASH_AT:-}" ] || exit 1
       if [ "$scenario" = "${LAND_RUNNER_FAIL:-}" ]; then echo "Scenario $scenario failed in 3s"; status=1
       else echo "Scenario $scenario passed in 2s"; fi
     done
@@ -519,7 +522,17 @@ land 'Change the product while a scenario fails on the landing runner' LAND_RUNN
 [ "$(grep -c '^runner soak ' "$LAND_CHECK_LOG")" = 1 ] && grep -qE -- '--scenario (shelf-layout,shelf-peek|shelf-peek,shelf-layout) ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run every scenario in one run' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'only the scenario that failed on the landing runner should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'scenario shelf-peek failed on runner.invalid in 3s, so it runs again on CI'
+grep -rqE '^shelf-layout ssh:runner.invalid ' "$records" || { echo 'a scenario that passed beside a failed one left no pass record' >&2; exit 1; }
 no_land_scenario_refs
+
+printf '// runner dies\n' >>internal/example/example.go
+printf 'runner dies\n' >>.agents/skills/drive-attn/features/example.md
+land 'Change the product while the landing runner dies before its last scenario' LAND_RUNNER_CRASH_AT=shelf-peek
+grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a scenario the landing runner did not finish should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'scenario shelf-peek did not finish on runner.invalid, so it runs again on CI'
+record="$(grep -rlE '^shelf-peek github ' "$records" | xargs ls -t | head -1)"
+grep -qE '^shelf-layout ssh:runner.invalid ' "$record" || { echo 'the scenario the landing runner finished left no pass record' >&2; cat "$record" >&2; exit 1; }
+if grep -qE '^shelf-peek ssh:' "$record"; then echo 'a scenario the landing runner did not finish was recorded as passed there' >&2; exit 1; fi
 
 export LAND_RUNNER_FAIL=shelf-moves
 refuses 'a scenario that fails on the landing runner and on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
@@ -530,6 +543,7 @@ no_land_scenario_refs
 mkdir "$work/runner-hold"
 mkfifo "$work/runner-hold/watching" "$work/runner-hold/release"
 printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-shelf-peek.mjs
 git add -A
 git commit -qm 'Scenario change whose gate fails while it runs on the landing runner'
 : >"$LAND_CHECK_LOG"
@@ -540,7 +554,9 @@ if env LAND_RUNNER_HOLD="$work/runner-hold" LAND_GATE_AWAITS_SOAK="$work/runner-
 fi
 [ "$before" = "$(git --git-dir="$work/remote" rev-parse main)" ]
 grep -qxF 'runner child stopped' "$LAND_CHECK_LOG" || { echo 'a failed gate did not stop the processes of the scenario on the landing runner' >&2; cat "$LAND_CHECK_LOG" "$work/output" >&2; exit 1; }
-[ ! -e "$(record_for_landing)" ] || { echo 'a scenario stopped on the landing runner recorded a pass' >&2; exit 1; }
+first="$(sed -n 's/^runner soak .*--scenario \([^,]*\),.*/\1/p' "$LAND_CHECK_LOG")"
+[ -n "$first" ] || { echo 'the landing runner did not run both scenarios in one run' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+[ "$(cut -d' ' -f1 "$(record_for_landing)")" = "$first" ] || { echo 'a stopped landing runner must keep the pass it finished and record no other' >&2; cat "$(record_for_landing)" >&2; exit 1; }
 git reset -q --hard origin/main
 
 git config attn.landRunner runner.invalid

@@ -32,7 +32,10 @@ listed_run() {
 }
 
 cleanup() {
-  if [ -n "$runner_pid" ]; then kill -TERM -- "-$runner_pid" 2>/dev/null || true; fi
+  if [ -n "$runner_pid" ]; then
+    kill -TERM -- "-$runner_pid" 2>/dev/null || true
+    record_runner_passes
+  fi
   if [ -n "$watch_pid" ]; then kill "$watch_pid" 2>/dev/null || true; fi
   if [ -z "$run_id" ] && [ -n "$dispatched" ]; then run_id="$(listed_run)"; fi
   if [ -n "$run_id" ] && [ "${finished:-}" != 1 ]; then gh run cancel "$run_id" >/dev/null 2>&1 || true; fi
@@ -82,34 +85,41 @@ waited_for_runner() {
 }
 
 scenario_seconds() {
-  sed -n "s/^Scenario $1 $2 in \([0-9]*\)s\$/\1/p" "$3" | tail -1
+  sed -n "s/^Scenario $1 $2 in \([0-9]*\)s\$/\1/p" "$runner_log" | tail -1
+}
+
+record_runner_passes() {
+  local scenario
+  for scenario in ${scenarios//,/ }; do
+    if [ -n "$(scenario_seconds "$scenario" passed)" ]; then record_pass "$scenario" "ssh:$runner_target" "$runner_log"; fi
+  done
 }
 
 run_on_ssh() {
-  local target="$1" scenarios="$2" logs log scenario seconds outcome failed="" started
-  if ! pnpm --silent --dir app real-app:linux status --provider ssh --target "$target" >/dev/null 2>&1; then
-    echo "land: the landing runner $target cannot be reached, so the scenarios run on CI's Linux instead" >&2
+  local scenario seconds outcome failed="" started
+  runner_target="$1"
+  if ! pnpm --silent --dir app real-app:linux status --provider ssh --target "$runner_target" >/dev/null 2>&1; then
+    echo "land: the landing runner $runner_target cannot be reached, so the scenarios run on CI's Linux instead" >&2
     run_on_github "$scenarios"
     return
   fi
-  logs="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-runner.XXXXXX")"
-  log="$logs/runner.log"
-  echo "land: running scenarios $scenarios on $target, before the push: $log"
+  runner_log="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-runner.XXXXXX")/runner.log"
+  echo "land: running scenarios $scenarios on $runner_target, before the push: $runner_log"
   started=$SECONDS
-  perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$target" \
-    --checkout land --scenario "$scenarios" --out "$logs/artifacts" >"$log" 2>&1 &
+  perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$runner_target" \
+    --checkout land --scenario "$scenarios" --out "$(dirname "$runner_log")/artifacts" >"$runner_log" 2>&1 &
   runner_pid=$!
   wait "$runner_pid" || true
   runner_pid=""
-  echo "land: the landing runner took $((SECONDS - started))s, $(waited_for_runner "$log")s of it waiting for other landings"
+  record_runner_passes
+  echo "land: the landing runner took $((SECONDS - started))s, $(waited_for_runner "$runner_log")s of it waiting for other landings"
   for scenario in ${scenarios//,/ }; do
-    if seconds="$(scenario_seconds "$scenario" passed "$log")" && [ -n "$seconds" ]; then
-      record_pass "$scenario" "ssh:$target" "$log"
-      echo "land: scenario $scenario passed on $target in ${seconds}s"
+    if seconds="$(scenario_seconds "$scenario" passed)" && [ -n "$seconds" ]; then
+      echo "land: scenario $scenario passed on $runner_target in ${seconds}s"
     else
-      seconds="$(scenario_seconds "$scenario" failed "$log")"
-      if [ -n "$seconds" ]; then outcome="failed on $target in ${seconds}s"; else outcome="did not finish on $target"; fi
-      echo "land: scenario $scenario $outcome, so it runs again on CI's Linux, and that run decides. Log: $log" >&2
+      seconds="$(scenario_seconds "$scenario" failed)"
+      if [ -n "$seconds" ]; then outcome="failed on $runner_target in ${seconds}s"; else outcome="did not finish on $runner_target"; fi
+      echo "land: scenario $scenario $outcome, so it runs again on CI's Linux, and that run decides. Log: $runner_log" >&2
       failed="${failed:+$failed,}$scenario"
     fi
   done
@@ -136,7 +146,7 @@ run_landing_scenarios() {
   runner="$(git config attn.landRunner || echo github)"
   case "$runner" in
     github) run_on_github "$scenarios" ;;
-    ssh:?*) run_on_ssh "${runner#ssh:}" "$scenarios" ;;
+    ssh:?*) run_on_ssh "${runner#ssh:}" ;;
     *) echo "land: git config attn.landRunner is $runner; set it to github or ssh:<target>" >&2; exit 2 ;;
   esac
 }

@@ -185,7 +185,7 @@ function installApp(execute, instance, app) {
 }
 
 function installFresh(execute, instance, app) {
-  execute(['./attn', 'instance', 'clean', instance]);
+  execute(['./attn', 'instance', 'clean', instance, '--keep-app']);
   installApp(execute, instance, app);
 }
 

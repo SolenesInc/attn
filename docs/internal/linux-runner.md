@@ -63,20 +63,22 @@ rejects stale installs. Commands run with a clean environment and the named
 `linux-<checkout>` instance. `--instance` selects another non-production
 name. The guest receives no host routing variables or provider credentials.
 
-`test` syncs, removes the guest instance with `attn instance clean`, installs the
-instance again, and runs the existing serial matrix under Xvfb, so every run
+`test` syncs, builds the app, empties the guest instance with
+`attn instance clean --keep-app`, installs the built app again, and runs the existing serial matrix under Xvfb, so every run
 starts from empty instance data, like CI. `test` copies the artifacts even when a scenario fails, and it exits with the failing command's exit status. Pass `--out <directory>` to choose the results directory. Without `--out`, `test` writes results under the host temporary directory in `attn-linux-artifacts/<provider>/<checkout>`.
 
 `soak --scenario <id>[,<id>...]` runs scenarios the way CI's Acceptance soak
 does: it syncs, builds each app the scenarios need (Tauri or native) once, and
-then, for each scenario in turn, cleans the instance, installs that app's built
-tree and runs the scenario once under Xvfb. Every scenario starts from an empty
+then, for each scenario in turn, empties the instance the same way, installs
+that app's built tree and runs the scenario once under Xvfb. Every scenario starts from an empty
 instance, as on CI's fresh runner per scenario, but the build is paid once: on
 the landing runner a no-op build took 31 s for Tauri and 15 s for native, and
 the clean and install together under a second. It prints
-`Scenario <id> passed in <n>s` or `failed` for each, and runs the rest after a
-failure. It also runs scenarios that the serial matrix leaves to the soak.
-Artifacts and the exit status work as for `test`.
+`Scenario <id> passed in <n>s` or `Scenario <id> failed in <n>s` for each, runs
+the rest after a failure, and exits 1 if any scenario failed. A build that fails
+stops the run before any scenario starts, with no scenario line, and exits with
+the build's status. It also runs scenarios that the serial matrix leaves to the
+soak. Like `test`, it copies the artifacts even when a scenario fails.
 
 After its scenarios, `test` and `soak` run `scripts/native-build-clean` on the
 guest, which keeps native build output within the budget

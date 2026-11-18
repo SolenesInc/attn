@@ -43,8 +43,8 @@ runner instead: a Linux machine that keeps its build output between landings.
 [Linux runner](linux-runner.md#landing-runner) says how to set one up. When the
 machine cannot be reached, the landing says so and uses the Acceptance soak
 workflow. A scenario that fails on the landing runner, or that the runner does
-not finish, runs again on the workflow, and only that run blocks the landing. Unset, or `github`, is the
-workflow.
+not finish, runs again on the workflow, and only that run blocks the landing.
+Unset, or `github`, is the workflow.
 
 A scenario that passed for the landing's diff does not run again. The diff is
 `git diff origin/main...HEAD`, identified by `git patch-id --verbatim`, so it
