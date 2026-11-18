@@ -48,9 +48,10 @@ than pieces, since a deleted area can no longer take picks.
 4. Run `scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid`
    for the areas you touched. `scripts/test.sh` passes its arguments to
    `cargo test`; several agents can run it at once on one machine, as
-   [Test builds and memory](#test-builds-and-memory) explains. A test that runs only on macOS runs in the fork's
-   `fork macOS tests` workflow (`.github/workflows/fork-macos.yml`), on each
-   push to `main` and on request.
+   [Test builds and memory](#test-builds-and-memory) explains. The fork's
+   `fork tests` workflow (`.github/workflows/fork-tests.yml`) runs the whole
+   suite on Linux and macOS for each push to `main` and on request, so a test
+   that runs only on macOS is checked there.
 5. Add a row under "Our changes" in `FORK.md`: what the change does, why it
    lives in Rune, and its tests in backticks, followed by `(macOS)` when a test
    runs only on macOS. Name a unit test by its path in its crate, such as
