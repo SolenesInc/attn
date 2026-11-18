@@ -362,15 +362,43 @@ pub(crate) fn advance(state: &mut State, tx: &mut Tx) {
     let bands = queue::bands(&state.facts, state.window.now_ms);
     let turns = bands.turns.iter().map(|r| r.session.id.clone()).collect();
     let previous = std::mem::replace(&mut state.window.queue_turns, turns);
-    let to = match state.window.view {
-        View::Home if state.window.follow_next_turn => bands.head().map(|h| Some(h.id.clone())),
-        View::Desktop => bands.advance_after_turn_closed(&previous, on_screen.as_deref()),
-        View::Home => None,
+    let (reason, to) = match state.window.view {
+        View::Home if state.window.follow_next_turn => {
+            ("follow", bands.head().map(|h| Some(h.id.clone())))
+        }
+        View::Desktop => (
+            "turn_closed",
+            bands.advance_after_turn_closed(&previous, on_screen.as_deref()),
+        ),
+        View::Home => ("", None),
     };
+    if let Some(to) = &to {
+        record_advance(state, reason, to.as_deref(), state.wall_ms(tx));
+    }
     match to {
         Some(Some(id)) if tx.focused().is_none() => open_agent(state, &id, tx),
         Some(Some(id)) => show_agent(state, &id, tx),
         Some(None) => state.window.go_home_following(),
         None => {}
     }
+}
+
+/// Records where the queue took the user, with how long the turn it opened has waited.
+fn record_advance(state: &State, reason: &str, to: Option<&str>, now_ms: i64) {
+    let Some(id) = to else {
+        let props = [("reason", reason.into()), ("to", "dashboard".into())];
+        return crate::app_actions::record(state, "queue_advance", &props);
+    };
+    let opened_at = state
+        .facts
+        .sessions
+        .iter()
+        .find(|s| s.id == id)
+        .and_then(|s| s.turn_opened_at.as_deref())
+        .and_then(queue::epoch_ms);
+    let mut props = vec![("reason", reason.into()), ("to", "session".into())];
+    if let Some(opened_at) = opened_at {
+        props.push(("wait_ms", (now_ms - opened_at).max(0).into()));
+    }
+    crate::app_actions::record(state, "queue_advance", &props);
 }

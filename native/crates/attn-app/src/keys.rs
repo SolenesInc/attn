@@ -1,8 +1,6 @@
 use attn_term::keys;
 use rune::{Chord, ClipboardContent, Ime, Key, KeyEvent, KeyPlatform, Mods, Tx};
 
-use attn_protocol::RecordAnalyticsMessage;
-
 use crate::State;
 use crate::action::Action;
 use crate::dispatch::{Outcome, run};
@@ -392,17 +390,5 @@ fn run_shortcut(state: &mut State, action: Action, tx: &mut Tx) -> bool {
 }
 
 fn record_shortcut(state: &State, action: &Action) {
-    if !crate::setting::on(&state.facts.settings, "analytics.enabled") {
-        return;
-    }
-    let _ = state.daemon.send(&RecordAnalyticsMessage {
-        stream: "app".into(),
-        name: "shortcut".into(),
-        props: Some(
-            [("id".to_owned(), serde_json::Value::from(action.id()))]
-                .into_iter()
-                .collect(),
-        ),
-        ..RecordAnalyticsMessage::new()
-    });
+    crate::app_actions::record(state, "shortcut", &[("id", action.id().into())]);
 }

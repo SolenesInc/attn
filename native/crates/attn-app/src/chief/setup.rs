@@ -682,8 +682,7 @@ fn alert(text_: &str, t: &Tokens) -> El {
 
 fn open_agents_settings(state: &mut State, tx: &mut Tx) {
     super::dismiss(state, false, tx);
-    crate::settings::open(state, tx);
-    crate::settings::select(state, crate::settings::Section::Agents, tx);
+    crate::settings::open(state, crate::settings::Section::Agents, tx);
 }
 
 /// The setup beside the slot, while it shows.

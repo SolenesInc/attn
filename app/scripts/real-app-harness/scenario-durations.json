@@ -106,6 +106,7 @@
     "move-with-delegates": 12,
     "native-agent-queue": 12,
     "native-agent-settings": 24,
+    "native-analytics-settings": 12,
     "native-automation-form": 30.5,
     "native-automation-surface": 25,
     "native-callouts": 20,

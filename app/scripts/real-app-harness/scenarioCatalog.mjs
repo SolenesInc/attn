@@ -278,6 +278,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-analytics-settings',
+    runnerId: 'NATIVE-ANALYTICS-SETTINGS',
+    label: "The native app's Analytics settings: vents new then done, a tool vent kept here, dismiss and undo by key, plant a seed, records by stream with app actions, and clear the local record",
+    command: ['node', 'scripts/real-app-harness/scenario-native-analytics-settings.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-delegation-preferences',
     runnerId: 'NATIVE-DELEGATION-PREFERENCES',
     label: "The native app's Delegation settings: opt in, an instance refusing the workflow install, a custom role's model, effort and alternative, delete and undo, one launch's effort override, and off and on again",

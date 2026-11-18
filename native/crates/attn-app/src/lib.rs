@@ -1,5 +1,6 @@
 mod action;
 pub mod annotations;
+mod app_actions;
 mod asks;
 pub mod automation;
 mod automations;

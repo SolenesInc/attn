@@ -62,6 +62,28 @@ Preconditions:
 - **Stop recording from the app.** Click the page head's switch, `[data-testid="settings-feature-analytics.enabled"]`, natively: it reads Off, the page stays open, `[data-testid="settings-nav-off-analytics"]` appears and `./attn settings get analytics.enabled` prints `false`.
 - **Proof.** In `$P`, keep each `./attn settings` command with its output and exit code, `bridge dom_text` of `[data-testid="settings-analytics"]` and `[data-testid="analytics-inspector"]` after each step, and `bridge capture_screenshot '{"path":"<P>/analytics-records.png"}'` with a record open, where `<P>` is the folder's path written out. With sharing, keep the `curl` reply. Name each file for its way in, such as `telemetry-shell-toggle.txt`.
 
+### In the native app
+
+The native app (`native/`) has the "Usage analytics" switch in **Settings → Experimental** and in the head of **Settings → Analytics**, the page's strip, its lists and inspector, its keys, and Machine settings. It records the same app actions as the Tauri app: shortcuts and palette commands, Settings sections opened and queue advances. It has no fallback after a failed `attn daemon ensure`: it says why in its Reconnecting banner and tries again, so it never stops a daemon with `app_recovery`, and `daemon-fallback-recovery` has no native copy. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+shift+,` where the steps press `mod+,`.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make `P` as above.
+
+Steps:
+
+- **Turn recording on in the app.** Press `mod+,` and `settings.nav.experimental`. `settings.nav-off.analytics` reads "off". Press `settings.feature.analytics.enabled`, the switch named "Usage analytics": `bridge wait '{"target":{"key":"settings.nav-off.analytics"},"gone":true}'` answers and `./attn settings get analytics.enabled` prints `true`.
+- **Off and on from the shell.** As above: `settings.nav-off.analytics` comes and goes with the setting.
+- **Read the outbox.** Press `settings.nav.analytics`. `bridge state '{"of":"settings"}'` shows `activeSection: "analytics"`, and `settings.analytics`, the page, has the keyboard. `settings.analytics.stat.sharing` reads `Off`. Press `]`: the tab `settings.analytics.views.all` is selected and `settings.analytics.list` lists `list-box-option` rows named `<time> · <name> · <stream>`. Press `j`: `settings.analytics.record.raw` holds the record's JSON under "Exactly as stored".
+- **App actions.** Press `settings.nav.experimental`, `settings.nav.analytics` and `settings.analytics.views.app`, then `r`: the list shows a `settings_section` row for each section opened, and the newest record's JSON reads `"props":{"section":"analytics"}`.
+- **A burst.** Press `settings.analytics.views.bus`, set `analytics.tool_vents` three times in the background of one command as above and press `r`: the first row reads `setting.changed ×3 · bus`, and `settings.analytics.record.heading` reads `3 records in the same second`. Press `Enter`: the burst's records are separate rows.
+- **A command outcome reaches the `cli` list.** Run `./attn doc nope`, press `settings.analytics.views.cli` and `r`: a row reads `doc · cli`.
+- **Daemon runs.** Run `./attn daemon stop`. The native app starts the daemon again on its own, and the `sample` records answer as above with `"previous_end":"stopped"` and `"stop_reason":"stop"`.
+- **Machine settings and clearing.** Press `m`: `settings.analytics.machine` shows the share row, whose `settings.analytics.machine.share.copy` says where uploads go, `settings.analytics.switch.analytics.tool_vents`, "Kept for 7 days", Forget and Clear. Run `./attn settings set analytics.share_vents true`: `bridge wait '{"target":{"key":"settings.analytics.machine.send-vents"}}'` answers, and it goes when the setting goes back. Press `settings.analytics.switch.analytics.tool_vents` twice: `./attn settings get analytics.tool_vents` follows it. Press `settings.analytics.clear`, then `settings.analytics.confirm.yes`: `settings.analytics.toast` reads "Cleared", described "Cleared <n> records and <n> dismissed vents.".
+- **Stop recording from the app.** Press `settings.feature.analytics.enabled`, now in the page head: `./attn settings get analytics.enabled` prints `false`, `activeSection` stays `analytics` and `settings.nav-off.analytics` shows.
+- **Proof.** In `$P`, keep each `./attn` answer with its exit code, `bridge tree` after each step on the page, and `bridge shot '{"path":"<P>/native-analytics.png"}'` with a record open, with `<P>` written out. The `native-analytics-settings` scenario runs the page's steps.
+
 ## Contexts
 
 - **Durability across restarts**: each daemon start classifies how the previous run ended from the run file, the stop note and the machine's boot time, so restarts, crashes, upgrades and reboots read apart on the server. The outbox, the install token (`<data-dir>/analytics-token`) and the subject secret (`<data-dir>/analytics-secret`) live in the data folder and survive restarts. A fact delivered again after a crash is stored once.
@@ -75,9 +97,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/analytics_wire_test.go`, `internal/daemon/analytics_enrich_wire_test.go`, `internal/daemon/analytics_mirror_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`, `internal/daemon/analytics_streams_wire_test.go`, `internal/daemon/analytics_runs_wire_test.go`.
+- Wire: `internal/daemon/analytics_wire_test.go`, `internal/daemon/analytics_enrich_wire_test.go`, `internal/daemon/analytics_mirror_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`, `internal/daemon/analytics_streams_wire_test.go`, `internal/daemon/analytics_runs_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/settings/analytics.rs`, `native/crates/attn-app/tests/wire/app_actions.rs` and `native/crates/attn-app/tests/wire/connection.rs` (a failed start).
 - Stack: `cmd/attnd/analytics_stack_test.go`, `cmd/attnd/analytics_outpost_stack_test.go`, `cmd/attnd/daemon_runs_stack_test.go`, `internal/daemon/analytics_mirror_stack_test.go`, `internal/daemon/analytics_samples_stack_test.go`, `cmd/attn-ingest/ingest_stack_test.go`.
-- Scenario: `analytics-settings`, `daemon-fallback-recovery`.
+- Scenario: `analytics-settings`, `daemon-fallback-recovery`; in the native app `native-analytics-settings`.
 - Kernel: `internal/analytics/redact_test.go`, `internal/daemon/daemon_run_test.go`.
 - App: `app/src/App.analytics.test.tsx`, `app/src/components/Analytics/AnalyticsSettings.records.test.tsx`, `app/src/components/Analytics/AnalyticsSettings.sharing.test.tsx`.
 

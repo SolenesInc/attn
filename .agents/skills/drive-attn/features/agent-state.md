@@ -83,6 +83,27 @@ Preconditions:
   - Put the setting back with `./attn settings set activity.enabled false`.
 - **Proof.** In `$P`, keep `./attn agent list --json` after each step, `./attn agent peek state-agent` after the reply, the approval and the stop, `./attn state explain state-agent --json`, `./attn activity` before and after the setting, and `bridge capture_screenshot '{"path":"<P>/state-home.png"}'` with the home screen showing the pending group, where `<P>` is the folder's path written out. Name each file for its way in, such as `state-approval-list.json`.
 
+### In the native app
+
+The native app (`native/`) shows each agent's state in its sidebar row, the home screen's state groups and the agent palette, and has **Settings → Background agents** with the activity switch and its refresh fields. The CLI steps above read the same daemon in either app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make `P`, `S` and the fixture as above.
+- The steps press the macOS chords. On Linux press `mod+alt+h` for `mod+shift+h`, `mod+shift+k` for `mod+k` and `mod+shift+,` for `mod+,`.
+- `<terminal>` is the `runtime_id` of the agent's pane in `wsctl list`. `wsctl input` takes that id, not the session id.
+
+Steps:
+
+- **Launch, working, then waiting.** Start `state-agent` as above. `bridge wait '{"target":{"key":"sidebar.session.state-agent.state"}}'` answers, an image named `Claude · idle`. Send `hello`: `bridge wait '{"target":{"key":"sidebar.session.state-agent.state","name":"Claude · waiting input"}}'` answers once `./attn agent list` shows `waiting_input`.
+- **A silent turn ends idle.** Send `quiet`: the same wait with `Claude · idle` answers.
+- **Needs approval.** Report the permission prompt with `_hook-notification` as above: the row reads `Claude · pending approval`. Press `mod+shift+h`: `bridge tree` shows `home.session.state-agent` inside the list `home.group.pending`, named "Pending approval", with the value `pending_approval`. Press `mod+k`: `palette.row.agent:state-agent.state` and `palette.row.agent:state-agent.status` read `approval`. Press `Escape`.
+- **Answered.** Send `hello` again: `bridge wait '{"target":{"key":"home.group.waiting"}}'` answers, named "Waiting for input", with `home.session.state-agent` in it, and the palette row reads `waiting`.
+- **Activity lines.** Press `mod+,` and `settings.nav.backgroundAgents`. `settings.activity.toggle` reads "Enable", disabled, with the description "Choose an agent first". Run `./attn settings set activity.enabled true`: `bridge wait '{"target":{"key":"settings.activity.toggle","name":"Disable"}}'` answers. Put the setting back and press `Escape`.
+- **Stopped.** Run `wsctl kill-session --id state-agent`: the row reads `Claude · idle` again, and peek shows `process exited with code`.
+- **Proof.** In `$P`, keep the CLI output the steps above name, `bridge tree` after the approval and after the answer, and `bridge shot '{"path":"<P>/native-state-home.png"}'` with home showing the pending group, with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: after an app or daemon restart, each live agent's monitor reads the agent's state again on the machine where the agent runs. A machine restart marks the agents attn can bring back `recoverable`, and attn restarts them at once; a shell stays `recoverable` until it is opened.
@@ -95,7 +116,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_state_edge_wire_test.go`, `internal/daemon/session_state_evidence_wire_test.go`, `internal/daemon/state_explain_wire_test.go`, `internal/daemon/stop_verdict_wire_test.go`, `internal/daemon/stop_yield_wire_test.go`, `internal/daemon/stop_outcomes_wire_test.go`, `internal/daemon/halt_replay_wire_test.go`, `internal/daemon/session_halt_wire_test.go`, `internal/daemon/session_approval_wire_test.go`, `internal/daemon/claude_stop_wire_test.go`, `internal/daemon/classifier_race_wire_test.go`, `internal/daemon/monitor_*_wire_test.go`, `internal/daemon/activity_*wire_test.go`, `internal/daemon/agent_peek_wire_test.go`, `internal/daemon/presence_wire_test.go`, `internal/daemon/program_status_wire_test.go`, `internal/daemon/transcript_binding_wire_test.go`, `internal/daemon/transcript_commentary_wire_test.go`, `internal/daemon/headless_launch_wire_test.go`, `internal/daemon/headless_tasks_wire_test.go`.
+- Wire: `internal/daemon/session_state_edge_wire_test.go`, `internal/daemon/session_state_evidence_wire_test.go`, `internal/daemon/state_explain_wire_test.go`, `internal/daemon/stop_verdict_wire_test.go`, `internal/daemon/stop_yield_wire_test.go`, `internal/daemon/stop_outcomes_wire_test.go`, `internal/daemon/halt_replay_wire_test.go`, `internal/daemon/session_halt_wire_test.go`, `internal/daemon/session_approval_wire_test.go`, `internal/daemon/claude_stop_wire_test.go`, `internal/daemon/classifier_race_wire_test.go`, `internal/daemon/monitor_*_wire_test.go`, `internal/daemon/activity_*wire_test.go`, `internal/daemon/agent_peek_wire_test.go`, `internal/daemon/presence_wire_test.go`, `internal/daemon/program_status_wire_test.go`, `internal/daemon/transcript_binding_wire_test.go`, `internal/daemon/transcript_commentary_wire_test.go`, `internal/daemon/headless_launch_wire_test.go`, `internal/daemon/headless_tasks_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/sidebar.rs` (each row's harness and state), `home.rs`, `palette.rs` (the agent row's dot) and `settings/background.rs`.
 - Stack: `cmd/attnd/state_explain_stack_test.go`, `cmd/attnd/agent_stack_test.go`, `cmd/attnd/transcript_stack_test.go`, `cmd/attnd/shell_program_status_stack_test.go`, `internal/daemon/monitor_restart_stack_test.go`, `internal/daemon/monitor_conversation_stack_test.go`, `app/e2e/session-states.spec.ts`, `scripts/verify-monitor-routing.sh`.
 - Kernel: `internal/sessionstate/*_test.go`, `internal/classifier/*_test.go`, `internal/sessionmonitor/*_test.go`, `internal/transcript/*_test.go`, `internal/activity/*_test.go`, `internal/statemarker/*_test.go`, `cli/attn/src/hooks/`, `internal/daemon/stop_terminality_test.go`.
 - App: `app/src/App.arrivalPulse.test.tsx`, `app/src/App.sessionActivitySettings.test.tsx`, `app/src/components/Sidebar.harnessIcons.test.tsx`.

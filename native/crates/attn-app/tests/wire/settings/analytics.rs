@@ -936,7 +936,7 @@ fn forgetting_this_install_waits_for_a_confirmation() {
 
 #[test]
 fn new_vents_list_before_done_ones_and_the_selected_vent_shows_its_context() {
-    let world = triage();
+    let mut world = triage();
 
     let listed = rows(&world);
     assert!(
@@ -967,6 +967,7 @@ fn new_vents_list_before_done_ones_and_the_selected_vent_shows_its_context() {
         named(&world, "settings.analytics.vent.destination"),
         "Kept on this machine"
     );
+    super::rest(&mut world);
 }
 
 #[test]

@@ -82,6 +82,27 @@ Preconditions:
 - **Guidance without tool vents, and without analytics.** Run `./attn settings set analytics.tool_vents false` and launch a third agent with an empty fixture: its launch file holds `attn vent --about attn` once and `attn vent --about tools` not at all. Run `./attn settings set analytics.enabled false` and launch a fourth: its launch file never mentions `attn vent`.
 - **Proof.** In `$P`, keep the output of each `./attn` command with its exit code, `./attn agent peek vent-agent` after each prompt, `bridge dom_text` of the list and of `[data-testid="analytics-inspector"]` after each key, `./attn seed show <seed> --json` after the plant and the undo, and `bridge capture_screenshot '{"path":"<P>/vents.png"}'` with the list open, where `<P>` is the folder's path written out. Name each file for its way in, such as `vents-agent-send-peek.txt`.
 
+### In the native app
+
+The native app (`native/`) lists vents in **Settings → Analytics** with their inspector, the triage keys and buttons, and Machine settings' "Send vents" and "Tool vents". The agent and shell steps above read the same daemon in either app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+shift+,` where the steps press `mod+,`.
+- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Turn analytics and tool vents on, make `P`, `A` and the fixture, and send the agent's four prompts as above. `<terminal>` is the `runtime_id` of the agent's pane in `wsctl list`.
+
+Steps:
+
+- **Review in the app.** Press `mod+,`, `settings.nav.analytics` and `settings.analytics.views.vents`. `settings.analytics.list` holds the group "New", with the `attn turn settle` vent above the tool vent, whose row reads `vent-agent · tools · …`, then the group "Done" with the withdrawn vent, its row ending `· withdrawn · now`. The rows are `list-box-option`s keyed `item<n>` in list order. `settings.analytics.inspector` shows the first vent: `settings.analytics.vent.text`, `.when`, `.agent`, `.seed`, `.build`, the buttons `settings.analytics.vent.action.<key>` and `settings.analytics.vent.destination`, "Kept on this machine".
+- **Dismiss and undo with keys.** Press `d`: `settings.analytics.toast` reads "Dismissed", described `Dismissed “vent-agent”.`, and the vent moves under "Done", its row marked `dismissed`. Press `u`: the toast reads "Undone." and the vent is back under "New".
+- **Move through the list.** Press `item0`, then `j`, `j`, `k`, `Down` and `Up`: after each, `settings.analytics.vent.text` names the next or previous vent.
+- **The inspector's buttons.** Press `item1`, the tool vent, then `settings.analytics.vent.action.d`: the toast reads `Dismissed “vent-agent”.` and the button is named "Restore". Press it again: `Restored “vent-agent”.`
+- **Plant a seed.** Press `item0` and `p`: the toast reads "Planted", described `Planted <slug> from “vent-agent”.`, and `./attn seed search "turn settle"` finds the seed. Press `u`: `./attn seed show <seed>` shows `status withered`.
+- **Refile.** Press `item1` and `s`: `Filed “vent-agent” under attn.` Press `s` again: `Filed “vent-agent” under tools; it stays on this machine.`
+- **Machine settings.** Drive "Send vents" and "Tool vents" as [telemetry.md](telemetry.md)'s native Machine settings step does.
+- **Open the session.** Press `item0` and `o`: `bridge state '{"of":"settings"}'` shows `open: false` and `bridge state '{"of":"window"}'` shows `on_screen: "vent-agent"`.
+- **Proof.** In `$P`, keep each `./attn` answer, `bridge tree` of `settings.analytics.list` and of the inspector after each key, and `bridge shot '{"path":"<P>/native-vents.png"}'` with the list open, with `<P>` written out. The `native-analytics-settings` scenario runs review, triage and planting.
+
 ## Contexts
 
 - **Durability across restarts**: vents are the daemon's records and come back after any restart, and a session can still vent after a daemon restart. Dismissed and withdrawn vents are deleted after 30 days.
@@ -93,9 +114,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/vents_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`.
+- Wire: `internal/daemon/vents_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/settings/analytics.rs`.
 - Stack: `cmd/attnd/vent_stack_test.go`.
-- Scenario: `analytics-settings`.
+- Scenario: `analytics-settings`; in the native app `native-analytics-settings`.
 - App: `app/src/components/Analytics/AnalyticsSettings.vents.test.tsx`.
 
 ## Gotchas

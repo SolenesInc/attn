@@ -263,11 +263,13 @@ pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
     if is_open(state) {
         close(state, tx);
     } else {
-        open(state, tx);
+        let section = state.window.settings.section;
+        open(state, section, tx);
     }
 }
 
-pub(crate) fn open(state: &mut State, tx: &mut Tx) {
+pub(crate) fn open(state: &mut State, section: Section, tx: &mut Tx) {
+    state.window.settings.section = section;
     let settings = state.facts.settings.clone();
     for (key, trim) in TEXT_FIELDS {
         let codec = if *trim {
@@ -288,8 +290,10 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
     arrive(state, tx);
 }
 
-/// Reads what the page just shown lists from the daemon.
+/// Records the page just shown, and reads what it lists from the daemon.
 fn arrive(state: &mut State, tx: &mut Tx) {
+    let section = state.window.settings.section.id();
+    crate::app_actions::record(state, "settings_section", &[("section", section.into())]);
     tasks::arrive(state, tx);
     bus::arrive(state, tx);
     analytics::arrive(state, tx);

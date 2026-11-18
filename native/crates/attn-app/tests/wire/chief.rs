@@ -452,6 +452,27 @@ fn a_refused_save_says_why_and_keeps_the_route_and_folder() {
 }
 
 #[test]
+fn settings_from_the_chief_setup_open_on_agents_and_record_only_that_section() {
+    let mut first = initial(true, chief(false), Vec::new());
+    let mut none = settings(true);
+    none.insert("claude_available".into(), "false".into());
+    none.insert("codex_available".into(), "false".into());
+    none.insert("analytics.enabled".into(), "true".into());
+    first.settings = Some(none);
+    let mut world = start(first);
+
+    click(&mut world, "chief-setup.settings");
+
+    let sections: Vec<Value> = sent(&world, "record_analytics")
+        .into_iter()
+        .filter(|r| r["name"] == "settings_section")
+        .map(|r| r["props"]["section"].clone())
+        .collect();
+    assert_eq!(sections, [json!("agents")]);
+    assert!(shows(&world, "settings.section.agents"));
+}
+
+#[test]
 fn with_no_harness_for_the_chief_check_again_reads_them_and_one_harness_hides_the_choice() {
     let mut first = initial(true, chief(false), Vec::new());
     let mut none = settings(true);

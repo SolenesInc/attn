@@ -2,6 +2,7 @@
 static ALLOCATOR: attn_testkit::allocations::Counting = attn_testkit::allocations::Counting;
 
 mod wire {
+    mod app_actions;
     mod asks;
     mod automation;
     mod automations;

@@ -913,6 +913,45 @@ fn an_agent_row_names_its_pull_request_and_marks_the_chief_and_what_the_chief_de
 }
 
 #[test]
+fn each_agent_row_names_its_harness_with_fallbacks_for_a_plugin_and_a_missing_one_and_its_state() {
+    let rows = [
+        ("claude", "claude", "Claude", "scheduled"),
+        ("codex", "codex", "Codex", "idle"),
+        ("shell", "shell", "Shell", "idle"),
+        ("plugin", "custom-driver", "Custom Driver", "idle"),
+        ("missing", "", "Unknown harness", "idle"),
+    ];
+    let sessions = rows
+        .iter()
+        .map(|(id, agent, _, state)| Session {
+            agent: (*agent).into(),
+            ..session(id, state)
+        })
+        .collect();
+    let panes = rows
+        .iter()
+        .enumerate()
+        .map(|(i, (id, ..))| pane("d1", &format!("p{i}"), id))
+        .collect();
+    let world = World::start(
+        Daemon::scripted().state(state(sessions, vec![desktop("d1", "a", "Work", panes)])),
+    );
+
+    let screen = world.screen();
+    for (id, _, harness, state) in rows {
+        let row = format!("sidebar.session.{id}");
+        assert_eq!(
+            screen.get(Target::key(format!("{row}.state"))).name,
+            Some(format!("{harness} · {state}")),
+        );
+        assert_eq!(
+            screen.get(Target::key(&row)).description.as_deref(),
+            Some(harness)
+        );
+    }
+}
+
+#[test]
 fn an_agent_row_says_its_harness_on_hover_and_explains_an_unknown_state_the_daemon_gave_a_reason_for()
  {
     let cases = [
