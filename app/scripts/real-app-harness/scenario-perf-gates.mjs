@@ -361,9 +361,9 @@ try {
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
   await observer.connect();
-  const desks = await runner.step('make_desktops', makeDesks);
   const startedOn = observer.currentDesktopId();
   if (startedOn) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(startedOn));
+  const desks = await runner.step('make_desktops', makeDesks);
   const summaries = [];
   const out = fs.createWriteStream(path.join(runner.runDir, 'runs.jsonl'));
   for (const name of extras.workloads) {

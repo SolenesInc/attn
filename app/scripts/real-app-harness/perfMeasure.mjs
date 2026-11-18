@@ -354,12 +354,9 @@ export async function paneIdForSession(client, sessionId) {
 }
 
 export async function createSlottedDesktop(observer) {
-  const taken = new Set(observer.desktops.map((desktop) => desktop.shortcut_slot).filter(Boolean));
-  const slot = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => !taken.has(n));
-  if (!slot) throw new Error(`no free desktop slot: ${observer.describeArrangement()}`);
-  const result = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: slot });
-  const desktop = await observer.waitFor(() => observer.desktop(result.desktops?.[0]?.id), `desktop in slot ${slot}`);
-  return { id: desktop.id, slot };
+  const desktop = await observer.createDesktop();
+  if (!desktop.shortcut_slot) throw new Error(`desktop ${desktop.id} has no shortcut slot: all nine are taken`);
+  return { id: desktop.id, slot: desktop.shortcut_slot };
 }
 
 export async function closeEmptiedDesktop(observer, id) {
@@ -398,8 +395,7 @@ export async function openPerfShell({ client, observer, cwd, label }) {
       client, observer, cwd, label, agent: 'shell', sessionWaitMs: 30_000, waitForInitialPaneVisible: true, initialPaneWaitMs: 25_000,
     });
   }
-  const desktop = await createSlottedDesktop(observer);
-  await showNativeDesktop(client, observer, desktop);
+  const desktop = await perfDesktop(client, observer);
   const id = crypto.randomUUID();
   const spawned = observer.waitForMessage((m) => m.event === 'spawn_result' && m.id === id && m, `${label} spawned`, 30_000);
   observer.send({ cmd: 'spawn_session', id, agent: 'shell', cwd, profile_id: observer.profileId, placement: { desktop_id: desktop.id }, label, cols: 100, rows: 30 });
@@ -411,10 +407,29 @@ export async function openPerfShell({ client, observer, cwd, label }) {
 }
 
 export async function closeSessions(client, ids, observer) {
-  const close = appShellInTree(client.appPath) === 'native'
-    ? (sessionId) => observer.unregisterSession(sessionId)
-    : (sessionId) => client.request('close_session', { sessionId }, { timeoutMs: 15_000 });
-  await Promise.allSettled([...new Set(ids)].map(close));
+  const closing = [...new Set(ids)];
+  if (appShellInTree(client.appPath) !== 'native') {
+    await Promise.allSettled(closing.map((sessionId) => client.request('close_session', { sessionId }, { timeoutMs: 15_000 })));
+    return;
+  }
+  for (const sessionId of closing) observer.unregisterSession(sessionId);
+  const desktop = perfDesktops.get(observer);
+  if (!desktop) return;
+  await observer.waitFor(() => !observer.desktop(desktop.id)?.panes.some((pane) => closing.includes(pane.session_id)), 'closed sessions leave the perf desktop');
+  if (observer.desktop(desktop.id)?.panes.length) return;
+  perfDesktops.delete(observer);
+  await closeEmptiedDesktop(observer, desktop.id);
+}
+
+const perfDesktops = new WeakMap();
+
+async function perfDesktop(client, observer) {
+  const known = perfDesktops.get(observer);
+  if (known && observer.desktop(known.id)) return known;
+  const desktop = await createSlottedDesktop(observer);
+  await showNativeDesktop(client, observer, desktop);
+  perfDesktops.set(observer, desktop);
+  return desktop;
 }
 
 // Sequential with a per-pane settle: filling every pane at once overruns the

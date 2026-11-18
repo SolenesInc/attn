@@ -48,7 +48,7 @@ nothing covers it and it draws as a window in view does, waits 20 s, then sample
 process the app is responsible for, the daemon and the PTY host once a second
 with `proc_pid_rusage`: CPU as a share of one core and physical footprint, the
 number that counts graphics memory. It compiles `procUsage.c` with `cc` on first
-use.
+use, so it runs only on macOS.
 
 ```bash
 ATTN_HARNESS_INSTANCE=<name> node app/scripts/real-app-harness/scenario-perf-gates.mjs \

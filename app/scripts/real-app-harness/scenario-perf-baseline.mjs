@@ -268,7 +268,7 @@ async function main() {
     const stale = [...observer.sessionsById.values()].filter(isPerfBaselineLabel);
     if (stale.length > 0) {
       console.log(`[perf] closing ${stale.length} stale perf-baseline session(s) from prior runs`);
-      await closeSessions(client, stale.map((session) => session.id));
+      await closeSessions(client, stale.map((session) => session.id), observer);
       await waitForSessionsGone(observer, isPerfBaselineLabel, 20_000);
     }
     if (!native) await client.waitForFrontendResponsive(20_000);
