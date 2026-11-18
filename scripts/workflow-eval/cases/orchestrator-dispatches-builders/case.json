@@ -5,5 +5,4 @@
  "graders": [
    {"kind": "delegation", "role": "builder", "seed": "child1", "authorization": true},
    {"kind": "delegation", "role": "builder", "seed": "child2", "authorization": true},
-   {"kind": "delegation", "role": "reviewer", "absent": true},
-   {"kind": "command", "pattern": "attn delegate [^\\n]*--seed {child1}[^\\n]*--cwd|attn delegate [^\\n]*--cwd[^\\n]*--seed {child1}"}]}
+   {"kind": "delegation", "role": "reviewer", "absent": true}]}

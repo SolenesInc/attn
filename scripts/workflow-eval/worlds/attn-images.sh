@@ -26,7 +26,7 @@ images_checks=(
 # 000c32eb4's images.go; the clean change only renames the private resolver, so every path stays as it was.
 commit_builder_change() {
   if [ "$1" = defect ]; then
-    git show "000c32eb4:internal/ask/images.go" > internal/ask/images.go
+    git -C "$EVAL_REPOSITORY" show "000c32eb4:internal/ask/images.go" > internal/ask/images.go
   else
     perl -pi -e 's/\blocalImagePath\b/ResolveImage/g' internal/ask/images.go
   fi
