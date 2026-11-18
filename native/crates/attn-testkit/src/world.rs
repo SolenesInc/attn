@@ -308,6 +308,7 @@ impl World {
             scale: 2.0,
         };
         let mut runtime = attn_app::app().headless_runtime(size, env);
+        runtime.check_kept_paint();
         APP_ON_KEY.get_or_init(|| runtime.app_mut().on_key.expect("the app hears keys"));
         runtime.app_mut().on_key = Some(heard);
         let clipboard = rune::clipboard::memory();

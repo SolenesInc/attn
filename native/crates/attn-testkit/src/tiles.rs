@@ -139,6 +139,7 @@ impl TileRuntime {
         let app = attn_app::tile_window_app(size);
         let keeps_running = app.keeps_running();
         let mut runtime = app.headless_runtime(size, env);
+        runtime.check_kept_paint();
         runtime.use_clipboard(&rune::clipboard::memory());
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
         let placed = Arc::new(Mutex::new(frame));

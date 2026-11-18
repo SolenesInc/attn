@@ -77,6 +77,7 @@ impl CaptureRuntime {
             scale: 2.0,
         };
         let mut runtime = quick_capture::app().headless_runtime(quick_capture::SIZE, env);
+        runtime.check_kept_paint();
         let clipboard = rune::clipboard::memory();
         runtime.use_clipboard(&clipboard);
         let window = Arc::new(HeadlessPanel {
