@@ -70,11 +70,8 @@ try {
     fs.mkdirSync(path.join(cwd, 'assets'), { recursive: true });
     fs.writeFileSync(path.join(cwd, `${nav}.md`), '# nav probe\n\n[bar](bar.md)\n', 'utf8');
     fs.writeFileSync(path.join(cwd, 'bar.md'), '# bar\n\n[anchor](deep/anchor.md)\n', 'utf8');
-    fs.writeFileSync(path.join(cwd, 'deep', 'anchor.md'), '# Anchor\n\n[picture](../image.md)\n', 'utf8');
-    fs.writeFileSync(path.join(cwd, 'image.md'), [
-      '# image probe',
-      '',
-      '![pixel](assets/pixel.png)',
+    fs.writeFileSync(path.join(cwd, 'deep', 'anchor.md'), [
+      '# Anchor',
       '',
       '[down](#down-below)',
       '',
@@ -82,7 +79,10 @@ try {
       '',
       '## Down below',
       '',
+      '[picture](../image.md)',
+      '',
     ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(cwd, 'image.md'), '# image probe\n\n![pixel](assets/pixel.png)\n', 'utf8');
     fs.writeFileSync(path.join(cwd, 'assets', 'pixel.png'), Buffer.from(PIXEL_PNG_BASE64, 'base64'));
     const spawned = observer.waitForMessage((m) => m.event === 'spawn_result' && m.id === id && m, 'shell spawned');
     observer.send({ cmd: 'spawn_session', id, agent: 'shell', cwd, profile_id: observer.profileId, placement: { desktop_id: desktop.id }, label: 'links', cols: 80, rows: 24 });
@@ -123,16 +123,16 @@ try {
     await titled('anchor');
   });
 
-  await runner.step('a_link_up_a_folder_opens_a_note_whose_image_draws', async () => {
+  await runner.step('a_link_to_a_heading_puts_the_caret_on_it', async () => {
     await follow(2);
+    await driver.waitFor({ role: 'text', name: '## Down below' });
+  });
+
+  await runner.step('a_link_below_the_heading_it_scrolled_to_opens_a_note_whose_image_draws', async () => {
+    await follow(87);
     await titled('image');
     await driver.waitFor({ role: 'image', name: 'pixel' });
     await driver.screenshot(path.join(runner.runDir, 'native-notebook-link-nav.png'));
-  });
-
-  await runner.step('a_link_to_a_heading_puts_the_caret_on_it', async () => {
-    await follow(4);
-    await driver.waitFor({ role: 'text', name: '## Down below' });
   });
 
   await runner.step('leave_no_tile_behind', async () => {
