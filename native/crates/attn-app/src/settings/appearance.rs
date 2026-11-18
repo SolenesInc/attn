@@ -24,7 +24,7 @@ const TILE_COLS_FIELD: f32 = 174.0;
 /// monospace needs six more for "240" to clear the arrows.
 const SIDEBAR_FIELD: f32 = 72.0;
 const MIN_SCALE: f32 = 0.7;
-const MAX_SCALE: f32 = 1.5;
+pub(crate) const MAX_SCALE: f32 = 1.5;
 const SCALE_STEP: f32 = 0.1;
 
 fn stored_scale(settings: &BTreeMap<String, String>, key: &str) -> Option<f32> {

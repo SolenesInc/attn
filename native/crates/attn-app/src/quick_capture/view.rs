@@ -708,12 +708,13 @@ fn sent_image(
                 .wrap()
         }))
         .children(matches!(sent, Some(Sent::Failed(_))).then(|| {
+            let media_type = file.media_type.clone();
             button(
                 &format!("capture.history.file.{}.{}.retry", record.id, file.id),
                 &format!("Retry {}", file.name),
                 "Retry image",
                 t,
-                move |panel, tx| previews::retry(panel, key.clone(), tx),
+                move |panel, tx| previews::retry(panel, key.clone(), media_type.clone(), tx),
             )
         }))
 }

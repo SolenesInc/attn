@@ -11,8 +11,9 @@ use rune::{Image, ImageCache, Tx};
 
 use super::{Message, Panel, result};
 
-/// The largest an image draws in the panel, in points, which an SVG rasterizes to fit.
-const LARGEST: f32 = 132.0;
+/// The largest an image draws in the panel, in points at the largest text size: each picture
+/// holds only the pixels that fill a square this size, however large the image.
+const LARGEST: f32 = 132.0 * crate::settings::LARGEST_TEXT_SCALE;
 const SCALE: f32 = 2.0;
 
 #[derive(Default)]
@@ -85,36 +86,37 @@ pub(super) fn fetch(panel: &mut Panel, tx: &mut Tx) {
     if panel.face != super::Face::Recent {
         return;
     }
-    let wanted: Vec<(String, String)> = panel
+    let wanted: Vec<((String, String), String)> = panel
         .history
         .ordered()
         .into_iter()
         .flat_map(images_of)
-        .filter(|key| !panel.history.images.contains_key(key))
+        .filter(|(key, _)| !panel.history.images.contains_key(key))
         .collect();
-    for key in wanted {
+    for (key, media_type) in wanted {
         panel.history.images.insert(key.clone(), Sent::Loading);
-        download(panel, key, 0, Vec::new(), tx);
+        download(panel, key, media_type, 0, Vec::new(), tx);
     }
 }
 
-/// Downloads the sent image `key` names again, after it failed.
-pub(crate) fn retry(panel: &mut Panel, key: (String, String), tx: &mut Tx) {
+/// Downloads the sent image `key` names, of `media_type`, again after it failed.
+pub(crate) fn retry(panel: &mut Panel, key: (String, String), media_type: String, tx: &mut Tx) {
     panel.history.images.insert(key.clone(), Sent::Loading);
-    download(panel, key, 0, Vec::new(), tx);
+    download(panel, key, media_type, 0, Vec::new(), tx);
 }
 
-fn images_of(record: &QuickCaptureRecord) -> impl Iterator<Item = (String, String)> + '_ {
+fn images_of(record: &QuickCaptureRecord) -> impl Iterator<Item = ((String, String), String)> + '_ {
     record
         .attachments
         .iter()
         .filter(|a| a.media_type.starts_with("image/"))
-        .map(|a| (record.id.clone(), a.id.clone()))
+        .map(|a| ((record.id.clone(), a.id.clone()), a.media_type.clone()))
 }
 
 fn download(
     panel: &mut Panel,
     key: (String, String),
+    media_type: String,
     offset: i64,
     mut bytes: Vec<u8>,
     tx: &mut Tx,
@@ -151,10 +153,12 @@ fn download(
                 Ok((data, next, eof)) => {
                     bytes.extend(data);
                     if !eof {
-                        return download(panel, key, next, bytes, tx);
+                        return download(panel, key, media_type, next, bytes, tx);
                     }
                     match &panel.previews.cache {
-                        Some(cache) => Sent::Shown(cache.load(bytes)),
+                        Some(cache) => {
+                            Sent::Shown(cache.load_mime(bytes, &media_type, LARGEST, SCALE))
+                        }
                         None => Sent::Failed("Images cannot be shown here.".to_owned()),
                     }
                 }

@@ -32,7 +32,7 @@ use crate::State;
 use crate::action::Action;
 use crate::shell::Layer;
 pub(crate) use analytics::long_ago;
-pub(crate) use appearance::{garden_scale, text_scale};
+pub(crate) use appearance::{MAX_SCALE as LARGEST_TEXT_SCALE, garden_scale, text_scale};
 pub(crate) use route::{
     EffortMode, Route, RouteHarness, Rules, Target as RouteTarget, view as route_view,
 };
