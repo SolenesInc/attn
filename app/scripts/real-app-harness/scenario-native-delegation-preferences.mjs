@@ -89,7 +89,7 @@ async function closePicker() {
 
 async function write(key, text) {
   await driver.click({ key });
-  await driver.pressKey('ctrl+a');
+  await driver.pressKey('mod+a');
   await driver.typeInto({ key }, text);
   await driver.click({ key: `${key}.label` });
 }
