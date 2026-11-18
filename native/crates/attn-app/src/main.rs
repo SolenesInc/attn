@@ -83,6 +83,7 @@ fn main() -> ExitCode {
         store: store.clone(),
         daemon: link.commands(),
         epoch_ms,
+        debug_dir: attn_app::instance::debug_dir(&launch.instance.bundle_id),
     });
     let deliver: attn_app::desktop::Deliver = {
         let main = main.clone();

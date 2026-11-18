@@ -156,6 +156,8 @@ pub struct NativeOpener {
     pub store: attn_client::Store,
     pub daemon: attn_client::Commands,
     pub epoch_ms: i64,
+    /// The app's debug folder, where each window logs its terminals' input.
+    pub debug_dir: Option<std::path::PathBuf>,
 }
 
 struct NativeWindow {
@@ -209,6 +211,11 @@ impl crate::desktop::Opener for NativeOpener {
                 move |update| handle.update(update)
             },
         );
+        if let Some(debug_dir) = self.debug_dir.clone() {
+            handle.update(Box::new(move |state: &mut State, _: &mut rune::Tx| {
+                state.log_input_to(&debug_dir)
+            }));
+        }
         Box::new(NativeWindow {
             window,
             handle,
