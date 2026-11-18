@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { openAsks } from './standin.mjs';
 
 function seedOf(world, name) {
   const id = world.seeds[name];
@@ -80,10 +81,10 @@ const kinds = {
   ask: {
     label: g => `ask ${g.state}`,
     grade: (g, { world, session }) => {
-      const { asks } = world.attnJson(['ask', 'list', '--session', session]);
-      if (g.state === 'none') return asks.length === 0;
-      if (g.state === 'open') return asks.some(ask => !ask.reply);
-      if (g.state === 'any') return asks.length > 0;
+      const open = openAsks(world, session).length;
+      if (g.state === 'none') return open + world.answered.length === 0;
+      if (g.state === 'open') return open > 0;
+      if (g.state === 'any') return open + world.answered.length > 0;
       throw new Error(`ask state is none, open or any, not ${g.state}`);
     },
   },
@@ -100,7 +101,7 @@ const kinds = {
     label: g => `read ${g.file}${g.before ? ` before ${g.before}` : ''}`,
     grade: (g, { transcript }) => {
       const loaded = g.file === 'SKILL.md' ? '|"skill":"attn-workflow"' : '';
-      const read = firstCall(transcript, new RegExp(`attn-workflow/${g.file.replace('.', '\\.')}${loaded}`));
+      const read = firstCall(transcript, new RegExp(`attn-workflow[\\s\\S]*${path.basename(g.file).replaceAll('.', '\\.')}${loaded}`));
       if (read < 0 || !g.before) return read >= 0;
       const after = firstCall(transcript, new RegExp(g.before));
       return after < 0 || after > read;

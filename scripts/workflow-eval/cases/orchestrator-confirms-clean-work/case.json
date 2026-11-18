@@ -5,4 +5,4 @@
  "graders": [
    {"kind": "check", "seed": "child", "check": "C1", "state": "confirmed"},
    {"kind": "check", "seed": "child", "check": "C2", "state": "confirmed"},
-   {"kind": "command", "pattern": "git (show|diff|log -p)", "before": "attn seed check (confirm|reject)"}]}
+   {"kind": "command", "pattern": "git (-C \\S+ |--no-pager )*(show|diff|log -p)", "before": "attn seed check (confirm|reject)"}]}

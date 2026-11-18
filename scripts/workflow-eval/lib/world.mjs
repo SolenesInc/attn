@@ -49,7 +49,7 @@ export function createWorld({ root, arm, accessToken }) {
     ATTN_CODEX_EXECUTABLE: mockAgent,
   };
   const world = {
-    instance, dir, toolHome, repo, env, arm, seeds: {},
+    instance, dir, toolHome, repo, env, arm, seeds: {}, answered: [],
     attn: (args, options = {}) => execFileSync(path.join(arm.bin, 'attn'), args, { env, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], ...options }),
     attnJson: (args) => JSON.parse(world.attn([...args, '--json'])),
     daemonEnv: { ...env, CLAUDE_CODE_OAUTH_TOKEN: accessToken },

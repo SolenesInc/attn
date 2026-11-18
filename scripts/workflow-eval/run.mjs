@@ -107,6 +107,7 @@ async function waitForStop(world, session, testCase, log) {
   for (;;) {
     await sleep(pollMs);
     const answered = testCase.answer_asks === false ? [] : answerAsks(world, session);
+    world.answered.push(...answered);
     for (const ask of answered) log(`answered ask ${ask.id} "${ask.subject}": ${JSON.stringify(ask.answers)}`);
     const state = agentState(world, session);
     quiet = answered.length || state === 'launching' || state === 'working' ? 0 : quiet + 1;

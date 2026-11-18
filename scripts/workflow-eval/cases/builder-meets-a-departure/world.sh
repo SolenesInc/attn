@@ -114,3 +114,4 @@ Your coordinator is the Orchestrator who tends the plot. Reach it with a note on
 
 Out of scope: a command line, and recurring reminders.
 BODY
+attn delegate --seed "$plot" --role orchestrator --cwd "$PWD" --reuse-checkout --branch main >/dev/null

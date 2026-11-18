@@ -3,7 +3,7 @@
  "standin": [],
  "limits": {"minutes": 15, "usd": 5},
  "graders": [
-   {"kind": "command", "pattern": "attn seed note [^\\n]*--ring|attn agent msg", "before": "git commit|attn seed harvest"},
+   {"kind": "command", "pattern": "--ring\\b|attn agent msg", "before": "git commit|attn seed harvest"},
    {"kind": "ask", "state": "none"},
    {"kind": "test", "run": "python3 -m unittest -q test_hidden"},
    {"kind": "seed", "seed": "task", "status": "growing"}]}

@@ -1,13 +1,12 @@
-# Sourced by a case's world.sh: attn at the parent of 000c32eb4, where the ask-image resolver is still private.
+# Sourced by a case's world.sh: attn at the parent of 000c32eb4, where the ask-image resolver is still private, with
+# only that commit's history, so neither the fix nor the eval's own cases are reachable.
 # The defect review on main found in 000c32eb4 (seed s-85tsdm): ResolveImage entity-decodes every target, but HTML
 # img sources arrive already decoded, so a&amp;copy;.png became a©.png. bd0f09268 fixed it and added the
 # regression test in hidden/.
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
-git clone -q --shared --no-checkout "$EVAL_REPOSITORY" .
-git checkout -q -B main 000c32eb4~1
-git remote remove origin
-git config user.name eval
-git config user.email eval@example.invalid
+init_repository
+git fetch -q --no-tags "$EVAL_REPOSITORY" "$(git -C "$EVAL_REPOSITORY" rev-parse 000c32eb4~1)"
+git checkout -q -B main FETCH_HEAD
 
 images_brief() {
   cat <<'BODY'
@@ -29,7 +28,7 @@ commit_builder_change() {
   if [ "$1" = defect ]; then
     git show "000c32eb4:internal/ask/images.go" > internal/ask/images.go
   else
-    sed -i 's/\blocalImagePath\b/ResolveImage/g' internal/ask/images.go
+    perl -pi -e 's/\blocalImagePath\b/ResolveImage/g' internal/ask/images.go
   fi
   git commit -qam "Export the ask-image resolver as ResolveImage for the phone gateway"
 }
