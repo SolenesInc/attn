@@ -1,5 +1,5 @@
 {"level": 1, "role": "pathfinder", "model": "sonnet",
- "opening": {"seed": "plot"},
+ "opening": {"seed": "plot", "authorization": "I won't review the plan: dispatch it as soon as it is ready, without showing it to me."},
  "standin": [],
  "limits": {"minutes": 15, "usd": 5},
  "graders": [

@@ -128,7 +128,14 @@ function transcriptOf(world, session) {
     .filter(line => line.startsWith('{')).map(line => JSON.parse(line)).filter(event => event.kind);
 }
 
-function runLine({ world, testCase, arm, run, session, transcript, started, closed, graded, limit }) {
+function permissionDenial(transcript) {
+  const denied = transcript.find(event => event.kind === 'tool_result' && event.is_error && /denied by the Claude Code auto mode classifier/.test(event.text));
+  if (!denied) return '';
+  const call = transcript.find(event => event.kind === 'tool_call' && event.tool_call_id === denied.tool_call_id);
+  return `the auto mode classifier denied ${call?.tool_name ?? 'a tool call'}: ${(call?.text ?? '').slice(0, 200)}`;
+}
+
+function runLine({ world, testCase, arm, run, session, transcript, started, closed, graded, limit, voided }) {
   const entry = sessions(world).find(e => e.id === session);
   const calls = transcript.filter(event => event.kind === 'tool_call');
   const loaded = calls.findIndex(event => event.tool_name === 'Skill' && /"attn-workflow"/.test(event.text));
@@ -138,7 +145,7 @@ function runLine({ world, testCase, arm, run, session, transcript, started, clos
     seed: world.seeds[testCase.opening.seed], started, closed, tool_calls: calls.length, cost_usd: entry?.usage?.cost_usd ?? 0,
     loaded_skill_at_call: loaded < 0 ? null : loaded + 1, references: read('references'), principles: read('principles'),
     eval: { case: testCase.name, arm: arm.label, ref: arm.ref, commit: arm.commit, run, instance: world.instance, limit: limit || null,
-      graders: Object.fromEntries(graded.map(g => [g.label, g.pass])) },
+      ...(voided ? { void: voided } : { graders: Object.fromEntries(graded.map(g => [g.label, g.pass])) }) },
   };
 }
 
@@ -157,14 +164,16 @@ async function runCase({ root, snapshot, record }, testCase, arm, run) {
     const closed = new Date();
     const transcript = transcriptOf(world, session);
     fs.writeFileSync(path.join(world.dir, 'transcript.jsonl'), transcript.map(event => JSON.stringify(event)).join('\n'));
-    const graded = grade(testCase.graders, { world, testCase, transcript, session });
+    const voided = permissionDenial(transcript);
+    const graded = voided ? [] : grade(testCase.graders, { world, testCase, transcript, session });
     const usd = spent(world);
-    const line = runLine({ world, testCase, arm, run, session, transcript, started: started.toISOString(), closed: closed.toISOString(), graded, limit });
+    const line = runLine({ world, testCase, arm, run, session, transcript, started: started.toISOString(), closed: closed.toISOString(), graded, limit, voided });
     fs.appendFileSync(record, `${JSON.stringify(line)}\n`);
     fs.writeFileSync(path.join(world.dir, 'result.json'), `${JSON.stringify(line, null, 2)}\n`);
-    log(`${limit ? `stopped: ${limit}, ` : ''}$${usd.toFixed(2)}, ${((closed - started) / 60_000).toFixed(1)} min, ${graded.filter(g => g.pass).length}/${graded.length} graders`);
+    const outcome = voided ? `void, not graded: ${voided}` : `${graded.filter(g => g.pass).length}/${graded.length} graders`;
+    log(`${limit ? `stopped: ${limit}, ` : ''}$${usd.toFixed(2)}, ${((closed - started) / 60_000).toFixed(1)} min, ${outcome}`);
     for (const g of graded.filter(g => !g.pass)) log(`  failed: ${g.label}${g.error ? ` (${g.error})` : ''}`);
-    return { case: testCase.name, arm: arm.label, graded, usd, minutes: (closed - started) / 60_000 };
+    return { case: testCase.name, arm: arm.label, graded, usd, minutes: (closed - started) / 60_000, voided };
   } catch (error) {
     log(`error: ${error.message}`);
     return { case: testCase.name, arm: arm.label, graded: testCase.graders.map(g => ({ label: graderLabel(g), pass: false })), usd: 0, minutes: 0, error: error.message };
@@ -179,7 +188,8 @@ const median = values => [...values].sort((a, b) => a - b)[Math.floor((values.le
 function printTable(cases, results) {
   const labels = arms.map(arm => arm.label);
   for (const testCase of cases) {
-    const mine = label => results.filter(r => r.case === testCase.name && r.arm === label);
+    const mine = label => results.filter(r => r.case === testCase.name && r.arm === label && !r.voided);
+    const voided = label => results.filter(r => r.case === testCase.name && r.arm === label && r.voided).length;
     const rows = [[testCase.name, ...labels]];
     for (const grader of testCase.graders) {
       const label = graderLabel(grader);
@@ -188,6 +198,7 @@ function printTable(cases, results) {
         return `${passes}/${mine(arm).length}${passes * 2 <= mine(arm).length ? ' ✗' : ''}`;
       })]);
     }
+    if (labels.some(voided)) rows.push(['  void, not graded', ...labels.map(arm => String(voided(arm)))]);
     rows.push(['  cost, median', ...labels.map(arm => `$${median(mine(arm).map(r => r.usd)).toFixed(2)}`)]);
     rows.push(['  minutes, median', ...labels.map(arm => median(mine(arm).map(r => r.minutes)).toFixed(1))]);
     const width = Math.max(...rows.map(row => row[0].length)) + 2;
