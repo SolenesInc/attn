@@ -81,27 +81,35 @@ waited_for_runner() {
   sed -n 's/^Waited \([0-9]*\)s for the guest checkout .*/\1/p' "$1" | grep . || echo 0
 }
 
+scenario_seconds() {
+  sed -n "s/^Scenario $1 $2 in \([0-9]*\)s\$/\1/p" "$3" | tail -1
+}
+
 run_on_ssh() {
-  local target="$1" scenarios="$2" logs scenario failed="" started waited
+  local target="$1" scenarios="$2" logs log scenario seconds outcome failed="" started
   if ! pnpm --silent --dir app real-app:linux status --provider ssh --target "$target" >/dev/null 2>&1; then
     echo "land: the landing runner $target cannot be reached, so the scenarios run on CI's Linux instead" >&2
     run_on_github "$scenarios"
     return
   fi
   logs="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-runner.XXXXXX")"
+  log="$logs/runner.log"
+  echo "land: running scenarios $scenarios on $target, before the push: $log"
+  started=$SECONDS
+  perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$target" \
+    --checkout land --scenario "$scenarios" --out "$logs/artifacts" >"$log" 2>&1 &
+  runner_pid=$!
+  wait "$runner_pid" || true
+  runner_pid=""
+  echo "land: the landing runner took $((SECONDS - started))s, $(waited_for_runner "$log")s of it waiting for other landings"
   for scenario in ${scenarios//,/ }; do
-    echo "land: running scenario $scenario on $target, before the push"
-    started=$SECONDS
-    perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$target" \
-      --checkout land --scenario "$scenario" --out "$logs/$scenario" >"$logs/$scenario.log" 2>&1 &
-    runner_pid=$!
-    if wait "$runner_pid"; then
-      runner_pid=""
-      record_pass "$scenario" "ssh:$target" "$logs/$scenario.log"
-      echo "land: scenario $scenario passed on $target in $((SECONDS - started))s, $(waited_for_runner "$logs/$scenario.log")s of it waiting for other landings: $logs/$scenario.log"
+    if seconds="$(scenario_seconds "$scenario" passed "$log")" && [ -n "$seconds" ]; then
+      record_pass "$scenario" "ssh:$target" "$log"
+      echo "land: scenario $scenario passed on $target in ${seconds}s"
     else
-      runner_pid=""
-      echo "land: scenario $scenario failed on $target in $((SECONDS - started))s, $(waited_for_runner "$logs/$scenario.log")s of it waiting for other landings, so it runs again on CI's Linux, and that run decides. Log: $logs/$scenario.log" >&2
+      seconds="$(scenario_seconds "$scenario" failed "$log")"
+      if [ -n "$seconds" ]; then outcome="failed on $target in ${seconds}s"; else outcome="did not finish on $target"; fi
+      echo "land: scenario $scenario $outcome, so it runs again on CI's Linux, and that run decides. Log: $log" >&2
       failed="${failed:+$failed,}$scenario"
     fi
   done

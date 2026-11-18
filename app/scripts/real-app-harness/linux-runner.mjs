@@ -112,8 +112,9 @@ Actions:
   build       Sync and install the packaged app in the named guest instance
   test        Sync, reinstall a fresh guest instance and run the serial app matrix under Xvfb;
               collect artifacts even on failure
-  soak        Sync, reinstall a fresh guest instance with the app --scenario needs and run that scenario
-              once under Xvfb, as CI's Acceptance soak does; collect artifacts even on failure
+  soak        Sync, build each app the --scenario list needs once, then run each scenario once under
+              Xvfb in a freshly installed guest instance, as CI's Acceptance soak does; print a
+              "Scenario <id> passed|failed in <n>s" line per scenario; collect artifacts even on failure
   artifacts   Copy the guest artifacts directory to --out
   clean       Remove the installed guest instance using its own CLI
 
@@ -125,13 +126,13 @@ Options:
   --checkout <name>          Guest checkout to sync into. Default: a hash of this checkout's path
   --instance <name>           Default: linux-<checkout>; never production
   --out <directory>          Local artifacts destination
-  --scenario <id>            The scenario soak runs
+  --scenario <id>[,<id>...]  The scenarios soak runs, in order
 
 Examples:
   pnpm --dir app real-app:linux provision
   pnpm --dir app real-app:linux test -- --scenario quick-capture
   pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
-  pnpm --dir app real-app:linux soak --provider ssh --target tester@linux --scenario linux-shortcuts
+  pnpm --dir app real-app:linux soak --provider ssh --target tester@linux --scenario linux-shortcuts,shelf-moves
 `);
     return;
   }
@@ -145,7 +146,7 @@ Examples:
   if (!['sync', 'provision', 'run', 'build', 'test', 'soak', 'artifacts', 'clean'].includes(options.action)) {
     throw new Error(`Unknown action: ${options.action}`);
   }
-  if (options.action === 'soak') resolveScenario(options.scenario ?? '');
+  if (options.action === 'soak') soakScenarios(options.scenario ?? '');
   if (options.action === 'provision') {
     provider.up();
     provider.ssh('bash -s', {
@@ -166,23 +167,68 @@ Examples:
   if (options.action === 'provision') {
     return execute(['bash', 'app/scripts/real-app-harness/vm/provision.sh']);
   }
-  if (options.action === 'build') return execute(['node', 'app/scripts/real-app-harness/vm/build.mjs', 'tauri']);
+  if (options.action === 'build') {
+    buildApp(execute, options.instance, 'tauri');
+    return installApp(execute, options.instance, 'tauri');
+  }
   if (options.action === 'run') return execute(options.commandArgs);
   if (options.action === 'clean') return execute(['./attn', 'instance', 'clean', options.instance]);
   if (options.action === 'artifacts') return collect(provider, root, destination);
 }
 
+function buildApp(execute, instance, app) {
+  execute(['make', 'build-app', `INSTANCE=${instance}`, `APP=${app}`]);
+}
+
+function installApp(execute, instance, app) {
+  execute(['make', 'install-staged', `INSTANCE=${instance}`, `APP=${app}`]);
+}
+
+function installFresh(execute, instance, app) {
+  execute(['./attn', 'instance', 'clean', instance]);
+  installApp(execute, instance, app);
+}
+
+function underXvfb(args) {
+  // Window probes must not reset Xvfb while GTK connects during app startup.
+  return ['xvfb-run', '-a', '-s', '-noreset -screen 0 1600x1000x24', 'pnpm', '--dir', 'app', 'run', ...args];
+}
+
+function runMatrix(options, execute) {
+  buildApp(execute, options.instance, 'tauri');
+  installFresh(execute, options.instance, 'tauri');
+  execute(underXvfb(['real-app:serial-matrix', ...(options.commandArgs || [])]));
+}
+
+function runSoak(options, execute) {
+  const scenarios = soakScenarios(options.scenario);
+  for (const app of new Set(scenarios.map(scenarioApp))) buildApp(execute, options.instance, app);
+  const failed = [];
+  for (const scenario of scenarios) {
+    const started = Date.now();
+    let verdict = 'passed';
+    try {
+      installFresh(execute, options.instance, scenarioApp(scenario));
+      execute(underXvfb(['real-app:soak', '--', '--scenario', scenario.id, '--repeat', '1', '--failed-evidence-only']));
+    } catch {
+      verdict = 'failed';
+      failed.push(scenario.id);
+    }
+    console.log(`Scenario ${scenario.id} ${verdict} in ${Math.round((Date.now() - started) / 1000)}s`);
+  }
+  if (failed.length) throw Object.assign(new Error(`Scenarios failed: ${failed.join(', ')}`), { exitCode: 1 });
+}
+
+function soakScenarios(list) {
+  return list.split(',').map((id) => resolveScenario(id));
+}
+
 function runScenarios(options, provider, root, destination, execute) {
   syncSource(provider, repo, root);
-  execute(['bash', '-c', '[[ ! -x ./attn ]] || ./attn instance clean "$ATTN_INSTANCE"']);
-  const scenarios = options.action === 'soak'
-    ? ['real-app:soak', '--', '--scenario', options.scenario, '--repeat', '1', '--failed-evidence-only']
-    : ['real-app:serial-matrix', ...(options.commandArgs || [])];
-  execute(['node', 'app/scripts/real-app-harness/vm/build.mjs', options.action === 'soak' ? scenarioApp(resolveScenario(options.scenario)) : 'tauri']);
   let testError;
   try {
-    // Window probes must not reset Xvfb while GTK connects during app startup.
-    execute(['xvfb-run', '-a', '-s', '-noreset -screen 0 1600x1000x24', 'pnpm', '--dir', 'app', 'run', ...scenarios]);
+    if (options.action === 'soak') runSoak(options, execute);
+    else runMatrix(options, execute);
   } catch (error) { testError = error; }
   try { execute(['scripts/native-build-clean']); }
   catch (error) { console.error(`Pruning native build output failed: ${error.message}`); }

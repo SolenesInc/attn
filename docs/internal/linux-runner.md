@@ -67,11 +67,16 @@ name. The guest receives no host routing variables or provider credentials.
 instance again, and runs the existing serial matrix under Xvfb, so every run
 starts from empty instance data, like CI. `test` copies the artifacts even when a scenario fails, and it exits with the failing command's exit status. Pass `--out <directory>` to choose the results directory. Without `--out`, `test` writes results under the host temporary directory in `attn-linux-artifacts/<provider>/<checkout>`.
 
-`soak --scenario <id>` runs one scenario the way CI's Acceptance soak does: it
-syncs, cleans the instance, installs the app the scenario needs (Tauri or
-native), and runs the scenario once under Xvfb. It also runs scenarios that the
-serial matrix leaves to the soak. Artifacts and the exit status work as for
-`test`.
+`soak --scenario <id>[,<id>...]` runs scenarios the way CI's Acceptance soak
+does: it syncs, builds each app the scenarios need (Tauri or native) once, and
+then, for each scenario in turn, cleans the instance, installs that app's built
+tree and runs the scenario once under Xvfb. Every scenario starts from an empty
+instance, as on CI's fresh runner per scenario, but the build is paid once: on
+the landing runner a no-op build took 31 s for Tauri and 15 s for native, and
+the clean and install together under a second. It prints
+`Scenario <id> passed in <n>s` or `failed` for each, and runs the rest after a
+failure. It also runs scenarios that the serial matrix leaves to the soak.
+Artifacts and the exit status work as for `test`.
 
 After its scenarios, `test` and `soak` run `scripts/native-build-clean` on the
 guest, which keeps native build output within the budget
@@ -115,14 +120,15 @@ cold one on a fresh GitHub runner.
    Every worktree of the clone uses it. `git config --unset attn.landRunner`
    goes back to GitHub.
 
-Each scenario then runs as `real-app:linux soak --checkout land` on that
-machine, from an empty instance. Every landing, from any clone or host, uses
-that one guest checkout and its build output, so the machine holds one build
-of each app however many worktrees land. Landings take turns on it, one
-scenario at a time, and the landing prints each scenario's time on the machine
-and how much of it went to waiting for other landings.
+A landing's scenarios then run as one `real-app:linux soak --checkout land` on
+that machine, so the landing syncs once and builds each app once, and each
+scenario starts from an empty instance. Every landing, from any clone or host,
+uses that one guest checkout and its build output, so the machine holds one
+build of each app however many worktrees land. Landings take turns on it, and
+the landing prints its time on the machine, how much of it went to waiting for
+other landings, and each scenario's time.
 
-The landing prints where it keeps each scenario's log from the machine.
+The landing prints where it keeps the log from the machine.
 [What land.sh does](trunk-based-development.md#what-landsh-does) says what
 happens when the machine is down or a scenario fails there.
 
