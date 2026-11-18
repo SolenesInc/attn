@@ -262,6 +262,7 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     let connected = state.facts.connection == attn_client::Connection::Connected;
     let names = profile_names(state);
     let pricing = pricing(state);
+    let now_ms = state.wall_ms();
     let ledger = &mut state.window.ledger;
     if !connected {
         forget_reads(ledger);
@@ -286,7 +287,7 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     let closes = &state.facts.closes;
     match closes.since(ledger.seen_closes) {
         Some(new) => {
-            let now = state.epoch_ms;
+            let now = now_ms;
             for entry in new {
                 take_close(ledger, entry.clone(), now);
             }
@@ -344,13 +345,14 @@ fn pricing(state: &State) -> String {
 
 /// Reads the first page of the filters shown, replacing the page when it answers.
 fn read(state: &mut State, tx: &mut Tx) {
+    let now_ms = state.wall_ms();
     let ledger = &mut state.window.ledger;
     ledger.epoch += 1;
     ledger.loading_more = false;
     ledger.next_before = None;
     ledger.omitted = 0;
     let filters = ledger.filters.clone();
-    let Ok(request) = filters.request(state.epoch_ms) else {
+    let Ok(request) = filters.request(now_ms) else {
         ledger.loading = false;
         return;
     };
@@ -422,6 +424,7 @@ fn answer_error(answer: &Answer, fallback: &str) -> String {
 
 /// Reads the page after the last one and adds its rows.
 pub(crate) fn load_more(state: &mut State, tx: &mut Tx) {
+    let now_ms = state.wall_ms();
     let ledger = &mut state.window.ledger;
     let Some(before) = ledger.next_before.clone() else {
         return;
@@ -429,7 +432,7 @@ pub(crate) fn load_more(state: &mut State, tx: &mut Tx) {
     if ledger.loading || ledger.loading_more {
         return;
     }
-    let Ok(request) = ledger.filters.request(state.epoch_ms) else {
+    let Ok(request) = ledger.filters.request(now_ms) else {
         return;
     };
     ledger.loading_more = true;

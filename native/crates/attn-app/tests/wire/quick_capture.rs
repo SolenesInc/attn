@@ -705,6 +705,33 @@ fn recent_heads_each_day_with_its_date() {
 }
 
 #[test]
+fn recent_heads_its_days_by_the_wall_clock_after_the_mac_slept() {
+    let (daemon, kept) = home();
+    let record = |id: &str, at: &str| QuickCaptureRecord {
+        id: id.into(),
+        mailbox: serde_json::from_value(json!({"kind": "crew_member", "member_id": "ada"}))
+            .unwrap(),
+        content: id.into(),
+        created_at: at.into(),
+        attachments: vec![],
+        read_at: None,
+    };
+    kept.lock().unwrap().records = vec![
+        record("then", "2026-11-11T12:00:00Z"),
+        record("this-morning", "2026-11-12T08:30:00Z"),
+    ];
+    let mut world = World::start(daemon);
+    world.sleep(Duration::from_secs(24 * 60 * 60));
+    open(&mut world);
+    world.capture_gesture(|d| d.click(Target::role("button").name("Recent messages")));
+    for label in ["Nov 11", "Yesterday"] {
+        assert!(shows(&world, label), "{label} heads its day");
+    }
+    assert!(!shows(&world, "Today"), "nothing came today");
+    rest(&mut world);
+}
+
+#[test]
 fn drops_a_multi_megabyte_file_and_uploads_it_in_chunks() {
     let (daemon, kept) = home();
     let mut world = World::start(daemon);

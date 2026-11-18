@@ -297,8 +297,8 @@ fn list(state: &State, rows: &[Row<'_>], selected: Option<&Row<'_>>, t: &Tokens)
         })
         .py(space::S1);
     if rows.is_empty() {
-        let failed = ledger.failed(state.epoch_ms);
-        let words = ledger.empty_message(state.epoch_ms);
+        let failed = ledger.failed(state.window.now_ms);
+        let words = ledger.empty_message(state.window.now_ms);
         return list
             .child(
                 text(words.clone())
@@ -329,7 +329,7 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
     let id = entry.id.clone();
     let menu_open = ledger.menu.as_deref() == Some(entry.id.as_str());
     let at_ms = crate::sidebar::queue::epoch_ms(query::instant(entry)).unwrap_or_default();
-    let stamp = query::relative_stamp(at_ms, state.epoch_ms);
+    let stamp = query::relative_stamp(at_ms, state.window.now_ms);
     let primary = r.verbs.first().map(|verb| {
         let (id, verb) = (entry.id.clone(), verb.clone());
         let words = match note {
@@ -543,7 +543,7 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
         group(&instant.to_lowercase().replace(' ', "-"), instant, t)
             .child(parts::value_with(
                 &query::full_stamp(at_ms),
-                &format!("({})", query::relative_stamp(at_ms, state.epoch_ms)),
+                &format!("({})", query::relative_stamp(at_ms, state.window.now_ms)),
                 t,
             ))
             .children(closed.then(|| muted(&closed_line(state, entry)["closed ".len()..], t))),

@@ -99,7 +99,7 @@ pub fn open(
         daemon,
         window.clone(),
         data_dir,
-        crate::wall_clock_ms(),
+        crate::WallClock::system(),
         {
             let handle = handle.clone();
             move |update| handle.update(update)

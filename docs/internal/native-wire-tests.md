@@ -62,8 +62,9 @@ To print each test's time, run the test binary that
 - The world's app presents the token `CLIENT_TOKEN` and belongs to the instance
   `INSTANCE`. A scripted daemon minted the same token and reports the same
   instance, so the handshake succeeds unless the test changes one of them.
-- Besides the daemon, the app sees two fakes: a `ManualClock` instead of the
-  system clock, and a `Runtime` instead of a window. The `Runtime` needs no GPU.
+- Besides the daemon, the app sees three fakes: a `ManualClock` instead of the
+  system clock, a wall clock that reads `WALL_START_MS` at the start, and a
+  `Runtime` instead of a window. The `Runtime` needs no GPU.
 
 `Daemon::scripted()` returns a daemon that is already listening. Configure it
 before `World::start`. These calls take the daemon and return it, so they
@@ -141,8 +142,9 @@ both sides have nothing left to do.
   lands at once, so a settled world shows the end of every animation. If both
   sides are still busy after 10 seconds, `settle` panics with both sides'
   traffic.
-- `advance(by)` moves the app's clock and the link's clock together, then
-  settles. Move time only with `advance`.
+- `advance(by)` moves the app's clock, the link's clock and the wall clock
+  together, then settles. `sleep(by)` moves only the wall clock, as a Mac's
+  sleep does, and runs nothing. Move time only with these two.
 - `reconnect()` hangs up, advances the clock to the link's next retry, and
   returns once the app has connected again and finished its handshake.
 - `world.link().traffic().parked` says where the link waits. `Parked::Until(t)`

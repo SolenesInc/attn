@@ -187,7 +187,7 @@ pub(crate) fn show(
         start: Start::Default,
         refreshing: false,
         delete: None,
-        read_at: state.wall_ms(tx) as f64 / 1000.0,
+        read_at: state.wall_ms() as f64 / 1000.0,
     };
     chooser.committed = chooser
         .destinations()
@@ -418,8 +418,8 @@ pub(crate) fn refresh(state: &mut State, which: Which, tx: &mut Tx) {
             request_id: Some(id),
             ..GetRepoInfoMessage::new()
         },
-        move |state, reply, tx| {
-            let read_at = state.wall_ms(tx) as f64 / 1000.0;
+        move |state, reply, _| {
+            let read_at = state.wall_ms() as f64 / 1000.0;
             let Some(chooser) =
                 super::current(state, which, generation).and_then(|p| p.chooser.as_mut())
             else {
@@ -522,7 +522,7 @@ fn reread_after_delete(
         },
         move |state, reply, tx| {
             let result: Option<GetRepoInfoResultMessage> = reply.parse();
-            let read_at = state.wall_ms(tx) as f64 / 1000.0;
+            let read_at = state.wall_ms() as f64 / 1000.0;
             let Some(chooser) = chooser_of(state, which) else {
                 return;
             };

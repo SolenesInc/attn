@@ -319,7 +319,7 @@ fn mark(state: &mut State, tile: &str, saying: Saying, tx: &mut Tx) {
             .and_then(|c| c.about.clone())
             .or_else(|| reading.pending.clone()),
     );
-    let now_ms = state.wall_ms(tx);
+    let now_ms = state.wall_ms();
     let now = tx.clock();
     let Some(draft) = state.drafts.get_mut(&uri) else {
         return;

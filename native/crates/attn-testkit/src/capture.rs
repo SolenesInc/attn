@@ -71,6 +71,7 @@ impl CaptureRuntime {
         daemon: Commands,
         pulse: &Pulse,
         data_dir: &Path,
+        wall: attn_app::WallClock,
     ) -> CaptureRuntime {
         let env = Env {
             system_dark: true,
@@ -95,7 +96,7 @@ impl CaptureRuntime {
                 daemon,
                 window.clone(),
                 data_dir.to_owned(),
-                crate::world::WALL_START_MS,
+                wall,
                 move |u| {
                     quick_capture::Window::update(&*window, u);
                 },

@@ -134,10 +134,10 @@ pub struct State {
     capture_shortcut: quick_capture::shortcut::Global,
     daemon: Commands,
     requests: requests::Requests,
-    /// Wall-clock milliseconds when the runtime's clock read zero.
-    epoch_ms: i64,
-    /// The runtime time the window next wakes to move turn ages on.
-    age_wake: Option<f64>,
+    wall: WallClock,
+    /// The next turn age or staleness change: its wall time, and the runtime time the window
+    /// wakes for it.
+    age_wake: Option<AgeWake>,
     /// Gives the menu bar's items the keys of each new keymap.
     menus: Option<Menus>,
     /// The instance the window's link serves, `default` for production.
@@ -155,14 +155,14 @@ impl State {
         self.terminals.trace.lock().unwrap().log_to(debug_dir);
     }
 
-    pub(crate) fn wall_ms(&self, tx: &Tx) -> i64 {
-        self.epoch_ms + (tx.clock() * 1000.0) as i64
+    pub(crate) fn wall_ms(&self) -> i64 {
+        self.wall.now_ms()
     }
 
     /// Reads the wall clock into the window and wakes it when the next turn age or activity
     /// staleness would change.
     fn tick(&mut self, tx: &mut Tx) {
-        self.window.now_ms = self.wall_ms(tx);
+        self.window.now_ms = self.wall_ms();
         let now_ms = self.window.now_ms;
         self.age_wake = sidebar::next_change(self, now_ms)
             .into_iter()
@@ -173,22 +173,61 @@ impl State {
             .chain(settings::phones::next_change(self, now_ms))
             .chain(review::setup::next_change(self, now_ms))
             .min()
-            .map(|at| (at - self.epoch_ms) as f64 / 1000.0);
-        if let Some(at) = self.age_wake {
-            tx.wake_at(at);
-        }
+            .map(|at| match self.age_wake {
+                Some(armed) if armed.at_ms == at => armed,
+                _ => AgeWake::arm(at, now_ms, tx),
+            });
     }
 }
 
-/// The wall clock's milliseconds since 1970, for `bind` in the app: tests pass their own.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "the one read of the wall clock, at launch"
-)]
-pub fn wall_clock_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as i64)
+#[derive(Clone, Copy)]
+struct AgeWake {
+    at_ms: i64,
+    due: f64,
+}
+
+impl AgeWake {
+    /// Asks the window to wake when the wall clock reaches `at_ms`. A wake that comes early,
+    /// as when the wall clock is set back, arms again for the time left.
+    fn arm(at_ms: i64, now_ms: i64, tx: &mut Tx) -> AgeWake {
+        let due = tx.clock() + (at_ms - now_ms).max(0) as f64 / 1000.0;
+        tx.wake_at(due);
+        AgeWake { at_ms, due }
+    }
+}
+
+/// Reads the wall clock in milliseconds since 1970: the system's in the app, a test's own in
+/// wire tests. Read it, never derive it from the runtime's clock, which stands still while the
+/// Mac sleeps.
+#[derive(Clone)]
+pub struct WallClock(Arc<dyn Fn() -> i64 + Send + Sync>);
+
+impl WallClock {
+    pub fn new(read: impl Fn() -> i64 + Send + Sync + 'static) -> WallClock {
+        WallClock(Arc::new(read))
+    }
+
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the one read of the system's wall clock"
+    )]
+    pub fn system() -> WallClock {
+        WallClock::new(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis() as i64)
+        })
+    }
+
+    pub fn now_ms(&self) -> i64 {
+        (self.0)()
+    }
+}
+
+impl Default for WallClock {
+    fn default() -> WallClock {
+        WallClock::system()
+    }
 }
 
 const READS: Slices = Slices::ALL;
@@ -205,7 +244,7 @@ pub fn bind(
     daemon: Commands,
     terminals: TerminalInbox,
     replies: ReplyInbox,
-    epoch_ms: i64,
+    wall: WallClock,
     instance: String,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> Subscription {
@@ -214,8 +253,13 @@ pub fn bind(
     let wake: rune::Waker = Arc::new(move || woken(Box::new(|_, _| {})));
     deliver(Box::new(move |state, _| {
         state.pictures.start(wake);
-        state.epoch_ms = epoch_ms;
-        state.terminals.trace.lock().unwrap().started_at(epoch_ms);
+        state
+            .terminals
+            .trace
+            .lock()
+            .unwrap()
+            .started_at(wall.clone());
+        state.wall = wall;
         state.instance = instance;
         state.daemon = daemon;
         state.terminals.inbox = terminals;
@@ -305,7 +349,7 @@ pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
 pub fn connect(
     store: &Store,
     config: impl FnOnce(TerminalSink, ReplySink) -> LinkConfig,
-    epoch_ms: i64,
+    wall: WallClock,
     changed: Pulse,
     wake: impl Fn() + Send + Sync + 'static,
     deliver: impl Fn(Update) + Send + Sync + 'static,
@@ -325,7 +369,7 @@ pub fn connect(
         link.commands(),
         terminals,
         replies.clone(),
-        epoch_ms,
+        wall,
         instance,
         move |update| {
             let changed = changed.clone();
@@ -357,12 +401,19 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let drafted = markdown::drafts::follow(state, now, tx)
         | markdown::annotating::expire(state, now)
         | markdown::sending::expire(state, now);
-    let aged = state.age_wake.is_some_and(|at| now >= at);
+    let aged = match state.age_wake {
+        Some(wake) if state.wall_ms() >= wake.at_ms => true,
+        Some(wake) if now >= wake.due => {
+            state.age_wake = Some(AgeWake::arm(wake.at_ms, state.wall_ms(), tx));
+            false
+        }
+        _ => false,
+    };
     if aged {
         state.tick(tx);
     }
-    let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
-        | desktop::follow_settling(state, state.wall_ms(tx));
+    let drains = sidebar::follow_countdowns(state, state.wall_ms())
+        | desktop::follow_settling(state, state.wall_ms());
     let greeted = whats_new::greet(state, tx);
     let settings =
         settings::poll(state, now, tx) | crew::poll(state, now, tx) | chief::poll(state, tx);

@@ -124,7 +124,7 @@ pub(crate) fn next_needing_you<'a>(
 
 /// ⌘⇧J: shows the next run that stopped and is owed a turn, after the agent on screen.
 pub(crate) fn next_run(state: &mut State, tx: &mut Tx) {
-    let now_ms = state.wall_ms(tx);
+    let now_ms = state.wall_ms();
     let on_screen = state.window.on_screen(&state.facts);
     let groups = on_desktops(&state.facts, now_ms);
     let next = next_needing_you(&groups, on_screen.as_deref()).map(|(run, ..)| run.id.clone());

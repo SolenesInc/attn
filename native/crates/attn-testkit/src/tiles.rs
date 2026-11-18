@@ -130,6 +130,7 @@ impl TileRuntime {
         store: &Store,
         daemon: attn_client::Commands,
         pulse: &Pulse,
+        wall: attn_app::WallClock,
     ) -> TileRuntime {
         let env = Env {
             system_dark: true,
@@ -159,7 +160,7 @@ impl TileRuntime {
                 daemon,
                 terminals.clone(),
                 attn_app::ReplyInbox::default(),
-                crate::WALL_START_MS,
+                wall,
                 String::new(),
                 move |update| {
                     inbox.lock().unwrap().push(update);

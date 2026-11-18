@@ -856,7 +856,7 @@ fn request_listing(
     dir: &str,
     tx: &mut Tx,
 ) {
-    let now_ms = state.wall_ms(tx);
+    let now_ms = state.wall_ms();
     let Some(launcher) = this_ref(state, which, opening) else {
         return;
     };
@@ -897,7 +897,7 @@ fn request_listing(
             );
             match result {
                 Some(result) if result.success => {
-                    let at_ms = state.wall_ms(tx);
+                    let at_ms = state.wall_ms();
                     let Some(launcher) = this_ref(state, which, opening) else {
                         return;
                     };
@@ -1137,7 +1137,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
 /// Counts how long the launchers wait on an outpost, and wakes again while they do. Returns
 /// whether any counted.
 pub(crate) fn tick(state: &mut State, tx: &mut Tx) -> bool {
-    let now_ms = state.wall_ms(tx);
+    let now_ms = state.wall_ms();
     let mut counted = false;
     for which in [Which::Dialog, Which::Inline] {
         let Some(launcher) = state.window.launching.launcher(which) else {
@@ -1652,7 +1652,7 @@ fn launch(
         )),
         _ => None,
     };
-    let at_ms = state.wall_ms(tx);
+    let at_ms = state.wall_ms();
     let launcher = state.window.launching.launcher_mut(which).expect("open");
     launcher.generation += 1;
     launcher.busy = true;

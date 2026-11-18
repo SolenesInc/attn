@@ -217,12 +217,12 @@ fn row_meta(state: &State, w: &Worktree) -> Vec<String> {
             if live == 1 { "session" } else { "sessions" }
         ));
     }
-    meta.push(sweep_word(w, state.epoch_ms));
+    meta.push(sweep_word(w, state.window.now_ms));
     if refreshing(state, &w.path) {
         meta.push("refreshing…".into());
     }
     if let Some(at) = w.last_activity_at.as_deref().and_then(epoch_ms) {
-        meta.push(format!("idle {}", relative_stamp(at, state.epoch_ms)));
+        meta.push(format!("idle {}", relative_stamp(at, state.window.now_ms)));
     }
     meta
 }
@@ -316,7 +316,7 @@ fn swept_row(state: &State, e: &WorktreeSweepEntry, selected: bool, t: &Tokens) 
     let mut meta: Vec<String> = e.branch.iter().cloned().collect();
     meta.push(e.action.clone());
     meta.extend(e.reason.iter().cloned());
-    let stamp = epoch_ms(&e.at).map(|at| parts::stamp(relative_stamp(at, state.epoch_ms), t));
+    let stamp = epoch_ms(&e.at).map(|at| parts::stamp(relative_stamp(at, state.window.now_ms), t));
     let id = e.id.clone();
     let name = base_name(&e.path).to_owned();
     let body = parts::row_body(
@@ -425,7 +425,7 @@ pub(crate) fn inspector(state: &State, t: &Tokens) -> El {
 
 fn worktree_inspector(state: &State, w: &Worktree, copied: Option<&str>, t: &Tokens) -> El {
     let ledger = &state.window.ledger.worktrees;
-    let now = state.epoch_ms;
+    let now = state.window.now_ms;
     let path = w.path.clone();
     let note = ledger.note(&path);
     let busy = matches!(note, Some(Note::Busy(_)));
@@ -615,7 +615,10 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
         vec![parts::status_text(counts.join("  ·  "), t.text_tertiary).key("ledger.counts")];
     let asked = match ledger.refresh() {
         Some(Refresh::Asked(at)) => {
-            format!("refresh · asked {}", relative_stamp(*at, state.epoch_ms))
+            format!(
+                "refresh · asked {}",
+                relative_stamp(*at, state.window.now_ms)
+            )
         }
         _ => "refresh".into(),
     };

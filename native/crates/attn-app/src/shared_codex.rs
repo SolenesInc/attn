@@ -223,7 +223,7 @@ pub(crate) fn poll(state: &mut State, tx: &mut Tx) -> bool {
         .and_then(|c| c.force_at.clone())
         .filter(|f| !f.is_empty())
     {
-        let now = state.wall_ms(tx);
+        let now = state.wall_ms();
         if now / 1000 != state.window.shared_codex.now_ms / 1000 {
             state.window.shared_codex.now_ms = now;
             changed = true;

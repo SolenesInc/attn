@@ -166,8 +166,7 @@ pub struct Panel {
     /// The panel's window holds the keyboard.
     pub(crate) key_window: bool,
     pub(crate) previews: previews::Previews,
-    /// Wall-clock milliseconds when the panel's clock read zero.
-    epoch_ms: i64,
+    wall: crate::WallClock,
     /// The user's calendar day when the panel last drew.
     pub(crate) today: i64,
     leader: Option<crate::shell::Leader>,
@@ -180,14 +179,14 @@ const READS: Slices = Slices::CONNECTION
     .union(Slices::CAPTURE_READS);
 
 /// Binds the panel to the store: it sends on `daemon`, keeps drafts under `data_dir`, hides
-/// through `window`, reads the wall clock as `epoch_ms` when its clock reads zero, and hears
+/// through `window`, reads the time of day from `wall`, and hears
 /// every change to what it reads through `deliver`.
 pub fn bind(
     store: &Store,
     daemon: Commands,
     window: Arc<dyn Window>,
     data_dir: PathBuf,
-    epoch_ms: i64,
+    wall: crate::WallClock,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> Subscription {
     let deliver = Arc::new(deliver);
@@ -195,7 +194,7 @@ pub fn bind(
     let wake: rune::Waker = Arc::new(move || woken(Box::new(|_, _| {})));
     deliver(Box::new(move |panel, _| {
         panel.previews.start(wake);
-        panel.epoch_ms = epoch_ms;
+        panel.wall = wall;
         panel.daemon = daemon;
         panel.window = Some(window);
         panel.data_dir = data_dir;
@@ -893,7 +892,7 @@ fn answer(panel: &mut Panel, tx: &mut Tx) -> bool {
 }
 
 fn poll(panel: &mut Panel, now: f64, tx: &mut Tx) -> bool {
-    let today = crate::calendar::local_day(panel.epoch_ms + (now * 1000.0) as i64);
+    let today = crate::calendar::local_day(panel.wall.now_ms());
     let mut changed = std::mem::replace(&mut panel.today, today) != today;
     changed |= answer(panel, tx);
     if panel.save.is_some_and(|due| now >= due.at) {

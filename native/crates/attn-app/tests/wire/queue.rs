@@ -347,6 +347,18 @@ fn a_turn_age_moves_on_when_it_would_read_differently_and_not_before() {
 }
 
 #[test]
+fn a_turn_age_reads_the_wall_clock_after_the_mac_slept() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    assert_eq!(name(&world, "queue-turn.t-new.age"), "5m");
+
+    world.sleep(Duration::from_secs(3 * 60 * 60));
+    assert_eq!(name(&world, "queue-turn.t-new.age"), "5m");
+    world.advance(Duration::from_millis(29_500));
+
+    assert_eq!(name(&world, "queue-turn.t-new.age"), "3h");
+}
+
+#[test]
 fn desktop_flow_shows_no_ages_and_never_wakes_for_them() {
     let world = World::start(Daemon::scripted().state(one_desktop(vec![turn("t-new", 5)])));
 

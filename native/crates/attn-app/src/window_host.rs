@@ -155,7 +155,7 @@ fn capture(window: u64, path: &str) -> Command {
 pub struct NativeOpener {
     pub store: attn_client::Store,
     pub daemon: attn_client::Commands,
-    pub epoch_ms: i64,
+    pub wall: crate::WallClock,
     /// The app's debug folder, where each window logs its terminals' input.
     pub debug_dir: Option<std::path::PathBuf>,
 }
@@ -204,7 +204,7 @@ impl crate::desktop::Opener for NativeOpener {
             self.daemon.clone(),
             terminals,
             crate::ReplyInbox::default(),
-            self.epoch_ms,
+            self.wall.clone(),
             String::new(),
             {
                 let handle = handle.clone();

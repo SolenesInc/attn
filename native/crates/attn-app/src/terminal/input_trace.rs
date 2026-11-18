@@ -202,7 +202,8 @@ struct Observed {
 #[derive(Default)]
 pub struct InputTrace {
     log: Option<PathBuf>,
-    epoch_ms: i64,
+    wall: crate::WallClock,
+    started_ms: i64,
     next_trace: u64,
     total: u64,
     events: VecDeque<Event>,
@@ -216,8 +217,9 @@ impl InputTrace {
         self.log = Some(debug_dir.join(DIAGNOSTICS_FILE));
     }
 
-    pub(crate) fn started_at(&mut self, epoch_ms: i64) {
-        self.epoch_ms = epoch_ms;
+    pub(crate) fn started_at(&mut self, wall: crate::WallClock) {
+        self.started_ms = wall.now_ms();
+        self.wall = wall;
     }
 
     pub(crate) fn log(&self) -> Option<&Path> {
@@ -252,7 +254,7 @@ impl InputTrace {
         self.next_trace += 1;
         let trace = format!(
             "n{}-{}",
-            base36(self.epoch_ms as u64),
+            base36(self.started_ms as u64),
             base36(self.next_trace)
         );
         let (key_class, repeat, modifiers) = match heard {
@@ -341,7 +343,7 @@ impl InputTrace {
             }
             return;
         };
-        let at = self.wall_ms(now);
+        let at = self.wall_ms();
         for (runtime, observed) in &mut self.observed {
             if observed.due.is_empty() {
                 continue;
@@ -360,7 +362,7 @@ impl InputTrace {
                 "kind": "input",
                 "schema": 1,
                 "reasons": reasons,
-                "appStartedAt": self.epoch_ms,
+                "appStartedAt": self.started_ms,
                 "pane": pane_id,
                 "session": session,
                 "runtimeId": runtime,
@@ -380,7 +382,7 @@ impl InputTrace {
         json!({
             "capacity": TRACE_CAPACITY,
             "total": self.total,
-            "capturedAtUnixMs": self.wall_ms(now),
+            "capturedAtUnixMs": self.wall_ms(),
             "capturedAtMonotonicMs": now * 1000.0,
             "events": self.events,
         })
@@ -427,7 +429,7 @@ impl InputTrace {
         Event {
             sequence: 0,
             trace_id: trace.clone(),
-            at_unix_ms: self.wall_ms(now),
+            at_unix_ms: self.wall_ms(),
             monotonic_ms: now * 1000.0,
             stage,
             event,
@@ -452,8 +454,8 @@ impl InputTrace {
         self.events.push_back(event);
     }
 
-    fn wall_ms(&self, now: f64) -> i64 {
-        self.epoch_ms + (now * 1000.0) as i64
+    fn wall_ms(&self) -> i64 {
+        self.wall.now_ms()
     }
 }
 

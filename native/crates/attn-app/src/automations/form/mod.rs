@@ -820,8 +820,8 @@ fn preview(state: &mut State, (cron, time_zone): (String, String), tx: &mut Tx) 
             time_zone,
             ..AutomationSchedulePreviewMessage::new()
         },
-        move |state, answer, tx: &mut Tx| {
-            let at_ms = state.wall_ms(tx);
+        move |state, answer, _: &mut Tx| {
+            let at_ms = state.wall_ms();
             let Some(f) = form_mut(state).filter(|f| f.preview.asked == asked) else {
                 return;
             };

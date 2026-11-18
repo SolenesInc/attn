@@ -373,7 +373,7 @@ pub(crate) fn advance(state: &mut State, tx: &mut Tx) {
         View::Home => ("", None),
     };
     if let Some(to) = &to {
-        record_advance(state, reason, to.as_deref(), state.wall_ms(tx));
+        record_advance(state, reason, to.as_deref(), state.wall_ms());
     }
     match to {
         Some(Some(id)) if tx.focused().is_none() => open_agent(state, &id, tx),

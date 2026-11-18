@@ -211,7 +211,7 @@ fn capture(state: &State, tx: &Tx) -> Capture {
         .collect();
     Capture {
         origin: json!({
-            "capturedAtUnixMs": state.wall_ms(tx),
+            "capturedAtUnixMs": state.wall_ms(),
             "view": match state.window.view { View::Home => "home", View::Desktop => "desktop" },
             "activeSessionId": active_session,
             "activePaneId": holder.map(|h| h.pane.clone()),
@@ -257,7 +257,7 @@ fn start_saving(state: &mut State, tx: &mut Tx) {
 }
 
 fn write(state: &mut State, tx: &mut Tx) {
-    let created_at = state.wall_ms(tx);
+    let created_at = state.wall_ms();
     let Some(draft) = state.window.diagnostic_report.take() else {
         return;
     };

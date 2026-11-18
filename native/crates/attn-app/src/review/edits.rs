@@ -481,7 +481,7 @@ fn save(state: &mut State, tx: &mut Tx) {
                 .is_some_and(|o| o.saving.as_deref() == Some(mark.id.as_str()));
             let problem = match result {
                 Ok(r) if !r.conflict => {
-                    mark.created_at = state.wall_ms(tx);
+                    mark.created_at = state.wall_ms();
                     let now = tx.clock();
                     if let Some(draft) = state.drafts.get_mut(&uri) {
                         draft.marks.push(mark);

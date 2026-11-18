@@ -78,7 +78,7 @@ impl At {
     fn of(state: &State, tx: &Tx) -> At {
         At {
             clock: tx.clock(),
-            wall_ms: state.wall_ms(tx),
+            wall_ms: state.wall_ms(),
         }
     }
 }

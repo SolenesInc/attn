@@ -187,8 +187,8 @@ fn list(state: &mut State, tx: &mut Tx) {
         state,
         id,
         &message,
-        |state, answer, tx| {
-            let now_ms = state.wall_ms(tx);
+        |state, answer, _| {
+            let now_ms = state.wall_ms();
             let automations = &mut state.window.automations;
             automations.loaded = true;
             match answer.outcome() {

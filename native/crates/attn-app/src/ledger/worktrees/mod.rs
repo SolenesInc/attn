@@ -610,9 +610,10 @@ pub(crate) fn refresh(state: &mut State, tx: &mut Tx) {
                 }
                 other => other.outcome().err(),
             };
+            let now_ms = state.wall_ms();
             let ledger = &mut state.window.ledger.worktrees;
             ledger.refresh = Some(match refused {
-                None => Refresh::Asked(state.epoch_ms),
+                None => Refresh::Asked(now_ms),
                 Some(why) => Refresh::Refused(why),
             });
         },

@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -30,6 +31,11 @@ const FRAME: f64 = 1.0 / 60.0;
 /// The wall clock when every world starts: 2026-11-12T09:00:00Z.
 pub const WALL_START_MS: i64 = 1_794_474_000_000;
 
+fn wall_clock(ms: &Arc<AtomicI64>) -> attn_app::WallClock {
+    let ms = ms.clone();
+    attn_app::WallClock::new(move || ms.load(Ordering::SeqCst))
+}
+
 /// The app on a windowless `Runtime`, with its real link connected to a scripted daemon over
 /// loopback. Time moves only when the test calls `advance`.
 pub struct World {
@@ -49,6 +55,7 @@ pub struct World {
     terminals: attn_app::TerminalInbox,
     replies: attn_app::ReplyInbox,
     clock: ManualClock,
+    wall_ms: Arc<AtomicI64>,
     pulse: Pulse,
     store: Store,
     orders: crate::tiles::Orders,
@@ -253,6 +260,7 @@ impl World {
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
         let frames: Arc<Mutex<Vec<Frame>>> = Arc::default();
         let clock = ManualClock::default();
+        let wall_ms = Arc::new(AtomicI64::new(WALL_START_MS));
         let received = frames.clone();
         let terminals = attn_app::TerminalInbox::default();
         let to_app = {
@@ -295,7 +303,7 @@ impl World {
                 link.commands(),
                 terminals.clone(),
                 replies.clone(),
-                WALL_START_MS,
+                wall_clock(&wall_ms),
                 instance.into(),
                 move |update| {
                     inbox.lock().unwrap().push(update);
@@ -327,8 +335,13 @@ impl World {
             runtime.update(move |state, _| state.open_tile_windows(opener, main));
         }
         let data_dir = files.path().join("data");
-        let capture =
-            crate::capture::CaptureRuntime::start(&store, link.commands(), &pulse, &data_dir);
+        let capture = crate::capture::CaptureRuntime::start(
+            &store,
+            link.commands(),
+            &pulse,
+            &data_dir,
+            wall_clock(&wall_ms),
+        );
         {
             let window: Arc<dyn attn_app::quick_capture::Window> = capture.window.clone();
             let data_dir = data_dir.clone();
@@ -353,6 +366,7 @@ impl World {
             terminals,
             replies,
             clock,
+            wall_ms,
             pulse,
             store,
             orders,
@@ -560,8 +574,10 @@ impl World {
         }
     }
 
-    /// Moves the app's clock and the link's together, then settles.
+    /// Moves the app's clock, the link's and the wall clock together, then settles.
     pub fn advance(&mut self, by: Duration) {
+        self.wall_ms
+            .fetch_add(by.as_millis() as i64, Ordering::SeqCst);
         self.clock.advance(by);
         self.pulse.beat();
         self.main_frame(by.as_secs_f64());
@@ -570,6 +586,14 @@ impl World {
         }
         self.capture.advance(by);
         self.settle();
+    }
+
+    /// The Mac sleeps for `by` and wakes: the wall clock moves while the app's and the link's
+    /// clocks stand still, as `Instant` does on macOS. Nothing runs until the test acts or
+    /// advances time.
+    pub fn sleep(&mut self, by: Duration) {
+        self.wall_ms
+            .fetch_add(by.as_millis() as i64, Ordering::SeqCst);
     }
 
     /// Hangs up, waits out the link's retry, and returns once the app has connected again and
@@ -605,6 +629,7 @@ impl World {
                         &self.store,
                         daemon,
                         &self.pulse,
+                        wall_clock(&self.wall_ms),
                     );
                     self.tiles.push(tile);
                     self.keyboard = Some(key);
@@ -945,6 +970,7 @@ impl World {
             self.link().commands(),
             &self.pulse,
             &self.capture.data_dir.clone(),
+            wall_clock(&self.wall_ms),
         );
         let window: Arc<dyn attn_app::quick_capture::Window> = self.capture.window.clone();
         self.runtime.update({

@@ -101,7 +101,7 @@ impl App {
                 start_daemon: None,
                 migration_marker: None,
             },
-            WALL_START_MS,
+            attn_app::WallClock::new(|| WALL_START_MS),
             host.frames.clone(),
             move || {
                 let _ = wake.send(Work::Wake);

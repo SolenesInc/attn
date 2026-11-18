@@ -305,7 +305,7 @@ fn save(state: &mut State, tx: &mut Tx) {
         r#type: if question { "question" } else { "comment" }.into(),
         text: Some(words),
         anchor: Some(composer.anchor),
-        created_at: state.wall_ms(tx),
+        created_at: state.wall_ms(),
         ..MarkdownAnnotation::default()
     };
     let Some(draft) = state.drafts.get_mut(&composer.uri) else {
