@@ -292,6 +292,43 @@ fn a_refresh_shows_dots_until_github_answers_and_a_failed_one_says_why_on_its_bu
 }
 
 #[test]
+fn the_refresh_dots_bounce_in_scale_and_opacity_as_the_tauri_dots_do() {
+    let mut world = start(one_desktop(vec![]), vec![]);
+    press(&mut world, Action::SessionGoToDashboard);
+    let refreshing = world.record(60.0, 3.0, |_, app| {
+        app.key(chord(Action::SessionRefreshPrs))
+    });
+    let dots: Vec<_> = refreshing
+        .tracks
+        .iter()
+        .filter(|t| t.path.contains("home.prs.refresh/") && t.frames.len() > 60)
+        .filter(|t| t.frames.iter().any(|(_, s)| s.scale < 0.99))
+        .collect();
+    assert_eq!(dots.len(), 3, "three dots bounce");
+    for dot in dots {
+        let (scale, opacity): (Vec<f32>, Vec<f32>) =
+            dot.frames.iter().map(|(_, s)| (s.scale, s.op)).unzip();
+        let span = |v: &[f32]| {
+            v.iter()
+                .copied()
+                .fold((f32::MAX, f32::MIN), |(lo, hi), x| (lo.min(x), hi.max(x)))
+        };
+        let (small, full) = span(&scale);
+        assert!(
+            (small - 0.6).abs() < 0.02 && (full - 1.0).abs() < 0.02,
+            "{}: scale {small}..{full}",
+            dot.path
+        );
+        let (faint, solid) = span(&opacity[opacity.len() / 2..]);
+        assert!(
+            faint < 0.55 && solid > 0.95,
+            "{}: opacity {faint}..{solid}",
+            dot.path
+        );
+    }
+}
+
+#[test]
 fn each_pr_opens_with_its_role_and_names_its_host_when_its_repo_spans_two() {
     let mut world = start(
         one_desktop(vec![]),

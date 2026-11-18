@@ -11,7 +11,7 @@ use attn_protocol::{
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
-use rune::{Color, Cycle, El, TextStyle, Tx, col, el, memo, row, text};
+use rune::{Beat, Color, El, Sequence, TextStyle, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use crate::State;
@@ -696,21 +696,24 @@ fn refresh_button(refresh: &Refresh, idle_help: String, t: &Tokens) -> El {
     .disabled(running)
 }
 
-/// `.refresh-dots`: three 4 point dots pulsing 0.16 s apart over 1.4 s.
+/// `.refresh-dots`: three 4 point dots bouncing 0.16 s apart over 1.4 s, each from scale 0.6 and
+/// half opacity to full and back, as the Tauri app's `dot-bounce` keyframes.
 fn refresh_dots(ink: Color) -> El {
-    const PULSE: &[(f32, f32)] = &[(0.0, 0.5), (0.4, 1.0), (0.8, 0.5), (1.0, 0.5)];
-    const PERIOD: f32 = 1.4;
+    const BOUNCE: &[Beat] = &[
+        Beat::new(0.0).opacity(0.5).scale(0.6),
+        Beat::new(0.56),
+        Beat::new(1.12).opacity(0.5).scale(0.6),
+        Beat::new(1.4).opacity(0.5).scale(0.6),
+    ];
     row()
         .gap(2.0)
         .items_center()
         .children([0.0, 0.16, 0.32].map(|delay| {
-            el().w(4.0).h(4.0).radius(2.0).fill(ink).cycle(Cycle {
-                period: PERIOD,
-                phase: delay / PERIOD,
-                stops: PULSE,
-                still: 1.0,
-                fps: 30.0,
-            })
+            el().w(4.0)
+                .h(4.0)
+                .radius(2.0)
+                .fill(ink)
+                .sequence(Sequence::new(BOUNCE).delay(delay).repeat())
         }))
 }
 
