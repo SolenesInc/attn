@@ -23,6 +23,12 @@ pub struct Grapheme(u32);
 
 const INTERNED: u32 = 0x0011_0000;
 
+impl Grapheme {
+    pub fn is(self, c: char) -> bool {
+        self.0 == u32::from(c)
+    }
+}
+
 /// A cell as drawn: inverse is already applied to its colours, and `bg` is None where the
 /// terminal's own background shows through.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]

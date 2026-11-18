@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use attn_term::links::{Line, Span};
-use attn_term::{Overlay, OverlayKind};
+use attn_term::{Cell, Overlay, OverlayKind};
 use attn_ui::colors::TerminalColors;
 
 use super::{Term, Terminals};
@@ -306,6 +306,9 @@ fn find(term: &mut Term, known: &HashSet<String>) -> Vec<SeedMark> {
         last += 1;
         outside.push((last, screen_row(vt, last)));
     }
+    if outside.is_empty() && !(0..usize::from(grid.rows)).any(|y| may_start_id(grid.row(y))) {
+        return Vec::new();
+    }
     let at = |row: u32, col: u16| -> Ends {
         match row.checked_sub(top).filter(|r| *r < rows) {
             Some(r) => grid.ends(grid.row(r as usize)[usize::from(col)].grapheme),
@@ -334,6 +337,14 @@ fn find(term: &mut Term, known: &HashSet<String>) -> Vec<SeedMark> {
         start = end + 1;
     }
     marks
+}
+
+/// An id starts at an `s` followed by `-`, in the next cell or, when the line wraps, at the
+/// start of the next row.
+fn may_start_id(row: &[Cell]) -> bool {
+    row.windows(2)
+        .any(|pair| pair[0].grapheme.is('s') && pair[1].grapheme.is('-'))
+        || row.last().is_some_and(|cell| cell.grapheme.is('s'))
 }
 
 fn screen_row(vt: &mut attn_term::Vt, row: u32) -> Vec<Ends> {
