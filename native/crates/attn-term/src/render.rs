@@ -113,6 +113,8 @@ struct Uniforms {
     underline: f32,
 }
 
+const IMMEDIATE_SIZE: u32 = std::mem::size_of::<Uniforms>() as u32;
+
 #[derive(Clone, Copy)]
 struct Slot {
     rect: [u16; 4],
@@ -439,8 +441,6 @@ struct Screen {
     over_cap: u64,
     washes: u32,
     lines: u32,
-    uniforms: wgpu::Buffer,
-    bind: wgpu::BindGroup,
     shape: (u16, u16),
     insts: Vec<Inst>,
     images: wgpu::Buffer,
@@ -463,14 +463,13 @@ struct Pipelines {
 
 struct Gpu {
     key: DeviceKey,
-    layout: wgpu::BindGroupLayout,
+    bind: wgpu::BindGroup,
     shader: wgpu::ShaderModule,
     pipeline_layout: wgpu::PipelineLayout,
     image_layout: wgpu::BindGroupLayout,
     image_pipeline_layout: wgpu::PipelineLayout,
     pipelines: Vec<Pipelines>,
     texture: wgpu::Texture,
-    view: wgpu::TextureView,
     sampler: wgpu::Sampler,
 }
 
@@ -493,7 +492,7 @@ struct U {
   origin: vec2f, viewport: vec2f, cell: vec2f, atlas: vec2f,
   linear: f32, zoom: f32, line: f32, underline: f32,
 };
-@group(0) @binding(0) var<uniform> u: U;
+var<immediate> u: U;
 @group(0) @binding(1) var atlas_t: texture_2d<f32>;
 @group(0) @binding(2) var atlas_s: sampler;
 
@@ -600,15 +599,13 @@ fn pack(c: Rgb, a: u8) -> u32 {
 }
 
 impl Cells {
+    /// The device features its pipelines need: each draw sets its place in the pass as immediates.
+    pub const FEATURES: wgpu::Features = wgpu::Features::IMMEDIATES;
+
     fn gpu(&mut self, device: &wgpu::Device, key: DeviceKey) {
         if self.gpu.as_ref().is_some_and(|g| g.key == key) {
             return;
         }
-        let uniform = wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        };
         let texture = wgpu::BindingType::Texture {
             sample_type: wgpu::TextureSampleType::Float { filterable: true },
             view_dimension: wgpu::TextureViewDimension::D2,
@@ -623,7 +620,6 @@ impl Cells {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("terminal cells"),
             entries: &[
-                entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT, uniform),
                 entry(1, wgpu::ShaderStages::FRAGMENT, texture),
                 entry(
                     2,
@@ -639,7 +635,7 @@ impl Cells {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("terminal cells"),
             bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
+            immediate_size: IMMEDIATE_SIZE,
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("terminal images"),
@@ -656,7 +652,7 @@ impl Cells {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("terminal images"),
                 bind_group_layouts: &[Some(&layout), Some(&image_layout)],
-                immediate_size: 0,
+                immediate_size: IMMEDIATE_SIZE,
             });
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("terminal glyph atlas"),
@@ -678,16 +674,29 @@ impl Cells {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
+        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("terminal cells"),
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
         self.gpu = Some(Gpu {
             key,
-            layout,
+            bind,
             shader,
             pipeline_layout,
             image_layout,
             image_pipeline_layout,
             pipelines: Vec::new(),
             texture,
-            view,
             sampler,
         });
         self.screens.clear();
@@ -1006,63 +1015,34 @@ impl Cells {
         if cols == 0 || rows == 0 {
             return;
         }
-        let gpu = self.gpu.as_ref().expect("made before any screen");
-        let screen = self.screens.entry(mark).or_insert_with(|| {
-            let uniforms = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("terminal uniforms"),
-                size: std::mem::size_of::<Uniforms>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let screen = self.screens.entry(mark).or_insert_with(|| Screen {
+            buf: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("terminal cells"),
-                layout: &gpu.layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: uniforms.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&gpu.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&gpu.sampler),
-                    },
-                ],
-            });
-            Screen {
-                buf: device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("terminal cells"),
-                    size: INST,
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                }),
-                cap: 0,
-                over: device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("terminal overlays"),
-                    size: INST,
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                }),
-                over_cap: 0,
-                washes: 0,
-                lines: 0,
-                uniforms,
-                bind,
-                shape: (0, 0),
-                insts: Vec::new(),
-                images: device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("terminal images"),
-                    size: IMAGE_INST,
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                }),
-                images_cap: 0,
-                cursor: None,
-                drawn: Vec::new(),
-            }
+                size: INST,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            cap: 0,
+            over: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("terminal overlays"),
+                size: INST,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            over_cap: 0,
+            washes: 0,
+            lines: 0,
+            shape: (0, 0),
+            insts: Vec::new(),
+            images: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("terminal images"),
+                size: IMAGE_INST,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            images_cap: 0,
+            cursor: None,
+            drawn: Vec::new(),
         });
         let count = usize::from(cols) * usize::from(rows) + 1;
         let reshaped = screen.shape != (cols, rows);
@@ -1156,7 +1136,6 @@ impl Cells {
     pub fn draw(
         &mut self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         pass: &mut wgpu::RenderPass<'_>,
         site: &EffectSite<'_>,
     ) {
@@ -1189,9 +1168,14 @@ impl Cells {
             line,
             underline: ((raster.metrics.font_size * 1.1).ceil() + 2.0) * line,
         };
-        queue.write_buffer(&screen.uniforms, 0, bytemuck::bytes_of(&uniforms));
+        pass.set_bind_group(0, &gpu.bind, &[]);
         let pipelines = Cells::pipelines(gpu, device, site.format);
         let pictures = &self.pictures;
+        let immediates = bytemuck::bytes_of(&uniforms);
+        let use_pipeline = |pass: &mut wgpu::RenderPass<'_>, pipeline: &wgpu::RenderPipeline| {
+            pass.set_pipeline(pipeline);
+            pass.set_immediates(0, immediates);
+        };
         let images = |pass: &mut wgpu::RenderPass<'_>, layer: Layer| {
             let mut set = false;
             for (at, (picture, drawn)) in screen.drawn.iter().enumerate() {
@@ -1199,7 +1183,7 @@ impl Cells {
                     continue;
                 };
                 if !set {
-                    pass.set_pipeline(&pipelines.image);
+                    use_pipeline(pass, &pipelines.image);
                     pass.set_vertex_buffer(0, screen.images.slice(..));
                     set = true;
                 }
@@ -1210,18 +1194,17 @@ impl Cells {
             set
         };
         let cells = screen.buf.slice(..u64::from(count) * INST);
-        pass.set_bind_group(0, &screen.bind, &[]);
         pass.set_vertex_buffer(0, cells);
-        pass.set_pipeline(&pipelines.bg);
+        use_pipeline(pass, &pipelines.bg);
         pass.draw(0..6, 0..1);
         if images(pass, Layer::UnderBackground) {
             pass.set_vertex_buffer(0, cells);
-            pass.set_pipeline(&pipelines.bg);
+            use_pipeline(pass, &pipelines.bg);
         }
         pass.draw(0..6, 1..count);
         if images(pass, Layer::UnderText) {
             pass.set_vertex_buffer(0, cells);
-            pass.set_pipeline(&pipelines.bg);
+            use_pipeline(pass, &pipelines.bg);
             if let Some(cursor) = screen.cursor {
                 pass.draw(0..6, cursor..cursor + 1);
             }
@@ -1233,13 +1216,13 @@ impl Cells {
         }
         pass.set_vertex_buffer(0, cells);
         for pipeline in [&pipelines.fg, &pipelines.underline, &pipelines.strike] {
-            pass.set_pipeline(pipeline);
+            use_pipeline(pass, pipeline);
             pass.draw(0..6, 1..count);
         }
         images(pass, Layer::OverText);
         if lines > 0 {
             pass.set_vertex_buffer(0, screen.over.slice(..u64::from(washes + lines) * INST));
-            pass.set_pipeline(&pipelines.over);
+            use_pipeline(pass, &pipelines.over);
             pass.draw(0..6, washes..washes + lines);
         }
     }

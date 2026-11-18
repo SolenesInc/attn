@@ -3,11 +3,15 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { PNG } from 'pngjs';
 import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
+
+const INK_LEVELS = 96;
+const DRAWN_INK_POINTS = 500;
 
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
@@ -66,6 +70,33 @@ try {
     await driver.pressKey('Enter');
     const rows = await screen('native-42');
     runner.assert(rows.some((row) => row.trim() === 'native-42'), 'the shell echoes the typed command and the window draws its output', rows);
+  });
+
+  await runner.step('text_reaches_the_screen', async () => {
+    const shot = path.join(runner.runDir, 'native-terminal-text.png');
+    await driver.screenshot(shot);
+    const image = PNG.sync.read(fs.readFileSync(shot));
+    const window = await driver.find({ key: 'window' });
+    const scale = Math.max(1, Math.round(image.width / window.rect[2]));
+    const [x, y, w, h] = (await driver.find(terminal())).rect.map((v) => Math.round(v * scale));
+    const pixel = (px, py) => image.data.subarray((py * image.width + px) * 4, (py * image.width + px) * 4 + 3);
+    const counts = new Map();
+    for (let py = y; py < y + h; py += 1) {
+      for (let px = x; px < x + w; px += 1) {
+        const key = pixel(px, py).join(',');
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    const background = [...counts].reduce((most, entry) => (entry[1] > most[1] ? entry : most))[0].split(',').map(Number);
+    let ink = 0;
+    for (let py = y; py < y + h; py += 1) {
+      for (let px = x; px < x + w; px += 1) {
+        const [r, g, b] = pixel(px, py);
+        if (Math.abs(r - background[0]) + Math.abs(g - background[1]) + Math.abs(b - background[2]) > INK_LEVELS) ink += 1;
+      }
+    }
+    const inkPoints = ink / (scale * scale);
+    runner.assert(inkPoints >= DRAWN_INK_POINTS, `the terminal draws its text: ${DRAWN_INK_POINTS} or more square points stand out from its background`, { inkPoints, scale, background });
   });
 
   await runner.step('mouse_reaches_the_program', async () => {

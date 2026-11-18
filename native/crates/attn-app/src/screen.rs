@@ -28,6 +28,10 @@ impl Screens {
 }
 
 impl Compositor<State> for Screens {
+    fn features(&self) -> wgpu::Features {
+        Cells::FEATURES
+    }
+
     fn redraws(&self, rt: &Runtime<State>) -> bool {
         rt.state().terminals.undrawn()
     }
@@ -45,7 +49,7 @@ impl Compositor<State> for Screens {
         f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, f.size);
         let cells = &mut self.cells;
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
-            cells.draw(device, queue, pass, site);
+            cells.draw(device, pass, site);
         });
     }
 }

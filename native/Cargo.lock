@@ -384,6 +384,7 @@ dependencies = [
  "skrifa",
  "tempfile",
  "uuid",
+ "wgpu",
 ]
 
 [[package]]
