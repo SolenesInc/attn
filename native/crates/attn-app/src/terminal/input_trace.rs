@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use attn_client::Facts;
 use rune::{Key, KeyEvent, Mods};
@@ -16,6 +17,10 @@ const SAMPLE_EVERY: f64 = 30.0;
 const REASON_COOLDOWN: f64 = 30.0;
 
 pub(crate) const DIAGNOSTICS_FILE: &str = "terminal-diagnostics.jsonl";
+
+/// Counts the app's traced inputs across its windows, which share one epoch, so no two
+/// windows hand the daemon the same id.
+static TRACED: AtomicU64 = AtomicU64::new(0);
 
 /// One key, paste or composition, from the window that heard it to the daemon's socket, named
 /// by the id the daemon's own trace echoes.
@@ -203,7 +208,6 @@ struct Observed {
 pub struct InputTrace {
     log: Option<PathBuf>,
     epoch_ms: i64,
-    next_trace: u64,
     total: u64,
     events: VecDeque<Event>,
     last_decided: Option<TraceId>,
@@ -249,12 +253,8 @@ impl InputTrace {
     }
 
     fn heard(&mut self, heard: Heard, target: Target, now: f64) -> TraceId {
-        self.next_trace += 1;
-        let trace = format!(
-            "n{}-{}",
-            base36(self.epoch_ms as u64),
-            base36(self.next_trace)
-        );
+        let n = TRACED.fetch_add(1, Ordering::Relaxed) + 1;
+        let trace = format!("n{}-{}", base36(self.epoch_ms as u64), base36(n));
         let (key_class, repeat, modifiers) = match heard {
             Heard::Key(ev, repeat) => (Some(key_class(ev)), Some(repeat), Some(modifiers(ev.mods))),
             _ => (None, None, None),

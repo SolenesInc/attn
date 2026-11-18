@@ -125,3 +125,40 @@ fn a_probe_the_link_dropped_logs_no_timeout_and_typing_probes_again() {
     let last = world.daemon.sent_of("pty_input").last().cloned().unwrap();
     assert!(last["probe_id"].is_string(), "the next key probes afresh");
 }
+
+#[test]
+fn keys_typed_in_a_tile_window_and_the_main_window_never_share_a_trace_id() {
+    let mut out = attn_testkit::tree::pane("t1");
+    out["window"] = serde_json::json!({"x": 10.0, "y": 20.0, "width": 900.0, "height": 500.0});
+    let desktop = attn_protocol::Desktop {
+        tree_json: attn_testkit::tree::row([out, attn_testkit::tree::pane("t2")]).to_string(),
+        active_pane_id: "t2".into(),
+        ..super::terminal::desktop(vec![pane("t1", "r1"), pane("t2", "r2")])
+    };
+    let daemon = Daemon::scripted().state(attn_protocol::InitialStateMessage {
+        desktops: Some(vec![desktop]),
+        ..showing(Vec::new(), "daemon-1")
+    });
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    output(&world, 1, b"$ ");
+    world.settle();
+    let window = world.tile_windows()[0].key.clone();
+
+    world.tile_gesture(&window, |app| app.type_text("ab"));
+    world.gesture(|app| app.type_text("cd"));
+
+    let sent = world.daemon.sent_of("pty_input");
+    let by_terminal: Vec<&str> = sent.iter().map(|i| i["id"].as_str().unwrap()).collect();
+    assert!(
+        by_terminal.contains(&"r1") && by_terminal.contains(&"r2"),
+        "{by_terminal:?}"
+    );
+    let mut traces: Vec<&str> = sent
+        .iter()
+        .map(|i| i["trace_id"].as_str().expect("every key is traced"))
+        .collect();
+    traces.sort_unstable();
+    traces.dedup();
+    assert_eq!(traces.len(), sent.len(), "{sent:?}");
+}
