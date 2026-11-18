@@ -162,23 +162,37 @@ service. Only the default instance on the default data folder uploads to
 ## Testing
 
 The stack tests in `cmd/attn-ingest` and the daemon's end-to-end upload test,
-`TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall`, run
-against a real ClickHouse, each test in its own database, through
-`testworld.NewClickHouse` and `testworld.StartIngest`. The other analytics
-upload wire tests in `internal/daemon` run against `testworld.StartFakeIngest`,
-an in-process server that keeps attn-ingest's HTTP contract.
+`TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall`, run the
+real `attn-ingest` against a ClickHouse from `testworld.NewClickHouse`, each
+test in its own database. The other analytics upload wire tests in
+`internal/daemon` run against `testworld.StartFakeIngest`, an in-process server
+that keeps attn-ingest's HTTP contract.
 
-`ATTN_TEST_CLICKHOUSE_URL` names the ClickHouse to use. Without it, the first
-test in each test process runs `scripts/ingest-clickhouse.sh start`, which
-starts the same container as `make ingest-clickhouse`, and later runs reuse the
-container. Stop the container with `make ingest-clickhouse-stop`. Nothing starts
-OrbStack or the Docker daemon. When no Docker daemon answers, the tests skip and
-name what is missing. Under CI, or with `ATTN_TEST_REQUIRE_CLICKHOUSE` set, the
-tests fail instead. `scripts/landing-tests.sh` sets that variable. The landing
-tests' `clickhouse` group runs the tests when a landing touches the analytics or
-ingest code. Go's test cache cannot see the ClickHouse server, so
-`scripts/landing-tests.sh` names every ClickHouse test and runs it with
-`-count=1`; add a new one there.
+`testworld.NewClickHouse` starts a fake ClickHouse for each test, so the tests
+need no server and no Docker. With `ATTN_TEST_CLICKHOUSE_URL` set, the same
+tests run against the real ClickHouse at that URL. CI sets the variable, so
+every commit on `main` runs the tests against ClickHouse 25.8. A landing runs
+them against the fake only: when a landing changes the SQL that attn-ingest
+sends, run the tests against the real server before you land.
+
+```bash
+ATTN_TEST_CLICKHOUSE_URL="$(make ingest-clickhouse)" go test -count=1 ./cmd/attn-ingest
+```
+
+Pass `-count=1` with the variable set, because Go's test cache cannot see the
+server.
+
+### The fake ClickHouse
+
+`internal/fakeclickhouse` serves ClickHouse's HTTP interface over tables held
+in memory. The fake runs the SQL that `internal/ingest` and the tests send, and
+answers as ClickHouse 25.8 does. The fake refuses any other statement,
+function, type, setting or format with an error that names what is missing.
+
+When attn-ingest or a test needs more SQL, teach the fake in the same change.
+Read the real server's answer first, edge cases included, and make the fake
+give the same answer. The tests are the fake's only check: they pass against
+both servers, so the repository has no test of the fake itself.
 
 ## ClickHouse memory
 

@@ -138,7 +138,7 @@ group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
 
-group clickhouse ^internal/daemon/analytics|^internal/analytics/|^internal/ingest/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
+group clickhouse ^internal/daemon/analytics|^internal/analytics/|^internal/ingest/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^internal/fakeclickhouse/
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
 go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
 go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing

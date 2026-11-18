@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,12 +23,10 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/fakeclickhouse"
 )
 
-const (
-	ClickHouseURLEnv      = "ATTN_TEST_CLICKHOUSE_URL"
-	ClickHouseRequiredEnv = "ATTN_TEST_REQUIRE_CLICKHOUSE"
-)
+const ClickHouseURLEnv = "ATTN_TEST_CLICKHOUSE_URL"
 
 type ClickHouse struct {
 	URL      string
@@ -41,15 +38,9 @@ func NewClickHouse(t testing.TB) ClickHouse {
 	t.Helper()
 	server := os.Getenv(ClickHouseURLEnv)
 	if server == "" {
-		started, err := onDemandClickHouse()
-		var unreachable dockerUnreachable
-		switch {
-		case errors.As(err, &unreachable) && os.Getenv("CI") == "" && os.Getenv(ClickHouseRequiredEnv) == "":
-			t.Skipf("%v, or set %s to a ClickHouse HTTP URL", err, ClickHouseURLEnv)
-		case err != nil:
-			t.Fatalf("%v, or set %s to a ClickHouse HTTP URL", err, ClickHouseURLEnv)
-		}
-		server = started
+		fake := httptest.NewServer(fakeclickhouse.New())
+		t.Cleanup(fake.Close)
+		server = fmt.Sprintf("http://%s:%s@%s/", fakeclickhouse.AdminUser, fakeclickhouse.AdminPassword, fake.Listener.Addr())
 	}
 	database := "attn_test_" + randomHex(t, 8)
 	clickHouseQuery(t, server, "CREATE DATABASE "+database)
@@ -115,32 +106,6 @@ func clickHouseAnswer(t testing.TB, server, query string) (int, string) {
 }
 
 var oneShotHTTP = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
-
-type dockerUnreachable struct{ reason string }
-
-func (d dockerUnreachable) Error() string { return d.reason }
-
-const dockerUnreachableExit = 3
-
-var onDemandClickHouse = sync.OnceValues(func() (string, error) {
-	module, err := exec.Command("go", "env", "GOMOD").Output()
-	if err != nil {
-		return "", fmt.Errorf("find the attn module for scripts/ingest-clickhouse.sh: %w", err)
-	}
-	script := filepath.Join(filepath.Dir(strings.TrimSpace(string(module))), "scripts", "ingest-clickhouse.sh")
-	var stderr bytes.Buffer
-	start := exec.Command(script, "start")
-	start.Stderr = &stderr
-	output, err := start.Output()
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == dockerUnreachableExit {
-		return "", dockerUnreachable{strings.TrimSpace(stderr.String())}
-	}
-	if err != nil {
-		return "", fmt.Errorf("%s start: %w\n%s", script, err, stderr.String())
-	}
-	return strings.TrimSpace(string(output)), nil
-})
 
 type Ingest struct {
 	URL string

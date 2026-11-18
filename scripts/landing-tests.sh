@@ -88,18 +88,10 @@ summarize() {
 
 # Go replays a test's cached pass while its test binary, its flags, and the
 # environment variables and files it read are unchanged, so a rebase reruns only
-# the tests its commits reach. These tests also depend on something Go cannot
-# see, a ClickHouse server, so they run every time.
-uncached_go_units="go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
-go ./cmd/attn-ingest TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted
-go ./cmd/attn-ingest TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected
-go ./cmd/attn-ingest TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay
-go ./cmd/attn-ingest TestOneAddressRegistersAtMostTwentyInstallsAnHour
-go ./cmd/attn-ingest TestOversizedRequestsAreRefusedNamingTheLimit
-go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
-go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
-go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
-go ./cmd/attn-ingest TestEachRecordKindReadsBackAsTypedColumnsThroughItsView"
+# the tests its commits reach. This test also depends on something Go cannot
+# see, the attn-ingest it builds from source its own package does not import,
+# so it runs every time.
+uncached_go_units="go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall"
 
 # ./cmd/attnd's stack tests wait on real processes, one after another in one test
 # binary: 20s of a go test step that used 19 CPU-s (2026-11-04). Each shard links
@@ -119,7 +111,7 @@ run_go_units() {
   while IFS= read -r unit; do unit_options+=(--unit "$unit"); done <<<"$go_entries"
   run_regex="^($(awk '!seen[$3]++ { print $3 }' <<<"$go_entries" | paste -sd'|' -))\$"
   echo "landing tests: go test${*:+ $*} -run '$run_regex' ${packages[*]}"
-  ATTN_TEST_REQUIRE_CLICKHOUSE=1 ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/$name.json" \
+  ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/$name.json" \
     ${vet_options[@]+"${vet_options[@]}"} "$@" -run "$run_regex" "${packages[@]}" >"$work/$name.log" 2>&1 || status=$?
   echo "$status" >"$work/$name.status"
 }

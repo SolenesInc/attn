@@ -370,7 +370,9 @@ jobs:
           bun-version: ${{ steps.bun.outputs.version }}
 
       - name: Start ClickHouse for the analytics tests
-        run: echo "ATTN_TEST_CLICKHOUSE_URL=$(./scripts/ingest-clickhouse.sh start)" >> "$GITHUB_ENV"
+        run: |
+          url="$(./scripts/ingest-clickhouse.sh start)"
+          echo "ATTN_TEST_CLICKHOUSE_URL=$url" >> "$GITHUB_ENV"
 
       - name: Ensure the attn CLI
         uses: ./.github/actions/cache-attn-cli

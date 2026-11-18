@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The ClickHouse that attn-ingest tests and local runs use. Prints the HTTP URL
-# for ATTN_TEST_CLICKHOUSE_URL. Startup took 1.9s on an M-series Mac
-# (2026-10-24); 60s is the tripwire.
+# The real ClickHouse for running attn-ingest locally and for running its tests
+# against a real server, as CI does. Prints the HTTP URL for
+# ATTN_TEST_CLICKHOUSE_URL. Startup took 1.9s on an M-series Mac (2026-10-24);
+# 60s is the tripwire.
 
 image=clickhouse/clickhouse-server:25.8.33.6
 name=attn-ingest-clickhouse
 port="${ATTN_INGEST_CLICKHOUSE_PORT:-18123}"
 url="http://attn:attn@127.0.0.1:${port}/"
 ready_seconds=60
-docker_unreachable=3
 
 case "${1:-}" in
 start)
   if ! command -v docker >/dev/null; then
     echo "ClickHouse needs Docker, and there is no docker command: install OrbStack or Docker" >&2
-    exit "$docker_unreachable"
+    exit 1
   fi
   if ! docker info >/dev/null 2>&1; then
     echo "ClickHouse needs Docker, and no Docker daemon answers: start OrbStack or Docker" >&2
-    exit "$docker_unreachable"
+    exit 1
   fi
   existing="$(docker inspect --format '{{.Id}} {{.Config.Image}}' "$name" 2>/dev/null || true)"
   read -r existing_id existing_image <<<"$existing"

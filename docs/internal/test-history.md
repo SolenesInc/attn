@@ -233,8 +233,8 @@ machine shares the cache. The attn binary that stack tests run counts as an
 input. A test whose result depends on something else Go cannot see, such as
 a server or a binary built during the test from source outside the test's
 package, must be listed in `scripts/landing-tests.sh`, which runs it with
-`-count=1`. The ClickHouse tests, and a test that builds attn at another
-version, are listed there.
+`-count=1`. The daemon's upload test, which builds attn-ingest, is listed
+there.
 
 - `land` prints each added test with the commit and lane where it failed, its
   passes since, and how many more passes clear it. `land` also prints each red test, each missing baseline unit, and each unavailable test with its reason, the baseline's size, and how many failures have cleared or are gone from the checkout. `land`
