@@ -88,7 +88,10 @@ struct Queue {
 
 impl Queue {
     fn push(&self, event: TerminalEvent) {
-        self.events.lock().unwrap().push((Instant::now(), event));
+        self.events
+            .lock()
+            .unwrap()
+            .push((input_trace::hop_time(), event));
         let wake = self.wake.lock().unwrap().clone();
         if let Some(wake) = wake {
             wake();

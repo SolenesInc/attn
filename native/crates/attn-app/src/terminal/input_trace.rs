@@ -227,8 +227,15 @@ struct Epoch(Instant);
 
 impl Default for Epoch {
     fn default() -> Epoch {
-        Epoch(Instant::now())
+        Epoch(hop_time())
     }
+}
+
+/// The moment a hop happens, on the platform's monotonic clock: the clock a key's arrival
+/// comes on, so every hop measures against it. No test clock can stand in for it.
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn hop_time() -> Instant {
+    Instant::now()
 }
 
 impl InputTrace {
@@ -349,7 +356,7 @@ impl InputTrace {
             )
         };
         let event = Event {
-            instant_ms: Some(self.ms(Instant::now())),
+            instant_ms: Some(self.ms(hop_time())),
             ..event
         };
         self.awaiting.insert(runtime.to_owned(), trace.clone());
@@ -379,10 +386,7 @@ impl InputTrace {
         let Some(trace) = self.awaiting.remove(runtime) else {
             return;
         };
-        for (event, at) in [
-            ("output_received", received),
-            ("output_taken", Instant::now()),
-        ] {
+        for (event, at) in [("output_received", received), ("output_taken", hop_time())] {
             let event = Event {
                 instant_ms: Some(self.ms(at)),
                 ..self.event(&trace, Stage::Echo, event, Some(runtime), now)
@@ -397,7 +401,7 @@ impl InputTrace {
         if self.drawing.is_empty() {
             return;
         }
-        let at = self.ms(Instant::now());
+        let at = self.ms(hop_time());
         for (runtime, trace, now) in std::mem::take(&mut self.drawing) {
             let event = Event {
                 instant_ms: Some(at),
