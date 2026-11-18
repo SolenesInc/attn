@@ -841,6 +841,15 @@ pub(crate) fn refocus_inline(state: &State, tx: &mut Tx) {
     refocus_inline_window(&state.window, tx);
 }
 
+/// Whether `focused` is where the empty desktop's launcher puts the keyboard on its own.
+pub(crate) fn rests_on_inline(state: &State, focused: &str) -> bool {
+    state
+        .window
+        .launching
+        .shown_inline()
+        .is_some_and(|picker| picker.focus_key() == focused)
+}
+
 pub(crate) fn refocus_inline_window(window: &crate::shell::Window, tx: &mut Tx) {
     if window.layer.is_none()
         && let Some(picker) = window.launching.shown_inline()

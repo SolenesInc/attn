@@ -389,7 +389,9 @@ pub(crate) fn poll(state: &mut State, tx: &mut Tx) -> bool {
     {
         let quiet = state.facts.desktops.iter().all(|d| d.panes.is_empty())
             && state.window.layer.is_none()
-            && tx.focused().is_none();
+            && tx
+                .focused()
+                .is_none_or(|f| crate::picker::rests_on_inline(state, f));
         if quiet {
             state.window.chief.automatic = Some(key);
         } else {
