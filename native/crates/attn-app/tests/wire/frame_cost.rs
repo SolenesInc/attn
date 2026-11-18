@@ -7,9 +7,12 @@ use super::terminal::{attached, output, pane, profile};
 
 const OTHER_DESKTOPS: usize = 20;
 /// The allocations a streamed frame may add for each desktop the window does not show. Reading
-/// the desktops' layouts on every frame cost about 180 each; reading the leaves the app parsed
-/// when each layout arrived costs about 4.
-const PER_OTHER_DESKTOP: u64 = 20;
+/// the desktops' layouts on every frame cost about 180 each, and reading each desktop's seed
+/// tiles about 4; with the seeds the desktops show read once per layout, it adds less than 1.
+const PER_OTHER_DESKTOP: u64 = 2;
+/// Lines that fill the terminal, so its cursor, which the input method's caret follows, stays
+/// on the last row while the agent streams.
+const FILLING_LINES: u32 = 60;
 
 fn other_desktop(n: usize) -> Desktop {
     let id = |kind: &str| format!("{kind}{n}");
@@ -29,8 +32,14 @@ fn other_desktop(n: usize) -> Desktop {
     }
 }
 
-/// The allocations each frame makes while an agent streams into the one terminal on screen.
-fn per_streamed_frame(others: usize) -> u64 {
+/// What each frame costs while an agent streams into the one terminal on screen: the allocations
+/// it makes, and the frames that painted the window anew.
+struct Streamed {
+    allocations: u64,
+    paints: u64,
+}
+
+fn per_streamed_frame(others: usize) -> Streamed {
     let mut desktops = vec![super::terminal::desktop(vec![pane("t1", "r1")])];
     desktops.extend((0..others).map(other_desktop));
     let daemon = Daemon::scripted().state(InitialStateMessage {
@@ -49,29 +58,43 @@ fn per_streamed_frame(others: usize) -> u64 {
     daemon.on("pty_resize", |_| ());
     let mut world = World::start(daemon);
     world.open_desktop();
-    for seq in 1..20 {
+    for seq in 1..=FILLING_LINES {
         output(&world, seq, b"warming up\r\n");
         world.settle();
     }
-    let (frames, made) = (world.terminal_frames(), made_here());
-    for seq in 20..120 {
+    let (frames, made, paints) = (
+        world.terminal_frames(),
+        made_here(),
+        world.runtime().stats.paints,
+    );
+    for seq in FILLING_LINES + 1..=FILLING_LINES + 100 {
         output(&world, seq, b"a line the agent wrote\r\n");
         world.settle();
     }
     let frames = (world.terminal_frames() - frames) as u64;
     assert_eq!(frames, 100, "each line drew a frame");
     assert!(world.runtime_is_at_rest());
-    (made_here() - made) / frames
+    Streamed {
+        allocations: (made_here() - made) / frames,
+        paints: world.runtime().stats.paints - paints,
+    }
 }
 
 #[test]
-fn a_streaming_terminal_frame_does_not_read_again_the_layouts_of_the_desktops_off_screen() {
+fn a_streaming_terminal_frame_does_no_work_for_the_desktops_off_screen() {
     let alone = per_streamed_frame(0);
     let beside_others = per_streamed_frame(OTHER_DESKTOPS);
 
     assert!(
-        beside_others <= alone + OTHER_DESKTOPS as u64 * PER_OTHER_DESKTOP,
-        "a frame made {alone} allocations on the only desktop and {beside_others} beside \
-         {OTHER_DESKTOPS} others"
+        beside_others.allocations <= alone.allocations + OTHER_DESKTOPS as u64 * PER_OTHER_DESKTOP,
+        "a frame made {} allocations on the only desktop and {} beside {OTHER_DESKTOPS} others",
+        alone.allocations,
+        beside_others.allocations,
+    );
+    assert_eq!(
+        beside_others.paints, 0,
+        "the terminal's cells are all a streamed frame changes, yet {} of 100 frames painted \
+         the window again, the sidebar's row for each desktop among it",
+        beside_others.paints,
     );
 }

@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
-use attn_client::{Connection, Facts};
+use std::sync::Arc;
+
+use attn_client::{Connection, Desktop, Facts};
 use attn_protocol::{
     MarkdownAnnotation, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage,
     MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage,
@@ -130,6 +132,33 @@ pub struct Drafts {
     drafts: HashMap<String, Draft>,
     /// Moves with every change to a draft, so views that show them build again.
     pub(crate) revision: u64,
+    seed_tiles: SeedTiles,
+}
+
+/// The seeds the desktops' tiles show, read again only when the desktops change, so a frame
+/// costs the same however many desktops the window does not show.
+#[derive(Default)]
+struct SeedTiles {
+    of: Arc<Vec<Desktop>>,
+    ids: Vec<String>,
+}
+
+impl SeedTiles {
+    fn follow(&mut self, desktops: &Arc<Vec<Desktop>>) -> &[String] {
+        if !Arc::ptr_eq(&self.of, desktops) {
+            self.of = desktops.clone();
+            self.ids.clear();
+            for leaf in desktops.iter().flat_map(|d| d.leaves()) {
+                if let Some(("seed", id)) = leaf.tile()
+                    && !id.is_empty()
+                    && !self.ids.iter().any(|seen| seen == id)
+                {
+                    self.ids.push(id.to_owned());
+                }
+            }
+        }
+        &self.ids
+    }
 }
 
 impl Drafts {
@@ -240,7 +269,8 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     if state.facts.connection != Connection::Connected {
         return false;
     }
-    let shown = shown(&state.facts, &state.window.garden);
+    let seeds = state.drafts.seed_tiles.follow(&state.facts.desktops);
+    let shown = shown(&state.facts, &state.window.garden, seeds);
     let drafts = &mut state.drafts;
     let before = drafts.drafts.len();
     drafts.drafts.retain(|uri, d| {
@@ -322,7 +352,11 @@ struct Shown<'a> {
 }
 
 /// The documents the window's tiles show, markdown files and seeds, by their sources.
-fn shown<'a>(facts: &'a Facts, garden: &'a crate::garden::Garden) -> Vec<(Source, Shown<'a>)> {
+fn shown<'a>(
+    facts: &'a Facts,
+    garden: &'a crate::garden::Garden,
+    seeds: &[String],
+) -> Vec<(Source, Shown<'a>)> {
     let files = facts
         .tile_contents
         .tiles
@@ -342,26 +376,17 @@ fn shown<'a>(facts: &'a Facts, garden: &'a crate::garden::Garden) -> Vec<(Source
                 },
             )
         });
-    let seeds = facts
-        .desktops
-        .iter()
-        .flat_map(|d| d.leaves())
-        .filter_map(|leaf| match leaf.tile() {
-            Some(("seed", params)) if !params.is_empty() => Some(params.to_owned()),
-            _ => None,
-        })
-        .map(|id| {
-            let seed =
-                crate::garden::shown_seed(garden, facts.garden.of(&facts.profiles.selected), &id);
-            (
-                Source::Seed(id),
-                Shown {
-                    text: seed.map(|s| s.body.as_str()),
-                    revision: seed.map_or(0, |s| s.rev as u64),
-                    generation: None,
-                },
-            )
-        });
+    let seeds = seeds.iter().map(|id| {
+        let seed = crate::garden::shown_seed(garden, facts.garden.of(&facts.profiles.selected), id);
+        (
+            Source::Seed(id.clone()),
+            Shown {
+                text: seed.map(|s| s.body.as_str()),
+                revision: seed.map_or(0, |s| s.rev as u64),
+                generation: None,
+            },
+        )
+    });
     let mut out: Vec<(Source, Shown<'a>)> = Vec::new();
     for (source, document) in files.chain(seeds) {
         if !out.iter().any(|(s, _)| *s == source) {
