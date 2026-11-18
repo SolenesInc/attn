@@ -1,4 +1,5 @@
 name: App acceptance matrix
+run-name: App acceptance matrix ${{ inputs.app }} on ${{ inputs.os }}
 
 env:
   GH_TOKEN: ${{ github.token }}
@@ -15,13 +16,36 @@ on:
         description: JSON array of the shard indexes, 1 to the shard count
         required: true
         type: string
+      os:
+        description: The runner the app is built and driven on
+        required: false
+        default: ubuntu-24.04
+        type: string
+  workflow_dispatch:
+    inputs:
+      app:
+        description: The app shell whose catalog scenarios run
+        required: true
+        type: choice
+        options: [native, tauri]
+      shards:
+        description: JSON array of the shard indexes, 1 to the shard count
+        required: true
+        default: '[1]'
+        type: string
+      os:
+        description: The runner the app is built and driven on
+        required: true
+        default: macos-15
+        type: choice
+        options: [macos-15, ubuntu-24.04]
 
 jobs:
   build:
     name: Build
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.os }}
     # Tauri 183s, native 521s with a cold Rust cache, on runs 44190682619 and 44194763596. 30m is slack.
     timeout-minutes: 30
     env:
@@ -62,7 +86,7 @@ jobs:
       matrix:
         shard: ${{ fromJSON(inputs.shards) }}
     # No concurrency group: a shared one cancels unrelated waiting checks.
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.os }}
     # Shard jobs took 119-249s on run 44194763596 (Tauri in 14 shards, native in 12). 40m is slack.
     timeout-minutes: 40
     env:
@@ -94,9 +118,13 @@ jobs:
         continue-on-error: true
         env:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
-        run: >-
-          xvfb-run -a -s '-noreset -screen 0 1600x1000x24'
-          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a -s '-noreset -screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix -- --shard "$SHARD"
+          else
+            ATTN_HARNESS_PARK_VISIBLE_PX=0 pnpm --dir app run real-app:serial-matrix -- --shard "$SHARD"
+          fi
 
       - name: Upload test receipts
         if: always()
@@ -230,7 +258,7 @@ jobs:
         run: |
           app="${{ inputs.app }}"
           if [ "$MATRIX_OUTCOME" = success ] && [ "$SHARD_RESULT" = success ]; then
-            echo "app acceptance: the $app Linux serial matrix is green for $HEAD_SHA"
+            echo "app acceptance: the $app serial matrix for ${{ inputs.os }} is green for $HEAD_SHA"
             exit 0
           fi
           if [ "$BUILD_RESULT" != success ]; then
@@ -243,6 +271,6 @@ jobs:
             echo "app acceptance: every $app scenario passed for $HEAD_SHA, but a shard job ended" \
               "$SHARD_RESULT; open the shard jobs, this is not a scenario verdict" >&2
           else
-            echo "app acceptance: the aggregated $app Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
+            echo "app acceptance: the aggregated $app serial matrix for ${{ inputs.os }} is $MATRIX_OUTCOME for $HEAD_SHA" >&2
           fi
           exit 1

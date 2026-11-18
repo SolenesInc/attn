@@ -36,7 +36,7 @@ export function planShards(scenarios, durationSeconds, shardCount, platform = pr
     .filter((scenario) => !scenarioSkipReason(scenario, platform, env))
     .filter((scenario) => typeof durationSeconds[scenario.id] !== 'number')
     .map((scenario) => scenario.id);
-  if (missing.length > 0) {
+  if (missing.length > 0 && shardCount > 1) {
     throw new Error([
       `No recorded duration for ${missing.join(', ')}, so the shards cannot be balanced.`,
       `Add each id to ${path.relative(process.cwd(), durationsPath)} with the seconds a green`,
@@ -45,7 +45,7 @@ export function planShards(scenarios, durationSeconds, shardCount, platform = pr
   }
 
   const shards = Array.from({ length: shardCount }, (_, offset) => ({ index: offset + 1, seconds: 0, ids: [] }));
-  const weight = (scenario) => (scenarioSkipReason(scenario, platform, env) ? 0 : durationSeconds[scenario.id]);
+  const weight = (scenario) => (scenarioSkipReason(scenario, platform, env) ? 0 : durationSeconds[scenario.id] ?? 0);
   // Ties broken by id so the same catalog always plans to the same shards.
   const ordered = [...scenarios].sort((a, b) => (weight(b) - weight(a)) || a.id.localeCompare(b.id));
   for (const scenario of ordered) {

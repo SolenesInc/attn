@@ -41,7 +41,7 @@ describe('scenarioCatalog agent tripwire flags', () => {
 describe('the Linux serial matrix', () => {
   it('has a recorded duration for each Linux scenario of each app, so the App acceptance shards can be planned', () => {
     for (const app of ['tauri', 'native']) {
-      expect(() => planShards(resolveScenarios([], app), readRecordedDurations(), 1, 'linux', {})).not.toThrow();
+      expect(() => planShards(resolveScenarios([], app), readRecordedDurations(), 2, 'linux', {})).not.toThrow();
     }
   });
 });
