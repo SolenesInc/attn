@@ -477,8 +477,15 @@ fn ctrl_shift_v_pastes_into_the_terminal_on_linux() {
 fn a_view_with_nothing_over_it_reports_no_overlays() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
+    let mut view = view(&mut world);
+    let caret = view.as_object_mut().and_then(|v| v.remove("caret"));
+    let [w, h] = [2, 3].map(|i| caret.as_ref().and_then(|c| c[i].as_f64()).unwrap_or(0.0));
+    assert!(
+        w > 0.0 && h > 0.0,
+        "the caret is the cursor's cell: {caret:?}"
+    );
     assert_eq!(
-        view(&mut world),
+        view,
         json!({"cursor": [0, 0], "overlays": [], "images": [], "scrolled_back": 0, "copies": null, "block": null, "annotations": null})
     );
     assert!(world.runtime_is_at_rest());
