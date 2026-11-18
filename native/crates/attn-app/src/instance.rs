@@ -44,7 +44,10 @@ impl Instance {
         let (Some(name), Some(port), Some(bundle_id)) =
             (BUILD_INSTANCE, BUILD_WS_PORT, BUILD_BUNDLE_ID)
         else {
-            return Err("this build carries no instance; build it with `make install INSTANCE=<name> APP=native`".into());
+            return Err(
+                "this build carries no instance; build it with `make install INSTANCE=<name>`"
+                    .into(),
+            );
         };
         let home = env::home_dir().ok_or("the home directory is unavailable")?;
         Instance::resolve(name.trim(), port.trim(), bundle_id.trim(), &home)

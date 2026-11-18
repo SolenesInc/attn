@@ -13,8 +13,8 @@ scripts/vm: run this checkout's attn in a shared macOS VM.
   scripts/vm adopt                  take an instance with no owner, started by an earlier
                                     scripts/vm, when it is yours
 
-APP=native runs the native app (native/crates/attn-app) instead of the Tauri app;
-drive then takes the native app's automation actions.
+It runs the native app (native/crates/attn-app), and drive takes its automation
+actions. APP=tauri runs the Tauri app, the rollback, built with DEMO=1.
 
 Each agent gets its own instance by default, vm-<worktree name>-<hash>. --instance
 NAME, before or right after the command, selects another; a name another agent is

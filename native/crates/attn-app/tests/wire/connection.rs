@@ -353,14 +353,14 @@ fn a_daemon_on_another_schema_shows_the_mismatch_even_when_its_state_does_not_de
 fn a_missing_daemon_names_its_install_command_without_marks_and_its_path_as_written() {
     let daemon = Daemon::scripted();
     daemon.fail_starts(Some(
-        "no attnd beside /Applications/attn-`canary`.app/Contents/MacOS/attn-app; install the app with make install INSTANCE=<name> APP=native",
+        "no attnd beside /Applications/attn-`canary`.app/Contents/MacOS/attn-app; install the app with make install INSTANCE=<name>",
     ));
     let world = World::start(daemon);
 
     let status = reconnecting(&world).expect("the window says the daemon is not answering");
     assert_eq!(
         status,
-        "The daemon is not answering, and starting it failed: no attnd beside /Applications/attn-`canary`.app/Contents/MacOS/attn-app; install the app with make install INSTANCE=<name> APP=native. Retrying."
+        "The daemon is not answering, and starting it failed: no attnd beside /Applications/attn-`canary`.app/Contents/MacOS/attn-app; install the app with make install INSTANCE=<name>. Retrying."
     );
 }
 

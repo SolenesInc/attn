@@ -23,7 +23,7 @@ pub fn ensure() -> Result<(), String> {
 }
 
 /// The command that installs the app with its daemon beside it.
-pub(crate) const INSTALL: &str = "make install INSTANCE=<name> APP=native";
+pub(crate) const INSTALL: &str = "make install INSTANCE=<name>";
 
 fn bundled_attnd() -> Result<PathBuf, String> {
     let exe =

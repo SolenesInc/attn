@@ -82,10 +82,18 @@ impl Hooks<State> for AppHooks {
 fn build_identity() -> Result<Value, String> {
     let exe = std::env::current_exe().map_err(|e| format!("locate this executable: {e}"))?;
     let dir = exe.parent().unwrap_or(Path::new("."));
-    let path = [dir.join("../Resources/build-identity.json"), dir.join("../resources/build-identity.json")]
-        .into_iter()
-        .find(|p| p.is_file())
-        .ok_or_else(|| format!("no build-identity.json beside {}; install the app with `make install INSTANCE=<name> APP=native`", exe.display()))?;
+    let path = [
+        dir.join("../Resources/build-identity.json"),
+        dir.join("../resources/build-identity.json"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+    .ok_or_else(|| {
+        format!(
+            "no build-identity.json beside {}; install the app with `make install INSTANCE=<name>`",
+            exe.display()
+        )
+    })?;
     let text =
         std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
     serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))

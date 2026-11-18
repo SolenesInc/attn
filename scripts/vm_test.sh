@@ -46,7 +46,7 @@ FAKE
 
 cat >"$sandbox/bin/make" <<'FAKE'
 #!/usr/bin/env bash
-app=tauri
+app=native
 for arg in "$@"; do
   case "$arg" in
   INSTANCE=*) instance="${arg#INSTANCE=}" ;;
@@ -74,7 +74,7 @@ guest_run() {
     ;;
   open)
     mkdir -p running
-    name="$(basename "$3")"
+    name="$(basename "${@: -1}")"
     touch "running/${name%.app}"
     ;;
   env) echo '{"frontendReady": true}' ;;
@@ -204,7 +204,7 @@ expect "adopt on a missing instance takes nothing" absent "$guest/vm-instance-ow
 as attn-b down --instance nothing >/dev/null
 
 # Moving an instance from the Tauri app to the native app at one commit installs the native app.
-as attn-a up --instance switch >/dev/null
+APP=tauri as attn-a up --instance switch >/dev/null
 APP=native as attn-a up --instance switch >/dev/null
 expect "APP=native up on an instance running the Tauri app installs the native app" \
   same "$(jq -r .app "$guest/Applications/attn-switch.app/Contents/Resources/build-identity.json")" native
@@ -214,9 +214,9 @@ APP=native as attn-a down --instance switch >/dev/null
 builds_of() { grep -c "^$1$" "$FAKE_BUILDS"; }
 guest_source() { jq -r .sourceFingerprint "$guest/Applications/attn-$1.app/Contents/Resources/build-identity.json"; }
 APP=native as attn-a up --instance native >/dev/null
-as attn-a up --instance tauri >/dev/null
+APP=tauri as attn-a up --instance tauri >/dev/null
 APP=native as attn-a up --instance native >/dev/null
-as attn-a up --instance tauri >/dev/null
+APP=tauri as attn-a up --instance tauri >/dev/null
 expect "an unchanged tree builds the native app once" same "$(builds_of "native native")" 1
 expect "an unchanged tree builds the Tauri app once" same "$(builds_of "tauri tauri")" 1
 before="$(guest_source native)"
@@ -224,10 +224,10 @@ printf 'fn main() { println!("changed"); }\n' >"$checkout/native/src/main.rs"
 APP=native as attn-a up --instance native >/dev/null
 expect "a change under native/ rebuilds the native app" same "$(builds_of "native native")" 2
 expect "a change under native/ reinstalls the native app" differ "$(guest_source native)" "$before"
-as attn-a up --instance tauri >/dev/null
+APP=tauri as attn-a up --instance tauri >/dev/null
 expect "a change under native/ does not rebuild the Tauri app" same "$(builds_of "tauri tauri")" 1
 APP=native as attn-a down --instance native >/dev/null
-as attn-a down --instance tauri >/dev/null
+APP=tauri as attn-a down --instance tauri >/dev/null
 
 echo "vm_test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
