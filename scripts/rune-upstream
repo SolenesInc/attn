@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="usage: scripts/rune-upstream list | reviewed <upstream-commit>
+
+list prints the commits on upstream's dev after the \"Last upstream commit
+reviewed\" line in FORK.md on the fork's main, oldest first. Each shows its date,
+whether it cherry-picks cleanly onto main alone, its subject and the folders it
+changes. Commits that change only files main has deleted are listed apart, since
+they cannot be picked. The first line names the commit the list reads through.
+
+reviewed moves that line on the fork's main to an upstream commit, and pushes
+main. It never picks a commit and never moves native/'s pin."
+
+upstream="${RUNE_UPSTREAM:-https://github.com/anomalyco/rune.git}"
+fork="${RUNE_FORK:-git@github.com:SolenesInc/rune.git}"
+clone="${RUNE_CLONE:-$HOME/projects/rune}"
+upstream_dev=refs/rune-upstream/upstream/dev
+trunk=refs/rune-upstream/fork/main
+marker="Last upstream commit reviewed:"
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/rune-upstream.XXXXXX")"
+worktree=""
+trap '[ -z "$worktree" ] || git -C "$clone" worktree remove --force "$worktree" >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
+
+die() { echo "rune-upstream: $*" >&2; exit 1; }
+
+case "${1-}" in
+  list) [ "$#" -eq 1 ] || { echo "$usage" >&2; exit 2; } ;;
+  reviewed) [ "$#" -eq 2 ] && [ -n "$2" ] || { echo "$usage" >&2; exit 2; } ;;
+  -h | --help) echo "$usage"; exit 0 ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+
+git -C "$clone" rev-parse --git-dir >/dev/null 2>&1 ||
+  die "no Rune clone at $clone; clone $fork there or set RUNE_CLONE"
+git -C "$clone" fetch -q --no-tags "$upstream" "+refs/heads/dev:$upstream_dev"
+git -C "$clone" fetch -q --no-tags "$fork" "+refs/heads/main:$trunk"
+
+short() { git -C "$clone" rev-parse --short=8 "$1"; }
+
+last_reviewed() {
+  local hash commit
+  hash="$(git -C "$clone" show "$trunk:FORK.md" | grep -F "$marker" | grep -oE '`[0-9a-f]{7,40}`' | head -1 | tr -d '`')" ||
+    die "FORK.md on the fork's main has no \"$marker \`<commit>\`\" line"
+  commit="$(git -C "$clone" rev-parse --verify --quiet "$hash^{commit}")" &&
+    git -C "$clone" merge-base --is-ancestor "$commit" "$upstream_dev" ||
+    die "FORK.md's last reviewed commit $hash is not on upstream's dev"
+  echo "$commit"
+}
+
+folders() {
+  git -C "$clone" -c core.quotepath=false diff-tree --no-commit-id --name-only -r "$1" |
+    grep -v '^changelog/' | sed -E 's#/[^/]*$##; s#^(([^/]+/){3}[^/]+).*#\1#' | sort -u | paste -sd, - | sed 's/,/, /g'
+}
+
+on_main() { git -C "$clone" cat-file -e "$trunk:$1" 2>/dev/null; }
+
+changes_kept_files() {
+  local status path
+  while IFS=$'\t' read -r status path; do
+    if [ "$status" = A ]; then
+      path="$(dirname "$path")"
+      while [ "$path" != . ] && ! on_main "$path"; do path="$(dirname "$path")"; done
+      [ "$path" != . ] && return 0
+    else
+      on_main "$path" && return 0
+    fi
+  done < <(git -C "$clone" -c core.quotepath=false diff-tree --no-commit-id --name-status -r "$1" | grep -v $'\tchangelog/')
+  return 1
+}
+
+fit_on_main() {
+  local status=0
+  git -C "$clone" merge-tree --write-tree --merge-base="$1^" "$trunk" "$1" >/dev/null 2>"$tmp/merge-tree.err" || status=$?
+  case "$status" in
+    0) echo applies ;;
+    1) echo conflicts ;;
+    *) cat "$tmp/merge-tree.err" >&2; die "git merge-tree failed on $1; this needs git 2.40 or later, and this is $(git --version)" ;;
+  esac
+}
+
+list() {
+  local since head commits commit fit gone=""
+  since="$(last_reviewed)"
+  head="$(git -C "$clone" rev-parse "$upstream_dev")"
+  commits="$(git -C "$clone" rev-list --reverse --no-merges "$since..$upstream_dev")"
+  echo "Read through $(short "$head"), upstream's dev now: $(grep -c . <<<"$commits" || true) commits after $(short "$since"), the last reviewed."
+  for commit in $commits; do
+    if ! changes_kept_files "$commit"; then
+      gone+="  $(git -C "$clone" log -1 --format='%h %as %s' --abbrev=8 "$commit")"$'\n'
+      continue
+    fi
+    fit="$(fit_on_main "$commit")"
+    echo
+    git -C "$clone" log -1 --format="%h %as $fit  %s" --abbrev=8 "$commit"
+    echo "    $(folders "$commit")"
+  done
+  if [ -n "$gone" ]; then
+    echo
+    echo "These change only files main has deleted:"
+    printf '%s' "$gone"
+  fi
+}
+
+reviewed() {
+  local target commit previous date line
+  target="$1"
+  commit="$(git -C "$clone" rev-parse --verify --quiet "$target^{commit}")" &&
+    git -C "$clone" merge-base --is-ancestor "$commit" "$upstream_dev" ||
+    die "$target is not a commit on upstream's dev"
+  previous="$(last_reviewed)"
+  if [ "$previous" = "$commit" ]; then
+    echo "rune-upstream: FORK.md already names $(short "$commit") as the last reviewed upstream commit"
+    return
+  fi
+  git -C "$clone" merge-base --is-ancestor "$previous" "$commit" ||
+    die "$target is not after $(short "$previous"), the last reviewed upstream commit"
+
+  worktree="$tmp/rune"
+  git -C "$clone" worktree add -q --detach "$worktree" "$trunk"
+  date="$(git -C "$clone" log -1 --format=%as "$commit")"
+  line="$marker \`$(short "$commit")\` ($date). attn's \`scripts/rune-upstream reviewed\` moves this line."
+  LINE="$line" MARKER="$marker" awk '
+    index($0, ENVIRON["MARKER"]) == 1 { print ENVIRON["LINE"]; skipping = 1; next }
+    skipping && /^$/ { skipping = 0 }
+    !skipping
+  ' "$worktree/FORK.md" >"$worktree/FORK.md.new"
+  mv "$worktree/FORK.md.new" "$worktree/FORK.md"
+  git -C "$worktree" commit -qam "FORK.md: upstream's dev is reviewed through $(short "$commit")"
+  git -C "$worktree" push -q "$fork" HEAD:refs/heads/main ||
+    die "the fork's main moved while this ran; run scripts/rune-upstream reviewed $target again"
+  echo "rune-upstream: the fork's main now names $(short "$commit") as the last reviewed upstream commit"
+}
+
+case "$1" in
+  list) list ;;
+  reviewed) reviewed "$2" ;;
+esac

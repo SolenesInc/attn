@@ -71,6 +71,17 @@ Take upstream changes one named commit at a time, by cherry-pick, never by
 merging `dev`. Watch the areas where upstream's work helps attn most: text and
 IME, Linux and Wayland, and frame pacing.
 
+A weekly automation, "Rune upstream review", reads upstream's new commits for
+picks, following the `rune-upstream-review` skill
+(`.agents/skills/rune-upstream-review`). `scripts/rune-upstream list` shows the
+commits after the "Last upstream commit reviewed" line in `FORK.md`, and the
+automation asks the user which to pick. It picks nothing itself. Once the user
+answers, it plants a seed for the Orchestrator when the user picked commits,
+and moves the line with `scripts/rune-upstream reviewed <commit>`, which
+commits the move to the fork's `main` and pushes it without moving the pin.
+Anyone else who reads upstream's commits for picks moves the line the same
+way.
+
 A Builder asked for an upstream change picks it on a branch from `main`:
 `git cherry-pick -x <commit>`, then adds a row under "Picked from upstream" in
 `FORK.md` in the same commit, pushes the branch and names it on the seed, as for
@@ -103,9 +114,6 @@ In order, it:
 
 A pick that conflicts stops the script, and nothing is pushed. Port it on a
 branch as a Builder would, then run `scripts/rune-bump --branch <branch>`.
-
-When you read upstream's new commits for picks, move the "Last upstream commit
-reviewed" line in `FORK.md` to the last one you read.
 
 ## Move the pin
 
