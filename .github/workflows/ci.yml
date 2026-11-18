@@ -237,7 +237,7 @@ jobs:
 
       - name: Check migration history
         env:
-          MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
         run: make check-migrations
 
       - name: Regenerate and diff
