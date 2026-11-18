@@ -26,8 +26,14 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 
 const MOUSE_READER = `stty raw -echo
 printf '\\033[?1000h\\033[?1006hREADY\\r\\n'
+reports=0
 while IFS= read -rs -n1 c; do
-  case "$c" in $'\\e') printf 'ESC' ;; q) break ;; *) printf '%s' "$c" ;; esac
+  case "$c" in
+    $'\\e') printf 'ESC' ;;
+    q) break ;;
+    M|m) reports=$((reports + 1)); printf '%s #%d\\r\\n' "$c" "$reports" ;;
+    *) printf '%s' "$c" ;;
+  esac
 done
 printf '\\033[?1000l\\033[?1006l'
 stty sane
@@ -104,11 +110,11 @@ try {
     await driver.pressKey('Enter');
     await screen('READY');
     await driver.click(terminal());
-    const pressed = await screen('ESC[<3;');
-    runner.assert(pressed.some((row) => /ESC\[<0;\d+;\d+MESC\[<3;\d+;\d+m/.test(row)), 'the program reads a primary press and its release in SGR', pressed);
+    const clicked = await screen('#2');
+    runner.assert(clicked.some((row) => /ESC\[<0;\d+;\d+M #1/.test(row)) && clicked.some((row) => /ESC\[<3;\d+;\d+m #2/.test(row)), 'the program reads a primary press and its release in SGR', clicked);
     await driver.scroll(terminal(), 60);
-    const wheeled = await screen('ESC[<65;');
-    runner.assert(wheeled.some((row) => row.includes('ESC[<65;')), 'the program reads the wheel turning down as button 65', wheeled);
+    const wheeled = await screen('#3');
+    runner.assert(wheeled.some((row) => /ESC\[<65;\d+;\d+M #3/.test(row)), 'the program reads the wheel turning down as button 65', wheeled);
     await driver.typeInto(null, 'q');
     await screen('DONE');
   });
