@@ -243,12 +243,19 @@ impl WebKitHost {
             scripts.addUserScript(&single_tab);
             if let Some(jar) = cookie_jar {
                 AWAITING_COOKIES.with_borrow_mut(|waiting| *waiting = Some(Vec::new()));
-                session_cookies::restore_then_keep(store.httpCookieStore(), jar, mtm, || {
-                    let waiting = AWAITING_COOKIES.with_borrow_mut(Option::take);
-                    for (web, url) in waiting.into_iter().flatten() {
-                        load(&web, &url);
-                    }
-                });
+                session_cookies::restore_then_keep(
+                    store.httpCookieStore(),
+                    jar,
+                    &scripts,
+                    &world,
+                    mtm,
+                    || {
+                        let waiting = AWAITING_COOKIES.with_borrow_mut(Option::take);
+                        for (web, url) in waiting.into_iter().flatten() {
+                            load(&web, &url);
+                        }
+                    },
+                );
             }
         }
         WebKitHost {
@@ -1034,7 +1041,6 @@ define_class!(
             let url = url.to_string();
             let scheme = url.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
             if matches!(scheme.as_deref(), Some("http" | "https")) {
-                session_cookies::changed();
                 tell(Heard::Located { page: self.ivars().clone(), url });
             }
         }

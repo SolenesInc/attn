@@ -18,7 +18,7 @@ const exec = promisify(execFile);
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-BROWSER-SESSION-COOKIES', tier: 'tier1-local-shell', prefix: 'native-browser-session-cookies',
-  metadata: { focus: "A browser tile's session cookies outlive the native app: the first launch on a home the Tauri app used sends the Tauri app's session sign-in with the page's first request, and a session cookie set in the native app is sent again after a relaunch" },
+  metadata: { focus: "A browser tile's session cookies outlive the native app: the first launch on a home the Tauri app used sends the Tauri app's session sign-in with the page's first request, a session cookie set in the native app is sent again after a relaunch, and a sign-out the page does in place, with no navigation, stays signed out after a relaunch" },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -29,14 +29,24 @@ const tauriJar = [
   { name: 'tauri_sess', value: 'from-tauri', domain: '127.0.0.1', path: '/', secure: false, httpOnly: true, sameSite: 'Lax', expiry: null },
 ];
 
+const signOutInPlace = `<button id="signout">Sign out</button><script>
+document.cookie = 'js_sess=from-script; path=/';
+document.getElementById('signout').onclick = async () => {
+  document.cookie = 'js_sess=; path=/; max-age=0';
+  await fetch('/signout');
+  document.body.insertAdjacentHTML('beforeend', '<p id="signedout">signed out</p>');
+};
+</script>`;
+
 const requests = [];
 const server = http.createServer((request, response) => {
   requests.push({ url: request.url, cookie: request.headers.cookie ?? '' });
   runner.writeJson('requests.json', requests);
   response.setHeader('content-type', 'text/html');
   if (request.url === '/signin') response.setHeader('set-cookie', 'native_sess=from-native; Path=/');
+  if (request.url === '/signout') response.setHeader('set-cookie', 'native_sess=; Path=/; Max-Age=0');
   const page = request.url.slice(1);
-  response.end(`<title>${page}</title><h1 id="${page}">${request.url}</h1>`);
+  response.end(`<title>${page}</title><h1 id="${page}">${request.url}</h1>${request.url === '/app' ? signOutInPlace : ''}`);
 });
 const firstRequestTo = (page, since) => requests.slice(since).find((request) => request.url === `/${page}`);
 
@@ -130,6 +140,24 @@ try {
     const restored = firstRequestTo('after', since);
     runner.assert(restored.cookie.includes('native_sess=from-native'), "the restored page's first request sends the native session cookie", restored);
     runner.assert(restored.cookie.includes('tauri_sess=from-tauri'), "the restored page's first request still sends the Tauri session cookie", restored);
+  });
+
+  await runner.step('a_sign_out_in_place_stays_signed_out_after_a_relaunch', async () => {
+    await browser('open', at('app'));
+    await waitForPage('app');
+    await observer.waitFor(() => jarNames().includes('js_sess'), "the jar keeps the page script's session cookie");
+    await browser('click', '--selector', '#signout');
+    await waitForPage('signedout');
+    await observer.waitFor(() => !jarNames().some((name) => name === 'js_sess' || name === 'native_sess'), 'the jar lets go of the cookies the page deleted');
+    const since = requests.length;
+    await client.quitApp();
+    await client.launchFreshApp();
+    await client.waitForManifest(20_000);
+    await client.waitForReady(20_000);
+    await observer.waitFor(() => firstRequestTo('app', since), 'the relaunched tile loads its page');
+    const restored = firstRequestTo('app', since);
+    runner.assert(!restored.cookie.includes('native_sess'), "the restored page's first request does not send the session cookie a request deleted", restored);
+    runner.assert(!restored.cookie.includes('js_sess'), "the restored page's first request does not send the session cookie a script deleted", restored);
   });
 
   await runner.finishSuccess({ desktopId: desktop.id, shell, jar });

@@ -3,9 +3,9 @@
 //! keeps the session cookies. The jar is the Tauri app's file, in its format, so the first
 //! launch on a home the Tauri app used restores what that app kept.
 //!
-//! The jar is written when a page finishes loading or changes its address and after the agent
-//! changes cookies, not on the cookie store's change notifications: for a data store opened by
-//! identifier, WebKit sends only the first of them.
+//! The jar is written when a page finishes loading, when a page's script or one of its requests
+//! changes a cookie, and after the agent changes cookies. The cookie store's change notifications
+//! cannot drive it: for a data store opened by identifier, WebKit sends only the first of them.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -16,31 +16,63 @@ use std::rc::Rc;
 
 use block2::RcBlock;
 use objc2::rc::Retained;
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send};
 use objc2_foundation::{
     NSArray, NSHTTPCookie, NSKeyValueObservingOptions, NSObject,
     NSObjectNSKeyValueObserverRegistration, NSString, ns_string,
 };
-use objc2_web_kit::{WKHTTPCookieStore, WKWebView};
+use objc2_web_kit::{
+    WKContentWorld, WKHTTPCookieStore, WKScriptMessage, WKScriptMessageHandler,
+    WKUserContentController, WKUserScript, WKUserScriptInjectionTime, WKWebView,
+};
 use serde_json::{Map, Value};
+
+/// Tells the keeper each time a page's cookies may have changed: a response arrived, which can
+/// set or delete any cookie, httpOnly ones included, or a script changed one. A site that signs
+/// out in place does one of these without loading a page.
+const COOKIE_SIGNALS_JS: &str = r#"(() => {
+  const changed = () => webkit.messageHandlers.attnSessionCookies.postMessage(null);
+  new PerformanceObserver(changed).observe({ type: 'resource' });
+  globalThis.cookieStore?.addEventListener('change', changed);
+})()"#;
+const COOKIE_SIGNALS: &str = "attnSessionCookies";
 
 thread_local! {
     static KEEPER: RefCell<Option<Retained<JarKeeper>>> = const { RefCell::new(None) };
 }
 
 /// Puts the jar's session cookies into `store`, then runs `restored`. From then on the jar
-/// follows the store's session cookies. A cookie the store already holds under the same name,
-/// domain and path is newer than the jar's, so it stays.
+/// follows the store's session cookies, told of changes by a script `pages` run in `world`. A
+/// cookie the store already holds under the same name, domain and path is newer than the jar's,
+/// so it stays.
 pub(super) fn restore_then_keep(
     store: Retained<WKHTTPCookieStore>,
     jar: PathBuf,
+    pages: &WKUserContentController,
+    world: &WKContentWorld,
     mtm: MainThreadMarker,
     restored: impl FnOnce() + 'static,
 ) {
     let saved = read_session_cookies(&jar);
     let keeper = JarKeeper::new(mtm, jar, store.clone());
     KEEPER.with_borrow_mut(|slot| *slot = Some(keeper.clone()));
+    unsafe {
+        pages.addScriptMessageHandler_contentWorld_name(
+            ProtocolObject::from_ref(&*keeper),
+            world,
+            &NSString::from_str(COOKIE_SIGNALS),
+        );
+        pages.addUserScript(
+            &WKUserScript::initWithSource_injectionTime_forMainFrameOnly_inContentWorld(
+                WKUserScript::alloc(mtm),
+                &NSString::from_str(COOKIE_SIGNALS_JS),
+                WKUserScriptInjectionTime::AtDocumentStart,
+                false,
+                world,
+            ),
+        );
+    }
     let keep = Rc::new(Cell::new(Some(move || {
         keeper.ivars().restored.set(true);
         keeper.save();
@@ -129,8 +161,7 @@ pub(super) fn unwatch(web: &WKWebView) {
     });
 }
 
-/// Saves the jar after a change that loads no page: the agent's cookie commands, or a page
-/// changing its address, as a script that signs in and then changes the route does.
+/// Saves the jar after the agent's cookie commands, which no page hears of.
 pub(super) fn changed() {
     let keeper = KEEPER.with_borrow(Clone::clone);
     if let Some(keeper) = keeper {
@@ -196,6 +227,15 @@ define_class!(
             if !loading {
                 self.save();
             }
+        }
+    }
+
+    unsafe impl NSObjectProtocol for JarKeeper {}
+
+    unsafe impl WKScriptMessageHandler for JarKeeper {
+        #[unsafe(method(userContentController:didReceiveScriptMessage:))]
+        fn heard(&self, _pages: &WKUserContentController, _message: &WKScriptMessage) {
+            self.save();
         }
     }
 );

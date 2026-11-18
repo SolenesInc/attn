@@ -349,7 +349,7 @@ export const scenarioCatalog = [
   {
     id: 'native-browser-session-cookies',
     runnerId: 'NATIVE-BROWSER-SESSION-COOKIES',
-    label: "A browser tile's session cookies outlive the native app: the Tauri app's session sign-in goes with the first page after cut-over, and a native session cookie comes back after a relaunch",
+    label: "A browser tile's session cookies outlive the native app: the Tauri app's session sign-in goes with the first page after cut-over, a native session cookie comes back after a relaunch, and one the page deletes in place stays deleted",
     command: ['node', 'scripts/real-app-harness/scenario-native-browser-session-cookies.mjs'],
     app: 'native',
     skipOn: { linux: 'The native app runs browser pages in WKWebView, which only macOS has; the Linux tile says browser tiles are unavailable' },
