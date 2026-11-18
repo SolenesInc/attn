@@ -50,7 +50,7 @@ impl Engine {
     /// The last place the window showed the page, or `None` while it is hidden.
     fn shown(&self) -> Option<Placement> {
         self.0.borrow().iter().rev().find_map(|asked| match asked {
-            Asked::Place(at) => Some(*at),
+            Asked::Place(at) => Some(at.clone()),
             _ => None,
         })?
     }
@@ -1078,49 +1078,199 @@ fn an_answer_too_large_for_the_daemon_to_read_fails_and_says_why() {
     rest(&mut world);
 }
 
-#[test]
-fn a_popped_out_browser_tile_says_its_window_shows_no_page_and_agents_hear_why() {
-    let mut popped = browser_at(START);
+fn popped_out(url: &str) -> Value {
+    let mut popped = browser_at(url);
     popped["window"] = json!({"x": 10.0, "y": 20.0, "width": 500.0, "height": 400.0});
-    let (mut world, engine) = start_on(daemon(row(vec![pane("a"), popped])));
+    row(vec![pane("a"), popped])
+}
 
+/// The app with a scripted web engine, its browser tile popped out at `url`, and the key of the
+/// tile window that shows it.
+fn start_popped_out(url: &str) -> (World, Engine, String) {
+    let (world, engine) = start_on(daemon(popped_out(url)));
     let windows = world.tile_windows();
     assert_eq!(windows.len(), 1, "{windows:?}");
-    let screen = world.tile_screen(&windows[0].key);
-    let said = screen
-        .descendants(Target::key(format!("tile.{TILE}.page")))
-        .into_iter()
-        .filter_map(|n| n.name)
-        .collect::<Vec<_>>();
-    assert_eq!(
-        said,
-        vec![
-            "This window does not show browser pages yet. Bring the tile back to its desktop to see its page."
-        ]
-    );
+    let key = windows[0].key.clone();
+    (world, engine, key)
+}
+
+fn tile_address(world: &World, window: &str) -> String {
+    world
+        .tile_screen(window)
+        .find(Target::key(format!("tile.{TILE}.address")))
+        .expect("the tile window shows the address field")
+        .value
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_popped_out_browser_tile_shows_its_page_in_its_window_where_agents_act_on_it() {
+    let (mut world, engine, window) = start_popped_out(START);
+
+    let asked = engine.asked();
+    assert_eq!(asked.first(), Some(&Asked::Open(START.into())));
+    let placed = asked
+        .iter()
+        .position(|a| matches!(a, Asked::Place(Some(at)) if at.window.is_some()));
+    let focused = asked.iter().position(|a| *a == Asked::Focus(true));
     assert!(
-        screen
-            .find(Target::key(format!("tile.{TILE}.address")))
-            .is_none()
+        placed.is_some() && focused > placed,
+        "the page takes the window's keyboard once it is in the window: {asked:?}"
     );
+    let shown = engine.shown().expect("the page shows in the tile window");
+    assert_eq!(shown.window.as_deref(), Some(window.as_str()));
+    let [x, y, w, h] = shown.frame;
     assert!(
-        screen
+        x >= 0.0 && y > 0.0 && w > 0.0 && h > 0.0 && x + w <= 500.0 && y + h <= 400.0,
+        "the page fills the tile window under its header: {shown:?}"
+    );
+    assert_eq!(shown.visible, shown.frame);
+    assert_eq!(tile_address(&world, &window), START);
+    assert!(
+        world
+            .tile_screen(&window)
             .find(Target::key(format!("tile.{TILE}.reload")))
-            .is_none()
-    );
-    assert!(
-        !engine.asked().iter().any(|a| matches!(a, Asked::Open(_))),
-        "{:?}",
-        engine.asked()
+            .is_some()
     );
 
     ask(&mut world, "shot", "screenshot", json!({}));
     assert_eq!(
+        engine.controls(),
+        vec![Control {
+            request_id: "shot".into(),
+            action: "screenshot".into(),
+            params: serde_json::Map::new(),
+        }]
+    );
+    page_says(
+        &mut world,
+        Heard::Answered {
+            request_id: "shot".into(),
+            result: Ok("\"cGFnZQ==\"".into()),
+        },
+    );
+    assert_eq!(
         result(&world, "shot"),
-        Some(failed(
-            "shot",
-            "the browser tile is popped out into its own window, where this app shows no page yet. Ask the user to bring it back to its desktop, then retry."
-        ))
+        Some(answered("shot", "\"cGFnZQ==\""))
+    );
+
+    ask(
+        &mut world,
+        "go",
+        "navigate",
+        json!({"url": "https://agent.example/"}),
+    );
+    assert!(
+        engine
+            .asked()
+            .contains(&Asked::Navigate("https://agent.example/".into()))
+    );
+    assert_eq!(
+        result(&world, "go"),
+        Some(answered("go", "{\"success\":true}"))
+    );
+    assert_eq!(tile_address(&world, &window), "https://agent.example/");
+
+    page_says(
+        &mut world,
+        Heard::Located {
+            page: page(),
+            url: "https://link.example/".into(),
+        },
+    );
+    assert_eq!(tile_address(&world, &window), "https://link.example/");
+    assert_eq!(stored(&world), vec!["https://link.example/"]);
+    world.advance(Duration::from_secs(2));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn the_address_field_reload_and_browser_keys_of_a_popped_out_tile_act_on_its_page() {
+    let (mut world, engine, window) = start_popped_out(START);
+    engine.take();
+
+    world.tile_gesture(&window, |app| {
+        app.click(Target::key(format!("tile.{TILE}.address")))
+    });
+    world.tile_gesture(&window, |app| app.press("mod+a"));
+    world.tile_gesture(&window, |app| app.type_text("localhost:3000"));
+    world.tile_gesture(&window, |app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods::default(),
+        })
+    });
+    assert!(
+        engine
+            .take()
+            .contains(&Asked::Navigate("http://localhost:3000".into()))
+    );
+    assert_eq!(tile_address(&world, &window), "http://localhost:3000");
+
+    world.tile_gesture(&window, |app| {
+        app.click(Target::key(format!("tile.{TILE}.reload")))
+    });
+    assert!(engine.take().contains(&Asked::Reload));
+
+    page_says(&mut world, Heard::Focused { page: page() });
+    engine.take();
+    let back = chord_of(Action::SessionHistoryBack);
+    world.tile_gesture(&window, |app| app.key(back));
+    assert!(engine.take().contains(&Asked::Back));
+    assert_eq!(shortcut_records(&world), Vec::<String>::new());
+    world.advance(Duration::from_secs(2));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn a_browser_tile_brought_back_from_its_window_shows_the_same_page_on_its_desktop() {
+    let (mut world, engine, window) = start_popped_out(START);
+    page_says(
+        &mut world,
+        Heard::Located {
+            page: page(),
+            url: "https://link.example/".into(),
+        },
+    );
+    engine.take();
+
+    lay_out(&mut world, with_browser("https://link.example/"), 2);
+    let asked = engine.asked();
+    assert!(
+        !asked
+            .iter()
+            .any(|a| matches!(a, Asked::Open(_) | Asked::Close | Asked::Navigate(_))),
+        "the page moves back as it was: {asked:?}"
+    );
+    let shown = engine.shown().expect("the page shows on its desktop");
+    assert_eq!(shown.window, None);
+    assert_eq!(shown.frame, page_rect(&world));
+    assert_eq!(address(&world), "https://link.example/");
+    assert!(!world.tile_windows()[0].shown, "{window} hid");
+    page_says(
+        &mut world,
+        Heard::Located {
+            page: page(),
+            url: "https://two.example/".into(),
+        },
+    );
+    engine.take();
+
+    lay_out(&mut world, popped_out("https://link.example/"), 3);
+    assert_eq!(
+        tile_address(&world, &window),
+        "https://two.example/",
+        "the window shows where the page went while its tile was on its desktop"
+    );
+    let shown = engine
+        .shown()
+        .expect("the page shows in the tile window again");
+    assert_eq!(shown.window.as_deref(), Some(window.as_str()));
+    assert!(
+        !engine
+            .asked()
+            .iter()
+            .any(|a| matches!(a, Asked::Open(_) | Asked::Close | Asked::Navigate(_)))
     );
     world.advance(Duration::from_secs(2));
     assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());

@@ -1,5 +1,5 @@
-//! Browser tiles' pages on macOS: a `WKWebView` per tile, a subview of the window's content
-//! view, clipped to the part of its tile the window shows. AppKit routes the page's input to it
+//! Browser tiles' pages on macOS: a `WKWebView` per tile, a subview of the content view of the
+//! window that shows the tile, clipped to the part of its tile the window shows. AppKit routes the page's input to it
 //! directly; the window takes back only the keys attn binds.
 
 use std::cell::{Cell, RefCell};
@@ -101,20 +101,32 @@ thread_local! {
     static WAKE: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
     /// Set while the window hands the keyboard to a page itself, which it need not hear about.
     static HANDING: Cell<bool> = const { Cell::new(false) };
+    /// The tile windows' content views, by window key.
+    static TILE_WINDOWS: RefCell<HashMap<String, Retained<NSView>>> = RefCell::new(HashMap::new());
+}
+
+fn content_view(window: &rune::WindowHandle) -> Option<Retained<NSView>> {
+    let content = window.with_raw_handle(|handle| match handle.as_raw() {
+        raw_window_handle::RawWindowHandle::AppKit(appkit) => Some(appkit.ns_view.as_ptr()),
+        _ => None,
+    });
+    content
+        .ok()
+        .flatten()
+        .and_then(|view| unsafe { Retained::retain(view.cast::<NSView>()) })
+}
+
+/// Lets pages show in the tile window `key`, whose native window now exists.
+pub fn adopt_tile_window(key: &str, window: &rune::WindowHandle) {
+    if let Some(content) = content_view(window) {
+        TILE_WINDOWS.with_borrow_mut(|windows| windows.insert(key.to_owned(), content));
+    }
 }
 
 /// Runs browser tiles' pages in `window`'s content view. `wake` brings the window to a frame,
 /// where it takes what the pages said. A parked automation window keeps its pages drawing.
 pub fn install(window: &rune::WindowHandle, wake: impl Fn() + 'static, automation: bool) {
-    let content = window.with_raw_handle(|handle| match handle.as_raw() {
-        raw_window_handle::RawWindowHandle::AppKit(appkit) => Some(appkit.ns_view.as_ptr()),
-        _ => None,
-    });
-    let Some(content) = content
-        .ok()
-        .flatten()
-        .and_then(|view| unsafe { Retained::retain(view.cast::<NSView>()) })
-    else {
+    let Some(content) = content_view(window) else {
         eprintln!("attn-app: browser tiles are off: the window has no content view");
         return;
     };
@@ -159,10 +171,10 @@ struct Shown {
 }
 
 impl WebKitHost {
-    /// Gives the keyboard back to the window when `web` holds it, so the window's keys reach
-    /// attn and not the window's own close.
+    /// Gives the keyboard back to the window `web` is in when `web` holds it, so the window's
+    /// keys reach attn and not the window's own close.
     fn focus_window_from(&self, web: &WKWebView) {
-        let Some(window) = self.content.window() else {
+        let Some(window) = web.window() else {
             return;
         };
         if window
@@ -170,8 +182,17 @@ impl WebKitHost {
             .is_some_and(|responder| same(&responder, web))
         {
             HANDING.set(true);
-            window.makeFirstResponder(Some(&self.content));
+            let content = window.contentView();
+            window.makeFirstResponder(content.as_deref().map(|view| &**view));
             HANDING.set(false);
+        }
+    }
+
+    /// The content view of the window `at` names: the main window's, or a tile window's.
+    fn content_of(&self, at: &Placement) -> Option<Retained<NSView>> {
+        match &at.window {
+            None => Some(self.content.clone()),
+            Some(key) => TILE_WINDOWS.with_borrow(|windows| windows.get(key).cloned()),
         }
     }
 
@@ -307,10 +328,16 @@ impl BrowserHost for WebKitHost {
         let Some(shown) = self.pages.get(page) else {
             return;
         };
-        let Some(at) = at else {
+        let Some((content, at)) = at.and_then(|at| Some((self.content_of(&at)?, at))) else {
             shown.clip.setHidden(true);
             return;
         };
+        let parent = unsafe { shown.clip.superview() };
+        if !parent.is_some_and(|parent| same(&parent, &*content)) {
+            self.focus_window_from(&shown.web);
+            shown.clip.removeFromSuperview();
+            content.addSubview(&shown.clip);
+        }
         let rect = |r: [f32; 4]| {
             NSRect::new(
                 NSPoint::new(f64::from(r[0]), f64::from(r[1])),
@@ -331,7 +358,7 @@ impl BrowserHost for WebKitHost {
         if !focused {
             return self.focus_window_from(&shown.web);
         }
-        let Some(window) = self.content.window() else {
+        let Some(window) = shown.web.window() else {
             return;
         };
         let web: &NSResponder = &shown.web;

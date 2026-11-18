@@ -8,7 +8,8 @@ use attn_client::TileKey;
 use rune::{Chord, Key, KeyEvent, KeyPlatform};
 use serde_json::{Map, Value};
 
-/// A web engine that holds one page per browser tile, as native views over the window.
+/// A web engine that holds one page per browser tile, as native views over the window that
+/// shows the tile: the main window, or the tile window it popped out into.
 pub trait BrowserHost {
     /// Makes the page for `page`, hidden, and loads `url` in it.
     fn open(&mut self, page: &TileKey, url: &str);
@@ -20,7 +21,8 @@ pub trait BrowserHost {
     fn zoom(&mut self, page: &TileKey, toward: crate::keymap::Zoom);
     /// Frees the page, so its web content process ends.
     fn close(&mut self, page: &TileKey);
-    /// Shows the page over `at` in window points, clipped to `at`'s visible part, or hides it.
+    /// Shows the page over `at` in `at`'s window, clipped to `at`'s visible part, or hides it.
+    /// A page moves between windows with its history and state intact.
     fn place(&mut self, page: &TileKey, at: Option<Placement>);
     /// Hands the keyboard to the page, or takes it back for the window.
     fn focus(&mut self, page: &TileKey, focused: bool);
@@ -29,10 +31,12 @@ pub trait BrowserHost {
     fn control(&mut self, page: &TileKey, request: Control);
 }
 
-/// Where a shown page sits in its window, in window points: `frame` is the whole page area,
-/// `visible` the part of it the window does not clip away.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// Where a shown page sits, in window points: in the main window, or in the tile window with
+/// this key; `frame` is the whole page area, `visible` the part of it the window does not clip
+/// away.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Placement {
+    pub window: Option<String>,
     pub frame: [f32; 4],
     pub visible: [f32; 4],
 }
@@ -93,7 +97,7 @@ thread_local! {
     static CLAIMED: RefCell<Vec<Chord>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Runs browser tiles' pages on `host`, for the main window on this thread.
+/// Runs browser tiles' pages on `host`, for the windows on this thread.
 pub fn use_host(host: Box<dyn BrowserHost>) {
     HOST.with_borrow_mut(|slot| *slot = Some(host));
 }

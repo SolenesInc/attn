@@ -174,6 +174,8 @@ impl crate::desktop::Opener for NativeOpener {
         let app = crate::tile_window_app((frame.width as f32, frame.height as f32));
         let handle = app.handle();
         let created = *frame;
+        #[cfg(target_os = "macos")]
+        let shows_pages = key.to_owned();
         let spec = rune::WindowSpec::from_app(key, app)
             .options(rune::WindowOptions {
                 visible: false,
@@ -181,6 +183,8 @@ impl crate::desktop::Opener for NativeOpener {
                 ..rune::WindowOptions::default()
             })
             .on_created(move |window| {
+                #[cfg(target_os = "macos")]
+                crate::browser::mac::adopt_tile_window(&shows_pages, &window);
                 if move_to(&window, &created) {
                     window.show_key();
                 }

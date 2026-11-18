@@ -1038,7 +1038,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             crate::notebook::tile_body(cx.notebook, &leaf.id, cx.keys.find_note.clone(), t)
         }
         (LeafKind::Tile { kind, .. }, _) if kind == crate::browser::KIND => {
-            crate::browser::page_area(&browser_page(desktop, leaf), leaf.window.is_some(), t)
+            crate::browser::page_area(&browser_page(desktop, leaf), t)
         }
         (LeafKind::Tile { kind, .. }, _) => empty(t, tile_kind_label(kind)),
     };
@@ -1320,9 +1320,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
                 .h_full()
                 .items_center()
                 .child(match &leaf.kind {
-                    LeafKind::Tile { kind, params, .. }
-                        if kind == crate::browser::KIND && !popped =>
-                    {
+                    LeafKind::Tile { kind, params, .. } if kind == crate::browser::KIND => {
                         crate::browser::address_field(
                             cx.browsers,
                             &browser_page(cx.desktop, leaf),
@@ -1389,8 +1387,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
                     .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
             )
             .children(
-                (matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
-                    && !popped)
+                matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
                     .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
             )
             .children(is_tile.then(|| {

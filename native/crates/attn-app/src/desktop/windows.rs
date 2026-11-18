@@ -169,6 +169,12 @@ pub struct TileWindow {
     title: Option<String>,
 }
 
+impl TileWindow {
+    pub(crate) fn key(&self) -> &str {
+        &self.key
+    }
+}
+
 /// The leaf a tile window shows, by desktop and leaf id; none once it gave its leaf back.
 pub fn tile_window_leaf(state: &State) -> Option<(String, String)> {
     let tile = state.window.tile.as_ref().filter(|t| !t.leaf.is_empty())?;
@@ -192,6 +198,19 @@ impl Pool {
     /// A tile window is on the desktop, holding a popped-out leaf.
     pub(crate) fn shows_a_window(&self) -> bool {
         self.windows.iter().any(|w| w.held.is_some() && !w.closed)
+    }
+
+    /// Runs `update` in the tile window that holds `leaf` of `desktop`; false when none does.
+    pub(crate) fn to_window(&self, desktop: &str, leaf: &str, update: Update) -> bool {
+        let Some(pooled) = self.windows.iter().find(|p| {
+            p.held
+                .as_ref()
+                .is_some_and(|h| h.desktop == desktop && h.leaf == leaf)
+        }) else {
+            return false;
+        };
+        pooled.window.update(update);
+        true
     }
 
     /// Hands each tile window, shown or hidden, the replies the main window heard and did not
