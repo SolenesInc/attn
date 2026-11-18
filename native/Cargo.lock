@@ -369,12 +369,14 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-web-kit",
  "percent-encoding",
+ "procwatch",
  "pulldown-cmark",
  "qrcodegen",
  "raw-window-handle",
  "rune",
  "rune-kit",
  "rune-mac",
+ "rune-perf",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2730,6 +2732,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "procwatch"
+version = "0.1.0"
+source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "profiling"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3074,6 +3084,15 @@ source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd
 dependencies = [
  "block2 0.5.1",
  "objc2 0.5.3",
+]
+
+[[package]]
+name = "rune-perf"
+version = "0.1.0"
+source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+dependencies = [
+ "procwatch",
+ "serde_json",
 ]
 
 [[package]]

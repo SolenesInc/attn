@@ -9,6 +9,9 @@ use rune::{FrameEncoded, FrameOutcome};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[global_allocator]
+static ALLOCATOR: procwatch::alloc::Counting = procwatch::alloc::Counting::system();
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--automation-headless") {
@@ -33,11 +36,19 @@ fn main() -> ExitCode {
     let frames = Pulse::default();
     let drawn = Arc::new(AtomicU64::new(0));
     let performance = Performance::default();
+    let automation = enabled(&launch.instance.name);
+    if let Some(debug) = automation
+        .then(|| attn_app::instance::debug_dir(&launch.instance.bundle_id))
+        .flatten()
+    {
+        attn_app::frame_recorder::start(&debug);
+    }
     let app = attn_app::native_app(&launch.instance.bundle_id)
         .on_frame_encoded({
             let (frames, performance) = (frames.clone(), performance.clone());
             move |frame| {
                 measure(&performance, frame);
+                attn_app::frame_recorder::record(frame);
                 frames.beat();
             }
         })
@@ -49,7 +60,6 @@ fn main() -> ExitCode {
             }
         });
     let handle = app.handle();
-    let automation = enabled(&launch.instance.name);
     #[cfg(target_os = "macos")]
     let app = app.on_ready({
         let pages = handle.clone();
@@ -147,6 +157,7 @@ fn main() -> ExitCode {
         },
     ));
     app.run();
+    attn_app::frame_recorder::stop();
     remove_app_pid();
     ExitCode::SUCCESS
 }

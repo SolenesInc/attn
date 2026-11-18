@@ -37,13 +37,71 @@ go test -run '^$' -bench . -benchmem ./internal/daemon/ ./internal/transcript/
 
 `allocs/op` is the stable signal. Compare `ns/op` only between runs on the same machine.
 
+## Cut-over gates
+
+`scenario-perf-gates` measures the gates the native app must hold before it
+replaces the Tauri app, on whichever app the instance has installed, so one
+session can measure both. Input reaches the shells only through the daemon, so
+both apps get the same work. Each run launches the app fresh, places it
+unfocused at 1710×956 with 20 px on screen and above every other window, so
+nothing covers it and it draws as a window in view does, waits 20 s, then samples every
+process the app is responsible for, the daemon and the PTY host once a second
+with `proc_pid_rusage`: CPU as a share of one core and physical footprint, the
+number that counts graphics memory. It compiles `procUsage.c` with `cc` on first
+use.
+
+```bash
+ATTN_HARNESS_INSTANCE=<name> node app/scripts/real-app-harness/scenario-perf-gates.mjs \
+  [--workloads idle1,quiet4,paint1,paint4,stream,flood,switches,rest,launch] [--runs 5] [--seconds 30]
+```
+
+| Workload | Measures |
+| --- | --- |
+| `idle1`, `quiet4` | CPU and footprint with one shell, or four in a 2×2 grid, doing nothing |
+| `paint1`, `paint4` | the same while every shell prints `seq 1 400` every 20 ms |
+| `stream` | three of the four print, the fourth is quiet |
+| `flood` | `yes` in all four |
+| `switches` | footprint growth over 10 switches between the two desktops, 15 s after the last |
+| `rest` | an 8 s `sample` of the app at `quiet4`, counting stacks in display links, run-loop timers and GPU submits |
+| `launch` | launch to the first frame with terminal content, four shells |
+
+It prints one JSON line per run and a summary per workload with the median,
+minimum and maximum over runs. Painting workloads on the native app quit it
+while it still paints and add the frame-time distribution from its frame
+recorder.
+
+## Native frames
+
+The native app on a named instance, or with `ATTN_AUTOMATION=1`, records every
+frame of its windows with Rune's `rune-perf`: the update (events, view, layout
+and paint) and the encode, together the frame's work on the UI thread, and the
+bytes the UI thread allocated. It writes
+`<appLocalDataDir>/debug/perf/perf.json` when it quits: frame totals and the
+p50, p95, p99 and longest work over the last 600 frames or 60 s, whichever is
+fewer. Frames slower than a 60 Hz refresh also land in `perf.log` and
+`perf-incident-NN.json` beside it while the app runs. Work is CPU time on the UI
+thread, not when the frame reached the screen.
+
+To see what one garden update or session fact costs the native app, open it on
+the copy, run the burst, quit it and read the totals. An idle window draws
+nothing, so frames counted over the bursts are the bursts' frames:
+
+```bash
+go run ./scripts/sessionfactperf -vars http://127.0.0.1:<pprof port>/debug/vars -n 10
+attn instance stop-app
+jq '.frames | {total, work_ms, ui_allocated_bytes}' \
+  "$(attn instance resolve --field appLocalDataDir)/debug/perf/perf.json"
+```
+
 ## Real-app memory
 
 These hand-run [harness](../../app/scripts/real-app-harness/AGENTS.md) scenarios
-measure the whole attn process tree and compare against the machine's own
-baseline (`~/.attn-perf-registry/`, or `perf-baselines.json` for committed
-reference machines). A regression sets `ok: false` in the verdict without
-failing the exit code.
+measure the whole attn process tree, of either app, and compare against the
+machine's own baseline for that app (`~/.attn-perf-registry/`, or
+`perf-baselines.json` for committed reference machines). A regression sets
+`ok: false` in the verdict without failing the exit code. On the native app the
+baseline scenario refuses the probes that read the Tauri app's webview:
+`--pressure`, `--dock-probe`, `--switch-probe` and `--real-cmd`.
 
 | Scenario | Measures | Command |
 | --- | --- | --- |
@@ -128,14 +186,17 @@ SQL
 `scenario-perf-pty-stream` measures what streaming terminal output costs while
 three shells print `seq 1 400` every 20 ms, with the shared terminal host on
 unless `--shared-host false` turns it off. With it on, the app streams only the
-terminals it draws. It prints one JSON line per run and a summary with the
-median, min and max of each number: CPU as a share of a core for the app,
-WebContent, WebKit Networking, WebKit GPU, the daemon and the PTY host;
-WebSocket messages and bytes a second; events a second per terminal from the
-daemon and from the app; the terminals `daemon.log` shows streaming to the app;
-key-to-echo p50 and p90 in a quiet shell under the load; and, for `hidden`, how
-long the streaming panes take to show the daemon's screen once the user returns
-to them, and when a command typed during that switch reaches its terminal.
+terminals it draws. It runs on either app. It prints one JSON line per run and a
+summary with the median, min and max of each number: CPU as a share of a core
+for the app (and, on the Tauri app, WebContent, WebKit Networking and WebKit
+GPU), the daemon and the PTY host; events a second per terminal from the
+daemon; the terminals `daemon.log` shows streaming to the app; key-to-paint p50
+and p90 in a quiet shell under the load, from a key sent to the app until the
+harness sees the echo drawn; and, for `hidden`, how long the streaming panes
+take to show the daemon's screen once the user returns to them. On the Tauri
+app it also reports WebSocket messages and bytes a second, events a second per
+terminal in the app, key-to-echo (the daemon's input to the app's parse of the
+echo) and when a command typed during the switch reaches its terminal.
 
 ```bash
 ATTN_HARNESS_INSTANCE=<name> pnpm --dir app run real-app:scenario-perf-pty-stream -- \
@@ -145,7 +206,7 @@ ATTN_HARNESS_INSTANCE=<name> pnpm --dir app run real-app:scenario-perf-pty-strea
 `drawn` draws the streams as splits beside the quiet shell, `hidden` puts them
 on the previous desktop, and `unmounted` on a desktop that is neither current
 nor previous. `--profile-dir <dir>` adds `sample` profiles of the PTY host and
-WebContent for each window, and `--pprof-port <port>` restarts the daemon with
+of WebContent, or the native app, for each window, and `--pprof-port <port>` restarts the daemon with
 `ATTN_PPROF` to add its CPU profile. Profiling costs CPU, so profiled runs are not baselines.
 
 ## A copy of production
@@ -196,19 +257,19 @@ Each run makes six mutations (a ringing note, a plain note, a check removed and
 restored, a wither and a replant), waits for the daemon to return to idle, and
 reports CPU milliseconds per mutation above the idle rate.
 
-The app side needs a bundle built against that instance. `app-push.mjs` then
-reports the socket handler, message-to-next-frame, and `JSON.parse` per update
-in headless Chromium (`PROFILE=1` adds a CPU profile):
+For the native app's side, run the moves with the app open on the Garden and
+read its frames, as [Native frames](#native-frames) says.
+
+`app-review-pull.mjs` measures the Tauri app's Garden in headless Chromium, on a
+bundle built against the instance:
 
 ```bash
 VITE_CLIENT_TOKEN=$(cat <instance data dir>/client-token) VITE_DAEMON_PORT=<instance ws port> \
   pnpm --dir app exec vite build --outDir <dir>
 pnpm --dir app exec vite preview --outDir <dir> --port <port>
-node scripts/gardenpushperf/app-push.mjs http://localhost:<port>/ <id> 20
 ```
 
-`app-review-pull.mjs` takes the same bundle. It opens the Garden on the seed
-with the given title, posts notes to it, and counts the `seed_review_show`
+It opens the Garden on the seed with the given title, posts notes to it, and counts the `seed_review_show`
 requests in the daemon's log, once for the opening and once for the notes. The
 notes should cost none, while the open seed's document still refetches on each:
 
@@ -287,16 +348,8 @@ For a before-and-after comparison, take a profile during the bursts instead,
 allocations, and read `projectSessionStateChanged` with `go tool pprof -top
 -cum`, using `-base <first snapshot>` for allocations.
 
-`app-session.mjs` measures the app's main-thread time, React commits and paints
-per fact in headless Chromium. It runs the Go tool for the bursts. Serve a
-bundle built against the instance, as for the garden push. A dev server also
-names the components each commit renders, and needs the instance's port:
-
-```bash
-VITE_DAEMON_PORT=<instance ws port> pnpm --dir app exec vite --port <port>
-node scripts/sessionfactperf/app-session.mjs http://localhost:<port>/ \
-  http://127.0.0.1:<pprof port>/debug/vars 10
-```
+For the native app's side of the bursts, read its frames, as
+[Native frames](#native-frames) says.
 
 ## Daemon profiling
 

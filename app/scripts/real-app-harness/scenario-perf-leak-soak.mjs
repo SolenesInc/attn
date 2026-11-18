@@ -3,12 +3,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createRunContext, createSessionAndWaitForInitialPane, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
+import { createRunContext, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
+import { appShellInTree } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { instanceForAppPath, assertProductionRunAllowed } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildLeakSoakVerdict, evaluateRssBaseline, fitSlope } from './rssBaselineVerdict.mjs';
-import { captureWebKitPids, readLiveDaemonPid, closeSessions, fillAllPanes, sampleWindow, teardownInstanceState } from './perfMeasure.mjs';
+import { captureWebKitPids, readLiveDaemonPid, openPerfShell, closeSessions, fillAllPanes, sampleWindow, teardownInstanceState } from './perfMeasure.mjs';
 
 function parseArgs(argv) {
   const filtered = argv.filter((arg) => arg !== '--');
@@ -91,7 +92,7 @@ async function main() {
   await client.launchFreshApp();
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
-  await client.waitForFrontendResponsive(20_000);
+  if (appShellInTree(client.appPath) !== 'native') await client.waitForFrontendResponsive(20_000);
 
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   await observer.connect();
@@ -107,21 +108,12 @@ async function main() {
       const sessionIds = [];
       for (let i = 0; i < options.sessions; i += 1) {
         const label = `perf-leak-soak-${runId}-c${cycle}-${i}`;
-        const sessionId = await createSessionAndWaitForInitialPane({
-          client,
-          observer,
-          cwd: sessionDir,
-          label,
-          agent: 'shell',
-          sessionWaitMs: 30_000,
-          waitForInitialPaneVisible: true,
-          initialPaneWaitMs: 25_000,
-        });
+        const sessionId = await openPerfShell({ client, observer, cwd: sessionDir, label });
         sessionIds.push(sessionId);
       }
 
-      await fillAllPanes(client, sessionIds, options.workloadCmd, options.perPaneSettleMs);
-      await closeSessions(client, sessionIds);
+      await fillAllPanes(client, sessionIds, options.workloadCmd, options.perPaneSettleMs, observer);
+      await closeSessions(client, sessionIds, observer);
 
       // The LAST sample of the decay window, never the peak: macOS scavenges
       // freed pages lazily, so an early sample still shows the workload spike.
@@ -137,7 +129,8 @@ async function main() {
   const { slope } = fitSlope(post);
 
   const fingerprint = getMachineFingerprint();
-  const key = `${fingerprint.key}-leak-floor`;
+  const shellKey = appShellInTree(client.appPath) === 'native' ? '-native' : '';
+  const key = `${fingerprint.key}${shellKey}-leak-floor`;
   const floorEval = evaluateRssBaseline({
     totalRssMb: post[0],
     fingerprint,

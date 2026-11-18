@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import crypto from 'node:crypto';
 import {
   launchFreshAppAndConnect,
+  launchFreshNativeAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
   queueDaemonSettingRestore,
@@ -14,10 +16,10 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, dataDirForInstance, defaultWSURLForInstance } from './harnessInstance.mjs';
-import { captureWebKitPids, collectDescendantPids, isRelevantWebKitProcess, readLiveDaemonPid, readProcessTable, stopDaemonKeepingTerminals } from './perfMeasure.mjs';
+import { captureWebKitPids, closeEmptiedDesktop, collectDescendantPids, createSlottedDesktop, isRelevantWebKitProcess, readLiveDaemonPid, readProcessTable, showNativeDesktop, stopDaemonKeepingTerminals } from './perfMeasure.mjs';
 import { waitForPaneAttached, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
-import { createWindowDriver } from './platform.mjs';
+import { appShellInTree, createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -504,31 +506,125 @@ async function hiddenCatchUp({ client, driver, observer, workload, runIndex }) {
   };
 }
 
-async function measureRun({ client, driver, observer, extras, runner, runIndex, pids: launchPids, dataDir, logPath, cwd }) {
+async function spawnShellOn(observer, desktopId, cwd, label, createdSessionIds, placement = {}) {
+  const id = crypto.randomUUID();
+  const spawned = observer.waitForMessage((m) => m.event === 'spawn_result' && m.id === id && m, `${label} spawned`, 20_000);
+  observer.send({ cmd: 'spawn_session', id, agent: 'shell', cwd, profile_id: observer.profileId, placement: { desktop_id: desktopId, ...placement }, label, cols: 100, rows: 30 });
+  const result = await spawned;
+  if (!result.success) throw new Error(`spawn ${label} failed: ${JSON.stringify(result)}`);
+  createdSessionIds.push(id);
+  const runtimeId = await observer.waitFor(() => { try { return observer.terminalOf(id); } catch { return null; } }, `${label} terminal`, 20_000);
+  const deadline = Date.now() + 30_000;
+  while (!(await daemonScreen(observer, runtimeId)).text.trim()) {
+    if (Date.now() > deadline) throw new Error(`${label} showed no prompt in 30 s`);
+    await delay(100);
+  }
+  return { sessionId: id, paneId: result.pane_id, runtimeId };
+}
+
+async function buildNativeWorkload({ client, observer, extras, cwd, runIndex, createdSessionIds, createdDesktops }) {
+  const tag = `pstream-${runIndex}`;
+  const slotted = async () => { const desktop = await createSlottedDesktop(observer); createdDesktops.push(desktop.id); return desktop; };
+  const streamsDesktop = await slotted();
+  const streams = [await spawnShellOn(observer, streamsDesktop.id, cwd, `${tag}-stream-0`, createdSessionIds)];
+  for (let index = 1; index < extras.streams; index += 1) {
+    const direction = index % 2 === 1 ? 'vertical' : 'horizontal';
+    streams.push(await spawnShellOn(observer, streamsDesktop.id, cwd, `${tag}-stream-${index}`, createdSessionIds, { anchor_pane_id: streams[index - 1].paneId, direction }));
+  }
+  for (const pane of streams) observer.send({ cmd: 'pty_input', id: pane.runtimeId, data: `${STREAM_COMMAND}\r`, source: 'automation' });
+  let quiet;
+  let quietDesktopId = streamsDesktop.id;
+  if (extras.workload === 'drawn') {
+    quiet = await spawnShellOn(observer, streamsDesktop.id, cwd, `${tag}-quiet`, createdSessionIds, { anchor_pane_id: streams[0].paneId, direction: 'horizontal' });
+    await showNativeDesktop(client, observer, streamsDesktop);
+  } else {
+    await showNativeDesktop(client, observer, streamsDesktop);
+    if (extras.workload === 'unmounted') {
+      const filler = await slotted();
+      await spawnShellOn(observer, filler.id, cwd, `${tag}-filler`, createdSessionIds);
+      await showNativeDesktop(client, observer, filler);
+    }
+    const quietDesktop = await slotted();
+    quiet = await spawnShellOn(observer, quietDesktop.id, cwd, `${tag}-quiet`, createdSessionIds);
+    quietDesktopId = quietDesktop.id;
+    await showNativeDesktop(client, observer, quietDesktop);
+  }
+  await observer.waitFor(() => observer.currentDesktopId() === quietDesktopId, `desktop ${quietDesktopId} current`);
+  return { streams, quiet, streamsDesktopId: streamsDesktop.id, quietDesktopId, arrangement: { current: observer.currentDesktopId() } };
+}
+
+async function nativeKeyToPaint(driver, observer, quiet, keys) {
+  if (keys === 0) return null;
+  observer.send({ cmd: 'pty_input', id: quiet.runtimeId, data: 'cat\r', source: 'automation' });
+  await delay(500);
+  await driver.click({ key: `tile.${quiet.paneId}.header` });
+  const paints = [];
+  for (let index = 0; index < keys; index += 1) {
+    const token = `k${index.toString(36)}q`;
+    const startedAt = performance.now();
+    await driver.typeInto(null, token);
+    await driver.state(`terminal:${quiet.runtimeId}`, { includes: token, timeoutMs: 10_000 });
+    paints.push(performance.now() - startedAt);
+    await driver.pressKey('Enter');
+    await delay(150);
+  }
+  observer.send({ cmd: 'pty_input', id: quiet.runtimeId, data: '\u0003', source: 'automation' });
+  return { keys, misses: 0, paintMs: { p50: round(percentile(paints, 0.5)), p90: round(percentile(paints, 0.9)) } };
+}
+
+async function nativeCatchUp({ driver, observer, workload, runIndex }) {
+  const token = `${Date.now().toString(36)}${runIndex}`;
+  stopStreams(observer, workload.streams);
+  for (const pane of workload.streams) {
+    observer.send({ cmd: 'pty_input', id: pane.runtimeId, data: `printf 'SET''TLED_%s\\n' ${token}\r`, source: 'automation' });
+  }
+  const marker = `SETTLED_${token}`;
+  for (const pane of workload.streams) {
+    const deadline = Date.now() + 15_000;
+    while (!(await daemonScreen(observer, pane.runtimeId)).text.includes(marker)) {
+      if (Date.now() > deadline) throw new Error(`The daemon's screen of ${pane.runtimeId} never showed ${marker}`);
+      await delay(50);
+    }
+  }
+  const startedAt = performance.now();
+  await observer.setCurrentDesktop(workload.streamsDesktopId);
+  const caughtUp = await Promise.all(workload.streams.map(async (pane) => {
+    await driver.state(`terminal:${pane.runtimeId}`, { includes: marker, timeoutMs: 15_000 });
+    return performance.now() - startedAt;
+  }));
+  return { slowestPaneMs: round(Math.max(...caughtUp)), perPaneMs: caughtUp.map((ms) => round(ms)) };
+}
+
+async function measureRun({ shell, client, driver, observer, extras, runner, runIndex, pids: launchPids, dataDir, logPath, cwd }) {
   const createdSessionIds = [];
+  const createdDesktops = [];
   const runLogStart = daemonLogSize(logPath);
+  const native = shell === 'native';
   try {
-    const workload = await buildWorkload({ client, observer, extras, cwd, runIndex, createdSessionIds });
+    const workload = native
+      ? await buildNativeWorkload({ client, observer, extras, cwd, runIndex, createdSessionIds, createdDesktops })
+      : await buildWorkload({ client, observer, extras, cwd, runIndex, createdSessionIds });
     await assertStreaming(observer, workload.streams);
     await delay(WARMUP_MS);
     const hostPid = extras.sharedHost === 'true' ? liveSharedHostPid(dataDir) : null;
     const pids = { ...launchPids, hostPid, ptyPids: new Set(hostPid ? [hostPid] : liveGoWorkerPids(dataDir)) };
 
     const tree = await appProcessTree(pids);
-    const webContentPids = tree.filter((entry) => entry.processClass === 'webkit_webcontent').map((entry) => entry.pid);
+    const webContentPids = tree.filter((entry) => entry.processClass === (native ? 'app' : 'webkit_webcontent')).map((entry) => entry.pid);
     const panes = [...workload.streams, workload.quiet];
     const roleOf = (pane) => (pane === workload.quiet ? 'quiet' : `stream-${workload.streams.indexOf(pane)}`);
 
     const windowLogStart = daemonLogSize(logPath);
     const seqBefore = await Promise.all(panes.map((pane) => daemonScreen(observer, pane.runtimeId)));
-    const perfBefore = await client.request('capture_perf_snapshot', { settleFrames: 0, includeMemory: false });
+    const appCounters = () => (native ? { terminals: [], pty: {} } : client.request('capture_perf_snapshot', { settleFrames: 0, includeMemory: false }));
+    const perfBefore = await appCounters();
     const cpuBefore = await sampleTreeCpu(tree);
     const profile = extras.profileDir
       ? await profileWindow({ extras, seconds: extras.seconds, runIndex, daemonPid: pids.daemonPid, hostPid: pids.hostPid, webContentPids })
       : null;
     await delay(extras.seconds * 1000);
     const cpuAfter = await sampleTreeCpu(tree);
-    const perfAfter = await client.request('capture_perf_snapshot', { settleFrames: 0, includeMemory: false });
+    const perfAfter = await appCounters();
     const seqAfter = await Promise.all(panes.map((pane) => daemonScreen(observer, pane.runtimeId)));
     const windowLogEnd = daemonLogSize(logPath);
     if (profile) await profile.done;
@@ -542,8 +638,10 @@ async function measureRun({ client, driver, observer, extras, runner, runIndex, 
       appWritesPerSecond: terminal.inApp ? round(terminal.writesParsed / windowSeconds) : null,
     }));
 
-    const keyProbe = await keyToEcho(client, workload.quiet, extras.keys);
-    const catchUp = extras.workload === 'hidden' ? await hiddenCatchUp({ client, driver, observer, workload, runIndex }) : null;
+    const keyProbe = native ? await nativeKeyToPaint(driver, observer, workload.quiet, extras.keys) : await keyToEcho(client, workload.quiet, extras.keys);
+    const catchUp = extras.workload !== 'hidden' ? null
+      : native ? await nativeCatchUp({ driver, observer, workload, runIndex })
+        : await hiddenCatchUp({ client, driver, observer, workload, runIndex });
 
     const sumStreams = (pick) => terminals.filter((terminal) => terminal.role !== 'quiet').reduce((sum, terminal) => sum + (pick(terminal) ?? 0), 0);
     const record = {
@@ -554,20 +652,20 @@ async function measureRun({ client, driver, observer, extras, runner, runIndex, 
       arrangement: workload.arrangement,
       metrics: {
         cpuPercent: treeCpuPercent(tree, cpuBefore, cpuAfter),
-        ws: {
+        ws: native ? undefined : {
           messagesPerSecond: round((perfAfter.pty.wsMessageCount - perfBefore.pty.wsMessageCount) / windowSeconds),
           bytesPerSecond: Math.round((perfAfter.pty.wsMessageBytes - perfBefore.pty.wsMessageBytes) / windowSeconds),
           ptyOutputPerSecond: round((perfAfter.pty.ptyOutputCount - perfBefore.pty.ptyOutputCount) / windowSeconds),
         },
         streams: {
           daemonEventsPerSecond: round(sumStreams((terminal) => terminal.daemonEventsPerSecond)),
-          appWritesPerSecond: round(sumStreams((terminal) => terminal.appWritesPerSecond)),
+          appWritesPerSecond: native ? undefined : round(sumStreams((terminal) => terminal.appWritesPerSecond)),
           streamedToApp: streamed.streamed.filter((id) => roleByRuntime.get(id)?.startsWith('stream')).length,
         },
-        keyToEchoMs: keyProbe ? keyProbe.echoMs : undefined,
+        keyToEchoMs: keyProbe?.echoMs,
         keyToPaintMs: keyProbe ? keyProbe.paintMs : undefined,
         catchUpMs: catchUp ? catchUp.slowestPaneMs : undefined,
-        typedWhileSwitchingArrivedMs: catchUp ? catchUp.typedWhileSwitching.arrivedMs : undefined,
+        typedWhileSwitchingArrivedMs: catchUp?.typedWhileSwitching?.arrivedMs,
       },
       terminals,
       streamedTerminals: {
@@ -582,7 +680,13 @@ async function measureRun({ client, driver, observer, extras, runner, runIndex, 
     runner.writeJson(`run-${runIndex + 1}.json`, record);
     return record;
   } finally {
-    await closeScenarioSessions(client, createdSessionIds).catch((error) => runner.log('close_sessions_failed', { error: String(error) }));
+    const closeDesktops = async () => {
+      for (const id of createdDesktops) await closeEmptiedDesktop(observer, id);
+    };
+    const close = native
+      ? async () => { await Promise.all(createdSessionIds.map((id) => observer.unregisterSession(id))); await closeDesktops(); }
+      : () => closeScenarioSessions(client, createdSessionIds);
+    await close().catch((error) => runner.log('close_sessions_failed', { error: String(error) }));
   }
 }
 
@@ -610,6 +714,7 @@ async function main() {
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
+  const shell = appShellInTree(options.appPath);
   const records = [];
   try {
     const pids = await runner.step('launch_app_with_the_shared_host', async () => {
@@ -618,7 +723,7 @@ async function main() {
         await stopDaemonKeepingTerminals(instance);
       }
       const webkitBaseline = await captureWebKitPids();
-      await launchFreshAppAndConnect(client, observer);
+      await (shell === 'native' ? launchFreshNativeAppAndConnect : launchFreshAppAndConnect)(client, observer);
       queueDaemonSettingRestore(observer, 'pty_shared_host_enabled');
       await writeDaemonSettings([{ key: 'pty_shared_host_enabled', value: extras.sharedHost }]);
       await observer.waitFor(() => observer.getSetting('pty_shared_host_active') === extras.sharedHost, `the shared terminal host active=${extras.sharedHost} for new terminals`, 20_000);
@@ -632,11 +737,11 @@ async function main() {
     const cwd = path.join(runner.sessionDir, 'shells');
     fs.mkdirSync(cwd, { recursive: true });
     for (let runIndex = 0; runIndex < extras.runs; runIndex += 1) {
-      const record = await runner.step(`run_${runIndex + 1}`, () => measureRun({ client, driver, observer, extras, runner, runIndex, pids, dataDir, logPath, cwd }));
+      const record = await runner.step(`run_${runIndex + 1}`, () => measureRun({ shell, client, driver, observer, extras, runner, runIndex, pids, dataDir, logPath, cwd }));
       records.push(record);
       console.log(JSON.stringify(record));
     }
-    const summary = { type: 'summary', workload: extras.workload, sharedHost: extras.sharedHost, runs: records.length, seconds: extras.seconds, streams: extras.streams, profiled: Boolean(extras.profileDir), metrics: summarize(records) };
+    const summary = { type: 'summary', shell, workload: extras.workload, sharedHost: extras.sharedHost, runs: records.length, seconds: extras.seconds, streams: extras.streams, profiled: Boolean(extras.profileDir), metrics: summarize(records) };
     runner.writeJson('summary-metrics.json', summary);
     console.log(JSON.stringify(summary));
     await runner.finishSuccess({ summary });

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -6,7 +7,9 @@ import {
   daemonPidFilePathForInstance,
   defaultAppPathForInstance,
 } from './harnessInstance.mjs';
+import { createSessionAndWaitForInitialPane } from './common.mjs';
 import { resetInstanceData } from './freshWorld.mjs';
+import { appShellInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -350,17 +353,81 @@ export async function paneIdForSession(client, sessionId) {
   return ws.activePaneId || ws.panes?.[0]?.paneId || null;
 }
 
-export async function closeSessions(client, ids) {
-  await Promise.allSettled([...new Set(ids)].map((sessionId) => (
-    client.request('close_session', { sessionId }, { timeoutMs: 15_000 })
-  )));
+export async function createSlottedDesktop(observer) {
+  const taken = new Set(observer.desktops.map((desktop) => desktop.shortcut_slot).filter(Boolean));
+  const slot = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => !taken.has(n));
+  if (!slot) throw new Error(`no free desktop slot: ${observer.describeArrangement()}`);
+  const result = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, shortcut_slot: slot });
+  const desktop = await observer.waitFor(() => observer.desktop(result.desktops?.[0]?.id), `desktop in slot ${slot}`);
+  return { id: desktop.id, slot };
+}
+
+export async function closeEmptiedDesktop(observer, id) {
+  if (!observer.desktop(id)) return;
+  const left = await observer.waitFor(() => observer.desktop(id)?.panes.length === 0 && observer.desktop(id), `desktop ${id} emptied`);
+  await observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
+}
+
+export async function showNativeDesktop(client, observer, desktop) {
+  const { layer } = await client.request('state', { of: 'window' });
+  if (layer === 'WhatsNew') {
+    await client.request('key', { chord: 'Escape' });
+    await client.request('wait', { target: { key: 'whats-new-dialog' }, gone: true });
+  }
+  const deadline = Date.now() + 10_000;
+  while (!(await client.request('state', { of: 'desktops' })).some((known) => known.id === desktop.id)) {
+    if (Date.now() > deadline) throw new Error(`the app never listed desktop ${desktop.id}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const appCurrent = async () => (await client.request('state', { of: 'window' })).current_desktop;
+  if (observer.currentDesktopId() === desktop.id) {
+    const other = observer.desktops.find((candidate) => candidate.id !== desktop.id);
+    await observer.setCurrentDesktop(other.id);
+    while ((await appCurrent()) !== other.id) {
+      if (Date.now() > deadline) throw new Error(`the app never followed the current desktop to ${other.id}`);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  await client.request('key', { chord: `${process.platform === 'darwin' ? 'mod' : 'mod+shift'}+${desktop.slot}` });
+  await observer.waitFor(() => observer.currentDesktopId() === desktop.id, `desktop ${desktop.id} current`);
+}
+
+export async function openPerfShell({ client, observer, cwd, label }) {
+  if (appShellInTree(client.appPath) !== 'native') {
+    return createSessionAndWaitForInitialPane({
+      client, observer, cwd, label, agent: 'shell', sessionWaitMs: 30_000, waitForInitialPaneVisible: true, initialPaneWaitMs: 25_000,
+    });
+  }
+  const desktop = await createSlottedDesktop(observer);
+  await showNativeDesktop(client, observer, desktop);
+  const id = crypto.randomUUID();
+  const spawned = observer.waitForMessage((m) => m.event === 'spawn_result' && m.id === id && m, `${label} spawned`, 30_000);
+  observer.send({ cmd: 'spawn_session', id, agent: 'shell', cwd, profile_id: observer.profileId, placement: { desktop_id: desktop.id }, label, cols: 100, rows: 30 });
+  const result = await spawned;
+  if (!result.success) throw new Error(`spawn ${label} failed: ${JSON.stringify(result)}`);
+  const runtimeId = await observer.waitFor(() => { try { return observer.terminalOf(id); } catch { return null; } }, `${label} terminal`, 25_000);
+  await client.request('state', { of: `terminal:${runtimeId}`, includes: '', timeout_ms: 25_000 }, { timeoutMs: 30_000 });
+  return id;
+}
+
+export async function closeSessions(client, ids, observer) {
+  const close = appShellInTree(client.appPath) === 'native'
+    ? (sessionId) => observer.unregisterSession(sessionId)
+    : (sessionId) => client.request('close_session', { sessionId }, { timeoutMs: 15_000 });
+  await Promise.allSettled([...new Set(ids)].map(close));
 }
 
 // Sequential with a per-pane settle: filling every pane at once overruns the
 // websocket's 256-message buffer (see AGENTS.md).
-export async function fillAllPanes(client, sessionIds, cmd, perPaneSettleMs) {
+export async function fillAllPanes(client, sessionIds, cmd, perPaneSettleMs, observer) {
   let filled = 0;
   for (const sessionId of sessionIds) {
+    if (appShellInTree(client.appPath) === 'native') {
+      observer.send({ cmd: 'pty_input', id: observer.terminalOf(sessionId), data: `${cmd}\r`, source: 'automation' });
+      filled += 1;
+      await delay(perPaneSettleMs);
+      continue;
+    }
     const paneId = await paneIdForSession(client, sessionId);
     if (!paneId) {
       console.warn(`[perf] fill: no pane for session ${sessionId}`);

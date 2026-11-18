@@ -3,12 +3,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createRunContext, createSessionAndWaitForInitialPane, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
+import { createRunContext, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
+import { appShellInTree } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { instanceForAppPath, assertProductionRunAllowed } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildColdWarmVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
-import { delay, captureWebKitPids, snapshot, readLiveDaemonPid, closeSessions, fillAllPanes, teardownInstanceState } from './perfMeasure.mjs';
+import { delay, captureWebKitPids, snapshot, readLiveDaemonPid, openPerfShell, closeSessions, fillAllPanes, teardownInstanceState } from './perfMeasure.mjs';
 
 function parseArgs(argv) {
   const filtered = argv.filter((arg) => arg !== '--');
@@ -77,7 +78,7 @@ async function main() {
     await client.launchFreshApp();
     await client.waitForManifest(20_000);
     await client.waitForReady(20_000);
-    await client.waitForFrontendResponsive(20_000);
+    if (appShellInTree(client.appPath) !== 'native') await client.waitForFrontendResponsive(20_000);
 
     const observer = new DaemonObserver({ wsUrl: options.wsUrl });
     await observer.connect();
@@ -91,16 +92,7 @@ async function main() {
       const sessionIds = [];
       for (let i = 0; i < options.sessions; i += 1) {
         const label = `perf-cold-warm-${runId}-${i}`;
-        const sessionId = await createSessionAndWaitForInitialPane({
-          client,
-          observer,
-          cwd: sessionDir,
-          label,
-          agent: 'shell',
-          sessionWaitMs: 30_000,
-          waitForInitialPaneVisible: true,
-          initialPaneWaitMs: 25_000,
-        });
+        const sessionId = await openPerfShell({ client, observer, cwd: sessionDir, label });
         sessionIds.push(sessionId);
         console.log(`[perf] created session ${i + 1}/${options.sessions} (${sessionId})`);
       }
@@ -108,14 +100,14 @@ async function main() {
       await delay(options.settleMs);
 
       if (warmup) {
-        await fillAllPanes(client, sessionIds, options.warmupCmd, options.warmupSettleMs);
+        await fillAllPanes(client, sessionIds, options.warmupCmd, options.warmupSettleMs, observer);
         await delay(options.settleMs);
       }
 
       const snap = await snapshot(appPid, daemonPid, webkitBaseline);
       console.log(`[perf] ${warmup ? 'WARM' : 'COLD'} @ ${options.sessions} sessions: ${snap.totalRssMb} MB (${snap.procCount} procs)`);
 
-      await closeSessions(client, sessionIds);
+      await closeSessions(client, sessionIds, observer);
       return snap;
     } finally {
       await observer.close();
@@ -126,9 +118,10 @@ async function main() {
   const warmSnap = await runPhase({ warmup: true });
 
   const fingerprint = getMachineFingerprint();
+  const shellKey = appShellInTree(client.appPath) === 'native' ? '-native' : '';
   const recordedAt = new Date().toISOString();
-  const coldKey = `${fingerprint.key}-cold`;
-  const warmKey = `${fingerprint.key}-warm`;
+  const coldKey = `${fingerprint.key}${shellKey}-cold`;
+  const warmKey = `${fingerprint.key}${shellKey}-warm`;
   const coldEval = evaluateRssBaseline({
     totalRssMb: coldSnap.totalRssMb,
     fingerprint,

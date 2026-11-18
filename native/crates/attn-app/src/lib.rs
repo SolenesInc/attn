@@ -20,6 +20,7 @@ mod diagnostic_report;
 mod dispatch;
 mod editor;
 mod frame;
+pub mod frame_recorder;
 pub mod garden;
 pub mod headless;
 mod home;
@@ -508,6 +509,7 @@ impl State {
 fn quit(state: &mut State, tx: &mut Tx) {
     frame::save(state, tx);
     instance::remove_app_pid();
+    frame_recorder::stop();
 }
 
 /// The person closed the main window. On macOS it hides while a tile window shows, and comes

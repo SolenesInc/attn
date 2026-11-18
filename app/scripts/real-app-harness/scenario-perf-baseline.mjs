@@ -7,13 +7,14 @@ import http from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createRunContext, createSessionAndWaitForInitialPane, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
+import { createRunContext, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
+import { appShellInTree } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { instanceForAppPath } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildBaselineVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
 import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
-import { delay, captureWebKitPids, snapshot, classRssMb, sampleWindow, readLiveDaemonPid, stopDaemonKeepingTerminals, paneIdForSession, closeSessions, fillAllPanes, readRegionFootprint, readGraphicsRegions, readAppFootprint } from './perfMeasure.mjs';
+import { delay, captureWebKitPids, snapshot, classRssMb, sampleWindow, readLiveDaemonPid, stopDaemonKeepingTerminals, paneIdForSession, openPerfShell, closeSessions, fillAllPanes, readRegionFootprint, readGraphicsRegions, readAppFootprint } from './perfMeasure.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -204,6 +205,9 @@ async function main() {
   const port = pprofPort();
   const { runId, runDir, sessionDir } = createRunContext(options, 'perf-baseline');
   const client = new UiAutomationClient(options);
+  const native = appShellInTree(options.appPath) === 'native';
+  const webOnly = ['pressure', 'dockProbe', 'switchProbe', 'realCmd'].filter((key) => options[key]);
+  if (native && webOnly.length) throw new Error(`--${webOnly.join(', --')} probe the Tauri app's webview; the native app has none of it`);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const isPerfBaselineLabel = (session) => typeof session.label === 'string' && session.label.startsWith('perf-baseline-');
   const sessionIds = [];
@@ -241,7 +245,7 @@ async function main() {
     await client.launchFreshApp();
     await client.waitForManifest(20_000);
     await client.waitForReady(20_000);
-    await client.waitForFrontendResponsive(20_000);
+    if (!native) await client.waitForFrontendResponsive(20_000);
     await observer.connect();
 
     // A pane's GPU surface is sized in device pixels: the harness launches at
@@ -267,7 +271,7 @@ async function main() {
       await closeSessions(client, stale.map((session) => session.id));
       await waitForSessionsGone(observer, isPerfBaselineLabel, 20_000);
     }
-    await client.waitForFrontendResponsive(20_000);
+    if (!native) await client.waitForFrontendResponsive(20_000);
 
     const manifest = client.readManifest();
     const appPid = manifest.pid;
@@ -330,16 +334,7 @@ async function main() {
     // firing them back-to-back hangs the bridge while a terminal is mounting.
     for (let i = 0; i < options.sessions; i += 1) {
       const label = `perf-baseline-${runId}-${i}`;
-      const sessionId = await createSessionAndWaitForInitialPane({
-        client,
-        observer,
-        cwd: sessionDir,
-        label,
-        agent: 'shell',
-        sessionWaitMs: 30_000,
-        waitForInitialPaneVisible: true,
-        initialPaneWaitMs: 25_000,
-      });
+      const sessionId = await openPerfShell({ client, observer, cwd: sessionDir, label });
       sessionIds.push(sessionId);
       console.log(`[perf] created session ${i + 1}/${options.sessions} (${sessionId})`);
     }
@@ -347,7 +342,7 @@ async function main() {
     await delay(options.settleMs);
 
     if (options.fillCmd) {
-      await fillAllPanes(client, sessionIds, options.fillCmd, options.fillSettleMs);
+      await fillAllPanes(client, sessionIds, options.fillCmd, options.fillSettleMs, observer);
       await delay(options.settleMs);
     }
 
@@ -427,22 +422,13 @@ async function main() {
       for (let round = 0; round < options.churnRounds; round += 1) {
         const roundIds = [];
         for (let i = 0; i < options.sessions; i += 1) {
-          roundIds.push(await createSessionAndWaitForInitialPane({
-            client,
-            observer,
-            cwd: sessionDir,
-            label: `perf-churn-${runId}-${round}-${i}`,
-            agent: 'shell',
-            sessionWaitMs: 30_000,
-            waitForInitialPaneVisible: true,
-            initialPaneWaitMs: 25_000,
-          }));
+          roundIds.push(await openPerfShell({ client, observer, cwd: sessionDir, label: `perf-churn-${runId}-${round}-${i}` }));
         }
-        if (options.fillCmd) await fillAllPanes(client, roundIds, options.fillCmd, options.fillSettleMs);
+        if (options.fillCmd) await fillAllPanes(client, roundIds, options.fillCmd, options.fillSettleMs, observer);
         await delay(options.settleMs);
         const peak = await snapshot(appPid, daemonPid, webkitBaseline);
         const peakRegions = await readRegionFootprint(webContentPid(peak));
-        await closeSessions(client, roundIds);
+        await closeSessions(client, roundIds, observer);
         await delay(options.settleMs);
         const rest = await snapshot(appPid, daemonPid, webkitBaseline);
         const pid = webContentPid(rest);
@@ -472,7 +458,7 @@ async function main() {
       const pid = webContentPid(before);
       const beforeRegions = await readRegionFootprint(pid);
       const beforeSurfaces = await readGraphicsRegions(pid);
-      await closeSessions(client, sessionIds);
+      await closeSessions(client, sessionIds, observer);
       sessionIds.length = 0;
       await delay(options.settleMs);
       await snapshot(appPid, daemonPid, webkitBaseline);
@@ -614,7 +600,8 @@ async function main() {
       };
     }
     const fingerprint = getMachineFingerprint();
-    const baseline = loadBaseline(fingerprint.key);
+    const baselineKey = `${fingerprint.key}${native ? '-native' : ''}`;
+    const baseline = loadBaseline(baselineKey);
     rssEvaluation = evaluateRssBaseline({
       totalRssMb: summary.headline.totalRssMb,
       fingerprint,
@@ -623,10 +610,10 @@ async function main() {
       record: options.recordBaseline,
       recordedAt: new Date().toISOString(),
     });
-    recordOrCompareBaseline({ evaluation: rssEvaluation, key: fingerprint.key });
+    recordOrCompareBaseline({ evaluation: rssEvaluation, key: baselineKey });
     summary.baselineComparison = rssEvaluation.comparison;
   } finally {
-    await closeSessions(client, sessionIds);
+    await closeSessions(client, sessionIds, observer);
     fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
     await observer.close();
   }

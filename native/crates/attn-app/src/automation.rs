@@ -52,6 +52,7 @@ impl Hooks<State> for AppHooks {
             "profiles" => json!({"selected": facts.profiles.selected, "all": facts.profiles.all}),
             "window" => json!({
                 "view": format!("{:?}", window.view),
+                "current_desktop": facts.current_desktop().map(|d| d.id.clone()),
                 "on_screen": window.on_screen(facts),
                 "sidebar_hidden": window.sidebar_hidden,
                 "drawers": window.drawers.iter().map(|d| format!("{d:?}")).collect::<Vec<_>>(),
