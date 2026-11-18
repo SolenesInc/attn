@@ -23,15 +23,15 @@ use attn_protocol::{
     GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
     HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
     LaunchDesktopResultMessage, LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView,
-    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RecentFilesResultMessage,
-    RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage, RepoInfo,
-    ReviewBundle, ReviewFile, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Seed,
-    SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress,
-    SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
-    SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree, WorktreeListResult,
-    WorktreeListResultEvent,
+    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage,
+    RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage,
+    RecordCommandUsageResultMessage, RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile,
+    ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
+    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, SeedReviewResultMessage,
+    Session, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage,
+    SessionLedgerEntry, SessionListResult, SessionListResultMessage, SessionMessage,
+    SessionMessagesGetResultMessage, SessionUsage, SessionUsageModel, SharedCodexBlocker,
+    SharedCodexState, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -3164,6 +3164,90 @@ fn merge_confirmation(dark: bool) {
     snap(&mut world, "merge-confirmation", dark);
 }
 
+/// Home's pull requests while GitHub rate-limits the daemon and a refresh failed: the user's
+/// own, a person's and a bot's review requests, and a repository on two GitHub hosts.
+fn home_pull_requests(dark: bool) {
+    let pr =
+        |id: &str, number: i64, role: &str, author: &str, repo: &str, host: &str, title: &str| PR {
+            id: id.into(),
+            number,
+            role: role.into(),
+            title: title.into(),
+            repo: repo.into(),
+            author: author.into(),
+            reason: if role == "author" {
+                "ready_to_merge"
+            } else {
+                "review_requested"
+            }
+            .into(),
+            url: format!("https://{host}/{repo}/pull/{number}"),
+            host: host.into(),
+            state: "waiting".into(),
+            ..PR::default()
+        };
+    let mut world = popover_world(
+        dark,
+        |state| {
+            state.prs = Some(vec![
+                pr(
+                    "a1",
+                    7,
+                    "author",
+                    "me",
+                    "victorarias/attn",
+                    "github.com",
+                    "Route every key through the keymap",
+                ),
+                pr(
+                    "r1",
+                    12,
+                    "reviewer",
+                    "someone",
+                    "org/shop",
+                    "github.com",
+                    "Cache the catalog",
+                ),
+                pr(
+                    "r2",
+                    31,
+                    "reviewer",
+                    "renovate-bot",
+                    "org/shop",
+                    "ghe.corp.example",
+                    "Bump serde",
+                ),
+                pr(
+                    "r3",
+                    4,
+                    "reviewer",
+                    "someone",
+                    "org/api",
+                    "github.com",
+                    "Add the orders endpoint",
+                ),
+            ])
+        },
+        |daemon| {
+            daemon.on("refresh_prs", |_| {
+                message(RefreshPRsResultMessage {
+                    success: false,
+                    error: Some("gh is not signed in".into()),
+                    ..RefreshPRsResultMessage::new()
+                })
+            });
+        },
+    );
+    press(&mut world, Action::SessionGoToDashboard);
+    world.daemon.emit(RateLimitedMessage {
+        rate_limit_resource: "core".into(),
+        rate_limit_reset_at: "2026-11-12T09:12:30Z".into(),
+        ..RateLimitedMessage::new()
+    });
+    world.gesture(|app| app.click(Target::key("home.prs.refresh")));
+    snap(&mut world, "home-pull-requests", dark);
+}
+
 /// Restarting shared Codex while two agents hold it, from the update band.
 fn shared_codex_restart(dark: bool) {
     let mut world = popover_world(
@@ -3321,6 +3405,7 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         chief_setup(dark);
         home(dark);
         home_empty(dark);
+        home_pull_requests(dark);
         palette_chief(dark);
         manage_crew(dark, "chief", "launch", "crew-launch");
         manage_crew(dark, "scout", "charter", "crew-charter");

@@ -159,6 +159,8 @@ pub struct PullRequests {
     pub prs: Vec<PR>,
     pub repos: Vec<RepoState>,
     pub authors: Vec<AuthorState>,
+    /// When GitHub lets the daemon poll again, as the daemon's last `rate_limited` said.
+    pub rate_limited_until: Option<String>,
 }
 
 /// The selected profile's unread notifications, as counted by the daemon's last list answer
@@ -570,6 +572,7 @@ impl Store {
                 prs: state.prs.unwrap_or_default(),
                 repos: state.repos.unwrap_or_default(),
                 authors: state.authors.unwrap_or_default(),
+                rate_limited_until: facts.pull_requests.rate_limited_until.clone(),
             });
             facts.github = Arc::new(GitHub {
                 hosts: state.github_hosts.unwrap_or_default(),

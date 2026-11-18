@@ -4,8 +4,8 @@ use attn_app::Action;
 use attn_protocol::{
     AuthorState, AuthorsUpdatedMessage, CreateWorktreeResultMessage, EnsureRepoResultMessage,
     FetchPRDetailsResultMessage, GitHubHostsUpdatedMessage, InitialStateMessage, PR,
-    PRActionResultMessage, PRsUpdatedMessage, RefreshPRsResultMessage, RepoState,
-    ReposUpdatedMessage, SettingsUpdatedMessage, SpawnResultMessage,
+    PRActionResultMessage, PRsUpdatedMessage, RateLimitedMessage, RefreshPRsResultMessage,
+    RepoState, ReposUpdatedMessage, SettingsUpdatedMessage, SpawnResultMessage,
 };
 use attn_testkit::{Answer, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -62,6 +62,17 @@ fn has(world: &World, key: &str) -> bool {
 
 fn name(world: &World, key: &str) -> Option<String> {
     world.screen().find(Target::key(key)).and_then(|n| n.name)
+}
+
+fn description(world: &World, key: &str) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key(key))
+        .and_then(|n| n.description)
+}
+
+fn press(world: &mut World, action: Action) {
+    world.gesture(|app| app.key(chord(action)));
 }
 
 fn focused(world: &World) -> Option<String> {
@@ -236,8 +247,21 @@ fn merge_asks_first_and_squashes_on_yes() {
 }
 
 #[test]
-fn the_refresh_key_polls_github_and_a_failed_poll_says_why() {
+fn a_refresh_shows_dots_until_github_answers_and_a_failed_one_says_why_on_its_button() {
     let mut world = start(one_desktop(vec![]), vec![]);
+    press(&mut world, Action::SessionGoToDashboard);
+    let idle_help = description(&world, "home.prs.refresh");
+    assert!(
+        idle_help
+            .as_deref()
+            .is_some_and(|h| h.starts_with("Refresh PRs"))
+    );
+
+    world.gesture(|app| app.key(chord(Action::SessionRefreshPrs)));
+    assert_eq!(world.daemon.sent_of("refresh_prs").len(), 1);
+    let button = world.screen().get(Target::key("home.prs.refresh"));
+    assert_eq!(button.name.as_deref(), Some("Refreshing PRs"));
+    assert!(button.is("disabled"));
     world.gesture(|app| app.key(chord(Action::SessionRefreshPrs)));
     assert_eq!(world.daemon.sent_of("refresh_prs").len(), 1);
 
@@ -248,9 +272,100 @@ fn the_refresh_key_polls_github_and_a_failed_poll_says_why() {
     });
     world.settle();
     assert_eq!(
-        name(&world, "notice.text").as_deref(),
-        Some("Refresh failed: gh is not signed in")
+        name(&world, "home.prs.refresh").as_deref(),
+        Some("Refresh PRs")
     );
+    assert_eq!(
+        description(&world, "home.prs.refresh").as_deref(),
+        Some("gh is not signed in")
+    );
+    assert!(!has(&world, "notice.text"));
+
+    click(&mut world, "home.prs.refresh");
+    assert_eq!(world.daemon.sent_of("refresh_prs").len(), 2);
+    world.daemon.emit(RefreshPRsResultMessage {
+        success: true,
+        ..RefreshPRsResultMessage::new()
+    });
+    world.settle();
+    assert_eq!(description(&world, "home.prs.refresh"), idle_help);
+}
+
+#[test]
+fn each_pr_opens_with_its_role_and_names_its_host_when_its_repo_spans_two() {
+    let mut world = start(
+        one_desktop(vec![]),
+        vec![
+            pr("mine", 1, "author", "my change"),
+            pr("asked", 2, "reviewer", "a person asks"),
+            PR {
+                author: "Dependabot[bot]".into(),
+                ..pr("bot", 3, "reviewer", "a bot asks")
+            },
+            PR {
+                host: "ghe.corp.example".into(),
+                ..pr("enterprise", 4, "reviewer", "the same repo on another host")
+            },
+            home_pr("other", 5, "reviewer", "org/elsewhere", "one host only"),
+        ],
+    );
+    press(&mut world, Action::SessionGoToDashboard);
+    let role = |id: &str| name(&world, &format!("home.pr.{id}.role"));
+    let open = |world: &World, id: &str| name(world, &format!("home.pr.{id}.open"));
+    assert_eq!(role("mine").as_deref(), Some("Yours"));
+    assert_eq!(role("asked").as_deref(), Some("Review requested"));
+    assert_eq!(role("bot").as_deref(), Some("Review requested by a bot"));
+    assert_eq!(
+        open(&world, "asked").as_deref(),
+        Some("#2 on github.com: a person asks")
+    );
+    assert_eq!(
+        open(&world, "enterprise").as_deref(),
+        Some("#4 on ghe.corp.example: the same repo on another host")
+    );
+    assert_eq!(open(&world, "other").as_deref(), Some("#5: one host only"));
+
+    world.daemon.emit(PRsUpdatedMessage {
+        prs: Some(vec![
+            pr("asked", 2, "reviewer", "a person asks"),
+            home_pr("other", 5, "reviewer", "org/elsewhere", "one host only"),
+        ]),
+        ..PRsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(open(&world, "asked").as_deref(), Some("#2: a person asks"));
+}
+
+#[test]
+fn home_counts_down_to_when_github_lets_the_daemon_poll_again() {
+    let mut world = start(one_desktop(vec![]), vec![]);
+    press(&mut world, Action::SessionGoToDashboard);
+    let banner = |world: &World| name(world, "home.rate-limit.text");
+    world.daemon.emit(RateLimitedMessage {
+        rate_limit_resource: "search".into(),
+        rate_limit_reset_at: "2026-11-12T08:59:00Z".into(),
+        ..RateLimitedMessage::new()
+    });
+    world.settle();
+    assert_eq!(banner(&world), None);
+
+    world.daemon.emit(RateLimitedMessage {
+        rate_limit_resource: "core".into(),
+        rate_limit_reset_at: "2026-11-12T09:02:05Z".into(),
+        ..RateLimitedMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        banner(&world).as_deref(),
+        Some("GitHub rate limited. Resuming in 2m 5s")
+    );
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        banner(&world).as_deref(),
+        Some("GitHub rate limited. Resuming in 2m 4s")
+    );
+    world.advance(Duration::from_secs(124));
+    assert_eq!(banner(&world), None);
 }
 
 fn home_pr(id: &str, number: i64, role: &str, repo: &str, title: &str) -> PR {

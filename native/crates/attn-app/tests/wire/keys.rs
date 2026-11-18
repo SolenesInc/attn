@@ -4,8 +4,9 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Category, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
+    RefreshPRsResultMessage,
 };
-use attn_testkit::{Daemon, Target, World, key_event, tree};
+use attn_testkit::{Daemon, Target, World, key_event, message, tree};
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 
 fn pane(id: &str, runtime: &str) -> DesktopPane {
@@ -165,7 +166,14 @@ fn every_shortcut_runs_its_own_action(category: Category) {
     let mut with_terminal =
         World::start(Daemon::scripted().state(state(two_terminals(), &settings)));
     with_terminal.open_desktop();
-    let mut without = World::start(Daemon::scripted().state(state(vec![], &settings)));
+    let without_daemon = Daemon::scripted().state(state(vec![], &settings));
+    without_daemon.on("refresh_prs", |_| {
+        message(RefreshPRsResultMessage {
+            success: true,
+            ..RefreshPRsResultMessage::new()
+        })
+    });
+    let mut without = World::start(without_daemon);
     for action in Action::ALL.iter().filter(|a| a.category() == category) {
         let world = if needs_no_terminal(action) {
             &mut without

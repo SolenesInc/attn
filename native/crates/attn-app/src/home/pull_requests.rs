@@ -11,11 +11,11 @@ use attn_protocol::{
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
-use rune::{El, TextStyle, Tx, col, el, memo, row, text};
+use rune::{Color, Cycle, El, TextStyle, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use crate::State;
-use crate::requests::{Answer, Refused};
+use crate::requests::Answer;
 const DONE_SHOWS_SECONDS: f64 = 1.5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -45,6 +45,54 @@ impl Act {
     }
 }
 
+/// Who a pull request wants the user as, which its row opens with, as the Tauri app's `.pr-role`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    Reviewer,
+    BotReviewer,
+    Author,
+}
+
+impl Role {
+    pub const ALL: [Role; 3] = [Role::Reviewer, Role::BotReviewer, Role::Author];
+
+    fn of(pr: &PR) -> Role {
+        if pr.role == "author" {
+            Role::Author
+        } else if pr.author.to_lowercase().contains("bot") {
+            Role::BotReviewer
+        } else {
+            Role::Reviewer
+        }
+    }
+
+    /// Drawn from the system's emoji font, as the Tauri app's are.
+    pub fn emoji(self) -> &'static str {
+        match self {
+            Role::Reviewer => "👀",
+            Role::BotReviewer => "🤖",
+            Role::Author => "✏️",
+        }
+    }
+
+    fn said(self) -> &'static str {
+        match self {
+            Role::Reviewer => "Review requested",
+            Role::BotReviewer => "Review requested by a bot",
+            Role::Author => "Yours",
+        }
+    }
+}
+
+/// Where the last refresh the user asked for stands.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+enum Refresh {
+    #[default]
+    Idle,
+    Running,
+    Failed(String),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Phase {
     Busy,
@@ -72,6 +120,7 @@ pub(crate) struct PullRequests {
     merged: HashSet<String>,
     /// The repositories whose review requests home's card folds away.
     folded_repos: HashSet<String>,
+    refresh: Refresh,
 }
 
 const SECTION_TITLE: rune::TextStyle = rune::TextStyle {
@@ -103,13 +152,22 @@ fn needs_the_user(pr: &PR) -> bool {
     !pr.approved_by_me || pr.has_new_changes
 }
 
-/// Asks the daemon to poll GitHub for the pull requests now; a failed poll says why.
+/// Asks the daemon to poll GitHub for the pull requests now, unless a poll the user asked for
+/// still runs; the refresh button says why a poll failed.
 pub(crate) fn refresh(state: &mut State, tx: &mut Tx) {
-    state.act_as(
+    if state.window.pull_requests.refresh == Refresh::Running {
+        return;
+    }
+    state.window.pull_requests.refresh = Refresh::Running;
+    state.ask_as(
         REFRESH_PRS_ID.to_owned(),
         &RefreshPRsMessage::new(),
-        Refused::Prefixed("Refresh failed"),
-        |_, _, _| {},
+        |state, answer, _| {
+            state.window.pull_requests.refresh = match answer.outcome() {
+                Ok(_) => Refresh::Idle,
+                Err(why) => Refresh::Failed(why),
+            };
+        },
         tx,
     );
 }
@@ -250,20 +308,49 @@ fn repo_name(repo: &str) -> &str {
     repo.rsplit('/').next().unwrap_or(repo)
 }
 
-fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: &Tokens) -> El {
+struct Heading {
+    said: String,
+    /// The pull request's GitHub host, shown when its repository's pull requests span more
+    /// than one.
+    host: Option<String>,
+}
+
+fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t: &Tokens) -> El {
     let k = attn_ui::kit(t);
+    let Heading {
+        said: heading,
+        host,
+    } = heading;
+    let role = Role::of(pr);
     let url = pr.url.clone();
     let visited = pr.id.clone();
-    let open = Button::new(format!("{heading}: {}", pr.title))
+    let named = match &host {
+        Some(host) => format!("{heading} on {host}"),
+        None => heading.clone(),
+    };
+    let open = Button::new(format!("{named}: {}", pr.title))
         .variant(ButtonVariant::GhostMuted)
         .control_size(ControlSize::Small)
         .help(format!("Open {heading} on GitHub"))
         .label_with({
             let heading = heading.clone();
+            let host_ink = t.text_tertiary;
+            let host_fill = t.bg_selected;
             move |font, ink| {
                 row()
                     .grow(1.0)
+                    .items_center()
+                    .gap(space::S2)
                     .child(text(heading.clone()).font(font).color(ink))
+                    .children(host.clone().map(|host| {
+                        text(host.to_lowercase())
+                            .font(TextStyle::new(10.0, 400.0).mono())
+                            .color(host_ink)
+                            .fill(host_fill)
+                            .px(6.0)
+                            .py(2.0)
+                            .radius(3.0)
+                    }))
             }
         })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -277,6 +364,13 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: String, t: 
         .w_full()
         .items_center()
         .gap(space::S1)
+        .child(
+            text(role.emoji())
+                .key(format!("{key}.role"))
+                .role("img")
+                .label(role.said())
+                .font(type_::LABEL),
+        )
         .child(open)
         .children(marks(pr, &key, t));
     let title = text(pr.title.clone())
@@ -484,13 +578,13 @@ pub(crate) fn home_card(state: &State, t: &Tokens) -> El {
         acts,
         (muting, merged),
         folded,
+        &tracked.refresh,
         *t,
     );
     memo("home.prs", reads, || pr_card(state, t))
 }
 
 fn pr_card(state: &State, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
     let facts = &state.facts;
     let tracked = &state.window.pull_requests;
     let active = active(facts, tracked);
@@ -507,6 +601,14 @@ fn pr_card(state: &State, t: &Tokens) -> El {
             None => repos.push((&pr.repo, vec![pr])),
         }
     }
+    let mut hosts: HashMap<&str, HashSet<&str>> = HashMap::new();
+    for pr in active.iter().filter(|p| !p.host.is_empty()) {
+        hosts.entry(&pr.repo).or_default().insert(&pr.host);
+    }
+    let heading = |pr: &PR, said: String| Heading {
+        said,
+        host: (hosts.get(pr.repo.as_str()).map_or(0, HashSet::len) > 1).then(|| pr.host.clone()),
+    };
     let mut body = col().key("home.prs.body").w_full().gap(14.0);
     let empty = |said: &str| crate::home::card_empty("home.prs.empty", said, t).role("status");
     if let Some(reason) = &facts.github.polling_off_reason {
@@ -521,7 +623,10 @@ fn pr_card(state: &State, t: &Tokens) -> El {
                 yours.len(),
                 yours
                     .iter()
-                    .map(|p| pr_row(state, p, true, format!("home.pr.{}", p.id), named(p), t))
+                    .map(|p| {
+                        let key = format!("home.pr.{}", p.id);
+                        pr_row(state, p, true, key, heading(p, named(p)), t)
+                    })
                     .collect(),
                 t,
             ));
@@ -530,7 +635,7 @@ fn pr_card(state: &State, t: &Tokens) -> El {
             let count = repos.iter().map(|(_, prs)| prs.len()).sum();
             let groups = repos
                 .iter()
-                .map(|(repo, prs)| repo_group(state, repo, prs, t))
+                .map(|(repo, prs)| repo_group(state, repo, prs, &heading, t))
                 .collect();
             body = body.child(section(
                 "home.prs.review",
@@ -545,28 +650,118 @@ fn pr_card(state: &State, t: &Tokens) -> El {
         Some(keys) => format!("Refresh PRs ({keys})"),
         None => "Refresh PRs".to_owned(),
     };
-    let actions = [GlyphButton::new(&icon::REFRESH, "Refresh PRs")
-        .icon_size(12.0)
-        .color(t.text_dimmed)
-        .side(20.0)
-        .help(refresh_help)
-        .on_press_tx(refresh)
-        .build(k)
-        .key("home.prs.refresh")]
-    .into_iter()
-    .chain(facts.github.polling_off_reason.is_none().then(|| {
-        crate::home::card_count(
-            "home.prs.count",
-            needing,
-            format!("{needing} need attention"),
-            t,
-        )
-    }))
-    .collect();
+    let actions = [refresh_button(&tracked.refresh, refresh_help, t)]
+        .into_iter()
+        .chain(facts.github.polling_off_reason.is_none().then(|| {
+            crate::home::card_count(
+                "home.prs.count",
+                needing,
+                format!("{needing} need attention"),
+                t,
+            )
+        }))
+        .collect();
     crate::home::card("home.prs", "Pull Requests", actions, body, t)
 }
 
-fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
+/// The card's refresh button: dots while the poll the user asked for runs, an error mark whose
+/// help says why it failed, as the Tauri app's `.refresh-btn`.
+fn refresh_button(refresh: &Refresh, idle_help: String, t: &Tokens) -> El {
+    let (glyph, ink, help) = match refresh {
+        Refresh::Idle => (&icon::REFRESH, t.text_dimmed, idle_help),
+        Refresh::Running => (&icon::REFRESH, t.brand, idle_help),
+        Refresh::Failed(why) => (&icon::REFRESH_FAILED, t.error, why.clone()),
+    };
+    let running = *refresh == Refresh::Running;
+    Button::new(if running {
+        "Refreshing PRs"
+    } else {
+        "Refresh PRs"
+    })
+    .variant(ButtonVariant::GhostMuted)
+    .help(help)
+    .on_press_tx(self::refresh)
+    .label_with(move |_, _| {
+        if running {
+            refresh_dots(ink)
+        } else {
+            rune::icon(glyph, 12.0).color(ink)
+        }
+    })
+    .build(attn_ui::kit(t))
+    .key("home.prs.refresh")
+    .h(20.0)
+    .min_w(20.0)
+    .px(0.0)
+    .disabled(running)
+}
+
+/// `.refresh-dots`: three 4 point dots pulsing 0.16 s apart over 1.4 s.
+fn refresh_dots(ink: Color) -> El {
+    const PULSE: &[(f32, f32)] = &[(0.0, 0.5), (0.4, 1.0), (0.8, 0.5), (1.0, 0.5)];
+    const PERIOD: f32 = 1.4;
+    row()
+        .gap(2.0)
+        .items_center()
+        .children([0.0, 0.16, 0.32].map(|delay| {
+            el().w(4.0).h(4.0).radius(2.0).fill(ink).cycle(Cycle {
+                period: PERIOD,
+                phase: delay / PERIOD,
+                stops: PULSE,
+                still: 1.0,
+                fps: 30.0,
+            })
+        }))
+}
+
+/// The band above Home's cards while GitHub holds the daemon's polls back, counting down to when
+/// they resume, as the Tauri app's `.rate-limit-banner`.
+pub(crate) fn rate_limit_banner(state: &State, t: &Tokens) -> Option<El> {
+    let left_ms = rate_limit_left_ms(&state.facts, state.window.now_ms)?;
+    let (minutes, seconds) = (left_ms / 60_000, left_ms % 60_000 / 1000);
+    Some(
+        row()
+            .key("home.rate-limit")
+            .role("status")
+            .w_full()
+            .items_center()
+            .gap(8.0)
+            .px(16.0)
+            .py(10.0)
+            .radius(6.0)
+            .fill(t.brand.alpha(0.10))
+            .border(1.0, t.brand.alpha(0.30))
+            .child(rune::icon(&icon::RATE_LIMITED, 16.0).color(t.brand))
+            .child(
+                text(format!(
+                    "GitHub rate limited. Resuming in {minutes}m {seconds}s"
+                ))
+                .key("home.rate-limit.text")
+                .font(type_::BODY)
+                .color(t.brand),
+            ),
+    )
+}
+
+fn rate_limit_left_ms(facts: &Facts, now_ms: i64) -> Option<i64> {
+    let until = facts.pull_requests.rate_limited_until.as_deref()?;
+    let left = crate::sidebar::queue::epoch_ms(until)? - now_ms;
+    (left > 0).then_some(left)
+}
+
+/// The next moment the rate limit's countdown shows another second, or ends.
+pub(crate) fn next_change(facts: &Facts, now_ms: i64) -> Option<i64> {
+    let left = rate_limit_left_ms(facts, now_ms)?;
+    Some(now_ms + left % 1000 + 1)
+}
+
+fn repo_group(
+    state: &State,
+    repo: &str,
+    prs: &[&PR],
+    heading: &dyn Fn(&PR, String) -> Heading,
+    t: &Tokens,
+) -> El {
     let k = attn_ui::kit(t);
     let folded = state.window.pull_requests.folded_repos.contains(repo);
     let key = format!("home.prs.repo.{repo}");
@@ -626,7 +821,7 @@ fn repo_group(state: &State, repo: &str, prs: &[&PR], t: &Tokens) -> El {
                                 p,
                                 false,
                                 format!("home.pr.{}", p.id),
-                                format!("#{}", p.number),
+                                heading(p, format!("#{}", p.number)),
                                 t,
                             )
                         })

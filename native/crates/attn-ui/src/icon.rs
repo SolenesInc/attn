@@ -95,6 +95,18 @@ outline!(
     r#"<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>"#
 );
 outline!(
+    REFRESH_FAILED,
+    24.0,
+    "2.5",
+    r#"<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>"#
+);
+outline!(
+    RATE_LIMITED,
+    24.0,
+    "2",
+    r#"<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>"#
+);
+outline!(
     PENCIL,
     16.0,
     "1.3",

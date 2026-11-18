@@ -72,6 +72,7 @@ pub use deep_link::open_link;
 pub use dispatch::dispatch;
 pub use editor::{EditorLaunch, record_editor_launches, take_editor_launches};
 pub use frame::{Folders, use_folders, use_prefs};
+pub use home::pull_requests::Role as PullRequestRole;
 pub use keymap::{Binding, Keymap, PageKey, Zoom, page_key};
 pub use requests::ReplyInbox;
 pub use review::places_built;
@@ -164,6 +165,7 @@ impl State {
         self.age_wake = sidebar::next_change(self, now_ms)
             .into_iter()
             .chain(home::next_change(&self.facts, now_ms))
+            .chain(home::pull_requests::next_change(&self.facts, now_ms))
             .chain(palette::next_change(self, now_ms))
             .chain(asks::next_change(self, now_ms))
             .chain(settings::phones::next_change(self, now_ms))

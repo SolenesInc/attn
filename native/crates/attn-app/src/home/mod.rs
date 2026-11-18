@@ -67,6 +67,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .px(28.0)
         .fill(t.bg_app)
         .child(top)
+        .children(pull_requests::rate_limit_banner(state, t).map(|banner| banner.mb(20.0)))
         .child(
             col()
                 .key("home.cards.scroll")

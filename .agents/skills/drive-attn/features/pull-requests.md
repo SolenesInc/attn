@@ -103,7 +103,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) lists the user's pull requests in Home's Pull Requests card, `home.prs`: "Yours", then "Review requested" grouped by repository, each group folding and muting its repository from its header. A card row, `home.pr.<id>`, opens the pull request and marks it visited, shows `.updated`, `.approved` and `.ci` marks, dims once the user approved it with no new changes, and carries New worktree session (`.new`), Approve, Merge, Mute and the author's name (`.mute-author`, "Mute all PRs by <author>"). It has no pull requests on a tile header or in Settings yet.
+The native app (`native/`) lists the user's pull requests in Home's Pull Requests card, `home.prs`: "Yours", then "Review requested" grouped by repository, each group folding and muting its repository from its header. A card row, `home.pr.<id>`, opens with its role, `.role` ("Yours", "Review requested", or "Review requested by a bot" when the author's name contains "bot"), names its GitHub host in `.open`'s name ("#4 on ghe.example: …") when its repository's pull requests span more than one host, opens the pull request and marks it visited, shows `.updated`, `.approved` and `.ci` marks, dims once the user approved it with no new changes, and carries New worktree session (`.new`), Approve, Merge, Mute and the author's name (`.mute-author`, "Mute all PRs by <author>"). While the daemon reports GitHub rate-limiting its polls, `home.rate-limit` above the cards counts down, "GitHub rate limited. Resuming in <m>m <s>s". It has no pull requests on a tile header or in Settings yet.
 
 Preconditions:
 
@@ -113,7 +113,7 @@ Preconditions:
 
 Steps:
 
-- **Refresh.** Press `mod+r`: the `requestCount` in `curl -s "$ATTN_MOCK_GH_URL/__control"` grows. A failed poll shows its reason in `notice.text`, after "Refresh failed: ".
+- **Refresh.** Press `mod+r`: `home.prs.refresh` is named "Refreshing PRs" and disabled until the daemon answers, and the `requestCount` in `curl -s "$ATTN_MOCK_GH_URL/__control"` grows. A failed poll turns the button into an error mark whose description is the reason; the next refresh clears it.
 - **Approve.** Press a review request's `home.pr.<id>.approve`: `bridge wait '{"target":{"role":"button","name":"Approved"}}'` answers, and `requests` in `/__control` gains a `POST` to that pull request's `/reviews`. The button reads "Approve" again 1.5 s later. Once the daemon marks it approved, the row shows `.approved` and dims, and `home.prs.count` drops by one.
 - **Merge asks first.** Press one of your pull requests' `home.pr.<id>.merge`: `home.prs.merge-dialog` shows, a dialog named "Merge PR #<number>?". Press Escape: the dialog goes and the Merge button holds the keyboard. Press Merge again, then `home.prs.merge.confirm`: `bridge wait '{"target":{"role":"button","name":"Merged"}}'` answers, `requests` gains a `PUT` to its `/merge`, and the row leaves the card once its check has shown.
 - **Mute.** Press a pull request's `home.pr.<id>.mute`: it leaves the card at once. Mute toggles in the daemon, so the row stays hidden until the daemon reports the pull request muted.

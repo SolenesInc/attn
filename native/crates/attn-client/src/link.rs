@@ -11,11 +11,12 @@ use attn_protocol::{
     NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
     PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
     ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
-    QuickCaptureUnreadMessage, ReposUpdatedMessage, RuntimeRespawnedMessage, SendersUpdatedMessage,
-    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
-    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
-    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
+    QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
+    SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
+    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
+    SessionsUpdatedMessage, SettingsUpdatedMessage, SharedCodexChangedMessage,
+    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
+    go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -698,6 +699,13 @@ impl Task {
                 let message: PRsUpdatedMessage = parse(&header.event, text)?;
                 let prs = message.prs.unwrap_or_default();
                 self.store.change_pull_requests(|p| p.prs = prs);
+                None
+            }
+            "rate_limited" => {
+                let message: RateLimitedMessage = parse(&header.event, text)?;
+                let until = message.rate_limit_reset_at;
+                self.store
+                    .change_pull_requests(|p| p.rate_limited_until = Some(until));
                 None
             }
             "repos_updated" => {
