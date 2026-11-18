@@ -64,11 +64,20 @@ func (e Entry) Render() (string, error) {
 	return fmt.Sprintf(`[Desktop Entry]
 Type=Application
 Name=%s
-Exec="%s" %%u
+Exec=%s %%u
 Terminal=false
 NoDisplay=true
 MimeType=x-scheme-handler/%s;
-`, e.AppName, e.Exec, e.Scheme), nil
+`, e.AppName, execArgument(e.Exec), e.Scheme), nil
+}
+
+func execArgument(path string) string {
+	path = strings.ReplaceAll(path, "%", "%%")
+	if !strings.ContainsAny(path, " \t\n'\\><~|&;$*?#()`") {
+		return path
+	}
+	quoted := strings.NewReplacer("\\", "\\\\", "`", "\\`", "$", "\\$").Replace(path)
+	return `"` + strings.ReplaceAll(quoted, "\\", "\\\\") + `"`
 }
 
 func Install(e Entry) (Report, error) {

@@ -20,7 +20,7 @@ func TestRender(t *testing.T) {
 			want: `[Desktop Entry]
 Type=Application
 Name=attn
-Exec="/home/u/.local/share/attn/bin/attn-app" %u
+Exec=/home/u/.local/share/attn/bin/attn-app %u
 Terminal=false
 NoDisplay=true
 MimeType=x-scheme-handler/attn;
@@ -32,10 +32,22 @@ MimeType=x-scheme-handler/attn;
 			want: `[Desktop Entry]
 Type=Application
 Name=attn-lx
-Exec="/home/u/.local/share/attn-lx/bin/attn-app" %u
+Exec=/home/u/.local/share/attn-lx/bin/attn-app %u
 Terminal=false
 NoDisplay=true
 MimeType=x-scheme-handler/attn-lx;
+`,
+		},
+		{
+			name:  "a path with spaces and reserved characters is quoted and escaped",
+			entry: Entry{AppName: "attn", Exec: "/home/a user/$x/100%/attn-app", Scheme: "attn"},
+			want: `[Desktop Entry]
+Type=Application
+Name=attn
+Exec="/home/a user/\\$x/100%%/attn-app" %u
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/attn;
 `,
 		},
 		{
@@ -153,7 +165,7 @@ func TestInstallOverwritesAnEarlierEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read installed entry: %v", err)
 	}
-	if !strings.Contains(string(body), `Exec="/new/bin/attn-app" %u`) || strings.Contains(string(body), "/old/bin") {
+	if !strings.Contains(string(body), `Exec=/new/bin/attn-app %u`) || strings.Contains(string(body), "/old/bin") {
 		t.Errorf("reinstall did not replace the exec line:\n%s", body)
 	}
 }

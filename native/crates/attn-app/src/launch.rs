@@ -13,10 +13,13 @@ pub struct Launch {
 }
 
 /// Everything the app needs before its first window: the baked instance, its lock and the two
-/// credentials its hello carries. The link starts the daemon. Call from `main` before any
-/// thread starts.
-pub fn prepare() -> Result<Launch, String> {
+/// credentials its hello carries. The link starts the daemon. None when the instance's app
+/// already runs and took this launch's links. Call from `main` before any thread starts.
+pub fn prepare() -> Result<Option<Launch>, String> {
     let instance = Instance::baked()?;
+    if !rune::single_instance(&instance.bundle_id) {
+        return Ok(None);
+    }
     instance.route_environment();
     instance.hold_app_lock()?;
     let launch = Launch {
@@ -27,7 +30,7 @@ pub fn prepare() -> Result<Launch, String> {
     #[cfg(target_os = "macos")]
     import_tauri_settings(&launch.instance);
     launch.instance.write_app_pid()?;
-    Ok(launch)
+    Ok(Some(launch))
 }
 
 #[cfg(target_os = "macos")]

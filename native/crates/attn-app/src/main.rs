@@ -21,7 +21,8 @@ fn main() -> ExitCode {
     }
     rune_mac::launch();
     let launch = match attn_app::launch::prepare() {
-        Ok(launch) => launch,
+        Ok(Some(launch)) => launch,
+        Ok(None) => return ExitCode::SUCCESS,
         Err(reason) => {
             eprintln!("attn-app: {reason}");
             return ExitCode::FAILURE;
