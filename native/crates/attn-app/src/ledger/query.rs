@@ -156,23 +156,22 @@ impl Filters {
         })
     }
 
-    /// The `session_list` request for one page of these filters at `now_ms`.
-    pub fn request(&self, now_ms: i64) -> Result<SessionListMessage, String> {
-        let window = self.window(now_ms)?;
+    /// The `session_list` request for one page of these filters over `window`.
+    pub fn request(&self, window: &Window) -> SessionListMessage {
         let text = |s: &str| (!s.is_empty()).then(|| s.to_owned());
-        Ok(SessionListMessage {
+        SessionListMessage {
             closed: (self.scope == Scope::Closed).then_some(true),
             all: (self.scope == Scope::All).then_some(true),
-            since: window.since,
-            until: window.until,
+            since: window.since.clone(),
+            until: window.until.clone(),
             profile_id: text(&self.profile_id),
             repository: text(&self.repository),
             ..SessionListMessage::new()
-        })
+        }
     }
 
-    /// Whether a row that closed at `now_ms` belongs on the page these filters show.
-    pub fn holds_close(&self, entry: &SessionLedgerEntry, now_ms: i64) -> bool {
+    /// Whether a row that closed belongs on a page of these filters over `window`.
+    pub fn holds_close(&self, entry: &SessionLedgerEntry, window: &Window) -> bool {
         if self.scope == Scope::Live
             || !self.profile_id.is_empty() && entry.profile_id != self.profile_id
             || !self.repository.is_empty()
@@ -180,12 +179,19 @@ impl Filters {
         {
             return false;
         }
-        let Ok(window) = self.window(now_ms) else {
-            return false;
-        };
         let at = instant(entry);
         window.since.as_deref().is_none_or(|since| at >= since)
             && window.until.as_deref().is_none_or(|until| at < until)
+    }
+
+    /// The next midnight after `now_ms` when the range counts back from today, the moment its
+    /// window moves.
+    pub fn next_move(&self, now_ms: i64) -> Option<i64> {
+        matches!(
+            self.range,
+            Range::Today | Range::Yesterday | Range::Week | Range::Month
+        )
+        .then(|| local_instant(local_day(now_ms) + 1, 0))
     }
 
     fn same_query(&self, other: &Filters) -> bool {

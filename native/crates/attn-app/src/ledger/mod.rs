@@ -17,7 +17,7 @@ use rune::{TextEdit, Tx};
 use crate::State;
 use crate::requests::Answer;
 use crate::shell::Layer;
-use query::{Filters, ProfileChoice, Scope, Verdict};
+use query::{Filters, ProfileChoice, Scope, Verdict, Window};
 
 pub(crate) use view::{row_menu, view};
 
@@ -66,6 +66,9 @@ pub struct Ledger {
     /// A profile the query chose, kept among the choices when a later page leaves it out.
     chosen_profile: Option<ProfileChoice>,
     read: Read,
+    /// The window the page was read over, which its older pages and the closes it takes in
+    /// keep, or none when the filters name no window.
+    window: Option<Window>,
     omitted: i64,
     next_before: Option<String>,
     loading: bool,
@@ -135,6 +138,25 @@ impl Verb {
 
 pub(crate) fn is_open(state: &State) -> bool {
     state.window.layer == Some(Layer::Ledger)
+}
+
+fn shows_sessions(state: &State) -> bool {
+    is_open(state) && state.window.ledger.tab == Tab::Sessions
+}
+
+/// The next midnight the shown Sessions list's window moves.
+pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
+    shows_sessions(state)
+        .then(|| state.window.ledger.filters.next_move(now_ms))
+        .flatten()
+}
+
+/// Reads the Sessions list again from its first page once its window moved past the page's.
+pub(crate) fn follow_clock(state: &mut State, tx: &mut Tx) {
+    let ledger = &state.window.ledger;
+    if shows_sessions(state) && ledger.filters.window(state.wall_ms()).ok() != ledger.window {
+        read(state, tx);
+    }
 }
 
 pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
@@ -262,7 +284,6 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     let connected = state.facts.connection == attn_client::Connection::Connected;
     let names = profile_names(state);
     let pricing = pricing(state);
-    let now_ms = state.wall_ms();
     let ledger = &mut state.window.ledger;
     if !connected {
         forget_reads(ledger);
@@ -287,9 +308,8 @@ pub(crate) fn follow(state: &mut State, was_connected: bool, tx: &mut Tx) {
     let closes = &state.facts.closes;
     match closes.since(ledger.seen_closes) {
         Some(new) => {
-            let now = now_ms;
             for entry in new {
-                take_close(ledger, entry.clone(), now);
+                take_close(ledger, entry.clone());
             }
         }
         None => reread = true,
@@ -311,14 +331,16 @@ fn forget_reads(ledger: &mut Ledger) {
     ledger.worktrees.log_epoch += 1;
 }
 
-fn take_close(ledger: &mut Ledger, entry: SessionLedgerEntry, now_ms: i64) {
+fn take_close(ledger: &mut Ledger, entry: SessionLedgerEntry) {
+    let holds = |window: &Window| ledger.filters.holds_close(&entry, window);
+    let held = ledger.window.as_ref().is_some_and(holds);
     let entries = &mut ledger.read.entries;
     match entries.iter().position(|row| row.id == entry.id) {
         Some(at) if ledger.filters.scope == Scope::Live => {
             entries.remove(at);
         }
         Some(at) => entries[at] = entry,
-        None if ledger.filters.holds_close(&entry, now_ms) => entries.insert(0, entry),
+        None if held => entries.insert(0, entry),
         None => {}
     }
 }
@@ -352,7 +374,10 @@ fn read(state: &mut State, tx: &mut Tx) {
     ledger.next_before = None;
     ledger.omitted = 0;
     let filters = ledger.filters.clone();
-    let Ok(request) = filters.request(now_ms) else {
+    ledger.window = filters.window(now_ms).ok();
+    state.tick(tx);
+    let ledger = &mut state.window.ledger;
+    let Some(request) = ledger.window.as_ref().map(|w| filters.request(w)) else {
         ledger.loading = false;
         return;
     };
@@ -424,7 +449,6 @@ fn answer_error(answer: &Answer, fallback: &str) -> String {
 
 /// Reads the page after the last one and adds its rows.
 pub(crate) fn load_more(state: &mut State, tx: &mut Tx) {
-    let now_ms = state.wall_ms();
     let ledger = &mut state.window.ledger;
     let Some(before) = ledger.next_before.clone() else {
         return;
@@ -432,9 +456,10 @@ pub(crate) fn load_more(state: &mut State, tx: &mut Tx) {
     if ledger.loading || ledger.loading_more {
         return;
     }
-    let Ok(request) = ledger.filters.request(now_ms) else {
+    let Some(window) = &ledger.window else {
         return;
     };
+    let request = ledger.filters.request(window);
     ledger.loading_more = true;
     let epoch = ledger.epoch;
     state.ask(

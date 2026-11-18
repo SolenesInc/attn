@@ -425,6 +425,76 @@ fn older_rows_load_from_the_cursor_and_append_to_the_page() {
     assert!(!has(&world, "ledger.older"));
 }
 
+/// A world whose remembered filters show yesterday's closed sessions, a page at a time.
+fn yesterday_paged() -> World {
+    let mut initial = state(vec![], vec![]);
+    initial.settings.as_mut().unwrap().insert(
+        "sessions.filters".into(),
+        r#"{"scope":"closed","range":"yesterday","customFrom":"","customTo":"","profileId":"","repository":""}"#.into(),
+    );
+    World::start({
+        let daemon = super::palette::daemon(initial, vec![]);
+        daemon.on("session_list", |r| {
+            if r["before"].is_null() {
+                page_of(r, vec![closed_docs()], 1, Some("docs"))
+            } else {
+                page(r, vec![closed_ledger()])
+            }
+        });
+        daemon
+    })
+}
+
+fn window_of(read: &Request) -> (serde_json::Value, serde_json::Value) {
+    (read["since"].clone(), read["until"].clone())
+}
+
+/// Each older page asks for the window of the page it continues.
+fn assert_older_pages_keep_their_window(world: &World) {
+    let mut page = None;
+    for read in reads(world) {
+        if read["before"].is_null() {
+            page = Some(window_of(&read));
+        } else {
+            assert_eq!(Some(window_of(&read)), page, "{read}");
+        }
+    }
+}
+
+#[test]
+fn midnight_moves_a_relative_window_and_reads_its_first_page_again() {
+    let mut world = yesterday_paged();
+    open(&mut world);
+    let first = window_of(&last_read(&world));
+
+    world.advance(std::time::Duration::from_secs(24 * 60 * 60));
+    let read = last_read(&world);
+    assert!(read["before"].is_null(), "{read}");
+    assert_ne!(window_of(&read), first);
+
+    click(&mut world, "ledger.older");
+    assert_eq!(last_read(&world)["before"], "docs");
+    assert_older_pages_keep_their_window(&world);
+    assert_eq!(rows(&world), ["docs", "ledger"]);
+}
+
+#[test]
+fn the_first_older_after_a_sleep_past_midnight_finds_the_page_of_the_new_day() {
+    let mut world = yesterday_paged();
+    open(&mut world);
+    let first = window_of(&last_read(&world));
+
+    world.sleep(std::time::Duration::from_secs(24 * 60 * 60));
+    click(&mut world, "ledger.older");
+    let read = last_read(&world);
+    assert!(read["before"].is_null(), "{read}");
+    assert_ne!(window_of(&read), first);
+
+    click(&mut world, "ledger.older");
+    assert_older_pages_keep_their_window(&world);
+    assert_eq!(rows(&world), ["docs", "ledger"]);
+}
+
 #[test]
 fn a_page_for_filters_the_user_left_is_dropped() {
     let mut world = world();

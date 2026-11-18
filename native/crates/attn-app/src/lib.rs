@@ -135,8 +135,8 @@ pub struct State {
     daemon: Commands,
     requests: requests::Requests,
     wall: WallClock,
-    /// The next turn age or staleness change: its wall time, and the runtime time the window
-    /// wakes for it.
+    /// The next turn age, staleness or Sessions list window change: its wall time, and the
+    /// runtime time the window wakes for it.
     age_wake: Option<AgeWake>,
     /// Gives the menu bar's items the keys of each new keymap.
     menus: Option<Menus>,
@@ -159,8 +159,8 @@ impl State {
         self.wall.now_ms()
     }
 
-    /// Reads the wall clock into the window and wakes it when the next turn age or activity
-    /// staleness would change.
+    /// Reads the wall clock into the window and wakes it when the next turn age, activity
+    /// staleness or Sessions list window would change.
     fn tick(&mut self, tx: &mut Tx) {
         self.window.now_ms = self.wall_ms();
         let now_ms = self.window.now_ms;
@@ -172,6 +172,7 @@ impl State {
             .chain(asks::next_change(self, now_ms))
             .chain(settings::phones::next_change(self, now_ms))
             .chain(review::setup::next_change(self, now_ms))
+            .chain(ledger::next_change(self, now_ms))
             .min()
             .map(|at| match self.age_wake {
                 Some(armed) if armed.at_ms == at => armed,
@@ -410,6 +411,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         _ => false,
     };
     if aged {
+        ledger::follow_clock(state, tx);
         state.tick(tx);
     }
     let drains = sidebar::follow_countdowns(state, state.wall_ms())
