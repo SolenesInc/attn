@@ -334,7 +334,7 @@ impl World {
             runtime.update(move |state, _| {
                 state.use_quick_capture(window, &data_dir);
                 state.quick_capture_runs();
-                state.log_incidents_to(&data_dir.join("debug"));
+                state.log_input_to(&data_dir.join("debug"));
             });
         }
         let mut world = World {

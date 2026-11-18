@@ -8,7 +8,7 @@ pub(super) const SCHEMA: &str = "attn.support-report.v1";
 const PANE_CONTENT_BYTE_LIMIT: usize = 32 * 1024;
 const REPORT_BYTE_LIMIT: usize = 8 * 1024 * 1024;
 const NOT_COLLECTED: [&str; 3] = [
-    "diagnostics.input",
+    "diagnostics.input.native",
     "diagnostics.terminal",
     "diagnostics.ui",
 ];
@@ -35,6 +35,8 @@ pub(crate) struct Capture {
     pub(crate) sessions: Vec<Value>,
     pub(crate) desktops: Vec<Value>,
     pub(crate) settings: BTreeMap<String, String>,
+    /// The window's input trace when the user asked.
+    pub(crate) input: Value,
 }
 
 /// The output of a ticked pane at the moment the user saves.
@@ -49,6 +51,8 @@ struct Omission {
     reason: &'static str,
     #[serde(rename = "omittedBytes", skip_serializing_if = "Option::is_none")]
     omitted_bytes: Option<usize>,
+    #[serde(rename = "omittedCount", skip_serializing_if = "Option::is_none")]
+    omitted_count: Option<u64>,
 }
 
 impl Omission {
@@ -57,7 +61,18 @@ impl Omission {
             section: section.into(),
             reason,
             omitted_bytes: None,
+            omitted_count: None,
         }
+    }
+
+    /// The entries a bounded `snapshot` let go of, if any.
+    fn overwritten(section: &str, snapshot: &Value) -> Option<Omission> {
+        let total = snapshot["total"].as_u64()?;
+        let kept = snapshot["events"].as_array()?.len() as u64;
+        (total > kept).then(|| Omission {
+            omitted_count: Some(total - kept),
+            ..Omission::of(section, "ring_entries_overwritten")
+        })
     }
 }
 
@@ -89,11 +104,13 @@ pub(crate) fn shortened(path: &str) -> String {
 }
 
 /// The report, as `attn.support-report.v1` writes it. `daemon` is the daemon's answer to
-/// `support_snapshot`, when it came in time. `output` is each ticked pane's output now.
+/// `support_snapshot`, when it came in time. `output` is each ticked pane's output now, and
+/// `historical` the input samples logged until now.
 pub(crate) fn build(
     capture: &Capture,
     selected: &[String],
     daemon: Option<&Value>,
+    historical: &Value,
     output: impl Fn(&Pane) -> Output,
     created_at_ms: i64,
     report_id: String,
@@ -107,6 +124,11 @@ pub(crate) fn build(
             .iter()
             .map(|section| Omission::of(*section, "not_collected_by_native_app")),
     );
+    if historical["events"].as_array().is_none_or(Vec::is_empty) {
+        omissions.push(Omission::of("historicalInput", "no_persisted_samples"));
+    }
+    omissions.extend(Omission::overwritten("frontendInput", &capture.input));
+    omissions.extend(Omission::overwritten("historicalInput", historical));
     let pane_content: Vec<Value> = capture
         .panes
         .iter()
@@ -167,6 +189,13 @@ pub(crate) fn build(
             "panes": capture.panes,
         },
         "daemons": daemon.into_iter().collect::<Vec<_>>(),
+        "diagnostics": {
+            "input": {
+                "frontend": capture.input,
+                "journeys": super::input::journeys(&capture.input, daemon),
+                "historical": historical,
+            },
+        },
         "paneContent": pane_content,
         "omissions": [],
         "privacy": {

@@ -19,6 +19,7 @@ mod annotating;
 mod blocks;
 mod filter;
 mod find;
+mod input_trace;
 mod kitty;
 mod latency;
 mod links;
@@ -31,6 +32,7 @@ pub(crate) use annotating::{
 pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
+pub(crate) use input_trace::{Decision, Heard, InputTrace, Target, TraceId};
 pub(crate) use latency::type_into;
 pub(crate) use links::accelerator;
 pub(crate) use seeds::SeedCard;
@@ -236,6 +238,7 @@ pub struct Terminals {
     /// The pointer is over the seed card, which keeps it open.
     over_card: bool,
     pub(crate) latency: latency::InputLatency,
+    pub(crate) trace: InputTrace,
 }
 
 struct Term {
@@ -254,7 +257,7 @@ struct Term {
     /// The highest sequence this terminal has drawn, kept across attaches: an attach without a
     /// snapshot continues from it.
     watermark: Option<u32>,
-    held: Vec<Vec<u8>>,
+    held: Vec<(Vec<u8>, TraceId)>,
     tile: Option<Tile>,
     /// The slot the terminal draws in, in points, and the scale it draws at.
     slot: Option<((f32, f32), f32)>,
@@ -418,6 +421,7 @@ impl Terminals {
             self.filters.remove(&id);
             self.images.forget(&id);
             self.latency.forget(&id);
+            self.trace.forget(&id);
             self.seed_card_left(&id);
             save_leaving_note(term.marking.as_ref(), daemon);
             release(&id, &mut term, None, 0, daemon);
@@ -939,8 +943,10 @@ impl Terminals {
             return;
         }
         term.phase = Phase::Live;
-        for data in std::mem::take(&mut term.held) {
-            send_input(&id, &data, "user", daemon);
+        for (data, trace) in std::mem::take(&mut term.held) {
+            let open = send_input(&id, &data, "user", Some(&trace), daemon);
+            self.trace
+                .sent(&trace, &id, open, self.connected, None, tx.clock());
         }
         let at = term.sent_at;
         if attaching.relaid && attaching.policy != Policy::RelaunchRestore {
@@ -961,20 +967,43 @@ impl Terminals {
             .is_some_and(|term| !std::mem::take(&mut term.held).is_empty())
     }
 
-    /// Sends what the user typed or pasted to the terminal, held while it attaches.
-    pub(crate) fn input(&mut self, id: &str, data: &[u8], daemon: &Commands) -> Typed {
+    /// Sends what the user typed or pasted to the terminal, held while it attaches, and traces
+    /// what became of it.
+    pub(crate) fn input(
+        &mut self,
+        id: &str,
+        data: &[u8],
+        trace: &TraceId,
+        now: f64,
+        daemon: &Commands,
+    ) -> Typed {
         let Some(term) = self.panes.get_mut(id) else {
+            self.trace.decide(trace, id, Decision::NoTarget, now);
             return Typed::Nowhere;
         };
-        match term.phase {
-            Phase::Live => send_input(id, data, "user", daemon),
+        let outcome = match term.phase {
+            Phase::Live => Decision::Sent,
             Phase::Waiting | Phase::Attaching(_) | Phase::Retrying { .. } => {
-                term.held.push(data.to_vec())
+                term.held.push((data.to_vec(), trace.clone()));
+                Decision::Held
             }
-            Phase::Away => return Typed::Refused,
-            Phase::Stopped => {}
+            Phase::Away => Decision::Refused,
+            Phase::Stopped => Decision::Stopped,
+        };
+        self.trace.decide(trace, id, outcome, now);
+        match outcome {
+            Decision::Sent => {
+                let open = send_input(id, data, "user", Some(trace), daemon);
+                self.trace.sent(trace, id, open, self.connected, None, now);
+            }
+            Decision::Refused => return Typed::Refused,
+            _ => {}
         }
         Typed::Taken
+    }
+
+    pub(crate) fn connected(&self) -> bool {
+        self.connected
     }
 
     pub(crate) fn live(&self, id: &str) -> bool {
@@ -1026,7 +1055,7 @@ impl Terminals {
             return pointing;
         }
         let report = mouse::report(Action::Move, term.pointer.reported, cell, modes.sgr, mods);
-        send_input(id, report.as_bytes(), "pointer", daemon);
+        send_input(id, report.as_bytes(), "pointer", None, daemon);
         term.pointer.cell = Some(cell);
         pointing
     }
@@ -1062,7 +1091,7 @@ impl Terminals {
             return false;
         };
         let report = mouse::report(Action::Press, Some(button), cell, modes.sgr, mods);
-        send_input(id, report.as_bytes(), "pointer", daemon);
+        send_input(id, report.as_bytes(), "pointer", None, daemon);
         term.pointer.reported = Some(button);
         term.pointer.cell = Some(cell);
         true
@@ -1109,6 +1138,7 @@ impl Terminals {
                 id,
                 mouse::wheel(lines, cell, modes).as_bytes(),
                 source,
+                None,
                 daemon,
             );
         }
@@ -1284,7 +1314,7 @@ fn copy_writes(term: &mut Term, tx: &mut Tx) {
 fn answer(id: &str, term: &mut Term, daemon: &Commands) {
     let replies = responses::without_daemon_owned(&term.vt.take_responses());
     if !replies.is_empty() {
-        send_input(id, &replies, "response", daemon);
+        send_input(id, &replies, "response", None, daemon);
     }
 }
 
@@ -1311,16 +1341,52 @@ fn release(id: &str, term: &mut Term, cell: Option<(u16, u16)>, mods: u8, daemon
     };
     let sgr = term.vt.mouse_modes().sgr;
     let report = mouse::report(Action::Release, None, cell, sgr, mods);
-    send_input(id, report.as_bytes(), "pointer", daemon);
+    send_input(id, report.as_bytes(), "pointer", None, daemon);
 }
 
-fn send_input(id: &str, data: &[u8], source: &'static str, daemon: &Commands) {
-    let _ = daemon.send(&PtyInputMessage {
-        id: id.into(),
-        data: String::from_utf8_lossy(data).into_owned(),
-        source: Some(source.into()),
-        ..PtyInputMessage::new()
-    });
+/// Whether the write left for the daemon.
+fn send_input(
+    id: &str,
+    data: &[u8],
+    source: &'static str,
+    trace: Option<&TraceId>,
+    daemon: &Commands,
+) -> bool {
+    daemon
+        .send(&PtyInputMessage {
+            id: id.into(),
+            data: String::from_utf8_lossy(data).into_owned(),
+            source: Some(source.into()),
+            trace_id: trace.cloned(),
+            ..PtyInputMessage::new()
+        })
+        .is_ok()
+}
+
+/// Appends `line` to the debug log at `path`, starting it over with a marker once it would
+/// pass the Tauri app's cap.
+pub(crate) fn append_capped(path: &std::path::Path, line: &str, at_ms: i64) -> std::io::Result<()> {
+    use std::io::Write;
+    const LOG_CAP_BYTES: u64 = 8 * 1024 * 1024;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let size = std::fs::metadata(path).map_or(0, |m| m.len());
+    let full = size + line.len() as u64 > LOG_CAP_BYTES;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(!full)
+        .write(true)
+        .truncate(full)
+        .open(path)?;
+    if full {
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({ "at": at_ms, "kind": "rotate" })
+        )?;
+    }
+    file.write_all(line.as_bytes())
 }
 
 fn send_attach(id: &str, term: &mut Term, attaching: Attaching, daemon: &Commands) {

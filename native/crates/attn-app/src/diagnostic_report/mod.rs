@@ -1,6 +1,7 @@
 //! "Create diagnostic report": one file in the user's Downloads with what it takes to trace a
 //! stuck terminal, and the output of the panes the user ticks.
 
+mod input;
 mod report;
 mod save;
 
@@ -220,6 +221,7 @@ fn capture(state: &State, tx: &Tx) -> Capture {
         sessions,
         desktops: desktop_snapshots,
         settings: report::chosen_settings(&facts.settings),
+        input: state.terminals.trace.snapshot(tx.clock()),
     }
 }
 
@@ -278,10 +280,12 @@ fn write(state: &mut State, tx: &mut Tx) {
         Snapshot::Taken(snapshot) => Some(snapshot),
         Snapshot::Waiting | Snapshot::Missing => None,
     };
+    let historical = input::historical(state.terminals.trace.log(), created_at);
     let built = report::build(
         &draft.capture,
         &selected,
         daemon,
+        &historical,
         |pane| match outputs.iter().find(|(id, _)| *id == pane.pane_id) {
             Some((_, Output::Text(text))) => Output::Text(text.clone()),
             _ => Output::Gone,

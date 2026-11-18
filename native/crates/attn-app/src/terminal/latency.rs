@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -11,7 +9,7 @@ use serde_json::{Map, Value, json};
 
 use crate::State;
 use crate::requests::Answer;
-use crate::terminal::Typed;
+use crate::terminal::{Decision, TraceId, Typed};
 
 /// Input slower than this, from the key's arrival to its handler or from a write to the
 /// daemon's receipt, is an incident.
@@ -22,9 +20,6 @@ const PROBE_EVERY: f64 = 2.0;
 const PROBE_TIMEOUT: f64 = 5.0;
 /// Seconds one terminal keeps quiet about a reason it reported, counting what it held back.
 const COOLDOWN: f64 = 30.0;
-/// The incident log starts over past this size, as the Tauri app's does.
-const LOG_CAP_BYTES: u64 = 8 * 1024 * 1024;
-
 const INCIDENTS_FILE: &str = "terminal-incidents.jsonl";
 
 /// How long typing takes to reach each terminal's program: the key's wait between the platform
@@ -240,7 +235,7 @@ impl InputLatency {
             "reason": reason.wire(),
             "detail": fields,
         });
-        if let Err(why) = append(log, &format!("{record}\n")) {
+        if let Err(why) = super::append_capped(log, &format!("{record}\n"), at.wall_ms) {
             eprintln!("attn-app: could not log a terminal incident: {why}");
         }
     }
@@ -249,7 +244,13 @@ impl InputLatency {
 /// Sends what the user typed to `terminal`, held while it attaches, and notes how long the key
 /// waited to be handled. Every two seconds of typing, the write carries a probe whose answer
 /// times its round trip.
-pub(crate) fn type_into(state: &mut State, terminal: &str, bytes: &[u8], tx: &mut Tx) -> Typed {
+pub(crate) fn type_into(
+    state: &mut State,
+    terminal: &str,
+    bytes: &[u8],
+    trace: &TraceId,
+    tx: &mut Tx,
+) -> Typed {
     let at = At::of(state, tx);
     if let Some(waited) = tx.input_time().map(|arrived| arrived.elapsed()) {
         state
@@ -263,7 +264,9 @@ pub(crate) fn type_into(state: &mut State, terminal: &str, bytes: &[u8], tx: &mu
             .latency
             .probe_due(terminal, &state.facts, at)
     {
-        return state.terminals.input(terminal, bytes, &state.daemon);
+        return state
+            .terminals
+            .input(terminal, bytes, trace, at.clock, &state.daemon);
     }
     let probe = state.next_request_id();
     let input = PtyInputMessage {
@@ -271,11 +274,17 @@ pub(crate) fn type_into(state: &mut State, terminal: &str, bytes: &[u8], tx: &mu
         data: String::from_utf8_lossy(bytes).into_owned(),
         source: Some("user".into()),
         probe_id: Some(probe.clone()),
+        trace_id: Some(trace.clone()),
         ..PtyInputMessage::new()
     };
     state.terminals.latency.sent(terminal, probe.clone(), at);
+    state
+        .terminals
+        .trace
+        .decide(trace, terminal, Decision::Sent, at.clock);
     let runtime = terminal.to_owned();
-    state.ask_as(
+    let answering = probe.clone();
+    let open = state.ask_as(
         probe.clone(),
         &input,
         move |state: &mut State, answer: Answer, tx: &mut Tx| {
@@ -284,10 +293,15 @@ pub(crate) fn type_into(state: &mut State, terminal: &str, bytes: &[u8], tx: &mu
             state
                 .terminals
                 .latency
-                .answered(&runtime, &probe, result, &state.facts, at);
+                .answered(&runtime, &answering, result, &state.facts, at);
         },
         tx,
     );
+    let connected = state.terminals.connected();
+    state
+        .terminals
+        .trace
+        .sent(trace, terminal, open, connected, Some(&probe), at.clock);
     Typed::Taken
 }
 
@@ -303,19 +317,4 @@ fn session_of(facts: &Facts, runtime: &str) -> Option<String> {
 
 fn rounded(ms: f64) -> f64 {
     (ms * 10.0).round() / 10.0
-}
-
-fn append(path: &Path, line: &str) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let size = std::fs::metadata(path).map_or(0, |m| m.len());
-    let full = size + line.len() as u64 > LOG_CAP_BYTES;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(!full)
-        .write(true)
-        .truncate(full)
-        .open(path)?;
-    file.write_all(line.as_bytes())
 }

@@ -105,7 +105,7 @@ fn main() -> ExitCode {
         move |state: &mut attn_app::State, _: &mut rune::Tx| {
             state.open_tile_windows(opener, deliver);
             if let Some(debug) = attn_app::instance::debug_dir(&bundle_id) {
-                state.log_incidents_to(&debug);
+                state.log_input_to(&debug);
             }
             #[cfg(target_os = "macos")]
             {

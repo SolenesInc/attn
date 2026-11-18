@@ -1,0 +1,490 @@
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::path::{Path, PathBuf};
+
+use attn_client::Facts;
+use rune::{Key, KeyEvent, Mods};
+use serde::Serialize;
+use serde_json::{Value, json};
+
+/// Events the trace keeps, as the Tauri app's support trace does.
+pub(crate) const TRACE_CAPACITY: usize = 512;
+/// Decisions each terminal's sample carries, as the Tauri app's input observer keeps.
+const RECENT_LIMIT: usize = 32;
+/// Seconds between a terminal's samples while nothing calls for one sooner, and between two
+/// samples for the same reason, as in the Tauri app.
+const SAMPLE_EVERY: f64 = 30.0;
+const REASON_COOLDOWN: f64 = 30.0;
+
+pub(crate) const DIAGNOSTICS_FILE: &str = "terminal-diagnostics.jsonl";
+
+/// One key, paste or composition, from the window that heard it to the daemon's socket, named
+/// by the id the daemon's own trace echoes.
+pub(crate) type TraceId = String;
+
+#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum Stage {
+    Document,
+    Terminal,
+    Transport,
+}
+
+/// What became of an input at the terminal: the Tauri terminal's outcomes, and `held`,
+/// `refused` and `stopped` for the native terminal's phases.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Decision {
+    Sent,
+    Held,
+    Refused,
+    Stopped,
+    NoTarget,
+    Unmapped,
+    Empty,
+    Intercepted,
+    Started,
+}
+
+impl Decision {
+    fn wire(self) -> &'static str {
+        match self {
+            Decision::Sent => "sent",
+            Decision::Held => "held",
+            Decision::Refused => "refused",
+            Decision::Stopped => "stopped",
+            Decision::NoTarget => "no_target",
+            Decision::Unmapped => "unmapped",
+            Decision::Empty => "empty",
+            Decision::Intercepted => "intercepted",
+            Decision::Started => "started",
+        }
+    }
+
+    /// The reason this outcome writes a sample at once.
+    fn urgent(self) -> Option<&'static str> {
+        match self {
+            Decision::Refused | Decision::Stopped | Decision::NoTarget => Some(self.wire()),
+            _ => None,
+        }
+    }
+}
+
+/// What the input was, without what it typed.
+#[derive(Clone, Copy)]
+pub(crate) enum Heard<'a> {
+    Key(&'a KeyEvent, bool),
+    Paste,
+    CompositionStart,
+    CompositionEnd,
+}
+
+impl Heard<'_> {
+    fn event(&self) -> &'static str {
+        match self {
+            Heard::Key(..) => "keydown",
+            Heard::Paste => "paste",
+            Heard::CompositionStart => "compositionstart",
+            Heard::CompositionEnd => "compositionend",
+        }
+    }
+}
+
+/// The element that held the keyboard when the input arrived, in the Tauri app's words.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Target {
+    Terminal,
+    TerminalFind,
+    TerminalFilter,
+    Editor,
+    Control,
+    None,
+}
+
+impl Target {
+    /// The element whose key is `focused`, `field` when it is a text field.
+    pub(crate) fn of(focused: Option<&str>, field: bool, terminal: bool) -> Target {
+        match focused {
+            Some(key) if field && key.ends_with(".find.field") => Target::TerminalFind,
+            Some(key) if field && key.ends_with(".filter.field") => Target::TerminalFilter,
+            Some(_) if field => Target::Editor,
+            Some(_) => Target::Control,
+            None if terminal => Target::Terminal,
+            None => Target::None,
+        }
+    }
+
+    fn wire(self) -> &'static str {
+        match self {
+            Target::Terminal => "terminal",
+            Target::TerminalFind => "terminal_find",
+            Target::TerminalFilter => "terminal_filter",
+            Target::Editor => "editor",
+            Target::Control => "control",
+            Target::None => "none",
+        }
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Event {
+    sequence: u64,
+    trace_id: TraceId,
+    at_unix_ms: i64,
+    monotonic_ms: f64,
+    stage: Stage,
+    event: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outcome: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_class: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repeat: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    modifiers: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    socket_state: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    initial_state_received: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    probe_id: Option<String>,
+}
+
+impl Event {
+    /// The event as a terminal's sample lists it, in the Tauri observer's shape.
+    fn recent(&self) -> Value {
+        let mut entry = json!({ "at": self.at_unix_ms, "event": self.event });
+        let fields = [
+            ("runtimeId", self.runtime_id.clone().map(Value::from)),
+            ("outcome", self.outcome.map(Value::from)),
+            ("keyClass", self.key_class.map(Value::from)),
+            ("repeat", self.repeat.map(Value::from)),
+            ("modifiers", self.modifiers.map(Value::from)),
+            ("socketState", self.socket_state.map(Value::from)),
+            (
+                "initialStateReceived",
+                self.initial_state_received.map(Value::from),
+            ),
+        ];
+        for (name, value) in fields {
+            if let Some(value) = value {
+                entry[name] = value;
+            }
+        }
+        entry
+    }
+
+    fn counter(&self) -> String {
+        match self.outcome {
+            Some(outcome) => format!("{}:{outcome}", self.event),
+            None => self.event.to_owned(),
+        }
+    }
+}
+
+/// What one terminal's samples carry.
+#[derive(Default)]
+struct Observed {
+    recent: VecDeque<Event>,
+    counts: BTreeMap<String, u32>,
+    last_send: Option<Event>,
+    last_sampled: Option<f64>,
+    reported: HashMap<&'static str, f64>,
+    due: Vec<&'static str>,
+}
+
+/// A bounded trace of the keys, pastes and compositions the window heard, the decision the
+/// terminal made on each and the write it sent, never what they typed. Each terminal's
+/// decisions are sampled to `terminal-diagnostics.jsonl`, where `attn debug input` reads them.
+#[derive(Default)]
+pub struct InputTrace {
+    log: Option<PathBuf>,
+    epoch_ms: i64,
+    next_trace: u64,
+    total: u64,
+    events: VecDeque<Event>,
+    last_decided: Option<TraceId>,
+    field_trace: Option<TraceId>,
+    observed: HashMap<String, Observed>,
+}
+
+impl InputTrace {
+    pub(crate) fn log_to(&mut self, debug_dir: &Path) {
+        self.log = Some(debug_dir.join(DIAGNOSTICS_FILE));
+    }
+
+    pub(crate) fn started_at(&mut self, epoch_ms: i64) {
+        self.epoch_ms = epoch_ms;
+    }
+
+    pub(crate) fn log(&self) -> Option<&Path> {
+        self.log.as_deref()
+    }
+
+    pub(crate) fn forget(&mut self, runtime: &str) {
+        self.observed.remove(runtime);
+    }
+
+    /// A key a focused text field heard first; the window's key handler continues its trace
+    /// when the field passes the key on.
+    pub(crate) fn field_heard(&mut self, heard: Heard, target: Target, now: f64) {
+        self.field_trace = Some(self.heard(heard, target, now));
+    }
+
+    /// An input the window heard, continuing the trace of a key its text field passed on.
+    pub(crate) fn window_heard(
+        &mut self,
+        heard: Heard,
+        target: Target,
+        passed_on: bool,
+        now: f64,
+    ) -> TraceId {
+        match self.field_trace.take().filter(|_| passed_on) {
+            Some(trace) => trace,
+            None => self.heard(heard, target, now),
+        }
+    }
+
+    fn heard(&mut self, heard: Heard, target: Target, now: f64) -> TraceId {
+        self.next_trace += 1;
+        let trace = format!(
+            "n{}-{}",
+            base36(self.epoch_ms as u64),
+            base36(self.next_trace)
+        );
+        let (key_class, repeat, modifiers) = match heard {
+            Heard::Key(ev, repeat) => (Some(key_class(ev)), Some(repeat), Some(modifiers(ev.mods))),
+            _ => (None, None, None),
+        };
+        let event = Event {
+            target: Some(target.wire()),
+            key_class,
+            repeat,
+            modifiers,
+            ..self.event(&trace, Stage::Document, heard.event(), None, now)
+        };
+        self.push(event);
+        trace
+    }
+
+    /// The terminal's decision on `trace`'s input.
+    pub(crate) fn decide(&mut self, trace: &TraceId, runtime: &str, outcome: Decision, now: f64) {
+        let Some(event) = self.events.iter().rev().find(|e| &e.trace_id == trace) else {
+            return;
+        };
+        let decision = Event {
+            outcome: Some(outcome.wire()),
+            key_class: event.key_class,
+            repeat: event.repeat,
+            modifiers: event.modifiers,
+            ..self.event(trace, Stage::Terminal, event.event, Some(runtime), now)
+        };
+        self.last_decided = Some(trace.clone());
+        self.observe(&decision, outcome.urgent(), now);
+        self.push(decision);
+    }
+
+    /// What the window decided on an input no terminal decided on: a terminal held the
+    /// keyboard, and something else took the key or nothing did.
+    pub(crate) fn settle(&mut self, trace: &TraceId, runtime: Option<&str>, taken: bool, now: f64) {
+        if self.last_decided.as_ref() == Some(trace) {
+            return;
+        }
+        if let Some(runtime) = runtime {
+            let outcome = if taken {
+                Decision::Intercepted
+            } else {
+                Decision::Unmapped
+            };
+            self.decide(trace, runtime, outcome, now);
+        }
+    }
+
+    /// The write that carries `trace`'s input left for the daemon, or found no connection.
+    pub(crate) fn sent(
+        &mut self,
+        trace: &TraceId,
+        runtime: &str,
+        socket_open: bool,
+        connected: bool,
+        probe: Option<&str>,
+        now: f64,
+    ) {
+        let event = Event {
+            socket_state: Some(if socket_open { 1 } else { 3 }),
+            initial_state_received: Some(connected),
+            probe_id: probe.map(str::to_owned),
+            ..self.event(
+                trace,
+                Stage::Transport,
+                "websocket_send",
+                Some(runtime),
+                now,
+            )
+        };
+        let unready = (!socket_open || !connected).then_some("transport_unready");
+        let observed = self.observed.entry(runtime.to_owned()).or_default();
+        observed.last_send = Some(event.clone());
+        self.observe(&event, unready, now);
+        self.push(event);
+    }
+
+    /// Writes the samples the last input made due, naming each terminal's pane and session in
+    /// `facts`.
+    pub(crate) fn write_due(&mut self, facts: &Facts, now: f64) {
+        let Some(log) = self.log.clone() else {
+            for observed in self.observed.values_mut() {
+                observed.due.clear();
+            }
+            return;
+        };
+        let at = self.wall_ms(now);
+        for (runtime, observed) in &mut self.observed {
+            if observed.due.is_empty() {
+                continue;
+            }
+            let reasons = std::mem::take(&mut observed.due);
+            observed.last_sampled = Some(now);
+            let pane = facts
+                .desktops
+                .iter()
+                .flat_map(|d| &d.panes)
+                .find(|p| &p.runtime_id == runtime);
+            let pane_id = pane.map(|p| p.pane_id.clone());
+            let session = pane.map(|p| p.session_id.clone()).filter(|s| !s.is_empty());
+            let record = json!({
+                "at": at,
+                "kind": "input",
+                "schema": 1,
+                "reasons": reasons,
+                "appStartedAt": self.epoch_ms,
+                "pane": pane_id,
+                "session": session,
+                "runtimeId": runtime,
+                "state": { "runtimeId": runtime, "paneId": pane_id, "sessionId": session },
+                "counts": observed.counts,
+                "recent": observed.recent.iter().map(Event::recent).collect::<Vec<_>>(),
+                "lastSend": observed.last_send.as_ref().map(Event::recent),
+            });
+            if let Err(why) = super::append_capped(&log, &format!("{record}\n"), at) {
+                eprintln!("attn-app: could not log a terminal input sample: {why}");
+            }
+        }
+    }
+
+    /// The trace as the report's `diagnostics.input.frontend` carries it.
+    pub(crate) fn snapshot(&self, now: f64) -> Value {
+        json!({
+            "capacity": TRACE_CAPACITY,
+            "total": self.total,
+            "capturedAtUnixMs": self.wall_ms(now),
+            "capturedAtMonotonicMs": now * 1000.0,
+            "events": self.events,
+        })
+    }
+
+    fn observe(&mut self, event: &Event, urgent: Option<&'static str>, now: f64) {
+        let Some(runtime) = &event.runtime_id else {
+            return;
+        };
+        let observed = self.observed.entry(runtime.clone()).or_default();
+        *observed.counts.entry(event.counter()).or_default() += 1;
+        if observed.recent.len() == RECENT_LIMIT {
+            observed.recent.pop_front();
+        }
+        observed.recent.push_back(event.clone());
+        let reason = urgent.filter(|reason| {
+            observed
+                .reported
+                .get(reason)
+                .is_none_or(|at| now - at >= REASON_COOLDOWN)
+        });
+        if let Some(reason) = reason {
+            observed.reported.insert(reason, now);
+            if !observed.due.contains(&reason) {
+                observed.due.push(reason);
+            }
+        } else if observed.due.is_empty()
+            && observed
+                .last_sampled
+                .is_none_or(|at| now - at >= SAMPLE_EVERY)
+        {
+            observed.due.push("sample");
+        }
+    }
+
+    fn event(
+        &self,
+        trace: &TraceId,
+        stage: Stage,
+        event: &'static str,
+        runtime: Option<&str>,
+        now: f64,
+    ) -> Event {
+        Event {
+            sequence: 0,
+            trace_id: trace.clone(),
+            at_unix_ms: self.wall_ms(now),
+            monotonic_ms: now * 1000.0,
+            stage,
+            event,
+            runtime_id: runtime.map(str::to_owned),
+            target: None,
+            outcome: None,
+            key_class: None,
+            repeat: None,
+            modifiers: None,
+            socket_state: None,
+            initial_state_received: None,
+            probe_id: None,
+        }
+    }
+
+    fn push(&mut self, mut event: Event) {
+        self.total += 1;
+        event.sequence = self.total;
+        if self.events.len() == TRACE_CAPACITY {
+            self.events.pop_front();
+        }
+        self.events.push_back(event);
+    }
+
+    fn wall_ms(&self, now: f64) -> i64 {
+        self.epoch_ms + (now * 1000.0) as i64
+    }
+}
+
+fn key_class(ev: &KeyEvent) -> &'static str {
+    match &ev.key {
+        Key::Text(text) if text.chars().count() == 1 => "text",
+        Key::Command(_) => "text",
+        Key::Modifier { .. } => "modifier",
+        Key::Enter => "enter",
+        Key::Escape => "escape",
+        _ => "other",
+    }
+}
+
+fn modifiers(mods: Mods) -> u8 {
+    u8::from(mods.shift)
+        | u8::from(mods.ctrl) << 1
+        | u8::from(mods.alt) << 2
+        | u8::from(mods.logo) << 3
+}
+
+fn base36(mut n: u64) -> String {
+    const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let mut out = Vec::new();
+    loop {
+        out.push(DIGITS[(n % 36) as usize]);
+        n /= 36;
+        if n == 0 {
+            break;
+        }
+    }
+    out.reverse();
+    String::from_utf8(out).expect("ascii digits")
+}

@@ -8,6 +8,7 @@ use attn_protocol::{
 };
 use attn_term::SNAPSHOT_FORMAT;
 use attn_testkit::{Daemon, Target, World, message, tree};
+use rune::Ime;
 use serde_json::{Value, json};
 
 use super::keys::chord;
@@ -90,7 +91,13 @@ fn answering(daemon: Daemon) -> Daemon {
             ..attached()
         })
     });
-    daemon.on("support_snapshot", |_| {
+    snapshotting(&daemon, json!([]));
+    daemon
+}
+
+/// A daemon whose `support_snapshot` reports `input_traces`.
+fn snapshotting(daemon: &Daemon, input_traces: Value) {
+    daemon.on("support_snapshot", move |_| {
         json!({
             "event": "support_snapshot_result",
             "protocol_version": "1",
@@ -100,12 +107,11 @@ fn answering(daemon: Daemon) -> Daemon {
             "backend": "worker",
             "warning_codes": [],
             "trace_capacity": 512,
-            "trace_total": 0,
-            "input_traces": [],
+            "trace_total": input_traces.as_array().map_or(0, Vec::len),
+            "input_traces": input_traces,
             "runtimes": [],
         })
     });
-    daemon
 }
 
 /// Two agents side by side on the desktop the window shows, each with output on screen, and
@@ -236,7 +242,7 @@ fn clearing_the_output_saves_only_metadata_and_names_no_webview_evidence() {
     let text = report.to_string();
     assert!(!text.contains(FIRST_OUTPUT) && !text.contains(SECOND_OUTPUT));
     for section in [
-        "diagnostics.input",
+        "diagnostics.input.native",
         "diagnostics.terminal",
         "diagnostics.ui",
     ] {
@@ -245,7 +251,6 @@ fn clearing_the_output_saves_only_metadata_and_names_no_webview_evidence() {
             "{section}"
         );
     }
-    assert!(report.get("diagnostics").is_none());
 }
 
 #[test]
@@ -441,4 +446,190 @@ fn a_pane_the_window_has_no_output_for_cannot_be_ticked() {
         Some("session 2, not currently mounted")
     );
     assert!(!choice(&world, 1).states.iter().any(|s| s == "disabled"));
+}
+
+fn saved_text(world: &World) -> String {
+    let found = reports_in(&downloads(world));
+    std::fs::read_to_string(&found[0]).unwrap()
+}
+
+fn report_without_output(world: &mut World) -> Value {
+    create_report(world);
+    click(world, "diagnostic-report.clear");
+    save(world);
+    only_report(world)
+}
+
+fn input_log(world: &World) -> PathBuf {
+    world.data_dir().join("debug/terminal-diagnostics.jsonl")
+}
+
+fn stages_of<'r>(report: &'r Value, trace: &str) -> Vec<&'r str> {
+    report["diagnostics"]["input"]["frontend"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["traceId"] == trace)
+        .map(|e| e["stage"].as_str().unwrap())
+        .collect()
+}
+
+#[test]
+fn it_traces_a_key_press_from_the_window_to_the_socket_under_one_id_without_the_key() {
+    let mut world = on_the_desktop(answering(daemon()));
+    world.gesture(|app| app.type_text("ẞ"));
+    let trace = world.daemon.sent_of("pty_input").last().unwrap()["trace_id"]
+        .as_str()
+        .expect("the write names its trace")
+        .to_owned();
+
+    let report = report_without_output(&mut world);
+
+    assert_eq!(
+        stages_of(&report, &trace),
+        ["document", "terminal", "transport"]
+    );
+    assert!(!saved_text(&world).contains('ẞ'));
+}
+
+#[test]
+fn the_report_follows_a_key_to_the_daemon_s_write_under_its_trace_id() {
+    let mut world = on_the_desktop(answering(daemon()));
+    world.gesture(|app| app.type_text("l"));
+    let trace = world.daemon.sent_of("pty_input")[0]["trace_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    snapshotting(
+        &world.daemon,
+        json!([{
+            "sequence": 1,
+            "trace_id": trace,
+            "runtime_id": "r1",
+            "received_at_unix_ms": 5,
+            "source": "user",
+            "byte_count": 1,
+            "write_duration_us": 80,
+            "write_result": "accepted",
+        }]),
+    );
+
+    let report = report_without_output(&mut world);
+
+    let journeys = report["diagnostics"]["input"]["journeys"]
+        .as_array()
+        .unwrap();
+    let journey = journeys.iter().find(|j| j["traceId"] == trace).unwrap();
+    assert_eq!(journey["runtimeId"], "r1");
+    assert_eq!(journey["terminalOutcome"], "sent");
+    assert_eq!(journey["transportReady"], true);
+    assert_eq!(
+        journey["daemonWrite"],
+        json!({"result": "accepted", "durationUs": 80})
+    );
+    assert_eq!(
+        journey["conclusion"],
+        "pty_write_succeeded_no_agent_evidence"
+    );
+}
+
+#[test]
+fn it_keeps_what_the_user_typed_into_the_find_field_composed_or_pasted_out_of_the_report() {
+    let mut world = on_the_desktop(answering(daemon()));
+    world.gesture(|app| app.key(chord(&Action::TerminalFind)));
+    world.gesture(|app| app.type_text("SECRET_FIND"));
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    world.gesture(|app| {
+        app.runtime.ime(Ime::Preedit("SECRET_PREEDIT".into(), None));
+        app.runtime.ime(Ime::Commit("SECRET_PREEDIT".into()));
+    });
+    world.gesture(|app| app.runtime.paste("SECRET_CLIPBOARD"));
+    world.advance(Duration::from_secs(31));
+    world.gesture(|app| app.type_text("a"));
+
+    let report = report_without_output(&mut world);
+
+    let targets: Vec<&str> = report["diagnostics"]["input"]["frontend"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["target"].as_str())
+        .collect();
+    assert!(targets.contains(&"terminal_find"), "{targets:?}");
+    let events: Vec<&str> = report["diagnostics"]["input"]["frontend"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["event"].as_str().unwrap())
+        .collect();
+    assert!(
+        events.contains(&"compositionend") && events.contains(&"paste"),
+        "{events:?}"
+    );
+    let saved = saved_text(&world);
+    let log = std::fs::read_to_string(input_log(&world)).unwrap();
+    for secret in ["SECRET_FIND", "SECRET_PREEDIT", "SECRET_CLIPBOARD"] {
+        assert!(!saved.contains(secret), "{secret} in the report");
+        assert!(!log.contains(secret), "{secret} in the input log");
+    }
+}
+
+#[test]
+fn it_carries_the_input_samples_logged_before_and_since_the_app_started_and_nothing_else_from_that_log()
+ {
+    let mut world = on_the_desktop(answering(daemon()));
+    let log = input_log(&world);
+    std::fs::create_dir_all(log.parent().unwrap()).unwrap();
+    std::fs::write(
+        &log,
+        [
+            r#"{"kind":"input","pane":"before-restart"}"#,
+            r#"{"kind":"paint","text":"PRIVATE_OUTPUT","context":[{"kind":"input"}]}"#,
+            r#"{"kind":"input","#,
+            "null",
+            "",
+        ]
+        .join("\n"),
+    )
+    .unwrap();
+    world.gesture(|app| app.type_text("a"));
+
+    let report = report_without_output(&mut world);
+
+    let historical = &report["diagnostics"]["input"]["historical"];
+    let panes: Vec<&str> = historical["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["pane"].as_str().unwrap())
+        .collect();
+    assert_eq!(panes, ["before-restart", "p1"]);
+    assert_eq!(historical["events"][1]["runtimeId"], "r1");
+    assert_eq!(historical["events"][1]["counts"]["keydown:sent"], 1);
+    assert!(!saved_text(&world).contains("PRIVATE_OUTPUT"));
+}
+
+#[test]
+fn it_saves_an_empty_input_history_when_there_is_no_log_on_disk() {
+    let mut world = on_the_desktop(answering(daemon()));
+    create_report(&mut world);
+    click(&mut world, "diagnostic-report.clear");
+    let _ = std::fs::remove_file(input_log(&world));
+
+    save(&mut world);
+
+    let report = only_report(&world);
+    let historical = &report["diagnostics"]["input"]["historical"];
+    assert_eq!(historical["total"], 0);
+    assert_eq!(historical["events"], json!([]));
+    assert!(has_omission(
+        &report,
+        "historicalInput",
+        "no_persisted_samples"
+    ));
 }

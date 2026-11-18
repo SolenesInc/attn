@@ -174,17 +174,24 @@ impl State {
         format!("native-{}", uuid::Uuid::new_v4())
     }
 
-    /// Sends `command`, whose answer names `id`, and runs `then` with that answer.
+    /// Sends `command`, whose answer names `id`, and runs `then` with that answer: whether it
+    /// left for the daemon.
     pub(crate) fn ask_as(
         &mut self,
         id: String,
         command: &impl Serialize,
         then: impl FnOnce(&mut State, Answer, &mut Tx) + 'static,
         tx: &mut Tx,
-    ) {
+    ) -> bool {
         match self.daemon.send(command) {
-            Ok(()) => self.requests.wait(id, command, Box::new(then)),
-            Err(_) => then(self, Answer::NotSent, tx),
+            Ok(()) => {
+                self.requests.wait(id, command, Box::new(then));
+                true
+            }
+            Err(_) => {
+                then(self, Answer::NotSent, tx);
+                false
+            }
         }
     }
 

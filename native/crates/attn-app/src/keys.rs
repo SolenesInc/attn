@@ -6,7 +6,7 @@ use crate::action::Action;
 use crate::dispatch::{Outcome, run};
 use crate::keymap::{Focus, Keymap, Press};
 use crate::shell::{LEADER_TIMEOUT, Leader};
-use crate::terminal::Typed;
+use crate::terminal::{Decision, Heard, Target, TraceId, Typed};
 
 /// A key the window hears: from Rune when nothing has focus, or after a focused control
 /// passed it on. A focused text field has already offered it to `on_field_key` and taken
@@ -18,6 +18,31 @@ use crate::terminal::Typed;
 /// passed the key on; then the terminal; then nothing. A modal dialog keeps every bound key
 /// from acting, and from the menu bar.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let terminal = keyboard_terminal(state, tx);
+    let target = Target::of(tx.focused(), tx.in_text_field(), terminal.is_some());
+    let now = tx.clock();
+    let trace = state.terminals.trace.window_heard(
+        Heard::Key(ev, tx.key_repeat()),
+        target,
+        tx.in_text_field(),
+        now,
+    );
+    let taken = heard_key(state, ev, &trace, tx);
+    let trace_log = &mut state.terminals.trace;
+    trace_log.settle(&trace, terminal.as_deref(), taken, now);
+    trace_log.write_due(&state.facts, now);
+    taken
+}
+
+/// The terminal the window's keys type into: none while an element holds the keyboard.
+fn keyboard_terminal(state: &State, tx: &Tx) -> Option<String> {
+    match tx.focused() {
+        None => state.window.typing_terminal(&state.facts),
+        Some(_) => None,
+    }
+}
+
+fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool {
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
     }
@@ -34,10 +59,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if closed {
         crate::desktop::header_pop::close(state);
     }
-    route(state, ev, tx) || disarmed || closed
+    route(state, ev, trace, tx) || disarmed || closed
 }
 
-fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+fn route(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool {
     if let Some(second) = follow_leader(&mut state.window.leader, &state.keymap, ev, tx) {
         if let Some(action) = second
             && !held(state, &action)
@@ -88,10 +113,7 @@ fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if field {
         return false;
     }
-    let terminal = match tx.focused() {
-        None => state.window.typing_terminal(&state.facts),
-        Some(_) => None,
-    };
+    let terminal = keyboard_terminal(state, tx);
     if let Some(id) = &terminal
         && let Some(chord) = clipboard_chord(ev)
         && clipboard(state, id, chord, tx)
@@ -99,7 +121,7 @@ fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     if terminal.is_some() && (types_text(ev) || is_shell_ctrl_letter(ev)) {
-        return send_to_terminal(state, terminal, ev, tx);
+        return send_to_terminal(state, terminal, ev, trace, tx);
     }
     let focus = Focus {
         field: false,
@@ -111,9 +133,9 @@ fn route(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             held(state, &action)
                 || crate::browser::press_page_key(state, &action, tx)
                 || run_shortcut(state, action, tx)
-                || send_to_terminal(state, terminal, ev, tx)
+                || send_to_terminal(state, terminal, ev, trace, tx)
         }
-        Press::Unbound => send_to_terminal(state, terminal, ev, tx),
+        Press::Unbound => send_to_terminal(state, terminal, ev, trace, tx),
         Press::Leader { chord, sequences } => {
             start_leader(&mut state.window.leader, chord, sequences, tx);
             true
@@ -244,6 +266,7 @@ fn send_to_terminal(
     state: &mut State,
     terminal: Option<String>,
     ev: &KeyEvent,
+    trace: &TraceId,
     tx: &mut Tx,
 ) -> bool {
     let Some(id) = terminal else {
@@ -259,13 +282,24 @@ fn send_to_terminal(
         },
     };
     if bytes.is_empty() {
+        let now = tx.clock();
+        state
+            .terminals
+            .trace
+            .decide(trace, &id, Decision::Empty, now);
         return true;
     }
-    type_into(state, &id, &bytes, tx)
+    type_into(state, &id, &bytes, trace, tx)
 }
 
-fn type_into(state: &mut State, terminal: &str, bytes: &[u8], tx: &mut Tx) -> bool {
-    match crate::terminal::type_into(state, terminal, bytes, tx) {
+fn type_into(
+    state: &mut State,
+    terminal: &str,
+    bytes: &[u8],
+    trace: &TraceId,
+    tx: &mut Tx,
+) -> bool {
+    match crate::terminal::type_into(state, terminal, bytes, trace, tx) {
         Typed::Taken => state.window.desk.refusals.sent(terminal),
         Typed::Refused => crate::desktop::refusal::flash(state, terminal, tx),
         Typed::Nowhere => return false,
@@ -286,6 +320,13 @@ pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) {
 /// What an input method composed for the terminal holding the keyboard: a dead key's accent,
 /// a CJK conversion, the emoji picker, dictation.
 pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
+    let taken = composed(state, ime, tx);
+    let now = tx.clock();
+    state.terminals.trace.write_due(&state.facts, now);
+    taken
+}
+
+fn composed(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     let composing = match ime {
         Ime::Preedit(text, _) if !text.is_empty() => Some(text),
         _ => None,
@@ -302,15 +343,34 @@ pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     let Some(id) = state.window.typing_terminal(&state.facts) else {
         return false;
     };
+    let now = tx.clock();
     match ime {
         Ime::Preedit(..) => {
             if let Some(text) = composing {
+                if state.terminals.preedit(&id).is_none() {
+                    let trace_log = &mut state.terminals.trace;
+                    let trace = trace_log.window_heard(
+                        Heard::CompositionStart,
+                        Target::Terminal,
+                        false,
+                        now,
+                    );
+                    trace_log.decide(&trace, &id, Decision::Started, now);
+                }
                 state.terminals.compose(&id, text);
             }
             true
         }
-        Ime::Commit(text) => !text.is_empty() && type_into(state, &id, text.as_bytes(), tx),
-        Ime::Enabled | Ime::Disabled => false,
+        Ime::Commit(text) if !text.is_empty() => {
+            let trace = state.terminals.trace.window_heard(
+                Heard::CompositionEnd,
+                Target::Terminal,
+                false,
+                now,
+            );
+            type_into(state, &id, text.as_bytes(), &trace, tx)
+        }
+        Ime::Commit(_) | Ime::Enabled | Ime::Disabled => false,
     }
 }
 
@@ -327,6 +387,11 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
     let Some(id) = state.window.typing_terminal(&state.facts) else {
         return;
     };
+    let now = tx.clock();
+    let trace = state
+        .terminals
+        .trace
+        .window_heard(Heard::Paste, Target::Terminal, false, now);
     let bytes = if content.image().is_some() {
         Some(b"\x16".to_vec())
     } else if content.text().is_empty() {
@@ -334,15 +399,28 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
     } else {
         state.terminals.encode_paste(&id, content.text())
     };
-    if let Some(bytes) = bytes {
-        type_into(state, &id, &bytes, tx);
+    match bytes {
+        Some(bytes) => {
+            type_into(state, &id, &bytes, &trace, tx);
+        }
+        None => state
+            .terminals
+            .trace
+            .decide(&trace, &id, Decision::Empty, now),
     }
+    state.terminals.trace.write_due(&state.facts, now);
 }
 
 /// A key pressed in a focused text field, before the field hears it, as the Tauri app's
 /// shortcuts run before an input does: a chord bound to an action the field does not keep runs
 /// it. A field never starts a sequence, and a modal dialog's field hears every key first.
 pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let target = Target::of(tx.focused(), true, false);
+    let now = tx.clock();
+    state
+        .terminals
+        .trace
+        .field_heard(Heard::Key(ev, tx.key_repeat()), target, now);
     if modal(state) {
         return false;
     }

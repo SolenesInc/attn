@@ -200,25 +200,29 @@ fn act(state: &mut State, act: Act, pr: &str, tx: &mut Tx) {
     };
     let pr = pr.to_owned();
     match act {
-        Act::Approve => state.ask_as(
-            id,
-            &ApprovePRMessage {
-                id: pr,
-                ..ApprovePRMessage::new()
-            },
-            answered,
-            tx,
-        ),
-        Act::Merge => state.ask_as(
-            id,
-            &MergePRMessage {
-                id: pr,
-                method: "squash".into(),
-                ..MergePRMessage::new()
-            },
-            answered,
-            tx,
-        ),
+        Act::Approve => {
+            state.ask_as(
+                id,
+                &ApprovePRMessage {
+                    id: pr,
+                    ..ApprovePRMessage::new()
+                },
+                answered,
+                tx,
+            );
+        }
+        Act::Merge => {
+            state.ask_as(
+                id,
+                &MergePRMessage {
+                    id: pr,
+                    method: "squash".into(),
+                    ..MergePRMessage::new()
+                },
+                answered,
+                tx,
+            );
+        }
     }
 }
 
