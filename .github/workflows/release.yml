@@ -60,7 +60,7 @@ jobs:
       contents: write
     uses: ./.github/workflows/release-macos-app.yml
     with:
-      app: tauri
+      app: native
       version: ${{ needs.validate-tag.outputs.release_version }}
       ref: ${{ needs.validate-tag.outputs.release_sha }}
       tag: ${{ github.event.client_payload.tag }}

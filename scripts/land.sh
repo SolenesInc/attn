@@ -47,7 +47,6 @@ prompt_outputs=(
   internal/prompts/catalog.generated.json
   app/src/prompts/catalog.generated.json
 )
-frozen_paths='^app/src/|^app/src-tauri/'
 native_paths='^native/|^internal/protocol/schema/|^cli/protocol/|^scripts/native-parity$'
 
 fail() {
@@ -413,24 +412,6 @@ land() {
   fail "main moved $max_attempts times while landing; run scripts/land.sh again"
 }
 
-refuse_frozen_changes() {
-  local frozen generated
-  generated="$(printf '%s\n' "${protocol_outputs[@]}" "${prompt_outputs[@]}")"
-  frozen="$(git diff --name-only origin/main...HEAD | grep -E "$frozen_paths" | grep -vxF -- "$generated" | grep -v '^app/src-tauri/generated/' || true)"
-  [ -n "$frozen" ] || return 0
-  if [ -n "${ATTN_FREEZE_EXCEPTION:-}" ]; then
-    if command -v attn >/dev/null && ! attn seed show "$ATTN_FREEZE_EXCEPTION" >/dev/null 2>&1; then
-      fail "ATTN_FREEZE_EXCEPTION=$ATTN_FREEZE_EXCEPTION names no seed; set it to the seed of the fix"
-    fi
-    echo "land: changing the frozen Tauri app under the exception for seed $ATTN_FREEZE_EXCEPTION" >&2
-    return 0
-  fi
-  fail "the Tauri app is frozen: app/src and app/src-tauri take only P0 and P1 fixes to the shipped app until the native app replaces it. A fix in an area the native app already covers lands in both apps.
-This landing changes:
-$frozen
-To land a fix, name its seed: ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh"
-}
-
 refuse_commits_by_another_author() {
   local author others
   author="$(git config --global --includes --get user.email || true)"
@@ -478,5 +459,4 @@ check_beside_scenarios() {
 export GOGC="${GOGC:-400}"
 git fetch --quiet origin main
 refuse_commits_by_another_author
-refuse_frozen_changes
 land

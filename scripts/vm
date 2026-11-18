@@ -65,7 +65,7 @@ attn instance resolve --instance "$instance" --field wsPort >/dev/null ||
     die "instance name '$instance' was refused by attn; pass another with --instance"
 
 app="attn-$instance"
-shell="${APP:-tauri}"
+shell="${APP:-native}"
 case "$shell" in
 tauri) bundle="app/src-tauri/target/staged/$app.app" ;;
 native) bundle="native/target/staged/$app.app" ;;
@@ -142,7 +142,7 @@ cmd_up() {
         if [ "$shell" = native ]; then
             make build-app INSTANCE="$instance" APP=native
         else
-            make build-app INSTANCE="$instance" DEMO=1
+            make build-app INSTANCE="$instance" APP=tauri DEMO=1
         fi
     fi
     local vm

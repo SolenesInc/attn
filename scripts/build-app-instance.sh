@@ -3,19 +3,23 @@
 # Build the packaged attn .app for a single instance. Bundle metadata
 # (productName, bundle id, deep-link scheme) comes from `attn instance resolve`,
 # and the ws port from `attn instance claim-port`, which keeps it in the
-# instance's data dir. The default/prod instance builds from the
-# committed tauri.conf.json; every NAMED instance gets a generated, gitignored
-# `tauri.<appName>.gen.conf.json` overlay (from `attn instance tauri-config`) so
-# no per-instance bundle metadata is ever hand-maintained.
+# instance's data dir.
 #
-# APP=native builds the native app (native/crates/attn-app) instead, into
-# native/target/staged, with the same sidecars. Its identity names the native
-# app's source (`scripts/source-fingerprint.sh --app native`), which covers
-# native/; the sidecars keep the SOURCE_FINGERPRINT they were built with.
+# APP=native, the default, builds the native app (native/crates/attn-app) into
+# native/target/staged. Its identity names the native app's source
+# (`scripts/source-fingerprint.sh --app native`), which covers native/; the
+# sidecars keep the SOURCE_FINGERPRINT they were built with.
+#
+# APP=tauri builds the Tauri app, kept as the rollback, into
+# app/src-tauri/target/staged, with the same sidecars. The default/prod instance
+# builds from the committed tauri.conf.json; every NAMED instance gets a
+# generated, gitignored `tauri.<appName>.gen.conf.json` overlay (from
+# `attn instance tauri-config`) so no per-instance bundle metadata is ever
+# hand-maintained.
 #
 # Inputs (env):
 #   INSTANCE                  instance name ("" = default/prod)
-#   APP                       tauri (default) or native
+#   APP                       native (default) or tauri
 #   ATTN_BIN                 path to the freshly built attn binary (the authority + sidecar)
 #   ATTND_BIN                path to the freshly built attnd binary (sidecar)
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
@@ -25,8 +29,8 @@
 #   ATTN_APP_CARGO_PROFILE   cargo profile for a named instance (default: fast);
 #                            the default/prod bundle always builds with release
 #
-# Output lands at app/src-tauri/target/staged/<appName>.app (macOS) or
-# app/src-tauri/target/staged/linux-tree/<appName>, whatever cargo profile built it.
+# Output lands at <staged>/<appName>.app (macOS) or <staged>/linux-tree/<appName>,
+# whatever cargo profile built it.
 #
 # Not using `set -u`: macOS ships bash 3.2 where empty-array/var expansion under
 # `set -u` is fragile. Required vars are validated explicitly.
@@ -63,7 +67,7 @@ if [ -n "$harness_default" ] && [ -z "$instance" ]; then
   exit 1
 fi
 
-app_shell="${APP:-tauri}"
+app_shell="${APP:-native}"
 case "$app_shell" in
   tauri | native) ;;
   *)
@@ -72,7 +76,7 @@ case "$app_shell" in
     ;;
 esac
 if [ "$app_shell" = native ] && { [ -n "$demo" ] || [ -n "$harness_default" ]; }; then
-  echo "APP=native does not build DEMO=1 or default-instance harness apps yet" >&2
+  echo "APP=native does not build DEMO=1 or default-instance harness apps yet; build them with APP=tauri" >&2
   exit 1
 fi
 

@@ -13,7 +13,7 @@ label="$("${attn}" instance resolve --instance "${instance}" --field label)"
 app_bundle="$("${attn}" instance resolve --instance "${instance}" --field appPath)"
 app_binary="$("${attn}" instance resolve --instance "${instance}" --field appDaemon)"
 
-case "${APP:-tauri}" in
+case "${APP:-native}" in
   tauri) staged_root="app/src-tauri/target/staged" ;;
   native) staged_root="native/target/staged" ;;
   *)

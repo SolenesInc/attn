@@ -141,12 +141,6 @@ cat >"$work/bin/uname" <<'EOF'
 echo "${LAND_HOST_OS:-Linux}"
 EOF
 chmod +x "$work/bin/uname"
-cat >"$work/bin/attn" <<'EOF'
-#!/usr/bin/env bash
-[ "$*" = "seed show s-fix123" ]
-EOF
-chmod +x "$work/bin/attn"
-unset ATTN_FREEZE_EXCEPTION
 export PATH="$work/bin:$PATH"
 export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
@@ -272,24 +266,8 @@ expect_checks "${go_choice[0]}" 'check-types' 'check-go GO_PACKAGES=./...' "${go
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
-git add -A
-git commit -qm 'Change the frozen app'
-if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'a change to the frozen app landed without an exception' >&2; exit 1; fi
-expect_output 'the Tauri app is frozen'
-expect_output 'app/src/example.ts'
-expect_output 'ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh'
-if ATTN_FREEZE_EXCEPTION=s-nope00 bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'an exception naming no seed let the frozen app change land' >&2; exit 1; fi
-expect_output 'ATTN_FREEZE_EXCEPTION=s-nope00 names no seed'
-git reset -q --soft HEAD^
-export ATTN_FREEZE_EXCEPTION=s-fix123
 land 'App change'
 expect_checks check-js-tools sync
-expect_output 'changing the frozen Tauri app under the exception for seed s-fix123'
-unset ATTN_FREEZE_EXCEPTION
-
-mkdir -p app/src/types
-printf 'export {};\n' >app/src/types/generated.ts
-land 'Regenerated protocol types reach the frozen app'
 
 mkdir -p native/crates/demo/src
 printf '[workspace]\n' >native/Cargo.toml
@@ -301,7 +279,6 @@ expect_checks 'land --group native' 'check-native NATIVE_CLIPPY=--workspace' "la
 printf '\n' >>native/crates/demo/src/lib.rs
 land 'Native crate change'
 expect_checks 'land --group native' 'check-native NATIVE_CLIPPY=-p demo' "landing-tests $selected_units" sync
-export ATTN_FREEZE_EXCEPTION=s-fix123
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts

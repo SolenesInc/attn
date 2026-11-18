@@ -311,8 +311,8 @@ endif
 endif
 endif
 
-# The app an instance installs: tauri, or native (native/crates/attn-app).
-APP ?= tauri
+# The app an instance installs: native (native/crates/attn-app), or tauri, the rollback.
+APP ?= native
 
 # LaunchServices only forwards shell overrides named with `open --env`. A named
 # instance's native app opens in the background and keeps itself from
@@ -556,7 +556,7 @@ build-app: ensure-codesign-identity build build-pty-host
 # A uniquely identified packaged app whose logical runtime instance is still the
 # empty/default instance. Its runtime refuses any non-owner-only or production root.
 build-default-instance-harness:
-	@env -u ATTN_INSTANCE ATTN_BUILD_DEFAULT_INSTANCE_HARNESS=1 $(MAKE) build-app INSTANCE=legacy-recovery
+	@env -u ATTN_INSTANCE ATTN_BUILD_DEFAULT_INSTANCE_HARNESS=1 $(MAKE) build-app INSTANCE=legacy-recovery APP=tauri
 
 ensure-codesign-identity:
 	@identity="$(MACOS_CODESIGN_IDENTITY)"; \
