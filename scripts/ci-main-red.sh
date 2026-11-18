@@ -36,5 +36,6 @@ newest_red() {
 }
 
 newest_red ci.yml push
+newest_red ci.yml full
 newest_red ci-macos.yml push
 newest_red ci-macos.yml full

@@ -8,10 +8,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '47 2 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: >-
     ci-${{ github.event.pull_request.number
+    || ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    && format('full-{0}', github.run_id))
     || (github.ref == 'refs/heads/main'
     && (startsWith(github.event.head_commit.message, 'chore(release): prepare v')
     || (startsWith(github.event.head_commit.message, 'Merge pull request ')
@@ -25,18 +30,20 @@ jobs:
     name: Changes
     permissions:
       contents: read
-      pull-requests: read
     runs-on: ubuntu-24.04
     outputs:
-      force_all: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
-      daemon: ${{ steps.filter.outputs.daemon }}
-      generated: ${{ steps.filter.outputs.generated }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      mobile: ${{ steps.filter.outputs.mobile }}
-      tauri: ${{ steps.filter.outputs.tauri }}
-      native: ${{ steps.filter.outputs.native }}
-      release_preflight: ${{ steps.filter.outputs.release_preflight }}
-      app_acceptance: ${{ steps.filter.outputs.app_acceptance }}
+      full: ${{ steps.full.outputs.full }}
+      carried: ${{ steps.select.outputs.carried }}
+      cli: ${{ steps.select.outputs.cli }}
+      generated: ${{ steps.select.outputs.generated }}
+      daemon: ${{ steps.select.outputs.daemon }}
+      frontend: ${{ steps.select.outputs.frontend }}
+      mobile: ${{ steps.select.outputs.mobile }}
+      tauri: ${{ steps.select.outputs.tauri }}
+      native: ${{ steps.select.outputs.native }}
+      app_acceptance_tauri: ${{ steps.select.outputs.app_acceptance_tauri }}
+      app_acceptance: ${{ steps.select.outputs.app_acceptance }}
+      release_preflight: ${{ steps.select.outputs.release_preflight }}
     steps:
       - name: Report API quota
         continue-on-error: true
@@ -48,15 +55,114 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Classify changed paths
-        id: filter
-        if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
+      - name: Decide whether every group runs
+        id: full
+        env:
+          BEFORE: ${{ github.event.before }}
+          FULL_EVENT: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v')) }}
+          MAIN_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          full="$FULL_EVENT"
+          if [ "$MAIN_PUSH" = true ] && [ -n "$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- .github/release-candidate.yml)" ]; then
+            full=true
+          fi
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "full run: $full"
+
+      - name: Compute inputs keys
+        id: keys
+        if: steps.full.outputs.full != 'true'
+        run: |
+          if keys="$(scripts/ci-pass-records keys)"; then
+            tr ' ' '=' <<<"$keys" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Pass records unread::No inputs key could be computed, so every group runs."
+          fi
+
+      - name: Look up cli's pass record
+        if: steps.keys.outputs.cli
+        uses: ./.github/actions/ci-pass-record
         with:
-          # PR API quota is shared by the installation. Full history lets the
-          # action use git instead, so an unrelated busy repo cannot break CI.
-          token: ''
-          filters: .github/path-filters.yml
+          group: cli
+          key: ${{ steps.keys.outputs.cli }}
+
+      - name: Look up generated's pass record
+        if: steps.keys.outputs.generated
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: generated
+          key: ${{ steps.keys.outputs.generated }}
+
+      - name: Look up daemon's pass record
+        if: steps.keys.outputs.daemon
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: daemon
+          key: ${{ steps.keys.outputs.daemon }}
+
+      - name: Look up frontend's pass record
+        if: steps.keys.outputs.frontend
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: frontend
+          key: ${{ steps.keys.outputs.frontend }}
+
+      - name: Look up mobile's pass record
+        if: steps.keys.outputs.mobile
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: mobile
+          key: ${{ steps.keys.outputs.mobile }}
+
+      - name: Look up tauri's pass record
+        if: steps.keys.outputs.tauri
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: tauri
+          key: ${{ steps.keys.outputs.tauri }}
+
+      - name: Look up native's pass record
+        if: steps.keys.outputs.native
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: native
+          key: ${{ steps.keys.outputs.native }}
+
+      - name: Look up app_acceptance_tauri's pass record
+        if: steps.keys.outputs.app_acceptance_tauri
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: app_acceptance_tauri
+          key: ${{ steps.keys.outputs.app_acceptance_tauri }}
+
+      - name: Look up app_acceptance's pass record
+        if: steps.keys.outputs.app_acceptance
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: app_acceptance
+          key: ${{ steps.keys.outputs.app_acceptance }}
+
+      - name: Look up release_preflight's pass record
+        if: steps.keys.outputs.release_preflight
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: release_preflight
+          key: ${{ steps.keys.outputs.release_preflight }}
+
+      - name: Select the groups that run
+        id: select
+        run: |
+          carried='{}'
+          for record in "$RUNNER_TEMP"/ci-pass-records/*/record; do
+            [ -f "$record" ] || continue
+            group="$(basename "$(dirname "$record")")"
+            read -r run commit <"$record"
+            echo "$group=carried" >> "$GITHUB_OUTPUT"
+            echo "$group carried: passed at $commit in $run"
+            carried="$(jq -c --arg group "$group" --arg run "$run" --arg commit "$commit" \
+              '. + {($group): {run: $run, commit: $commit}}' <<<"$carried")"
+          done
+          echo "carried=$carried" >> "$GITHUB_OUTPUT"
 
   release-candidate:
     name: Release candidate
@@ -106,7 +212,7 @@ jobs:
   generated-types:
     name: Generated types
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
+    if: needs.changes.outputs.generated != 'carried'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -140,7 +246,7 @@ jobs:
   go-lint:
     name: Go vet and lint
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+    if: needs.changes.outputs.daemon != 'carried'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -195,7 +301,7 @@ jobs:
   backend:
     name: Daemon (${{ matrix.group }})
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+    if: needs.changes.outputs.daemon != 'carried'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -300,7 +406,7 @@ jobs:
   pty-compatibility:
     name: PTY upgrade
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+    if: needs.changes.outputs.daemon != 'carried'
     uses: ./.github/workflows/pty-upgrade.yml
     with:
       os: ubuntu-24.04
@@ -308,7 +414,7 @@ jobs:
   frontend:
     name: Frontend
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend != 'carried'
     runs-on: ubuntu-24.04-arm
     defaults:
       run:
@@ -365,7 +471,7 @@ jobs:
   mobile:
     name: Mobile
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.mobile == 'true'
+    if: needs.changes.outputs.mobile != 'carried'
     runs-on: ubuntu-24.04-arm
     defaults:
       run:
@@ -396,7 +502,7 @@ jobs:
   frontend-e2e:
     name: Frontend E2E (${{ matrix.shard }}/3)
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend != 'carried'
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
@@ -488,7 +594,7 @@ jobs:
   rust:
     name: Tauri
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+    if: needs.changes.outputs.tauri != 'carried'
     uses: ./.github/workflows/tauri.yml
     with:
       os: ubuntu-24.04
@@ -496,7 +602,7 @@ jobs:
   native:
     name: Native
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.native == 'true'
+    if: needs.changes.outputs.native != 'carried'
     permissions:
       contents: read
     uses: ./.github/workflows/native.yml
@@ -505,6 +611,8 @@ jobs:
 
   attn-cli:
     name: CLI
+    needs: changes
+    if: needs.changes.outputs.cli != 'carried'
     permissions:
       contents: read
     uses: ./.github/workflows/attn-cli.yml
@@ -514,7 +622,7 @@ jobs:
   app-acceptance-tauri:
     name: App acceptance (tauri)
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
+    if: needs.changes.outputs.app_acceptance_tauri != 'carried'
     permissions:
       actions: read
       contents: read
@@ -527,7 +635,7 @@ jobs:
   app-acceptance-native:
     name: App acceptance (native)
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
+    if: needs.changes.outputs.app_acceptance != 'carried'
     permissions:
       actions: read
       contents: read
@@ -543,7 +651,7 @@ jobs:
     # !cancelled() so a red matrix still reaches the gate instead of skipping.
     if: >-
       !cancelled() &&
-      (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true')
+      (needs.changes.outputs.app_acceptance_tauri != 'carried' || needs.changes.outputs.app_acceptance != 'carried')
     permissions:
       actions: read
       contents: read
@@ -559,11 +667,11 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           HEAD_BRANCH: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TAURI_RESULT: ${{ needs.app-acceptance-tauri.result }}
-          NATIVE_RESULT: ${{ needs.app-acceptance-native.result }}
+          TAURI_RESULT: ${{ needs.changes.outputs.app_acceptance_tauri == 'carried' && 'carried' || needs.app-acceptance-tauri.result }}
+          NATIVE_RESULT: ${{ needs.changes.outputs.app_acceptance == 'carried' && 'carried' || needs.app-acceptance-native.result }}
         run: |
-          if [ "$TAURI_RESULT" = success ] && [ "$NATIVE_RESULT" = success ]; then
-            echo "app acceptance: the tauri and native Linux serial matrices are green for $HEAD_SHA"
+          if [[ "$TAURI_RESULT" =~ ^(success|carried)$ ]] && [[ "$NATIVE_RESULT" =~ ^(success|carried)$ ]]; then
+            echo "app acceptance: for $HEAD_SHA the tauri Linux serial matrix is $TAURI_RESULT and the native one is $NATIVE_RESULT"
             exit 0
           fi
           if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/release/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
@@ -580,7 +688,7 @@ jobs:
   release-preflight:
     name: Release preflight
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.release_preflight == 'true'
+    if: needs.changes.outputs.release_preflight != 'carried'
     permissions:
       contents: read
     uses: ./.github/workflows/release-preflight.yml
@@ -645,23 +753,122 @@ jobs:
       actions: read
       contents: read
     runs-on: ubuntu-24.04
+    env:
+      NEEDS_JSON: ${{ toJSON(needs) }}
+      JOB_GROUPS: >-
+        {"attn-cli": ["cli"],
+        "generated-types": ["generated"],
+        "go-lint": ["daemon"], "backend": ["daemon"], "pty-compatibility": ["daemon"],
+        "frontend": ["frontend"], "frontend-e2e": ["frontend"],
+        "mobile": ["mobile"],
+        "rust": ["tauri"],
+        "native": ["native"],
+        "app-acceptance-tauri": ["app_acceptance_tauri"],
+        "app-acceptance-native": ["app_acceptance"],
+        "app-acceptance": ["app_acceptance_tauri", "app_acceptance"],
+        "release-preflight": ["release_preflight"]}
     steps:
       - uses: actions/checkout@v4
 
       - name: Aggregate exact-SHA acceptance
         env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
+          CARRIED_JSON: ${{ needs.changes.outputs.carried }}
         run: ./scripts/ci-acceptance.sh
+
+      - name: Choose the pass records to write
+        id: passed
+        if: '!cancelled()'
+        run: scripts/ci-pass-records passed | tr ' ' '=' >> "$GITHUB_OUTPUT"
+
+      - name: Record cli's pass
+        if: '!cancelled() && steps.passed.outputs.cli'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: cli
+          key: ${{ steps.passed.outputs.cli }}
+          write: 'true'
+
+      - name: Record generated's pass
+        if: '!cancelled() && steps.passed.outputs.generated'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: generated
+          key: ${{ steps.passed.outputs.generated }}
+          write: 'true'
+
+      - name: Record daemon's pass
+        if: '!cancelled() && steps.passed.outputs.daemon'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: daemon
+          key: ${{ steps.passed.outputs.daemon }}
+          write: 'true'
+
+      - name: Record frontend's pass
+        if: '!cancelled() && steps.passed.outputs.frontend'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: frontend
+          key: ${{ steps.passed.outputs.frontend }}
+          write: 'true'
+
+      - name: Record mobile's pass
+        if: '!cancelled() && steps.passed.outputs.mobile'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: mobile
+          key: ${{ steps.passed.outputs.mobile }}
+          write: 'true'
+
+      - name: Record tauri's pass
+        if: '!cancelled() && steps.passed.outputs.tauri'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: tauri
+          key: ${{ steps.passed.outputs.tauri }}
+          write: 'true'
+
+      - name: Record native's pass
+        if: '!cancelled() && steps.passed.outputs.native'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: native
+          key: ${{ steps.passed.outputs.native }}
+          write: 'true'
+
+      - name: Record app_acceptance_tauri's pass
+        if: '!cancelled() && steps.passed.outputs.app_acceptance_tauri'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: app_acceptance_tauri
+          key: ${{ steps.passed.outputs.app_acceptance_tauri }}
+          write: 'true'
+
+      - name: Record app_acceptance's pass
+        if: '!cancelled() && steps.passed.outputs.app_acceptance'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: app_acceptance
+          key: ${{ steps.passed.outputs.app_acceptance }}
+          write: 'true'
+
+      - name: Record release_preflight's pass
+        if: '!cancelled() && steps.passed.outputs.release_preflight'
+        uses: ./.github/actions/ci-pass-record
+        with:
+          group: release_preflight
+          key: ${{ steps.passed.outputs.release_preflight }}
+          write: 'true'
 
   branch-health:
     name: Report branch health
     if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: acceptance
+    needs: [changes, acceptance]
     permissions:
       contents: read
       issues: write
     concurrency:
-      group: branch-health-${{ github.ref_name }}-acceptance
+      group: branch-health-${{ github.ref_name }}-${{ needs.changes.outputs.full == 'true' && 'ci-full-run' || 'acceptance' }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     steps:
@@ -673,10 +880,11 @@ jobs:
         env:
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
           BRANCH_HEALTH_ASSIGNEE: victorarias
+          RECORD: ${{ needs.changes.outputs.full == 'true' && 'CI full run' || 'acceptance' }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
           ./scripts/ci-branch-health.sh "$ACCEPTANCE_RESULT"
-          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL" acceptance
+          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL" "$RECORD"
 
       - name: Report issue-update failure
         if: steps.branch-health-issue.outcome == 'failure'

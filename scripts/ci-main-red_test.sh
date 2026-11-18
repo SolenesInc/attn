@@ -79,6 +79,13 @@ fixture red-nightly-behind-green-pushes \
   8 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"success"},{"conclusion":"failure"}]}'
 expect red-nightly-behind-green-pushes 0 "8 1"
 
+fixture red-ci-nightly-behind-green-pushes \
+  ci.yml-push '[{"databaseId":31}]' \
+  ci.yml-all '[{"databaseId":31,"event":"push"},{"databaseId":30,"event":"workflow_dispatch"}]' \
+  31 '{"attempt":1,"conclusion":"success","jobs":[]}' \
+  30 '{"attempt":1,"conclusion":"failure","jobs":[{"conclusion":"failure"}]}'
+expect red-ci-nightly-behind-green-pushes 0 "30 1"
+
 fixture red-push-and-green-nightly \
   ci.yml-push '[{"databaseId":11}]' \
   ci-macos.yml-all '[{"databaseId":12,"event":"workflow_dispatch"},{"databaseId":10,"event":"schedule"}]' \

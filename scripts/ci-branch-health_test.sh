@@ -68,6 +68,26 @@ if [ "$(issue_state 'Branch health: main full run')" != closed ]; then
   exit 1
 fi
 
+echo '[]' >"$FAKE_ISSUES"
+: >"$FAKE_GH_LOG"
+"$script" failure main "$nightly_sha" "$run_url" 'CI full run' >/dev/null
+if [ "$(issue_state 'Branch health: main CI full run')" != open ] || grep -q 'branches/main' "$FAKE_GH_LOG"; then
+  echo "a red CI full run on an older main commit did not open its own issue" >&2
+  cat "$FAKE_ISSUES" >&2
+  exit 1
+fi
+"$script" success main "$head_sha" "$run_url" acceptance >/dev/null
+"$script" success main "$head_sha" "$run_url" 'full run' >/dev/null
+if [ "$(issue_state 'Branch health: main CI full run')" != open ]; then
+  echo "a green push or macOS full run closed the CI full run's issue" >&2
+  exit 1
+fi
+"$script" success main "$head_sha" "$run_url" 'CI full run' >/dev/null
+if [ "$(issue_state 'Branch health: main CI full run')" != closed ]; then
+  echo "a green CI full run left its issue open" >&2
+  exit 1
+fi
+
 "$script" failure main "$head_sha" "$run_url" macOS >/dev/null
 if [ "$(issue_state 'Branch health: main macOS')" != open ]; then
   echo "a red macOS run did not open its issue" >&2

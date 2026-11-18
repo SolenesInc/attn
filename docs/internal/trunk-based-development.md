@@ -14,8 +14,8 @@ conflicts. Unfinished work lands unwired, or behind an experimental
 setting that is off by default. The `land-on-main` skill is the
 procedure, from the working branch to the report after the push.
 
-After the push, these run without you. `main`'s CI runs the full test suites and
-the scenario matrices. When a landing breaks `main`, the sheriff gets `main` green
+After the push, these run without you. `main`'s CI runs the test suites and the
+scenario matrices whose inputs changed. When a landing breaks `main`, the sheriff gets `main` green
 again. The review automation reviews the commits and messages their author or
 dispatches a fixer. The release process writes release notes from the commits.
 
@@ -166,8 +166,17 @@ any other conflict stops the land before the push.
 Checks before landing are fast and local: targeted tests, the change on the
 surface it touches, and a review scaled to the change's risk. The full Go
 suite, the Playwright specs and the Linux scenario matrices of both app
-shells, Tauri and native, run in CI on every push to `main` after landing,
-and so do the combinations of changes that landed together. The macOS jobs run in their own workflow, `CI macOS`, so
+shells, Tauri and native, run in CI on `main` after landing, and so do the
+combinations of changes that landed together. A push runs each job group, such
+as the four `Daemon` jobs, unless the group already passed with the same
+inputs: the files its filter in `.github/path-filters.yml` matches, plus every
+file under `.github/`. When every job of a group passes on `main`, `Acceptance`
+saves a pass record for those inputs in the Actions cache, and later runs carry
+the group instead of running it. `Acceptance` names each carried group and the
+run that passed it. Pull requests read `main`'s pass records and write none.
+CI runs every job nightly, on dispatch, on a release commit and on a
+`release/v*` pull request, so a group that a filter skipped by mistake fails
+within a day. The macOS jobs run in their own workflow, `CI macOS`, so
 waiting for a macOS runner never holds up Linux's Acceptance. `CI macOS` runs
 each macOS job on a push only when the commits since its last green push run
 change paths that can break it, so a failed job runs again on every push until
@@ -209,9 +218,11 @@ delegation watch, even after harvest. Corrections are new landings.
 CI and CI macOS run on `main` after every landing, and each batches pushes that
 arrive during its run into its next run. When Acceptance fails, CI opens the
 `Branch health: main acceptance` issue. When `macOS acceptance` fails, CI macOS
-opens `Branch health: main macOS`. Every night CI macOS also runs every macOS
-job on `main`'s head. A red nightly run opens `Branch health: main full run`,
-which only the next green full run closes. The sheriff automation watches both
+opens `Branch health: main macOS`. Every night CI runs every job, and CI macOS
+every macOS job, on `main`'s head. A red CI full run opens
+`Branch health: main CI full run` and a red CI macOS full run opens
+`Branch health: main full run`. Only that workflow's next green full run
+closes each. The sheriff automation watches both
 workflows on `main` and counts a run as red when any job in it failed, even when the run itself
 concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
 sheriff reads it, finds the commit that broke it, and delegates an agent
@@ -228,7 +239,8 @@ release waits for green.
 ## Releases
 
 A release is cut on demand from a `main` commit that has green Acceptance and
-that `reviewed` contains. CI macOS runs every macOS job on the release commit,
-and the release ships only when that commit's `Full macOS run` is green. Its notes are written from the commits since the last
+that `reviewed` contains. CI runs every job and CI macOS every macOS job on the
+release commit, and the release ships only when that commit's `Acceptance` and
+`Full macOS run` are green. Its notes are written from the commits since the last
 release, grouped by their `Attn-Seed:` trailers, so landings add no changelog
 fragment. See [Making a release](making-a-release.md).

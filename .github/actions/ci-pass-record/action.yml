@@ -1,0 +1,43 @@
+name: CI pass record
+description: >-
+  Read or write one CI job group's pass record: the Actions cache entry
+  ci-pass-<group>-<inputs key>, holding the run and commit that passed the group
+  with those inputs. Reading restores it to
+  $RUNNER_TEMP/ci-pass-records/<group>/record when it exists. Writing saves it
+  unless it already exists.
+inputs:
+  group:
+    description: The job group, as named in .github/path-filters.yml.
+    required: true
+  key:
+    description: The group's inputs key, from scripts/ci-pass-records.
+    required: true
+  write:
+    description: "'true' writes this run's pass; otherwise the record is read."
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Look up the pass record
+      id: lookup
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/ci-pass-records/${{ inputs.group }}
+        key: ci-pass-${{ inputs.group }}-${{ inputs.key }}
+        lookup-only: ${{ inputs.write }}
+
+    - name: Describe this run's pass
+      if: inputs.write == 'true' && steps.lookup.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        RECORD_DIR: ${{ runner.temp }}/ci-pass-records/${{ inputs.group }}
+      run: |
+        mkdir -p "$RECORD_DIR"
+        echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID $GITHUB_SHA" >"$RECORD_DIR/record"
+
+    - name: Save the pass record
+      if: inputs.write == 'true' && steps.lookup.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/ci-pass-records/${{ inputs.group }}
+        key: ci-pass-${{ inputs.group }}-${{ inputs.key }}

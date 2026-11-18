@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: ci-pass-records keys
+       ci-pass-records passed
+
+keys    prints "<group> <inputs key>" for each group in .github/path-filters.yml.
+        The key hashes the index entries (mode, blob, path) of the files the
+        group's globs match, plus every file under .github/.
+passed  prints "<group> <inputs key>" for each group whose CI jobs all
+        succeeded. NEEDS_JSON is the Acceptance job's needs; JOB_GROUPS maps
+        each gated job to the groups that gate it.
+EOF
+  exit 2
+}
+
+root="$(git rev-parse --show-toplevel)"
+filters="$root/.github/path-filters.yml"
+
+group_globs() {
+  awk -v file="$filters" '
+    /^[[:space:]]*(#.*)?$/ { next }
+    /^[a-z_]+:$/ { group = substr($0, 1, length($0) - 1); next }
+    /^  - \x27[^\x27]+\x27$/ && group != "" {
+      glob = substr($0, 6, length($0) - 6)
+      if (glob ~ /[][{}()!+@\\]/ || glob ~ /[^\/]\*\*|\*\*[^\/]/) {
+        printf "ci-pass-records: %s: %s uses glob syntax git pathspecs do not match like picomatch\n", file, glob > "/dev/stderr"
+        exit 1
+      }
+      print group "\t" glob
+      next
+    }
+    { printf "ci-pass-records: %s:%d: cannot read \"%s\"\n", file, NR, $0 > "/dev/stderr"; exit 1 }
+  ' "$filters"
+}
+
+keys() {
+  local globs group
+  globs="$(group_globs)"
+  for group in $(cut -f1 <<<"$globs" | uniq); do
+    local pathspecs=(':(glob).github/**')
+    while IFS=$'\t' read -r _ glob; do
+      pathspecs+=(":(glob)$glob")
+    done < <(awk -F'\t' -v g="$group" '$1 == g' <<<"$globs")
+    printf '%s %s\n' "$group" "$(git -C "$root" ls-files -s -- "${pathspecs[@]}" | sha256sum | cut -d' ' -f1)"
+  done
+}
+
+passed() {
+  : "${NEEDS_JSON:?ci-pass-records: NEEDS_JSON is required}"
+  : "${JOB_GROUPS:?ci-pass-records: JOB_GROUPS is required}"
+  local green
+  green="$(jq -c --argjson job_groups "$JOB_GROUPS" '. as $needs
+    | [$job_groups | to_entries[] | {job: .key, group: .value[]}]
+    | group_by(.group)
+    | map(select(all(.[]; $needs[.job].result == "success")) | .[0].group)' <<<"$NEEDS_JSON")"
+  keys | while read -r group key; do
+    if jq -e --arg group "$group" 'index($group) != null' <<<"$green" >/dev/null; then
+      printf '%s %s\n' "$group" "$key"
+    fi
+  done
+}
+
+case "${1:-}" in
+  keys) keys ;;
+  passed) passed ;;
+  *) usage ;;
+esac

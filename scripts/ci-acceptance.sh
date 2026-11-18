@@ -7,13 +7,26 @@ set -euo pipefail
 : "${GITHUB_RUN_ATTEMPT:?ci acceptance: GITHUB_RUN_ATTEMPT is required}"
 : "${GITHUB_SHA:?ci acceptance: GITHUB_SHA is required}"
 
+carried="${CARRIED_JSON:-}"
+carried="${carried:-"{}"}"
+job_groups="${JOB_GROUPS:-}"
+job_groups="${job_groups:-"{}"}"
+jq -r 'to_entries[] | "ci acceptance: \(.key) carried: passed with the same inputs at \(.value.commit) in \(.value.run)"' <<<"$carried"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ "$carried" != '{}' ]; then
+  jq -r '"### Carried groups\n\nEach passed with the same inputs in an earlier run.\n",
+    (to_entries[] | "- \(.key): \(.value.commit) in \(.value.run)")' <<<"$carried" >>"$GITHUB_STEP_SUMMARY"
+fi
+
 may_skip="$(jq -nc '$ARGS.positional' --args "$@")"
-unmet="$(jq -c --argjson may_skip "$may_skip" '[to_entries[]
+unmet="$(jq -c --argjson may_skip "$may_skip" --argjson carried "$carried" --argjson job_groups "$job_groups" '[to_entries[]
   | select(.value.result != "success")
-  | select((.key | IN($may_skip[])) and .value.result == "skipped" | not)
+  | select(.value.result == "skipped" and (
+      (.key | IN($may_skip[]))
+      or (($job_groups[.key] // []) as $groups | ($groups | length) > 0 and all($groups[]; $carried[.] != null))
+    ) | not)
   | {job: .key, result: .value.result}]' <<<"$NEEDS_JSON")"
 if [ "$unmet" = '[]' ]; then
-  echo "ci acceptance: every job $GITHUB_SHA needs is green"
+  echo "ci acceptance: every job $GITHUB_SHA needs is green or carried"
   exit 0
 fi
 echo "ci acceptance: not green: $unmet" >&2

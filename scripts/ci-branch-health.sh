@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url> <acceptance|macOS|full run>"
+usage="usage: ci-branch-health.sh <conclusion> <main|next> <sha> <run-url> <acceptance|macOS|full run|CI full run>"
 conclusion="${1:?$usage}"
 branch="${2:?$usage}"
 sha="${3:?$usage}"
@@ -26,6 +26,10 @@ case "$record" in
     record_summary="The full run of every macOS job is not green for \`$branch\`. Push runs skip the macOS jobs a push cannot break, so only the next full run closes this issue."
     record_recovered="The full run recovered"
     ;;
+  'CI full run')
+    record_summary="The full CI run of every Linux job is not green for \`$branch\`. Push runs carry the job groups whose inputs already passed, so only the next full run closes this issue."
+    record_recovered="The full CI run recovered"
+    ;;
   *) echo "branch health: unsupported record '$record'" >&2; exit 2 ;;
 esac
 
@@ -39,7 +43,7 @@ for tool in gh jq; do
   command -v "$tool" >/dev/null || { echo "branch health: missing $tool" >&2; exit 2; }
 done
 
-if [ "$record" != 'full run' ]; then
+if [[ "$record" != *'full run' ]]; then
   remote_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --jq .commit.sha)"
   if [ "$remote_sha" != "$sha" ]; then
     echo "branch health: $branch moved to $remote_sha; ignoring stale result for $sha"

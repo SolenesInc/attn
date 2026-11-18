@@ -83,11 +83,12 @@ git fetch origin main && git rev-parse origin/main
 ```
 
 Main has two workflows: `CI` (`ci.yml`) holds the Linux jobs and their
-`Acceptance`, and `CI macOS` (`ci-macos.yml`) holds the macOS jobs, their
-`macOS acceptance` and the full runs. `ci-main-red.sh` prints
+`Acceptance`, and `CI macOS` (`ci-macos.yml`) holds the macOS jobs and their
+`macOS acceptance`. Each also has full runs. `ci-main-red.sh` prints
 `<run-id> <attempt>` for main's newest completed CI push run with a failed
 job, unless a newer completed push run passed. It prints a line the same way
-for CI macOS's push runs, and one for its nightly and dispatched full runs. A run can conclude `cancelled` while jobs inside it failed, so the
+for CI macOS's push runs, and one each for CI's and CI macOS's nightly and
+dispatched full runs. A run can conclude `cancelled` while jobs inside it failed, so the
 script reads the jobs, not the run's conclusion. The script reads only completed runs, so read
 the run list beside the script's output:
 
@@ -99,28 +100,33 @@ the run list beside the script's output:
   The older run's failure still stands unless a landed repair covers it, as
   [Before you diagnose](#before-you-diagnose) says.
 - When the script prints nothing, the newest completed push run of each
-  workflow and the newest nightly run passed. `main` is green only when both
+  workflow and the newest nightly run of each passed. `main` is green only when both
   push runs' `headSha` is `origin/main`. Otherwise report the last green SHA and that
   `main`'s head is still in CI, and end. Never call `main` green from the
   script's empty output alone.
 
-A CI macOS push run skips the macOS jobs that the commits since its last
-green push run cannot break, so a failed macOS job runs again on every push
-until it passes.
-CI macOS's nightly run, and its run on a release commit, run every macOS job,
-and their `Full macOS run` job requires every macOS job to pass. A green push
-run after a red nightly run does not clear it: only the next green nightly run
-does, so treat a red nightly run like a red push run, and find its culprit
-among the commits since the last green nightly run.
-`gh run list --workflow ci-macos.yml --branch main --event schedule` lists the
-nightly runs.
+A CI push run carries each job group that already passed with the same
+inputs, and `Acceptance` names the run that passed it. A failed group records
+no pass, so it runs again on every push until it passes. A CI macOS push run
+skips the macOS jobs that the commits since its last green push run cannot
+break, so a failed macOS job also runs again on every push until it passes.
+The nightly runs of both workflows, and their runs on a release commit, run
+every job. A full run that fails where push runs carried the group means the
+group's filter in `.github/path-filters.yml` misses one of its inputs: fix the
+break, and add the input to the filter. A green push run after a red nightly
+run does not clear it: only the next green nightly run does, so treat a red
+nightly run like a red push run, and find its culprit among the commits since
+the last green nightly run.
+`gh run list --workflow <ci.yml|ci-macos.yml> --branch main --event schedule`
+lists the nightly runs.
 
 ## Before you diagnose
 
 The `Branch health: main acceptance` issue is the record of CI's push runs,
-`Branch health: main macOS` the record of CI macOS's push runs, and
-`Branch health: main full run` the record of CI macOS's full runs: nightly,
-dispatched and release-commit runs. CI opens each only when a run's
+`Branch health: main macOS` the record of CI macOS's push runs,
+`Branch health: main CI full run` the record of CI's full runs, and
+`Branch health: main full run` the record of CI macOS's full runs. Full runs
+are the nightly, dispatched and release-commit runs. CI opens each only when a run's
 `Acceptance` or `macOS acceptance` finishes red, so when you act on a run still in
 progress and the issue is closed, reopen it (`gh issue reopen <number>`). Read
 the comments on the issue first and comment each step. Keep one record per
