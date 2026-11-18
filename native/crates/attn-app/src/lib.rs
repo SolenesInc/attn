@@ -152,7 +152,7 @@ impl State {
     /// debug folder, where `attn debug incidents` and `attn debug input` read them.
     pub fn log_input_to(&mut self, debug_dir: &std::path::Path) {
         self.terminals.latency.log_to(debug_dir);
-        self.terminals.trace.log_to(debug_dir);
+        self.terminals.trace.lock().unwrap().log_to(debug_dir);
     }
 
     pub(crate) fn wall_ms(&self, tx: &Tx) -> i64 {
@@ -215,7 +215,7 @@ pub fn bind(
     deliver(Box::new(move |state, _| {
         state.pictures.start(wake);
         state.epoch_ms = epoch_ms;
-        state.terminals.trace.started_at(epoch_ms);
+        state.terminals.trace.lock().unwrap().started_at(epoch_ms);
         state.instance = instance;
         state.daemon = daemon;
         state.terminals.inbox = terminals;

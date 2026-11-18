@@ -35,7 +35,7 @@ pub(crate) struct Capture {
     pub(crate) sessions: Vec<Value>,
     pub(crate) desktops: Vec<Value>,
     pub(crate) settings: BTreeMap<String, String>,
-    /// The window's input trace when the user asked.
+    /// The app's input trace, from every window, when the user asked.
     pub(crate) input: Value,
 }
 

@@ -633,3 +633,101 @@ fn it_saves_an_empty_input_history_when_there_is_no_log_on_disk() {
         "no_persisted_samples"
     ));
 }
+
+/// The first agent popped out into its own window, the second on the desktop the main window
+/// shows with its keyboard.
+fn with_the_first_agent_popped_out() -> (World, String) {
+    let mut popped = tree::pane("p1");
+    popped["window"] = json!({"x": 10.0, "y": 20.0, "width": 900.0, "height": 500.0});
+    let desk = Desktop {
+        active_pane_id: "p2".into(),
+        tree_json: tree::row([popped, tree::pane("p2")]).to_string(),
+        ..desktop(vec![pane(1), pane(2)])
+    };
+    let daemon = super::palette::daemon(
+        InitialStateMessage {
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![profile()]),
+            desktops: Some(vec![desk]),
+            sessions: Some(vec![session(1), session(2)]),
+            daemon_instance_id: Some("daemon-home".into()),
+            ..InitialStateMessage::new()
+        },
+        Vec::new(),
+    );
+    let world = on_the_desktop(answering(daemon));
+    let window = world.tile_windows()[0].key.clone();
+    (world, window)
+}
+
+/// The trace id of the key the daemon received for `runtime`, which the daemon's own trace
+/// then reports as written.
+fn received(world: &World, runtime: &str) -> String {
+    let trace = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .find(|m| m["id"] == runtime)
+        .expect("the key reached the daemon")["trace_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    snapshotting(
+        &world.daemon,
+        json!([{
+            "sequence": 1,
+            "trace_id": trace,
+            "runtime_id": runtime,
+            "received_at_unix_ms": 5,
+            "source": "user",
+            "byte_count": 1,
+            "write_duration_us": 80,
+            "write_result": "accepted",
+        }]),
+    );
+    trace
+}
+
+fn joined_journey<'r>(report: &'r Value, trace: &str) -> &'r Value {
+    let journeys = report["diagnostics"]["input"]["journeys"]
+        .as_array()
+        .unwrap();
+    let journey = journeys
+        .iter()
+        .find(|j| j["traceId"] == trace)
+        .unwrap_or_else(|| panic!("no journey for {trace}: {journeys:?}"));
+    assert_eq!(journey["terminalOutcome"], "sent", "{journey}");
+    assert_eq!(
+        journey["daemonWrite"],
+        json!({"result": "accepted", "durationUs": 80}),
+        "{journey}"
+    );
+    journey
+}
+
+#[test]
+fn a_key_typed_in_a_popped_out_window_joins_its_daemon_write_in_a_report_from_the_main_window() {
+    let (mut world, window) = with_the_first_agent_popped_out();
+    world.tile_gesture(&window, |app| app.type_text("x"));
+    let trace = received(&world, "r1");
+
+    let report = report_without_output(&mut world);
+
+    assert_eq!(joined_journey(&report, &trace)["runtimeId"], "r1");
+}
+
+#[test]
+fn a_key_typed_in_the_main_window_joins_its_daemon_write_in_a_report_from_a_popped_out_window() {
+    let (mut world, window) = with_the_first_agent_popped_out();
+    world.gesture(|app| app.type_text("x"));
+    let trace = received(&world, "r2");
+
+    world.tile_gesture(&window, |app| app.key(chord(&Action::UiCommandPalette)));
+    world.gesture(|app| app.type_text("diagnostic report"));
+    world.gesture(|app| app.click(Target::key("palette.row.command:create-diagnostic-report")));
+    click(&mut world, "diagnostic-report.clear");
+    save(&mut world);
+    let report = only_report(&world);
+
+    assert_eq!(joined_journey(&report, &trace)["runtimeId"], "r2");
+}

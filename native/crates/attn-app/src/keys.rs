@@ -21,14 +21,14 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let terminal = keyboard_terminal(state, tx);
     let target = Target::of(tx.focused(), tx.in_text_field(), terminal.is_some());
     let now = tx.clock();
-    let trace = state.terminals.trace.window_heard(
+    let trace = state.terminals.trace.lock().unwrap().window_heard(
         Heard::Key(ev, tx.key_repeat()),
         target,
         tx.in_text_field(),
         now,
     );
     let taken = heard_key(state, ev, &trace, tx);
-    let trace_log = &mut state.terminals.trace;
+    let mut trace_log = state.terminals.trace.lock().unwrap();
     trace_log.settle(&trace, terminal.as_deref(), taken, now);
     trace_log.write_due(&state.facts, now);
     taken
@@ -286,6 +286,8 @@ fn send_to_terminal(
         state
             .terminals
             .trace
+            .lock()
+            .unwrap()
             .decide(trace, &id, Decision::Empty, now);
         return true;
     }
@@ -322,7 +324,12 @@ pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) {
 pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     let taken = composed(state, ime, tx);
     let now = tx.clock();
-    state.terminals.trace.write_due(&state.facts, now);
+    state
+        .terminals
+        .trace
+        .lock()
+        .unwrap()
+        .write_due(&state.facts, now);
     taken
 }
 
@@ -348,7 +355,7 @@ fn composed(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
         Ime::Preedit(..) => {
             if let Some(text) = composing {
                 if state.terminals.preedit(&id).is_none() {
-                    let trace_log = &mut state.terminals.trace;
+                    let mut trace_log = state.terminals.trace.lock().unwrap();
                     let trace = trace_log.window_heard(
                         Heard::CompositionStart,
                         Target::Terminal,
@@ -362,7 +369,7 @@ fn composed(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
             true
         }
         Ime::Commit(text) if !text.is_empty() => {
-            let trace = state.terminals.trace.window_heard(
+            let trace = state.terminals.trace.lock().unwrap().window_heard(
                 Heard::CompositionEnd,
                 Target::Terminal,
                 false,
@@ -388,10 +395,12 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
         return;
     };
     let now = tx.clock();
-    let trace = state
-        .terminals
-        .trace
-        .window_heard(Heard::Paste, Target::Terminal, false, now);
+    let trace = state.terminals.trace.lock().unwrap().window_heard(
+        Heard::Paste,
+        Target::Terminal,
+        false,
+        now,
+    );
     let bytes = if content.image().is_some() {
         Some(b"\x16".to_vec())
     } else if content.text().is_empty() {
@@ -406,9 +415,16 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
         None => state
             .terminals
             .trace
+            .lock()
+            .unwrap()
             .decide(&trace, &id, Decision::Empty, now),
     }
-    state.terminals.trace.write_due(&state.facts, now);
+    state
+        .terminals
+        .trace
+        .lock()
+        .unwrap()
+        .write_due(&state.facts, now);
 }
 
 /// A key pressed in a focused text field, before the field hears it, as the Tauri app's
@@ -420,6 +436,8 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
     state
         .terminals
         .trace
+        .lock()
+        .unwrap()
         .field_heard(Heard::Key(ev, tx.key_repeat()), target, now);
     if modal(state) {
         return false;

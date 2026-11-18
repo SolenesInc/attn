@@ -1,7 +1,7 @@
 //! Tiles in windows of their own: a popped-out leaf leaves its desktop's columns for a window
 //! where the daemon's `window` frame says.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use attn_protocol::{DesktopBringBackLeafMessage, DesktopPopOutLeafMessage, TileWindowFrame};
 use rune::{El, Tx, col};
@@ -9,6 +9,7 @@ use rune::{El, Tx, col};
 use super::layout::{Direction, Frame, Node};
 use crate::action::Action;
 use crate::requests::Refused;
+use crate::terminal::InputTrace;
 use crate::{State, Update};
 
 /// The smallest window a tile pops out into, in points.
@@ -120,14 +121,15 @@ pub trait Opened {
 }
 
 /// What a tile window needs before it shows its leaf: which leaf, its way to the main
-/// window, and the main window's terminal events, whose share for this window
-/// `TerminalInbox::for_window` takes.
+/// window, the main window's terminal events, whose share for this window
+/// `TerminalInbox::for_window` takes, and the app's input trace, which the window adds to.
 pub struct Setup {
     pub key: String,
     pub desktop: String,
     pub leaf: String,
     pub main: Deliver,
     pub terminals: crate::TerminalInbox,
+    trace: Arc<Mutex<InputTrace>>,
 }
 
 impl Setup {
@@ -139,9 +141,11 @@ impl Setup {
             desktop,
             leaf,
             main,
+            trace,
             ..
         } = self;
         Box::new(move |state: &mut State, tx: &mut Tx| {
+            state.terminals.trace = trace;
             state.window.hold_keyboard(&desktop, &leaf);
             state.window.tile = Some(TileWindow {
                 key,
@@ -252,6 +256,7 @@ pub(crate) fn follow(state: &mut State) {
         return;
     }
     let terminals = state.terminals.inbox.clone();
+    let trace = state.terminals.trace.clone();
     let pool = &mut state.window.desk.windows;
     let (Some(opener), Some(main)) = (pool.opener.clone(), pool.main.clone()) else {
         return;
@@ -335,6 +340,7 @@ pub(crate) fn follow(state: &mut State) {
                         leaf,
                         main: main.clone(),
                         terminals: terminals.clone(),
+                        trace: trace.clone(),
                     },
                 );
                 pool.windows.push(Pooled {

@@ -281,6 +281,8 @@ pub(crate) fn type_into(
     state
         .terminals
         .trace
+        .lock()
+        .unwrap()
         .decide(trace, terminal, Decision::Sent, at.clock);
     let runtime = terminal.to_owned();
     let answering = probe.clone();
@@ -298,10 +300,14 @@ pub(crate) fn type_into(
         tx,
     );
     let connected = state.terminals.connected();
-    state
-        .terminals
-        .trace
-        .sent(trace, terminal, open, connected, Some(&probe), at.clock);
+    state.terminals.trace.lock().unwrap().sent(
+        trace,
+        terminal,
+        open,
+        connected,
+        Some(&probe),
+        at.clock,
+    );
     Typed::Taken
 }
 

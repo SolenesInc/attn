@@ -238,7 +238,8 @@ pub struct Terminals {
     /// The pointer is over the seed card, which keeps it open.
     over_card: bool,
     pub(crate) latency: latency::InputLatency,
-    pub(crate) trace: InputTrace,
+    /// The app's input trace, which the main window hands its tile windows.
+    pub(crate) trace: Arc<Mutex<InputTrace>>,
 }
 
 struct Term {
@@ -421,7 +422,7 @@ impl Terminals {
             self.filters.remove(&id);
             self.images.forget(&id);
             self.latency.forget(&id);
-            self.trace.forget(&id);
+            self.trace.lock().unwrap().forget(&id);
             self.seed_card_left(&id);
             save_leaving_note(term.marking.as_ref(), daemon);
             release(&id, &mut term, None, 0, daemon);
@@ -946,6 +947,8 @@ impl Terminals {
         for (data, trace) in std::mem::take(&mut term.held) {
             let open = send_input(&id, &data, "user", Some(&trace), daemon);
             self.trace
+                .lock()
+                .unwrap()
                 .sent(&trace, &id, open, self.connected, None, tx.clock());
         }
         let at = term.sent_at;
@@ -978,7 +981,10 @@ impl Terminals {
         daemon: &Commands,
     ) -> Typed {
         let Some(term) = self.panes.get_mut(id) else {
-            self.trace.decide(trace, id, Decision::NoTarget, now);
+            self.trace
+                .lock()
+                .unwrap()
+                .decide(trace, id, Decision::NoTarget, now);
             return Typed::Nowhere;
         };
         let outcome = match term.phase {
@@ -990,11 +996,14 @@ impl Terminals {
             Phase::Away => Decision::Refused,
             Phase::Stopped => Decision::Stopped,
         };
-        self.trace.decide(trace, id, outcome, now);
+        self.trace.lock().unwrap().decide(trace, id, outcome, now);
         match outcome {
             Decision::Sent => {
                 let open = send_input(id, data, "user", Some(trace), daemon);
-                self.trace.sent(trace, id, open, self.connected, None, now);
+                self.trace
+                    .lock()
+                    .unwrap()
+                    .sent(trace, id, open, self.connected, None, now);
             }
             Decision::Refused => return Typed::Refused,
             _ => {}

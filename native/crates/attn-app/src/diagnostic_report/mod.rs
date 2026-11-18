@@ -221,7 +221,7 @@ fn capture(state: &State, tx: &Tx) -> Capture {
         sessions,
         desktops: desktop_snapshots,
         settings: report::chosen_settings(&facts.settings),
-        input: state.terminals.trace.snapshot(tx.clock()),
+        input: state.terminals.trace.lock().unwrap().snapshot(tx.clock()),
     }
 }
 
@@ -280,7 +280,7 @@ fn write(state: &mut State, tx: &mut Tx) {
         Snapshot::Taken(snapshot) => Some(snapshot),
         Snapshot::Waiting | Snapshot::Missing => None,
     };
-    let historical = input::historical(state.terminals.trace.log(), created_at);
+    let historical = input::historical(state.terminals.trace.lock().unwrap().log(), created_at);
     let built = report::build(
         &draft.capture,
         &selected,
