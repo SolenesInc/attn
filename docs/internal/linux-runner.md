@@ -83,6 +83,12 @@ stops the run before any scenario starts, with no scenario line, and exits with
 the build's status. It also runs scenarios that the serial matrix leaves to the
 soak. Like `test`, it copies the artifacts even when a scenario fails.
 
+Before they build, `test` and `soak` install the app's Node dependencies from
+`app/pnpm-lock.yaml` through `make app/node_modules/.attn-installed`, which
+installs only when `app/package.json` or the lockfile changed. The scenario
+harness needs them whichever app it drives, so a fresh `--checkout` runs
+scenarios with no manual install.
+
 After its scenarios, `test` and `soak` run `scripts/native-build-clean` on the
 guest, which keeps native build output within the budget
 [Native app](native-app.md#build-output) describes, as `land.sh` does after a

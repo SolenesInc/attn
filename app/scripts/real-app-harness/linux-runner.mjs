@@ -235,6 +235,7 @@ function runScenarios(options, provider, root, destination, execute) {
   syncSource(provider, repo, root);
   let testError;
   try {
+    execute(['make', 'app/node_modules/.attn-installed']);
     if (options.action === 'soak') runSoak(options, execute);
     else runMatrix(options, execute);
   } catch (error) { testError = error; }
