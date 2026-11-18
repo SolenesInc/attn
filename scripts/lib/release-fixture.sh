@@ -12,6 +12,7 @@ init_release_fixture() {
     "$root/scripts/compile-changelog.sh" \
     "$root/CHANGELOG.md" \
     "$root/.github/release-candidate.yml" \
+    "$root/VERSION" \
     "$root/app/package.json" \
     "$root/app/pnpm-lock.yaml" \
     "$root/app/src-tauri/tauri.conf.json" \

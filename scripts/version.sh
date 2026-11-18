@@ -8,15 +8,9 @@ if [[ -n "${ATTN_VERSION:-}" ]]; then
   exit 0
 fi
 
-PACKAGE_JSON="${ROOT_DIR}/app/package.json"
-if [[ ! -f "${PACKAGE_JSON}" ]]; then
-  echo "app/package.json not found" >&2
-  exit 1
-fi
-
-VERSION="$(sed -nE 's/^[[:space:]]*"version":[[:space:]]*"([^"]+)".*$/\1/p' "${PACKAGE_JSON}" | head -n1)"
+VERSION="$(tr -d '[:space:]' <"${ROOT_DIR}/VERSION")"
 if [[ -z "${VERSION}" ]]; then
-  echo "could not determine version from app/package.json" >&2
+  echo "VERSION is empty" >&2
   exit 1
 fi
 

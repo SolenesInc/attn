@@ -129,6 +129,7 @@ func runVersion(root string, args []string, stdout io.Writer) error {
 
 func versionSources() []versionSource {
 	return []versionSource{
+		{path: "VERSION", read: readPlainVersion, set: setPlainVersion},
 		{path: "app/package.json", read: readJSONVersion, set: setJSONVersion},
 		{path: "app/src-tauri/tauri.conf.json", read: readJSONVersion, set: setJSONVersion},
 		{path: "app/src-tauri/Cargo.toml", read: readCargoVersion, set: setCargoVersion},
@@ -219,6 +220,18 @@ func readRepositoryFile(root, ref, path string) ([]byte, error) {
 		return os.ReadFile(filepath.Join(root, path))
 	}
 	return gitOutput(root, "show", ref+":"+path)
+}
+
+func readPlainVersion(data []byte) (string, error) {
+	version := strings.TrimSpace(string(data))
+	if version == "" || strings.ContainsAny(version, " \t\n") {
+		return "", fmt.Errorf("expected one version, found %q", version)
+	}
+	return version, nil
+}
+
+func setPlainVersion(_ []byte, version string) ([]byte, error) {
+	return []byte(version + "\n"), nil
 }
 
 func readJSONVersion(data []byte) (string, error) {
@@ -474,6 +487,7 @@ func requireReleaseOnlyChanges(root, source, head, manifestPath string) error {
 	allowed := map[string]bool{
 		manifestPath:                    true,
 		"CHANGELOG.md":                  true,
+		"VERSION":                       true,
 		"app/package.json":              true,
 		"app/pnpm-lock.yaml":            true,
 		"app/src-tauri/tauri.conf.json": true,

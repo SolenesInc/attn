@@ -19,6 +19,7 @@ func newTestRepository(t *testing.T) *testRepository {
 	repo.git("init", "-q", "-b", "main")
 	repo.git("config", "user.name", "Release Test")
 	repo.git("config", "user.email", "release@example.com")
+	repo.write("VERSION", "0.11.1\n")
 	repo.write("app/package.json", "{\n  \"name\": \"app\",\n  \"version\": \"0.11.1\"\n}\n")
 	repo.write("app/pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
 	repo.write("app/src-tauri/tauri.conf.json", "{\n  \"productName\": \"attn\",\n  \"version\": \"0.11.1\"\n}\n")
