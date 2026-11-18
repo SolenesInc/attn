@@ -73,15 +73,15 @@ async function defaultHistoryPath() {
   return path.join(shown.artifact_dir, 'workflow-sessions.jsonl');
 }
 
+function wholeLines(file) {
+  if (!fs.existsSync(file)) return '';
+  const text = fs.readFileSync(file, 'utf8');
+  return text.slice(0, text.lastIndexOf('\n') + 1);
+}
+
 function readHistory(file) {
-  if (!fs.existsSync(file)) return [];
-  let text = fs.readFileSync(file, 'utf8');
-  if (text && !text.endsWith('\n')) {
-    text = text.slice(0, text.lastIndexOf('\n') + 1);
-    fs.writeFileSync(file, text);
-  }
   const lines = new Map();
-  for (const line of text.split('\n').filter(Boolean).map((row) => JSON.parse(row))) {
+  for (const line of wholeLines(file).split('\n').filter(Boolean).map((row) => JSON.parse(row))) {
     if (!lines.has(line.session)) lines.set(line.session, line);
   }
   return [...lines.values()];
@@ -215,7 +215,12 @@ function mainModel(usage) {
   return agents.sort((a, b) => b.cost_usd - a.cost_usd)[0]?.model ?? null;
 }
 
+function dropPartialLastLine(file) {
+  if (fs.existsSync(file) && fs.statSync(file).size !== Buffer.byteLength(wholeLines(file))) fs.writeFileSync(file, wholeLines(file));
+}
+
 async function collect(historyFile) {
+  dropPartialLastLine(historyFile);
   const history = readHistory(historyFile);
   const known = new Set(history.map((line) => line.session));
   const rows = await ledger();
@@ -269,6 +274,13 @@ const median = (values) => {
   return String(sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2));
 };
 
+async function everyNote(seed) {
+  const sinceStart = await attnJSON('seed', 'notes', seed, '--since', '0', '--kind', 'note');
+  if (!sinceStart.expired) return { notes: sinceStart.notes.filter((n) => n.seed_id === seed), keptSince: null };
+  const kept = await attnJSON('seed', 'notes', seed, '--since', String(sinceStart.expired.earliest), '--kind', 'note');
+  return { notes: kept.notes.filter((n) => n.seed_id === seed), keptSince: new Date(Date.now() - sinceStart.expired.retention_seconds * 1000) };
+}
+
 async function gardenFacts(builderSeeds, since, until) {
   const notes = await pool([...builderSeeds], gardenReaders, async (seed) => {
     try {
@@ -291,12 +303,15 @@ async function gardenFacts(builderSeeds, since, until) {
   const search = await attnJSON('seed', 'search', 'Review main', '--limit', '1000');
   const reviewSeeds = search.hits.map((hit) => hit.seed).filter((seed) => seed.step_slug === reviewMainSlug);
   const findings = [];
+  facts.reviewNotes = 0;
   for (const seed of reviewSeeds) {
-    const log = (await attnJSON('seed', 'notes', seed.id, '--kind', 'note', '--limit', '1000')).notes;
-    for (const note of log.filter((n) => new Date(n.created_at) >= since && new Date(n.created_at) < until)) {
+    const { notes: log, keptSince } = await everyNote(seed.id);
+    const inWindow = log.filter((n) => new Date(n.created_at) >= since && new Date(n.created_at) < until);
+    facts.reviewNotes += inWindow.length;
+    for (const note of inWindow) {
       for (const [, sha, target, severity] of note.body.matchAll(/^finding: ([0-9a-f]{7,40}) (s-[a-z0-9]{6}|-) (P[01]) /gm)) findings.push({ sha, target, severity });
     }
-    if (log.length === 1000 && new Date(log.at(-1).created_at) > since) facts.findingsTruncated = true;
+    if (keptSince && keptSince > since) facts.findingsKeptSince = keptSince;
   }
   facts.findings = findings.length;
   facts.findingSeeds = new Set(findings.map((f) => f.target).filter((t) => t !== '-')).size;
@@ -359,8 +374,9 @@ async function scorecard(inPeriod, title, since, until, names) {
   console.log(`all sessions          ${inPeriod.length}: ${count(inPeriod, (l) => l.role ?? 'no role')}`);
   console.log(`  by host             ${count(inPeriod, (l) => hostLabel(l, names))}`);
   console.log(`  by harness          ${count(inPeriod, (l) => l.agent)}`);
+  console.log(`  review on main      ${garden.reviewNotes} notes read for findings`);
   if (garden.unread) console.log(`  ${garden.unread} Builder seeds could not be read from the garden`);
-  if (garden.findingsTruncated) console.log('  review on main has more than 1000 notes in this period; findings are undercounted');
+  if (garden.findingsKeptSince) console.log(`  the garden keeps review on main's notes only since ${garden.findingsKeptSince.toISOString().slice(0, 10)}; findings before then are not counted`);
   console.log('');
 }
 
