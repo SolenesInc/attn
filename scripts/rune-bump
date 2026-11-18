@@ -272,7 +272,7 @@ bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --bra
   for test in ${integration_tests[@]+"${integration_tests[@]}"}; do
     file="${test%%::*}" name=""
     [ "$file" = "$test" ] || name="${test#*::}"
-    if [[ ! "$file" =~ ^crates/rune(-kit|-mermaid)?/tests/([^/]+)(\.rs|/main\.rs)$ ]] || [ ! -f "$worktree/$file" ]; then
+    if [[ ! "$file" =~ ^crates/rune(-kit|-mermaid|-perf)?/tests/([^/]+)(\.rs|/main\.rs)$ ]] || [ ! -f "$worktree/$file" ]; then
       missing+=" $test"
       continue
     fi

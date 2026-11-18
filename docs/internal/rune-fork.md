@@ -47,7 +47,7 @@ than pieces, since a deleted area can no longer take picks.
 3. Write the change with a test that fails without it. Put tests in the sibling
    test file the fork's `AGENTS.md` names; overlay tests go in
    `crates/rune/src/overlay/fork_tests.rs`.
-4. Run `scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid`
+4. Run `scripts/test.sh -p rune -p rune-kit -p rune-mermaid -p rune-perf --features rune-kit/markdown,rune-kit/mermaid`
    for the areas you touched. `scripts/test.sh` passes its arguments to
    `cargo test`; several agents can run it at once on one machine, as
    [Test builds and memory](#test-builds-and-memory) explains. The fork's
