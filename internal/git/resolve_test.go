@@ -33,3 +33,26 @@ func TestHostOwnerRepoFromRemote(t *testing.T) {
 		})
 	}
 }
+
+func TestRepositoryIdentityMatchesEveryURLOfOneRepository(t *testing.T) {
+	t.Parallel()
+	for _, row := range []struct{ a, b string }{
+		{"https://github.com/first/shop.git", "git@github.com:first/shop.git"},
+		{"https://github.com/First/Shop.git", "ssh://git@github.com/first/shop"},
+		{"https://github.com/first/shop.git", "https://github.com/first/shop/"},
+		{"/tmp/first/shop", "/tmp/first/shop.git"},
+	} {
+		if repositoryIdentity(row.a) != repositoryIdentity(row.b) {
+			t.Errorf("%q and %q name one repository, but their identities differ", row.a, row.b)
+		}
+	}
+	for _, row := range []struct{ a, b string }{
+		{"https://github.com/first/shop.git", "https://github.com/second/shop.git"},
+		{"https://github.com/first/shop.git", "https://ghe.corp/first/shop.git"},
+		{"/tmp/first/shop", "/tmp/second/shop"},
+	} {
+		if repositoryIdentity(row.a) == repositoryIdentity(row.b) {
+			t.Errorf("%q and %q name different repositories, but share an identity", row.a, row.b)
+		}
+	}
+}

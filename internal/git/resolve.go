@@ -145,36 +145,20 @@ func repoNameFromRemote(remote string) string {
 	return parts[len(parts)-1]
 }
 
-func (c *Client) RemoteHostOwnerRepos(ctx context.Context, dir string) []string {
-	out, err := c.Output(ctx, OpMetadata, dir, "remote", "-v")
-	if err != nil {
-		return nil
-	}
-	identities := []string{}
-	seen := map[string]bool{}
-	origin := ""
+func (c *Client) hasRemoteFor(ctx context.Context, dir, cloneURL string) bool {
+	out, _ := c.Output(ctx, OpMetadata, dir, "config", "--get-regexp", `^remote\..*\.url$`)
+	want := repositoryIdentity(cloneURL)
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
+		if _, url, ok := strings.Cut(line, " "); ok && repositoryIdentity(url) == want {
+			return true
 		}
-		host, ownerRepo := hostOwnerRepoFromRemote(fields[1])
-		if host == "" || ownerRepo == "" {
-			continue
-		}
-		identity := host + "/" + ownerRepo
-		if seen[identity] {
-			continue
-		}
-		seen[identity] = true
-		if fields[0] == "origin" && origin == "" {
-			origin = identity
-			continue
-		}
-		identities = append(identities, identity)
 	}
-	if origin != "" {
-		identities = append([]string{origin}, identities...)
+	return false
+}
+
+func repositoryIdentity(remote string) string {
+	if host, ownerRepo := hostOwnerRepoFromRemote(remote); ownerRepo != "" {
+		return strings.ToLower(host + "/" + ownerRepo)
 	}
-	return identities
+	return strings.TrimSuffix(strings.TrimRight(remote, "/"), ".git")
 }

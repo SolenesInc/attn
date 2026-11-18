@@ -44,6 +44,9 @@ func (c *Client) EnsureRepo(ctx context.Context, cloneURL, targetPath string) (b
 	targetPath = ExpandPath(targetPath)
 
 	if c.isGitRepo(ctx, targetPath) {
+		if !c.hasRemoteFor(ctx, targetPath, cloneURL) {
+			return false, fmt.Errorf("%s holds a different repository: none of its remotes is %s. Move it aside or change the Projects Directory", targetPath, cloneURL)
+		}
 		return false, nil
 	}
 

@@ -166,3 +166,40 @@ func worktreeCreatePaths(worktrees []protocol.Worktree) []string {
 	}
 	return paths
 }
+
+func TestOpeningAPullRequestNeverReusesACheckoutOfAnotherRepository(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	requested := newRepo(t, "shop")
+	commitFile(t, requested, "repo.txt", "requested\n")
+	runGit(t, requested, "branch", "release")
+	unrelated := newRepo(t, "shop")
+	commitFile(t, unrelated, "repo.txt", "unrelated\n")
+	runGit(t, unrelated, "branch", "release")
+	checkout := w.Path("projects/shop")
+	runGit(t, "", "clone", unrelated, checkout)
+	ensure := func(cloneURL string) protocol.WebSocketEvent {
+		return testworld.Request(app, protocol.EnsureRepoMessage{Cmd: protocol.CmdEnsureRepo, TargetPath: checkout, CloneURL: cloneURL},
+			protocol.EventEnsureRepoResult, func(r protocol.WebSocketEvent) bool { return protocol.Deref(r.TargetPath) == checkout })
+	}
+
+	refused := ensure(requested)
+	if protocol.Deref(refused.Success) || !strings.Contains(protocol.Deref(refused.Error), checkout) || !strings.Contains(protocol.Deref(refused.Error), requested) {
+		t.Fatalf("ensuring %s in a checkout of another repository = %+v; want a refusal naming the checkout and the requested repository", requested, refused)
+	}
+	if branches := strings.TrimSpace(runGit(t, checkout, "branch", "--list", "release")); branches != "" {
+		t.Errorf("the refused checkout gained a release branch: %q", branches)
+	}
+
+	runGit(t, checkout, "remote", "add", "upstream", requested)
+	if fork := ensure(requested); !protocol.Deref(fork.Success) || protocol.Deref(fork.Cloned) {
+		t.Errorf("ensuring %s in a fork whose upstream is that repository = %+v; want the fork reused", requested, fork)
+	}
+
+	const hosted = "https://github.com/first/shop.git"
+	runGit(t, checkout, "remote", "set-url", "upstream", "git@github.com:First/Shop.git")
+	runGit(t, checkout, "config", "url."+requested+".insteadOf", "git@github.com:First/Shop.git")
+	if rewritten := ensure(hosted); !protocol.Deref(rewritten.Success) || protocol.Deref(rewritten.Cloned) {
+		t.Errorf("ensuring %s in a checkout whose upstream is its SSH address, rewritten by insteadOf = %+v; want the checkout reused", hosted, rewritten)
+	}
+}
