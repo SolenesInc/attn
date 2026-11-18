@@ -10,7 +10,7 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, KeyPlatform, Mods, WheelEvent};
 
 const SIZE: (f32, f32) = (1600.0, 900.0);
 const DESKTOP: &str = "work/desktop_1";
@@ -1757,6 +1757,39 @@ fn a_sidebar_rows_chain_opens_beside_it_on_hover_stays_shut_under_a_still_pointe
     let pane = middle(&world, "tile.a");
     world.gesture(|app| app.click_at(pane));
     assert_eq!(chain(&world), None, "a press in a terminal pane closes it");
+    rest(&mut world);
+}
+
+fn wheel_over(world: &mut World, key: &str) {
+    let at = middle(world, key);
+    world.gesture(|app| app.move_to(at));
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(WheelEvent::new(0.0, -120.0).at(at.0, at.1))
+    });
+}
+
+#[test]
+fn a_pinned_chain_stays_open_under_a_wheel_inside_it_and_closes_when_the_user_wheels_the_sidebar() {
+    let mut world = start_with(vec![
+        session("a", "root session", None),
+        with_role(
+            "Builder",
+            "builder",
+            delegate_of("b", "Build navigator", "a"),
+        ),
+    ]);
+    world.gesture(|app| app.click(Target::key("tile.b.role")));
+    assert!(chain(&world).is_some(), "a press pins the chain");
+
+    wheel_over(&mut world, "tile.b.role.popover.agents");
+    assert!(
+        chain(&world).is_some(),
+        "the wheel inside the chain scrolls its agents and leaves it open"
+    );
+
+    wheel_over(&mut world, "sidebar.session.s-a");
+    assert_eq!(chain(&world), None, "the wheel over the sidebar closes it");
     rest(&mut world);
 }
 

@@ -303,6 +303,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
                 header_pop::close(state)
             })
             .modal_press_through(true)
+            .modal_wheel_closes(true)
     } else {
         surface
     };
