@@ -178,6 +178,12 @@ pub(super) fn query_text(world: &World) -> String {
         .unwrap_or_default()
 }
 
+/// The row a screen reader hears as chosen while the keyboard stays on the list.
+pub(super) fn heard(world: &World) -> Option<String> {
+    let key = world.screen().active_option()?.key?;
+    key.strip_prefix("ledger.row.").map(str::to_owned)
+}
+
 pub(super) fn focused(world: &World) -> Option<String> {
     world.screen().focused().and_then(|n| n.key)
 }
@@ -862,6 +868,7 @@ fn the_keys_walk_rows_open_the_menu_copy_the_path_and_back_out_one_layer_at_a_ti
     assert_eq!(selected(&world).as_deref(), Some("docs"));
     plain(&mut world, Key::End);
     assert_eq!(selected(&world).as_deref(), Some("ledger"));
+    assert_eq!(heard(&world).as_deref(), Some("ledger"));
     letter(&mut world, "k");
     assert_eq!(selected(&world).as_deref(), Some("docs"));
 

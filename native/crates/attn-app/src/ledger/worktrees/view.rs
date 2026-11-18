@@ -106,7 +106,9 @@ pub(crate) fn list(state: &State, t: &Tokens) -> El {
             )
             .scroll_bar_styled(attn_ui::scroll_bar(t));
     }
-    list.children(out).scroll_bar_styled(attn_ui::scroll_bar(t))
+    parts::on_chosen_row(list, chosen.as_deref())
+        .children(out)
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn empty_words(state: &State) -> &'static str {

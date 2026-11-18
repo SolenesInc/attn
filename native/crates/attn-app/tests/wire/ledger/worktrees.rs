@@ -10,8 +10,8 @@ use rune::Key;
 use super::super::queue::ago;
 use super::super::sidebar::{chord, desktop, pane, session, state};
 use super::{
-    click, come_back, entry, focused, hang_up, has, ledger_daemon, letter, name, open, plain,
-    query_text, rows, selected, shown_session, text_in, type_query,
+    click, come_back, entry, focused, hang_up, has, heard, ledger_daemon, letter, name, open,
+    plain, query_text, rows, selected, shown_session, text_in, type_query,
 };
 
 const MAIN: &str = "/projects/attn";
@@ -602,6 +602,7 @@ fn shows_a_sessions_worktree_and_a_worktrees_sessions_across_the_two_lists() {
 
     assert!(has(&world, "ledger.refresh"));
     assert_eq!(selected(&world).as_deref(), Some(TWO));
+    assert_eq!(heard(&world).as_deref(), Some(TWO));
     assert_eq!(focused(&world).as_deref(), Some("ledger.list"));
 
     letter(&mut world, "2");

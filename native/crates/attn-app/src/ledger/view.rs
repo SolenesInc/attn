@@ -313,11 +313,12 @@ fn list(state: &State, rows: &[Row<'_>], selected: Option<&Row<'_>>, t: &Tokens)
             .scroll_bar_styled(attn_ui::scroll_bar(t));
     }
     let chosen = selected.map(|r| r.entry.id.as_str());
-    list.children(
-        rows.iter()
-            .map(|r| list_row(state, r, Some(r.entry.id.as_str()) == chosen, t)),
-    )
-    .scroll_bar_styled(attn_ui::scroll_bar(t))
+    parts::on_chosen_row(list, chosen)
+        .children(
+            rows.iter()
+                .map(|r| list_row(state, r, Some(r.entry.id.as_str()) == chosen, t)),
+        )
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {

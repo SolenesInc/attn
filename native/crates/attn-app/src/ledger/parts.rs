@@ -60,6 +60,14 @@ pub(crate) fn glyph(g: Glyph, t: &Tokens) -> El {
     }
 }
 
+/// `list`, telling a screen reader which row is chosen while the keyboard stays on the list.
+pub(crate) fn on_chosen_row(list: El, chosen: Option<&str>) -> El {
+    match chosen {
+        Some(key) => list.active_descendant(format!("ledger.row.{key}")),
+        None => list,
+    }
+}
+
 /// One list row, `.ledger-row`: the mark centered in its column, the body, then what trails it,
 /// over a hairline.
 pub(crate) fn list_row(

@@ -8,8 +8,8 @@ use rune::Key;
 
 use super::super::sidebar::state;
 use super::{
-    click, closed, come_back, entry, focused, hang_up, has, ledger_daemon, letter, name, open,
-    plain, rows, selected, text_in,
+    click, closed, come_back, entry, focused, hang_up, has, heard, ledger_daemon, letter, name,
+    open, plain, rows, selected, text_in,
 };
 
 const AT: &str = "2026-10-01T12:00:00Z";
@@ -327,6 +327,7 @@ fn the_keyboard_stays_on_a_surviving_row_after_a_forget() {
     assert_eq!(focused(&world).as_deref(), Some("ledger.list"));
     plain(&mut world, Key::Down);
     assert_eq!(selected(&world).as_deref(), Some("claude:release"));
+    assert_eq!(heard(&world).as_deref(), Some("claude:release"));
     assert_eq!(
         sent(&world, "kept_conversation_forget"),
         [

@@ -82,11 +82,12 @@ pub(crate) fn list(state: &State, rows: &[&KeptConversationRow], t: &Tokens) -> 
             .scroll_bar_styled(attn_ui::scroll_bar(t));
     }
     let chosen = super::selected(state, rows).map(key);
-    list.children(
-        rows.iter()
-            .map(|r| list_row(state, r, chosen.as_deref() == Some(key(r).as_str()), t)),
-    )
-    .scroll_bar_styled(attn_ui::scroll_bar(t))
+    parts::on_chosen_row(list, chosen.as_deref())
+        .children(
+            rows.iter()
+                .map(|r| list_row(state, r, chosen.as_deref() == Some(key(r).as_str()), t)),
+        )
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn list_row(state: &State, r: &KeptConversationRow, selected: bool, t: &Tokens) -> El {
