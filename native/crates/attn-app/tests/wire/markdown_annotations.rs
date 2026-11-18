@@ -1219,7 +1219,7 @@ fn an_empty_comment_box_closes_on_a_press_outside_it_and_one_with_words_stays() 
 }
 
 #[test]
-fn a_document_in_its_own_window_offers_no_annotations() {
+fn a_document_in_its_own_window_is_annotated_and_sent_as_in_the_main_window() {
     let (mut world, kept) = start_with(
         DOC,
         Kept {
@@ -1230,28 +1230,53 @@ fn a_document_in_its_own_window_offers_no_annotations() {
     let windows = world.tile_windows();
     assert_eq!(windows.len(), 1, "{windows:?}");
     let window = windows[0].key.clone();
-    world.tile_gesture(&window, |app| {
-        app.update(|_, tx| tx.select_text("tile.m.document/b1", 10..21))
-    });
-    let screen = world.tile_screen(&window);
-    assert!(
-        screen
-            .find(Target::role("label").name("Cache the tile layout before the first paint."))
-            .is_some(),
-        "{screen}"
+    let label = |world: &World, part: &str| {
+        world
+            .tile_screen(&window)
+            .find(Target::key(format!("tile.m.document.{part}")))
+            .and_then(|e| e.name.clone())
+    };
+    assert_eq!(
+        label(&world, "send").as_deref(),
+        Some("Send 1 to Agent a"),
+        "the draft is read in the tile window:\n{}",
+        world.tile_screen(&window)
     );
-    for part in ["toolbar", "send", "overall", "notes"] {
-        assert!(
-            screen
-                .find(Target::key(format!("tile.m.document.{part}")))
-                .is_none(),
-            "{part}: {screen}"
-        );
-    }
-    world.tile_gesture(&window, |app| app.type_text("N"));
+
+    world.tile_gesture(&window, |app| {
+        app.update(|_, tx| tx.select_text("tile.m.document.md/b1", 10..21))
+    });
+    assert!(
+        world
+            .tile_screen(&window)
+            .find(Target::key("tile.m.document.toolbar"))
+            .is_some(),
+        "{}",
+        world.tile_screen(&window)
+    );
+    world.tile_gesture(&window, |app| {
+        app.click(Target::key("tile.m.document.toolbar.delete"))
+    });
     pause(&mut world);
-    assert_eq!(marks(&kept).len(), 1);
-    assert!(world.daemon.sent_of("markdown_annotations_save").is_empty());
+    let kept_marks = marks(&kept);
+    assert_eq!(kept_marks.len(), 2, "{kept_marks:?}");
+    assert!(
+        kept_marks
+            .iter()
+            .any(|m| m["type"] == "deletion" && m["anchor"]["exact"] == "tile layout")
+    );
+    assert_eq!(label(&world, "send").as_deref(), Some("Send 2 to Agent a"));
+
+    world.tile_gesture(&window, |app| {
+        app.click(Target::key("tile.m.document.send"))
+    });
+    let submitted = world.daemon.sent_of("markdown_annotations_submit");
+    assert_eq!(submitted.len(), 1);
+    assert_eq!(submitted[0]["target_session_id"].as_str(), Some("s-a"));
+    assert_eq!(label(&world, "send").as_deref(), Some("Sent ✓"));
+    assert!(marks(&kept).is_empty());
+    world.advance(Duration::from_secs(5));
+    assert!(world.tile_windows_are_at_rest());
 }
 
 #[test]

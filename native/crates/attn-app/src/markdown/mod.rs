@@ -67,7 +67,7 @@ pub(crate) fn body(
     session: Option<&str>,
     content: Option<&attn_client::TileContent>,
     (outposts, servers): (&[attn_protocol::OutpostInfo], crate::review::setup::Servers),
-    (pictures, drafts, readings, annotates): (&Pictures, &Drafts, &Readings, bool),
+    (pictures, drafts, readings): (&Pictures, &Drafts, &Readings),
     t: &Tokens,
 ) -> El {
     let Some(attn_client::TileContent {
@@ -156,7 +156,7 @@ pub(crate) fn body(
         opens_seed: None,
         part: None,
     };
-    let read_source = |source: &str, part: Option<usize>, marking: Option<Marking>| {
+    let read_source = |source: &str, part: Option<usize>, marking: Marking| {
         let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
         reader(
             source,
@@ -166,7 +166,7 @@ pub(crate) fn body(
             },
             pictures,
             kept.clone(),
-            marking,
+            Some(marking),
             match text_width {
                 Some(width) => look(t).prose_measure(measure).text_width(width),
                 None => look(t).prose_measure(measure),
@@ -176,19 +176,15 @@ pub(crate) fn body(
     };
     if let Some(bundle) = content.review.as_ref() {
         let read_part = |part: std::ops::Range<usize>| {
-            let marking = annotates.then(|| Marking {
+            let marking = Marking {
                 tile: tile.to_owned(),
                 uri: uri.clone(),
                 highlights: within(&marks, &part),
-            });
+            };
             read_source(&content.content[part.clone()], Some(part.start), marking)
         };
         let card = crate::review::card_key(tile);
-        let marking = if annotates {
-            annotating::in_document(readings, tile, &card, 0.0, t)
-        } else {
-            Vec::new()
-        };
+        let marking = annotating::in_document(readings, tile, &card, 0.0, t);
         return crate::review::body(
             (tile, &view, title, padding),
             (&content.content, bundle, *revision),
@@ -200,10 +196,7 @@ pub(crate) fn body(
             ),
             (&read_part, {
                 let mut h = std::hash::DefaultHasher::new();
-                std::hash::Hash::hash(
-                    &(session, &version.3, version.4, &kept, &marks, annotates),
-                    &mut h,
-                );
+                std::hash::Hash::hash(&(session, &version.3, version.4, &kept, &marks), &mut h);
                 std::hash::Hasher::finish(&h)
             }),
             marking,
@@ -212,17 +205,17 @@ pub(crate) fn body(
             t,
         );
     }
-    let read = |marking: Option<Marking>| read_source(&content.content, None, marking);
-    if !annotates {
-        return memo(gutter.clone(), version, || scroll(card(read(None))));
-    }
     let root = annotating::root_key(tile);
     let reading = memo(root.clone(), version, || {
-        read(Some(Marking {
-            tile: tile.to_owned(),
-            uri,
-            highlights: marks,
-        }))
+        read_source(
+            &content.content,
+            None,
+            Marking {
+                tile: tile.to_owned(),
+                uri,
+                highlights: marks,
+            },
+        )
     });
     let marking = annotating::in_document(readings, tile, &root, padding, t);
     scroll(card(reading).children(marking))

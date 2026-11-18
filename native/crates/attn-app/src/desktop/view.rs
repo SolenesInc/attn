@@ -588,7 +588,6 @@ pub(super) fn lone(
         facts: &state.facts,
         marks: (&state.drafts, &state.readings),
         browsers: &state.browser,
-        annotates: false,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
         shared: &super::shared_conversation::notices(
             &state.facts.sessions,
@@ -677,7 +676,6 @@ fn screen(
                     facts,
                     marks,
                     browsers,
-                    annotates: true,
                     stale: &stale,
                     shared: &shared,
                     t,
@@ -759,8 +757,6 @@ struct TileCx<'a> {
     facts: &'a attn_client::Facts,
     marks: (&'a crate::markdown::Drafts, &'a crate::markdown::Readings),
     browsers: &'a crate::browser::Browsers,
-    /// Whether its document tiles take annotations, which a tile window's do not.
-    annotates: bool,
     /// Sessions whose terminal runs an older build, with the notice still up.
     stale: &'a [String],
     /// Sessions whose conversation another terminal also has open, with where it is.
@@ -1021,7 +1017,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                         now_ms: cx.now_ms,
                     },
                 ),
-                (cx.pictures, cx.marks.0, cx.marks.1, cx.annotates),
+                (cx.pictures, cx.marks.0, cx.marks.1),
                 t,
             )
         }
@@ -1030,7 +1026,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             &leaf.id,
             params.as_deref().unwrap_or(""),
             cx.seeds,
-            cx.annotates.then_some(cx.marks.0),
+            Some(cx.marks.0),
             t,
         ),
         (LeafKind::Tile { kind, .. }, _) if kind == "notebook" => {
@@ -1117,9 +1113,6 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
     else {
         return None;
     };
-    if !cx.annotates {
-        return None;
-    }
     let (uri, to) = match kind.as_str() {
         "markdown" => {
             let content = cx.contents.get(&attn_client::TileKey {
