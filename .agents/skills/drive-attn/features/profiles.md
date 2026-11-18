@@ -88,6 +88,7 @@ Steps:
 - **Keyboard and native input**: ⌘⇧U opens the switcher with focus on its list, and N, R, ⌫, arrows, Enter and Escape reach every action without the pointer. No macOS menu item claims ⌘⇧U.
 - **Compatibility across versions**: an install from before profiles migrates once, at its first daemon start, with no step for the user. `attn profile` and `attn profile-env` are not about profiles: they are the retired names of `attn instance` and `attn instance-env`, print the new command and exit 2.
 - **Flow**: flow is one daemon-wide setting for all profiles, so switching profiles keeps the flow.
+- **Accessibility**: in the native app the profile switcher's menu keeps focus while ↑ and ↓ move its highlight, and names the highlighted profile as its active descendant, so VoiceOver reads each profile as the arrows reach it.
 
 ## Tests
 

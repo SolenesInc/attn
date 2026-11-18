@@ -436,6 +436,9 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         .no_focus_ring()
         .on_key(key)
         .modal_tx(true, dismiss);
+    if let (Mode::List, Some(profile)) = (&switcher.mode, highlighted(state)) {
+        menu = menu.active_descendant(format!("{CHOOSE}{}", profile.id));
+    }
     menu = match &switcher.mode {
         Mode::List => menu.children(list(state, t, k)),
         Mode::Name { profile, draft } => {

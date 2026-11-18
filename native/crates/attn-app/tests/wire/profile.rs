@@ -303,6 +303,15 @@ fn the_highlighted_profile_switches_even_after_another_client_reorders_the_list(
     assert_eq!(focused(&world).as_deref(), Some("Switch profile"));
 
     press(&mut world, Key::Down);
+    assert_eq!(
+        world
+            .screen()
+            .active_option()
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("home"),
+        "the menu names its highlighted profile to a screen reader"
+    );
     world.daemon.emit(ProfilesChangedMessage {
         profiles: vec![work(), profile("home", "2026-09-23T09:00:00Z"), side()],
         ..ProfilesChangedMessage::new()
