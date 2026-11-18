@@ -394,7 +394,6 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         shown |= refresh(state, tx);
     }
     bus::poll(state, now, tx);
-    shown |= delegation::poll(state, tx);
     let plugin_marks_went = plugins::poll(state, now);
     state.window.settings.autosave.expire(now) | plugin_marks_went | shown
 }

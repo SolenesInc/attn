@@ -481,6 +481,22 @@ fn a_dragged_multi_line_field_keeps_its_height_through_typing_and_leaving_it() {
 }
 
 #[test]
+fn a_field_saves_when_the_window_loses_focus_and_keeps_taking_typing_when_it_comes_back() {
+    let (mut world, server) = open_fallback(Spec::default());
+    type_into(&mut world, FALLBACK_FIELD, "first");
+    world.gesture(|app| app.runtime.window_focus(false));
+    assert_eq!(server.preferences().fallback.instructions, "first");
+
+    world.gesture(|app| app.runtime.window_focus(true));
+    world.gesture(|app| app.type_text(" and more"));
+    assert_eq!(value(&world, FALLBACK_FIELD), "first and more");
+    leave_field(&mut world, FALLBACK_FIELD);
+    assert_eq!(server.preferences().fallback.instructions, "first and more");
+    assert_eq!(saves(&world).len(), 2);
+    rest(&mut world);
+}
+
+#[test]
 fn edits_made_during_a_save_collapse_into_one_follow_up_carrying_the_returned_revision() {
     let (mut world, server) = open_fallback(Spec::default());
     server.hold_saves();

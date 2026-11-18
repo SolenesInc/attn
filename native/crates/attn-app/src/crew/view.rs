@@ -1037,6 +1037,10 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
             let id = member.id.clone();
             move |state: &mut State, tx: &mut Tx| charter::edited(state, &id, tx)
         })
+        .on_blur({
+            let id = member.id.clone();
+            move |state: &mut State, tx: &mut Tx| charter::flush(state, &id, tx)
+        })
         .build(attn_ui::kit(t));
     let save_ink = match edit.phase {
         Phase::Saving | Phase::Dirty => t.brand,
@@ -1116,21 +1120,6 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         );
     }
     section
-}
-
-/// Saves the charter the focus just left; whether the focus moved.
-pub(crate) fn leave_charter(state: &mut State, tx: &mut Tx) -> bool {
-    let editing = (super::is_open(state) && tx.focused() == Some(CHARTER))
-        .then(|| super::selected(state).map(|m| m.id.clone()))
-        .flatten();
-    if state.window.crew.charter_focus == editing {
-        return false;
-    }
-    let left = std::mem::replace(&mut state.window.crew.charter_focus, editing);
-    if let Some(member) = left {
-        charter::flush(state, &member, tx);
-    }
-    true
 }
 
 /// A tab's document heading, as the Tauri app's `.crew-document-heading`: its title on the

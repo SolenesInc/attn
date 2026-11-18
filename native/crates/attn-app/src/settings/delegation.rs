@@ -40,10 +40,9 @@ pub(crate) struct Delegation {
     /// Where each maintained role goes, by its built-in kind: `NEW` or the role it replaces.
     adoption: Option<BTreeMap<String, String>>,
     adoption_open: Option<String>,
-    /// The text of each field while the focus is in it.
+    /// What each field the runtime reached holds: its text while the focus is in it, and the
+    /// height its grip dragged it to.
     drafts: BTreeMap<String, Draft>,
-    /// The height each text area's grip dragged it to, which outlives its drafts.
-    dragged_heights: BTreeMap<String, f32>,
 }
 
 struct Pending {
@@ -63,12 +62,11 @@ struct Undo {
     generation: u64,
 }
 
-/// A field's text from its first edit. The runtime also edits a field it moves the focus
-/// past, so only a draft whose field held the focus is kept when the focus leaves it.
+/// A field's text while the focus is in it. The runtime also edits each field it moves the
+/// focus past, so a draft whose field has not got the focus holds the table's text.
 struct Draft {
     edit: TextEdit,
     field: table::Field,
-    held_focus: bool,
 }
 
 fn page_state(state: &State) -> &Delegation {
@@ -97,7 +95,6 @@ pub(super) fn arrive(state: &mut State, tx: &mut Tx) {
     d.adoption = None;
     d.adoption_open = None;
     d.drafts.clear();
-    d.dragged_heights.clear();
     if d.preferences.is_some() {
         reload(state, tx);
     }
@@ -279,53 +276,18 @@ fn undo(state: &mut State, tx: &mut Tx) {
     commit(state, previous, tx);
 }
 
-/// Commits each field the focus left; whether one changed the table.
-pub(super) fn poll(state: &mut State, tx: &mut Tx) -> bool {
-    if page_state(state).drafts.is_empty() {
-        return false;
-    }
-    let focused = tx.focused().map(str::to_owned);
-    let d = page_state_mut(state);
-    if let Some(draft) = focused.as_ref().and_then(|key| d.drafts.get_mut(key)) {
-        draft.held_focus = true;
-    }
-    for (key, draft) in &d.drafts {
-        if let Some(h) = draft.edit.dragged_height() {
-            d.dragged_heights.insert(key.clone(), h);
-        }
-    }
-    d.drafts
-        .retain(|key, draft| draft.held_focus || Some(key) == focused.as_ref());
-    let left: Vec<String> = d
-        .drafts
-        .keys()
-        .filter(|key| Some(*key) != focused.as_ref())
-        .cloned()
-        .collect();
-    let mut changed = false;
-    for key in left {
-        changed |= commit_draft(state, &key, tx);
-    }
-    changed
-}
-
-fn commit_draft(state: &mut State, key: &str, tx: &mut Tx) -> bool {
-    let Some(draft) = page_state_mut(state).drafts.remove(key) else {
-        return false;
+fn commit_draft(state: &mut State, key: &str, tx: &mut Tx) {
+    let d = page_state(state);
+    let (Some(draft), Some(preferences)) = (d.drafts.get(key), &d.preferences) else {
+        return;
     };
-    let Some(preferences) = page_state(state).preferences.clone() else {
-        return false;
-    };
-    match draft.field.commit(&preferences, &draft.edit.text) {
-        Some(next) => {
-            commit(state, next, tx);
-            true
-        }
-        None => false,
+    if let Some(next) = draft.field.commit(preferences, &draft.edit.text) {
+        commit(state, next, tx);
     }
 }
 
-/// The text a field edits, a draft of it from the first edit until the focus leaves.
+/// The text a field edits: the table's until the field has the focus, then a draft of it
+/// until the focus leaves.
 fn draft_mut<'a>(state: &'a mut State, field: &table::Field) -> &'a mut TextEdit {
     let key = field.key();
     let value = page_state(state)
@@ -333,21 +295,19 @@ fn draft_mut<'a>(state: &'a mut State, field: &table::Field) -> &'a mut TextEdit
         .as_ref()
         .map(|p| field.value(p))
         .unwrap_or_default();
-    let d = page_state_mut(state);
-    let height = d.dragged_heights.get(&key).copied();
-    &mut d
+    let draft = page_state_mut(state)
         .drafts
         .entry(key)
-        .or_insert_with(|| {
-            let mut edit = TextEdit::new(value);
-            edit.set_dragged_height(height);
-            Draft {
-                edit,
-                field: field.clone(),
-                held_focus: false,
-            }
-        })
-        .edit
+        .or_insert_with(|| Draft {
+            edit: TextEdit::new(value.clone()),
+            field: field.clone(),
+        });
+    if !draft.edit.focused && draft.edit.text != value {
+        let height = draft.edit.dragged_height();
+        draft.edit = TextEdit::new(value);
+        draft.edit.set_dragged_height(height);
+    }
+    &mut draft.edit
 }
 
 /// The harnesses the page's routes run on whose models were discovered before: a new

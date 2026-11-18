@@ -432,11 +432,8 @@ impl Field {
         preferences: &DelegationPreferences,
         text: &str,
     ) -> Option<DelegationPreferences> {
-        if text == self.value(preferences) {
-            return None;
-        }
         let text = text.to_owned();
-        Some(match self {
+        let next = match self {
             Field::Name(id) => {
                 let name = text.trim().to_owned();
                 if name.is_empty() {
@@ -458,7 +455,8 @@ impl Field {
                 next.fallback.instructions = text;
                 next
             }
-        })
+        };
+        (self.value(&next) != self.value(preferences)).then_some(next)
     }
 
     pub(super) fn single_line(&self) -> bool {

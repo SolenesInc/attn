@@ -751,12 +751,16 @@ fn text_field(
             .map(|p| field.value(p))
             .unwrap_or_default(),
     );
-    shown.set_dragged_height(d.dragged_heights.get(&key).copied());
-    let edit = d.drafts.get(&key).map_or(&shown, |draft| &draft.edit);
+    let draft = d.drafts.get(&key);
+    shown.set_dragged_height(draft.and_then(|draft| draft.edit.dragged_height()));
+    let edit = draft
+        .filter(|draft| draft.edit.focused)
+        .map_or(&shown, |draft| &draft.edit);
     let k = crate::settings::pages::kit(t);
     let control = if field.single_line() {
         let editing = field.clone();
         let submitted = key.clone();
+        let left = key.clone();
         TextInput::new(edit)
             .key(key)
             .label(label.to_owned())
@@ -766,15 +770,18 @@ fn text_field(
                 super::commit_draft(state, &submitted, tx);
                 tx.blur();
             })
+            .on_blur(move |state: &mut State, tx: &mut Tx| super::commit_draft(state, &left, tx))
             .width(None)
             .build(k)
     } else {
         let editing = field.clone();
+        let left = key.clone();
         TextArea::new(edit)
             .key(key)
             .label(label.to_owned())
             .placeholder(placeholder.to_owned())
             .on_edit(move |state: &mut State| super::draft_mut(state, &editing))
+            .on_blur(move |state: &mut State, tx: &mut Tx| super::commit_draft(state, &left, tx))
             .auto_grow(3, 12)
             .resizable()
             .width(None)

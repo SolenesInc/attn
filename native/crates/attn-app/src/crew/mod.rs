@@ -104,8 +104,6 @@ pub(crate) struct Panel {
     pub(crate) charters: charter::Charters,
     pub(crate) handoffs: handoffs::Histories,
     pub(crate) back: Option<Back>,
-    /// The member whose charter the focus was in at the last frame.
-    pub(crate) charter_focus: Option<String>,
     /// The control that opened the panel from a menu, which takes the focus back on close.
     pub(crate) opener: Option<String>,
 }
@@ -517,8 +515,7 @@ pub(crate) fn reconnected(state: &mut State, tx: &mut Tx) {
 }
 
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
-    let left = view::leave_charter(state, tx);
     let listed = is_open(state) && crate::settings::crew_poll(state, tx);
     let rows = crate::sidebar::crew::poll(state, now, &crate::sidebar::crew::row_prefixes(), tx);
-    charter::poll(state, now, tx) | left | listed | rows
+    charter::poll(state, now, tx) | listed | rows
 }
