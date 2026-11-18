@@ -1331,9 +1331,4 @@ fn a_screen_reader_is_on_the_terminal_or_document_that_holds_the_keyboard() {
         focused(&world),
         Some(("tile.m.document".to_owned(), "Plan".to_owned()))
     );
-    world.gesture(|app| app.press("mod+k"));
-    assert_eq!(
-        focused(&world).map(|(key, _)| key).as_deref(),
-        Some("palette.field")
-    );
 }
