@@ -22,16 +22,20 @@ thread_local! {
 /// (`bundle_id` names them). [`save`] keeps where it is.
 pub(crate) fn restored(app: App<State>, bundle_id: &str) -> App<State> {
     let prefs = Prefs::open(bundle_id);
+    let options = WindowOptions {
+        always_on_top: harness_keeps_on_top(),
+        ..WindowOptions::default()
+    };
     let app = match prefs.get::<Saved>(KEY) {
         Some((position, size, maximized, full_screen)) => app
             .window_options(WindowOptions {
                 position: Some(position),
                 physical_size: Some(size),
-                ..WindowOptions::default()
+                ..options
             })
             .maximized(maximized)
             .full_screen(full_screen),
-        None => app,
+        None => app.window_options(options),
     };
     let mut prefs = Some(prefs);
     let folders = Folders::of_this_machine(bundle_id);
@@ -42,6 +46,13 @@ pub(crate) fn restored(app: App<State>, bundle_id: &str) -> App<State> {
         use_folders(folders.clone());
         MAIN.set(Some(window.clone()));
     })
+}
+
+/// Whether the packaged-app harness parks this app's windows at the screen's edge, where
+/// they float above other apps' windows so the system never counts them covered and their
+/// motion keeps running, as the Tauri app's harness windows do.
+pub(crate) fn harness_keeps_on_top() -> bool {
+    std::env::var("ATTN_HARNESS_ALWAYS_ON_TOP").is_ok_and(|value| value == "1")
 }
 
 pub(crate) fn save(_: &mut State, _: &mut Tx) {

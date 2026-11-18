@@ -181,6 +181,7 @@ impl crate::desktop::Opener for NativeOpener {
         let spec = rune::WindowSpec::from_app(key, app)
             .options(rune::WindowOptions {
                 visible: false,
+                always_on_top: crate::frame::harness_keeps_on_top(),
                 min_size: Some((320.0, 200.0)),
                 ..rune::WindowOptions::default()
             })
