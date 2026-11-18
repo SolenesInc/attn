@@ -78,8 +78,9 @@ owner_link="vm-instance-owners/$instance"
 export MACVM_LABEL="scripts/vm $instance"
 
 bundle_fingerprint() { jq -r .sourceFingerprint "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
-guest_fingerprint() {
-    macvm exec cat "$guest_app/Contents/Resources/build-identity.json" 2>/dev/null | jq -r .sourceFingerprint 2>/dev/null || true
+bundle_build() { jq -r '"\(.app) \(.sourceFingerprint)"' "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
+guest_build() {
+    macvm exec cat "$guest_app/Contents/Resources/build-identity.json" 2>/dev/null | jq -r '"\(.app) \(.sourceFingerprint)"' 2>/dev/null || true
 }
 
 bridge() {
@@ -147,7 +148,7 @@ cmd_up() {
     local vm
     vm="$(macvm up)"
     claim_instance
-    if [ "$(guest_fingerprint)" != "$(bundle_fingerprint)" ]; then
+    if [ "$(guest_build)" != "$(bundle_build)" ]; then
         macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
         macvm install-app "$bundle"
     fi

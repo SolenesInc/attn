@@ -58,7 +58,7 @@ native) resources="native/target/staged/attn-$instance.app/Contents/Resources" ;
 *) resources="app/src-tauri/target/staged/attn-$instance.app/Contents/Resources" ;;
 esac
 mkdir -p "$resources"
-printf '{"sourceFingerprint":"%s"}\n' "$(bash scripts/source-fingerprint.sh --app "$app")" >"$resources/build-identity.json"
+printf '{"app":"%s","sourceFingerprint":"%s"}\n' "$app" "$(bash scripts/source-fingerprint.sh --app "$app")" >"$resources/build-identity.json"
 echo "$app $instance" >>"$FAKE_BUILDS"
 FAKE
 
@@ -202,6 +202,13 @@ out="$(as attn-b adopt --instance nothing)"
 expect "adopt names a missing instance" says "$out" "no instance 'nothing'"
 expect "adopt on a missing instance takes nothing" absent "$guest/vm-instance-owners/nothing"
 as attn-b down --instance nothing >/dev/null
+
+# Moving an instance from the Tauri app to the native app at one commit installs the native app.
+as attn-a up --instance switch >/dev/null
+APP=native as attn-a up --instance switch >/dev/null
+expect "APP=native up on an instance running the Tauri app installs the native app" \
+  same "$(jq -r .app "$guest/Applications/attn-switch.app/Contents/Resources/build-identity.json")" native
+APP=native as attn-a down --instance switch >/dev/null
 
 # A change under native/ alone rebuilds the native app, and only the native app.
 builds_of() { grep -c "^$1$" "$FAKE_BUILDS"; }
