@@ -487,4 +487,49 @@ bump --branch left || fail "--branch failed for the first of two branches that d
 git -C "$work/attn" checkout -q -- native
 bump --branch right || fail "refused a second branch that drops the same FORK.md row"
 
+setup adjacent-rows
+git clone -q -b main "$work/fork.git" "$work/branch-src"
+git -C "$work/branch-src" checkout -q -b topic
+echo "// topic" >>"$work/branch-src/crates/rune-mermaid/src/topic.rs"
+sed -i.bak "s/^| The answer stays 42/| The answer stays 42, and topic/" "$work/branch-src/FORK.md" && rm "$work/branch-src/FORK.md.bak"
+commit "$work/branch-src" "Topic fix"
+git clone -q -b main "$work/fork.git" "$work/main-src"
+echo "// beside" >>"$work/main-src/crates/rune-mermaid/src/beside.rs"
+printf '| The beside change | Inside Rune | `tests::the_shapes_hold` | |\n' >"$work/main-src/row"
+sed -i.bak '/^| The answer stays 42/r '"$work/main-src/row" "$work/main-src/FORK.md" && rm "$work/main-src/FORK.md.bak" "$work/main-src/row"
+commit "$work/main-src" "Another Builder adds the row beside it"
+git -C "$work/main-src" push -q origin main
+git -C "$work/branch-src" pull -q --no-rebase --no-edit origin main 2>/dev/null
+git -C "$work/branch-src" push -q origin topic
+old_main="$(fork_rev main)"
+bump --branch topic && fail "merged a branch whose FORK.md keeps the row it extended and the old row"
+grep -qF "| The answer stays 42, and topic (" "$work/out" || fail "did not name the branch's version of the row it extended"
+grep -qF "| The answer stays 42 (" "$work/out" || fail "did not name the old version of the row the union merge kept"
+grep -qF "| The beside change |" "$work/out" && fail "named the row main added beside the extended one"
+[ "$(fork_rev main)" = "$old_main" ] || fail "pushed main with a FORK.md row twice"
+sed -i.bak '/^| The answer stays 42 (/d' "$work/branch-src/FORK.md" && rm "$work/branch-src/FORK.md.bak"
+commit "$work/branch-src" "Drop the old version of the row"
+git -C "$work/branch-src" push -q origin topic
+git -C "$work/attn" checkout -q -- native
+bump --branch topic || fail "refused a branch that extends a FORK.md row beside one main added"
+fork_md | grep -qF "| The beside change |" || fail "lost the row main added"
+
+setup same-extension
+for branch in left right; do
+  src="$work/$branch-src"
+  git clone -q -b main "$work/fork.git" "$src"
+  git -C "$src" checkout -q -b "$branch"
+  echo "// $branch" >>"$src/crates/rune-mermaid/src/$branch.rs"
+  sed -i.bak "s/^| The answer stays 42/| The answer stays 42, and shared/" "$src/FORK.md" && rm "$src/FORK.md.bak"
+done
+printf '| The right change | Inside Rune | `tests::the_shapes_hold` | |\n' >"$work/right-src/row"
+sed -i.bak '/^| The answer stays 42/r '"$work/right-src/row" "$work/right-src/FORK.md" && rm "$work/right-src/FORK.md.bak" "$work/right-src/row"
+for branch in left right; do
+  commit "$work/$branch-src" "The $branch change"
+  git -C "$work/$branch-src" push -q origin "$branch"
+done
+bump --branch left || fail "--branch failed for the first of two branches that extend one FORK.md row alike"
+git -C "$work/attn" checkout -q -- native
+bump --branch right || fail "refused a branch that extends a FORK.md row as main did and adds a row beside it"
+
 echo "rune-bump tests passed"

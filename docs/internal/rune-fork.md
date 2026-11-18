@@ -27,10 +27,12 @@ upstream's `dev` lacks. A commit records itself by changing `FORK.md`. Changes
 made before that rule list their commits by hash.
 
 The fork's `.gitattributes` merges `FORK.md` by union, so branches that each
-append a row merge without a conflict. Union also keeps both versions of a line
-that both sides changed, such as a row two branches extend, so
-`scripts/rune-bump` refuses a `main` whose `FORK.md` still holds both versions,
-and names them. Make each pair into one line on the branch, in any later commit.
+append a row merge without a conflict. Union also keeps two versions of a line
+when a merge's sides disagree on it: a row two branches extend, or a row one
+side extends while the other adds a row beside it, which keeps the old version
+too. `scripts/rune-bump` refuses a `main` whose `FORK.md` still holds two
+versions of one line, and names them; rows that differ, kept once each, pass.
+Make each pair into one line on the branch, in any later commit.
 
 ## Change the library
 

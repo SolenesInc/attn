@@ -98,33 +98,73 @@ a commit records itself by changing FORK.md: add or extend its row under \"Our c
 }
 
 fork_md_at() { git -C "$clone" show "$1:FORK.md" 2>/dev/null || true; }
-doubled_lines() {
-  git merge-file -p --diff3 "$2" "$1" "$3" 2>/dev/null | awk '
-    /^<<<<<<< / { part = "ours"; n = 0; next }
-    /^\|\|\|\|\|\|\| / { part = "base"; changed = 0; next }
-    /^=======$/ && part == "base" { part = "theirs"; next }
-    /^>>>>>>> / { if (changed) for (i = 1; i <= n; i++) print hunk[i]; part = ""; next }
-    part == "ours" || part == "theirs" { hunk[++n] = part "\t" $0; next }
-    part == "base" { changed = 1 }
+side_versions() {
+  { diff "$1" "$2" || true; } | awk -v lines="$(wc -l <"$1")" '
+    /^[0-9]/ {
+      kind = $0; sub(/^[0-9,]+/, "", kind); kind = substr(kind, 1, 1)
+      split(substr($0, 1, index($0, kind) - 1), range, ",")
+      first = range[1]; last = range[2] == "" ? first : range[2]
+      if (kind != "a") for (i = first; i <= last; i++) touched[i] = 1
+      next
+    }
+    kind == "c" && /^> / { for (i = first; i <= last; i++) print i "\t+" substr($0, 3) }
+    END { for (i = 1; i <= lines; i++) if (!(i in touched)) print i "\t=" }
   '
 }
+doubled_lines() {
+  local base="$1" ours="$2" theirs="$3" final="$4" dir hunk
+  dir="$(mktemp -d "$logs/hunks.XXXXXX")"
+  git merge-file -p --diff3 "$ours" "$base" "$theirs" 2>/dev/null | awk -v dir="$dir" '
+    /^<<<<<<< / { n++; part = "ours"; printf "" >(dir "/" n ".base"); printf "" >(dir "/" n ".ours"); printf "" >(dir "/" n ".theirs"); next }
+    /^\|\|\|\|\|\|\| / { part = "base"; next }
+    /^=======$/ && part == "base" { part = "theirs"; next }
+    /^>>>>>>> / { part = ""; next }
+    part != "" { print >(dir "/" n "." part) }
+  '
+  for hunk in "$dir"/*.base; do
+    [ -e "$hunk" ] || continue
+    hunk="${hunk%.base}"
+    awk -F'\t' '
+      FILENAME == ARGV[1] { kept[$0] = 1; next }
+      FILENAME == ARGV[2] { base[FNR] = $0; next }
+      {
+        line = substr($0, index($0, "\t") + 2)
+        if (substr($0, index($0, "\t") + 1, 1) == "=") line = base[$1]
+        side = FILENAME == ARGV[3] ? "ours" : "theirs"
+        holds[side, $1, line] = 1
+        count[side, $1]++
+        written[side, $1, count[side, $1]] = line
+      }
+      function own_kept(side, other, i,   n, line, out) {
+        for (n = 1; n <= count[side, i]; n++) {
+          line = written[side, i, n]
+          if (line != "" && (line in kept) && !((other, i, line) in holds)) out = out "  " line "\n"
+        }
+        return out
+      }
+      END {
+        for (i = 1; i in base; i++) {
+          ours = own_kept("ours", "theirs", i)
+          theirs = own_kept("theirs", "ours", i)
+          if (ours != "" && theirs != "") printf "%s%s", ours, theirs
+        }
+      }
+    ' "$final" "$hunk.base" <(side_versions "$hunk.base" "$hunk.ours") <(side_versions "$hunk.base" "$hunk.theirs")
+  done | awk '!seen[$0]++'
+}
 check_union_merges() {
-  local merge dir final side line kept_ours kept_theirs doubled
-  final="$(fork_md_at "$1")" dir="$logs/union"
+  local merge dir doubled
+  dir="$logs/union"
   mkdir -p "$dir"
+  fork_md_at "$1" >"$dir/final"
   for merge in $(git -C "$clone" rev-list --merges "$1" "^$trunk"); do
     fork_md_at "$(git -C "$clone" merge-base "$merge^1" "$merge^2")" >"$dir/base"
     fork_md_at "$merge^1" >"$dir/ours"
     fork_md_at "$merge^2" >"$dir/theirs"
-    kept_ours="" kept_theirs="" doubled=""
-    while IFS=$'\t' read -r side line; do
-      grep -qxF -- "$line" <<<"$final" || continue
-      doubled+="
-  $line"
-      if [ "$side" = ours ]; then kept_ours=1; else kept_theirs=1; fi
-    done < <(doubled_lines "$dir/base" "$dir/ours" "$dir/theirs")
-    [ -z "$kept_ours" ] || [ -z "$kept_theirs" ] ||
-      die "FORK.md keeps both sides' versions of lines that both sides of $(git -C "$clone" log -1 --format='%h %s' "$merge") changed:$doubled
+    doubled="$(doubled_lines "$dir/base" "$dir/ours" "$dir/theirs" "$dir/final")"
+    [ -z "$doubled" ] ||
+      die "FORK.md keeps two versions of lines that $(git -C "$clone" log -1 --format='%h %s' "$merge") merged:
+$doubled
 FORK.md merges by union, so a row two branches extend, or two moves of the last reviewed upstream commit, come out twice. On the branch, make each pair into one line, commit, push it and run scripts/rune-bump --branch again"
   done
 }
