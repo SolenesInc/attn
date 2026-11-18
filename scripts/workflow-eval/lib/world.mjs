@@ -49,6 +49,7 @@ export function createWorld({ root, arm, accessToken }) {
     CLAUDE_CONFIG_DIR: path.join(toolHome, '.claude'),
     ATTN_CODEX_EXECUTABLE: mockAgent,
     GIT_CONFIG_GLOBAL: path.join(dir, 'gitconfig'),
+    ATTN_TEST_HISTORY_URL: 'http://127.0.0.1:9',
   };
   const world = {
     instance, dir, toolHome, repo, env, arm, seeds: {}, answered: [],
