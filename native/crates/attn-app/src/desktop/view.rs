@@ -1913,18 +1913,18 @@ fn settling_track(
 
 /// The input method's caret in the terminal holding the keyboard: the cell text goes to
 /// next, where the candidate window opens, showing what the input method composes so far.
+/// The caret moves with the terminal's cursor without painting the window again, until the
+/// input method composes: then the caret is an element at the cursor holding what it composes.
 fn ime_caret(terminals: &Terminals, runtime_id: &str, theme: &TerminalColors) -> Option<El> {
-    let caret = el()
-        .key(format!("terminal.{runtime_id}.caret"))
-        .absolute(0.0, 0.0)
-        .live_rect(terminals.caret(runtime_id)?)
-        .ime_cursor();
+    let at = terminals.caret(runtime_id)?;
+    let key = format!("terminal.{runtime_id}.caret");
     let (Some(preedit), Some((size, h))) = (
         terminals.preedit(runtime_id),
         terminals.cell_font(runtime_id),
     ) else {
-        return Some(caret);
+        return Some(el().key(key).absolute(0.0, 0.0).ime_cursor_at(at));
     };
+    let caret = el().key(key).absolute(0.0, 0.0).live_rect(at).ime_cursor();
     let color = attn_ui::colors::rgb;
     let font = rune::TextStyle {
         size,

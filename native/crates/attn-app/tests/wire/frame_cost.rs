@@ -10,8 +10,7 @@ const OTHER_DESKTOPS: usize = 20;
 /// the desktops' layouts on every frame cost about 180 each, and reading each desktop's seed
 /// tiles about 4; with the seeds the desktops show read once per layout, it adds less than 1.
 const PER_OTHER_DESKTOP: u64 = 2;
-/// Lines that fill the terminal, so its cursor, which the input method's caret follows, stays
-/// on the last row while the agent streams.
+/// Lines that fill the terminal before the agent starts redrawing its rows.
 const FILLING_LINES: u32 = 60;
 
 fn other_desktop(n: usize) -> Desktop {
@@ -32,8 +31,9 @@ fn other_desktop(n: usize) -> Desktop {
     }
 }
 
-/// What each frame costs while an agent streams into the one terminal on screen: the allocations
-/// it makes, and the frames that painted the window anew.
+/// What each frame costs while an agent redraws rows of the one terminal on screen, as a
+/// terminal UI does, so the cursor the input method's caret follows lands somewhere new each
+/// frame: the allocations it makes, and the frames that painted the window anew.
 struct Streamed {
     allocations: u64,
     paints: u64,
@@ -68,7 +68,8 @@ fn per_streamed_frame(others: usize) -> Streamed {
         world.runtime().stats.paints,
     );
     for seq in FILLING_LINES + 1..=FILLING_LINES + 100 {
-        output(&world, seq, b"a line the agent wrote\r\n");
+        let redrawn = format!("\x1b[{};1Hthe agent redraws this row\x1b[K", 1 + seq % 20);
+        output(&world, seq, redrawn.as_bytes());
         world.settle();
     }
     let frames = (world.terminal_frames() - frames) as u64;
@@ -93,8 +94,8 @@ fn a_streaming_terminal_frame_does_no_work_for_the_desktops_off_screen() {
     );
     assert_eq!(
         beside_others.paints, 0,
-        "the terminal's cells are all a streamed frame changes, yet {} of 100 frames painted \
-         the window again, the sidebar's row for each desktop among it",
+        "the terminal's cells are all a streamed frame changes, yet the window painted {} \
+         frames again while 100 frames streamed, the sidebar's row for each desktop among them",
         beside_others.paints,
     );
 }
