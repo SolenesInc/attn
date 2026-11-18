@@ -128,6 +128,12 @@ pub(crate) fn answer<S: 'static>(
             host.shot(path, patience(request))?;
             return Ok(json!({"path": path}));
         }
+        "get_window_bounds" => {
+            let bounds = host
+                .window_bounds()
+                .ok_or("get_window_bounds: the app has no window open")?;
+            return Ok(serde_json::to_value(bounds).expect("window bounds serialize"));
+        }
         "set_window_bounds" => {
             let asked = request
                 .payload

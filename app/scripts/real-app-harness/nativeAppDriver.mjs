@@ -96,6 +96,11 @@ export class NativeAppDriver {
     return logicalBounds;
   }
 
+  async widenWindow(width) {
+    const { logicalBounds } = await this.client.request('get_window_bounds', {});
+    return this.setWindowBounds({ ...logicalBounds, width });
+  }
+
   parkPointerBeside(...args) {
     return this.window.parkPointerBeside(...args);
   }

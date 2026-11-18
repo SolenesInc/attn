@@ -94,6 +94,10 @@ impl Host<State> for WindowHost {
         Ok(())
     }
 
+    fn window_bounds(&self) -> Option<WindowBounds> {
+        self.read(|_| crate::frame::main_bounds()).flatten()
+    }
+
     fn set_window_bounds(&self, asked: Bounds, wait: Duration) -> Result<WindowBounds, String> {
         const CLOSED: &str = "set_window_bounds: the app closed before it answered";
         self.read(move |_| crate::frame::move_main(asked))

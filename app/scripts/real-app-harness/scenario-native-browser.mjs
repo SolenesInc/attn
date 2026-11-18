@@ -69,7 +69,7 @@ try {
   const at = (page) => `http://127.0.0.1:${server.address().port}/${page}`;
   const frontmostBefore = await driver.frontmostBundleId();
   await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
-  await runner.step('widen_the_window_for_two_tiles', () => driver.setWindowBounds({ x: 0, y: 0, width: 1600, height: 1000 }));
+  await runner.step('widen_the_window_for_two_tiles', () => driver.widenWindow(1600));
 
   let desktop;
   await runner.step('make_a_desktop', async () => {

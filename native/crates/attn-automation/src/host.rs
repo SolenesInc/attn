@@ -36,6 +36,11 @@ pub trait Host<S: 'static>: Send + Sync + 'static {
         Err("this host draws no window to capture".into())
     }
 
+    /// Where the main window is and how big its content is, in points, while it is open.
+    fn window_bounds(&self) -> Option<WindowBounds> {
+        None
+    }
+
     /// Moves the main window's top-left corner to `asked`'s and sizes its content to
     /// `asked`'s, in points, then waits up to `wait` for the view to lay out at that size.
     /// Replies with [`WindowBounds`] once it has, and fails naming the size the window got
