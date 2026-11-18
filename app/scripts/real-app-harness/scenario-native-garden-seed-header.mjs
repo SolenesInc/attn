@@ -51,7 +51,7 @@ function seedTiles(desktop) {
 }
 
 async function cardSays(card, words) {
-  await driver.waitFor({ role: 'text', name: words });
+  await driver.waitFor({ role: 'label', name: words });
   const texts = textsUnder(await driver.tree(), card);
   runner.assert(texts.includes(words), `the card shows ${words}`, texts);
   return texts;

@@ -141,7 +141,7 @@ fn editor_root_offers(world: &mut World, option: &str) -> bool {
     world
         .automate(
             "find",
-            json!({ "target": { "role": "option", "name": option } }),
+            json!({ "target": { "role": "list-box-option", "name": option } }),
         )
         .is_ok_and(|found| !found.is_null())
 }

@@ -117,7 +117,7 @@ Preconditions:
 Steps:
 
 - **An agent shows a file.** Run `wsctl input --id <agent> --text "show-notes" --enter`. `tree_json` holds the tile as above, and `bridge wait '{"target":{"key":"drive-notes"}}'` matches: each heading's key is its slug.
-- **The tile follows the file.** Append a line to `$A/notes.md`: `bridge wait '{"target":{"role":"text","name":"A new line."}}'` matches.
+- **The tile follows the file.** Append a line to `$A/notes.md`: `bridge wait '{"target":{"role":"label","name":"A new line."}}'` matches.
 - **From the person's shell.** Run `./attn open $A/rich.md`: `bridge wait '{"target":{"key":"rich-drive"}}'` matches, and `bridge shot '{"path":"<P>/markdown-native-rich.png"}'` shows the frontmatter, the alert and the diagram.
 - **The opener.** With the agent's terminal pressed, run `bridge run '{"name":"file.open"}'` and wait for `opener.field`. Rows are keyed `opener.row.<absolute path>`. On the empty query the files opened above are listed, the later first. `bridge type '{"text":"secnd"}'` lists `second.md`; press its row: the opener closes and `tree_json` gains a tile for it, bound to the agent. Picking a file that is open makes its tile active instead.
 - **⌘-click in a terminal.** Start a shell in `$A` with `wsctl add-session --cwd $A --agent shell --label md-shell --id md-shell --place` and run `echo ./third.md` in it. Find the cell as [annotations.md](annotations.md) does for a mark, then `bridge hold '{"mods":"mod"}'`, `bridge press` on that point of `terminal.<shell>`, and `bridge hold '{"mods":""}'`. A tile for `third.md` docks, bound to `md-shell`. A press without the modifier opens nothing, and the same path again makes its tile active.

@@ -125,7 +125,7 @@ try {
 
   await runner.step('a_link_to_a_heading_puts_the_caret_on_it', async () => {
     await follow(2);
-    await driver.waitFor({ role: 'text', name: '## Down below' });
+    await driver.waitFor({ role: 'label', name: '## Down below' });
   });
 
   await runner.step('a_link_below_the_heading_it_scrolled_to_opens_a_note_whose_image_draws', async () => {

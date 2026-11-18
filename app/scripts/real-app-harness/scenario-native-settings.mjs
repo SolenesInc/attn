@@ -97,7 +97,7 @@ try {
     await section('general');
     const next = observer.getSetting('theme') === 'light' ? ['Dark', 'dark'] : ['Light', 'light'];
     const saved = savedAs('theme', next[1]);
-    await driver.click({ role: 'radio', name: next[0] });
+    await driver.click({ role: 'radio-button', name: next[0] });
     await saved;
     runner.assert(attn('settings', 'get', 'theme').trim() === next[1], 'the shell reads the theme the dialog saved');
   });

@@ -1553,7 +1553,10 @@ fn slot_keys(slot: i64) -> String {
 
 fn choose_option(world: &mut World, name: &str) {
     world
-        .automate("press", json!({"target": {"role": "option", "name": name}}))
+        .automate(
+            "press",
+            json!({"target": {"role": "list-box-option", "name": name}}),
+        )
         .unwrap_or_else(|why| panic!("choose {name}: {why}"));
 }
 
@@ -1561,7 +1564,7 @@ fn desktop_options(world: &mut World) -> Vec<String> {
     world
         .automate(
             "wait",
-            json!({"target": {"role": "option", "name": "A new desktop…"}}),
+            json!({"target": {"role": "list-box-option", "name": "A new desktop…"}}),
         )
         .expect("the Desktop list opened");
     world

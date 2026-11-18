@@ -140,10 +140,10 @@ newline-delimited JSON over loopback TCP, `{id, token, action, payload}` in and
 actions are the native app's own.
 
 A target names an element by its key, `{"key": "sidebar"}`, or by its role and
-accessible name, `{"role": "group", "name": "Agent t2"}`. The role is either the
-one the view gives the element, such as `option`, or the one `tree` prints for
-it, such as `list-box-option`, and the name is its label, its text or the name
-`tree` prints. When several elements match, the first one that shows wins. A key
+accessible name, `{"role": "group", "name": "Agent t2"}`. The role is the one
+`tree` prints, such as `list-box-option` for an element the view calls
+`option`, and the name is its label, its text or the name `tree` prints. When
+several elements match, the first one that shows wins. A key
 with a name, `{"key": "ledger.row.a.verb", "name": "Unkeep"}`, matches only
 while that element carries the name, so `wait` on it waits for the name to
 change. Pointer actions wait for the element to appear and stop moving, scroll

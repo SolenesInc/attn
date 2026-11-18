@@ -183,7 +183,7 @@ fn the_resume_choice_saves_and_says_which_mail_resumes_a_standby_agent() {
         ]
     );
 
-    press_named(&mut world, "radio", "PRs and reminders");
+    press_named(&mut world, "radio-button", "PRs and reminders");
     assert!(resume_choice(&world, "PRs and reminders").is("checked"));
     assert_eq!(
         verdicts(&world),
@@ -195,7 +195,7 @@ fn the_resume_choice_saves_and_says_which_mail_resumes_a_standby_agent() {
         ]
     );
 
-    press_named(&mut world, "radio", "Never");
+    press_named(&mut world, "radio-button", "Never");
     assert_eq!(
         verdicts(&world),
         [
@@ -746,7 +746,7 @@ fn codex_auto_review_bills_as_gpt_6_luna_until_another_model_is_picked() {
     let trigger = "settings.price.billed-as-trigger";
     assert_eq!(value(&world, trigger), "gpt-6-luna (default)");
     click(&mut world, trigger);
-    press_named(&mut world, "option", "gpt-6-sol");
+    press_named(&mut world, "list-box-option", "gpt-6-sol");
     assert_eq!(
         writes(&world),
         saved(&[("session_cost.billed_as.codex-auto-review", "gpt-6-sol")])

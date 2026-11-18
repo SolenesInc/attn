@@ -675,7 +675,7 @@ fn root_options(world: &mut World, tile: &str) -> Vec<String> {
     world
         .automate(
             "wait",
-            json!({ "target": { "role": "option", "name": "Notebook" } }),
+            json!({ "target": { "role": "list-box-option", "name": "Notebook" } }),
         )
         .unwrap();
     ["Notebook", "Desktop — a", "Desktop — b", "x", "Browse…"]
@@ -689,7 +689,7 @@ fn shows_option(world: &mut World, name: &str) -> bool {
     world
         .automate(
             "find",
-            json!({ "target": { "role": "option", "name": name } }),
+            json!({ "target": { "role": "list-box-option", "name": name } }),
         )
         .is_ok_and(|found| !found.is_null())
 }
@@ -703,7 +703,7 @@ fn choose_root(world: &mut World, tile: &str, option: &str) {
     world
         .automate(
             "press",
-            json!({ "target": { "role": "option", "name": option } }),
+            json!({ "target": { "role": "list-box-option", "name": option } }),
         )
         .unwrap();
     world.settle();

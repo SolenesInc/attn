@@ -443,7 +443,7 @@ fn a_theme_click_saves_the_theme_and_the_window_follows_it() {
     world
         .automate(
             "press",
-            json!({"target": {"role": "radio", "name": "Light"}}),
+            json!({"target": {"role": "radio-button", "name": "Light"}}),
         )
         .unwrap();
 
@@ -473,7 +473,7 @@ fn a_color_scheme_click_saves_it_and_the_list_marks_it_chosen() {
     world
         .automate(
             "press",
-            json!({"target": {"role": "radio", "name": "Catppuccin Frappé"}}),
+            json!({"target": {"role": "radio-button", "name": "Catppuccin Frappé"}}),
         )
         .unwrap();
 

@@ -116,7 +116,7 @@ try {
   const peekScreen = async () => nodeIn(await driver.tree(), 'shelf.peek.screen')?.children?.[0]?.name ?? null;
   const waitScreen = async (expected) => {
     await driver.waitFor({ key: 'shelf.peek.screen' });
-    await driver.waitFor({ role: 'text', name: expected }).catch(async (error) => {
+    await driver.waitFor({ role: 'label', name: expected }).catch(async (error) => {
       throw new Error(`the peek screen never read ${JSON.stringify(expected)}; it reads ${JSON.stringify(await peekScreen())}: ${error.message}`);
     });
     runner.assert(await peekScreen() === expected, 'the panel shows the terminal\'s screen', { expected });

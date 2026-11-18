@@ -1175,7 +1175,7 @@ fn choose_desktop(world: &mut World, select: &str, option: &str) {
     world
         .automate(
             "press",
-            json!({"target": {"role": "option", "name": option}}),
+            json!({"target": {"role": "list-box-option", "name": option}}),
         )
         .unwrap_or_else(|why| panic!("choose {option}: {why}"));
 }

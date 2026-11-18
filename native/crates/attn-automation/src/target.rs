@@ -4,10 +4,10 @@ use rune::{AccessibleElement, ElementInfo, Runtime};
 use serde::{Deserialize, Serialize};
 
 /// An element named the way a person or an assistive tool would: by its key, or by its role
-/// and accessible name. A role is the one the view gives the element, as `"option"`, or the
-/// one the accessibility tree prints for it, as `"list-box-option"`; a name is its label, its
-/// text, or the name the tree prints. Of several matching elements, the first that shows wins,
-/// else the first; a key with a name matches only while that element carries the name.
+/// and accessible name. A role is the one the accessibility tree prints, as `"list-box-option"`
+/// for an option; a name is its label, its text, or the name the tree prints. Of several
+/// matching elements, the first that shows wins, else the first; a key with a name matches only
+/// while that element carries the name.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Target {
@@ -57,9 +57,33 @@ impl Target {
         };
         match self {
             Target::Key { key, name } => e.key.as_deref() == Some(key) && named(name),
-            Target::Role { role, name } => {
-                (e.role == role || read.is_some_and(|a| a.role == *role)) && named(name)
-            }
+            Target::Role { role, name } => read.is_some_and(|a| a.role == *role) && named(name),
+        }
+    }
+
+    /// What a request that cannot find it waits for, naming the tree's role when the target
+    /// gives the role the view wrote instead.
+    pub(crate) fn to_appear<S>(&self, rt: &Runtime<S>) -> String {
+        let Target::Role { role, name } = self else {
+            return format!("{self:?} to appear");
+        };
+        let read: HashMap<String, AccessibleElement> = rt
+            .accessible_elements()
+            .into_iter()
+            .map(|a| (a.path.clone(), a))
+            .collect();
+        let tree_role = rt.elements().into_iter().find_map(|e| {
+            let a = read.get(&e.path)?;
+            let named = name.as_ref().is_none_or(|name| {
+                accessible_name(&e) == Some(name) || a.name.as_ref() == Some(name)
+            });
+            (e.role == role && a.role != *role && named).then(|| a.role.clone())
+        });
+        match tree_role {
+            Some(tree_role) => format!(
+                "{self:?} to appear; the tree's role for an element the view calls {role:?} is {tree_role:?}"
+            ),
+            None => format!("{self:?} to appear"),
         }
     }
 

@@ -144,7 +144,8 @@ pub fn act<S: 'static>(
                 (None, true) => Attempt::Done(Value::Null),
                 (Some(_), true) => Attempt::Wait(format!("{target:?} to go")),
                 (Some(found), false) if !found.moving => Attempt::Done(json!(found)),
-                (_, false) => Attempt::Wait(format!("{target:?} to appear and stop moving")),
+                (None, false) => Attempt::Wait(target.to_appear(rt)),
+                (_, false) => Attempt::Wait(format!("{target:?} to stop moving")),
             }
         }
         "press" => {
@@ -222,7 +223,7 @@ pub fn act<S: 'static>(
             let Typed { text, target } = args!(action, payload);
             if let Some(target) = target {
                 let Some(found) = target.find(rt) else {
-                    return Attempt::Wait(format!("{target:?} to appear"));
+                    return Attempt::Wait(target.to_appear(rt));
                 };
                 if !rt.elements()[found.index].focused {
                     let aimed = Aimed {
@@ -311,7 +312,7 @@ fn pointer<S: 'static>(
     input: impl FnOnce(&mut Runtime<S>, (f32, f32)),
 ) -> Attempt {
     let Some(found) = aimed.target.find(rt) else {
-        return Attempt::Wait(format!("{:?} to appear", aimed.target));
+        return Attempt::Wait(aimed.target.to_appear(rt));
     };
     if found.moving {
         return Attempt::Wait(format!("{:?} to stop moving", aimed.target));
@@ -557,5 +558,29 @@ mod tests {
         rt.frame(0.016);
         assert_eq!(receipt["matched"], true, "{receipt}");
         assert!(*rt.state(), "the save that shows was pressed");
+    }
+
+    #[test]
+    fn a_role_the_view_wrote_finds_nothing_and_the_wait_names_the_tree_s_role() {
+        fn option(_: &bool, _: &mut Cx<bool>) -> El {
+            row()
+                .role("option")
+                .on_press(|_: &mut bool| {})
+                .child(text("Notebook"))
+        }
+        let mut rt = Runtime::new(false, option, (300.0, 200.0), Env::default());
+        rt.frame(0.0);
+
+        let attempt = act(
+            &mut rt,
+            &Hooksless,
+            "press",
+            &json!({"target": {"role": "option", "name": "Notebook"}}),
+        );
+
+        let Attempt::Wait(why) = attempt else {
+            panic!("a view role matched: {attempt:?}");
+        };
+        assert!(why.contains("\"list-box-option\""), "{why}");
     }
 }

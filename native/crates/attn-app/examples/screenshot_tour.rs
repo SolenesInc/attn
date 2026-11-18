@@ -2577,7 +2577,7 @@ fn desktop_naming(dark: bool) {
     world
         .automate(
             "press",
-            json!({"target": {"role": "option", "name": "A new desktop…"}}),
+            json!({"target": {"role": "list-box-option", "name": "A new desktop…"}}),
         )
         .expect("the Desktop list offers a new desktop");
     snap(&mut world, "desktop-naming", dark);
