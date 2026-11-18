@@ -53,8 +53,8 @@ than pieces, since a deleted area can no longer take picks.
    suite on Linux and macOS for each push to `main` and on request, so a test
    that runs only on macOS is checked there.
 5. Add a row under "Our changes" in `FORK.md`: what the change does, why it
-   lives in Rune, and its tests in backticks, followed by `(macOS)` when a test
-   runs only on macOS. Name a unit test by its path in its crate, such as
+   lives in Rune, and its tests in backticks, followed by `(macOS)` or `(Linux)`
+   when a test runs only there; `scripts/rune-bump` skips it elsewhere. Name a unit test by its path in its crate, such as
    `overlay::tests::a_press_before_the_first_frame_after_show_reaches_the_view`, and an integration test by its
    file, such as `crates/rune/tests/press_keeps_focus.rs`, which runs the whole
    file, or with `::<test>` after the file to run one of its tests. Commit the

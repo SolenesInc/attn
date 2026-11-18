@@ -25,6 +25,7 @@ pub fn press(
     }
     let plain_shift = m.shift && !m.ctrl && !m.alt && !(mac && m.logo);
     match &ev.key {
+        Key::Dead(_) => return None,
         Key::Tab if plain_shift => return Some(Press::Bytes(b"\x1b[Z")),
         Key::Enter if m.shift && !m.ctrl && !m.alt => return Some(Press::Bytes(b"\n")),
         _ => {}

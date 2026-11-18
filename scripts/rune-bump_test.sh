@@ -61,6 +61,9 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn only_on_macos() {}
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn only_on_linux() {}
 }
 EOF
   cat >>"$patch/crates/rune-kit/src/lib.rs" <<'EOF'
@@ -88,7 +91,7 @@ EOF
 | Change | Why it is in Rune | Test | Commits |
 |---|---|---|---|
 | The answer stays 42 (`rune/src/lib.rs`) | The answer is Rune's | `tests::the_answer_holds`, `tests::a_wrong_answer_panics` | PATCH |
-| The kit holds | Inside `Kit \| Menu` | `tests::the_kit_holds`, `tests::only_on_macos` (macOS), `tests::a_diagram_draws` | PATCH |
+| The kit holds | Inside `Kit \| Menu` | `tests::the_kit_holds`, `tests::only_on_macos` (macOS), `tests::only_on_linux` (Linux), `tests::a_diagram_draws` | PATCH |
 | The shapes hold | Inside the diagram parser | `tests::the_shapes_hold` (rune-mermaid) | PATCH |
 
 ## Picked from upstream
@@ -210,8 +213,10 @@ grep -qF "ok tests::a_wrong_answer_panics" "$work/out" || fail "missed a should_
 grep -qF "ok tests::the_shapes_hold" "$work/out" || fail "missed a rune-mermaid test FORK.md lists"
 if [ "$(uname -s)" = Darwin ]; then
   grep -qF "ok tests::only_on_macos" "$work/out" || fail "skipped a macOS test on macOS"
+  grep -qF "only_on_linux" "$work/out" && fail "ran a Linux-only test off Linux"
 else
   grep -qF "only_on_macos" "$work/out" && fail "ran a macOS-only test off macOS"
+  grep -qF "ok tests::only_on_linux" "$work/out" || fail "skipped a Linux test on Linux"
 fi
 grep -qE "test result: ok. 1 passed" "$work/out" || fail "did not show the native suite's result"
 
@@ -332,7 +337,7 @@ grep -qF "run scripts/rune-bump --branch rename" "$work/out" || fail "did not sa
 [ "$(fork_rev main)" = "$old_main" ] || fail "pushed a branch that breaks attn into the fork's main"
 [ -z "$(candidates)" ] || fail "left the candidate ref on the fork"
 git -C "$work/attn" checkout -q -- native
-sed -i 's/rune::greeting()/rune::salutation()/' "$work/attn/native/crates/app/src/lib.rs"
+sed -i.bak 's/rune::greeting()/rune::salutation()/' "$work/attn/native/crates/app/src/lib.rs" && rm "$work/attn/native/crates/app/src/lib.rs.bak"
 bump --branch rename || fail "refused the branch once attn uses its new API"
 git -C "$work/fork.git" merge-base --is-ancestor rename main || fail "did not bring the branch into main once attn passes"
 [ "$(pinned)" = "$(fork_rev main)" ] || fail "did not pin the main it pushed"

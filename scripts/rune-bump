@@ -200,11 +200,12 @@ bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --bra
   step "run the tests FORK.md lists"
   ledger="$(ledger_section "$(cat "$worktree/FORK.md")" "Our changes" | awk -F'|' -v os="$(uname -s)" '{
       rest = $(NF-2)
-      while (match(rest, /`[^`]+`( \(macOS\))?/)) {
+      while (match(rest, /`[^`]+`( \((macOS|Linux)\))?/)) {
         token = substr(rest, RSTART, RLENGTH)
         rest = substr(rest, RSTART + RLENGTH)
         if (token ~ /\(macOS\)$/ && os != "Darwin") continue
-        sub(/ \(macOS\)$/, "", token)
+        if (token ~ /\(Linux\)$/ && os != "Linux") continue
+        sub(/ \((macOS|Linux)\)$/, "", token)
         gsub(/`/, "", token)
         print token
       }

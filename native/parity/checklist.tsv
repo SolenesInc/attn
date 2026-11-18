@@ -1,7 +1,7 @@
 item	statement	native_test	reason
 6	On macOS the bundle registers its instance's link scheme (attn-palmac://), not production's attn://, and a link in it reaches that bundle	live:s-fmcb34/palmac-proof.tgz	
 6	On Linux the instance's desktop entry handles its own scheme, not production's attn://	live:s-fmcb34/c36-linux.tgz	
-31	Option-modified letter shortcuts (⌥⌘N, the new session dialog's ⌥T, ⌥Q and ⌥1–⌥9) fire through AppKit despite macOS dead-key reporting		gap: s-70656g
+31	Option-modified letter shortcuts (⌥⌘N, the new session dialog's ⌥T, ⌥Q and ⌥1–⌥9, and a binding on a dead key such as ⌥E) fire through AppKit despite macOS dead-key reporting	live:s-70656g/alt-keys.tgz	
 41	A terminal whose pane is no longer drawn detaches from its stream	attn-app/tests/wire/terminal.rs::a_terminal_no_longer_drawn_is_detached	
 41	A tile shown again draws its last screen, not a blank one, until its attach brings the current one	attn-app/tests/wire/terminal.rs::a_tile_shown_again_draws_its_last_screen_until_its_attach_brings_the_current_one	
 41	Hidden tiles release their GPU buffers and memory, and dozens of tiles across desktops draw without failure	live:s-gjttf8/tile-memory.tgz	

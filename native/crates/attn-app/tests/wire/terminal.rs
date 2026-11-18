@@ -358,6 +358,28 @@ fn an_input_method_commit_reaches_the_pty() {
 }
 
 #[test]
+fn an_option_dead_key_composes_its_accent_instead_of_sending_escape() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    let option = Mods {
+        alt: true,
+        ..Mods::default()
+    };
+
+    world.gesture(|app| {
+        app.runtime.dead_key(
+            rune::PhysicalKeyCode::KeyE,
+            option,
+            Some('e'),
+            Ime::Preedit("´".into(), None),
+        );
+        app.runtime.ime(Ime::Commit("é".into()));
+    });
+
+    assert_eq!(inputs(&world), [typed("é")]);
+}
+
+#[test]
 fn an_input_method_composes_at_the_cursor_and_opens_its_candidates_there() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
