@@ -52,16 +52,7 @@ pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, tx: &mut Tx) {
             .notify("No supported agent CLI found in PATH.".into(), tx);
         return;
     }
-    let Some(projects) = settings
-        .get(PROJECTS)
-        .map(|dir| dir.trim_end_matches('/'))
-        .filter(|dir| !dir.is_empty())
-    else {
-        state.window.notify(
-            "Configure your Projects Directory in Settings first: it tells attn where to find your repositories."
-                .into(),
-            tx,
-        );
+    let Some(projects) = settings.get(PROJECTS).map(|dir| dir.trim_end_matches('/')) else {
         return;
     };
     let name = pr.repo.rsplit('/').next().unwrap_or(&pr.repo);

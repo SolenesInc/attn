@@ -69,18 +69,12 @@ func (d *Daemon) ensureRepositoryStore(ctx context.Context, identity, authorizat
 }
 
 func (d *Daemon) repositoryTransport(ctx context.Context, client *attngit.Client, identity string) string {
-	if clone := d.personalClone(identity); clone != "" {
-		if origin, err := client.LocalCloneOrigin(ctx, clone, identity); err == nil {
-			return origin
-		}
+	if origin, err := client.LocalCloneOrigin(ctx, d.personalClone(identity), identity); err == nil {
+		return origin
 	}
 	return "https://" + identity + ".git"
 }
 
 func (d *Daemon) personalClone(identity string) string {
-	projects := strings.TrimSpace(d.setting(setting.ProjectsDirectory))
-	if projects == "" {
-		return ""
-	}
-	return filepath.Join(attngit.ExpandPath(projects), path.Base(identity))
+	return filepath.Join(attngit.ExpandPath(strings.TrimSpace(d.setting(setting.ProjectsDirectory))), path.Base(identity))
 }

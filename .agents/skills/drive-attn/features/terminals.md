@@ -164,7 +164,7 @@ Steps:
 ## Gotchas
 
 - `attn terminal` needs a session. From the instance shell every verb but `--help` exits 1 with the caller rule. Drive `attn terminal` through the mock agent.
-- ⌘T opens the location picker with the shell chosen. ⌘T does not start a shell until you confirm a folder with Enter. With `projects_directory` set, the path field starts with that folder, so typed text goes after the folder: press ⌘A before typing.
+- ⌘T opens the location picker with the shell chosen. ⌘T does not start a shell until you confirm a folder with Enter. The path field starts with `projects_directory` (`~/projects/` on a fresh home), so typed text goes after the folder: press ⌘A before typing.
 - The find count counts matches on screen rows, so a command line that wraps at the tile's width no longer matches its own text. Keep typed commands short.
 - A mock turn matches the first turn whose `includes` the prompt contains, so a turn `t2-ls` also takes the prompt `t2-lsd`.
 - `attn terminal ls` prints each terminal's first 8 characters as its ID. `open` prints the whole id. Either works as a target while the id names one terminal.

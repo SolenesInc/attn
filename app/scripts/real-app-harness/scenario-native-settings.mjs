@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -28,8 +28,6 @@ const DIALOG = { key: 'settings-dialog' };
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 
-const baseline = new Map();
-const remember = (key) => { if (!baseline.has(key)) baseline.set(key, observer.getSetting(key)); };
 const savedAs = (key, value) => observer.waitForMessage((m) => m.event === 'settings_updated' && m.settings?.[key] === value && m, `${key} saved as ${JSON.stringify(value)}`, 15_000);
 const nodes = async () => {
   const all = [];
@@ -57,8 +55,7 @@ try {
   const frontmostBefore = mac ? await driver.frontmostBundleId() : null;
   await runner.step('launch_app', async () => {
     await launchFreshNativeAppAndConnect(client, observer);
-    for (const key of ['theme', 'worktree_sweep_enabled', 'projects_directory']) remember(key);
-    runner.registerCleanup('restore_settings', () => Promise.all([...baseline].map(([key, value]) => observer.requestResult({ cmd: 'set_setting', key, value }, 'settings_updated').catch(() => {}))));
+    for (const key of ['theme', 'worktree_sweep_enabled', 'projects_directory']) queueDaemonSettingRestore(observer, key);
     await driver.waitFor({ key: 'home' });
   });
 

@@ -28,12 +28,7 @@ const (
 	Computed
 )
 
-type Default int
-
-const (
-	Off Default = iota
-	On
-)
+const On = "true"
 
 type Stage int
 
@@ -103,7 +98,7 @@ type Setting struct {
 	Class       Class
 	Kind        Kind
 	Scope       Scope
-	Default     Default
+	Default     string
 	Internal    bool
 	Description string
 }
@@ -178,8 +173,8 @@ func (s *Setting) For(name string) *Setting {
 func (s *Setting) Matches(key string) bool { return s.IsFamily() && patternMatches(s.Key, key) }
 
 func (s *Setting) WithDefault(stored string) string {
-	if s.Default == On && strings.TrimSpace(stored) == "" {
-		return "true"
+	if s.Default != "" && strings.TrimSpace(stored) == "" {
+		return s.Default
 	}
 	return stored
 }
@@ -207,7 +202,7 @@ func ClassOf(key string) Class {
 
 func FillDefaults(values map[string]string) {
 	for _, s := range all {
-		if s.Default == On {
+		if s.Default != "" {
 			values[s.Key] = s.WithDefault(values[s.Key])
 		}
 	}

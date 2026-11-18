@@ -13,6 +13,8 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 		"queue_mode_enabled":        "false",
 		"queue_quiet_notifications": "true",
 		"crew.away_seconds":         "9000",
+		"projects_directory":        "~/projects",
+		"theme":                     "dark",
 	} {
 		if got := app.Initial.Settings[key]; got != want {
 			t.Errorf("the app first sees %s = %q, want %q", key, got, want)

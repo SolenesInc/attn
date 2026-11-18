@@ -5,7 +5,7 @@ use attn_protocol::{
     AuthorState, AuthorsUpdatedMessage, CreateWorktreeResultMessage, EnsureRepoResultMessage,
     FetchPRDetailsResultMessage, GitHubHostsUpdatedMessage, InitialStateMessage, PR,
     PRActionResultMessage, PRsUpdatedMessage, RateLimitedMessage, RefreshPRsResultMessage,
-    RepoState, ReposUpdatedMessage, SettingsUpdatedMessage, SpawnResultMessage,
+    RepoState, ReposUpdatedMessage, SpawnResultMessage,
 };
 use attn_testkit::{Answer, Target, World, message};
 use rune::{Key, KeyEvent, Mods};
@@ -822,7 +822,7 @@ fn a_new_worktree_session_that_cannot_finish_says_why_starts_nothing_and_can_be_
         head_branch: Some("feature".into()),
         ..unknown.clone()
     };
-    let mut world = start(one_desktop(vec![]), vec![unknown.clone()]);
+    let mut world = start(with_projects(one_desktop(vec![])), vec![unknown.clone()]);
     let try_it = |world: &mut World, case: &str, said: &str, sent: &[&str]| {
         let before: Vec<usize> = steps
             .iter()
@@ -843,17 +843,6 @@ fn a_new_worktree_session_that_cannot_finish_says_why_starts_nothing_and_can_be_
         assert_eq!(went, sent, "{case}");
     };
 
-    try_it(
-        &mut world,
-        "no projects directory",
-        "Configure your Projects Directory in Settings first",
-        &[],
-    );
-
-    world.daemon.emit(SettingsUpdatedMessage {
-        settings: with_projects(InitialStateMessage::new()).settings,
-        ..SettingsUpdatedMessage::new()
-    });
     world.daemon.answer_in_turn(
         "fetch_pr_details",
         [
