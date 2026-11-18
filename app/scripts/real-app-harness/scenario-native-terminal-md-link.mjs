@@ -79,11 +79,9 @@ try {
 
   let grid;
   await runner.step('measure_the_grid_while_the_terminal_holds_the_caret', async () => {
-    const slot = await driver.waitFor(terminal);
-    const caret = await driver.waitFor({ key: `terminal.${runtimeId}.caret` });
-    const { cursor } = await driver.state(`terminal-view:${runtimeId}`);
-    const [cx, cy, cw, ch] = caret.rect;
-    grid = { dx: cx - cursor[0] * cw - slot.rect[0], dy: cy - cursor[1] * ch - slot.rect[1], cw, ch };
+    await driver.waitFor({ key: `terminal.${runtimeId}.caret` });
+    const { cursor, caret: [cx, cy, cw, ch] } = await driver.state(`terminal-view:${runtimeId}`);
+    grid = { dx: cx - cursor[0] * cw, dy: cy - cursor[1] * ch, cw, ch };
   });
 
   const pointAt = async (relPath) => {

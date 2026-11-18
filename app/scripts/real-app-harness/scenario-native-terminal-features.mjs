@@ -86,10 +86,9 @@ try {
     const row = rows.findIndex((text) => text.trim() === 'block-1');
     runner.assert(row >= 0, 'the output row reads block-1 alone', rows);
     const slot = await driver.waitFor(terminal());
-    const caret = await driver.waitFor({ key: `terminal.${runtimeId}.caret` });
-    const { cursor } = await view();
-    const y = caret.rect[1] - cursor[1] * caret.rect[3] + (row + 0.5) * caret.rect[3];
-    await driver.click(terminal(), { at: [0.01, (y - slot.rect[1]) / slot.rect[3]] });
+    const { cursor, caret: [, cy, , ch] } = await view();
+    const y = cy - cursor[1] * ch + (row + 0.5) * ch;
+    await driver.click(terminal(), { at: [0.01, y / slot.rect[3]] });
     const selected = await view();
     runner.assert(selected.block, 'a press on the output selects its command block', selected);
     runner.assert(selected.overlays.some((o) => o.kind.startsWith('Outline')), 'the selected block draws its outline', selected.overlays);

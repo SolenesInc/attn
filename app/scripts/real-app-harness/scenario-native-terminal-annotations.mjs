@@ -76,15 +76,13 @@ try {
     }
     await driver.state(`terminal-view:${runtimeId}`, { includes: message.key, timeoutMs: 15_000 });
     const slot = await driver.waitFor(terminal);
-    const caret = await driver.waitFor({ key: `terminal.${runtimeId}.caret` });
-    const { cursor } = await driver.state(`terminal-view:${runtimeId}`);
-    const [cx, cy, cw, ch] = caret.rect;
+    const { cursor, caret: [cx, cy, cw, ch] } = await driver.state(`terminal-view:${runtimeId}`);
     const row = rows.findIndex((text) => text.includes(PHRASE));
     const col = [...rows[row]].join('').indexOf(PHRASE);
     const x = cx - cursor[0] * cw + (col + 0.5) * cw;
     const y = cy - cursor[1] * ch + (row + 0.5) * ch;
-    const [sx, sy, sw, sh] = slot.rect;
-    at = { at: [(x - sx) / sw, (y - sy) / sh], cell: cw };
+    const [, , sw, sh] = slot.rect;
+    at = { at: [x / sw, y / sh], cell: cw };
   });
 
   await runner.step('alt_drag_marks_the_phrase', async () => {

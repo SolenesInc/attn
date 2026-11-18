@@ -214,8 +214,8 @@ impl Terminals {
     }
 
     /// Where the cursor and what lies over terminal `id`'s view as its screen holds them now,
-    /// how far the view is scrolled back, and what ⌘C copies: the automation server's
-    /// `terminal-view` slice.
+    /// the cursor's cell in points from the terminal's top-left, how far the view is scrolled
+    /// back, and what ⌘C copies: the automation server's `terminal-view` slice.
     pub fn view_state(&mut self, id: &str) -> Option<serde_json::Value> {
         let term = self.current(id)?;
         let overlays: Vec<serde_json::Value> = term
@@ -251,6 +251,7 @@ impl Terminals {
             .collect();
         Some(serde_json::json!({
             "cursor": term.grid.cursor.map(|c| [c.col, c.row]),
+            "caret": term.caret.get(),
             "overlays": overlays,
             "images": images,
             "scrolled_back": term.scrolled_back,
