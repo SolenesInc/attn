@@ -262,7 +262,7 @@ pub(crate) fn type_into(
             .trace
             .lock()
             .unwrap()
-            .arrived(trace, terminal, arrived, at.clock);
+            .arrived(trace, arrived);
     }
     if !state.terminals.live(terminal)
         || !state

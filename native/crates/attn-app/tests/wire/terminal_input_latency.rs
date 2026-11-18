@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use attn_protocol::PtyInputProbeResultMessage;
 use attn_testkit::{Answer, Daemon, World};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::terminal::{output, pane, showing};
 
@@ -196,7 +196,7 @@ fn a_key_s_trace_times_its_send_and_the_first_output_after_it_until_the_frame_dr
     assert_eq!(
         names,
         [
-            "key_arrived",
+            "keydown",
             "websocket_send",
             "output_received",
             "output_taken",
@@ -212,4 +212,35 @@ fn a_key_s_trace_times_its_send_and_the_first_output_after_it_until_the_frame_dr
         hops[1].1 - hops[0].1 >= 5.0,
         "the key's arrival is the platform's, not the frame's: {hops:?}"
     );
+    let events = world
+        .automate("state", serde_json::json!({"of": "input-trace"}))
+        .unwrap_or_else(|why| panic!("{why}"));
+    let decided = events
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["traceId"] == trace && e["stage"] == "terminal")
+        .expect("the terminal decided on the key");
+    assert_eq!(
+        (&decided["event"], &decided["outcome"], &decided["keyClass"]),
+        (&json!("keydown"), &json!("sent"), &json!("text")),
+        "timing the key leaves the terminal's decision on it as it was"
+    );
+}
+
+#[test]
+fn a_key_automation_types_arrives_when_automation_types_it() {
+    let mut world = live_terminal(one_agent());
+
+    world
+        .automate("type", json!({"text": "l"}))
+        .unwrap_or_else(|why| panic!("{why}"));
+    let input = world.daemon.sent_of("pty_input")[0].clone();
+    let trace = input["trace_id"].as_str().unwrap().to_owned();
+
+    let names: Vec<String> = hops(&mut world, &trace)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["keydown", "websocket_send"]);
 }

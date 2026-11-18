@@ -254,6 +254,7 @@ pub fn act<S: 'static>(
                     };
                 }
             }
+            let _arrival = rune::input_arrived(std::time::Duration::ZERO);
             for c in text.chars() {
                 rt.key(KeyEvent {
                     key: Key::Text(c.to_string()),

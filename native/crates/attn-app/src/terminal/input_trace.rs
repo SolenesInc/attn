@@ -360,13 +360,17 @@ impl InputTrace {
         self.push(event);
     }
 
-    /// The key behind `trace` reached the window at `arrived`.
-    pub(crate) fn arrived(&mut self, trace: &TraceId, runtime: &str, arrived: Instant, now: f64) {
-        let event = Event {
-            instant_ms: Some(self.ms(arrived)),
-            ..self.event(trace, Stage::Document, "key_arrived", Some(runtime), now)
-        };
-        self.push(event);
+    /// The key behind `trace` reached the window at `arrived`, which its heard event carries.
+    pub(crate) fn arrived(&mut self, trace: &TraceId, arrived: Instant) {
+        let at = self.ms(arrived);
+        if let Some(heard) = self
+            .events
+            .iter_mut()
+            .rev()
+            .find(|e| &e.trace_id == trace && e.stage == Stage::Document)
+        {
+            heard.instant_ms = Some(at);
+        }
     }
 
     /// Terminal `runtime` took output the link heard at `received`: the echo of the last input
