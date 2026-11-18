@@ -43,6 +43,16 @@ native:
   - '.github/workflows/ci.yml'
   - '.github/workflows/ci-macos.yml'
   - '.github/workflows/native.yml'
+native_release:
+  - 'native/**'
+  - 'VERSION'
+  - 'Makefile'
+  - 'app/src-tauri/Entitlements.plist'
+  - 'app/src-tauri/icons/icon.icns'
+  - 'scripts/build-app-instance.sh'
+  - 'scripts/check-macos-release-app.sh'
+  - 'scripts/version.sh'
+  - '.github/workflows/ci-macos.yml'
 app_acceptance:
   - 'app/**'
   - 'native/**'

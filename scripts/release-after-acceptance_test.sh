@@ -399,16 +399,18 @@ for value in \
   'ref: ${{ github.sha }}' \
   'release_sha: ${{ steps.validate.outputs.release_sha }}' \
   'ref: ${{ env.RELEASE_SHA }}' \
+  'ref: ${{ needs.validate-tag.outputs.release_sha }}' \
   'Recheck immutable release tag' \
   'needs: validate-tag' \
   './scripts/release-tag-gate.sh "$RELEASE_TAG_INPUT"'; do
   grep -Fq "$value" "$root/.github/workflows/release.yml"
 done
-if [[ "$(grep -Fc 'ref: ${{ env.RELEASE_SHA }}' "$root/.github/workflows/release.yml")" -ne 3 ]]; then
+if [[ "$(grep -Fc 'ref: ${{ env.RELEASE_SHA }}' "$root/.github/workflows/release.yml")" -ne 2 ]] ||
+  ! grep -Fq 'ref: ${{ inputs.ref || github.sha }}' "$root/.github/workflows/release-macos-app.yml"; then
   echo "release build jobs are not all pinned to the validated SHA" >&2
   exit 1
 fi
-if grep -Fq 'ref: ${{ env.RELEASE_TAG }}' "$root/.github/workflows/release.yml"; then
+if grep -Fq 'ref: ${{ env.RELEASE_TAG }}' "$root/.github/workflows/release.yml" "$root/.github/workflows/release-macos-app.yml"; then
   echo "release build still resolves the mutable tag after validation" >&2
   exit 1
 fi

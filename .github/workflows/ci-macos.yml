@@ -40,6 +40,7 @@ jobs:
       tauri: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.tauri == 'true' }}
       native: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native == 'true' }}
       app_acceptance: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.app_acceptance == 'true' }}
+      native_release: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native_release == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -121,18 +122,26 @@ jobs:
       os: macos-15
 
   app-acceptance-macos:
-    name: App acceptance macOS
+    name: App acceptance macOS (${{ matrix.app }})
     needs: changes
     if: needs.changes.outputs.app_acceptance == 'true'
     permissions:
       contents: read
     runs-on: macos-15
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: tauri
+            scenarios: terminal-block-copy terminal-input quick-capture
+          - app: native
+            scenarios: native-terminal-core native-quick-capture native-browser
     env:
       ATTN_INSTANCE: app-acceptance
       ATTN_HARNESS_INSTANCE: app-acceptance
       ATTN_HARNESS_PARK_VISIBLE_PX: '0'
-      SCENARIOS: terminal-block-copy terminal-input quick-capture
+      SCENARIOS: ${{ matrix.scenarios }}
     steps:
       - name: Configure artifact directory
         run: echo "ATTN_REAL_APP_ARTIFACTS_DIR=$RUNNER_TEMP/attn-real-app-harness" >> "$GITHUB_ENV"
@@ -149,14 +158,16 @@ jobs:
         uses: ./.github/actions/build-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
+          app: ${{ matrix.app }}
 
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
+          app: ${{ matrix.app }}
           archive: ${{ steps.build-app.outputs.archive }}
 
-      - name: Run native clipboard, keyboard and Quick Capture scenarios
+      - name: Run the macOS-only scenarios
         run: |
           scenario_args=(); for scenario in $SCENARIOS; do scenario_args+=(--scenario "$scenario"); done
           pnpm --dir app run real-app:serial-matrix -- "${scenario_args[@]}"
@@ -165,7 +176,7 @@ jobs:
         if: always()
         uses: ./.github/actions/upload-test-receipts
         with:
-          name: app-acceptance-macos
+          name: app-acceptance-macos-${{ matrix.app }}
 
       - name: Require executed macOS coverage
         run: |
@@ -201,7 +212,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-macos-evidence-${{ github.run_attempt }}
+          name: app-acceptance-macos-${{ matrix.app }}-evidence-${{ github.run_attempt }}
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
@@ -217,9 +228,56 @@ jobs:
         if: always()
         run: ./attn instance clean "$ATTN_INSTANCE"
 
+  native-release-preflight:
+    name: Native release preflight
+    needs: changes
+    if: needs.changes.outputs.native_release == 'true'
+    permissions:
+      contents: read
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+
+      - name: Install the native workspace's Rust
+        working-directory: native
+        run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      - name: Build each Rust workspace in its target, which the Rust cache keeps
+        run: echo 'CARGO_BUILD_BUILD_DIR={workspace-root}/target' >> "$GITHUB_ENV"
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-release-profile
+          workspaces: |
+            native
+            pty-host
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build the native release app
+        env:
+          MACOS_CODESIGN_IDENTITY: '-'
+        run: make build-app APP=native CHANNEL=release
+
+      - name: Check the native release app
+        run: ./scripts/check-macos-release-app.sh native/target/staged/attn.app "$(./scripts/version.sh)"
+
   full-macos:
     name: Full macOS run
-    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos]
+    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos, native-release-preflight]
     if: always() && needs.changes.outputs.full == 'true'
     permissions: {}
     runs-on: ubuntu-24.04
@@ -232,7 +290,7 @@ jobs:
   pr-gate:
     name: macOS PR gate
     if: always() && github.event_name == 'pull_request'
-    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos, full-macos]
+    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos, native-release-preflight, full-macos]
     permissions: {}
     runs-on: ubuntu-24.04
     steps:
@@ -244,7 +302,7 @@ jobs:
   acceptance:
     name: macOS acceptance
     if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos, full-macos]
+    needs: [changes, pty-compatibility, rust, native, attn-cli, app-acceptance-macos, native-release-preflight, full-macos]
     permissions:
       actions: read
       contents: read
@@ -255,7 +313,7 @@ jobs:
       - name: Aggregate exact-SHA macOS acceptance
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-        run: ./scripts/ci-acceptance.sh pty-compatibility rust native attn-cli app-acceptance-macos full-macos
+        run: ./scripts/ci-acceptance.sh pty-compatibility rust native attn-cli app-acceptance-macos native-release-preflight full-macos
 
   branch-health:
     name: Report branch health

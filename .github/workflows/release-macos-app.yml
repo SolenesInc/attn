@@ -1,0 +1,222 @@
+name: Release macOS app
+run-name: ${{ inputs.tag || format('{0} {1} candidate', inputs.app, inputs.version) }}
+
+# Builds, signs, notarizes and packages attn.app for one app shell. Release
+# calls it with a tag and uploads the assets to that tag's draft release. A
+# dispatch builds a candidate: the same assets as workflow artifacts, with no
+# tag and no release.
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: The app shell to ship, tauri or native
+        required: true
+        type: string
+      version:
+        description: The version to stamp, X.Y.Z
+        required: true
+        type: string
+      ref:
+        description: The commit to build
+        required: true
+        type: string
+      tag:
+        description: The release tag whose draft gets the assets
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      app:
+        description: The app shell to build
+        required: true
+        type: choice
+        options: [tauri, native]
+      version:
+        description: The version to stamp, X.Y.Z
+        required: true
+        type: string
+      release_source:
+        description: Where the build's attn update looks for releases; empty keeps GitHub's
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  app:
+    name: ${{ inputs.app }} app
+    permissions:
+      contents: write
+    runs-on: macos-15
+    env:
+      APP: ${{ inputs.app }}
+      VERSION: ${{ inputs.version }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_SOURCE_INPUT: ${{ inputs.release_source }}
+    steps:
+      - name: Check the inputs
+        run: |
+          case "$APP" in
+            tauri | native) ;;
+            *) echo "app must be tauri or native, got: $APP"; exit 1 ;;
+          esac
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $VERSION"
+            exit 1
+          fi
+          if [ -n "$RELEASE_TAG" ] && [ "$RELEASE_TAG" != "v$VERSION" ]; then
+            echo "Tag $RELEASE_TAG does not name version $VERSION"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go-cgo-cflags
+
+      - name: Stamp the version
+        run: go run ./cmd/release-train version set "v$VERSION"
+
+      - name: Install pnpm
+        if: inputs.app == 'tauri'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        if: inputs.app == 'tauri'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        if: inputs.app == 'tauri'
+        working-directory: app
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+          targets: aarch64-apple-darwin
+
+      - name: Install the native workspace's Rust
+        if: inputs.app == 'native'
+        working-directory: native
+        run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      - name: Import Apple signing credentials
+        id: signing
+        uses: ./.github/actions/apple-signing
+        with:
+          certificate: ${{ secrets.APPLE_CERTIFICATE }}
+          certificate-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          api-key: ${{ secrets.APPLE_API_KEY }}
+          api-key-p8: ${{ secrets.APPLE_API_KEY_P8 }}
+
+      - name: Build the bundled binaries
+        if: inputs.app == 'tauri'
+        run: |
+          GOOS=darwin GOARCH=arm64 make build VERSION="$VERSION" CHANNEL=release OUTPUT=/tmp/attn ${RELEASE_SOURCE_INPUT:+RELEASE_SOURCE="$RELEASE_SOURCE_INPUT"}
+          make build-pty-host
+          mkdir -p app/src-tauri/binaries
+          cp /tmp/attnd "app/src-tauri/binaries/attnd-aarch64-apple-darwin"
+          cp /tmp/attn "app/src-tauri/binaries/attn-aarch64-apple-darwin"
+          cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-aarch64-apple-darwin"
+
+      - name: Build the Tauri app
+        if: inputs.app == 'tauri'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_INSTALL_CHANNEL: release
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
+        with:
+          projectPath: app
+          tagName: ${{ inputs.tag }}
+          releaseName: ${{ inputs.tag && format('attn {0}', inputs.tag) || '' }}
+          releaseBody: See CHANGELOG.md for details.
+          # Draft until every gate in Release has run and every asset is
+          # attached. tauri-action's own upload is the un-notarized build, which
+          # the upload below replaces; Release's `publish` job flips the draft.
+          releaseDraft: true
+          prerelease: false
+          args: --target aarch64-apple-darwin
+
+      - name: Build the native app
+        if: inputs.app == 'native'
+        env:
+          MACOS_CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: |
+          make build-app APP=native VERSION="$VERSION" CHANNEL=release ${RELEASE_SOURCE_INPUT:+RELEASE_SOURCE="$RELEASE_SOURCE_INPUT"}
+
+      - name: Check the app
+        id: app
+        run: |
+          case "$APP" in
+            native) app_path=native/target/staged/attn.app ;;
+            tauri) app_path="$(find app/src-tauri/target -type d -name 'attn.app' -path '*/bundle/macos/*' | head -n1)" ;;
+          esac
+          if [ ! -d "$app_path" ]; then
+            echo "No attn.app bundle found in the $APP build output"
+            exit 1
+          fi
+          ./scripts/check-macos-release-app.sh "$app_path" "$VERSION"
+          echo "path=$app_path" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize and package
+        env:
+          APP_PATH: ${{ steps.app.outputs.path }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          NOTARY_API_KEY_PATH: ${{ steps.signing.outputs.notary-key-path }}
+        run: |
+          ./scripts/package-macos-release.sh "$APP_PATH" "$VERSION" "$RUNNER_TEMP/release"
+          ls -l "$RUNNER_TEMP/release"
+
+      - name: Upload the assets to the draft release
+        if: inputs.tag != ''
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "attn $RELEASE_TAG" --notes "See CHANGELOG.md for details."
+          fi
+          gh release upload "$RELEASE_TAG" \
+            "$RUNNER_TEMP/release/attn_${VERSION}_aarch64.dmg" \
+            "$RUNNER_TEMP/release/attn_aarch64.app.tar.gz" \
+            "$RUNNER_TEMP/release/attn_aarch64.dmg" \
+            --clobber
+
+      - name: Upload the candidate
+        if: inputs.tag == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: attn-${{ inputs.app }}-${{ inputs.version }}
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Clean up Apple signing credentials
+        if: always()
+        env:
+          KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+          NOTARY_API_KEY_PATH: ${{ steps.signing.outputs.notary-key-path }}
+        run: |
+          if [ -n "$KEYCHAIN" ]; then
+            security delete-keychain "$KEYCHAIN" || true
+          fi
+          rm -f "$RUNNER_TEMP/apple-certificate.p12"
+          if [ -n "$NOTARY_API_KEY_PATH" ]; then
+            rm -f "$NOTARY_API_KEY_PATH"
+          fi

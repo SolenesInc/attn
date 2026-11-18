@@ -163,10 +163,14 @@ if [ "$app_shell" = native ]; then
 </plist>
 PLIST
   identity="$(codesign_identity)"
-  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attnd"
-  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn"
-  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn-pty-host"
-  codesign --force --sign "$identity" --entitlements app/src-tauri/Entitlements.plist "${bundle_dir}"
+  sign_args=(--force --options runtime --sign "$identity")
+  if [ "$identity" != - ] && security find-identity -v -p codesigning | grep -F "$identity" | grep -q '"Developer ID Application:'; then
+    sign_args+=(--timestamp)
+  fi
+  codesign "${sign_args[@]}" "${bundle_dir}/Contents/MacOS/attnd"
+  codesign "${sign_args[@]}" "${bundle_dir}/Contents/MacOS/attn"
+  codesign "${sign_args[@]}" "${bundle_dir}/Contents/MacOS/attn-pty-host"
+  codesign "${sign_args[@]}" --entitlements app/src-tauri/Entitlements.plist "${bundle_dir}"
   echo ">>> Built $bundle_dir"
   exit 0
 fi

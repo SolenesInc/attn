@@ -17,6 +17,7 @@ jobs:
     name: Validate accepted tag
     outputs:
       release_sha: ${{ steps.validate.outputs.release_sha }}
+      release_version: ${{ steps.version.outputs.version }}
     permissions:
       actions: read
       checks: read
@@ -41,225 +42,33 @@ jobs:
           RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
         run: ./scripts/release-tag-gate.sh "$RELEASE_TAG_INPUT"
 
-  tauri:
-    name: Tauri Release
+      - name: Read the release version
+        id: version
+        env:
+          RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
+        run: |
+          if ! [[ "$RELEASE_TAG_INPUT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG_INPUT"
+            exit 1
+          fi
+          echo "version=${RELEASE_TAG_INPUT#v}" >> "$GITHUB_OUTPUT"
+
+  macos-app:
+    name: macOS app
     needs: validate-tag
     permissions:
       contents: write
-    runs-on: macos-15
-
-    steps:
-      - name: Resolve release tag
-        env:
-          RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
-          RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
-        run: |
-          RELEASE_TAG="$RELEASE_TAG_INPUT"
-          RELEASE_SHA="$RELEASE_SHA_INPUT"
-
-          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid release tag: $RELEASE_TAG"
-            exit 1
-          fi
-          if ! [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Invalid release SHA: $RELEASE_SHA"
-            exit 1
-          fi
-
-          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
-          echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
-
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_SHA }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            go-cgo-cflags
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
-
-      - name: Install frontend dependencies
-        working-directory: app
-        run: pnpm install --frozen-lockfile
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.95.0'
-          targets: aarch64-apple-darwin
-
-      - name: Build bundled daemon binary
-        run: |
-          GOOS=darwin GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn
-          make build-pty-host
-          mkdir -p app/src-tauri/binaries
-          cp /tmp/attnd "app/src-tauri/binaries/attnd-aarch64-apple-darwin"
-          cp /tmp/attn "app/src-tauri/binaries/attn-aarch64-apple-darwin"
-          cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-aarch64-apple-darwin"
-
-      - name: Import Apple signing credentials
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          for var in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8; do
-            if [ -z "${!var:-}" ]; then
-              echo "Missing required secret: $var"
-              exit 1
-            fi
-          done
-
-          CERT_PATH="$RUNNER_TEMP/apple-certificate.p12"
-          KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-
-          printf '%s' "$APPLE_CERTIFICATE" | tr -d '\n\r' | openssl base64 -d -A -out "$CERT_PATH"
-          printf '%s' "$APPLE_API_KEY_P8" | tr -d '\n\r' | openssl base64 -d -A -out "$KEY_PATH"
-
-          # The keychain lives for this run only, so its password needs no storing.
-          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security default-keychain -s "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -f pkcs12 -A
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -nE 's/.*"([^"]+)".*/\1/p' | grep 'Developer ID Application:' | head -n1)"
-          if [ -z "$SIGNING_IDENTITY" ]; then
-            echo "Developer ID Application identity not found in imported keychain"
-            security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-            exit 1
-          fi
-
-          echo "APPLE_SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
-          echo "NOTARY_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
-          echo "APPLE_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
-
-      - name: Build and publish release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VITE_INSTALL_CHANNEL: release
-          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
-        with:
-          projectPath: app
-          tagName: ${{ env.RELEASE_TAG }}
-          releaseName: attn ${{ env.RELEASE_TAG }}
-          releaseBody: See CHANGELOG.md for details.
-          # Draft until every gate below has run and every asset is attached.
-          # tauri-action's own upload is the un-notarized build, which the
-          # repackage step replaces; publishing here would put that build, and
-          # any bundle the verification is about to reject, in front of users.
-          # The `publish` job at the end flips it.
-          releaseDraft: true
-          prerelease: false
-          args: --target aarch64-apple-darwin
-
-      - name: Repackage notarized app and replace release assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          NOTARY_API_KEY_PATH: ${{ env.NOTARY_API_KEY_PATH }}
-        run: |
-          APP_PATH="$(find app/src-tauri/target -type d -name 'attn.app' | head -n1)"
-          if [ -z "$APP_PATH" ]; then
-            echo "No attn.app bundle found in build output"
-            exit 1
-          fi
-
-          notarize() {
-            local submission result status id
-            submission="$1"
-            result="$(xcrun notarytool submit "$submission" \
-              --key "$NOTARY_API_KEY_PATH" \
-              --key-id "$APPLE_API_KEY" \
-              --issuer "$APPLE_API_ISSUER" \
-              --wait --output-format json)"
-            status="$(jq -r '.status' <<<"$result")"
-            id="$(jq -r '.id' <<<"$result")"
-            if [ "$status" != Accepted ]; then
-              xcrun notarytool log "$id" \
-                --key "$NOTARY_API_KEY_PATH" \
-                --key-id "$APPLE_API_KEY" \
-                --issuer "$APPLE_API_ISSUER"
-              echo "notarization of $(basename "$submission") is $status (submission $id); Apple's log is above" >&2
-              exit 1
-            fi
-            echo "notarization of $(basename "$submission") accepted (submission $id)"
-          }
-
-          VERSION="${RELEASE_TAG#v}"
-          WORK_DIR="$(mktemp -d)"
-          cp -R "$APP_PATH" "$WORK_DIR/attn.app"
-
-          codesign --verify --deep --strict --verbose=2 "$WORK_DIR/attn.app"
-
-          APP_ZIP="$WORK_DIR/attn.app.zip"
-          ditto -c -k --keepParent "$WORK_DIR/attn.app" "$APP_ZIP"
-          notarize "$APP_ZIP"
-          xcrun stapler staple "$WORK_DIR/attn.app"
-          xcrun stapler validate "$WORK_DIR/attn.app"
-          spctl -a -t exec -vv "$WORK_DIR/attn.app"
-
-          DMG_REBUILT="$WORK_DIR/attn_${VERSION}_aarch64.dmg"
-          hdiutil create -volname "attn" -srcfolder "$WORK_DIR/attn.app" -format UDZO "$DMG_REBUILT"
-          notarize "$DMG_REBUILT"
-          xcrun stapler staple "$DMG_REBUILT"
-          xcrun stapler validate "$DMG_REBUILT"
-
-          (cd "$WORK_DIR" && tar -czf "attn_aarch64.app.tar.gz" attn.app)
-          APP_TAR="$WORK_DIR/attn_aarch64.app.tar.gz"
-
-          gh release upload "${RELEASE_TAG}" "$DMG_REBUILT" --clobber
-          gh release upload "${RELEASE_TAG}" "$APP_TAR" --clobber
-          echo "DMG_REBUILT=$DMG_REBUILT" >> "$GITHUB_ENV"
-
-      - name: Upload stable DMG alias for Homebrew cask
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -z "${DMG_REBUILT:-}" ]; then
-            echo "Rebuilt DMG path not available"
-            exit 1
-          fi
-          cp "$DMG_REBUILT" /tmp/attn_aarch64.dmg
-          gh release upload "${RELEASE_TAG}" /tmp/attn_aarch64.dmg --clobber
-
-      - name: Clean up Apple signing credentials
-        if: always()
-        run: |
-          if [ -n "${APPLE_KEYCHAIN_PATH:-}" ]; then
-            security delete-keychain "$APPLE_KEYCHAIN_PATH" || true
-          fi
-          rm -f "$RUNNER_TEMP/apple-certificate.p12"
-          if [ -n "${NOTARY_API_KEY_PATH:-}" ]; then
-            rm -f "$NOTARY_API_KEY_PATH"
-          fi
+    uses: ./.github/workflows/release-macos-app.yml
+    with:
+      app: tauri
+      version: ${{ needs.validate-tag.outputs.release_version }}
+      ref: ${{ needs.validate-tag.outputs.release_sha }}
+      tag: ${{ github.event.client_payload.tag }}
+    secrets: inherit
 
   linux-amd64:
     name: Linux amd64 daemon
-    needs: [validate-tag, tauri]
+    needs: [validate-tag, macos-app]
     permissions:
       contents: write
     runs-on: ubuntu-24.04
@@ -348,7 +157,7 @@ jobs:
 
   linux-arm64:
     name: Linux arm64 daemon
-    needs: [validate-tag, tauri]
+    needs: [validate-tag, macos-app]
     permissions:
       contents: write
     runs-on: ubuntu-24.04-arm
@@ -441,7 +250,7 @@ jobs:
   # set is right.
   publish:
     name: Publish release
-    needs: [validate-tag, tauri, linux-amd64, linux-arm64]
+    needs: [validate-tag, macos-app, linux-amd64, linux-arm64]
     permissions:
       contents: write
     runs-on: ubuntu-latest

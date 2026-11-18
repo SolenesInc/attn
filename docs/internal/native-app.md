@@ -35,6 +35,13 @@ The build bakes the instance's name, port and bundle id into `attn-app`, and the
 app starts the `attnd` bundled beside it. A build without them, such as a bare
 `cargo run`, refuses to start.
 
+Without an instance, `make build-app APP=native` builds the release bundle,
+`native/target/staged/attn.app`, with the bundle id and URL scheme the Tauri
+release has, in the `release` profile and signed with the hardened runtime.
+[Making a release](making-a-release.md#the-macos-app) says how a release signs
+and notarizes it. CI macOS's `Native release preflight` builds it and checks it
+with `scripts/check-macos-release-app.sh`.
+
 `native/Cargo.toml` pins one revision of `main`, the trunk of attn's Rune fork,
 and repeats Rune's `[patch.crates-io]` entries.
 [The Rune fork](rune-fork.md) says why, what the fork holds, and who moves the

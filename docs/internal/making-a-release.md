@@ -33,7 +33,9 @@ not yet contain the previous release commit. Then run the
 `review-main` skill, or wait for the review automation to move `reviewed`.
 
 The script compiles the commits since the last release into `CHANGELOG.md`,
-bumps every version, and opens a PR to `main`. Merge the PR once `PR gate`,
+bumps every version, and opens a PR to `main`. `VERSION` holds the version every
+build stamps; `cmd/release-train` sets it and the Tauri app's copies together and
+refuses a release where they disagree. Merge the PR once `PR gate`,
 `macOS PR gate` and `App acceptance` are green. The merged commit is the release
 commit. CI and CI macOS on `main` each run one push at a time and drop a waiting
 push when a newer one arrives, but the release commit gets a run of its own in
@@ -57,6 +59,27 @@ If Acceptance or `Full macOS run` fails on the release commit, fix the failure
 on `main` and prepare the release again with the same version. When a macOS
 job failed only because no runner picked it up, re-run the failed jobs of the
 release commit's CI macOS run instead.
+
+## The macOS app
+
+`.github/workflows/release-macos-app.yml` builds `attn.app` for one app shell,
+checks it with `scripts/check-macos-release-app.sh`, signs it with the
+Developer ID certificate, and notarizes and packages it with
+`scripts/package-macos-release.sh`. Release calls it with `app: tauri`; the
+cut-over to the native app changes that one input.
+
+Signing and notarization need the certificate and the App Store Connect key in
+the repository's secrets, which no Mac holds. To get a signed, notarized build
+without a release, dispatch the workflow on its own:
+
+```bash
+gh workflow run release-macos-app.yml -f app=native -f version=0.16.0
+```
+
+It uploads the same three files a release gets as the run's artifact
+`attn-<app>-<version>`, and creates no tag and no release. `release_source`
+points the build's `attn update` at another server, such as one serving a
+candidate's `attn_aarch64.app.tar.gz`.
 
 ## Hotfix
 

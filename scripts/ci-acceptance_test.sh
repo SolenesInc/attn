@@ -42,7 +42,7 @@ macos_failed='{"name":"PTY upgrade / macos-15","status":"completed","conclusion"
 macos_cancelled_while_running='{"name":"PTY upgrade / macos-15","status":"completed","conclusion":"cancelled","runner_name":"GitHub Actions 2","labels":["macos-15"]}'
 linux_never_started='{"name":"Frontend","status":"completed","conclusion":"cancelled","runner_name":null,"labels":["ubuntu-24.04-arm"]}'
 full_macos_failed='{"name":"Full macOS run","status":"completed","conclusion":"failure","runner_name":"GitHub Actions 4","labels":["ubuntu-24.04"]}'
-macos_jobs=(pty-compatibility rust native attn-cli app-acceptance-macos full-macos)
+macos_jobs=(pty-compatibility rust native attn-cli app-acceptance-macos native-release-preflight full-macos)
 
 expect() {
   local name="$1" want_status="$2" needs="$3" jobs="$4" status=0

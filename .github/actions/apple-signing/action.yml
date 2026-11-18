@@ -1,0 +1,75 @@
+name: Import Apple signing credentials
+description: >-
+  Import the Developer ID certificate into a keychain that lives for this run,
+  and write the App Store Connect key notarytool submits with. Delete the
+  keychain and the key with the job's cleanup step.
+inputs:
+  certificate:
+    description: The Developer ID Application certificate, a base64 PKCS#12
+    required: true
+  certificate-password:
+    description: The certificate's password
+    required: true
+  api-key:
+    description: The App Store Connect key id
+    required: true
+  api-key-p8:
+    description: The App Store Connect key, base64
+    required: true
+outputs:
+  identity:
+    description: The Developer ID Application identity's name
+    value: ${{ steps.import.outputs.identity }}
+  keychain:
+    description: The keychain holding it
+    value: ${{ steps.import.outputs.keychain }}
+  notary-key-path:
+    description: The App Store Connect key file
+    value: ${{ steps.import.outputs.notary-key-path }}
+runs:
+  using: composite
+  steps:
+    - name: Import the certificate and the notary key
+      id: import
+      shell: bash
+      env:
+        APPLE_CERTIFICATE: ${{ inputs.certificate }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ inputs.certificate-password }}
+        APPLE_API_KEY: ${{ inputs.api-key }}
+        APPLE_API_KEY_P8: ${{ inputs.api-key-p8 }}
+      run: |
+        for var in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_KEY APPLE_API_KEY_P8; do
+          if [ -z "${!var:-}" ]; then
+            echo "Missing required secret: $var"
+            exit 1
+          fi
+        done
+
+        CERT_PATH="$RUNNER_TEMP/apple-certificate.p12"
+        KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+        KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+        printf '%s' "$APPLE_CERTIFICATE" | tr -d '\n\r' | openssl base64 -d -A -out "$CERT_PATH"
+        printf '%s' "$APPLE_API_KEY_P8" | tr -d '\n\r' | openssl base64 -d -A -out "$KEY_PATH"
+
+        # The keychain lives for this run only, so its password needs no storing.
+        KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security default-keychain -s "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -f pkcs12 -A
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+        rm -f "$CERT_PATH"
+
+        SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -nE 's/.*"([^"]+)".*/\1/p' | grep 'Developer ID Application:' | head -n1)"
+        if [ -z "$SIGNING_IDENTITY" ]; then
+          echo "Developer ID Application identity not found in imported keychain"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+          exit 1
+        fi
+
+        echo "identity=$SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+        echo "keychain=$KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"
+        echo "notary-key-path=$KEY_PATH" >> "$GITHUB_OUTPUT"
