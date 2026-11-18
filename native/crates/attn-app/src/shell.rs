@@ -468,12 +468,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     cx.zoom(crate::settings::text_scale(&state.facts.settings));
     let connection = &state.facts.connection;
     let body = match connection {
-        Connection::Connected | Connection::Reconnecting { .. } => {
-            match state.facts.pending_migration {
-                Some(pending) => centered(&t, crate::migration_gate::screen(pending, &t)),
-                None => shell(state, &t, cx.env().scale),
-            }
-        }
+        Connection::Connected | Connection::Reconnecting { .. } => shell(state, &t, cx.env().scale),
         Connection::Connecting => centered(&t, connection::connecting(&t)),
         Connection::Refused(Refusal::MigrationFailed(marker)) => {
             centered(&t, crate::migration_failure::screen(state, marker, &t))
@@ -524,7 +519,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
     let connected = matches!(
         state.facts.connection,
         Connection::Connected | Connection::Reconnecting { .. }
-    ) && !crate::migration_gate::holds(state);
+    );
     let lights_end = cx.chrome_insets().leading;
     let lights = if lights_end > 0.0 {
         lights_end + TITLE_BAR_GAP_PAST_LIGHTS / crate::settings::text_scale(&state.facts.settings)

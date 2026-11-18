@@ -52,7 +52,6 @@
     "real-app:scenario-shelf-sidebar-resize": "node scripts/real-app-harness/scenario-shelf-sidebar-resize.mjs",
     "real-app:scenario-shelf-motion": "node scripts/real-app-harness/scenario-shelf-motion.mjs",
     "real-app:scenario-desktop-switching": "node scripts/real-app-harness/scenario-desktop-switching.mjs",
-    "real-app:scenario-desktop-migration": "node scripts/real-app-harness/scenario-desktop-migration.mjs",
     "real-app:scenario-desktop-close-one-session-keeps-selection": "node scripts/real-app-harness/scenario-desktop-close-one-session-keeps-selection.mjs",
     "real-app:scenario-close-pane-nonblocking": "node scripts/real-app-harness/scenario-close-pane-nonblocking.mjs",
     "real-app:scenario-agent-close": "node scripts/real-app-harness/scenario-agent-close.mjs",

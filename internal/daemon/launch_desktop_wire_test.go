@@ -162,68 +162,7 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 	}
 }
 
-func TestTheLaunchReviewCreatesSuggestedDesktopsOnFinishAndKeepsChoicesAcrossRestart(t *testing.T) {
-	w := newCrewWorld(t)
-	app := w.App()
-	profile := app.SelectedProfile()
-	read := func(app *testworld.Peer) protocol.MigrationState {
-		t.Helper()
-		result := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "migration"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "migration" })
-		if !result.Success || result.State == nil {
-			t.Fatalf("migration_get = %+v", result)
-		}
-		return *result.State
-	}
-	finish := func(app *testworld.Peer, state protocol.MigrationState) protocol.MigrationResultMessage {
-		t.Helper()
-		return testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: "finish", ExpectedRevision: state.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "finish" })
-	}
-	state := read(app)
-	if state.Phase != protocol.MigrationPhaseLaunchRequired || len(state.Groups) != 0 || len(state.LaunchItems) != 4 {
-		t.Fatalf("migration without workspaces = %+v", state)
-	}
-	for _, item := range state.LaunchItems {
-		if item.Confirmed || item.Setting.DesktopID != nil || protocol.Deref(item.Setting.Label) != item.Name+" (new)" {
-			t.Fatalf("suggestion is not a desktop Finish creates: %+v", item)
-		}
-	}
-	target := createDesktop(app, profile)
-	writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(target.ID)})
-	if result := finish(app, state); result.Success {
-		t.Fatal("stale launch review finished migration")
-	}
-	w.restart()
-	app = w.App()
-	state = read(app)
-	for _, item := range state.LaunchItems {
-		if chosen := item.ItemID == "alder"; chosen != item.Confirmed || chosen != (protocol.Deref(item.Setting.DesktopID) == target.ID) {
-			t.Fatalf("restart changed the review: %+v", item)
-		}
-	}
-	for _, desktop := range viewProfile(t, w, profile).desktops {
-		if desktop.Name != "" {
-			t.Fatalf("the review created %+v before Finish", desktop)
-		}
-	}
-	done := finish(app, state)
-	if !done.Success || done.State.Phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("finish = %+v", done)
-	}
-	view := viewProfile(t, w, profile)
-	for member, name := range map[string]string{"alder": "Alder", "chief": "Chief", "keel": "Keel", "trellis": "Trellis"} {
-		item := readLaunchSetting(app, "crew", member)
-		desktop, exists := view.desktops[protocol.Deref(item.Setting.DesktopID)]
-		if !item.Confirmed || !exists || (member == "alder") != (desktop.ID == target.ID) || (member != "alder" && desktop.Name != name) {
-			t.Fatalf("%s after finish: %+v on %+v", member, item, desktop)
-		}
-	}
-	w.restart()
-	if got := read(w.App()); got.Phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("completed review returned: %+v", got)
-	}
-}
-
-func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExistingAgents(t *testing.T) {
+func TestUpgradingAnInstallWithOnlyAutomationsGivesEachItsDesktopAndPlacesExistingAgents(t *testing.T) {
 	w := &world{World: prepareWorld(t, fakeagent.Claude)}
 	dir := w.Path("check")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -250,33 +189,13 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	}
 	w.start()
 	app := w.App()
-	result := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "migration"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "migration" })
-	if !result.Success || result.State == nil || result.State.Phase != protocol.MigrationPhaseLaunchRequired || len(result.State.LaunchItems) != 2 {
-		t.Fatalf("automation-only migration = %+v, want the automation and the Chief to review", result)
+	if phase := protocol.Deref(app.Initial.MigrationPhase); phase != protocol.MigrationPhaseComplete {
+		t.Fatalf("the upgraded install opened in migration phase %q, want complete", phase)
 	}
-	automationAt := slices.IndexFunc(result.State.LaunchItems, func(i protocol.LaunchDesktopItem) bool { return i.Kind == protocol.LaunchDesktopKindAutomation })
-	if automationAt < 0 {
-		t.Fatalf("automation-only migration reviews %+v, want the automation among them", result.State.LaunchItems)
-	}
-	item := result.State.LaunchItems[automationAt]
-	if item.Kind != protocol.LaunchDesktopKindAutomation || item.ItemID != "1" || item.Confirmed || protocol.Deref(item.Setting.Label) != "Local check (new)" {
-		t.Fatalf("existing automation = %+v", item)
-	}
-	current, active := placedPane(t, w, "existing")
-	run, err := w.Client().AutomationRun(1, "during-review", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	during := protocol.Deref(run.Run.SessionID)
-	w.Launched(string(during))
-	assertBackgroundPlacement(t, w, profileID, string(during), current.ID, current.ID, active)
-	finished := testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: "finish", ExpectedRevision: result.State.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "finish" })
-	if !finished.Success || finished.State.Phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("accept suggestions = %+v", finished)
-	}
+	placedPane(t, w, "existing")
 	got := readLaunchSetting(app, "automation", "1")
 	if !got.Confirmed || protocol.Deref(got.Setting.Label) != "Local check (no ⌘ number)" {
-		t.Fatalf("finish did not give the automation its desktop: %+v", got)
+		t.Fatalf("the upgrade did not give the automation its desktop: %+v", got)
 	}
 }
 
@@ -424,39 +343,15 @@ func TestACompletedMigrationDoesNotReopenForALaterAutomation(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.start()
-	app, cli := w.App(), w.Client()
-	read := func(app *testworld.Peer) protocol.MigrationState {
-		result := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "read"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "read" })
-		if !result.Success || result.State == nil {
-			t.Fatalf("migration read: %+v", result)
-		}
-		return *result.State
+	read := func(app *testworld.Peer) protocol.MigrationPhase {
+		return protocol.Deref(app.Initial.MigrationPhase)
 	}
-	state := read(app)
-	if state.Phase != protocol.MigrationPhasePlacementRequired {
-		t.Fatalf("initial phase: %s", state.Phase)
+	if got := read(w.App()); got != protocol.MigrationPhaseComplete {
+		t.Fatalf("a home waiting for placement opened in phase %q, want complete", got)
 	}
-	if err := cli.AutomationDelete(1); err != nil {
-		t.Fatal(err)
-	}
-	finish := func(requestID string, state protocol.MigrationState) protocol.MigrationState {
-		t.Helper()
-		done := testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: requestID, ExpectedRevision: state.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == requestID })
-		if !done.Success || done.State == nil {
-			t.Fatalf("finish %s: %+v", requestID, done)
-		}
-		return *done.State
-	}
-	placed := finish("finish-placement", read(app))
-	if placed.Phase != protocol.MigrationPhaseLaunchRequired || len(placed.LaunchItems) != 1 || placed.LaunchItems[0].ItemID != "chief" {
-		t.Fatalf("finishing placement = %+v, want the Chief's launch desktop left to review", placed)
-	}
-	if reviewed := finish("finish-review", placed); reviewed.Phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("finishing the review = %+v, want the migration complete", reviewed)
-	}
-	applyAutomation(t, cli, definition)
+	applyAutomation(t, w.Client(), definition)
 	w.restart()
-	if got := read(w.App()); got.Phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("later automation reopened migration: %+v", got)
+	if got := read(w.App()); got != protocol.MigrationPhaseComplete {
+		t.Fatalf("later automation reopened migration: %q", got)
 	}
 }

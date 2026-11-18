@@ -32,7 +32,6 @@ mod launcher;
 mod ledger;
 mod markdown;
 mod migration_failure;
-mod migration_gate;
 mod notebook;
 mod notifications;
 mod opener;

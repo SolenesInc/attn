@@ -72,10 +72,6 @@ Preconditions:
 ]}
 ```
 
-- Creating Quill before the first daemon start opens the one-time launch-desktop setup, so `--wait-ready` cannot reach the normal app until that setup finishes. If `bridge --launch --wait-ready ping` fails on the migration screen, `bridge migration_get_state` shows `launch_required`. Finish the setup one of two ways. These steps are setup, not a person's way in.
-  - With Quill selected, run `bridge native_key '{"key":"1"}'` to choose desktop 1, then `bridge native_key '{"key":"Enter","modifiers":["command"]}'` to finish setup. Wait for `.mp-button.primary` beside “Your Default profile is ready.” and click it natively ("Continue →"). Run `bridge --wait-ready ping` again and complete the baseline doctor before the first ledger action.
-  - Alternatively, run `./attn crew set quill --launch-desktop own` first, then `bridge dom_click '{"selector":".mp-launch-footer .mp-button.primary"}'` and `bridge dom_click '{"selector":".mp-done-actions .mp-button.primary"}'`. These commands also clear the screen.
-
 `<terminal>` is the agent's terminal id from `wsctl list`. Read it again after a resume. `<P>` is the proof folder's path written out.
 
 - **A live row.** Run `wsctl add-session --cwd $L --agent claude --label ledger-agent --id ledger-agent --place`, then `wsctl input --id <terminal> --text "hello" --enter` and wait for `waiting_input` in `./attn agent list`. `./attn session list` shows a row `ledger-agent  claude  waiting_input` labelled `ledger-agent`, and `./attn list` prints JSON with a session whose `id` is `ledger-agent`.

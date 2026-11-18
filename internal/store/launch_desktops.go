@@ -245,41 +245,21 @@ func launchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {
 	return items, nil
 }
 
-// PrepareLaunchMigration opens the launch review once crew files are imported, which happens after SQL upgrades.
-func (s *Store) PrepareLaunchMigration() error {
-	return s.profilesTx(func(tx *sql.Tx, now string) error {
-		var complete bool
-		var phase string
-		if err := tx.QueryRow(`SELECT launch_review_complete, phase FROM profile_migration WHERE id = 1`).Scan(&complete, &phase); err != nil || complete {
-			return err
-		}
-		// Only an upgrade leaves agents without a pane; later, one would be a placement bug.
-		if phase != profilemigration.PhasePlacementRequired {
-			profileIDs, err := queryColumn[string](tx, `SELECT id FROM profiles WHERE deleted_at = ''`)
-			if err != nil {
-				return err
-			}
-			for _, id := range profileIDs {
-				profile, err := loadLiveProfile(tx, id)
-				if err != nil {
-					return err
-				}
-				if err := placeMigrationRemainder(tx, now, profile); err != nil {
-					return err
-				}
-			}
-		}
-		items, err := launchItems(tx)
+func placeEveryProfilesRemainder(tx *sql.Tx, now string) error {
+	profileIDs, err := queryColumn[string](tx, `SELECT id FROM profiles WHERE deleted_at = ''`)
+	if err != nil {
+		return err
+	}
+	for _, id := range profileIDs {
+		profile, err := loadLiveProfile(tx, id)
 		if err != nil {
 			return err
 		}
-		if len(items) == 0 {
-			_, err = tx.Exec(`UPDATE profile_migration SET launch_review_complete = 1 WHERE id = 1`)
-		} else {
-			_, err = tx.Exec(`UPDATE profile_migration SET phase = 'launch_required', revision = revision + 1 WHERE phase = 'complete'`)
+		if err := placeMigrationRemainder(tx, now, profile); err != nil {
+			return err
 		}
-		return err
-	})
+	}
+	return nil
 }
 
 func launchItemDesktop(tx *sql.Tx, written *documentWrites, now string, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {

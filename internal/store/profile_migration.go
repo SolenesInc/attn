@@ -174,32 +174,13 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 		if err := requirePlacement(view, expectedRevision); err != nil {
 			return err
 		}
-		profile, err := loadLiveProfile(tx, view.Manifest.ProfileID)
+		profile, err := finishPlacement(tx, now, &view)
 		if err != nil {
 			return err
 		}
-		current, err := listDesktops(tx, profile.ID)
-		if err != nil {
-			return err
-		}
-		outcome, err := profilemigration.Materialize(view.Plan, view.Live, current, func() string { return newProfileEntityID("split") })
-		if err != nil {
-			return err
-		}
-		if err := writeMigrationOutcome(tx, now, &profile, current, &outcome); err != nil {
-			return err
-		}
-		view.State.Phase = profilemigration.PhaseComplete
-		items, err := launchItems(tx)
-		if err != nil {
-			return err
-		}
-		if len(items) > 0 {
+		if len(view.LaunchItems) > 0 {
 			view.State.Phase = profilemigration.PhaseLaunchRequired
 		} else if _, err := tx.Exec(`UPDATE profile_migration SET launch_review_complete = 1 WHERE id = 1`); err != nil {
-			return err
-		}
-		if err := placeMigrationRemainder(tx, now, profile); err != nil {
 			return err
 		}
 		if err := saveMigrationRow(tx, &view); err != nil {
@@ -213,6 +194,63 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 		return nil
 	})
 	return result, err
+}
+
+// FinishPendingProfileMigration completes an upgraded home's migration at start, once crew files are
+// imported: every imported workspace keeps the desktop its saved draft gives it, and every launch item
+// without a desktop starts on its own.
+func (s *Store) FinishPendingProfileMigration() error {
+	return s.profilesTx(func(tx *sql.Tx, now string) error {
+		var phase string
+		var launchReviewed bool
+		found, err := rowFound(tx.QueryRow(`SELECT phase, launch_review_complete FROM profile_migration WHERE id = 1`), &phase, &launchReviewed)
+		if err != nil || !found || phase == profilemigration.PhaseComplete && launchReviewed {
+			return err
+		}
+		view, err := loadProfileMigration(tx)
+		if err != nil {
+			return err
+		}
+		if view.PlacementRequired() {
+			if pending := view.Plan.Unconfirmed(view.Live); len(pending) > 0 {
+				if view.Plan, err = view.Plan.Keep(view.Live, pending); err != nil {
+					return err
+				}
+			}
+			if _, err := finishPlacement(tx, now, &view); err != nil {
+				return err
+			}
+		} else if err := placeEveryProfilesRemainder(tx, now); err != nil {
+			return err
+		}
+		if view.LaunchItems, err = launchItems(tx); err != nil {
+			return err
+		}
+		return finishLaunchMigration(tx, now, &view)
+	})
+}
+
+func finishPlacement(tx *sql.Tx, now string, view *ProfileMigrationView) (profiles.Profile, error) {
+	profile, err := loadLiveProfile(tx, view.Manifest.ProfileID)
+	if err != nil {
+		return profile, err
+	}
+	current, err := listDesktops(tx, profile.ID)
+	if err != nil {
+		return profile, err
+	}
+	outcome, err := profilemigration.Materialize(view.Plan, view.Live, current, func() string { return newProfileEntityID("split") })
+	if err != nil {
+		return profile, err
+	}
+	if err := writeMigrationOutcome(tx, now, &profile, current, &outcome); err != nil {
+		return profile, err
+	}
+	view.State.Phase = profilemigration.PhaseComplete
+	if view.LaunchItems, err = launchItems(tx); err != nil {
+		return profile, err
+	}
+	return profile, placeMigrationRemainder(tx, now, profile)
 }
 
 func writeMigrationOutcome(tx *sql.Tx, now string, profile *profiles.Profile, current []profiles.Desktop, outcome *profilemigration.Outcome) error {

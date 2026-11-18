@@ -8,11 +8,11 @@ use attn_protocol::{
     GardenReviewUpdatedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
     GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
     InstallCodexUpdateResultMessage, KittyImageResultMessage, KittyPlacementsMessage,
-    MigrationChangedMessage, NotificationListResultMessage, NotificationsUpdatedMessage,
-    OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage,
-    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
-    QuickCaptureReadMessage, QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage,
-    RuntimeRespawnedMessage, SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
+    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
+    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
+    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
+    QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
+    SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
     SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
     SessionsUpdatedMessage, SettingsUpdatedMessage, SharedCodexChangedMessage,
     UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
@@ -573,11 +573,6 @@ impl Task {
                 if let Some(settings) = message.settings {
                     self.store.set_settings(settings);
                 }
-                None
-            }
-            "migration_changed" => {
-                let message: MigrationChangedMessage = parse(&header.event, text)?;
-                self.store.set_migration_phase(&message.state.phase);
                 None
             }
             "profile_arrangement_changed" => {

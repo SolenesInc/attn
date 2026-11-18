@@ -32,7 +32,6 @@ mod wire {
     mod markdown;
     mod markdown_annotations;
     mod migration_failure;
-    mod migration_gate;
     mod notebook;
     mod notifications;
     mod opener;

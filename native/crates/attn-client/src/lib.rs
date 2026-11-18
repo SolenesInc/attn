@@ -17,9 +17,8 @@ pub use performance::Performance;
 pub use pulse::Pulse;
 pub use store::{
     CLOSES_KEPT, Closes, Connection, Desktop, Facts, Garden, GitHub, MigrationMarker,
-    Notifications, PendingMigration, Plugins, Profiles, PullRequests, Refusal, SWEEPS_KEPT,
-    SharedCodex, Slices, Store, Subscription, TileContent, TileContents, TileKey, WorktreePush,
-    WorktreePushes,
+    Notifications, Plugins, Profiles, PullRequests, Refusal, SWEEPS_KEPT, SharedCodex, Slices,
+    Store, Subscription, TileContent, TileContents, TileKey, WorktreePush, WorktreePushes,
 };
 
 pub const CLIENT_KIND: &str = "native-app";

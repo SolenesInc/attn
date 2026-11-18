@@ -36,8 +36,8 @@ func (d *Daemon) importCrewHomes() {
 	if d.store == nil {
 		return
 	}
-	if err := d.store.PrepareLaunchMigration(); err != nil {
-		d.logf("launch desktop migration: %v", err)
+	if err := d.store.FinishPendingProfileMigration(); err != nil {
+		d.logf("finishing the profile migration: %v", err)
 	}
 }
 
