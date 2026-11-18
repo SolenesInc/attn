@@ -125,6 +125,23 @@ fn press(world: &mut World, key: Key) {
     });
 }
 
+/// Moves the focus with Tab until it reaches `key`, as a keyboard user gets there.
+fn tab_to(world: &mut World, key: &str) {
+    let mut seen = Vec::new();
+    loop {
+        let focused = world.screen().focused().and_then(|n| n.key);
+        if focused.as_deref() == Some(key) {
+            return;
+        }
+        assert!(
+            !seen.contains(&focused),
+            "Tab never reaches {key}; it went {seen:?}"
+        );
+        seen.push(focused);
+        press(world, Key::Tab);
+    }
+}
+
 fn click(world: &mut World, key: &str) {
     world
         .automate("press", json!({"target": {"key": key}}))

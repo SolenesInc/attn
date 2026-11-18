@@ -319,7 +319,7 @@ fn on_delegation(spec: Spec) -> (World, Server) {
         vec![saves.answer_save(r)]
     });
     daemon.on("harness_models", |_| message(everyday_catalog()));
-    let mut world = World::start_sized(daemon, (1440.0, 1000.0));
+    let mut world = World::start(daemon);
     server.hold_loads();
     open(&mut world);
     click(&mut world, "settings.nav.delegation");
@@ -477,6 +477,49 @@ fn a_dragged_multi_line_field_keeps_its_height_through_typing_and_leaving_it() {
         world.rect(&grip)[1],
         dragged,
         "typing and leaving the field keep the dragged height"
+    );
+}
+
+#[test]
+fn the_wheel_over_a_multi_line_field_that_fits_scrolls_the_page() {
+    let roles = (0..12)
+        .map(|n| DelegationRole {
+            id: format!("role-{n}"),
+            name: format!("Role {n}"),
+            ..custom("Everyday", "")
+        })
+        .collect();
+    let (mut world, _server) = open_fallback(Spec {
+        roles,
+        ..Spec::default()
+    });
+    let wheel = |world: &mut World, at: [f64; 4], dy: f32| {
+        let point = ((at[0] + at[2] / 2.0) as f32, (at[1] + at[3] / 2.0) as f32);
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, dy).at(point.0, point.1))
+        });
+    };
+    let body = world.rect("settings.body");
+    for _ in 0..20 {
+        let [_, top, _, height] = world.rect(FALLBACK_FIELD);
+        if top + height <= body[1] + body[3] {
+            break;
+        }
+        wheel(&mut world, [body[0], body[1], body[2], 40.0], -60.0);
+    }
+    let field = world.rect(FALLBACK_FIELD);
+    assert!(
+        field[1] + field[3] <= body[1] + body[3],
+        "the field scrolls into view"
+    );
+
+    wheel(&mut world, field, 60.0);
+    let scrolled = world.rect(FALLBACK_FIELD)[1];
+    assert!(
+        scrolled > field[1],
+        "the page scrolls under the wheel over the field: it stays at {scrolled}, was {}",
+        field[1]
     );
 }
 

@@ -9,8 +9,8 @@ use super::harness_catalogs::{
     enter_model, harnesses, open_route, options, pick_effort, pick_model, picker_open, serve,
 };
 use super::{
-    Settings, accepting, click, field, keeping, open, press, rest, retype, state, value, write,
-    writes,
+    Settings, accepting, click, field, keeping, open, press, rest, retype, state, tab_to, value,
+    write, writes,
 };
 
 const BOTH: &[(&str, &str)] = &[("claude_available", "true"), ("codex_available", "true")];
@@ -316,6 +316,42 @@ fn the_harness_default_row_clears_the_default_model() {
     open_route(&mut world, "Claude default model");
     pick_model(&mut world, "Claude default");
     assert_eq!(writes(&world), saved(&[("default_model_claude", "")]));
+    rest(&mut world);
+}
+
+#[test]
+fn the_keyboard_opens_and_closes_each_agent_group_and_its_advanced_part_apart() {
+    let mut world = on_agents(BOTH);
+    let space = || Key::Text(" ".into());
+    let (claude, codex) = (
+        "settings.agent.claude.toggle",
+        "settings.agent.codex.toggle",
+    );
+    assert!(node(&world, claude).is("expanded"));
+    assert!(!node(&world, codex).is("expanded"));
+
+    tab_to(&mut world, codex);
+    press(&mut world, space());
+    assert!(node(&world, codex).is("expanded"));
+    assert!(
+        node(&world, claude).is("expanded"),
+        "opening Codex leaves Claude open"
+    );
+
+    let advanced = "settings.agent.codex.advanced";
+    tab_to(&mut world, advanced);
+    press(&mut world, space());
+    assert!(node(&world, advanced).is("expanded"));
+    assert!(shows(&world, &field("default_context_window_cap_codex")));
+    assert!(!shows(&world, &field("default_context_window_cap_claude")));
+
+    tab_to(&mut world, claude);
+    press(&mut world, space());
+    assert!(!node(&world, claude).is("expanded"));
+    assert!(
+        node(&world, codex).is("expanded"),
+        "closing Claude leaves Codex open"
+    );
     rest(&mut world);
 }
 

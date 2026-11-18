@@ -7,7 +7,7 @@ use attn_testkit::{Target, World, message};
 use rune::Key;
 
 use super::harness_catalogs::{harness, harnesses, model, reported, serve};
-use super::{Settings, accepting, click, named, open, press, rest, state, writes};
+use super::{Settings, accepting, click, named, open, press, rest, state, tab_to, writes};
 
 const OVERRIDES: &str = "model_tier_overrides";
 
@@ -173,23 +173,6 @@ fn a_missing_models_override_stays_visible_and_remove_drops_only_it() {
         )
     );
     rest(&mut world);
-}
-
-/// Moves the focus with Tab until it reaches `key`, as a keyboard user gets there.
-fn tab_to(world: &mut World, key: &str) {
-    let mut seen = Vec::new();
-    loop {
-        let focused = world.screen().focused().and_then(|n| n.key);
-        if focused.as_deref() == Some(key) {
-            return;
-        }
-        assert!(
-            !seen.contains(&focused),
-            "Tab never reaches {key}; it went {seen:?}"
-        );
-        seen.push(focused);
-        press(world, Key::Tab);
-    }
 }
 
 #[test]
