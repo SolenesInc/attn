@@ -333,6 +333,25 @@ fn a_first_setup_opens_on_its_own_and_saves_the_recommended_route_then_starts_th
 }
 
 #[test]
+fn the_first_setup_opens_on_its_own_while_the_empty_desktops_launcher_holds_the_keyboard() {
+    let mut initial = state(
+        Vec::new(),
+        vec![desktop("only", "a0", "Desktop 1", Vec::new())],
+    );
+    initial.settings = Some(settings(false));
+    let mut world = start(initial);
+    world.open_desktop();
+    assert_eq!(focused(&world).as_deref(), Some("launcher.path.field"));
+    world.daemon.emit(CrewUpdatedMessage {
+        members: vec![chief(false)],
+        ..CrewUpdatedMessage::new()
+    });
+    world.settle();
+    assert!(shows(&world, SETUP));
+    assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+}
+
+#[test]
 fn while_agents_run_the_first_setup_waits_for_the_user_to_ask_and_escape_returns_to_the_slot() {
     let mut world = start(initial(
         true,
