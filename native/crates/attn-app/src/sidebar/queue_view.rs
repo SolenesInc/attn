@@ -514,6 +514,29 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .and_then(|cursor| reached(&rows, cursor))
             .map(|at| rows[at].key.clone());
         let t = *t;
+        let reached_row = cursor.clone();
+        let list = col()
+            .key(LIST)
+            .role("list")
+            .label("Queue")
+            .w_full()
+            .growth(GrowthSpec::default())
+            .virtual_rows(
+                lines.len(),
+                LEAF_HEIGHT,
+                move |_: &State, i| keys[i].key().into(),
+                move |state: &State, i| {
+                    let line_key = lines[i].key();
+                    let reached = cursor.as_deref() == Some(line_key.as_str());
+                    line(state, &lines[i], reached, &t)
+                },
+            )
+            .focusable(true)
+            .on_key(super::actions::list_key);
+        let list = match reached_row {
+            Some(key) => list.active_descendant(key),
+            None => list,
+        };
         col()
             .key("sidebar")
             .role("navigation")
@@ -542,26 +565,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                     .scroll(ScrollSpec {
                         stick_bottom: false,
                     })
-                    .child(
-                        col()
-                            .key(LIST)
-                            .role("list")
-                            .label("Queue")
-                            .w_full()
-                            .growth(GrowthSpec::default())
-                            .virtual_rows(
-                                lines.len(),
-                                LEAF_HEIGHT,
-                                move |_: &State, i| keys[i].key().into(),
-                                move |state: &State, i| {
-                                    let line_key = lines[i].key();
-                                    let reached = cursor.as_deref() == Some(line_key.as_str());
-                                    line(state, &lines[i], reached, &t)
-                                },
-                            )
-                            .focusable(true)
-                            .on_key(super::actions::list_key),
-                    )
+                    .child(list)
                     .scroll_bar_styled(attn_ui::scroll_bar(&t)),
             )
             .child(super::chrome::desktop_strip(state, &bands, &t))

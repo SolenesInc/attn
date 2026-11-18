@@ -170,6 +170,7 @@ Steps:
 - **Keyboard and native input**: every desktop and tile action has a key, and the overview runs on arrows, ↵, ⇧↵, digits and Esc. ⌘W reaches attn through File → "Close Pane", so rebinding `terminal.close` or `session.close` does not change the menu's ⌘W. After a switch, typing goes straight to the shown desktop's active tile.
 - **Compatibility across versions**: a later version reads today's desktops through the store's migrations. An arrangement from before desktops becomes one desktop per old workspace at the first daemon start, before any shell. For the profile migration, see [profiles.md](profiles.md).
 - **Flow**: in desktop flow the sidebar lists each desktop with its tiles, and ⌘↑ and ⌘↓ step through desktops. In queue flow the sidebar shows desktop chips and ⌘↑ and ⌘↓ walk the queue instead ([queue-flow.md](queue-flow.md)).
+- **Accessibility**: in the native app the desktop overview keeps focus while the arrows move between cards, and names the focused card as its active descendant (`overview.card.<desktop>`), so VoiceOver reads each desktop as the arrows reach it.
 
 ## Tests
 

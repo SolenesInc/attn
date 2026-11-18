@@ -271,6 +271,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .key(pop.surface())
         .role("dialog")
         .label("Delegation chain")
+        .active_descendant(row_key(pop, picked))
         .w(300.0)
         .padding(space::S2)
         .gap(space::S1)

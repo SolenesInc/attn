@@ -177,6 +177,7 @@ Steps:
 - **Harnesses**: every harness drives the garden with the same `attn seed` verbs and reads the same garden prompts. A seed update rings the tender in the tender's own harness. A shell never gets a ring.
 - **Keyboard and native input**: ⌘⇧T, the palette, arrows, `/` and Escape reach the garden and its rows, and a card's open menu takes arrows and Enter. After ⌘⇧T opens the drawer, the arrows do nothing until focus is inside the garden. A click puts focus there, and so does the move from fullscreen to the drawer.
 - **Compatibility across versions**: a later version reads today's seeds, through the store's garden migrations. `attn ticket` answers with its replacement. `attn seed handover` was removed and is an unknown command.
+- **Accessibility**: in the native app the search field names its active answer as its active descendant while it has answers, and a tile's pinned seed list names its picked seed, so VoiceOver reads each as ↑ and ↓ move.
 
 ## Tests
 

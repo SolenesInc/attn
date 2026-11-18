@@ -100,6 +100,7 @@ Steps:
 - **Harnesses**: each row carries its harness's mark. With logos off, the queue sidebar still names the harness in the row's hover text.
 - **Keyboard and native input**: ⌘B, ⌘⇧A, ⌥⌘] and ⌥⌘[ reach the sidebar from a terminal or the window. In an input, a textarea or an editor outside a terminal, ⌘B stays with that field, while the others still fire. In the queue sidebar, ↑ and ↓ walk rows, and Escape clears the filter, then closes the list, then returns to the agent on screen.
 - **Flow**: queue flow shows the queue sidebar and the queue bar, and desktop flow shows the desktop sidebar and the rail. ⌘⇧A opens the agent list only where the queue sidebar shows. Both open sidebars share one width.
+- **Accessibility**: in the native app the sidebar's list keeps focus while ↑ and ↓ move its reached row, and names that row as its active descendant, so VoiceOver reads each agent as the arrows reach it.
 
 ## Tests
 

@@ -592,6 +592,15 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
         .on_input_key(super::field_key)
         .grow(1.0)
         .color(t.text_primary);
+    let found = place
+        .query
+        .searches
+        .then(|| place.answers.get(place.active(state)))
+        .flatten();
+    let field = match found {
+        Some(m) => field.active_descendant(row_key(&m.seed.id)),
+        None => field,
+    };
     let mut meta = row()
         .key("garden.search.meta")
         .items_center()

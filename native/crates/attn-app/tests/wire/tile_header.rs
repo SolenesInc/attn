@@ -989,12 +989,18 @@ fn a_pinned_chain_starts_on_its_agent_walks_with_the_arrows_home_and_end_and_ope
                 "release notes · Codex",
             ]
         );
-        keys.iter().position(|k| {
+        let at = keys.iter().position(|k| {
             world
                 .screen()
                 .find(Target::key(k.clone()))
                 .is_some_and(|n| n.is("selected"))
-        })
+        });
+        assert_eq!(
+            world.screen().active_option().and_then(|n| n.key),
+            at.map(|i| keys[i].clone()),
+            "the chain names its picked agent to a screen reader"
+        );
+        at
     };
     world.gesture(|app| app.click(Target::key("tile.a.role")));
     assert_eq!(picked(&world), Some(1));

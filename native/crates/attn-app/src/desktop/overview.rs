@@ -103,6 +103,10 @@ pub(crate) fn create(state: &mut State, tx: &mut Tx) {
     );
 }
 
+fn card_key(desktop: &str) -> String {
+    format!("overview.card.{desktop}")
+}
+
 /// Arrows move the focused card, Return switches to it and Shift-Return sends the active tile
 /// there, and a digit switches to the desktop on that slot.
 fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -265,7 +269,12 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         .modal_tx(true, close)
         .focusable(true)
         .autofocus()
-        .on_key(key)
+        .on_key(key);
+    let dialog = match focused {
+        Some(id) => dialog.active_descendant(card_key(id)),
+        None => dialog,
+    };
+    let dialog = dialog
         .w_full()
         .max_w(880.0)
         .max_h(800.0)
@@ -358,7 +367,7 @@ fn card(
         .fill(t.bg_app)
         .children(layout);
     let open = col()
-        .key(format!("overview.card.{}", desktop.id))
+        .key(card_key(&desktop.id))
         .role("button")
         .label(title.to_owned())
         .a11y_value(match (current, focused) {

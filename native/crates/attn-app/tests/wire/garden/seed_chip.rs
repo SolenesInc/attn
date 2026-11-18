@@ -340,6 +340,15 @@ fn the_palette_pins_an_agents_seeds_and_the_keyboard_opens_one() {
 
     show_seeds(&mut world);
     key(&mut world, Key::Down);
+    assert_eq!(
+        world
+            .screen()
+            .active_option()
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("second · Growing"),
+        "the list names its picked seed to a screen reader"
+    );
     key(&mut world, Key::Enter);
     assert_eq!(opened(&world), [("s-b".into(), "s1".into())]);
     assert_eq!(listed(&world), None);

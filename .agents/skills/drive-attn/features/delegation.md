@@ -150,6 +150,7 @@ Steps:
 - **Keyboard and native input**: ⌘⇧↑, the palette and the card's arrows, Home, End, Enter and Escape reach the chain. A placed delegate does not take the keyboard: the dispatcher keeps focus.
 - **Compatibility across versions**: retired flags answer with their replacement: `--ticket`, `--confirm`, `--plot`, `--worktree`, `--repo`, `--no-worktree`, `--preferences-revision` and the two flags that once chose a desktop. A delegate keeps the role it launched with when the role is later changed or deleted.
 - **Flow**: `--priority` puts the delegate's owed turns first in queue flow. The chain trigger shows on queue sidebar rows and desktop sidebar rows alike.
+- **Accessibility**: in the native app the pinned delegation chain keeps focus while the arrows walk it, and names the picked agent as its active descendant, so VoiceOver reads each agent as the arrows reach it.
 
 ## Tests
 

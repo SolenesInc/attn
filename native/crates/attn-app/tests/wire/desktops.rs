@@ -3016,6 +3016,10 @@ fn overview_card(world: &World, slot: u32) -> attn_testkit::Node {
         .get(Target::key(format!("overview.card.work/desktop_{slot}")))
 }
 
+fn heard_card(world: &World) -> Option<String> {
+    world.screen().active_option().and_then(|n| n.key)
+}
+
 #[test]
 fn the_overview_moves_between_desktops_by_arrow_and_switches_or_sends_the_active_tile() {
     let mut world = start(two_desktops());
@@ -3027,9 +3031,18 @@ fn the_overview_moves_between_desktops_by_arrow_and_switches_or_sends_the_active
         overview_card(&world, 1).value.as_deref(),
         Some("current, focused")
     );
+    assert_eq!(
+        heard_card(&world).as_deref(),
+        Some("overview.card.work/desktop_1"),
+        "a screen reader hears the focused card"
+    );
 
     key(&mut world, rune::Key::Right, false);
     assert_eq!(overview_card(&world, 2).value.as_deref(), Some("focused"));
+    assert_eq!(
+        heard_card(&world).as_deref(),
+        Some("overview.card.work/desktop_2")
+    );
     key(&mut world, rune::Key::Enter, true);
     let moved = sent(&world, "desktop_move_leaf");
     assert_eq!(moved.len(), 1, "Shift-Return sends the active tile");

@@ -292,12 +292,18 @@ fn focused(world: &World) -> Option<Node> {
 }
 
 fn active_answer(world: &World) -> Option<String> {
-    world
+    let shown = world
         .screen()
         .all(Target::role("list-box-option"))
         .into_iter()
         .find(|n| n.is("selected"))
-        .and_then(|n| n.name)
+        .and_then(|n| n.name);
+    assert_eq!(
+        world.screen().active_option().and_then(|n| n.name),
+        shown,
+        "the search field names its active answer to a screen reader"
+    );
+    shown
 }
 
 /// The window landed its motion with no time passing, and goes to sleep once the timers it set

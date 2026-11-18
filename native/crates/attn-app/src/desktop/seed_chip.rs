@@ -521,6 +521,10 @@ fn prose(words: String, t: &Tokens) -> El {
     text(words).font(type_::BODY).color(t.text_primary).wrap()
 }
 
+fn seed_key(pop: &Pop, i: usize) -> String {
+    format!("{}.seed.{i}", pop.surface())
+}
+
 /// The open seed popover, under its chip.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let chip = of_facts(&pop.session, &state.facts)?;
@@ -553,6 +557,11 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
                 .font(attn_ui::kit(t).ty.caption())
                 .color(t.text_muted)
         }));
+    let surface = if pop.pinned && !single {
+        surface.active_descendant(seed_key(pop, state.window.desk.header_pop.picked))
+    } else {
+        surface
+    };
     let surface = if pop.pinned {
         let ids: Vec<String> = chip.entries.iter().map(|e| e.id.clone()).collect();
         let session = pop.session.clone();
@@ -776,7 +785,7 @@ fn option(
     };
     let (id, session) = (entry.id.clone(), pop.session.clone());
     row()
-        .key(format!("{}.seed.{i}", pop.surface()))
+        .key(seed_key(pop, i))
         .role("option")
         .label(format!("{title} · {side}"))
         .focus_selected(picked)

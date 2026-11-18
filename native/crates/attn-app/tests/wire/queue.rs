@@ -1664,12 +1664,18 @@ fn reached(world: &World) -> Option<String> {
     if focused.as_deref() != Some("sidebar.queue") {
         return focused;
     }
-    world
+    let shown = world
         .screen()
         .children(Target::key("sidebar.queue"))
         .into_iter()
         .find(|n| n.is("selected"))
-        .and_then(|n| n.key)
+        .and_then(|n| n.key);
+    assert_eq!(
+        world.screen().active_option().and_then(|n| n.key),
+        shown,
+        "the list names its reached row to a screen reader"
+    );
+    shown
 }
 
 #[test]
