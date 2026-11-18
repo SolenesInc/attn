@@ -355,3 +355,19 @@ func TestACompletedMigrationDoesNotReopenForALaterAutomation(t *testing.T) {
 		t.Fatalf("later automation reopened migration: %q", got)
 	}
 }
+
+func TestAFreshInstanceStartsCrewFoundAtFirstStartOnTheirOwnDesktopsWithoutALaunchReview(t *testing.T) {
+	w := newCrewWorld(t)
+	app := w.App()
+	result := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "migration"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "migration" })
+	if !result.Success || result.State == nil || result.State.Phase != protocol.MigrationPhaseComplete {
+		t.Fatalf("a fresh instance with crew homes asked for the workspace migration: %+v", result)
+	}
+	view := viewProfile(t, w, app.SelectedProfile())
+	for member, name := range map[string]string{"alder": "Alder", "keel": "Keel", "trellis": "Trellis"} {
+		item := readLaunchSetting(app, "crew", member)
+		if desktop, exists := view.desktops[protocol.Deref(item.Setting.DesktopID)]; !exists || desktop.Name != name {
+			t.Fatalf("%s starts on %+v, want its own desktop %q", member, item, name)
+		}
+	}
+}
