@@ -1,6 +1,7 @@
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::{El, Key, KeyEvent, Span, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, TextInput};
 
 use crate::State;
@@ -79,14 +80,16 @@ fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
             stick_bottom: false,
         });
     if lines.is_empty() {
-        return list.child(
-            text("No matching lines")
-                .key(format!("terminal.{id}.filter.empty"))
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .px(8.0)
-                .py(6.0),
-        );
+        return list
+            .child(
+                text("No matching lines")
+                    .key(format!("terminal.{id}.filter.empty"))
+                    .font(type_::LABEL)
+                    .color(t.text_secondary)
+                    .px(8.0)
+                    .py(6.0),
+            )
+            .scroll_bar_styled(attn_ui::scroll_bar(t));
     }
     list.children(lines.iter().map(|line| {
         let (id, offset) = (id.to_owned(), line.offset);
@@ -119,6 +122,7 @@ fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
             .px(6.0)
             .radius(4.0)
     }))
+    .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn surface(el: El, t: &Tokens) -> El {

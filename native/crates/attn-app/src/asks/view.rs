@@ -7,6 +7,7 @@ use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Image, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown};
 
 use super::{Chip, Item, Kind, Lists, mentions, questions};
@@ -213,6 +214,7 @@ fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
         .padding(8.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .children(rows)
+        .scroll_bar_styled(attn_ui::asks_scroll_bar(t))
 }
 
 fn divider(words: &'static str, t: &Tokens) -> El {
@@ -358,6 +360,7 @@ impl<'a> Prose<'a> {
             outpost: None,
             view: "asks.ask".into(),
             opens_seed: None,
+            part: None,
         };
         let path = self.document.clone();
         let pictures = self.pictures.clone();
@@ -546,6 +549,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .children(parts)
         .children(note)
         .children(error)
+        .scroll_bar_styled(attn_ui::asks_scroll_bar(t))
 }
 
 fn open_agent(session: &Session, from: &str, t: &Tokens) -> El {

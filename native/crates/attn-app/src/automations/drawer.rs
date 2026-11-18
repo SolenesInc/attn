@@ -3,6 +3,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, Checkbox, ControlSize, TextInput};
 
 use super::look::{self, Look};
@@ -125,7 +126,7 @@ fn list(automations: &Automations, t: &Tokens) -> El {
     {
         body = body.child(runs(automations, selected, t));
     }
-    body
+    body.scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn error_text(key: &str, error: &str, t: &Tokens) -> El {

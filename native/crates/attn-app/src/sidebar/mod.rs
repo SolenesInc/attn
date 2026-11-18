@@ -21,6 +21,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
+use rune_kit::ScrollBar;
 
 pub use model::AgentState;
 pub(crate) use model::{AgentRow, Line, display_name, tile_title};
@@ -312,7 +313,8 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                                 move |state: &State, i| line(state, &lines, i, &t),
                             ),
                     )
-                    .children(new_desktop.map(|over| new_desktop_drop(over, &t))),
+                    .children(new_desktop.map(|over| new_desktop_drop(over, &t)))
+                    .scroll_bar_styled(attn_ui::scroll_bar(&t)),
             )
             .child(dock::view(&dock, &t))
     })

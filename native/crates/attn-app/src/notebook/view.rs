@@ -6,6 +6,7 @@ use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{Color, El, ScrollSpec, TextStyle, Tx, col, row, text, text_input};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use super::file_kind::FileKind;
@@ -303,6 +304,7 @@ fn tree(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
             stick_bottom: false,
         })
         .children(rows)
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn folder_rows(
@@ -611,7 +613,8 @@ fn open_view(id: &SurfaceId, open: &Open, inset: f32, t: &Tokens) -> El {
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(editor),
+                .child(editor)
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
         )
 }
 
@@ -867,7 +870,8 @@ fn rail(id: &SurfaceId, surface: &Surface, t: &Tokens) -> Option<El> {
                         t,
                     ))
                     .children(backlinks_body),
-            ),
+            )
+            .scroll_bar_styled(attn_ui::scroll_bar(t)),
     )
 }
 

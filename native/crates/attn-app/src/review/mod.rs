@@ -27,6 +27,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::{radius, space};
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row, text};
+use rune_kit::ScrollBar;
 
 use crate::State;
 use document::Part;
@@ -826,13 +827,23 @@ pub(crate) fn body(
         document = document.active_descendant(key);
     }
     let frame = match reading.frame {
-        Frame::Map => map(tile, &reading, document.w_full().grow(1.0), revision, t),
+        Frame::Map => map(
+            tile,
+            &reading,
+            document
+                .w_full()
+                .grow(1.0)
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
+            revision,
+            t,
+        ),
         Frame::Walkthrough => {
             let script = (!review.filled).then(|| {
                 document
                     .w_frac(SCRIPT_SHARE)
                     .max_w(SCRIPT_WIDTH)
                     .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
+                    .scroll_bar_styled(attn_ui::scroll_bar(t))
             });
             let stage = match review.files.last() {
                 Some(open) => {
@@ -865,7 +876,10 @@ pub(crate) fn body(
                 .children(script)
                 .child(stage)
         }
-        Frame::Brief => document.w_full().grow(1.0),
+        Frame::Brief => document
+            .w_full()
+            .grow(1.0)
+            .scroll_bar_styled(attn_ui::scroll_bar(t)),
     };
     let frame = match review
         .files
@@ -1143,7 +1157,8 @@ fn map(tile: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -
                     .h_full()
                     .scroll(ScrollSpec {
                         stick_bottom: false,
-                    }),
+                    })
+                    .scroll_bar_styled(attn_ui::scroll_bar(t)),
             )
             .child(step)
     } else {
@@ -1157,7 +1172,8 @@ fn map(tile: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -
                     .max_h(width.max(320.0) * 0.6)
                     .scroll(ScrollSpec {
                         stick_bottom: false,
-                    }),
+                    })
+                    .scroll_bar_styled(attn_ui::scroll_bar(t)),
             )
             .child(step)
     }

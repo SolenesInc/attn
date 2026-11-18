@@ -107,6 +107,8 @@ pub(crate) struct Document {
     pub(crate) outpost: Option<Outpost>,
     pub(crate) view: String,
     pub(crate) opens_seed: Option<fn(&mut State, &str, &mut Tx)>,
+    /// The byte of the source a reading of one part of the document starts at.
+    pub(crate) part: Option<usize>,
 }
 
 #[derive(Clone)]

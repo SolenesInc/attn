@@ -2,6 +2,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{ClipboardContent, Cx, El, Image, SurfaceFit, Tx, col, el, row, text, text_input};
+use rune_kit::ScrollBar;
 
 use super::attach::{self, Attachment, Source};
 use super::previews::{self, Sent};
@@ -141,7 +142,8 @@ fn compose(panel: &Panel, t: &Tokens) -> El {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .child(field);
+        .child(field)
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     col()
         .w_full()
         .grow(1.0)
@@ -580,7 +582,8 @@ fn recent(panel: &Panel, t: &Tokens) -> El {
                         .w_full()
                         .gap(space::S2)
                         .children(rows),
-                ),
+                )
+                .scroll_bar_styled(attn_ui::document_scroll_bar(t)),
         )
         .child(
             text("↑↓ move    esc back to draft")

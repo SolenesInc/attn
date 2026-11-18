@@ -5,6 +5,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, Placement};
 
 use super::fit::{Level, Widths, text_w};
@@ -264,7 +265,8 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
             rows.iter()
                 .enumerate()
                 .map(|(i, (session, depth))| agent_row(pop, i, session, *depth, i == picked, t)),
-        );
+        )
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     let surface = col()
         .key(pop.surface())
         .role("dialog")

@@ -7,6 +7,7 @@ use rune::tok::space;
 use rune::{
     El, Key, KeyEvent, Phase, ScrollSpec, TextEdit, Tx, col, el, memo, row, text, text_input,
 };
+use rune_kit::ScrollBar;
 
 use super::model::{self, SessionNames};
 use crate::State;
@@ -1074,13 +1075,15 @@ fn column_view(
         .child(head)
         .child(
             col()
+                .key(format!("garden.board.body.{}", column.name()))
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(body),
+                .child(body)
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
         )
 }
 

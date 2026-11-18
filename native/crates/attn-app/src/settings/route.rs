@@ -7,6 +7,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{Color, El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::popover::{anchored, raised};
 use rune_kit::{Button, ButtonVariant, ControlSize, Placement, TextInput};
 use serde::{Deserialize, Serialize};
@@ -1437,7 +1438,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
                 .color(t.text_tertiary),
         );
     }
-    list
+    list.scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {

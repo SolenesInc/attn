@@ -8,9 +8,10 @@ use attn_protocol::{DesktopUpdateTileMessage, MarkdownAnnotation, Session};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::{Cx, El, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant, Menu, MenuItem, Placement};
+use rune_kit::{Button, ButtonVariant, Menu, MenuItem, Placement, ScrollBar};
 
 use super::drafts::{self, Sent, To};
+
 use crate::State;
 use crate::desktop::Room;
 
@@ -846,13 +847,15 @@ fn notes(
         .child(head)
         .child(
             col()
+                .key(key(tile, "notes.list"))
                 .grow(1.0)
                 .min_h(0.0)
                 .gap(6.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .children(body),
+                .children(body)
+                .scroll_bar_styled(attn_ui::document_scroll_bar(t)),
         );
     rune_kit::popover::raised(attn_ui::kit(t), surface, super::annotating::SURFACE_RADIUS)
 }

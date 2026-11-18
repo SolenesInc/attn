@@ -5,6 +5,7 @@
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::{Color, Cycle, El, Shadow, TextStyle, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant};
 
 /// A row's mark, as the Tauri app's `.ledger-glyph.is-*`.
@@ -324,6 +325,7 @@ pub(crate) fn inspector(head: El, fields: Vec<El>, t: &Tokens) -> El {
         })
         .child(head.mb(2.0))
         .children(fields)
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 const INSPECTOR_TITLE: TextStyle = TextStyle {

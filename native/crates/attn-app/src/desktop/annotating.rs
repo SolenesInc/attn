@@ -1,6 +1,7 @@
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::{Drag, El, Key, KeyEvent, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, TextArea};
 
 use crate::State;
@@ -587,7 +588,8 @@ fn panel(
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .children(marking.marks.iter().map(|m| card(id, m, t)));
+        .children(marking.marks.iter().map(|m| card(id, m, t)))
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
     let note = TextArea::new(&marking.note)
         .key(format!("terminal.{id}.annotation.note.field"))

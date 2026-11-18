@@ -652,6 +652,17 @@ fn recent_shows_the_picture_of_a_sent_image_read_in_chunks_from_the_daemon() {
     rest(&mut world);
 }
 
+/// Scrolls the recent messages up to their top with the wheel and presses "Show older
+/// messages" there, in one go, as a person does.
+fn show_older(world: &mut World) {
+    world.capture_gesture(|d| {
+        let (x, y) = d.runtime.find("capture.history.list").unwrap();
+        d.runtime.wheel(x, y, 2000.0);
+        d.runtime.frame(0.0);
+        d.click(Target::role("button").name("Show older messages"));
+    });
+}
+
 #[test]
 fn recent_heads_each_day_with_its_date() {
     let (daemon, kept) = home();
@@ -674,11 +685,7 @@ fn recent_heads_each_day_with_its_date() {
     let mut world = World::start(daemon);
     open(&mut world);
     world.capture_gesture(|d| d.click(Target::role("button").name("Recent messages")));
-    world.capture_gesture(|d| {
-        let (x, y) = d.runtime.find("capture.history.list").unwrap();
-        d.runtime.wheel(x, y, 2000.0);
-    });
-    world.capture_gesture(|d| d.click(Target::role("button").name("Show older messages")));
+    show_older(&mut world);
     let screen = world.capture_screen();
     let day = |id: &str| {
         screen
@@ -867,11 +874,7 @@ fn recent_pages_older_messages_on_request() {
         4
     );
     assert!(!shows(&world, "\"one\""));
-    world.capture_gesture(|d| {
-        let (x, y) = d.runtime.find("capture.history.list").unwrap();
-        d.runtime.wheel(x, y, 2000.0);
-    });
-    world.capture_gesture(|d| d.click(Target::role("button").name("Show older messages")));
+    show_older(&mut world);
     assert_eq!(
         world.capture_screen().all(Target::role("list-item")).len(),
         6

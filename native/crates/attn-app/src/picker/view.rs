@@ -4,6 +4,7 @@ use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph};
 use rune::tok::space;
 use rune::{El, TextStyle, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
@@ -613,7 +614,8 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
             .padding(8.0)
             .children(group("Recent", "RECENT", recents))
             .children(group("Directories", "DIRECTORIES", directories))
-            .children(empty),
+            .children(empty)
+            .scroll_bar_styled(attn_ui::scroll_bar(t)),
         footer(w, &hints, t),
     ]
 }

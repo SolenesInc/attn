@@ -9,6 +9,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::{radius, space};
 use rune::{Color, El, GrowthSpec, Live, ScrollPos, ScrollSpec, TextStyle, Tx, col, row, text};
+use rune_kit::ScrollBar;
 
 use super::stop::{Colors, code_row};
 use crate::State;
@@ -333,7 +334,8 @@ pub(super) fn view(
             move |at: ScrollPos| {
                 reported.set([at.offset[0], at.viewport[0]]);
             }
-        }),
+        })
+        .scroll_bar_styled(attn_ui::scroll_bar(t)),
     };
     let line = file.line();
     let strip: Vec<El> = notes

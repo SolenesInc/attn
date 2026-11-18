@@ -5,6 +5,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{El, Image, ScrollSpec, Tx, col, el, memo, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant};
 
 use crate::asks::Item as AskItem;
@@ -83,7 +84,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                         .flex_wrap()
                         .child(sessions)
                         .child(pull_requests::home_card(state, t)),
-                ),
+                )
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
         )
 }
 

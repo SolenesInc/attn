@@ -4,6 +4,7 @@ use attn_ui::keycap;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, ControlSize, Menu, MenuItem};
 
 use super::parts::{self, Glyph, Ink, body, field, group, muted};
@@ -298,22 +299,25 @@ fn list(state: &State, rows: &[Row<'_>], selected: Option<&Row<'_>>, t: &Tokens)
     if rows.is_empty() {
         let failed = ledger.failed(state.epoch_ms);
         let words = ledger.empty_message(state.epoch_ms);
-        return list.child(
-            text(words.clone())
-                .key("ledger.empty")
-                .role(if failed { "alert" } else { "note" })
-                .label(words)
-                .font(type_::BODY)
-                .color(if failed { t.error } else { t.text_tertiary })
-                .wrap()
-                .padding(space::S6),
-        );
+        return list
+            .child(
+                text(words.clone())
+                    .key("ledger.empty")
+                    .role(if failed { "alert" } else { "note" })
+                    .label(words)
+                    .font(type_::BODY)
+                    .color(if failed { t.error } else { t.text_tertiary })
+                    .wrap()
+                    .padding(space::S6),
+            )
+            .scroll_bar_styled(attn_ui::scroll_bar(t));
     }
     let chosen = selected.map(|r| r.entry.id.as_str());
     list.children(
         rows.iter()
             .map(|r| list_row(state, r, Some(r.entry.id.as_str()) == chosen, t)),
     )
+    .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {

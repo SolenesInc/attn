@@ -6,6 +6,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::{radius, space};
 use rune::{El, Key, KeyEvent, Tx, col, row, text};
+use rune_kit::ScrollBar;
 
 use crate::State;
 
@@ -586,6 +587,7 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
                     stick_bottom: false,
                 })
                 .child(places)
+                .scroll_bar_styled(attn_ui::scroll_bar(t))
         }));
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
 }

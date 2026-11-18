@@ -11,6 +11,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, ScrollSpec, TextEdit, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::layout::{LeafKind, Node};
@@ -821,7 +822,8 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
                 })
                 .color(t.text_primary)
                 .selectable(true),
-        );
+        )
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     let notice = notice(reply, blocked).map(|words| {
         row()
             .key("shelf.peek.notice")

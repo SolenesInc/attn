@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use rune::{El, Span, TextStyle, col, el, row, text};
+use rune_kit::ScrollBar;
 
 use crate::colors::mix_srgb;
 use crate::{Backdrop, Frame, Tokens, frame};
@@ -50,7 +51,7 @@ pub fn layer(t: &Tokens, key: impl Into<String>, panel: El) -> El {
 pub fn panel(t: &Tokens, panel: El, input: El, list: El, footer: Option<El>) -> El {
     let panel = panel
         .child(input.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle))
-        .child(list)
+        .child(list.scroll_bar_styled(crate::scroll_bar(t)))
         .children(footer.map(|f| f.border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)));
     Frame {
         fill: t.bg_elevated,

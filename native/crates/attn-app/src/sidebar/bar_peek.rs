@@ -6,6 +6,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{Align, El, Shadow, Side, Tx, col, text};
+use rune_kit::ScrollBar;
 
 use crate::State;
 use crate::palette::Row;
@@ -144,7 +145,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .children(rows),
+                .children(rows)
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
         )
         .children(foot);
     let (align, label) = match anchor {

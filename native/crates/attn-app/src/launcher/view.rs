@@ -1,6 +1,7 @@
 use attn_ui::colors::mix_srgb;
 use attn_ui::{Tokens, icon};
 use rune::{Color, El, KeyPlatform, Span, TextCase, TextStyle, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::TextInput;
 
 use super::{
@@ -463,7 +464,7 @@ fn section(title: &str, look: &Look) -> El {
 }
 
 /// The scrolling list under the field.
-fn results(key: String, label: &str, children: Vec<El>) -> El {
+fn results(key: String, label: &str, children: Vec<El>, t: &Tokens) -> El {
     col()
         .key(key)
         .role("listbox")
@@ -477,6 +478,7 @@ fn results(key: String, label: &str, children: Vec<El>) -> El {
         .pt(6.0)
         .pb(8.0)
         .children(children)
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 /// A row's glyph in its tile, which turns to the accent while the row is highlighted.
@@ -646,7 +648,7 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, loo
                 .py(16.0)
         }));
     }
-    results(format!("{w}.locations"), "Locations", children)
+    results(format!("{w}.locations"), "Locations", children, t)
 }
 
 /// The dot before a machine's name: green while connected, amber while stalled, red once lost
@@ -819,7 +821,7 @@ fn where_list(
             look,
         ));
     }
-    results(format!("{w}.where"), "Where", children)
+    results(format!("{w}.where"), "Where", children, t)
 }
 
 /// "NEW WORKTREE · name · type to rename", the name in green and as typed.

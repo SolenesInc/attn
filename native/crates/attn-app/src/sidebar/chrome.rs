@@ -4,6 +4,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant};
 
 use super::model::{desktop_number, desktop_title, ordered_desktops};
@@ -436,7 +437,8 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .children(chips.iter().map(|c| rail_chip(c, t))),
+                .children(chips.iter().map(|c| rail_chip(c, t)))
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
         )
 }
 

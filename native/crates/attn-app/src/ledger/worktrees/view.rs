@@ -3,6 +3,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, row, text, text_input};
+use rune_kit::ScrollBar;
 
 use super::super::parts::{self, Glyph, Ink, body, group, muted};
 use super::super::query::{
@@ -92,18 +93,20 @@ pub(crate) fn list(state: &State, t: &Tokens) -> El {
     }
     if out.is_empty() {
         let words = empty_words(state);
-        return list.child(
-            text(words)
-                .key("ledger.empty")
-                .role("note")
-                .label(words)
-                .font(type_::BODY)
-                .color(t.text_tertiary)
-                .wrap()
-                .padding(space::S6),
-        );
+        return list
+            .child(
+                text(words)
+                    .key("ledger.empty")
+                    .role("note")
+                    .label(words)
+                    .font(type_::BODY)
+                    .color(t.text_tertiary)
+                    .wrap()
+                    .padding(space::S6),
+            )
+            .scroll_bar_styled(attn_ui::scroll_bar(t));
     }
-    list.children(out)
+    list.children(out).scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn empty_words(state: &State) -> &'static str {

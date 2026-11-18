@@ -6,6 +6,7 @@ use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Mods, TextStyle, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use crate::State;
@@ -381,7 +382,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .mt(6.0),
         )
         .child(row().mt(14.0).child(scheme_button(state, &step.scheme, k)))
-        .children((!step.keys.is_empty()).then(|| keys.mt(14.0)));
+        .children((!step.keys.is_empty()).then(|| keys.mt(14.0)))
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     Dialog::new(DIALOG, "What's new", DialogFrame::whats_new(t))
         .width(scenes::WIDTH + 2.0 * INSET)
         .click_outside(true)

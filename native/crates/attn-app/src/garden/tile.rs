@@ -126,7 +126,7 @@ pub(crate) fn body(
         .children(sheet.seeds("related", "Related", related))
         .children(sheet.artifacts(document))
         .child(sheet.log(document, error));
-    super::zoomed(reads.zoom, super::view::scroll(&view, page))
+    super::zoomed(reads.zoom, super::view::scroll(&view, page, t))
 }
 
 /// Escape in a seed tile that holds the keyboard climbs to its seed's plot; false when the

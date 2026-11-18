@@ -6,6 +6,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::TextInput;
 
 use super::file::Target;
@@ -382,7 +383,8 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
                 el
             }
         }))
-        .children(empty);
+        .children(empty)
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     let panel = col()
         .key("review.search")
         .role("dialog")

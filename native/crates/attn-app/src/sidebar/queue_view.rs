@@ -4,6 +4,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, TextInput};
 
 use super::model::{AgentRow, display_name, ordered_desktops};
@@ -560,7 +561,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                             )
                             .focusable(true)
                             .on_key(super::actions::list_key),
-                    ),
+                    )
+                    .scroll_bar_styled(attn_ui::scroll_bar(&t)),
             )
             .child(super::chrome::desktop_strip(state, &bands, &t))
     })

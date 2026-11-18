@@ -727,6 +727,79 @@ fn a_long_code_line_stays_one_line() {
     );
 }
 
+/// The thumbs of the document's sideways scroll bars, in document order: where each draws and
+/// how visible it is.
+fn wide_thumbs(world: &World) -> Vec<([f32; 4], f32)> {
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| e.key.as_deref() == Some("thumb") && e.path.contains("wide-"))
+        .map(|e| (e.rect, e.opacity))
+        .collect()
+}
+
+#[test]
+fn a_code_block_wider_than_the_document_shows_its_scroll_bar_and_one_that_fits_shows_none() {
+    let mut world = start();
+    let long = format!(
+        "let wide = [{}];",
+        (0..80)
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    world
+        .daemon
+        .emit(content(&format!("```\nshort\n```\n\n```\n{long}\n```\n")));
+    world.settle();
+    let thumbs = wide_thumbs(&world);
+    assert_eq!(thumbs.len(), 2, "a bar on each code block: {thumbs:?}");
+    let [(short, _), (wide, _)] = thumbs[..] else {
+        unreachable!()
+    };
+    assert_eq!(short[2], 0.0, "a block that fits shows no thumb");
+    let line = world
+        .screen()
+        .bounds(Target::role("label").name(&long))
+        .expect("the long line is shown");
+    assert!(
+        wide[2] > 0.0 && wide[2] < line[2],
+        "the thumb is as long as the share of the line shown: {wide:?} of {line:?}"
+    );
+    assert!(
+        wide[1] + wide[3] <= line[1] + line[3] + 24.0,
+        "the thumb runs along the block's bottom edge: {wide:?} under {line:?}"
+    );
+
+    let at = ((line[0] + 40.0) as f32, (line[1] + 4.0) as f32);
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(rune::WheelEvent::new(-200.0, 0.0).at(at.0, at.1))
+    });
+    world.settle();
+    let [_, (scrolled, _)] = wide_thumbs(&world)[..] else {
+        unreachable!()
+    };
+    assert!(
+        scrolled[0] > wide[0],
+        "scrolling the block sideways moves its thumb along: {wide:?} -> {scrolled:?}"
+    );
+
+    world.daemon.emit(content(&format!(
+        "```\nshort\n```\n\n```\n{long}\n```\n\nEdited.\n"
+    )));
+    world.settle();
+    let [_, (edited, _)] = wide_thumbs(&world)[..] else {
+        unreachable!()
+    };
+    assert_eq!(
+        edited[0], scrolled[0],
+        "an edit to the file keeps the block where it was scrolled"
+    );
+    rest(&mut world);
+}
+
 #[test]
 fn a_wide_table_wraps_its_cells_inside_the_document() {
     let mut world = start();

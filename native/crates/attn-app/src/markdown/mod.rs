@@ -154,12 +154,16 @@ pub(crate) fn body(
         outpost: outpost.clone(),
         view: view.clone(),
         opens_seed: None,
+        part: None,
     };
-    let read_source = |source: &str, marking: Option<Marking>| {
+    let read_source = |source: &str, part: Option<usize>, marking: Option<Marking>| {
         let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
         reader(
             source,
-            document.clone(),
+            links::Document {
+                part,
+                ..document.clone()
+            },
             pictures,
             kept.clone(),
             marking,
@@ -176,9 +180,8 @@ pub(crate) fn body(
                 tile: tile.to_owned(),
                 uri: uri.clone(),
                 highlights: within(&marks, &part),
-                part: Some(part.start),
             });
-            read_source(&content.content[part], marking)
+            read_source(&content.content[part.clone()], Some(part.start), marking)
         };
         let card = crate::review::card_key(tile);
         let marking = if annotates {
@@ -209,7 +212,7 @@ pub(crate) fn body(
             t,
         );
     }
-    let read = |marking: Option<Marking>| read_source(&content.content, marking);
+    let read = |marking: Option<Marking>| read_source(&content.content, None, marking);
     if !annotates {
         return memo(gutter.clone(), version, || scroll(card(read(None))));
     }
@@ -219,7 +222,6 @@ pub(crate) fn body(
             tile: tile.to_owned(),
             uri,
             highlights: marks,
-            part: None,
         }))
     });
     let marking = annotating::in_document(readings, tile, &root, padding, t);
@@ -227,13 +229,12 @@ pub(crate) fn body(
 }
 
 /// The marks a reader in tile `tile` paints over document `uri`, and where its selections go.
-/// With `part`, the reader draws only the document's source from that byte on, and paints
-/// marks by where they sit in it.
+/// Reading a part of the document ([`links::Document::part`]), the reader paints marks by
+/// where they sit in it.
 pub(crate) struct Marking {
     tile: String,
     uri: String,
     highlights: Vec<(Vec<std::ops::Range<usize>>, rune_kit::Highlight)>,
-    part: Option<usize>,
 }
 
 /// The marks `highlights` paints on the document, as a reader of its bytes `part` alone
@@ -276,7 +277,6 @@ pub(crate) fn seed_reader(
                 tile: tile.to_owned(),
                 uri,
                 highlights,
-                part: None,
             }))
         },
     );
@@ -304,14 +304,17 @@ pub(crate) fn reader(
     let folded = document.view.clone();
     let copied_in = document.view.clone();
     let nth = details_order(source);
-    let root = marking.as_ref().map(|m| match m.part {
+    let part = document.part;
+    let root = marking.as_ref().map(|m| match part {
         None => annotating::root_key(&m.tile),
         Some(start) => annotating::part_key(&m.tile, start),
     });
     if let Some(root) = &root {
         document.view = format!("{}/{root}", document.view);
     }
+    let bars = scroll_bars_id(&document.view, part);
     let markdown = read_as(source)
+        .id(bars.clone())
         .details(
             {
                 let nth = nth.clone();
@@ -324,7 +327,7 @@ pub(crate) fn reader(
         )
         .diagram_frame({
             let t = *t;
-            move |card, frame| leaves_out(framed(card, frame, &t), frame, &t)
+            move |card, frame| leaves_out(framed(card, frame, &bars, &t), frame, &t)
         })
         .diagram_source_frame({
             let t = *t;
@@ -345,7 +348,6 @@ pub(crate) fn reader(
             tile,
             uri,
             highlights,
-            part,
         }),
         Some(root),
     ) = (marking, root)
@@ -517,6 +519,7 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
         .table_margin(14.0, 14.0)
         .table_full_width(true)
         .table_scroll_bar(t.border, t.text_tertiary)
+        .code_scroll_bar(attn_ui::code_scroll_bar(t))
         .diagram_font(TextStyle {
             size: 16.0,
             line_height: 24.0,
@@ -591,6 +594,17 @@ fn missing(image: &MissingImage<'_>, failed: Option<bool>, t: &Tokens) -> El {
         .wrap()
 }
 
+/// What names the scroll bars of a reading in `view`, of the document's `part` when it reads
+/// one, apart from every other reading's in the window. Scroll bars are found by path, so
+/// the name leaves out the path's `/`.
+fn scroll_bars_id(view: &str, part: Option<usize>) -> String {
+    let view = view.replace('/', ".");
+    match part {
+        Some(start) => format!("{view}.part{start}."),
+        None => format!("{view}."),
+    }
+}
+
 /// `source` as the reader reads it, which a mark's passage is found in.
 fn read_as(source: &str) -> Markdown {
     Markdown::new(source.to_owned())
@@ -660,7 +674,7 @@ const LARGE_HEIGHT: f32 = 410.0;
 /// A diagram as the Tauri reader frames it: a `diagram` bar over its card, and a diagram too
 /// wide to read fitted shows at its natural size in a box that scrolls, its bar saying so and
 /// offering to focus it, which opens it over the window to zoom and pan.
-fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
+fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, bars: &str, t: &Tokens) -> El {
     let style = look(t);
     let large = (!frame.open)
         .then(|| rune_kit::mermaid::drawing(frame.source, &style, DIAGRAM_ROOM))
@@ -704,7 +718,7 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
                 .key("focus"),
         );
     let scrolled = col()
-        .key("large")
+        .key(format!("{bars}diagram-{}", frame.index))
         .w_full()
         .max_h(LARGE_HEIGHT)
         .padding(16.0)
@@ -712,7 +726,8 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
         .border(1.0, drawing.surface_border)
         .fill(drawing.surface)
         .scroll_xy()
-        .child(drawing.el);
+        .child(drawing.el)
+        .scroll_bar_styled(attn_ui::document_scroll_bar(t).horizontal());
     col().w_full().gap(space::S1).child(bar).child(scrolled)
 }
 

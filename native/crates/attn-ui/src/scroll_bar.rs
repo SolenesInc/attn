@@ -24,13 +24,39 @@ pub fn dialog_scroll_bar(t: &Tokens) -> ScrollBarStyle {
         .always()
 }
 
+/// The asks' bar, `.asks-list` and `.asks-ask`: a 6 point `border` thumb with round ends,
+/// `border_hover` under the pointer.
+pub fn asks_scroll_bar(t: &Tokens) -> ScrollBarStyle {
+    ScrollBarStyle::native(t.border, t.border_hover)
+        .webkit_parts(6.0, 0.0, 0.0)
+        .inside()
+        .always()
+}
+
+/// `scrollbar-width: thin` with the system's colours, the garden's columns: the system's thin
+/// scroller, a 7 point thumb, shown as the system "Show scroll bars" setting says.
+pub fn thin_scroll_bar(t: &Tokens) -> ScrollBarStyle {
+    ScrollBarStyle::from_kit(crate::kit(t))
+        .width(7.0)
+        .hover_width(7.0)
+}
+
 /// The Markdown reader's bar, `.md-reader { scrollbar-width: thin; scrollbar-color:
-/// var(--color-border) transparent }`: the system's thin scroller, a 7 point `border` thumb,
-/// shown as the system "Show scroll bars" setting says.
+/// var(--color-border) transparent }`, and the boxes under it that set `thin` too: the thin bar
+/// in `border`.
 pub fn document_scroll_bar(t: &Tokens) -> ScrollBarStyle {
+    thin_scroll_bar(t)
+        .thumb(t.border)
+        .thumb_hover(t.border_hover)
+}
+
+/// A code block's bar under the Markdown reader, `.md-codeblock pre { overflow-x: auto }`, which
+/// takes the reader's `scrollbar-color` but not its `thin`: the system's regular scroller in
+/// `border`, 8 points at rest and 12, as the 2026-11 macOS pair measured it, under the pointer.
+pub fn code_scroll_bar(t: &Tokens) -> ScrollBarStyle {
     ScrollBarStyle::from_kit(crate::kit(t))
         .thumb(t.border)
         .thumb_hover(t.border_hover)
-        .width(7.0)
-        .hover_width(7.0)
+        .width(8.0)
+        .hover_width(12.0)
 }

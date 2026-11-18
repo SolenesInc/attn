@@ -9,6 +9,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune_kit::Checkbox;
+use rune_kit::ScrollBar;
 
 pub(crate) fn toolbar(state: &State, t: &Tokens) -> El {
     let kept = &state.window.ledger.conversations;
@@ -59,30 +60,33 @@ pub(crate) fn list(state: &State, rows: &[&KeptConversationRow], t: &Tokens) -> 
             (None, None) => "Reading kept conversations…".into(),
             (None, Some(_)) => "No conversations match this view.".into(),
         };
-        return list.child(
-            text(words.clone())
-                .key("ledger.empty")
-                .role(if kept.error().is_some() {
-                    "alert"
-                } else {
-                    "note"
-                })
-                .label(words)
-                .font(type_::BODY)
-                .color(if kept.error().is_some() {
-                    t.error
-                } else {
-                    t.text_tertiary
-                })
-                .wrap()
-                .padding(space::S6),
-        );
+        return list
+            .child(
+                text(words.clone())
+                    .key("ledger.empty")
+                    .role(if kept.error().is_some() {
+                        "alert"
+                    } else {
+                        "note"
+                    })
+                    .label(words)
+                    .font(type_::BODY)
+                    .color(if kept.error().is_some() {
+                        t.error
+                    } else {
+                        t.text_tertiary
+                    })
+                    .wrap()
+                    .padding(space::S6),
+            )
+            .scroll_bar_styled(attn_ui::scroll_bar(t));
     }
     let chosen = super::selected(state, rows).map(key);
     list.children(
         rows.iter()
             .map(|r| list_row(state, r, chosen.as_deref() == Some(key(r).as_str()), t)),
     )
+    .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn list_row(state: &State, r: &KeptConversationRow, selected: bool, t: &Tokens) -> El {

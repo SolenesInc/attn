@@ -10,7 +10,7 @@ use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{Align, El, Key, KeyEvent, TextEdit, TextStyle, Tx, col, row, text, text_input};
-use rune_kit::{Button, ButtonVariant};
+use rune_kit::{Button, ButtonVariant, ScrollBar};
 
 use super::handover::Handover;
 use super::model::{self, Index};
@@ -850,6 +850,7 @@ pub(super) fn view(state: &State, sheet: &Sheet, full: bool, t: &Tokens) -> El {
         return panel.child(super::view::scroll(
             "garden.review.viewport",
             finished(review, t),
+            t,
         ));
     }
     let Some(item) = item else {
@@ -870,6 +871,7 @@ pub(super) fn view(state: &State, sheet: &Sheet, full: bool, t: &Tokens) -> El {
                 .w_full()
                 .child(seed.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle))
                 .child(decision),
+            t,
         ));
     }
     panel.child(
@@ -878,7 +880,7 @@ pub(super) fn view(state: &State, sheet: &Sheet, full: bool, t: &Tokens) -> El {
             .grow(1.0)
             .min_h(0.0)
             .child(
-                super::view::scroll("garden.review.rail.viewport", rail)
+                super::view::scroll("garden.review.rail.viewport", rail, t)
                     .w(RAIL_WIDTH)
                     .min_w(RAIL_WIDTH)
                     .grow(0.0)
@@ -886,7 +888,7 @@ pub(super) fn view(state: &State, sheet: &Sheet, full: bool, t: &Tokens) -> El {
                     .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle),
             )
             .child(
-                super::view::scroll("garden.review.viewport", seed)
+                super::view::scroll("garden.review.viewport", seed, t)
                     .h_full()
                     .w(0.0)
                     .grow(1.0 - DECISION_SHARE)
@@ -894,7 +896,7 @@ pub(super) fn view(state: &State, sheet: &Sheet, full: bool, t: &Tokens) -> El {
                     .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle),
             )
             .child(
-                super::view::scroll("garden.review.decision.viewport", decision)
+                super::view::scroll("garden.review.decision.viewport", decision, t)
                     .w(0.0)
                     .grow(DECISION_SHARE)
                     .min_w(DECISION_MIN)
@@ -1171,7 +1173,11 @@ fn rail(shown: &GardenReview, selected: &str, full: bool, t: &Tokens) -> El {
         }
         rail = rail.child(line);
     }
-    rail
+    if full {
+        rail
+    } else {
+        rail.scroll_bar_styled(attn_ui::scroll_bar(t).horizontal())
+    }
 }
 
 /// Where the reader stands in its plot: a way back to the reviewed seed when it went

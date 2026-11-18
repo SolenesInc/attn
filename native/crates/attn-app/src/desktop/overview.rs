@@ -8,6 +8,7 @@ use attn_ui::frame::{self, Frame};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant};
 
 use super::layout::{Direction, LeafKind, Node};
@@ -287,7 +288,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 .mt(4.0)
                 .pb(12.0),
         )
-        .child(grid);
+        .child(grid)
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
     let dialog = Frame {
         edge: t.border_hover,
         radius: 12.0,

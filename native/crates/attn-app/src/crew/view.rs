@@ -3,6 +3,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{Color, El, Key, KeyEvent, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, TextArea, TextInput};
 
 use super::autosave::Phase;
@@ -306,7 +307,7 @@ fn roster(state: &State, t: &Tokens) -> El {
                 .iter()
                 .map(|m| roster_row(state, m, selected.as_deref(), t)),
         );
-    aside.child(list)
+    aside.child(list).scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn presence(member: &CrewMember) -> &'static str {
@@ -405,11 +406,13 @@ fn detail(state: &State, t: &Tokens) -> El {
             stick_bottom: false,
         });
     let Some(member) = super::selected(state) else {
-        return main.child(
-            caption("crew.empty", "No crew members.", t)
-                .px(28.0)
-                .py(40.0),
-        );
+        return main
+            .child(
+                caption("crew.empty", "No crew members.", t)
+                    .px(28.0)
+                    .py(40.0),
+            )
+            .scroll_bar_styled(attn_ui::scroll_bar(t));
     };
     let tab = state.window.crew.place.tab;
     main.child(heading(state, member, t))
@@ -428,6 +431,7 @@ fn detail(state: &State, t: &Tokens) -> El {
                     Tab::Seeds => vec![seeds_tab(state, member, t)],
                 }),
         )
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn heading(state: &State, member: &CrewMember, t: &Tokens) -> El {
@@ -1272,6 +1276,7 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
                     outpost: None,
                     view: view.clone(),
                     opens_seed: Some(super::open_seed),
+                    part: None,
                 },
                 std::rc::Rc::default(),
                 state.readings.kept(&view),

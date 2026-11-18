@@ -11,6 +11,7 @@ use attn_protocol::SupportSnapshotMessage;
 use attn_ui::{Dialog, DialogFrame, Tokens, type_};
 use rune::tok::space;
 use rune::{El, FileDialogOptions, TextStyle, Tx, col, row, text};
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, Checkbox, ControlSize};
 use serde_json::{Value, json};
 
@@ -508,7 +509,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .px(INSET)
                 .gap(space::S3)
                 .child(output_heading)
-                .child(choices),
+                .child(choices)
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
         )
         .children(draft.error.as_ref().map(|why| {
             text(why.clone())

@@ -9,6 +9,7 @@ use rune::tok::space;
 use rune::{
     El, GrowthSpec, ScrollSpec, Span, TextStyle, Tx, col, memo, rich, row, text, text_input,
 };
+use rune_kit::ScrollBar;
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use super::model::{self, Index, SessionNames};
@@ -1088,7 +1089,7 @@ fn results(state: &State, place: &Place, t: &Tokens) -> El {
     list("garden.results", "listbox", "Results", specs, t)
 }
 
-pub(super) fn scroll(key: &str, content: El) -> El {
+pub(super) fn scroll(key: &str, content: El, t: &Tokens) -> El {
     col()
         .key(key.to_owned())
         .w_full()
@@ -1098,6 +1099,7 @@ pub(super) fn scroll(key: &str, content: El) -> El {
             stick_bottom: false,
         })
         .child(content)
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> El {
@@ -1164,6 +1166,7 @@ fn stack_view(state: &State, place: &Place, t: &Tokens) -> El {
             .pt(14.0)
             .pb(40.0)
             .gap(PAGE_GAP),
+        t,
     )
 }
 
@@ -1183,6 +1186,7 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                 stick_bottom: false,
             })
             .child(content)
+            .scroll_bar_styled(attn_ui::thin_scroll_bar(t))
     };
     if place.query.searches {
         columns = columns.child(column(
@@ -1209,7 +1213,8 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(root),
+                .child(root)
+                .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
         );
     } else {
         let levels = place.levels();
@@ -1254,7 +1259,8 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                         .pt(24.0)
                         .px(32.0)
                         .pb(72.0),
-                ),
+                )
+                .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
         );
     }
     columns

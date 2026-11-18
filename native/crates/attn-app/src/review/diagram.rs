@@ -9,6 +9,7 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::radius;
 use rune::{Color, El, LineCap, Shape, TextStyle, canvas, col, el, text};
+use rune_kit::ScrollBar;
 
 const CHAR_WIDTH: f32 = 6.6;
 const CAPTION_CHAR_WIDTH: f32 = 5.9;
@@ -577,7 +578,14 @@ pub(super) fn diagram(
         .role("figure")
         .label("Sequence diagram")
         .gap(4.0)
-        .child(col().w_full().scroll_x().child(drawing))
+        .child(
+            col()
+                .key(format!("{key}.scroll"))
+                .w_full()
+                .scroll_x()
+                .child(drawing)
+                .scroll_bar_styled(attn_ui::scroll_bar(t).horizontal()),
+        )
         .children(flow.note.as_deref().filter(|n| !n.is_empty()).map(|note| {
             text(note.to_owned())
                 .font(type_::BODY)

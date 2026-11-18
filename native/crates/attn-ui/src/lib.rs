@@ -6,7 +6,10 @@ pub mod colors;
 mod scroll_bar;
 pub mod type_;
 
-pub use scroll_bar::{dialog_scroll_bar, document_scroll_bar, scroll_bar};
+pub use scroll_bar::{
+    asks_scroll_bar, code_scroll_bar, dialog_scroll_bar, document_scroll_bar, scroll_bar,
+    thin_scroll_bar,
+};
 
 /// The interface's colors in one appearance, named by meaning. The surfaces, borders, text and
 /// status colors name the Tauri app's CSS variables they carry: `bg_app` is `--color-bg-app`.
