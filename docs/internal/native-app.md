@@ -156,6 +156,7 @@ are on their way to the daemon.
 | --- | --- | --- |
 | `ping` | | `{pong, frontendReady}`: ready once connected to the daemon |
 | `tree` | | the accessibility tree |
+| `at_rest` | | once the window has no motion left to draw and nothing still leaving, `{}`; while it waits, says which elements are still leaving |
 | `find`, `wait` | `target`, and `gone` for `wait` | the element now, or once it shows and stops moving, or goes |
 | `press`, `hover` | `target`, `at` | a click or a pointer move at `at`, fractions of the box (center by default) |
 | `drag` | `target`, `at`, then `to` (a target) or `by` (points) | press, move, release |

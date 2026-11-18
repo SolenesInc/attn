@@ -75,6 +75,10 @@ export class NativeAppDriver {
     return this.client.request('tree');
   }
 
+  atRest({ timeoutMs } = {}) {
+    return this.client.request('at_rest', timeoutMs ? { timeout_ms: timeoutMs } : {});
+  }
+
   mainWindowId(opts) {
     return this.window.mainWindowId(opts);
   }

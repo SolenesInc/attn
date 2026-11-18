@@ -1234,7 +1234,10 @@ fn the_tile_that_slides_into_a_closed_tiles_slot_takes_the_keyboard() {
 /// The tile area at `area` wide shows `before`, then the daemon changes desktop 1 to `after`:
 /// what the window shows over the two seconds that follow, long enough for a chip's flash.
 fn moving(area: f32, before: Desktop, after: Desktop) -> Recording {
-    let mut world = start(area, None, vec![before]);
+    moving_in(&mut start(area, None, vec![before]), after)
+}
+
+fn moving_in(world: &mut World, after: Desktop) -> Recording {
     world.record(60.0, 2.0, |daemon, _| {
         daemon.emit(arrangement("work/desktop_1", vec![after]));
     })
@@ -1542,4 +1545,142 @@ fn one_shell_tile_in_a_1200_by_800_window_gets_the_grid_the_tauri_app_gives_it()
         (Some(106), Some(34))
     );
     rest(&mut world);
+}
+
+/// Where tile `leaf` showed on each frame from the gesture on: its left edge, the width left in
+/// view, and its opacity.
+fn travel_of(rec: &Recording, leaf: &str) -> Vec<(f32, f32, f32)> {
+    let from = rec.inputs[0].0;
+    rec.tracks
+        .iter()
+        .find(|t| t.path.ends_with(&format!("/tile.{leaf}")))
+        .unwrap_or_else(|| panic!("tile {leaf} was drawn"))
+        .frames
+        .iter()
+        .filter(|(k, _)| *k >= from)
+        .map(|(_, s)| (s.rect[0], s.vis[2], s.op))
+        .collect()
+}
+
+fn sliding_to_the_last_tile(world: &mut World) -> Recording {
+    moving_in(world, tiles("d", panes(["a", "b", "c", "d"])))
+}
+
+fn four_tiles(area: f32) -> World {
+    start(area, None, vec![tiles("a", panes(["a", "b", "c", "d"]))])
+}
+
+#[test]
+fn tiles_leaving_and_joining_a_screen_that_moves_along_the_row_slide_with_it_whole() {
+    let rec = sliding_to_the_last_tile(&mut four_tiles(TWO_FIT));
+    assert_eq!(
+        rec.awake.last(),
+        Some(&false),
+        "the window stops drawing once the slide lands, within the recording"
+    );
+    let leaving = travel_of(&rec, "a");
+    let (start, ..) = leaving[0];
+    assert!(
+        leaving.iter().all(|&(_, _, op)| op > 0.999),
+        "a leaves whole: {leaving:?}"
+    );
+    assert!(
+        leaving.windows(2).all(|w| w[1].0 <= w[0].0),
+        "a travels left with the row: {leaving:?}"
+    );
+    assert_eq!(
+        leaving.last().map(|&(_, seen, _)| seen),
+        Some(0.0),
+        "a is out of view when it goes: {leaving:?}"
+    );
+
+    let joining = travel_of(&rec, "c");
+    assert!(
+        joining.iter().all(|&(_, _, op)| op > 0.999),
+        "c joins whole: {joining:?}"
+    );
+    assert!(
+        joining[0].0 >= start + TWO_FIT - 1.0,
+        "c starts past the screen's right edge: {joining:?}"
+    );
+    assert_eq!(
+        joining.last().map(|&(x, ..)| x),
+        Some(start),
+        "c lands where a was"
+    );
+}
+
+#[test]
+fn each_step_along_the_row_slides_from_the_screen_the_last_step_left() {
+    let row = || panes(["a", "b", "c", "d"]);
+    let mut world = start(TWO_FIT, None, vec![tiles("d", row())]);
+    moving_in(&mut world, tiles("a", row()));
+    let rec = moving_in(&mut world, tiles("c", row()));
+    let leaving = travel_of(&rec, "a");
+    assert!(
+        leaving.iter().all(|&(_, _, op)| op > 0.999)
+            && leaving.windows(2).all(|w| w[1].0 <= w[0].0),
+        "a, which the first step brought on screen, slides out left whole on the second: {leaving:?}"
+    );
+    let joining = travel_of(&rec, "c");
+    assert!(
+        joining.windows(2).any(|w| w[1].0 < w[0].0),
+        "c slides in from the right: {joining:?}"
+    );
+}
+
+#[test]
+fn a_browser_tile_leaving_a_sliding_screen_snaps_away_while_its_neighbour_slides() {
+    let row = || vec![pane("a"), tile("w", "browser"), pane("c"), pane("d")];
+    let mut world = start(TWO_FIT, None, vec![tiles("a", row())]);
+    let rec = moving_in(&mut world, tiles("d", row()));
+    let gone_after = |leaf: &str| {
+        rec.tracks
+            .iter()
+            .find(|t| t.path.ends_with(&format!("/tile.{leaf}")))
+            .map_or(0, |t| {
+                t.frames
+                    .iter()
+                    .filter(|(k, _)| *k > rec.inputs[0].0)
+                    .count()
+            })
+    };
+    assert!(gone_after("w") <= 1, "the browser tile goes at once");
+    assert!(gone_after("a") > 2, "a slides out with the row");
+}
+
+#[test]
+fn under_reduce_motion_the_screen_lands_on_its_new_tiles_without_sliding() {
+    let mut world = four_tiles(TWO_FIT);
+    world.reduce_motion();
+    let rec = sliding_to_the_last_tile(&mut world);
+    let joining = travel_of(&rec, "c");
+    assert!(
+        joining.iter().all(|&(x, ..)| x == joining[0].0),
+        "c lands in place: {joining:?}"
+    );
+    let leaving = travel_of(&rec, "a");
+    assert!(
+        leaving.iter().all(|&(x, ..)| x == leaving[0].0),
+        "a goes in place: {leaving:?}"
+    );
+}
+
+#[test]
+fn a_tile_that_closes_shrinks_out_in_place_while_its_neighbour_moves_up() {
+    let rec = moving(
+        FOUR_FIT,
+        tiles("a", panes(["a", "b", "c"])),
+        tiles("a", panes(["a", "c"])),
+    );
+    let leaving = travel_of(&rec, "b");
+    let (start, ..) = leaving[0];
+    assert!(
+        leaving.iter().any(|&(_, _, op)| op < 0.5),
+        "b fades as it goes: {leaving:?}"
+    );
+    assert!(
+        leaving.iter().all(|&(x, ..)| x >= start),
+        "b leaves where it was: {leaving:?}"
+    );
 }

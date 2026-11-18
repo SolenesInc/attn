@@ -19,6 +19,7 @@ mod peek;
 pub(crate) mod provenance;
 pub(crate) mod refusal;
 mod role_icon;
+mod row_slide;
 mod seed_card;
 pub(crate) mod seed_chip;
 mod shared_conversation;
@@ -85,6 +86,8 @@ pub struct Desk {
     /// The shelf cap whose menu is open.
     pub(crate) cap_open: Option<layout::Edge>,
     pub(crate) width_label: Option<shelf::WidthLabel>,
+    /// The row the tile area last laid out, which its next layout slides from.
+    pub(crate) shown_row: Option<row_slide::ShownRow>,
     /// A column divider being dragged.
     pub(crate) column_drag: Option<divider::ColumnDrag>,
     /// A split divider being dragged.

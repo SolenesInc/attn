@@ -104,6 +104,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         version(&facts.profiles),
         version(&facts.settings),
         holder.clone(),
+        desk.shown_row.clone(),
         composing,
         state.terminals.pointing_link().map(str::to_owned),
         row_state,
@@ -688,7 +689,18 @@ fn screen(
                 };
                 let placed = desk.placement(&rendered);
                 let held = desk.held_divider(&placed);
-                laid_out(&rendered, &placed, held, &cx)
+                let shown = super::row_slide::ShownRow::of(
+                    &plan,
+                    &placed,
+                    desk.area().map_or(0.0, |a| a.w),
+                );
+                laid_out(
+                    &rendered,
+                    &placed,
+                    held,
+                    (desk.shown_row.as_ref(), shown),
+                    &cx,
+                )
             }
         },
     }
@@ -774,17 +786,34 @@ struct TileCx<'a> {
 }
 
 /// The screen's tiles and dividers as siblings pinned where `placed` lays them, so a tile that
-/// moves to another split stays the same element and springs to its new place.
+/// moves to another split stays the same element and springs to its new place. When the screen
+/// moves along its row from the one `was` shows, tiles leaving it and joining it slide with it.
 fn laid_out(
     rendered: &Node,
     placed: &super::layout::Placement,
     held: Option<(String, Direction, [f32; 4])>,
+    (was, shown): (
+        Option<&super::row_slide::ShownRow>,
+        super::row_slide::ShownRow,
+    ),
     cx: &TileCx,
 ) -> El {
+    let slide = was.map_or(0.0, |was| was.slide_to(&shown));
     let leaves = rendered.leaves();
     let tiles = placed.leaves.iter().filter_map(|(id, rect)| {
         let leaf = leaves.iter().find(|l| l.id == *id)?;
-        Some(pinned(tile(leaf, cx), *rect))
+        let tile = tile(leaf, cx);
+        let joins = slide != 0.0 && was.is_some_and(|was| !was.shows(id)) && slides(&leaf.kind);
+        let tile = if joins {
+            tile.transition(super::row_slide::joining(
+                slide,
+                row_spring(),
+                tile_transition(&leaf.kind),
+            ))
+        } else {
+            tile
+        };
+        Some(pinned(tile, *rect))
     });
     let dividers = placed
         .splits
@@ -792,11 +821,17 @@ fn laid_out(
         .map(|s| (s.id.clone(), s.direction, s.divider, cx.dividers))
         .chain(held.map(|(id, direction, rect)| (id, direction, rect, true)))
         .map(|(id, direction, rect, live)| pinned(divider(id, direction, live), rect));
-    el().w_full()
+    let row = el()
+        .w_full()
         .h_full()
         .fill(cx.t.bg_tile)
         .children(tiles)
         .children(dividers)
+        .child(shown.marker());
+    if slide == 0.0 {
+        return row;
+    }
+    row.child_exit(super::row_slide::leaving(slide, row_spring()))
 }
 
 fn pinned(child: El, [x, y, w, h]: [f32; 4]) -> El {
@@ -1184,13 +1219,18 @@ pub(super) fn moves_with_the_row(el: El) -> El {
 /// fading, and a browser tile snaps.
 fn tile_transition(kind: &LeafKind) -> rune::Transition {
     use rune::{Spring, SpringPair, Transition};
-    if matches!(kind, LeafKind::Tile { kind, .. } if kind == "browser") {
+    if !slides(kind) {
         return Transition::none();
     }
     Transition::asymmetric(Transition::scale(0.9), Transition::scale(0.92)).springs(SpringPair {
         enter: row_spring(),
         exit: Spring::new(0.11, 0.0),
     })
+}
+
+/// Whether a tile moves with the row: a browser tile's page snaps instead.
+fn slides(kind: &LeafKind) -> bool {
+    !matches!(kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
 }
 
 /// The machine of the pane's session while the home cannot reach it.

@@ -371,6 +371,12 @@ impl World {
         self.settle();
     }
 
+    /// The system's Reduce Motion preference turns on, then the window settles.
+    pub fn reduce_motion(&mut self) {
+        self.runtime.set_system_reduced_motion(true);
+        self.settle();
+    }
+
     /// Presses `ev` as macOS's menu bar hands the window the key of a standard item, such as
     /// Window > Close's ⌘W or Edit > Redo's ⇧⌘Z, then settles. True when the app left the key,
     /// so the item acts: Close closes the window, and with the only window the app quits.

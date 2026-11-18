@@ -412,6 +412,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-shelf-motion',
+    runnerId: 'NATIVE-SHELF-MOTION',
+    label: 'Native app: each slide along a row of shells and a closing tile come to rest with nothing left leaving and only the screen\'s tiles drawn',
+    command: ['node', 'scripts/real-app-harness/scenario-native-shelf-motion.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-shelf-moves',
     runnerId: 'NATIVE-SHELF-MOVES',
     label: 'Native app: a split at capacity keeps its anchor, close keeps focus in the slot, carry and send to the shelf, documents agents open wait on the shelf for the jump key, and chips and the sidebar go to a tile without reordering the row',

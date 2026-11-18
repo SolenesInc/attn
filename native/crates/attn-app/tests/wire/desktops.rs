@@ -4148,3 +4148,32 @@ fn jump_to_dispatcher_gives_the_keyboard_to_the_agent_that_dispatched_the_one_on
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_column_a_divider_drag_sends_to_the_shelf_leaves_without_sliding_with_the_row() {
+    let three = || desktop(1, "c", Some(row(["a", "b", "c"].map(pane))));
+    let mut world = World::start_sized(daemon(vec![three()]), THREE_FIT);
+    world.open_desktop();
+    let (x, y) = divider_at(&world, "row:b");
+    let rec = world.record(60.0, 1.0, |_, app| app.drag_from((x, y), (x - 250.0, y)));
+    assert_eq!(shown(&world), ["b", "c"], "a leaves for the shelf");
+    let from = rec.inputs[0].0;
+    let leaving: Vec<f32> = rec
+        .tracks
+        .iter()
+        .find(|t| t.path.ends_with("/tile.a"))
+        .map(|t| {
+            t.frames
+                .iter()
+                .filter(|(k, _)| *k >= from)
+                .map(|(_, s)| s.rect[0])
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(
+        leaving
+            .iter()
+            .all(|&x| x >= leaving.first().copied().unwrap_or(0.0)),
+        "a leaves where it was, as the Tauri app never animates a divider drag: {leaving:?}"
+    );
+}

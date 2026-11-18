@@ -149,6 +149,7 @@
     "native-shelf-drags": 33,
     "native-shelf-drop-beside": 27.5,
     "native-shelf-layout": 49,
+    "native-shelf-motion": 40,
     "native-shelf-moves": 46,
     "native-shelf-peek": 29,
     "native-shortcut-editor": 25,

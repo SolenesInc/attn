@@ -134,6 +134,21 @@ pub fn act<S: 'static>(
     match action {
         "ping" => Attempt::Done(json!({"pong": true, "frontendReady": hooks.ready(rt.state())})),
         "tree" => Attempt::Done(rt.accessibility_json()),
+        "at_rest" => {
+            let leaving: Vec<String> = rt
+                .elements()
+                .into_iter()
+                .filter(|e| e.exiting)
+                .map(|e| e.key.unwrap_or(e.path))
+                .collect();
+            if rt.animating || !leaving.is_empty() {
+                Attempt::Wait(format!(
+                    "the window to stop moving, with {leaving:?} still leaving"
+                ))
+            } else {
+                Attempt::Done(json!({}))
+            }
+        }
         "find" => {
             let Aimed { target, .. } = args!(action, payload);
             Attempt::Done(serde_json::to_value(target.find(rt)).unwrap_or(Value::Null))
