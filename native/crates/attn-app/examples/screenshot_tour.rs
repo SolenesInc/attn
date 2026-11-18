@@ -2682,8 +2682,8 @@ fn queue_seeded_home(dark: bool) {
 }
 
 /// The queue sidebar with the Chief between sessions and two automation runs that stopped
-/// with a question.
-fn queue_runs(dark: bool) {
+/// with a question, their group closed, or open with the pointer on a run and its settle button.
+fn queue_runs(dark: bool, open: bool, name: &str) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     let mut members = crew();
     members[0].agent = Some("claude".into());
@@ -2709,7 +2709,14 @@ fn queue_runs(dark: bool) {
     }
     let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
     press(&mut world, Action::SessionGoToDashboard);
-    snap(&mut world, "queue-runs", dark);
+    if open {
+        world.gesture(|app| app.click(Target::key("queue.runs.group.1")));
+        world.gesture(|app| {
+            let run = app.runtime.find("queue-run.s1").expect("the run is listed");
+            app.move_to(run);
+        });
+    }
+    snap(&mut world, name, dark);
 }
 
 /// The seeded queue with the asking agent's desktop open: its row in view, its desktop current.
@@ -3324,7 +3331,8 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         queue_home(dark);
         queue_agent_list(dark);
         queue_seeded_home(dark);
-        queue_runs(dark);
+        queue_runs(dark, false, "queue-runs");
+        queue_runs(dark, true, "queue-runs-open");
         queue_seeded_agent(dark);
         queue_bar(dark);
         queue_bar_crowded(dark);
