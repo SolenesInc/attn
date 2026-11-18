@@ -720,7 +720,7 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, bars: &str, t: &Tokens) 
         .fill(drawing.surface)
         .scroll_xy()
         .child(drawing.el)
-        .scroll_bar_styled(attn_ui::document_scroll_bar(t).horizontal());
+        .scroll_bar_styled(attn_ui::document_scroll_bar(t).both_ways());
     col().w_full().gap(space::S1).child(bar).child(scrolled)
 }
 

@@ -823,7 +823,7 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
                 .color(t.text_primary)
                 .selectable(true),
         )
-        .scroll_bar_styled(attn_ui::scroll_bar(t));
+        .scroll_bar_styled(attn_ui::scroll_bar(t).both_ways());
     let notice = notice(reply, blocked).map(|words| {
         row()
             .key("shelf.peek.notice")

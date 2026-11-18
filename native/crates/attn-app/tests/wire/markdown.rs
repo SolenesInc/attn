@@ -981,6 +981,58 @@ fn a_diagram_too_wide_to_read_fitted_shows_at_its_size_and_opens_over_the_window
     );
 }
 
+/// The thumbs of the oversized diagram's scroll bars, keyed by bar: `scroll-bar` down its end
+/// edge, `scroll-bar-x` along its bottom.
+fn diagram_thumbs(world: &World) -> Vec<(String, [f32; 4])> {
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| e.key.as_deref() == Some("thumb") && e.path.contains("diagram-"))
+        .map(|e| {
+            let bar = e
+                .path
+                .split('/')
+                .find(|s| s.starts_with("scroll-bar"))
+                .unwrap_or_default()
+                .to_owned();
+            (bar, e.rect)
+        })
+        .collect()
+}
+
+#[test]
+fn a_diagram_too_large_both_ways_carries_a_scroll_bar_for_each() {
+    let mut world = start();
+    let participants: String = (0..12)
+        .map(|i| format!("  participant P{i} as Participant number {i} with a long name\n"))
+        .collect();
+    let messages: String = (0..40)
+        .map(|i| format!("  P{}->>P{}: message {i}\n", i % 12, (i + 5) % 12))
+        .collect();
+    world.daemon.emit(content(&format!(
+        "```mermaid\nsequenceDiagram\n{participants}{messages}```\n"
+    )));
+    world.settle();
+    let thumbs = diagram_thumbs(&world);
+    let thumb = |bar: &str| {
+        thumbs
+            .iter()
+            .find(|(b, _)| b == bar)
+            .unwrap_or_else(|| panic!("a {bar} on the diagram: {thumbs:?}"))
+            .1
+    };
+    let (down, across) = (thumb("scroll-bar"), thumb("scroll-bar-x"));
+    assert!(
+        down[3] > 0.0 && across[2] > 0.0,
+        "a diagram taller and wider than its frame shows a thumb on each axis: {thumbs:?}"
+    );
+    assert!(
+        down[1] + down[3] <= across[1],
+        "the end bar stops above the bottom one: {down:?} over {across:?}"
+    );
+}
+
 #[test]
 fn a_code_blocks_copy_button_copies_its_code_and_says_so_a_while() {
     let mut world = start();

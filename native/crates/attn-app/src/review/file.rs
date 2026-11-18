@@ -335,7 +335,7 @@ pub(super) fn view(
                 reported.set([at.offset[0], at.viewport[0]]);
             }
         })
-        .scroll_bar_styled(attn_ui::scroll_bar(t)),
+        .scroll_bar_styled(attn_ui::scroll_bar(t).both_ways()),
     };
     let line = file.line();
     let strip: Vec<El> = notes

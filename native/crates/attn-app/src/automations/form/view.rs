@@ -41,8 +41,6 @@ const PROMPT_HEIGHT: f32 = 120.0;
 /// The Tauri form's unstyled Desktop `<select>`, a macOS pop-up button: 20 points tall in
 /// the pixel audit's automations-notebook-21 crop.
 const DESKTOP_SELECT_HEIGHT: f32 = 20.0;
-/// The width `attn_ui::scroll_bar` takes beside the content, as WebKit's styled scroll bar does.
-const SCROLL_BAR: f32 = 8.0;
 /// attn checks schedules once a minute.
 const SCHEDULER_TICK_MS: i64 = 60_000;
 
@@ -253,7 +251,7 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
                 .grow(1.0)
                 .min_h(0.0)
                 .pl(2.0)
-                .pr(2.0 + SCROLL_BAR)
+                .pr(2.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
