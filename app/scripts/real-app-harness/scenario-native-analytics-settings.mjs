@@ -146,16 +146,16 @@ try {
 
   await runner.step('records_by_stream', async () => {
     await driver.pressKey(']');
-    await driver.waitFor({ key: 'settings.analytics.views.all' });
-    await driver.waitFor({ role: 'list-box-option' });
+    await driver.waitFor({ key: LIST, name: 'All records' });
     await driver.pressKey('j');
     await driver.waitFor({ key: 'settings.analytics.record.raw' });
     await shot('04-all-records');
     await driver.click({ key: 'settings.analytics.views.app' });
+    await driver.waitFor({ key: LIST, name: 'app' });
     const app = (await rows()).map((r) => r.name);
     runner.assert(app.some((name) => name.includes('settings_section')), 'opening Analytics recorded its section on the app stream', app);
     await driver.click({ key: 'settings.analytics.views.bus' });
-    await driver.waitFor({ role: 'list-box-option' });
+    await driver.waitFor({ key: LIST, name: 'bus' });
     const bus = (await rows()).map((r) => r.name);
     runner.assert(!bus.some((name) => name.includes('vent.')), 'vent facts stay out of the outbox', bus);
   });
