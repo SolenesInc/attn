@@ -80,36 +80,41 @@ impl Sheet<'_> {
         page_section(&self.key(part), title, self.t)
     }
 
-    /// The seed's title beside `action`, then its state, who tends it, its checks, its age and
-    /// id, then `notes`, why it closed and its plot's progress.
+    /// The seed's title beside `action`, then [`Sheet::head_under`]'s facts.
     pub(super) fn head(&self, here: &Seed, action: El, notes: Vec<El>) -> El {
         let t = self.t;
-        let mut head = col().key(self.key("head")).w_full().gap(7.0).child(
-            row()
-                .w_full()
-                .items_start()
-                .gap(16.0)
-                .child(
-                    text(here.title.clone())
-                        .key(self.key("head.title"))
-                        .role("heading")
-                        .label(here.title.clone())
-                        .font(PAGE_TITLE)
-                        .color(t.text_primary)
-                        .wrap()
-                        .grow(1.0)
-                        .min_w(TITLE_MIN_WIDTH),
-                )
-                .child(
-                    action
-                        .gap(6.0)
-                        .mt(1.0)
-                        .flex_wrap()
-                        .justify_end()
-                        .shrink()
-                        .min_w(0.0),
-                ),
-        );
+        let title = row()
+            .w_full()
+            .items_start()
+            .gap(16.0)
+            .child(
+                text(here.title.clone())
+                    .key(self.key("head.title"))
+                    .role("heading")
+                    .label(here.title.clone())
+                    .font(PAGE_TITLE)
+                    .color(t.text_primary)
+                    .wrap()
+                    .grow(1.0)
+                    .min_w(TITLE_MIN_WIDTH),
+            )
+            .child(
+                action
+                    .gap(6.0)
+                    .mt(1.0)
+                    .flex_wrap()
+                    .justify_end()
+                    .shrink()
+                    .min_w(0.0),
+            );
+        self.head_under(title, here, notes)
+    }
+
+    /// `title`, then the seed's state, who tends it, its checks, its age and id, then `notes`,
+    /// why it closed and its plot's progress.
+    pub(super) fn head_under(&self, title: El, here: &Seed, notes: Vec<El>) -> El {
+        let t = self.t;
+        let mut head = col().key(self.key("head")).w_full().gap(7.0).child(title);
         let mut meta = row()
             .key(self.key("head.meta"))
             .w_full()
@@ -566,10 +571,6 @@ fn line_breaks(body: &str) -> String {
     out
 }
 
-pub(super) fn section(key: &str, title: &str, t: &Tokens) -> El {
-    region(key, title).child(heading(title, t))
-}
-
 /// A section of a seed's page, as the Tauri garden's `.garden-section`: a rule above it and
 /// its heading in small capitals.
 pub(super) fn page_section(key: &str, title: &str, t: &Tokens) -> El {
@@ -602,24 +603,6 @@ pub(super) fn page_heading(title: &str, t: &Tokens) -> El {
     type_::upper(title, HEADING)
         .role("heading")
         .color(t.text_muted)
-}
-
-fn region(key: &str, title: &str) -> El {
-    col()
-        .key(key.to_owned())
-        .role("region")
-        .label(title.to_owned())
-        .w_full()
-        .gap(space::S1)
-        .pt(space::S3)
-}
-
-fn heading(title: &str, t: &Tokens) -> El {
-    text(title.to_owned())
-        .role("heading")
-        .label(title.to_owned())
-        .font(type_::SECTION)
-        .color(t.text_tertiary)
 }
 
 pub(super) fn meta_word(words: impl Into<String>, t: &Tokens) -> El {

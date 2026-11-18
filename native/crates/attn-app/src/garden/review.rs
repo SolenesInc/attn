@@ -9,14 +9,14 @@ use attn_protocol::{
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text, text_input};
-use rune_kit::ButtonVariant;
+use rune::{Align, El, Key, KeyEvent, TextEdit, TextStyle, Tx, col, row, text, text_input};
+use rune_kit::{Button, ButtonVariant};
 
 use super::handover::Handover;
 use super::model::{self, Index};
-use super::sheet::{Sheet, meta_word, note, section};
+use super::sheet::Sheet;
 use super::spot::{Sends, Spot};
-use super::view::{button, kit_button};
+use super::view::{kit_button, text_button};
 use super::{BODY, Mode};
 use crate::State;
 
@@ -804,6 +804,32 @@ fn alert(key: &str, words: &str, t: &Tokens) -> El {
         .padding(space::S2)
 }
 
+/// The review's section headings, `.garden-review__actions h3`: semibold small capitals in the
+/// text's own ink, drawn a point larger as the native app's small text is.
+const HEADING: TextStyle = TextStyle::new(12.0, 600.0).tracking(0.48);
+
+/// The panel's title in the chrome, `.garden-review__title strong`.
+const CHROME_TITLE: TextStyle = TextStyle::new(12.0, 600.0).mono().tracking(0.48);
+
+/// The title of the seed being read and of the finished review, `.garden-review__seed h2`.
+const SEED_TITLE: TextStyle = TextStyle::new(25.0, 570.0).lh(30.0).tracking(-0.5);
+
+/// The review's running text, `.garden-review__problem p` and its kin.
+const PROSE: TextStyle = type_::BODY.lh(18.85);
+
+const RAIL_WIDTH: f32 = 248.0;
+const RAIL_NUMBER: TextStyle = TextStyle::new(10.0, 400.0).mono();
+const RAIL_TITLE: TextStyle = TextStyle::new(13.0, 530.0);
+const DOCK_RAIL_ITEM: f32 = 190.0;
+
+/// The decision's share of the reader beside the seed, and the least it takes.
+const DECISION_SHARE: f32 = 0.35;
+const DECISION_MIN: f32 = 280.0;
+
+/// How far the seed and the decision sit inside their columns, expanded and docked.
+const READER_INSET: (f32, f32) = (56.0, 26.0);
+const DOCK_INSET: (f32, f32) = (18.0, 20.0);
+
 /// The open review: its header, the seeds it holds, the seed being read, and the decision.
 pub(super) fn view(state: &State, sheet: &Sheet, full: bool, t: &Tokens) -> El {
     let review = review(state);
@@ -829,35 +855,52 @@ pub(super) fn view(state: &State, sheet: &Sheet, full: bool, t: &Tokens) -> El {
     let Some(item) = item else {
         return panel;
     };
-    let rail = rail(shown, &item.id, t);
-    let decision = decision(state, review, shown, item, sheet, t);
-    let seed = reader(state, review, item, sheet, t);
-    if full {
-        panel.child(
-            row()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(
-                    super::view::scroll("garden.review.rail.viewport", rail)
-                        .w(240.0)
-                        .grow(0.0)
-                        .h_full(),
-                )
-                .child(super::view::scroll("garden.review.viewport", seed).h_full())
-                .child(
-                    super::view::scroll("garden.review.decision.viewport", decision)
-                        .w(340.0)
-                        .grow(0.0)
-                        .h_full(),
-                ),
-        )
-    } else {
-        panel.child(super::view::scroll(
+    let inset = if full { READER_INSET } else { DOCK_INSET };
+    let rail = rail(shown, &item.id, full, t);
+    let decision = decision(state, review, shown, item, sheet, t)
+        .px(inset.0)
+        .py(inset.1);
+    let seed = reader(state, review, item, sheet, t)
+        .px(inset.0)
+        .py(inset.1);
+    if !full {
+        return panel.child(rail).child(super::view::scroll(
             "garden.review.viewport",
-            col().w_full().child(rail).child(decision).child(seed),
-        ))
+            col()
+                .w_full()
+                .child(seed.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle))
+                .child(decision),
+        ));
     }
+    panel.child(
+        row()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .child(
+                super::view::scroll("garden.review.rail.viewport", rail)
+                    .w(RAIL_WIDTH)
+                    .min_w(RAIL_WIDTH)
+                    .grow(0.0)
+                    .h_full()
+                    .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle),
+            )
+            .child(
+                super::view::scroll("garden.review.viewport", seed)
+                    .h_full()
+                    .w(0.0)
+                    .grow(1.0 - DECISION_SHARE)
+                    .min_w(0.0)
+                    .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle),
+            )
+            .child(
+                super::view::scroll("garden.review.decision.viewport", decision)
+                    .w(0.0)
+                    .grow(DECISION_SHARE)
+                    .min_w(DECISION_MIN)
+                    .h_full(),
+            ),
+    )
 }
 
 fn header(shown: &GardenReview, complete: bool, full: bool, t: &Tokens) -> El {
@@ -880,37 +923,43 @@ fn header(shown: &GardenReview, complete: bool, full: bool, t: &Tokens) -> El {
         .key("garden.review.chrome")
         .w_full()
         .items_center()
-        .gap(space::S2)
-        .padding(space::S2)
+        .gap(10.0)
+        .px(14.0)
+        .pt(10.0)
+        .pb(9.0)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(button("garden.review.back".into(), "‹ Garden", t).on_press_tx(exit))
+        .child(
+            text_button(
+                "garden.review.back".into(),
+                "‹ Garden".into(),
+                (type_::BODY, t.text_tertiary),
+                t,
+            )
+            .on_press_tx(exit),
+        )
         .child(
             row()
                 .grow(1.0)
-                .gap(space::S2)
+                .min_w(0.0)
+                .gap(8.0)
                 .items_center()
                 .child(
-                    text("Review garden")
+                    type_::upper("Review garden", CHROME_TITLE)
                         .role("heading")
-                        .label("Review garden")
-                        .font(rune::TextStyle {
-                            weight: 600.0,
-                            ..type_::LABEL
-                        })
                         .color(t.text_primary),
                 )
                 .child(
                     text(progress.clone())
                         .key("garden.review.progress")
                         .label(progress)
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
+                        .font(type_::CAPTION)
+                        .color(t.text_muted),
                 ),
         )
         .child(
             GlyphButton::new(frame_glyph, frame_label)
                 .icon_size(12.0)
-                .color(t.text_muted)
+                .color(t.text_tertiary)
                 .on_press_tx(super::toggle_frame)
                 .build(attn_ui::kit(t))
                 .key("garden.review.frame-button"),
@@ -918,11 +967,84 @@ fn header(shown: &GardenReview, complete: bool, full: bool, t: &Tokens) -> El {
         .child(
             GlyphButton::new(attn_ui::glyph::TIMES, "Close")
                 .font(attn_ui::glyph::REGULAR)
-                .color(t.text_muted)
+                .color(t.text_tertiary)
                 .on_press(super::close)
                 .build(attn_ui::kit(t))
                 .key("garden.review.close"),
         )
+}
+
+/// One of the review's section headings.
+fn heading(title: &str, t: &Tokens) -> El {
+    type_::upper(title, HEADING)
+        .role("heading")
+        .color(t.text_primary)
+}
+
+/// A part of the decision under its heading.
+fn part(key: &str, title: &str, t: &Tokens) -> El {
+    col()
+        .key(key.to_owned())
+        .role("region")
+        .label(title.to_owned())
+        .w_full()
+        .child(heading(title, t).mb(12.0))
+}
+
+/// Running words in `ink`, as the review's paragraphs.
+fn prose(key: &str, words: impl Into<String>, ink: rune::Color) -> El {
+    let words = words.into();
+    text(words.clone())
+        .key(key.to_owned())
+        .role("note")
+        .label(words)
+        .font(PROSE)
+        .color(ink)
+        .wrap()
+}
+
+/// Small words in `ink`, as the review's `font-size: var(--font-size-sm)` lines.
+fn small(words: impl Into<String>, ink: rune::Color) -> El {
+    text(words.into()).font(type_::CAPTION).color(ink)
+}
+
+/// What failed, in the error's ink under what it is about, `.garden-review__error`.
+fn failed(key: &str, words: &str, t: &Tokens) -> El {
+    small(words.to_owned(), t.error)
+        .key(key.to_owned())
+        .role("alert")
+        .label(words.to_owned())
+        .wrap()
+        .mt(7.0)
+}
+
+/// `button` drawn as the review's bordered buttons, `.garden-review__action-row button`.
+fn bordered(
+    button: Button,
+    shown: impl Into<String>,
+    (ink, edge): (rune::Color, rune::Color),
+    t: &Tokens,
+) -> El {
+    let shown = shown.into();
+    button
+        .variant(ButtonVariant::Ghost)
+        .label_with(move |_, _| text(shown).font(type_::BODY).color(ink).truncate())
+        .build(attn_ui::kit(t))
+        .h(28.0)
+        .px(11.0)
+        .radius(4.0)
+        .fill(rune::Color::TRANSPARENT)
+        .hover(rune::Color::TRANSPARENT)
+        .border(1.0, edge)
+        .hover_border(if edge == t.border_subtle {
+            t.text_tertiary
+        } else {
+            edge
+        })
+}
+
+fn plain(button: Button, shown: impl Into<String>, t: &Tokens) -> El {
+    bordered(button, shown, (t.text_primary, t.border_subtle), t)
 }
 
 fn finished(review: &Review, t: &Tokens) -> El {
@@ -930,75 +1052,198 @@ fn finished(review: &Review, t: &Tokens) -> El {
         .key("garden.review.complete")
         .w_full()
         .items_center()
-        .gap(space::S2)
-        .padding(space::S3)
+        .gap(12.0)
+        .padding(40.0)
+        .child(
+            row()
+                .size(42.0, 42.0)
+                .radius(21.0)
+                .border(1.0, t.brand)
+                .items_center()
+                .justify_center()
+                .a11y_hidden()
+                .child(text("✓").font(TextStyle::new(20.0, 400.0)).color(t.brand)),
+        )
         .child(
             text("Garden review complete")
                 .role("heading")
                 .label("Garden review complete")
-                .font(type_::TITLE)
+                .font(SEED_TITLE)
                 .color(t.text_primary),
         )
-        .child(note(
-            "garden.review.complete.note",
-            "Every captured seed has been dealt with. New candidates will appear in the next review.",
-            t,
-        ));
+        .child(
+            prose(
+                "garden.review.complete.note",
+                "Every captured seed has been dealt with. New candidates will appear in the next review.",
+                t.text_tertiary,
+            )
+            .font(PROSE.lh(19.5))
+            .align(Align::Center)
+            .max_w(430.0),
+        );
     if let Some(failure) = &review.failure {
-        done = done.child(alert("garden.review.error", failure, t));
+        done = done.child(failed("garden.review.error", failure, t));
     }
     done.child(
-        button(
-            "garden.review.complete.back".into(),
-            "Back to the garden",
-            t,
-        )
-        .on_press_tx(exit),
+        plain(kit_button("Back to the garden"), "Back to the garden", t)
+            .key("garden.review.complete.back")
+            .on_press_tx(exit),
     )
 }
 
-fn rail(shown: &GardenReview, selected: &str, t: &Tokens) -> El {
-    let mut rail = col()
+/// The seeds the review holds, each its number in a ring over its title and where it stands:
+/// a column beside the reader, or a strip over it in the dock.
+fn rail(shown: &GardenReview, selected: &str, full: bool, t: &Tokens) -> El {
+    let rail = if full {
+        col().gap(2.0).px(8.0).py(10.0)
+    } else {
+        row()
+            .gap(2.0)
+            .px(8.0)
+            .py(7.0)
+            .min_h(72.0)
+            .scroll_x()
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+    };
+    let mut rail = rail
         .key("garden.review.rail")
         .role("navigation")
         .label("Seeds in this review")
-        .w_full()
-        .gap(2.0)
-        .padding(space::S2);
+        .w_full();
     for (n, item) in shown.items.iter().enumerate() {
         let id = item.id.clone();
         let current = item.id == selected;
-        let resolved = item.resolution != "unresolved";
-        let line = kit_button(item.title.clone())
-            .variant(if current {
-                ButtonVariant::Neutral
-            } else {
-                ButtonVariant::GhostMuted
-            })
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
-            .build(attn_ui::kit(t))
+        let number = row()
+            .size(19.0, 19.0)
+            .radius(9.5)
+            .border(1.0, if current { t.brand } else { t.border_subtle })
+            .items_center()
+            .justify_center()
+            .a11y_hidden()
+            .child(
+                text(format!("{}", n + 1))
+                    .font(RAIL_NUMBER)
+                    .color(if current { t.brand } else { t.text_muted }),
+            );
+        let copy = col()
+            .grow(1.0)
+            .min_w(0.0)
+            .gap(2.0)
+            .child(
+                text(item.title.clone())
+                    .font(RAIL_TITLE)
+                    .color(if current {
+                        t.text_primary
+                    } else {
+                        t.text_secondary
+                    })
+                    .truncate(),
+            )
+            .child(small(status_words(item), t.text_muted));
+        let mut line = row()
             .key(format!("garden.review.rail.{}", item.id))
-            .a11y_value(if current { "current" } else { "" });
-        rail = rail.child(
-            row()
-                .w_full()
-                .items_center()
-                .gap(space::S1)
-                .child(
-                    text(format!("{}", n + 1))
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_tertiary)
-                        .a11y_hidden(),
-                )
-                .child(line)
-                .child(meta_word(status_words(item), t).color(if resolved {
-                    t.text_tertiary
+            .role("button")
+            .label(item.title.clone())
+            .a11y_value(if current { "current" } else { "" })
+            .focusable(true)
+            .items_start()
+            .gap(9.0)
+            .padding(8.0)
+            .radius(5.0)
+            .border(
+                1.0,
+                if current {
+                    t.border_subtle
                 } else {
-                    t.text_secondary
-                })),
-        );
+                    rune::Color::TRANSPARENT
+                },
+            )
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
+            .child(number)
+            .child(copy);
+        line = if full {
+            line.w_full()
+        } else {
+            line.w(DOCK_RAIL_ITEM).grow(0.0)
+        };
+        if item.resolution != "unresolved" {
+            line = line.opacity(0.52);
+        }
+        rail = rail.child(line);
     }
     rail
+}
+
+/// Where the reader stands in its plot: a way back to the reviewed seed when it went
+/// elsewhere, then each seed above it to go to, and its own title.
+fn path_nav(sheet: &Sheet, item: &GardenReviewItem, browsed: &str, t: &Tokens) -> El {
+    let index = Index::of(sheet.seeds);
+    let path: Vec<_> = index
+        .path_to(browsed)
+        .into_iter()
+        .filter_map(|id| index.by_id.get(&id).cloned())
+        .collect();
+    let mut nav = row()
+        .key("garden.review.path")
+        .role("navigation")
+        .label("Plot path")
+        .w_full()
+        .items_center()
+        .gap(12.0)
+        .min_h(24.0)
+        .mb(20.0);
+    if browsed != item.seed_id {
+        let seed = item.seed_id.clone();
+        nav = nav.child(
+            text_button(
+                "garden.review.return".into(),
+                "‹ Review seed".into(),
+                (type_::BODY, t.brand),
+                t,
+            )
+            .pr(12.0)
+            .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| browse(state, &seed, tx)),
+        );
+    }
+    let Some((here, above)) = path.split_last() else {
+        return nav;
+    };
+    let mut crumbs = row().flex_wrap().items_center().gap(5.0).min_w(0.0);
+    for seed in above {
+        let id = seed.id.clone();
+        crumbs = crumbs
+            .child(
+                text_button(
+                    format!("garden.review.path.{}", seed.id),
+                    seed.title.clone(),
+                    (type_::CAPTION, t.text_tertiary),
+                    t,
+                )
+                .max_w(210.0)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| browse(state, &id, tx)),
+            )
+            .child(small("›", t.text_muted).a11y_hidden());
+    }
+    nav.child(crumbs.child(small(here.title.clone(), t.text_muted).truncate()))
+}
+
+/// What the reader says of the seed's place in the review, `.garden-review__status`: in the
+/// brand's colors once the advisor is ready.
+fn status_pill(words: String, ready: bool, t: &Tokens) -> El {
+    let (ink, edge) = if ready {
+        (t.brand, t.brand.mix(t.border_subtle, 0.55))
+    } else {
+        (t.text_tertiary, t.border_subtle)
+    };
+    row()
+        .key("garden.review.status")
+        .px(8.0)
+        .py(3.0)
+        .radius(999.0)
+        .border(1.0, edge)
+        .shrink()
+        .child(small(words, ink))
 }
 
 fn reader(
@@ -1012,58 +1257,47 @@ fn reader(
     let at_review_seed = browsed == item.seed_id;
     let (document, error) = super::reading(&state.window.garden, browsed);
     let held = sheet.seeds.iter().find(|s| s.id == browsed);
-    let mut page = col().w_full().padding(space::S3).gap(space::S2);
-    let index = Index::of(sheet.seeds);
-    let path: Vec<_> = index
-        .path_to(browsed)
-        .into_iter()
-        .filter_map(|id| index.by_id.get(&id).cloned())
-        .collect();
-    let mut nav = row()
-        .key("garden.review.path")
-        .role("navigation")
-        .label("Plot path")
-        .w_full()
-        .flex_wrap()
-        .items_center()
-        .gap(space::S1);
-    if !at_review_seed {
-        nav = nav.child(
-            button("garden.review.return".into(), "‹ Review seed", t).on_press_tx({
-                let seed = item.seed_id.clone();
-                move |state: &mut State, tx: &mut Tx| browse(state, &seed, tx)
-            }),
-        );
-    }
-    if path.len() > 1 {
-        for seed in &path[..path.len() - 1] {
-            let id = seed.id.clone();
-            nav = nav
-                .child(
-                    button(
-                        format!("garden.review.path.{}", seed.id),
-                        seed.title.clone(),
-                        t,
-                    )
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| browse(state, &id, tx)),
-                )
-                .child(meta_word("›", t).a11y_hidden());
-        }
-    }
-    page = page.child(nav);
+    let page = col().w_full().child(path_nav(sheet, item, browsed, t));
     let here = document.map(|d| &d.seed).or(held.map(|s| s.as_ref()));
     let Some(here) = here else {
         let words = match error {
             Some(error) => error.to_owned(),
             None => "Reading the seed and its log…".to_owned(),
         };
-        return page.child(note("garden.review.loading", words, t));
+        return page.child(prose("garden.review.loading", words, t.text_muted));
     };
-    let status = if at_review_seed {
-        status_words(item).to_owned()
+    let (status, ready) = if at_review_seed {
+        (status_words(item).to_owned(), item.status == "ready")
     } else {
-        here.status.clone()
+        (here.status.clone(), false)
     };
+    let title = row()
+        .w_full()
+        .items_start()
+        .justify_between()
+        .gap(16.0)
+        .pb(17.0)
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .child(
+                    text(here.id.clone())
+                        .font(type_::MONO_CAPTION)
+                        .color(t.text_muted)
+                        .mb(5.0),
+                )
+                .child(
+                    text(here.title.clone())
+                        .key(sheet.key("head.title"))
+                        .role("heading")
+                        .label(here.title.clone())
+                        .font(SEED_TITLE)
+                        .color(t.text_primary)
+                        .wrap(),
+                ),
+        )
+        .child(status_pill(status, ready, t));
     let children = document
         .map(|d| {
             d.children
@@ -1075,18 +1309,18 @@ fn reader(
                 .collect()
         })
         .unwrap_or_default();
+    let mut page = page.child(sheet.head_under(title, here, Vec::new()));
     if document.is_none() {
-        page = page.child(note(
+        page = page.child(prose(
             "garden.review.loading",
             "Reading the seed and its log…",
-            t,
+            t.text_muted,
         ));
     }
     if let Some(error) = error {
-        page = page.child(alert("garden.review.read-error", error, t));
+        page = page.child(failed("garden.review.read-error", error, t));
     }
-    page.child(sheet.head(here, meta_word(status, t), Vec::new()))
-        .child(sheet.authorization(here))
+    page.child(sheet.authorization(here))
         .child(sheet.plan(here))
         .children(sheet.checks(here, document))
         .children(sheet.seeds("plot", "Plot", children))
@@ -1102,53 +1336,30 @@ fn decision(
     sheet: &Sheet,
     t: &Tokens,
 ) -> El {
-    let at_review_seed = review.reading.seed == item.seed_id;
-    let mut aside = col()
-        .key("garden.review.decision")
-        .w_full()
-        .gap(space::S2)
-        .padding(space::S3);
-    if !at_review_seed {
-        let seed = item.seed_id.clone();
-        return aside.child(
-            section(
-                "garden.review.context",
-                "You are looking around the plot",
-                t,
-            )
-            .child(note(
-                "garden.review.context.note",
-                format!("The review decision still belongs to {}.", item.title),
-                t,
-            ))
-            .child(
-                button(
-                    "garden.review.context.return".into(),
-                    "Return to review seed",
-                    t,
-                )
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| browse(state, &seed, tx)),
-            ),
-        );
+    let aside = col().key("garden.review.decision").w_full();
+    if review.reading.seed != item.seed_id {
+        return aside.child(context(item, t));
     }
-    aside = aside.child(status_panel(state, review, shown, item, t));
-    let evidence: Vec<_> = item
+    let mut aside = aside.child(status_panel(state, review, shown, item, t));
+    let evidence = item
         .evidence
         .iter()
-        .filter(|e| !e.label.starts_with("Related seed ") && !e.label.starts_with("Seed log "))
-        .collect();
-    let mut known = section("garden.review.evidence", "What we know", t);
+        .filter(|e| !e.label.starts_with("Related seed ") && !e.label.starts_with("Seed log "));
+    let mut known = part("garden.review.evidence", "What we know", t);
     for entry in evidence {
         known = known.child(
             col()
                 .role("group")
                 .label(entry.label.clone())
-                .gap(2.0)
-                .child(meta_word(entry.label.clone(), t))
+                .w_full()
+                .gap(3.0)
+                .py(10.0)
+                .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+                .child(small(entry.label.clone(), t.text_muted))
                 .child(
                     text(entry.text.clone())
                         .label(entry.text.clone())
-                        .font(type_::BODY)
+                        .font(PROSE)
                         .color(t.text_primary)
                         .wrap(),
                 ),
@@ -1156,13 +1367,56 @@ fn decision(
     }
     aside = aside.child(known);
     if let Some(failure) = &review.failure {
-        aside = aside.child(alert("garden.review.error", failure, t));
+        aside = aside.child(failed("garden.review.error", failure, t));
     }
     let actionable = item.resolution == "unresolved" && item.status != "invalidated";
     if actionable {
         aside = aside.child(actions(state, item, sheet, t));
     }
     aside
+}
+
+/// What the decision says while the reader is on another seed of the plot,
+/// `.garden-review__context`.
+fn context(item: &GardenReviewItem, t: &Tokens) -> El {
+    let seed = item.seed_id.clone();
+    let title = "You are looking around the plot";
+    col()
+        .key("garden.review.context")
+        .role("region")
+        .label(title)
+        .w_full()
+        .pl(14.0)
+        .border_sides([0.0, 0.0, 0.0, 3.0], t.border_subtle)
+        .child(type_::upper("Plot context", type_::CAPTION).color(t.text_muted))
+        .child(
+            text(title)
+                .role("heading")
+                .label(title)
+                .font(TextStyle::new(17.0, 570.0))
+                .color(t.text_primary)
+                .wrap()
+                .mt(5.0)
+                .mb(8.0),
+        )
+        .child(
+            prose(
+                "garden.review.context.note",
+                format!("The review decision still belongs to {}.", item.title),
+                t.text_tertiary,
+            )
+            .mb(14.0),
+        )
+        .child(
+            plain(
+                kit_button("Return to review seed"),
+                "Return to review seed",
+                t,
+            )
+            .key("garden.review.context.return")
+            .px(10.0)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| browse(state, &seed, tx)),
+        )
 }
 
 fn status_panel(
@@ -1176,45 +1430,7 @@ fn status_panel(
         let Some(recommendation) = &item.recommendation else {
             return col();
         };
-        let mut advice = col()
-            .key("garden.review.advice")
-            .role("region")
-            .label("Advisor suggests")
-            .w_full()
-            .gap(space::S1)
-            .padding(space::S2)
-            .radius(6.0)
-            .fill(t.bg_elevated)
-            .child(meta_word("Advisor suggests", t))
-            .child(
-                text(action_label(recommendation).to_owned())
-                    .key("garden.review.advice.action")
-                    .label(action_label(recommendation).to_owned())
-                    .font(rune::TextStyle {
-                        weight: 600.0,
-                        ..type_::BODY
-                    })
-                    .color(t.text_primary),
-            );
-        if let Some(explanation) = item.explanation.as_ref().filter(|e| !e.is_empty()) {
-            advice = advice.child(
-                text(explanation.clone())
-                    .label(explanation.clone())
-                    .font(type_::BODY)
-                    .color(t.text_secondary)
-                    .wrap(),
-            );
-        }
-        for cited in item.cited_evidence.iter().flatten() {
-            advice = advice.child(
-                text(format!("• {cited}"))
-                    .label(cited.clone())
-                    .font(type_::LABEL)
-                    .color(t.text_secondary)
-                    .wrap(),
-            );
-        }
-        return advice;
+        return advice(item, recommendation, t);
     }
     if item.status == "failed" || item.status == "invalidated" {
         let failed = item.status == "failed";
@@ -1234,31 +1450,93 @@ fn status_panel(
                 .filter(|e| !e.is_empty())
                 .unwrap_or_else(|| "Refresh the evidence and try again.".into())
         };
-        let mut problem = section("garden.review.problem", title, t).child(note(
-            "garden.review.problem.note",
-            words,
-            t,
-        ));
-        problem = if review.retrying {
-            problem.child(
+        let problem = col()
+            .key("garden.review.problem")
+            .role("region")
+            .label(title)
+            .w_full()
+            .gap(10.0)
+            .child(heading(title, t).mb(2.0))
+            .child(prose("garden.review.problem.note", words, t.text_tertiary));
+        if review.retrying {
+            return problem.child(
                 text("Refreshing…")
                     .role("status")
                     .label("Refreshing…")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
-        } else {
-            let item = item.clone();
-            problem.child(
-                button("garden.review.retry".into(), "Try again", t)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| retry(state, &item, tx)),
-            )
-        };
-        return problem;
+                    .font(type_::BODY)
+                    .color(t.text_tertiary),
+            );
+        }
+        let item = item.clone();
+        return problem.child(
+            plain(kit_button("Try again"), "Try again", t)
+                .key("garden.review.retry")
+                .px(9.0)
+                .h(26.0)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| retry(state, &item, tx)),
+        );
     }
     progress(state, shown, item, t)
 }
 
+/// What the advisor suggests, `.garden-review__advice`: a brand rule beside the action it
+/// names, why, and what it read.
+fn advice(item: &GardenReviewItem, recommendation: &str, t: &Tokens) -> El {
+    let action = action_label(recommendation).to_owned();
+    let mut advice = col()
+        .key("garden.review.advice")
+        .role("region")
+        .label("Advisor suggests")
+        .w_full()
+        .pl(14.0)
+        .py(2.0)
+        .mb(28.0)
+        .border_sides([0.0, 0.0, 0.0, 3.0], t.brand)
+        .child(small("Advisor suggests", t.text_muted).mb(3.0))
+        .child(
+            text(action.clone())
+                .key("garden.review.advice.action")
+                .label(action)
+                .font(TextStyle::new(18.0, 600.0))
+                .color(t.brand),
+        );
+    if let Some(explanation) = item.explanation.as_ref().filter(|e| !e.is_empty()) {
+        advice = advice.child(
+            text(explanation.clone())
+                .label(explanation.clone())
+                .font(type_::BODY.lh(19.5))
+                .color(t.text_primary)
+                .wrap()
+                .mt(11.0),
+        );
+    }
+    let cited: Vec<_> = item.cited_evidence.iter().flatten().collect();
+    if cited.is_empty() {
+        return advice;
+    }
+    let mut list = col().w_full().mt(12.0);
+    for cited in cited {
+        list = list.child(
+            row()
+                .w_full()
+                .items_start()
+                .child(small("•", t.text_tertiary).w(18.0).pl(6.0).a11y_hidden())
+                .child(
+                    text(cited.clone())
+                        .label(cited.clone())
+                        .font(type_::CAPTION.lh(17.4))
+                        .color(t.text_tertiary)
+                        .wrap()
+                        .grow(1.0)
+                        .min_w(0.0),
+                ),
+        );
+    }
+    advice.child(list)
+}
+
+/// The advisor's progress through the review, `.garden-review__waiting`: a segment for each
+/// seed in the review's track, then what the advisor is doing on this one.
 fn progress(state: &State, shown: &GardenReview, item: &GardenReviewItem, t: &Tokens) -> El {
     let now = state.window.now_ms;
     let advised = advised(shown);
@@ -1285,25 +1563,96 @@ fn progress(state: &State, shown: &GardenReview, item: &GardenReviewItem, t: &To
         _ => "Waiting for an advisor slot.".to_owned(),
     };
     let ready = format!("Advice ready for {advised} of {total} seeds.");
-    let mut panel = section("garden.review.waiting", "Advisor progress", t)
-        .child(note("garden.review.waiting.ready", ready, t))
-        .child(meta_word(
-            format!("{} · {}", shown.run.recipe.agent, shown.run.recipe.model),
-            t,
-        ))
-        .child(note("garden.review.waiting.detail", detail, t));
+    let recipe = format!("{} · {}", shown.run.recipe.agent, shown.run.recipe.model);
+    let head = row()
+        .w_full()
+        .items_start()
+        .justify_between()
+        .gap(16.0)
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .child(heading("Advisor progress", t).mb(4.0))
+                .child(prose(
+                    "garden.review.waiting.ready",
+                    ready.clone(),
+                    t.text_tertiary,
+                )),
+        )
+        .child(
+            text(recipe.clone())
+                .label(recipe)
+                .font(RAIL_NUMBER)
+                .color(t.text_muted)
+                .truncate()
+                .shrink()
+                .min_w(0.0),
+        );
+    let track = row()
+        .key("garden.review.waiting.track")
+        .label(ready)
+        .w_full()
+        .h(5.0)
+        .gap(4.0)
+        .mt(16.0)
+        .mb(12.0)
+        .children(shown.items.iter().map(|candidate| {
+            rune::el()
+                .grow(1.0)
+                .min_w(10.0)
+                .h_full()
+                .radius(2.5)
+                .fill(track_color(candidate, t))
+        }));
+    let mut panel = col()
+        .key("garden.review.waiting")
+        .role("region")
+        .label("Advisor progress")
+        .w_full()
+        .child(head)
+        .child(track)
+        .child(prose("garden.review.waiting.detail", detail, t.text_primary).mb(5.0));
     if let Some(error) = item.advisor_error.as_ref().filter(|e| !e.is_empty()) {
-        panel = panel.child(note("garden.review.waiting.error", error.clone(), t));
+        panel = panel.child(
+            small(error.clone(), t.error)
+                .key("garden.review.waiting.error")
+                .role("note")
+                .label(error.clone())
+                .wrap()
+                .mb(8.0),
+        );
     }
-    panel.child(note(
-        "garden.review.waiting.now",
-        "You can choose an action now. Advice will appear here if it arrives first.",
-        t,
-    ))
+    let now = "You can choose an action now. Advice will appear here if it arrives first.";
+    panel.child(
+        small(now, t.text_tertiary)
+            .key("garden.review.waiting.now")
+            .role("note")
+            .label(now)
+            .wrap()
+            .mt(12.0),
+    )
+}
+
+/// A seed's segment in the advisor's track, `.garden-review__progress-track span`.
+fn track_color(candidate: &GardenReviewItem, t: &Tokens) -> rune::Color {
+    let advisor = candidate.advisor_state.as_deref();
+    match candidate.status.as_str() {
+        _ if advisor == Some("retrying") => t.brand.mix(t.border_subtle, 0.45),
+        "running" => t.brand.mix(t.border_subtle, 0.45),
+        _ if advisor == Some("failed") => t.error,
+        "failed" | "invalidated" => t.error,
+        "ready" => t.brand,
+        _ => t.border_subtle,
+    }
 }
 
 fn actions(state: &State, item: &GardenReviewItem, sheet: &Sheet, t: &Tokens) -> El {
-    let mut panel = section("garden.review.actions", "What should happen?", t);
+    let title = "What should happen?";
+    let panel = part("garden.review.actions", title, t)
+        .mt(26.0)
+        .pt(18.0)
+        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle);
     let document = super::reading(&state.window.garden, &item.seed_id).0;
     if let Some((spot, kind)) = composing(state) {
         return panel.child(match kind {
@@ -1316,62 +1665,89 @@ fn actions(state: &State, item: &GardenReviewItem, sheet: &Sheet, t: &Tokens) ->
             Kind::Chief => col().w_full().children(sheet.chief_form(document)),
         });
     }
-    let mut buttons = row()
-        .key("garden.review.choices")
-        .role("group")
-        .label("Choose what happens to this seed")
-        .w_full()
-        .flex_wrap()
-        .gap(space::S1);
+    let mut choices = Vec::new();
     for action in &item.actions {
         if action == "send_to_chief" && !sheet.chief {
             continue;
         }
-        let label = match (action.as_str(), item.outpost.as_deref()) {
-            ("resume", Some(outpost)) => format!("Resume on {outpost}"),
-            _ => action_label(action).to_owned(),
+        let (label, alone) = match (action.as_str(), item.outpost.as_deref()) {
+            ("resume", Some(outpost)) => (format!("Resume on {outpost}"), true),
+            _ => (action_label(action).to_owned(), false),
         };
         let key = match Kind::of(action) {
             Some(kind) => spot(&item.seed_id, kind).key("open"),
             None => format!("garden.review.action.{action}"),
         };
         let recommended = item.recommendation.as_deref() == Some(action.as_str());
+        let ink = if recommended {
+            (t.brand, t.brand)
+        } else {
+            (t.text_primary, t.border_subtle)
+        };
         let (chosen, action) = (item.clone(), action.clone());
-        buttons = buttons.child(
-            kit_button(label)
-                .variant(if recommended {
-                    ButtonVariant::Submit
-                } else {
-                    ButtonVariant::Neutral
-                })
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    choose_action(state, &chosen, &action, tx)
-                })
-                .build(attn_ui::kit(t))
-                .key(key)
-                .a11y_value(if recommended { "recommended" } else { "" }),
-        );
+        let choice = bordered(kit_button(label.clone()), label, ink, t)
+            .key(key)
+            .justify_start()
+            .a11y_value(if recommended { "recommended" } else { "" })
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                choose_action(state, &chosen, &action, tx)
+            });
+        choices.push((choice, alone));
     }
-    panel = panel.child(buttons);
-    panel
+    panel.child(choice_grid(choices))
+}
+
+/// The choices in two even columns, `.garden-review__action-row`, a choice that stands
+/// `alone` across both.
+fn choice_grid(choices: Vec<(El, bool)>) -> El {
+    let mut grid = col()
+        .key("garden.review.choices")
+        .role("group")
+        .label("Choose what happens to this seed")
+        .w_full()
+        .gap(7.0);
+    let mut pending: Option<El> = None;
+    let pair = |left: El, right: Option<El>| {
+        row()
+            .w_full()
+            .gap(7.0)
+            .child(left.w(0.0).grow(1.0).min_w(0.0))
+            .child(
+                right
+                    .unwrap_or_else(|| rune::el().px(11.0))
+                    .w(0.0)
+                    .grow(1.0)
+                    .min_w(0.0),
+            )
+    };
+    for (choice, alone) in choices {
+        if alone {
+            grid = grid.children(pending.take().map(|left| pair(left, None)));
+            grid = grid.child(choice.w_full());
+            continue;
+        }
+        match pending.take() {
+            Some(left) => grid = grid.child(pair(left, Some(choice))),
+            None => pending = Some(choice),
+        }
+    }
+    grid.children(pending.map(|left| pair(left, None)))
 }
 
 fn draft_line(state: &State, spot: &Spot, t: &Tokens) -> El {
     let review = review(state);
-    let mut line = row().w_full().items_center().gap(space::S1);
+    let mut line = row().w_full().items_center().gap(7.0);
     let shown = state.window.garden.shown(spot);
     if review.drafting.is_some() {
         line = line.child(
-            text("Drafting…")
+            small("Drafting…", t.text_tertiary)
                 .role("status")
-                .label("Drafting…")
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+                .label("Drafting…"),
         );
     } else if !shown.busy {
         let drafted = spot.clone();
         line = line.child(
-            button(spot.key("draft"), "Draft", t)
+            text_button(spot.key("draft"), "Draft".into(), (type_::BODY, t.brand), t)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| draft(state, &drafted, tx)),
         );
     }
@@ -1382,45 +1758,52 @@ fn draft_line(state: &State, spot: &Spot, t: &Tokens) -> El {
         let used = spot.clone();
         line = line
             .child(
-                text("Draft ready. Your edits were kept.")
+                small("Draft ready. Your edits were kept.", t.text_tertiary)
                     .role("status")
-                    .label("Draft ready. Your edits were kept.")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
+                    .label("Draft ready. Your edits were kept."),
             )
             .child(
-                button(spot.key("use-draft"), "Use draft", t)
-                    .on_press(move |state: &mut State| use_draft(state, &used)),
+                text_button(
+                    spot.key("use-draft"),
+                    "Use draft".into(),
+                    (type_::CAPTION, t.brand),
+                    t,
+                )
+                .on_press(move |state: &mut State| use_draft(state, &used)),
             );
     }
     line
 }
 
+/// The park or wither composer, `.garden-review__composer`: its prompt over the field, then
+/// its way out and its send at the right.
 fn lifecycle_form(state: &State, spot: &Spot, kind: Kind, t: &Tokens) -> El {
     let shown = state.window.garden.shown(spot);
     let Some(written) = shown.words else {
         return col();
     };
-    let kit = attn_ui::kit(t);
     let (typed, edited) = (spot.clone(), spot.clone());
     let mut form = col()
         .key(spot.key("form"))
         .role("form")
         .label(action_label(kind.part()).to_owned())
         .w_full()
-        .gap(space::S1)
-        .padding(space::S2)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .child(
-            text(kind.prompt())
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .a11y_hidden(),
+            row()
+                .w_full()
+                .items_center()
+                .gap(6.0)
+                .mb(6.0)
+                .a11y_hidden()
+                .child(
+                    text(kind.prompt())
+                        .font(TextStyle::new(13.0, 540.0))
+                        .color(t.text_primary),
+                )
+                .child(small("optional", t.text_muted)),
         )
         .child(
-            text_input(written, type_::BODY)
+            text_input(written, PROSE)
                 .key(spot.field())
                 .return_breaks_line()
                 .label(kind.prompt())
@@ -1436,47 +1819,45 @@ fn lifecycle_form(state: &State, spot: &Spot, kind: Kind, t: &Tokens) -> El {
                     )
                 })
                 .w_full()
-                .min_h(56.0)
+                .min_h(82.0)
                 .color(t.text_primary)
                 .fill(t.bg_input)
-                .border(1.0, t.border_focus)
-                .radius(4.0)
-                .padding(space::S1),
+                .border(1.0, t.brand)
+                .radius(5.0)
+                .px(10.0)
+                .py(8.0),
         );
     if let Some(failure) = shown.failure {
-        form = form.child(alert(&spot.key("error"), failure, t));
+        form = form.child(failed(&spot.key("error"), failure, t));
     }
     let label = action_label(kind.part());
-    let line = if shown.busy {
+    let line = row().w_full().items_center().justify_end().gap(7.0).mt(9.0);
+    if shown.busy {
         let words = format!("{label}ing…");
-        row().child(
-            text(words.clone())
-                .role("status")
-                .label(words)
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+        return form.child(
+            line.child(
+                small(words.clone(), t.text_muted)
+                    .role("status")
+                    .label(words),
+            ),
+        );
+    }
+    let (cancelled, sent) = (spot.clone(), spot.clone());
+    form.child(
+        line.child(
+            plain(kit_button("Cancel"), "Cancel", t)
+                .key(spot.key("cancel"))
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    cancelled.put_away(state, &cancelled.key("open"), tx)
+                }),
         )
-    } else {
-        let (cancelled, sent) = (spot.clone(), spot.clone());
-        row()
-            .gap(space::S1)
-            .child(
-                kit_button("Cancel")
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        cancelled.put_away(state, &cancelled.key("open"), tx)
-                    })
-                    .build(kit)
-                    .key(spot.key("cancel")),
-            )
-            .child(
-                kit_button(label)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        let words = sent.words(state);
-                        lifecycle(&sent, kind, state, words, tx)
-                    })
-                    .build(kit)
-                    .key(spot.key("send")),
-            )
-    };
-    form.child(line)
+        .child(
+            plain(kit_button(label), label, t)
+                .key(spot.key("send"))
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    let words = sent.words(state);
+                    lifecycle(&sent, kind, state, words, tx)
+                }),
+        ),
+    )
 }

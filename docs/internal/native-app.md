@@ -86,7 +86,8 @@ alone in its tile with every block the reader draws, a document whose file is
 missing, a review stop with its key line, the review's key sheet and file view,
 a review shown alone beside a second document, with its Walkthrough, search and
 send sheet, the Garden fullscreen on a plot and on a seed's page, in the dock at
-its root, on a plot and on a seed's page, and empty in both, the Chief's setup,
+its root, on a plot and on a seed's page, and empty in both, the garden review
+expanded with its advice and while its advisor runs, and in the dock, the Chief's setup,
 Settings on Appearance, Agents and its end, Analytics, Delegation, Outposts,
 Experimental and its end, Phones, Plugins, Updates, Event bus, Files and locations, Attention
 queue, Background agents, Task runner, GitHub hosts and Models, Quick Capture with a

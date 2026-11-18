@@ -18,18 +18,20 @@ use attn_protocol::{
     CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
     CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
     DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
-    DesktopTileContentMessage, DirectoryEntry, FileActivity, FsIndexResultMessage,
+    DesktopTileContentMessage, DirectoryEntry, FileActivity, FsIndexResultMessage, GardenReview,
+    GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun,
     GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
     HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
     LaunchDesktopResultMessage, LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView,
     PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RecentFilesResultMessage,
     RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage, RepoInfo,
     ReviewBundle, ReviewFile, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Seed,
-    SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
-    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree,
-    WorktreeListResult, WorktreeListResultEvent,
+    SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress,
+    SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
+    SessionUsageModel, SharedCodexBlocker, SharedCodexState, Worktree, WorktreeListResult,
+    WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Fonts};
 use attn_testkit::tree::{pane, row};
@@ -861,6 +863,90 @@ fn garden_dock_plot(dark: bool) {
     press(&mut world, Action::BoardOpen);
     world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
     snap(&mut world, "garden-dock-plot", dark);
+}
+
+/// A garden review of two seeds, the first `s-one`, advised or with its advisor still running.
+fn garden_review(advised: bool) -> GardenReview {
+    let item = |seed: &str, title: &str| GardenReviewItem {
+        id: format!("r-1.{seed}"),
+        run_id: "r-1".into(),
+        seed_id: seed.into(),
+        seed_rev: 1,
+        evidence_version: "evidence-1".into(),
+        title: title.into(),
+        evidence: vec![
+            GardenReviewEvidence {
+                label: "Review signal".into(),
+                text: "No log entry for nine days.".into(),
+            },
+            GardenReviewEvidence {
+                label: "Tender".into(),
+                text: "reviewer, waiting for input".into(),
+            },
+        ],
+        actions: ["handover", "keep_growing", "park", "harvest", "wither"]
+            .map(String::from)
+            .to_vec(),
+        status: "ready".into(),
+        resolution: "unresolved".into(),
+        recommendation: Some("park".into()),
+        explanation: Some(
+            "Useful work remains, but nothing needs an agent until the palette lands.".into(),
+        ),
+        cited_evidence: Some(vec!["No log entry for nine days.".into()]),
+        ..GardenReviewItem::default()
+    };
+    let mut first = item("s-one", "Colors in one place");
+    if !advised {
+        first.status = "running".into();
+        first.recommendation = None;
+        first.explanation = None;
+        first.cited_evidence = None;
+        first.advisor_attempt = Some(1);
+    }
+    let mut second = item("s-two", "Catppuccin color schemes");
+    second.status = "queued".into();
+    second.recommendation = None;
+    GardenReview {
+        run: GardenReviewRun {
+            profile_id: PROFILE.into(),
+            id: "r-1".into(),
+            candidate_ids: vec!["s-one".into(), "s-two".into()],
+            recipe: GardenReviewRecipe {
+                agent: "codex".into(),
+                model: "gpt-5.6-luna".into(),
+                effort: None,
+            },
+            status: "running".into(),
+            captured_at: "2026-11-13T09:00:00Z".into(),
+            ..GardenReviewRun::default()
+        },
+        items: vec![first, second],
+    }
+}
+
+/// The garden's review of [`garden_review`], opened in the dock or expanded to the window.
+fn garden_review_screen(dark: bool, advised: bool, full: bool, name: &str) {
+    let shown = garden_review(advised);
+    let mut world = with_document_and(dark, move |daemon| {
+        daemon.on("seed_review_show", move |r: &Request| {
+            message(SeedReviewResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                profile_id: PROFILE.into(),
+                operation: "show".into(),
+                success: true,
+                candidate_count: 2,
+                review: Some(shown.clone()),
+                ..SeedReviewResultMessage::new()
+            })
+        });
+    });
+    press(&mut world, Action::BoardOpen);
+    if full {
+        world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    }
+    world.gesture(|app| app.click(Target::role("button").name("Continue review")));
+    snap(&mut world, name, dark);
 }
 
 fn settings_page(dark: bool) {
@@ -3145,6 +3231,9 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         garden_dock_seed(dark);
         garden_empty(dark);
         garden_dock_empty(dark);
+        garden_review_screen(dark, true, true, "garden-review");
+        garden_review_screen(dark, false, true, "garden-review-waiting");
+        garden_review_screen(dark, true, false, "garden-review-dock");
         settings_page(dark);
         settings_agents(dark);
         shortcut_editor(dark);

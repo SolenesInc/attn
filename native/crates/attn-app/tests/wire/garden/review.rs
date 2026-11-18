@@ -283,7 +283,26 @@ fn type_into(world: &mut World, key: &str, words: &str) {
 }
 
 fn press(world: &mut World, key: &str) {
-    world.gesture(|app| app.click(Target::key(format!("garden.review.{key}"))));
+    let key = format!("garden.review.{key}");
+    scroll_to(world, &key);
+    world.gesture(|app| app.click(Target::key(key)));
+}
+
+/// Scrolls the review the way a person does, with the wheel over it, until `key` is in view.
+fn scroll_to(world: &mut World, key: &str) {
+    let [x, y, w, h] = world.rect("garden.review.viewport");
+    for _ in 0..40 {
+        let [_, top, _, height] = world.rect(key);
+        if top + height <= y + h {
+            return;
+        }
+        let at = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -60.0).at(at.0, at.1))
+        });
+    }
+    panic!("{key} stays below the review's view");
 }
 
 fn emit(world: &mut World, review: GardenReview) {
@@ -395,6 +414,36 @@ fn waits_for_a_review_start_however_long_model_discovery_takes() {
 
     assert!(decides(&world));
     assert!(!shows(&world, "Starting review…"));
+    assert!(rests(&mut world));
+}
+
+#[test]
+fn lays_the_expanded_review_out_as_the_seeds_it_holds_beside_the_seed_and_the_decision() {
+    let (mut world, _) = garden(Script {
+        seeds: vec![reviewed(), next()],
+        ..Script::of(Some(review(vec![item(), next_item()])))
+    });
+    click(&mut world, "Expand the garden");
+    click(&mut world, "Continue review");
+
+    let screen = world.screen();
+    let width = |key: &str| {
+        screen
+            .bounds(Target::key(key))
+            .unwrap_or_else(|| panic!("{key} is not on the screen"))[2]
+    };
+    let (rail, seed, decision) = (
+        width("garden.review.rail.viewport"),
+        width("garden.review.viewport"),
+        width("garden.review.decision.viewport"),
+    );
+    assert_eq!(rail, 248.0);
+    let reader = seed + decision;
+    assert!(
+        (decision - reader * 0.35).abs() < 1.0,
+        "the decision takes 35% of the reader: {decision} of {reader}"
+    );
+    assert!(has(&world, NEXT), "the rail offers the next seed");
     assert!(rests(&mut world));
 }
 
