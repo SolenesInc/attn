@@ -51,6 +51,7 @@ test.describe('LocationPicker', () => {
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         await page.locator('[data-testid="location-picker-path-input"]').focus();
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type(`${parentDir}/`);
         const last = page.locator('.picker-item', { hasText: 'dir-39' });
         await expect(last).toBeAttached();
@@ -82,6 +83,7 @@ test.describe('LocationPicker', () => {
 
           const input = page.locator('[data-testid="location-picker-path-input"]');
           await input.focus();
+          await page.keyboard.press('ControlOrMeta+a');
           await page.keyboard.type(typedPath);
           await page.keyboard.press('Enter');
 
@@ -112,6 +114,7 @@ test.describe('LocationPicker', () => {
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type(repo.repoPath);
         await expect(input).toHaveValue(repo.repoPath);
         await page.keyboard.press('Enter');
@@ -152,6 +155,7 @@ test.describe('LocationPicker', () => {
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
         await input.focus();
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type(repo.worktrees[0].path);
         await page.keyboard.press('Enter');
 
@@ -184,6 +188,7 @@ test.describe('LocationPicker', () => {
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
         await input.focus();
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type(repo.repoPath);
         await page.keyboard.press('Enter');
 
@@ -214,6 +219,7 @@ test.describe('LocationPicker', () => {
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
         await input.focus();
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type(repo.worktrees[1].path);
         await page.keyboard.press('Enter');
 
@@ -250,6 +256,7 @@ test.describe('LocationPicker', () => {
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
         await input.focus();
+        await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.type(`${projectDir}/`);
         await page.keyboard.press('Enter');
 

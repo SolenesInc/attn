@@ -64,6 +64,7 @@ async function launchFromEmptyDesktop(emptied, cwd) {
     const session = message.session;
     return session && session.directory === cwd && !sessions.includes(session.id) ? session : null;
   }, `session in ${cwd}`);
+  await driver.pressKey('a', { command: true });
   await driver.typeText(cwd);
   await driver.pressKey('Enter');
   const session = await registered;
