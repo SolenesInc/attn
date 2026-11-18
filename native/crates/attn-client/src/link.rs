@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -26,7 +27,9 @@ use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::frame::Frame;
-use crate::{CLIENT_KIND, Clock, Connection, MigrationMarker, Performance, Pulse, Refusal, Store};
+use crate::{
+    CLIENT_KIND, Clock, Connection, MigrationMarker, Performance, Pulse, Refusal, Store, setting,
+};
 
 const FIRST_RETRY: Duration = Duration::from_secs(1);
 const LAST_RETRY: Duration = Duration::from_secs(5);
@@ -516,20 +519,31 @@ impl Task {
         }
     }
 
+    fn follow_analytics(&self, settings: Option<&BTreeMap<String, String>>) {
+        if let Some(settings) = settings {
+            self.config.performance.record(
+                setting::on(settings, "analytics.enabled"),
+                self.config.clock.now(),
+            );
+        }
+    }
+
     fn apply(&self, text: &str, greeted: &mut bool) -> Option<Refusal> {
         let Ok(header) = serde_json::from_str::<Header>(text) else {
             eprintln!("attn-app: dropped a daemon message that is not a JSON object");
             return None;
         };
         if header.event == "app_performance_request" {
-            let _ = self.shared.send(
-                serde_json::to_string(&AppPerformanceResultMessage {
-                    request_id: header.request_id.unwrap_or_default(),
-                    performance: self.config.performance.take(self.config.clock.now()),
-                    ..AppPerformanceResultMessage::new()
-                })
-                .expect("app_performance_result serializes"),
-            );
+            if let Some(performance) = self.config.performance.take(self.config.clock.now()) {
+                let _ = self.shared.send(
+                    serde_json::to_string(&AppPerformanceResultMessage {
+                        request_id: header.request_id.unwrap_or_default(),
+                        performance,
+                        ..AppPerformanceResultMessage::new()
+                    })
+                    .expect("app_performance_result serializes"),
+                );
+            }
             return None;
         }
         let request_id = header.answers().filter(|id| !id.is_empty());
@@ -561,6 +575,7 @@ impl Task {
                     }
                 };
                 *greeted = true;
+                self.follow_analytics(state.settings.as_ref());
                 self.store.apply_initial_state(state);
                 None
             }
@@ -570,6 +585,7 @@ impl Task {
             }
             "settings_updated" => {
                 let message: SettingsUpdatedMessage = parse(&header.event, text)?;
+                self.follow_analytics(message.settings.as_ref());
                 if let Some(settings) = message.settings {
                     self.store.set_settings(settings);
                 }

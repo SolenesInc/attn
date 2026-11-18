@@ -4,6 +4,7 @@ pub mod layout;
 mod link;
 mod performance;
 mod pulse;
+pub mod setting;
 mod store;
 
 pub use clock::{Clock, ManualClock};

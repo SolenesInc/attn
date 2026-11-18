@@ -46,7 +46,6 @@ pub mod quick_capture;
 mod requests;
 mod review;
 pub mod screen;
-mod setting;
 mod settings;
 mod shared_codex;
 mod shell;
@@ -63,6 +62,7 @@ use std::sync::Arc;
 
 use attn_client::{
     Commands, Facts, Link, LinkConfig, Pulse, ReplySink, Slices, Store, Subscription, TerminalSink,
+    setting,
 };
 use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 

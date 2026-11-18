@@ -80,8 +80,8 @@ the build stored with its record, which an upload batch names.
 | `processes[].resident_bytes` | Their total resident memory |
 | `processes[].footprint_bytes` | Their total physical footprint, as Activity Monitor's Memory column shows it. macOS only |
 | `processes[].split` | For `webkit_content` on macOS, the part of that footprint in three of `footprint`'s categories, summed over the processes: `webkit_malloc_bytes` (WebKit malloc), `owned_graphics_bytes` (owned physical footprint, graphics) and `gigacage_bytes` (JS VM Gigacage). Each counts the category's dirty and compressed memory. It is absent when `footprint` could not measure every WebContent process |
-| `processes[].performance` | For `app` with shell `native`, what the app measured since the daemon last asked, or since it started: the fields below. It is absent when the app did not answer within 10 seconds |
-| `performance.period_ms` | How long the measurement covers, not counting time the machine slept. It is about 20 minutes, longer when a sample failed or analytics was off |
+| `processes[].performance` | For `app` with shell `native`, what the app measured since the latest of three moments: the daemon last asked, the app connected, or `analytics.enabled` turned on. The app measures nothing while `analytics.enabled` is off. The fields are below. It is absent when the app did not answer within 10 seconds |
+| `performance.period_ms` | How long the measurement covers, not counting time the machine slept. It is about 20 minutes, longer when a sample failed and shorter after analytics turned on |
 | `performance.cpu_ms` | The CPU time the app's process used, all threads, user and system |
 | `performance.frames_drawn` | Frames the main window drew |
 | `performance.frames_unchanged` | Frames a timer asked for that showed what was already on screen, so the window drew nothing |

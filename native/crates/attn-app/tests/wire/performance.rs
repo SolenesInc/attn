@@ -1,8 +1,25 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
-use attn_protocol::{AppPerformanceRequestMessage, InitialStateMessage};
+use attn_protocol::{AppPerformanceRequestMessage, InitialStateMessage, SettingsUpdatedMessage};
 use attn_testkit::{Daemon, World};
 use serde_json::Value;
+
+fn analytics(on: bool) -> Option<BTreeMap<String, String>> {
+    Some(BTreeMap::from([(
+        "analytics.enabled".to_string(),
+        on.to_string(),
+    )]))
+}
+
+fn starting_with_analytics(on: bool) -> World {
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        settings: analytics(on),
+        ..InitialStateMessage::new()
+    });
+    daemon.on("app_performance_result", |_| ());
+    World::start(daemon)
+}
 
 fn ask(world: &mut World, id: &str) -> Value {
     world.daemon.emit(AppPerformanceRequestMessage {
@@ -21,9 +38,7 @@ fn ask(world: &mut World, id: &str) -> Value {
 
 #[test]
 fn the_app_answers_a_performance_request_with_what_it_measured_since_it_last_answered() {
-    let daemon = Daemon::scripted().state(InitialStateMessage::new());
-    daemon.on("app_performance_result", |_| ());
-    let mut world = World::start(daemon);
+    let mut world = starting_with_analytics(true);
     ask(&mut world, "first");
 
     for ms in [1.0, 2.0, 2.0, 3.0, 40.0] {
@@ -76,5 +91,43 @@ fn the_app_answers_a_performance_request_with_what_it_measured_since_it_last_ans
     assert!(
         next.get("frame_ms").is_none(),
         "no frame times without drawn frames: {next}"
+    );
+}
+
+#[test]
+fn a_performance_answer_holds_nothing_from_before_analytics_turned_on() {
+    let mut world = starting_with_analytics(false);
+    for ms in [1.0, 2.0, 30.0] {
+        world.performance.drawn(ms);
+    }
+    world.performance.unchanged();
+    world.performance.skipped();
+    world.advance(Duration::from_secs(600));
+
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: analytics(true),
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    world.advance(Duration::from_secs(60));
+    world.performance.drawn(4.0);
+    let measured = ask(&mut world, "after turning on");
+
+    assert_eq!(
+        (
+            &measured["period_ms"],
+            &measured["frames_drawn"],
+            &measured["frames_unchanged"],
+            &measured["frames_skipped"],
+            &measured["frame_ms"]["max"],
+        ),
+        (
+            &Value::from(60_000),
+            &Value::from(1),
+            &Value::from(0),
+            &Value::from(0),
+            &Value::from(4.0),
+        ),
+        "the answer covers only the time since analytics turned on"
     );
 }

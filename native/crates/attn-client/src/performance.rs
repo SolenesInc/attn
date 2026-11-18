@@ -10,9 +10,10 @@ const GROWTH: f64 = 1.02;
 const BUCKETS: usize = 700;
 
 /// What the app measures of its own performance for the daemon's analytics samples: its CPU
-/// time and the main window's frames since the daemon last took them.
-#[derive(Clone)]
-pub struct Performance(Arc<Mutex<Meter>>);
+/// time and the main window's frames while usage analytics records, since the daemon last took
+/// them or since recording turned on. While recording is off it measures nothing.
+#[derive(Clone, Default)]
+pub struct Performance(Arc<Mutex<Option<Meter>>>);
 
 struct Meter {
     since: Duration,
@@ -24,48 +25,57 @@ struct Meter {
     slowest_ms: f64,
 }
 
-impl Default for Performance {
-    fn default() -> Self {
-        Performance(Arc::new(Mutex::new(Meter::starting(
-            Duration::ZERO,
-            cpu_time(),
-        ))))
-    }
-}
-
 impl Performance {
+    /// Follows the daemon's `analytics.enabled`: turning it on starts a fresh measurement at
+    /// `now`, the link's clock, and turning it off drops what was measured.
+    pub fn record(&self, on: bool, now: Duration) {
+        let mut meter = self.0.lock().unwrap();
+        match (on, meter.is_some()) {
+            (true, false) => *meter = Some(Meter::starting(now, cpu_time())),
+            (false, true) => *meter = None,
+            _ => {}
+        }
+    }
+
     /// A frame the window drew, which took `ms` from its start until its commands were
     /// submitted.
     pub fn drawn(&self, ms: f64) {
-        let mut meter = self.0.lock().unwrap();
-        meter.drawn += 1;
-        meter.frame_ms[bucket(ms)] += 1;
-        meter.slowest_ms = meter.slowest_ms.max(ms);
+        if let Some(meter) = self.0.lock().unwrap().as_mut() {
+            meter.drawn += 1;
+            meter.frame_ms[bucket(ms)] += 1;
+            meter.slowest_ms = meter.slowest_ms.max(ms);
+        }
     }
 
     /// A frame a timer asked for that drew what was already on screen.
     pub fn unchanged(&self) {
-        self.0.lock().unwrap().unchanged += 1;
+        if let Some(meter) = self.0.lock().unwrap().as_mut() {
+            meter.unchanged += 1;
+        }
     }
 
     /// A frame that was due but not drawn, because the window was covered or no drawable came.
     pub fn skipped(&self) {
-        self.0.lock().unwrap().skipped += 1;
+        if let Some(meter) = self.0.lock().unwrap().as_mut() {
+            meter.skipped += 1;
+        }
     }
 
     /// What was measured since the last take, and starts measuring afresh. `now` is the link's
-    /// clock, which starts with the link.
-    pub fn take(&self, now: Duration) -> AppPerformance {
+    /// clock, which starts with the link. `None` while recording is off.
+    pub fn take(&self, now: Duration) -> Option<AppPerformance> {
+        let mut meter = self.0.lock().unwrap();
+        let measuring = meter.as_mut()?;
         let cpu = cpu_time();
-        let meter = std::mem::replace(&mut *self.0.lock().unwrap(), Meter::starting(now, cpu));
-        AppPerformance {
-            period_ms: millis(now.saturating_sub(meter.since)),
-            cpu_ms: millis(cpu.saturating_sub(meter.cpu_since)),
-            frames_drawn: meter.drawn as i64,
-            frames_unchanged: meter.unchanged as i64,
-            frames_skipped: meter.skipped as i64,
-            frame_ms: meter.frame_times(),
-        }
+        let taken = std::mem::replace(measuring, Meter::starting(now, cpu));
+        Some(AppPerformance {
+            period_ms: millis(now.saturating_sub(taken.since)),
+            cpu_ms: millis(cpu.saturating_sub(taken.cpu_since)),
+            frames_drawn: taken.drawn as i64,
+            frames_unchanged: taken.unchanged as i64,
+            frames_skipped: taken.skipped as i64,
+            frame_ms: taken.frame_times(),
+        })
     }
 }
 
