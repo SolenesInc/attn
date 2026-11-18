@@ -4,7 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -74,6 +74,7 @@ try {
     { includes: 'quote', actions: [{ type: 'reply', text: 'retry wrapper handles terminal annotation selection' }] },
   ] }));
   await launchFreshAppAndConnect(client, observer);
+  for (const key of ['queue_mode_enabled', 'auto_settle_enabled']) queueDaemonSettingRestore(observer, key);
   await inactive('launch');
   const desktop = await observer.createDesktop();
   await observer.setCurrentDesktop(desktop.id);

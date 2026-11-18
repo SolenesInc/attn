@@ -80,13 +80,11 @@ try {
       'keep until force',
     );
     await launchFreshAppAndConnect(client, observer);
-    const previousLauncherEnabled = observer.getSetting('new_session_launcher_enabled') || 'false';
-    runner.registerCleanup('launcher_setting', () => client.request('set_setting', {
-      key: 'new_session_launcher_enabled', value: previousLauncherEnabled,
-    }));
     for (const key of [
+      'new_session_launcher_enabled',
       'new_session_agent',
       'keybindings_config',
+      `new_session_destination_local_${repo}`,
     ])
       queueDaemonSettingRestore(observer, key);
     await client.request('set_setting', {

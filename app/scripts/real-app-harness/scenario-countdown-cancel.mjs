@@ -10,6 +10,7 @@ import {
   parseCommonArgs,
   pressShortcutKeys,
   printCommonHelp,
+  queueDaemonSettingRestore,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -107,11 +108,12 @@ async function main() {
   // registered first to close last.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
-  runner.registerCleanup('restore_auto_settle', () =>
-    client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' }).catch(() => {}));
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      for (const key of ['auto_settle_enabled', 'auto_settle_arm_seconds', 'auto_settle_countdown_seconds']) {
+        queueDaemonSettingRestore(observer, key);
+      }
       await driver.activateApp();
     });
 
@@ -266,7 +268,6 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    await client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' }).catch(() => {});
     if (agentId) await client.request('close_session', { sessionId: agentId }).catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});

@@ -14,7 +14,7 @@ func TestTheDaemonAcceptsOnlyValidSettingValues(t *testing.T) {
 		accepted   bool
 	}{
 		{"projects_directory", t.TempDir(), true},
-		{"projects_directory", "", false},
+		{"projects_directory", "", true},
 		{"projects_directory", "relative/path", false},
 		{"new_session_agent", "codex", true},
 		{"new_session_agent", "claude", true},

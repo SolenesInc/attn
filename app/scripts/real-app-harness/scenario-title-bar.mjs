@@ -68,10 +68,6 @@ const CONTROLS = [
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
-runner.registerCleanup('restore_settings', async () => {
-  await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-  await request('set_setting', { key: 'asks_enabled', value: 'false' });
-});
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
 });
@@ -98,6 +94,7 @@ try {
 
   await runner.step('build_a_row', async () => {
     await launchFreshAppAndConnect(client, observer);
+    for (const key of ['asks_enabled', 'queue_mode_enabled']) queueDaemonSettingRestore(observer, key);
     await request('set_setting', { key: 'asks_enabled', value: 'true' });
     queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });

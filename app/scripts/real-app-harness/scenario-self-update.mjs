@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -100,6 +100,7 @@ try {
   await runner.step('launch', async () => {
     attn('daemon', 'stop');
     await launchFreshAppAndConnect(client, observer);
+    queueDaemonSettingRestore(observer, 'self_update_enabled');
     await client.request('set_setting', { key: 'self_update_enabled', value: 'true' });
     await observer.waitFor(() => observer.getSetting('self_update_enabled') === 'true', 'self-update on');
   });

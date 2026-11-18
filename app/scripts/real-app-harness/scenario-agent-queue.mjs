@@ -14,6 +14,7 @@ import {
   parseCommonArgs,
   pressShortcutKeys,
   printCommonHelp,
+  queueDaemonSettingRestore,
   relaunchAppAndConnect,
   submitPrompt,
   shownAgentId,
@@ -236,8 +237,6 @@ async function main() {
       await client.request('close_session', { sessionId }).catch(() => {});
     }
   });
-  runner.registerCleanup('restore_queue_mode', () =>
-    client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' }).catch(() => {}));
 
   const snoozeUntil = (sessionId, ms) => {
     const until = new Date(Date.now() + ms).toISOString();
@@ -252,6 +251,9 @@ async function main() {
     await runner.step('launch_app_with_queue_mode', async () => {
       await launchFreshAppAndConnect(client, observer);
       await observer.closeLeftoverNumberedDesktops();
+      for (const key of ['queue_mode_enabled', 'auto_settle_enabled', 'auto_settle_arm_seconds', 'auto_settle_countdown_seconds']) {
+        queueDaemonSettingRestore(observer, key);
+      }
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     });
 

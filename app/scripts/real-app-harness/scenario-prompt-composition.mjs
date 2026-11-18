@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { PNG } from 'pngjs';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs, submitPrompt } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore, submitPrompt } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -210,6 +210,7 @@ async function main() {
       const duplicate = JSON.parse(cli(['crew', 'start', crewName, '--json']));
       runner.assert(duplicate.already_in_session === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
       observer.send({ cmd: 'set_client_presence', visible: true, dashboard_visible: false, idle_seconds: 0 });
+      queueDaemonSettingRestore(observer, 'crew.heartbeat_enabled');
       await observer.requestResult({ cmd: 'set_setting', key: 'crew.heartbeat_enabled', value: 'false' }, 'settings_updated');
       const presence = JSON.parse(cli(['activity', '--json']));
       runner.assert(presence.presence_tier === 'present' || presence.presence_tier === 'watching', 'the user is present before plain handoff', presence);
