@@ -4,4 +4,5 @@
  "limits": {"minutes": 120, "usd": 25},
  "graders": [
    {"kind": "landed"},
-   {"kind": "test", "ref": "origin/main", "run": "ATTN_DATA_DIR=$(mktemp -d) go test -count=1 -tags workfloweval -run 'TestClaudeFastModeRates|TestUsageExtractorReadsClaudeSpeed|TestFastModeRatesAndContextTiers' ./internal/sessioncost ./internal/transcript"}]}
+   {"kind": "test", "ref": "origin/main", "from": {"commit": "6031f9a5c", "files": ["internal/sessioncost/sessioncost_test.go", "internal/transcript/usage_test.go"]},
+    "run": "ATTN_DATA_DIR=$(mktemp -d) go test -count=1 -run 'TestClaudeFastModeRates|TestUsageExtractorReadsClaudeSpeed|TestFastModeRatesAndContextTiers' ./internal/sessioncost ./internal/transcript"}]}

@@ -1,6 +1,6 @@
 # Sourced by a whole run's world.sh: attn at the parent of 6031f9a5c, which priced Claude fast mode (seed s-7zp490),
 # fetched alone so the change and this eval's cases are unreachable, with a local bare origin for scripts/land.sh.
-# Its tests are the hidden grader.
+# Its test files are the hidden grader, read from that commit when grading.
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 init_repository
 git fetch -q --no-tags "$EVAL_REPOSITORY" "$(git -C "$EVAL_REPOSITORY" rev-parse 6031f9a5c~1)"

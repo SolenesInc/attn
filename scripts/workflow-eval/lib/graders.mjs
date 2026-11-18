@@ -1,7 +1,8 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { openAsks } from './standin.mjs';
+import { repository } from './world.mjs';
 
 function seedOf(world, name) {
   const id = world.seeds[name];
@@ -122,7 +123,13 @@ const kinds = {
     label: g => `test ${g.run}${g.ref ? ` on ${g.ref}` : ''}`,
     grade: (g, { world, testCase }) => {
       const dir = g.ref ? checkoutOf(world, g.ref) : world.repo;
-      fs.cpSync(path.join(testCase.dir, 'hidden'), dir, { recursive: true, dereference: true });
+      if (g.from) {
+        for (const file of g.from.files) {
+          fs.writeFileSync(path.join(dir, file), execFileSync('git', ['-C', repository, 'show', `${g.from.commit}:${file}`]));
+        }
+      } else {
+        fs.cpSync(path.join(testCase.dir, 'hidden'), dir, { recursive: true });
+      }
       return spawnSync('bash', ['-c', g.run], { cwd: dir, env: world.env, stdio: 'ignore' }).status === 0;
     },
   },
