@@ -33,7 +33,8 @@ fn other_desktop(n: usize) -> Desktop {
 
 /// What each frame costs while an agent redraws rows of the one terminal on screen, as a
 /// terminal UI does, so the cursor the input method's caret follows lands somewhere new each
-/// frame: the allocations it makes, and the frames that painted the window anew.
+/// frame: the allocations each window frame makes, which holds however many frames a loaded
+/// machine takes to settle a line, and the frames that painted the window anew.
 struct Streamed {
     allocations: u64,
     paints: u64,
@@ -62,8 +63,9 @@ fn per_streamed_frame(others: usize) -> Streamed {
         output(&world, seq, b"warming up\r\n");
         world.settle();
     }
-    let (frames, made, paints) = (
+    let (frames, window_frames, made, paints) = (
         world.terminal_frames(),
+        world.window_frames(),
         made_here(),
         world.runtime().stats.paints,
     );
@@ -72,11 +74,14 @@ fn per_streamed_frame(others: usize) -> Streamed {
         output(&world, seq, redrawn.as_bytes());
         world.settle();
     }
-    let frames = (world.terminal_frames() - frames) as u64;
-    assert_eq!(frames, 100, "each line drew a frame");
+    assert_eq!(
+        world.terminal_frames() - frames,
+        100,
+        "each line drew a frame"
+    );
     assert!(world.runtime_is_at_rest());
     Streamed {
-        allocations: (made_here() - made) / frames,
+        allocations: (made_here() - made) / (world.window_frames() - window_frames) as u64,
         paints: world.runtime().stats.paints - paints,
     }
 }

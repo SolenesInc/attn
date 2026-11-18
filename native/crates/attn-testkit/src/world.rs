@@ -48,6 +48,7 @@ pub struct World {
     screens: Screens,
     covered: bool,
     terminal_frames: usize,
+    window_frames: usize,
     link: Option<Link>,
     _window: Subscription,
     inbox: Arc<Mutex<Vec<attn_app::Update>>>,
@@ -359,6 +360,7 @@ impl World {
             screens: Screens::default(),
             covered: false,
             terminal_frames: 0,
+            window_frames: 0,
             link: Some(link),
             _window: window,
             inbox,
@@ -504,6 +506,7 @@ impl World {
     }
 
     fn main_frame(&mut self, dt: f64) -> bool {
+        self.window_frames += 1;
         let awake = self.runtime.frame(dt);
         if let Some(mut trail) = self.focus_trail.take() {
             trail.push(self.screen().focused().and_then(|n| n.key));
@@ -845,7 +848,7 @@ impl World {
                 waited < STUCK.as_secs_f64(),
                 "the window still animated {waited} s after opening the desktop"
             );
-            self.runtime.frame(FRAME);
+            self.main_frame(FRAME);
             waited += FRAME;
         }
         self.settle();
@@ -1050,7 +1053,7 @@ impl World {
         self.runtime
             .resolve_file_dialog(path.map(std::path::PathBuf::from))
             .expect("a file dialog is open");
-        self.runtime.frame(0.0);
+        self.main_frame(0.0);
         self.settle();
     }
 
@@ -1059,6 +1062,13 @@ impl World {
     /// come back leaves none.
     pub fn terminal_frames(&self) -> usize {
         self.terminal_frames
+    }
+
+    /// How many frames the world has run the main window: each settle runs one at least, and
+    /// one more each time what the daemon sent arrives while it waits, so a loaded machine runs
+    /// more. A pointer's frames inside a gesture are not among them.
+    pub fn window_frames(&self) -> usize {
+        self.window_frames
     }
 
     /// The text on a terminal's screen, by its runtime id, row by row.
