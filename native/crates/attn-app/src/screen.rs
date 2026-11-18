@@ -18,12 +18,17 @@ fn theme_terminals(rt: &mut Runtime<State>) -> TerminalColors {
     theme
 }
 
+fn echoes_drawn(rt: &mut Runtime<State>) {
+    rt.state().terminals.trace.lock().unwrap().drawn();
+}
+
 impl Screens {
     /// A frame of a window with no GPU, as a wire test's world draws one: it takes the
     /// terminals' screens as `render` does and uploads nothing.
     pub fn draw_without_gpu(&mut self, rt: &mut Runtime<State>) {
         theme_terminals(rt);
         rt.state_mut().terminals.grids().for_each(drop);
+        echoes_drawn(rt);
     }
 }
 
@@ -51,5 +56,6 @@ impl Compositor<State> for Screens {
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
             cells.draw(device, pass, site);
         });
+        echoes_drawn(f.rt);
     }
 }

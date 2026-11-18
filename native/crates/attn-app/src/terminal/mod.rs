@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use attn_client::{Commands, Connection, Facts, Frame, Pulse, TerminalEvent, TerminalSink};
 use attn_protocol::DesktopPane;
@@ -81,13 +82,13 @@ impl Default for TerminalInbox {
 
 #[derive(Default)]
 struct Queue {
-    events: Mutex<Vec<TerminalEvent>>,
+    events: Mutex<Vec<(Instant, TerminalEvent)>>,
     wake: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 impl Queue {
     fn push(&self, event: TerminalEvent) {
-        self.events.lock().unwrap().push(event);
+        self.events.lock().unwrap().push((Instant::now(), event));
         let wake = self.wake.lock().unwrap().clone();
         if let Some(wake) = wake {
             wake();
@@ -152,7 +153,7 @@ impl TerminalInbox {
         Arc::ptr_eq(&self.own, &self.main)
     }
 
-    fn take(&self) -> Vec<TerminalEvent> {
+    fn take(&self) -> Vec<(Instant, TerminalEvent)> {
         std::mem::take(&mut *self.own.events.lock().unwrap())
     }
 
@@ -671,8 +672,8 @@ impl Terminals {
     pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) -> bool {
         let events = self.inbox.take();
         let heard = !events.is_empty();
-        for event in events {
-            self.apply(event, tx, daemon);
+        for (received, event) in events {
+            self.apply(event, received, tx, daemon);
             self.undrawn = true;
         }
         if let (true, Some(metrics)) = (heard, self.metrics) {
@@ -704,7 +705,7 @@ impl Terminals {
         recounted
     }
 
-    fn apply(&mut self, event: TerminalEvent, tx: &mut Tx, daemon: &Commands) {
+    fn apply(&mut self, event: TerminalEvent, received: Instant, tx: &mut Tx, daemon: &Commands) {
         match event {
             TerminalEvent::Frame(Frame::PtyOutput {
                 terminal,
@@ -721,6 +722,10 @@ impl Terminals {
                 if let Output::Write(bytes) = term.stream.receive(Chunk { seq, data }) {
                     term.watermark = Some(seq);
                     term.vt.write(&bytes);
+                    self.trace
+                        .lock()
+                        .unwrap()
+                        .output(&terminal, received, tx.clock());
                     copy_writes(term, tx);
                     Terminals::wrote(term);
                     answer(&terminal, term, daemon);

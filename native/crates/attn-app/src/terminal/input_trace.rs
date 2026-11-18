@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use attn_client::Facts;
 use rune::{Key, KeyEvent, Mods};
@@ -27,6 +28,7 @@ enum Stage {
     Document,
     Terminal,
     Transport,
+    Echo,
 }
 
 /// What became of an input at the terminal: the Tauri terminal's outcomes, and `held`,
@@ -151,6 +153,10 @@ struct Event {
     initial_state_received: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     probe_id: Option<String>,
+    /// When it happened on the trace's own clock, for the key's arrival and its echo's hops,
+    /// which a frame's clock can't time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instant_ms: Option<f64>,
 }
 
 impl Event {
@@ -210,6 +216,19 @@ pub struct InputTrace {
     last_decided: Option<TraceId>,
     field_trace: Option<TraceId>,
     observed: HashMap<String, Observed>,
+    epoch: Epoch,
+    /// The last input sent to each terminal, until its first output comes back.
+    awaiting: HashMap<String, TraceId>,
+    /// Inputs whose echo the terminals took this frame, until the frame draws it.
+    drawing: Vec<(String, TraceId, f64)>,
+}
+
+struct Epoch(Instant);
+
+impl Default for Epoch {
+    fn default() -> Epoch {
+        Epoch(Instant::now())
+    }
 }
 
 impl InputTrace {
@@ -228,6 +247,8 @@ impl InputTrace {
 
     pub(crate) fn forget(&mut self, runtime: &str) {
         self.observed.remove(runtime);
+        self.awaiting.remove(runtime);
+        self.drawing.retain(|(r, ..)| r != runtime);
     }
 
     /// A key a focused text field heard first; the window's key handler continues its trace
@@ -327,11 +348,63 @@ impl InputTrace {
                 now,
             )
         };
+        let event = Event {
+            instant_ms: Some(self.ms(Instant::now())),
+            ..event
+        };
+        self.awaiting.insert(runtime.to_owned(), trace.clone());
         let unready = (!socket_open || !connected).then_some("transport_unready");
         let observed = self.observed.entry(runtime.to_owned()).or_default();
         observed.last_send = Some(event.clone());
         self.observe(&event, unready, now);
         self.push(event);
+    }
+
+    /// The key behind `trace` reached the window at `arrived`.
+    pub(crate) fn arrived(&mut self, trace: &TraceId, runtime: &str, arrived: Instant, now: f64) {
+        let event = Event {
+            instant_ms: Some(self.ms(arrived)),
+            ..self.event(trace, Stage::Document, "key_arrived", Some(runtime), now)
+        };
+        self.push(event);
+    }
+
+    /// Terminal `runtime` took output the link heard at `received`: the echo of the last input
+    /// sent to it, when none came back since.
+    pub(crate) fn output(&mut self, runtime: &str, received: Instant, now: f64) {
+        let Some(trace) = self.awaiting.remove(runtime) else {
+            return;
+        };
+        for (event, at) in [
+            ("output_received", received),
+            ("output_taken", Instant::now()),
+        ] {
+            let event = Event {
+                instant_ms: Some(self.ms(at)),
+                ..self.event(&trace, Stage::Echo, event, Some(runtime), now)
+            };
+            self.push(event);
+        }
+        self.drawing.push((runtime.to_owned(), trace, now));
+    }
+
+    /// The frame that draws the echoes the terminals took is encoded.
+    pub(crate) fn drawn(&mut self) {
+        if self.drawing.is_empty() {
+            return;
+        }
+        let at = self.ms(Instant::now());
+        for (runtime, trace, now) in std::mem::take(&mut self.drawing) {
+            let event = Event {
+                instant_ms: Some(at),
+                ..self.event(&trace, Stage::Echo, "echo_drawn", Some(&runtime), now)
+            };
+            self.push(event);
+        }
+    }
+
+    fn ms(&self, at: Instant) -> f64 {
+        at.saturating_duration_since(self.epoch.0).as_secs_f64() * 1000.0
     }
 
     /// Writes the samples the last input made due, naming each terminal's pane and session in
@@ -375,6 +448,11 @@ impl InputTrace {
                 eprintln!("attn-app: could not log a terminal input sample: {why}");
             }
         }
+    }
+
+    /// The trace's events, oldest first, as a test reads them.
+    pub(crate) fn events(&self) -> Value {
+        json!(self.events)
     }
 
     /// The trace as the report's `diagnostics.input.frontend` carries it.
@@ -442,6 +520,7 @@ impl InputTrace {
             socket_state: None,
             initial_state_received: None,
             probe_id: None,
+            instant_ms: None,
         }
     }
 

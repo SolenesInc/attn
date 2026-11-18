@@ -252,11 +252,17 @@ pub(crate) fn type_into(
     tx: &mut Tx,
 ) -> Typed {
     let at = At::of(state, tx);
-    if let Some(waited) = tx.input_time().map(|arrived| arrived.elapsed()) {
+    if let Some(arrived) = tx.input_time() {
         state
             .terminals
             .latency
-            .key_waited(terminal, waited, &state.facts, at);
+            .key_waited(terminal, arrived.elapsed(), &state.facts, at);
+        state
+            .terminals
+            .trace
+            .lock()
+            .unwrap()
+            .arrived(trace, terminal, arrived, at.clock);
     }
     if !state.terminals.live(terminal)
         || !state

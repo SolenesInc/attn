@@ -162,3 +162,54 @@ fn keys_typed_in_a_tile_window_and_the_main_window_never_share_a_trace_id() {
     traces.dedup();
     assert_eq!(traces.len(), sent.len(), "{sent:?}");
 }
+
+fn hops(world: &mut World, trace: &str) -> Vec<(String, f64)> {
+    let events = world
+        .automate("state", serde_json::json!({"of": "input-trace"}))
+        .unwrap_or_else(|why| panic!("{why}"));
+    events
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["traceId"] == trace)
+        .filter_map(|e| Some((e["event"].as_str()?.to_owned(), e["instantMs"].as_f64()?)))
+        .collect()
+}
+
+#[test]
+fn a_key_s_trace_times_its_send_and_the_first_output_after_it_until_the_frame_draws_it() {
+    let mut world = live_terminal(one_agent());
+
+    {
+        let _arrival = rune::input_arrived(Duration::from_millis(5));
+        world.gesture(|app| app.type_text("l"));
+    }
+    let input = world.daemon.sent_of("pty_input")[0].clone();
+    let trace = input["trace_id"].as_str().unwrap().to_owned();
+    output(&world, 2, b"l");
+    world.settle();
+    output(&world, 3, b"more");
+    world.settle();
+
+    let hops = hops(&mut world, &trace);
+    let names: Vec<&str> = hops.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "key_arrived",
+            "websocket_send",
+            "output_received",
+            "output_taken",
+            "echo_drawn"
+        ],
+        "one echo per key: later output adds nothing"
+    );
+    assert!(
+        hops.windows(2).all(|pair| pair[0].1 <= pair[1].1),
+        "each hop happens after the one before: {hops:?}"
+    );
+    assert!(
+        hops[1].1 - hops[0].1 >= 5.0,
+        "the key's arrival is the platform's, not the frame's: {hops:?}"
+    );
+}
