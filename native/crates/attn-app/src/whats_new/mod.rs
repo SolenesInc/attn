@@ -299,6 +299,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 } else {
                     t.text_tertiary.alpha(0.6)
                 })
+                .motion(DOT_MOTION)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     go(state, i as isize, tx);
                     tx.focus(PRIMARY, false);
@@ -363,26 +364,32 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .child(scenes::scene(step.scene, t))
         .child(
-            text(step.title)
-                .key("whats-new.title")
-                .role("heading")
-                .level(2)
-                .font(STEP_TITLE)
-                .color(t.text_primary)
-                .mt(18.0),
+            col()
+                .key(format!("whats-new.step.{index}"))
+                .w_full()
+                .transition(step_entrance())
+                .child(scenes::scene(step.scene, t))
+                .child(
+                    text(step.title)
+                        .key("whats-new.title")
+                        .role("heading")
+                        .level(2)
+                        .font(STEP_TITLE)
+                        .color(t.text_primary)
+                        .mt(18.0),
+                )
+                .child(
+                    text(step.body)
+                        .key("whats-new.body")
+                        .font(STEP_BODY)
+                        .color(t.text_tertiary)
+                        .wrap()
+                        .mt(6.0),
+                )
+                .child(row().mt(14.0).child(scheme_button(state, &step.scheme, k)))
+                .children((!step.keys.is_empty()).then(|| keys.mt(14.0))),
         )
-        .child(
-            text(step.body)
-                .key("whats-new.body")
-                .font(STEP_BODY)
-                .color(t.text_tertiary)
-                .wrap()
-                .mt(6.0),
-        )
-        .child(row().mt(14.0).child(scheme_button(state, &step.scheme, k)))
-        .children((!step.keys.is_empty()).then(|| keys.mt(14.0)))
         .scroll_bar_styled(attn_ui::scroll_bar(t));
     Dialog::new(DIALOG, "What's new", DialogFrame::whats_new(t))
         .width(scenes::WIDTH + 2.0 * INSET)
@@ -465,6 +472,20 @@ const INSET: f32 = 24.0;
 /// `.whats-new-live { flex: 0 1 480px }`: the tallest step, so the footer holds still while
 /// stepping, and less in a window too short for it.
 const LIVE_HEIGHT: f32 = 480.0;
+
+/// `@keyframes whats-new-step`: each step fades in from 8 points right over 180 ms, and the
+/// step it replaces is gone at once.
+fn step_entrance() -> rune::Transition {
+    use rune::{Spring, SpringPair, Transition};
+    Transition::asymmetric(
+        Transition::offset(8.0, 0.0).combined(Transition::opacity()),
+        Transition::none(),
+    )
+    .springs(SpringPair::new(Spring::new(0.18, 0.0), Spring::NONE))
+}
+
+/// `.whats-new-dot { transition: width 160ms, background 160ms }`.
+const DOT_MOTION: rune::Spring = rune::Spring::new(0.16, 0.0);
 
 /// `.whats-new-step h2`.
 const STEP_TITLE: TextStyle = TextStyle::new(19.0, 600.0).tracking(-0.19);

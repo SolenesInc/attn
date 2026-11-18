@@ -5,6 +5,7 @@ use attn_app::whats_new::{BANNER_PREF, RELEASE, SEEN_PREF};
 use attn_app::{Action, Keymap};
 use attn_testkit::{Daemon, Target, World};
 use rune::KeyPlatform;
+use rune::motion_gate;
 use rune::prefs::Prefs;
 use rune::{Key, KeyEvent, Mods};
 
@@ -114,6 +115,56 @@ fn right_enter_and_next_step_forward_and_left_and_back_step_back() {
     press(&mut world, Key::Left);
     assert_eq!(title(&world), FIRST);
     assert!(world.screen().find(Target::key("whats-new.back")).is_none());
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+/// How the element keyed `key` looked on each frame `rec` drew from the gesture on: its rect
+/// and opacity.
+fn looks(rec: &motion_gate::Recording, key: &str) -> Vec<([f32; 4], f32)> {
+    let from = rec.inputs[0].0;
+    rec.tracks
+        .iter()
+        .find(|t| t.path.ends_with(&format!("/{key}")))
+        .unwrap_or_else(|| panic!("{key} is on screen"))
+        .frames
+        .iter()
+        .filter(|(k, _)| *k >= from)
+        .map(|(_, s)| (s.rect, s.op))
+        .collect()
+}
+
+#[test]
+fn a_new_step_slides_in_from_the_right_and_its_dot_widens_then_both_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut world = launch(&after_update(dir.path()), &[]);
+    world.advance(Duration::from_secs(1));
+    let ([rest_x, ..], _) = world.runtime().presented("whats-new.step.0").unwrap();
+
+    let rec = world.record(60.0, 0.5, |_, app| {
+        app.key(KeyEvent {
+            key: Key::Right,
+            mods: Mods::default(),
+        })
+    });
+
+    let step = looks(&rec, "whats-new.step.1");
+    let ([first_x, ..], first_op) = step[0];
+    assert!(
+        first_x > rest_x && first_x <= rest_x + 8.0 && first_op < 1.0,
+        "the step enters at x {first_x}, opacity {first_op}; it rests at x {rest_x}"
+    );
+    let ([last_x, ..], last_op) = *step.last().unwrap();
+    assert_eq!((last_x, last_op), (rest_x, 1.0));
+    let widths: Vec<f32> = looks(&rec, "whats-new.dot.1")
+        .iter()
+        .map(|(r, _)| r[2])
+        .collect();
+    let at_150ms = widths[9];
+    assert!(
+        widths[1] < 18.0 && at_150ms >= 17.5 && widths.iter().all(|w| *w <= 18.0),
+        "the current dot widens over about 160 ms without overshooting: {widths:?}"
+    );
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
@@ -234,6 +285,7 @@ fn the_command_palette_replays_the_tour_from_the_first_step() {
     replay_from_palette(&mut world);
 
     assert_eq!(title(&world), FIRST);
+    world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 
