@@ -11,7 +11,8 @@ const BUCKETS: usize = 700;
 
 /// What the app measures of its own performance for the daemon's analytics samples: its CPU
 /// time and the main window's frames while usage analytics records, since the daemon last took
-/// them or since recording turned on. While recording is off it measures nothing.
+/// them, since the link connected, or since recording turned on. While recording is off, or the
+/// link is disconnected and cannot know whether it is, it measures nothing.
 #[derive(Clone, Default)]
 pub struct Performance(Arc<Mutex<Option<Meter>>>);
 

@@ -386,6 +386,9 @@ impl Task {
                     _ = stopped.wait_for(|stop| *stop) => Ended::Stopped,
                 };
                 self.shared.close();
+                self.config
+                    .performance
+                    .record(false, self.config.clock.now());
                 match ended {
                     Ended::Stopped => return,
                     Ended::Refused(refusal) => return self.refuse(refusal, &mut stopped).await,

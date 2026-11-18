@@ -131,3 +131,67 @@ fn a_performance_answer_holds_nothing_from_before_analytics_turned_on() {
         "the answer covers only the time since analytics turned on"
     );
 }
+
+fn measured_after_reconnecting(world: &mut World) -> Value {
+    world.performance.drawn(4.0);
+    world.advance(Duration::from_secs(60));
+    ask(world, "after reconnecting")
+}
+
+fn only_the_frame_since_reconnecting(measured: &Value) {
+    assert_eq!(
+        (
+            &measured["period_ms"],
+            &measured["frames_drawn"],
+            &measured["frames_unchanged"],
+            &measured["frames_skipped"],
+            &measured["frame_ms"]["max"],
+        ),
+        (
+            &Value::from(60_000),
+            &Value::from(1),
+            &Value::from(0),
+            &Value::from(0),
+            &Value::from(4.0),
+        ),
+        "the answer covers only the time since the app connected again"
+    );
+}
+
+#[test]
+fn a_performance_answer_holds_nothing_from_before_the_app_reconnected() {
+    let mut world = starting_with_analytics(true);
+    world.performance.drawn(25.0);
+    world.advance(Duration::from_secs(300));
+    world.reconnect();
+
+    only_the_frame_since_reconnecting(&measured_after_reconnecting(&mut world));
+}
+
+#[test]
+fn a_performance_answer_holds_nothing_from_analytics_turned_off_while_the_app_was_disconnected() {
+    let mut world = starting_with_analytics(true);
+    world.performance.drawn(25.0);
+    world.advance(Duration::from_secs(300));
+    let before = world.daemon.connections();
+    world.daemon.refuse_connections(true);
+    world.daemon.disconnect();
+    world.settle();
+
+    world.daemon.answer_hello_with(InitialStateMessage {
+        settings: analytics(false),
+        ..InitialStateMessage::new()
+    });
+    world.performance.drawn(40.0);
+    world.performance.unchanged();
+    world.performance.skipped();
+    world.advance(Duration::from_secs(600));
+    world.daemon.answer_hello_with(InitialStateMessage {
+        settings: analytics(true),
+        ..InitialStateMessage::new()
+    });
+    world.daemon.refuse_connections(false);
+    world.wait_for_reconnect(before);
+
+    only_the_frame_since_reconnecting(&measured_after_reconnecting(&mut world));
+}

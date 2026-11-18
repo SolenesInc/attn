@@ -610,6 +610,12 @@ impl World {
         let before = self.daemon.connections();
         self.daemon.disconnect();
         self.settle();
+        self.wait_for_reconnect(before);
+    }
+
+    /// Waits out the link's retries until the app has opened a connection past the
+    /// `before`th and finished its handshake.
+    pub fn wait_for_reconnect(&mut self, before: usize) {
         while self.daemon.connections() == before
             || self.runtime.state().facts.connection != Connection::Connected
         {
