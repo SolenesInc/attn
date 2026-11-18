@@ -3,7 +3,9 @@ use attn_testkit::{Daemon, Request, Target, World, message};
 use rune::{FileDialogKind, Key};
 use serde_json::Value;
 
-use super::{accepting, click, named, open, press, rest, retype, value, writes};
+use attn_app::Action;
+
+use super::{accepting, click, named, open, press, press_action, rest, retype, value, writes};
 
 const SOURCE: &str = "settings.plugins.source";
 
@@ -281,6 +283,26 @@ fn a_priority_saves_when_focus_leaves_its_field_and_shows_saved() {
             )))
             .is_none()
     );
+}
+
+#[test]
+fn a_priority_saves_when_the_settings_shortcut_closes_the_dialog_with_the_focus_in_it() {
+    let mut world = World::start(serving(vec![installed()]));
+    on_plugins(&mut world);
+    let priority = plugin_part("services-pilot-worktrees", "priority");
+
+    retype(&mut world, &priority, "25");
+    press_action(&mut world, Action::UiOpenSettings);
+
+    assert!(world.screen().find(Target::key(&priority)).is_none());
+    let sent: Vec<_> = world
+        .daemon
+        .sent_of("set_plugin_priority")
+        .iter()
+        .map(|r| r["priority"].clone())
+        .collect();
+    assert_eq!(sent, [Value::from(25)]);
+    rest(&mut world);
 }
 
 #[test]
