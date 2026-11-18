@@ -501,6 +501,51 @@ fn a_new_schedule_saves_its_guard_and_missed_runs_in_the_zone_of_this_machine() 
     );
 }
 
+const ZONE_UNDER_TEST: &str = "ATTN_TEST_EXPECTED_ZONE";
+
+/// The clock reads `TZ` once for the whole process, so each `TZ` runs this test again in a
+/// process of its own.
+#[test]
+fn a_new_schedule_takes_the_zone_the_clock_keeps_by_the_name_the_tauri_form_gives_it() {
+    if let Ok(expected) = std::env::var(ZONE_UNDER_TEST) {
+        let mut world = open_new();
+        press(&mut world, "trigger-scheduled");
+        assert_eq!(value(&world, "time-zone"), expected);
+        return;
+    }
+    let test = std::any::type_name_of_val(
+        &a_new_schedule_takes_the_zone_the_clock_keeps_by_the_name_the_tauri_form_gives_it,
+    );
+    let test = test.split_once("::").map_or(test, |(_, path)| path);
+    let runs: Vec<_> = [
+        ("UTC", "UTC"),
+        ("Asia/Calcutta", "Asia/Kolkata"),
+        ("Europe/Stockholm", "Europe/Stockholm"),
+    ]
+    .map(|(tz, zone)| {
+        let run = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([test, "--exact"])
+            .env("TZ", tz)
+            .env(ZONE_UNDER_TEST, zone)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        (tz, run)
+    })
+    .into_iter()
+    .collect();
+    for (tz, run) in runs {
+        let run = run.wait_with_output().unwrap();
+        assert!(
+            run.status.success() && String::from_utf8_lossy(&run.stdout).contains("1 passed"),
+            "under TZ={tz}:\n{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+    }
+}
+
 #[test]
 fn switching_back_to_manual_hides_and_omits_the_guard() {
     let mut world = open_new();

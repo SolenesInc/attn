@@ -147,23 +147,34 @@ fn field_of_key(key: &str) -> Option<fn(&Field) -> bool> {
     Some(check)
 }
 
-/// The zone the user's clock keeps, by its IANA name, or UTC when the system names none.
+/// The zone the user's clock keeps, by the canonical name the Tauri form gives it: the one `TZ`
+/// names, else the one /etc/localtime links to, else UTC.
 fn local_zone() -> String {
-    if let Ok(zone) = std::env::var("TZ")
-        && let Some(name) = zone.strip_prefix(':').or(Some(zone.as_str()))
-        && name.contains('/')
-    {
-        return name.to_owned();
-    }
-    std::fs::read_link("/etc/localtime")
-        .ok()
-        .and_then(|target| {
-            let target = target.to_string_lossy().into_owned();
-            target
-                .split_once("zoneinfo/")
-                .map(|(_, name)| name.to_owned())
-        })
-        .unwrap_or_else(|| "UTC".into())
+    let named = std::env::var("TZ").ok().map(|tz| {
+        let tz = tz.strip_prefix(':').unwrap_or(&tz);
+        tz.split_once("zoneinfo/")
+            .map_or(tz, |(_, name)| name)
+            .to_owned()
+    });
+    let linked = || {
+        let target = std::fs::read_link("/etc/localtime").ok()?;
+        let target = target.to_string_lossy();
+        Some(target.split_once("zoneinfo/")?.1.to_owned())
+    };
+    named
+        .as_deref()
+        .and_then(canonical_zone)
+        .or_else(|| linked().as_deref().and_then(canonical_zone))
+        .unwrap_or("UTC")
+        .to_owned()
+}
+
+fn canonical_zone(name: &str) -> Option<&'static str> {
+    let name = name.to_lowercase();
+    zones()
+        .iter()
+        .find(|(_, names)| names.contains(&name))
+        .map(|(zone, _)| zone.as_str())
 }
 
 /// Every IANA zone by the canonical name `Intl.supportedValuesOf` gives the Tauri form, UTC
