@@ -479,7 +479,10 @@ fn with_no_harness_for_the_chief_check_again_reads_them_and_one_harness_hides_th
     none.insert("claude_available".into(), "false".into());
     none.insert("codex_available".into(), "false".into());
     first.settings = Some(none);
-    let mut world = start(first);
+    let held = daemon(first);
+    held.on("harness_models", |_: &Request| Value::Null);
+    let mut world = World::start(held);
+    world.settle();
     assert_eq!(
         named(&world, "chief-setup.empty").as_deref(),
         Some("No harness here can run the Chief. Install Claude Code or Codex to start it.")
@@ -498,6 +501,9 @@ fn with_no_harness_for_the_chief_check_again_reads_them_and_one_harness_hides_th
     click(&mut world, "chief-setup.recheck");
     assert_eq!(sent(&world, "get_settings").len(), 1);
     assert!(!shows(&world, "chief-setup.harness"));
+    assert_eq!(focused(&world).as_deref(), Some(SETUP));
+    let models = serve_models(&sent(&world, "harness_models").last().cloned().unwrap());
+    answer(&mut world, "harness_models", Vec::new(), models);
     assert_eq!(checked(&world, "model"), ["gpt-6.1-sol · recommended"]);
     assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
     assert!(sent(&world, "crew_set").is_empty());

@@ -386,8 +386,9 @@ fn radio_group(key: &str) -> Option<Group> {
 /// Gives the setup the focus it owes on opening, gives a radio the user had focused back once
 /// its group is drawn again, and takes the focus back when it falls to nothing, as when the
 /// control holding it goes: each frame until the focus lands, since the setup draws after it
-/// asks. The focus moving anywhere else settles both, and moving out of the setup once it held
-/// the focus closes the setup.
+/// asks. While no control can take it yet the setup itself holds it, and that settles nothing.
+/// The focus moving anywhere else settles both, and moving out of the setup once it held the
+/// focus closes the setup.
 fn follow_focus(state: &mut State, form: &Form, created: bool, tx: &mut Tx) -> bool {
     let focused = tx.focused().map(str::to_owned);
     let anchor = super::row_key(state).unwrap_or_default();
@@ -417,9 +418,9 @@ fn follow_focus(state: &mut State, form: &Form, created: bool, tx: &mut Tx) -> b
     if focused.is_some() && !draft.wants_focus && draft.last_radio.is_none() {
         return false;
     }
-    let target = form
-        .focus_target(draft.last_radio)
-        .unwrap_or_else(|| POP.to_owned());
+    let target = form.focus_target(draft.last_radio);
+    draft.wants_focus |= target.is_none();
+    let target = target.unwrap_or_else(|| POP.to_owned());
     if focused.as_deref() == Some(target.as_str()) {
         return false;
     }
@@ -480,9 +481,6 @@ fn recheck(state: &mut State, tx: &mut Tx) {
         return;
     };
     let harness = form(state, draft, view.busy).harness.map(|(h, _)| h);
-    if let Some(d) = state.window.chief.draft.as_mut() {
-        d.wants_focus = true;
-    }
     let _ = state.daemon.send(&GetSettingsMessage::new());
     crate::settings::recheck_harnesses(state, harness.as_deref(), tx);
 }
@@ -494,9 +492,6 @@ fn recheck_models(state: &mut State, tx: &mut Tx) {
     let Some((harness, _)) = form(state, draft, view.busy).harness else {
         return;
     };
-    if let Some(d) = state.window.chief.draft.as_mut() {
-        d.wants_focus = true;
-    }
     crate::settings::rediscover_models(state, &harness, tx);
 }
 
