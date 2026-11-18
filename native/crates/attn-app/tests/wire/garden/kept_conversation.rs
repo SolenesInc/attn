@@ -159,10 +159,10 @@ fn renders_the_daemons_retention_state() {
         ),
     ];
     for (retention, line) in cases {
-        let mut kept = Kept::open(read_as(continuation(Some(retention))));
+        let kept = Kept::open(read_as(continuation(Some(retention))));
         assert_eq!(kept.kept_line(), Some(line));
         assert_eq!(kept.reads(), 1);
-        assert!(rests(&mut kept.world));
+        assert!(kept.world.runtime_is_at_rest());
     }
 }
 
@@ -225,7 +225,7 @@ fn waits_for_the_current_seed_document_before_describing_its_conversation() {
     kept.world.settle();
     assert_eq!(kept.kept_line().as_deref(), Some(KEPT_LINE));
     assert_eq!(kept.reads(), 2);
-    assert!(rests(&mut kept.world));
+    assert!(kept.world.runtime_is_at_rest());
 }
 
 #[test]

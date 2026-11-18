@@ -204,11 +204,12 @@ pub(crate) fn zones_matching(typed: &str) -> Vec<&'static str> {
         .collect()
 }
 
-pub(crate) fn choose_zone(state: &mut State, zone: &str) {
+pub(crate) fn choose_zone(state: &mut State, zone: &str, tx: &mut Tx) {
     if let Some(f) = form_mut(state) {
         f.time_zone.replace_text(zone);
         f.zone_suggestions = ZoneSuggestions::Hidden;
     }
+    follow_preview(state, tx);
 }
 
 impl Form {
@@ -779,13 +780,22 @@ pub(crate) fn follow_focus(state: &mut State, tx: &mut Tx) -> bool {
             changed = true;
         }
     }
+    changed |= follow_preview(state, tx);
+    changed | crate::settings::discover_routes(state, &[view::route_target()], tx)
+}
+
+/// Asks for the schedule's preview when its cron or zone differs from the one last asked about.
+pub(crate) fn follow_preview(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(f) = form_mut(state) else {
+        return false;
+    };
     let wanted = (f.trigger == Trigger::Scheduled && f.load == Load::Ready)
         .then(|| (f.cron.text.clone(), f.time_zone.text.clone()));
-    if let Some(asked) = wanted.filter(|w| f.preview.asked.as_ref() != Some(w)) {
-        preview(state, asked, tx);
-        changed = true;
-    }
-    changed | crate::settings::discover_routes(state, &[view::route_target()], tx)
+    let Some(asked) = wanted.filter(|w| f.preview.asked.as_ref() != Some(w)) else {
+        return false;
+    };
+    preview(state, asked, tx);
+    true
 }
 
 fn preview(state: &mut State, (cron, time_zone): (String, String), tx: &mut Tx) {

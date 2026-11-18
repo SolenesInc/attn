@@ -180,7 +180,7 @@ fn names_active_work_in_progress_and_counts_a_plot_in_motion() {
     ));
     assert_eq!(column(world, "In progress"), ["owned work"]);
     assert!(card_says(world, "owned work", "Trellis"));
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -194,7 +194,7 @@ fn puts_parked_work_under_parked_and_counts_closed_work_until_shown() {
 
     click(world, "show");
     assert_eq!(column(world, "Closed"), ["finished work"]);
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -224,7 +224,7 @@ fn says_what_an_armed_card_waits_on_instead_of_repeating_its_column_and_keeps_it
         "armed but still pickable",
         "harvests on #43"
     ));
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -245,7 +245,7 @@ fn sorts_ready_work_first_and_says_how_many_are_not_ready_yet() {
         .find(Target::role("region").name("Ready, 3"))
         .is_some();
     assert!(count, "{}", world.screen());
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -282,7 +282,7 @@ fn takes_a_seed_over_from_its_live_tender_when_harvesting_it() {
             .find(Target::key("garden.board.compose"))
             .is_none()
     );
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -308,7 +308,7 @@ fn parks_a_seed_with_its_comment_in_one_move() {
     assert!(sent[0].get("force").is_none());
     assert!(sent[0].get("reason").is_none());
     assert!(world.daemon.sent_of("seed_note").is_empty());
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -344,7 +344,7 @@ fn replants_by_writing_the_reason_on_the_log_first() {
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0]["verb"], "replant");
     assert!(sent[0].get("reason").is_none());
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -389,7 +389,7 @@ fn asks_for_what_got_done_before_harvesting_and_shows_a_refusal() {
 
     click(world, "Dismiss");
     assert!(world.screen().find(Target::role("alert")).is_none());
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -431,7 +431,7 @@ fn walks_the_cards_with_the_arrows_and_opens_a_card_menu_with_return() {
         focused(world).and_then(|n| n.name).as_deref(),
         Some("Wither s-armed1: why nobody should pick this up")
     );
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -467,7 +467,7 @@ fn opens_a_plot_with_the_right_arrow_and_climbs_out_with_the_left() {
 
     key(world, Key::Left);
     assert_eq!(column(world, "Ready"), ["the migration", "elsewhere"]);
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -493,7 +493,7 @@ fn puts_away_the_compose_line_then_the_menu_then_the_garden_with_escape() {
 
     key(world, Key::Escape);
     assert_eq!(shown(world), "closed");
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -548,7 +548,7 @@ fn drags_a_card_onto_a_move_its_target_column_offers() {
             .find(Target::key("garden.board.carry"))
             .is_none()
     );
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -570,7 +570,7 @@ fn one_changed_seed_rebuilds_only_its_card() {
 
     assert_eq!(attn_app::garden::rows_built() - before, 1);
     assert_eq!(column(world, "In progress"), ["seed 3"]);
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -612,7 +612,7 @@ fn keeps_the_keys_on_the_board_once_a_harvested_card_folds_into_closed() {
     );
     key(world, Key::Down);
     assert_eq!(focused_card(world).as_deref(), Some("still going"));
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -629,7 +629,7 @@ fn lets_go_of_a_card_a_push_takes_away() {
     assert!(world.screen().find(Target::role("menu")).is_none());
     key(world, Key::Down);
     assert_eq!(focused_card(world).as_deref(), Some("staying"));
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -646,5 +646,5 @@ fn tab_reaches_every_button_of_the_board_with_a_cards_menu_open() {
         super::super::reach::unreached_by_tab(&mut world),
         Vec::<String>::new()
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

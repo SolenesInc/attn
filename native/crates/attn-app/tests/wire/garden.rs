@@ -300,11 +300,14 @@ fn active_answer(world: &World) -> Option<String> {
         .and_then(|n| n.name)
 }
 
-/// Lets the last change's motion play out on the fake clock, then asks whether the window is
-/// idle. Entering a page plays for 0.75 s at most (45 frames at 60 Hz, measured with
-/// `World::record`), past what landing motion in zero time finishes.
-fn rests(world: &mut World) -> bool {
-    world.advance(std::time::Duration::from_secs(1));
+/// The window landed its motion with no time passing, and goes to sleep once the timers it set
+/// have run: a tooltip's delay under the resting pointer, a notice that leaves. The longest these
+/// tests set ends 2 s in (measured).
+fn sleeps_once_its_timers_run(world: &mut World) -> bool {
+    if world.runtime().animating {
+        return false;
+    }
+    world.advance(std::time::Duration::from_secs(3));
     world.runtime_is_at_rest()
 }
 
@@ -369,7 +372,7 @@ fn seeds_the_garden_from_initial_state_and_replaces_it_on_every_push() {
     );
 
     assert_eq!(rows(&world), ["just planted", "already planted"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -418,7 +421,7 @@ fn replaces_the_garden_on_a_profile_change_and_ignores_late_pushes_from_the_old_
     });
     world.settle();
     assert!(rows(&world).is_empty());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -452,7 +455,7 @@ fn applies_a_change_onto_the_garden_it_holds_in_the_order_the_daemon_sends() {
     });
     world.settle();
     assert_eq!(rows(&world), ["just planted", "older seed"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -481,7 +484,7 @@ fn one_changed_seed_rebuilds_only_its_row() {
             .as_deref(),
         Some("growing")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -495,7 +498,7 @@ fn reads_a_garden_less_daemon_as_an_empty_garden() {
 
     assert!(rows(&world).is_empty());
     assert!(shows(&world, "The garden is empty"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -516,14 +519,14 @@ fn carries_how_many_seeds_the_garden_holds_not_just_the_ones_it_sent() {
 
     push(&mut world, vec![seed("s-bbb222", "the newest one")]);
     assert!(!shows(&world, "The garden holds"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
 fn opens_on_crowns_and_loose_seeds_keeping_plot_children_inside_their_plot() {
     let mut seeds = deep();
     seeds.push(part_of("s-gone99", "s-orph11", "crown got capped away"));
-    let mut world = open_garden(seeds);
+    let world = open_garden(seeds);
 
     let shown = rows(&world);
     assert!(shown.contains(&"the migration".to_owned()));
@@ -531,7 +534,7 @@ fn opens_on_crowns_and_loose_seeds_keeping_plot_children_inside_their_plot() {
     assert!(shown.contains(&"crown got capped away".to_owned()));
     assert!(!shown.contains(&"one panel".to_owned()));
     assert!(!shown.contains(&"already shipped".to_owned()));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -553,7 +556,7 @@ fn counts_a_plot_on_its_row_and_spells_it_out_on_its_page() {
     open_row(&mut world, "ship the thing");
 
     assert!(shows(&world, "1/3 done · 1 growing · 1 ready"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -570,7 +573,7 @@ fn drills_into_a_plot_keeps_its_closed_seeds_behind_a_toggle_and_climbs_back_out
     click(&mut world, "Garden");
 
     assert!(has_row(&world, "unrelated work"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -587,7 +590,7 @@ fn walks_a_plot_inside_a_plot_and_climbs_several_levels_at_once() {
 
     assert!(has_row(&world, "the migration"));
     assert_eq!(heading(&world), None);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -599,7 +602,7 @@ fn climbs_out_on_its_own_when_the_plot_it_is_inside_disappears() {
 
     assert_eq!(heading(&world), None);
     assert!(has_row(&world, "unrelated work"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -624,7 +627,7 @@ fn crosses_from_one_plot_into_a_related_one() {
         trail(&world),
         ["Garden", "the migration", "holds the next plot up"]
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -645,7 +648,7 @@ fn names_the_way_in_when_the_garden_is_empty_and_the_way_into_an_empty_plot() {
         &world,
         "attn seed plant \"what this is\" --part-of s-crown9"
     ));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -668,7 +671,7 @@ fn opens_a_seed_to_its_own_page_and_the_trail_is_the_way_back() {
 
     click(&mut world, "Garden");
     assert!(has_row(&world, "unrelated work"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -683,7 +686,7 @@ fn opens_a_found_seed_under_the_whole_part_of_path_from_the_garden_root() {
         trail(&world),
         ["Garden", "…", "the overflow menu", "the fold threshold"]
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -698,7 +701,7 @@ fn opens_a_found_seed_whose_parent_the_push_left_out_as_a_root_of_its_own() {
 
     assert_eq!(heading(&world).as_deref(), Some("the actual work"));
     assert_eq!(trail(&world), ["Garden"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -718,7 +721,7 @@ fn stacks_in_the_dock_and_lays_the_walk_out_in_columns_in_the_window() {
     assert_eq!(heading(&world).as_deref(), Some("one panel"));
     assert!(!has_row(&world, "one panel"));
     assert!(has_row(&world, "its header"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -733,7 +736,7 @@ fn draws_the_trailing_levels_the_width_holds_and_names_only_the_ancestors_no_col
     assert!(!has_row(&world, "unrelated work"));
     assert!(has_row(&world, "its header"));
     assert_eq!(trail(&world), ["Garden", "the migration"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -751,7 +754,7 @@ fn keeps_the_closed_lens_across_a_walk_that_leaves_the_column_behind() {
     click(&mut world, "the migration");
 
     assert!(has_row(&world, "already shipped"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -766,7 +769,7 @@ fn shows_a_third_level_once_there_is_room_for_it() {
     open_row(&mut world, "its header");
     assert!(!has_row(&world, "unrelated work"));
     assert_eq!(trail(&world), ["Garden", "the migration"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -799,7 +802,7 @@ fn folds_the_trail_once_it_outruns_three_steps_and_opens_it_again() {
             "the overflow menu"
         ]
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -815,7 +818,7 @@ fn switches_siblings_when_a_row_in_an_earlier_column_is_clicked() {
 
     assert_eq!(heading(&world).as_deref(), Some("another panel"));
     assert_eq!(trail(&world), ["Garden"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -849,7 +852,7 @@ fn hands_escape_to_the_frame_without_climbing_the_walk_or_clearing_the_question(
 
     key(&mut world, Key::Escape);
     assert_eq!(shown(&world), "closed");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -869,7 +872,7 @@ fn reopens_in_the_frame_the_user_last_chose_however_it_was_closed() {
     assert_eq!(shown(&world), "closed");
     world.gesture(|app| app.key(board()));
     assert_eq!(shown(&world), "dock");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -904,7 +907,7 @@ fn holds_the_window_as_a_modal_only_once_expanded_and_offers_the_board_only_ther
             .find(Target::role("group").name("Garden view"))
             .is_some()
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -922,7 +925,7 @@ fn opens_and_closes_from_the_title_bar_icon_without_turning_a_close_into_a_frame
 
     click(&mut world, "Show the garden");
     assert_eq!(shown(&world), "dock");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -939,7 +942,7 @@ fn opens_the_garden_from_the_palette() {
     key(&mut world, Key::Enter);
 
     assert_eq!(shown(&world), "dock");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -953,7 +956,7 @@ fn walks_the_rows_of_the_place_it_is_in_and_climbs_back_out() {
 
     assert_eq!(heading(&world), None);
     assert_eq!(focused_row(&world).as_deref(), Some("the migration"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -972,7 +975,7 @@ fn walks_a_column_drills_right_and_climbs_left() {
     key(&mut world, Key::Left);
     key(&mut world, Key::Up);
     assert_eq!(focused_row(&world).as_deref(), Some("one panel"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -988,7 +991,7 @@ fn leaves_the_arrows_to_the_search_field_while_it_has_answers_to_walk() {
     let field = focused(&world).and_then(|n| n.key);
     assert_eq!(field.as_deref(), Some("garden.search.field"));
     assert_eq!(active_answer(&world).as_deref(), Some("socket two"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -999,7 +1002,7 @@ fn hands_the_arrows_back_to_the_walk_when_the_field_has_no_answers_to_walk() {
     key(&mut world, Key::Down);
 
     assert_eq!(focused_row(&world).as_deref(), Some("socket one"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1013,7 +1016,7 @@ fn returns_to_the_search_field_from_anywhere_in_the_panel() {
 
     let field = focused(&world).and_then(|n| n.key);
     assert_eq!(field.as_deref(), Some("garden.search.field"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1026,7 +1029,7 @@ fn flattens_the_garden_into_the_answer_out_of_every_plot_at_once() {
     assert!(found.contains(&"the actual work".to_owned()));
     assert!(found.contains(&"the migration".to_owned()));
     assert!(!found.contains(&"already shipped".to_owned()));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1044,7 +1047,7 @@ fn shows_the_line_of_body_that_answered_the_query() {
             .iter()
             .any(|n| n.name.as_deref() == Some("a passing mention of the beacon"))
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1075,7 +1078,7 @@ fn follows_a_tender_session_to_its_new_label() {
         app.type_text("tender:reviewer");
     });
     assert_eq!(rows(&world), ["tended work"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1085,7 +1088,7 @@ fn names_a_filter_it_does_not_have_rather_than_answering_with_an_empty_list() {
     type_query(&mut world, "is:done ");
 
     assert!(shows(&world, "no filter called is:done"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1103,7 +1106,7 @@ fn offers_the_values_of_an_operator_being_typed_and_puts_one_into_the_query() {
             .as_deref(),
         Some("socket is:ready ")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1115,7 +1118,7 @@ fn names_the_query_and_the_scope_when_nothing_matches_and_clears_it_on_request()
     click(&mut world, "Clear the search");
 
     assert_eq!(rows(&world), ["socket one"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1127,7 +1130,7 @@ fn counts_what_a_search_is_hiding_and_takes_it_back_when_asked() {
     click(&mut world, "Include closed seeds 1");
 
     assert_eq!(rows(&world), ["already shipped"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1164,7 +1167,7 @@ fn searches_the_plot_it_stands_in_and_widens_with_one_key() {
         },
     );
     assert_eq!(rows(&world), ["the actual work"]);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1182,7 +1185,7 @@ fn walks_the_answers_with_the_arrows_without_wrapping_past_the_ends() {
     key(&mut world, Key::Enter);
 
     assert_eq!(heading(&world).as_deref(), Some("socket two"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1208,7 +1211,7 @@ fn says_how_many_open_seeds_block_a_seed_and_nothing_once_its_blocker_closes() {
     );
 
     assert!(!row_says(&world, "s-held01", "blocked by"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1236,7 +1239,7 @@ fn lists_an_opened_seeds_edges_in_both_directions() {
         related("blocked by", "s-blok01").as_deref(),
         Some("the blocker")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1274,7 +1277,7 @@ fn says_what_an_armed_row_waits_on_where_a_parked_row_says_parked() {
     assert!(row_says(world, "s-park01", "parked"));
     assert!(!row_says(world, "s-park01", "harvests on"));
     assert!(!row_says(world, "s-blank1", "harvests on"));
-    assert!(rests(world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1298,7 +1301,7 @@ fn says_the_whole_condition_on_the_seed_it_opens_and_opens_the_pull_request() {
         world.opened_links(),
         ["https://github.com/northwind/atlas/pull/412"]
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -1316,7 +1319,7 @@ fn keeps_a_pull_request_it_cannot_take_apart_rather_than_showing_nothing() {
 
     assert!(shows_in_head(&world, "harvests when somewhere-else merges"));
     assert!(world.screen().find(Target::role("link")).is_none());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn shows_in_head(world: &World, words: &str) -> bool {
@@ -1365,7 +1368,7 @@ fn follows_a_seed_through_its_life_and_says_why_it_closed_once_opened() {
     assert!(!shows(&world, "shipped it"));
     open_row(&mut world, "the work");
     assert!(shows(&world, "shipped it"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1409,7 +1412,7 @@ fn reads_the_open_seed_again_on_a_garden_push_and_shows_its_log() {
     push(&mut world, vec![work]);
 
     assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 2);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1424,7 +1427,7 @@ fn shows_the_daemons_error_when_the_seed_cannot_be_read() {
     open_row(&mut world, "gone");
 
     assert!(shows(&world, "seed \"s-gone01\" not found"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1471,7 +1474,7 @@ fn keeps_the_seed_it_opened_when_an_earlier_read_answers_late() {
             .find(Target::key("garden.log.n-first"))
             .is_none()
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1513,7 +1516,7 @@ fn counts_a_blocker_from_outside_the_plot_it_is_standing_in() {
 
     assert!(!has_row(&world, "blocker elsewhere"));
     assert!(row_says(&world, "s-bbb111", "blocked by 1"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1535,7 +1538,7 @@ fn shows_a_discovered_from_edge_from_the_work_and_from_its_origin() {
         related(&world, "discovered", "s-found11").as_deref(),
         Some("the discovered work")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn claimed_by(seed: Seed, name: &str, r#ref: &str, session_id: Option<&str>) -> Seed {
@@ -1609,7 +1612,7 @@ fn names_a_session_tender_by_its_current_label_as_soon_as_the_session_is_renamed
     world.settle();
 
     assert!(row_says(&world, "s-grow22", "tended by Search rework"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1625,7 +1628,7 @@ fn says_what_is_hidden_when_everything_in_view_is_closed() {
     assert!(has_row(&world, "all wrapped"));
     assert!(has_row(&world, "went nowhere"));
     assert!(!shows(&world, "Nothing open here"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1679,5 +1682,5 @@ fn reads_the_seeds_document_and_opens_a_linked_markdown_file_from_it() {
         world.daemon.sent_of("open_markdown")[0]["path"],
         "/repo/evidence.md"
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }

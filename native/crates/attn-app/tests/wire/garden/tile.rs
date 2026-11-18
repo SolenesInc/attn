@@ -372,7 +372,7 @@ fn a_seed_tile_hands_its_seed_over_and_leaves_the_keyboard_with_the_agent() {
         focused(&world).and_then(|n| n.key).as_deref(),
         Some("seed-tile.t.handover.open")
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -521,7 +521,7 @@ fn lists_a_seed_tiles_checks_under_its_plan_with_the_header_tally_and_moves_one_
         (&sent[0]["seed_id"], &sent[0]["check_id"], &sent[0]["verb"]),
         (&json!("s-plan11"), &json!("C1"), &json!("confirm"))
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 fn press_a_shared_checks_seed(update_tile: impl Fn(&Request) -> Value + Send + 'static) -> World {
@@ -595,7 +595,7 @@ fn opens_an_inheriting_seeds_check_from_a_plot_tiles_shared_check_row() {
     walk_the_tile_to_the_leaf(&mut world);
 
     assert_eq!(focused_name(&world).as_deref(), Some("Confirm C4"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -615,7 +615,7 @@ fn leaves_the_keyboard_alone_on_a_later_visit_when_the_tile_refused_to_go_to_the
     );
     assert_ne!(focused_name(&world).as_deref(), Some("Confirm C4"));
     world.advance(std::time::Duration::from_secs(6));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -683,7 +683,7 @@ fn refreshes_a_seed_tile_on_garden_changes_that_carry_no_seed_on_reconnect_and_i
         "{seen:?}"
     );
     assert_eq!(reads(&world).len(), 4);
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]

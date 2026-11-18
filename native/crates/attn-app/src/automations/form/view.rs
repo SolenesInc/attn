@@ -1303,7 +1303,7 @@ fn active_zone(f: &Form) -> Option<&'static str> {
 
 /// Down and Up walk the suggestions, looping, Return chooses the highlighted one and Escape
 /// hides them, as a datalist's keys do.
-fn zone_keys(state: &mut State, ev: &KeyEvent, _: &mut Tx) -> bool {
+fn zone_keys(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(f) = form_mut(state) else {
         return false;
     };
@@ -1323,7 +1323,7 @@ fn zone_keys(state: &mut State, ev: &KeyEvent, _: &mut Tx) -> bool {
             let Some(zone) = active_zone(f) else {
                 return false;
             };
-            super::choose_zone(state, zone);
+            super::choose_zone(state, zone, tx);
             return true;
         }
         _ => return false,
@@ -1354,7 +1354,7 @@ fn zone_suggestions(f: &Form, t: &Tokens, layers: &mut Vec<El>) {
                 f.zone_suggestions = ZoneSuggestions::Shown { active: Some(i) };
             }
         })
-        .on_choose(|state: &mut State, zone: &str, _: &mut Tx| super::choose_zone(state, zone))
+        .on_choose(super::choose_zone)
         .build(kit(t), layers);
 }
 
@@ -1604,10 +1604,11 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
                     .spellcheck(false)
                     .active_descendant(active_zone(f).map(zone_option_key))
                     .on_edit(|s: &mut State| field_of(s, |f| &mut f.time_zone))
-                    .on_change(|s: &mut State, _: &mut Tx| {
+                    .on_change(|s: &mut State, tx: &mut Tx| {
                         if let Some(f) = form_mut(s) {
                             f.zone_suggestions = ZoneSuggestions::Shown { active: None };
                         }
+                        super::follow_preview(s, tx);
                     })
                     .on_key(zone_keys)
                     .build(kit(t))
@@ -1696,10 +1697,11 @@ fn schedule(f: &Form, t: &Tokens) -> El {
             .spellcheck(false)
             .invalid(f.preview.error.is_some())
             .on_edit(|s: &mut State| field_of(s, |f| &mut f.cron))
-            .on_change(|state: &mut State, _: &mut Tx| {
+            .on_change(|state: &mut State, tx: &mut Tx| {
                 if let Some(f) = form_mut(state) {
                     f.replaced = None;
                 }
+                super::follow_preview(state, tx);
             })
             .build(kit(t))
             .fill(t.bg_elevated)

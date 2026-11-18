@@ -98,13 +98,13 @@ fn the_authorization_being_written_survives_a_check_judged_on_the_page() {
     let sent = world.daemon.sent_of("seed_authorization");
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0]["text"], "Half a thought, finished.");
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
 fn the_note_to_the_chief_being_written_survives_a_check_judged_on_the_page() {
     let mut world = keeps_draft_through_a_check("chief", "Send to Chief", "C1");
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -118,11 +118,11 @@ fn the_handover_note_being_written_survives_a_check_judged_on_the_page() {
             .as_deref(),
         Some("/tmp/placed")
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
 fn a_rejection_being_written_survives_another_check_judged_on_the_page() {
     let mut world = keeps_draft_through_a_check("check.C1", "Reject C1", "C2");
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }

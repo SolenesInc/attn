@@ -70,7 +70,7 @@ fn resumes_a_seeds_agent_and_goes_to_the_session_the_daemon_reopened() {
     assert_eq!(resumed[0]["seed_id"], "s-cont11");
     let shown = world.daemon.sent_of("desktop_show_session");
     assert_eq!(shown.last().unwrap()["session_id"], "tender");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn offers_resume_only_while_the_agent_can_come_back_and_names_an_unreachable_out
         .screen()
         .get(Target::role("button").name("Resume on studio"));
     assert!(resume.is("disabled"), "{resume:?}");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn sends_a_seed_to_the_chief_with_the_users_note_once_the_profile_has_a_chief() 
         focused(&world).and_then(|n| n.key).as_deref(),
         Some("garden.chief.open")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 const DESKTOP: &str = "work/desktop_1";
@@ -286,7 +286,7 @@ fn opens_a_seed_as_a_tile_beside_the_session_the_user_is_in_and_shows_it() {
     assert_eq!(shown(&world), "closed");
     let window = world.automate("state", json!({"of": "window"})).unwrap();
     assert_eq!(window["keyboard"]["pane"], "tile-seed");
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn opening_a_seed_as_a_tile_from_home_shows_the_desktop_it_lands_on() {
     assert_eq!(window["keyboard"]["pane"], "tile-seed");
     let leaves = world.daemon.sent_of("desktop_show_leaf");
     assert_eq!(leaves.last().unwrap()["leaf_id"], "tile-seed");
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]

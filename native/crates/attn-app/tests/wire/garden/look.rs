@@ -29,12 +29,12 @@ fn the_title_bar_garden_button_reads_pressed_while_the_garden_shows() {
 
     click(&mut world, "Hide the garden");
     assert!(!pressed(&world, "titlebar.garden"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
 fn the_empty_garden_says_all_of_its_sentence_inside_the_dock() {
-    let mut world = open_garden(Vec::new());
+    let world = open_garden(Vec::new());
 
     let [frame_x, _, frame_w, _] = bounds(&world, "drawer");
     let [x, _, w, h] = bounds(&world, "garden.empty");
@@ -49,7 +49,7 @@ fn the_empty_garden_says_all_of_its_sentence_inside_the_dock() {
         h > line * 1.5,
         "the sentence wraps: {h} tall, a line is {line}"
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn the_expanded_garden_lays_its_root_out_as_one_area_until_a_seed_is_walked_to()
         root < columns / 2.0,
         "the walked root is a column: {root} of {columns}"
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn a_seeds_short_title_keeps_one_line_beside_its_actions_in_the_dock() {
         (tile_y - title_y).abs() < 6.0,
         "Open as tile sits beside the title"
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -131,5 +131,5 @@ fn every_action_beside_a_long_title_stays_inside_the_docked_page() {
     }
     let [_, _, title_w, _] = bounds(&world, "garden.head.title");
     assert!(title_w >= 160.0, "the title keeps room to read: {title_w}");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

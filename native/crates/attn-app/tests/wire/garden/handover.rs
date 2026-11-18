@@ -118,7 +118,7 @@ fn hands_a_seed_over_to_a_new_agent_with_the_users_note_and_goes_to_it() {
             .find(Target::key("garden.handover.form"))
             .is_none()
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn places_a_handover_where_the_user_says_when_the_saved_folder_cannot_be_reused(
             &json!("claude")
         )
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -200,7 +200,7 @@ fn recreates_a_missing_branch_checkout_from_its_repository_context() {
         Some("Create a worktree for an existing branch")
     );
     assert_eq!(value(&world, "branch").as_deref(), Some("feature/recreate"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -345,7 +345,7 @@ fn dismisses_a_composer_before_the_dock_after_returning_from_fullscreen() {
     key(&mut world, Key::Escape);
     assert!(!automations_open(&world));
     assert!(garden_shown(&world));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]

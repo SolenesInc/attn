@@ -58,7 +58,7 @@ fn preserves_opening_order_after_restoring_the_garden() {
         key(&mut world, Key::Escape);
         assert_eq!(shown(&world), "closed", "{case}");
         assert!(!automations_open(&world), "{case}");
-        assert!(rests(&mut world), "{case}");
+        assert!(world.runtime_is_at_rest(), "{case}");
     }
 }
 
@@ -74,7 +74,7 @@ fn dismisses_an_expanded_garden_before_a_dock_panel_opened_after_its_list() {
     assert!(automations_open(&world));
     key(&mut world, Key::Escape);
     assert!(!automations_open(&world));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -103,14 +103,14 @@ fn keeps_the_chosen_fullscreen_view_through_dismissal_the_dock_and_a_relaunch() 
 
     world.gesture(|app| app.key(super::board()));
     assert!(board_shown(&world));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
     drop(world);
 
     let mut relaunched = launch(&path);
     relaunched.gesture(|app| app.key(super::board()));
     assert_eq!(shown(&relaunched), "full");
     assert!(board_shown(&relaunched));
-    assert!(rests(&mut relaunched));
+    assert!(relaunched.runtime_is_at_rest());
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn a_long_plot_title_in_the_docked_trail_leaves_the_frame_button_clear() {
         app.type_text("work");
     });
     ends_before_the_frame_button(&world, "garden.trail.here");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn ends_before_the_frame_button(world: &World, crumb: &str) {

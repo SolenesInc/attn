@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     CommandUsage, Desktop, DesktopPane, GardenSeedsUpdatedMessage, GetCommandUsageResultMessage,
@@ -207,11 +205,6 @@ fn reads(world: &World) -> Vec<Request> {
     world.daemon.sent_of("seed_document_get")
 }
 
-fn rests(world: &mut World) -> bool {
-    world.advance(Duration::from_secs(2));
-    world.runtime_is_at_rest()
-}
-
 #[test]
 fn an_agents_header_names_the_seed_its_crew_member_tends_and_opens_it_beside_the_agent() {
     let mut world = start(
@@ -242,7 +235,7 @@ fn an_agents_header_names_the_seed_its_crew_member_tends_and_opens_it_beside_the
         None,
         "a claim released leaves nothing to name"
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -262,7 +255,7 @@ fn an_agent_that_reports_to_a_seed_the_garden_does_not_hold_names_it_by_id_opens
     });
     world.settle();
     assert_eq!(chip(&world), None);
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -313,7 +306,7 @@ fn a_plot_chip_counts_its_seeds_and_a_press_pins_their_list_until_a_second_press
     world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
     assert_eq!(listed(&world), None);
     assert!(opened(&world).is_empty());
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -350,7 +343,7 @@ fn the_palette_pins_an_agents_seeds_and_the_keyboard_opens_one() {
     key(&mut world, Key::Enter);
     assert_eq!(opened(&world), [("s-b".into(), "s1".into())]);
     assert_eq!(listed(&world), None);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -372,7 +365,7 @@ fn the_list_names_the_seed_the_agent_reports_to_after_what_it_tends_and_once_whe
         );
         show_seeds(&mut world);
         assert_eq!(listed(&world).expect("the list is pinned"), rows);
-        assert!(rests(&mut world));
+        assert!(world.runtime_is_at_rest());
     }
 }
 
@@ -425,15 +418,15 @@ fn the_chip_counts_only_seeds_tended_in_this_session_by_it_or_its_crew_member_an
         ),
     ];
     for (seeds, name) in cases {
-        let mut world = start(seeds, agent(None));
+        let world = start(seeds, agent(None));
         assert_eq!(chip(&world).as_deref(), Some(name));
-        assert!(rests(&mut world));
+        assert!(world.runtime_is_at_rest());
     }
 }
 
 #[test]
 fn the_chip_leaves_out_a_seed_title_the_agents_own_title_already_says() {
-    let mut world = start(
+    let world = start(
         vec![tended_by(seed("s-work11", "Agent a's work"), "s1")],
         agent(None),
     );
@@ -447,7 +440,7 @@ fn the_chip_leaves_out_a_seed_title_the_agents_own_title_already_says() {
             .find(Target::key("tile.a.seed.label"))
             .is_none()
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -479,7 +472,7 @@ fn a_seed_whose_tending_ends_stays_as_the_seed_the_agent_reports_to_with_its_new
     assert!(says(&world, "Withered"));
     assert!(says(&world, "This agent reports to this seed."));
     assert!(says(&world, "No notes yet."));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -531,7 +524,7 @@ fn the_seed_context_reads_its_latest_note_only_while_open_and_leaves_out_activit
 
     key(&mut world, Key::Escape);
     assert_eq!(context(&world), None);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -566,7 +559,7 @@ fn the_seed_context_shows_the_newer_of_two_notes_written_in_the_same_second() {
         "A new note arrived while the card stayed open."
     ));
     assert!(!says(&world, "The silhouettes work at 24px."));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -644,7 +637,7 @@ fn an_open_context_follows_each_garden_push_and_drops_an_answer_a_later_read_rep
     );
     assert!(says(&world, "Finished and verified."));
     assert!(!says(&world, "Still exploring."));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -672,5 +665,5 @@ fn a_failed_read_says_the_note_is_unavailable_and_return_still_opens_the_seed() 
     key(&mut world, Key::Enter);
     assert_eq!(opened(&world), [("s-work11".into(), "s1".into())]);
     assert_eq!(context(&world), None);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

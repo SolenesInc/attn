@@ -127,7 +127,7 @@ fn marks_a_standby_card_with_its_note_pull_request_and_reminder_and_follows_the_
         vec![on_standby(watching("", "merged"), None), growing()],
     );
     assert!(says(&card(&world, "s-stand1"), "#123 merged"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn a_card_drops_its_marker_when_standby_ends_and_says_why_a_resume_is_blocked_wh
     for gone in ["standby", "Merge once approved", "#123 blocked"] {
         assert!(!says(&shown, gone), "{gone} in {shown:?}");
     }
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn marks_a_standby_row_with_its_note_pull_request_reminder_and_blocked_resume_in
     push(&mut world, vec![resumed(blocked), growing()]);
     assert_eq!(marker(&world, "s-stand1"), None);
     assert!(says(&row(&world, "s-stand1"), "growing"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn keeps_a_standby_rows_dependency_blockers_beside_its_marker_until_the_blocker_
     );
     assert!(marker(&world, "s-stand1").is_some());
     assert!(!says(&row(&world, "s-stand1"), "blocked by 1"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -279,5 +279,5 @@ fn keeps_only_the_seeds_on_standby_under_the_standby_lens_and_lets_one_go_when_s
             .iter()
             .any(|r| r.starts_with("merge the readiness check"))
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

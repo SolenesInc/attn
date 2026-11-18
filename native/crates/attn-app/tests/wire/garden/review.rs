@@ -372,7 +372,7 @@ fn shows_a_failed_resume_after_its_review_decision_has_settled() {
             .find(Target::role("heading").name("Garden review complete"))
             .is_some()
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -391,7 +391,7 @@ fn counts_the_seeds_that_need_review_and_starts_a_new_review() {
 
     assert_eq!(world.daemon.sent_of("seed_review_start").len(), 1);
     assert!(decides(&world));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -414,7 +414,7 @@ fn waits_for_a_review_start_however_long_model_discovery_takes() {
 
     assert!(decides(&world));
     assert!(!shows(&world, "Starting review…"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -444,7 +444,7 @@ fn lays_the_expanded_review_out_as_the_seeds_it_holds_beside_the_seed_and_the_de
         "the decision takes 35% of the reader: {decision} of {reader}"
     );
     assert!(has(&world, NEXT), "the rail offers the next seed");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -466,7 +466,7 @@ fn opens_the_review_the_daemon_shows_and_takes_its_progressive_updates() {
         advice.iter().any(|w| w == "The work is done."),
         "{advice:?}"
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -497,7 +497,7 @@ fn moves_the_overview_to_a_newer_review_run_and_ignores_an_older_broadcast() {
     click(&mut world, "Continue review");
 
     assert!(advice(&world).iter().any(|w| w == "Park"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -547,7 +547,7 @@ fn follows_an_outposts_reach_on_an_open_item_and_keeps_its_advice() {
         "{known:?}"
     );
     assert!(advice(&world).iter().any(|w| w == "Park"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -564,12 +564,12 @@ fn resumes_on_the_outpost_the_button_names() {
     assert_eq!(resumed.len(), 1);
     assert_eq!(resumed[0]["seed_id"], "s-review1");
     assert_eq!(resumed[0]["review"], receipt());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
 fn offers_only_the_actions_the_captured_item_allows() {
-    let mut world = reviewing(advised(|i| {
+    let world = reviewing(advised(|i| {
         i.actions = vec!["handover".into(), "park".into()];
         i.recommendation = Some("handover".into());
     }));
@@ -585,7 +585,7 @@ fn offers_only_the_actions_the_captured_item_allows() {
     ] {
         assert!(!has(&world, absent), "{absent}");
     }
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -611,7 +611,7 @@ fn harvests_with_the_advisors_guidance_when_it_recommended_harvesting_and_the_co
         "The seed's stated outcome and required verification are complete."
     );
     assert_eq!(sent[0]["review"], receipt());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -626,7 +626,7 @@ fn prefills_the_optional_park_and_wither_comments_from_matching_advice() {
         click(&mut world, action);
 
         assert_eq!(field(&world, &format!("{part}.field")), Some(explanation));
-        assert!(rests(&mut world));
+        assert!(world.runtime_is_at_rest());
     }
 }
 
@@ -645,7 +645,7 @@ fn sends_the_review_receipt_with_a_park_comment_in_one_move() {
     assert_eq!(sent[0]["comment"], "Waiting for input.");
     assert_eq!(sent[0]["review"], receipt());
     assert!(sent[0].get("reason").is_none_or(Value::is_null));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -665,12 +665,12 @@ fn keeps_a_reviewed_seed_growing_with_its_evidence_receipt_and_reads_the_review_
     let shows = world.daemon.sent_of("seed_review_show");
     assert_eq!(shows.len(), shows_before + 1);
     assert_eq!(shows.last().unwrap()["review_id"], "r-1");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
 fn shows_the_advisors_progress_without_making_the_user_wait_to_act() {
-    let mut world = reviewing(advised(|i| {
+    let world = reviewing(advised(|i| {
         i.status = "queued".into();
         i.recommendation = None;
         i.explanation = None;
@@ -696,7 +696,7 @@ fn shows_the_advisors_progress_without_making_the_user_wait_to_act() {
     assert!(shows(&world, "Advice ready for 0 of 1 seeds."));
     assert!(has(&world, "Harvest"));
     assert!(has(&world, "Handover"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -726,7 +726,7 @@ fn offers_a_retry_for_changed_advice_without_lifecycle_actions() {
     assert_eq!(retried[0]["review_id"], "r-1");
     assert_eq!(retried[0]["seed_id"], "s-review1");
     assert!(advice(&world).iter().any(|w| w == "Park"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -751,7 +751,7 @@ fn reads_the_reviewed_seeds_body_and_log_without_a_way_to_mark_it() {
     );
     assert!(!has(&world, "Overall note"));
     assert!(!has(&world, "+ Overall note"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -823,7 +823,7 @@ fn walks_up_and_down_a_plot_and_returns_to_the_reviewed_seed() {
     assert!(decides(&world));
     let read = world.daemon.sent_of("seed_document_get");
     assert!(read[reads..].iter().any(|r| r["seed_id"] == "s-review1"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 const NEXT: &str = "Review the next seed";
@@ -892,7 +892,7 @@ fn reads_and_decides_on_the_item_chosen_from_the_rail() {
     press(&mut world, "rail.r-1.s-review2");
 
     reads_the_next_seed_and_decides_on_it(&world);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -907,7 +907,7 @@ fn reads_and_decides_on_the_next_item_once_one_is_resolved() {
     click(&mut world, "Keep growing");
 
     reads_the_next_seed_and_decides_on_it(&world);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -945,7 +945,7 @@ fn stays_on_the_plot_seed_the_user_went_to_while_the_review_updates() {
             .iter()
             .any(|w| w == "Advice that arrived later.")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn handover_review(item: GardenReviewItem, seed: Seed) -> World {
@@ -975,7 +975,7 @@ fn fills_the_handover_composer_with_the_advisory_draft() {
     assert_eq!(drafted.len(), 1);
     assert_eq!(drafted[0]["seed_id"], "s-review1");
     assert_eq!(drafted[0]["review"], receipt());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1009,7 +1009,7 @@ fn keeps_the_users_edits_when_the_advisory_draft_arrives_late() {
         Some("Late generated handoff")
     );
     assert!(!shows(&world, "Draft ready. Your edits were kept."));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1029,7 +1029,7 @@ fn starts_a_handover_from_the_saved_working_context_or_asks_for_placement_when_i
     click(&mut world, "Handover");
     assert_eq!(field(&world, "handover.cwd").as_deref(), Some(""));
     assert_eq!(checkout(&world).as_deref(), Some("Not a Git folder"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1067,7 +1067,7 @@ fn keeps_the_handoff_text_when_the_new_agent_fails_to_launch() {
     );
     assert_eq!(sent[0]["allow_worktree_reuse"], true);
     assert_eq!(sent[0]["review"], receipt());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1080,7 +1080,7 @@ fn offers_send_to_chief_only_while_the_selected_profile_has_a_chief() {
 
     assert!(has(&world, "Park"));
     assert!(!has(&world, "Send to Chief"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1110,7 +1110,7 @@ fn sends_a_seed_to_chief_from_the_active_session_with_optional_guidance() {
         "Use branch feature/special under /tmp/special."
     );
     assert_eq!(sent[0]["review"], receipt());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1126,7 +1126,7 @@ fn closes_the_composer_before_leaving_the_review_on_escape() {
     assert!(!decides(&world));
     assert_eq!(prompt(&world).as_deref(), Some("1 seed needs review"));
     assert_eq!(shown(&world), "dock");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1173,7 +1173,7 @@ fn reads_the_overview_when_the_garden_opens_and_when_a_row_changes_never_on_a_pu
             .iter()
             .all(|r| r.get("review_id").is_none_or(Value::is_null))
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1188,7 +1188,7 @@ fn reads_the_overview_again_each_time_an_empty_garden_opens() {
     world.gesture(|app| app.key(board()));
 
     assert_eq!(world.daemon.sent_of("seed_review_show").len(), 2);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -1233,5 +1233,5 @@ fn a_profile_switch_drops_the_review_another_profile_was_shown() {
 
     assert_eq!(prompt(&world), None);
     assert!(!has(&world, "Continue review"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

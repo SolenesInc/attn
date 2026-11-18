@@ -96,7 +96,7 @@ fn shows_the_words_who_set_them_and_whether_the_tender_has_them_as_pushes_come()
     );
     let meta = says(&world, "garden.authorization.meta");
     assert!(meta.contains(" · typed into Builder "), "{meta}");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn sets_the_words_from_the_keyboard_and_keeps_shift_enter_as_a_new_line() {
         focused_key(&world).as_deref(),
         Some("garden.authorization.edit")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn clears_the_words_and_leaves_the_keyboard_on_set() {
     );
 
     assert_eq!(focused(&world).and_then(|n| n.name).as_deref(), Some("Set"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -207,5 +207,5 @@ fn keeps_the_words_and_shows_a_refusal_waiting_for_it_and_escape_sends_nothing()
             .is_none()
     );
     assert_eq!(sent(&world).len(), 1);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

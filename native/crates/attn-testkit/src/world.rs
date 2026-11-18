@@ -20,6 +20,10 @@ use crate::screen::{Screen, Target};
 /// A wire test's settle takes milliseconds; one that has not gone quiet after this long is
 /// stuck, and the test says where.
 const STUCK: Duration = Duration::from_secs(10);
+/// Settles a window takes to land its motion. What a settle lands can set more going: the app
+/// answers the layout it reports, or text draws its masks a frame after it lands. The wire suite
+/// needs 3 at most (measured). A loop or a playing video never lands, and stops landing here.
+pub(crate) const LANDING_SETTLES: usize = 8;
 const VIEWPORT: (f32, f32) = (960.0, 640.0);
 const FRAME: f64 = 1.0 / 60.0;
 
@@ -452,9 +456,14 @@ impl World {
 
     /// Lands the motion the last frame started, unless a sampler records it.
     fn land_motion(&mut self, sampler: &Option<&mut rune::motion_gate::Sampler>) {
-        if sampler.is_none() && self.runtime.animating {
-            self.runtime.settle_all();
-            self.main_frame(0.0);
+        if sampler.is_none() {
+            for _ in 0..LANDING_SETTLES {
+                if !self.runtime.animating {
+                    break;
+                }
+                self.runtime.settle_all();
+                self.main_frame(0.0);
+            }
         }
     }
 

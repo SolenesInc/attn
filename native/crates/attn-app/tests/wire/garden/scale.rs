@@ -68,7 +68,7 @@ fn the_garden_draws_at_its_saved_size_in_the_box_it_has_and_matches_the_app_size
     );
     open_row(&mut world, "Cache store migration");
     assert_eq!(heading(&world).as_deref(), Some("Cache store migration"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn the_board_draws_its_cards_at_the_saved_garden_size() {
         unscaled * 1.3,
         "card at 130%",
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -112,5 +112,5 @@ fn a_seed_tile_draws_its_seed_at_the_saved_garden_size_in_the_tile_it_has() {
         "seed tile at 140%",
     );
     assert_eq!(drawn(&world, Target::key("tile.t")), tile);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

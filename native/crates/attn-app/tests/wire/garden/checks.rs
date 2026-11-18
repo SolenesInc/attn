@@ -133,7 +133,7 @@ fn shows_each_checks_report_and_verdict_and_judges_it_from_the_seed_page() {
             ("C3".into(), "uncheck".into(), None),
         ]
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn rejecting_a_check_asks_what_would_prove_it_and_escape_puts_the_reason_away() 
         focused(&world).and_then(|n| n.key).as_deref(),
         Some("garden.check.C2.box")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -240,7 +240,7 @@ fn a_plots_shared_check_opens_to_the_seeds_that_prove_it_and_removed_checks_wait
     click(&mut world, "C2 lands green · 1 of 2 confirmed");
     click(&mut world, "Settings unit · planted · open");
     assert_eq!(heading(&world).as_deref(), Some("Settings unit"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -340,7 +340,7 @@ fn opens_each_piece_of_evidence_where_the_seeds_artifacts_open_it_and_leaves_unk
             .find(Target::key("garden.check.C2.evidence.4"))
             .is_none()
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -362,7 +362,7 @@ fn scrolls_from_the_header_tally_to_the_checks_section() {
     assert!(below(&world));
 
     world.gesture(|app| app.click(tally));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 
     assert!(!below(&world));
     assert_eq!(
@@ -468,7 +468,7 @@ fn counts_a_fresh_report_as_to_judge_on_child_rows_plot_progress_and_board_cards
             .iter()
             .any(|n| n.name.as_deref() == Some("✓2/5 · 1 to judge · 1 rejected"))
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn report_of(world: &World, check: &str) -> String {
@@ -520,7 +520,7 @@ fn marks_artifact_evidence_the_daemon_says_changed_since_its_report_and_clears_i
         "{report}"
     );
     assert!(!report.contains("changed since this report"), "{report}");
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -586,7 +586,7 @@ fn logs_check_notes_as_ordinary_entries_outside_the_attachment_bookkeeping() {
             .is_none()
     );
     assert!(!shows(&world, "attached run.log"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn no_checks_on_the_page(world: &World) {
@@ -641,7 +641,7 @@ fn counts_a_plots_descendants_without_a_link_when_the_plot_has_no_checks_section
             .any(|w| w == "✓2/5 · 1 to judge · 1 rejected"),
         "{progress:?}"
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -658,5 +658,5 @@ fn renders_no_checks_section_and_no_tally_for_a_seed_without_checks() {
     open_row(&mut world, "A plain seed");
 
     no_checks_on_the_page(&world);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }

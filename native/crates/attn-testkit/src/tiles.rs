@@ -216,7 +216,10 @@ impl TileRuntime {
 
     /// Lands the motion the last frame started.
     fn land_motion(&mut self) {
-        if self.runtime.animating {
+        for _ in 0..crate::world::LANDING_SETTLES {
+            if !self.runtime.animating {
+                break;
+            }
             self.runtime.settle_all();
             self.runtime.frame(0.0);
         }

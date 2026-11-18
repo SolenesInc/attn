@@ -172,7 +172,7 @@ fn opens_reveals_and_moves_out_a_kept_document_where_the_user_chooses() {
             "destination_path": "/tmp/out/report.pdf",
         })]
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn only_reveals_a_kept_file_the_system_would_run() {
     press(&mut world, "artifact.setup.command", "move-out");
     world.answer_file_dialog(None);
     assert!(transfers(&world).is_empty());
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn keeps_a_missing_linked_file_listed_and_brings_it_in_only_when_asked() {
             "legacy_reference": {"kind": "markdown_file", "path": "/gone/legacy.md"},
         })]
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -245,7 +245,7 @@ fn asks_which_file_a_repository_relative_link_means_before_bringing_it_in() {
             "legacy_reference": {"kind": "markdown_file", "path": "docs/legacy.md"},
         })]
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -267,7 +267,7 @@ fn leaves_a_linked_file_listed_and_says_why_when_bringing_it_in_is_refused() {
         row(&world, "reference.0").name.as_deref(),
         Some("linked file legacy.md · /tmp")
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -287,7 +287,7 @@ fn removes_a_link_through_a_detach_note() {
             &json!({"kind": "markdown_file", "path": "/repo/plan.md"})
         )
     );
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -342,5 +342,5 @@ fn lists_linked_files_notebook_documents_and_pages_and_opens_each_where_it_belon
         world.opened_links(),
         vec!["https://github.com/acme/app/pull/736".to_owned()]
     );
-    assert!(rests(&mut world));
+    assert!(sleeps_once_its_timers_run(&mut world));
 }

@@ -87,7 +87,7 @@ fn finds_a_changed_seed_by_its_new_text_and_a_seed_the_change_did_not_include_ke
     assert!(has_row(&world, "wire the quartz"));
     ask(&mut world, "line of type");
     assert!(!has_row(&world, "wire the quartz"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn toggles_the_closed_lens_by_writing_it_into_the_query_without_flattening_the_p
 
     click(&mut world, "hide 1 closed");
     assert!(!has_row(&world, "a dropped idea"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -117,16 +117,16 @@ fn stands_down_when_the_query_names_a_lens_of_its_own() {
 
     ask(&mut world, "is:ready");
     assert_eq!(closed_lens(&world), None);
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
 fn searches_the_plot_you_are_standing_in_and_says_what_the_garden_holds() {
-    let mut world = search_inside_the_plot("field");
+    let world = search_inside_the_plot("field");
 
     assert_eq!(rows(&world), ["wire the field"]);
     assert!(offers(&world, "+1 in the whole garden"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn keeps_the_trail_when_the_search_widens_out_of_the_plot_and_goes_back_to_the_p
     ask(&mut world, "");
     assert!(has_row(&world, "rank the answers"));
     assert!(!has_row(&world, "unrelated field work"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -158,5 +158,5 @@ fn starts_a_new_question_at_its_best_answer() {
 
     assert_eq!(field(&world).as_deref(), Some("field w"));
     assert_eq!(active_answer(&world).as_deref(), Some("wire the field"));
-    assert!(rests(&mut world));
+    assert!(world.runtime_is_at_rest());
 }
