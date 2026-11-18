@@ -1,4 +1,4 @@
-use attn_protocol::{InitialStateMessage, Profile};
+use attn_protocol::{InitialStateMessage, Profile, SettingsUpdatedMessage};
 use attn_testkit::{Daemon, World};
 
 fn world() -> World {
@@ -58,11 +58,32 @@ fn the_title_bar_keeps_its_tools_left_and_its_panels_right_in_the_tauri_apps_ord
 }
 
 #[test]
-fn the_first_title_bar_control_starts_where_the_tauri_app_starts_it_past_the_traffic_lights() {
+fn the_first_title_bar_control_starts_at_tauris_78_window_points_past_the_lights_at_every_text_size()
+ {
     let mut world = world();
     world.window_controls_take(69.0);
     assert_eq!(world.rect("titlebar.new")[0], 78.0);
+    for tenths in 7..=15 {
+        let scale = format!("{}", f64::from(tenths) / 10.0);
+        world.daemon.emit(SettingsUpdatedMessage {
+            settings: Some([("uiScale".to_owned(), scale.clone())].into()),
+            ..SettingsUpdatedMessage::new()
+        });
+        world.settle();
+        let zoom = f64::from(world.runtime().zoom());
+        assert!((zoom - f64::from(tenths) / 10.0).abs() < 1e-6, "{scale}");
+        let new_in_window_points = world.rect("titlebar.new")[0] * zoom;
+        assert!(
+            (new_in_window_points - 78.0).abs() < 0.05,
+            "at {scale} New starts {new_in_window_points} window points in, not Tauri's 78"
+        );
+    }
 
     world.window_controls_take(0.0);
+    world.daemon.emit(SettingsUpdatedMessage {
+        settings: Some([("uiScale".to_owned(), "1".to_owned())].into()),
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
     assert_eq!(world.rect("titlebar.new")[0], 8.0);
 }
