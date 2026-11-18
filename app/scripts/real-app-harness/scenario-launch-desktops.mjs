@@ -72,51 +72,18 @@ try {
       execFileSync('sqlite3', [db, "UPDATE profile_migration SET phase='launch_required', launch_review_complete=0, revision=revision+1 WHERE id=1;"]);
     }
   });
-  await runner.step('launch_review_is_mandatory', async () => {
+  await runner.step('an_unfinished_launch_review_finishes_at_start', async () => {
     await client.launchFreshApp(); await client.waitForReady(30000); await observer.connect();
-    await wait('.mp-welcome-actions, .mp-launch-shell');
-    const initial = await client.request('migration_get_state');
-    if (initial.migrationPhase === 'placement_required') {
-      await click('.mp-welcome-actions .mp-button.primary');
-      await wait('.mp-bottom');
-      await capture('00-placement-counts.png');
-      runner.writeJson('placement-counts.json', await client.request('dom_text', { selector: '.mp-dest-panel' }));
-      await click('.mp-bottom-right .mp-button.quiet');
-      await wait('.mp-bottom .mp-button.primary:not(:disabled)');
-      await click('.mp-bottom .mp-button.primary');
-    }
-    await wait('.mp-launch-shell');
-    const state = await client.request('migration_get_state');
-    members = state.migration.launch_items.filter((item) => item.kind === 'crew' && (realCopy || item.item_id.endsWith('-launch-check'))).slice(0, 2);
-    runner.assert(members.length === 2, 'The review shows both crew members', state);
-    await wait('.app', { absent: true });
-    await capture('01-launch-review.png');
-    await click('.mp-crew-help button');
-    await capture('02-where-to-change.png');
-    await click('.mp-crew-help button');
-  });
-  await runner.step('name_one_new_desktop_share_it_and_create_it_on_finish', async () => {
-    const [first, second] = members;
-    await click(`.mp-launch-row[data-launch-item="${first.item_id}"] .mp-launch-choice`);
-    await wait('dialog input');
-    await client.request('dom_type', { selector: 'dialog input', text: 'Launch review' });
-    await click('dialog .primary');
-    await wait(`select[aria-label="New desktops for ${second.name}"]`);
-    await client.request('dom_select', { selector: `select[aria-label="New desktops for ${second.name}"]`, value: '|Launch review' });
-    await wait(`.mp-launch-row[data-launch-item="${second.item_id}"] .mp-launch-result`, { textIncludes: 'Launch review' });
-    const before = (await client.request('migration_get_state')).migration;
-    runner.assert(!before.launch_desktops.some((desktop) => desktop.name === 'Launch review'), 'The new desktop exists only after Finish', before.launch_desktops);
-    await wait('.mp-launch-footer .primary:not(:disabled)');
-    await capture('03-shared-new-desktop.png');
-    await click('.mp-launch-footer .primary');
-    await wait('.mp-done');
-    const starts = crew().filter((member) => members.some((item) => item.item_id === member.id)).map((member) => member.launch_desktop);
-    runner.assert(starts.length === 2 && starts[0]?.desktop_id && starts[0].desktop_id === starts[1]?.desktop_id && starts[0].label.includes('Launch review'),
-      'Both members start on the one desktop Finish created', starts);
-    await capture('04-finished.png');
-    await click('.mp-done .primary');
     await wait('.app');
+    await wait('.mp-welcome-actions, .mp-launch-shell', { absent: true });
+    const phase = execFileSync('sqlite3', [db, 'SELECT phase, launch_review_complete FROM profile_migration WHERE id=1;'], { encoding: 'utf8' }).trim();
+    runner.assert(phase === 'complete|1', 'The daemon finished the launch review before the app connected', phase);
+    members = crew().filter((member) => realCopy || member.id.endsWith('-launch-check')).slice(0, 2).map((member) => ({ item_id: member.id, start: member.launch_desktop }));
+    runner.assert(members.length === 2, 'Both crew members are in the roster', crew());
+    const [first, second] = members.map((member) => member.start?.desktop_id);
+    runner.assert(Boolean(first) && Boolean(second) && first !== second, 'Each member launches on a desktop of its own', members);
     await client.request('dismiss_whats_new', {}).catch(() => {});
+    await capture('01-finished-at-start.png');
   });
   await runner.step('settings_show_the_saved_desktop', async () => {
     await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
@@ -128,7 +95,7 @@ try {
     await openCrew();
     await click(`[data-testid="crew-roster-${members[0].item_id}"]`);
     await click('[data-testid="crew-tab-launch"]');
-    await wait('.launch-desktop-field', { textIncludes: 'Launch review' });
+    await wait('.launch-desktop-field', { textIncludes: members[0].start.label.split(' (')[0] });
     await capture('05-launch-settings.png');
   });
   await runner.step('a_user_wake_goes_there_and_background_wake_stays_quiet', async () => {

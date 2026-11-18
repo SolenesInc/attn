@@ -71,7 +71,7 @@ export const scenarioCatalog = [
   {
     id: 'launch-desktops',
     runnerId: 'LAUNCH-DESKTOPS',
-    label: 'Launch desktops: mandatory review, named pending sharing, settings, protected errors and quiet background starts',
+    label: 'Launch desktops: an unfinished review finishes at start, settings, protected errors and quiet background starts',
     command: ['node', 'scripts/real-app-harness/scenario-launch-desktops.mjs'],
   },
   {
@@ -133,15 +133,6 @@ export const scenarioCatalog = [
     runnerId: 'MOVE-WITH-DELEGATES',
     label: 'Move an agent and its same-desktop delegates through the palette',
     command: ['node', 'scripts/real-app-harness/scenario-move-with-delegates.mjs'],
-  },
-  {
-    id: 'desktop-migration',
-    runnerId: 'DESKTOP-MIGRATION',
-    label: 'Workspace migration picker: keyboard, native pointer drop, second client, restart, reopen, narrow window, finish',
-    command: ['pnpm', 'run', 'real-app:scenario-desktop-migration'],
-    skipOn: {
-      darwin: 'the in-app macOS input injector deadlocks here: AppKit holds its mouse-down window-drag check open for the up event the injector sends only after that call returns; the Linux run drops through xdotool',
-    },
   },
   {
     id: 'desktop-splits',
