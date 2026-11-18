@@ -3,10 +3,18 @@ use attn_ui::type_;
 use rune::{El, KeyEvent, Tx, row, text};
 
 use super::model;
-use super::sheet::{FORM_FIELD, Sheet, meta_word, page_heading, page_region, words_field};
+use super::sheet::{
+    FORM_FIELD, FieldLook, Sheet, meta_word, page_heading, page_region, words_field,
+};
 use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
+
+/// `.seed-authorization__input`: its border takes the focus colour, not the brand.
+const AUTHORIZATION_FIELD: FieldLook = FieldLook {
+    edge: |t| (t.border, t.border_focus),
+    ..FORM_FIELD
+};
 
 impl Sheet<'_> {
     /// What the user lets agents do on this seed beyond the project's guidance, who set it and
@@ -109,7 +117,7 @@ impl Sheet<'_> {
                         here.id
                     ),
                     "Land on main once the checks pass. Ask me before releasing.",
-                    &FORM_FIELD,
+                    &AUTHORIZATION_FIELD,
                     move |state: &mut State| edited.words_mut(state),
                     move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                         let home = typed.key("edit");

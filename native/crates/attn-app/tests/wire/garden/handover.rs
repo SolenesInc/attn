@@ -121,6 +121,51 @@ fn hands_a_seed_over_to_a_new_agent_with_the_users_note_and_goes_to_it() {
     assert!(world.runtime_is_at_rest());
 }
 
+/// An opaque token as the window paints it: sRGB-encoded (IEC 61966-2-1).
+fn painted(c: rune::Color) -> [f32; 4] {
+    let encode = |v: f32| {
+        if v <= 0.003_130_8 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        }
+    };
+    [encode(c.r), encode(c.g), encode(c.b), c.a]
+}
+
+/// The border the instance drawn at `key`'s box paints.
+fn edge_at(world: &World, key: &str) -> Option<[f32; 4]> {
+    let [x, y, w, h] = world.screen().bounds(Target::key(key))?;
+    let scale = world.runtime().env.scale;
+    let near = |a: f32, b: f32| (a - b * scale).abs() <= 1.5 * scale;
+    world
+        .runtime()
+        .instances
+        .iter()
+        .find(|i| {
+            i.border[3] > 0.0
+                && near(i.rect[0], x)
+                && near(i.rect[1], y)
+                && near(i.rect[2], w)
+                && near(i.rect[3], h)
+        })
+        .map(|i| i.border)
+}
+
+#[test]
+fn the_handover_note_s_border_turns_brand_while_it_has_focus_as_the_tauri_field_does() {
+    let mut world = opened(vec![continued(placed())], |r| Some(handed_over(r)));
+    let t = &attn_ui::colors::scheme_for(None).colors(true).ui;
+    click(&mut world, "Handover");
+    world.advance(std::time::Duration::from_secs(1));
+    let field = "garden.handover.field-resizable";
+    assert_eq!(edge_at(&world, field), Some(painted(t.brand)));
+
+    key_with(&mut world, Key::Tab, Mods::default());
+    world.advance(std::time::Duration::from_secs(1));
+    assert_eq!(edge_at(&world, field), Some(painted(t.border)));
+}
+
 #[test]
 fn places_a_handover_where_the_user_says_when_the_saved_folder_cannot_be_reused() {
     let mut world = opened(

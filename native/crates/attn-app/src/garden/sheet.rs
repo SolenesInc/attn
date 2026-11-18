@@ -4,7 +4,7 @@ use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{El, KeyEvent, TextEdit, TextStyle, Tx, col, memo, row, text};
+use rune::{Color, El, KeyEvent, TextEdit, TextStyle, Tx, col, memo, row, text};
 use rune_kit::{MarkdownStyle, TextArea};
 
 use super::model::{self, Relation, SessionNames};
@@ -538,12 +538,13 @@ pub(super) fn quiet_note(key: &str, words: impl Into<String>, ink: rune::Color) 
 }
 
 /// How a seed page's words field draws: its type, its padding inside its 1 pt border, its least
-/// height and its corner radius.
+/// height, its corner radius, and its border's colour at rest and in focus.
 pub(super) struct FieldLook {
     pub font: TextStyle,
     pub padding: (f32, f32),
     pub min_height: f32,
     pub radius: f32,
+    pub edge: fn(&Tokens) -> (Color, Color),
 }
 
 pub(super) const FORM_FIELD: FieldLook = FieldLook {
@@ -551,9 +552,10 @@ pub(super) const FORM_FIELD: FieldLook = FieldLook {
     padding: (space::S1, space::S1),
     min_height: 56.0,
     radius: 4.0,
+    edge: |t| (t.border, t.brand),
 };
 
-/// The kit draws a field's border as a ring outside the box's layout, so the padding holds it.
+/// The field's 1 pt border draws inside its box and takes no layout room, so the padding holds it.
 const FIELD_EDGE: f32 = 1.0;
 
 /// A seed page's form field for words, which its grip drags taller.
@@ -568,6 +570,7 @@ pub(super) fn words_field(
     keyed: impl Fn(&mut State, &KeyEvent, &mut Tx) -> bool + 'static,
     t: &Tokens,
 ) -> El {
+    let (rest, focused) = (look.edge)(t);
     TextArea::new(words)
         .key(key)
         .width(None)
@@ -579,6 +582,7 @@ pub(super) fn words_field(
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
         .placeholder_ink(t.text_muted)
+        .edge(rest, focused)
         .on_edit(lens)
         .on_key(keyed)
         .build(attn_ui::kit(t))

@@ -823,6 +823,7 @@ const COMPOSER_FIELD: FieldLook = FieldLook {
     padding: (10.0, 8.0),
     min_height: 82.0,
     radius: 5.0,
+    edge: |t| (t.border_subtle, t.brand),
 };
 
 const RAIL_WIDTH: f32 = 248.0;
