@@ -37,6 +37,8 @@ use serde_json::{Map, Value, json};
 use super::{Alert, AlertKind, BrowserHost, Control, Heard, Placement};
 use crate::keymap::Zoom;
 
+mod session_cookies;
+
 /// The agent's page script, built from `app/src/browser/runtime.ts` for both apps.
 const RUNTIME_JS: &str = include_str!("../../../../../app/src-tauri/generated/browser-runtime.js");
 const CONTROL_WORLD: &str = "attn-browser-control";
@@ -103,7 +105,12 @@ thread_local! {
     static HANDING: Cell<bool> = const { Cell::new(false) };
     /// The tile windows' content views, by window key.
     static TILE_WINDOWS: RefCell<HashMap<String, Retained<NSView>>> = RefCell::new(HashMap::new());
+    /// Loads that wait for the session cookies of the last launch to be back in the store, so a
+    /// page's first request carries them. `None` once they are.
+    static AWAITING_COOKIES: RefCell<Option<Vec<PendingLoad>>> = const { RefCell::new(None) };
 }
+
+type PendingLoad = (Retained<WKWebView>, String);
 
 fn content_view(window: &rune::WindowHandle) -> Option<Retained<NSView>> {
     let content = window.with_raw_handle(|handle| match handle.as_raw() {
@@ -125,7 +132,13 @@ pub fn adopt_tile_window(key: &str, window: &rune::WindowHandle) {
 
 /// Runs browser tiles' pages in `window`'s content view. `wake` brings the window to a frame,
 /// where it takes what the pages said. A parked automation window keeps its pages drawing.
-pub fn install(window: &rune::WindowHandle, wake: impl Fn() + 'static, automation: bool) {
+/// `cookie_jar` keeps the pages' session cookies from one launch to the next.
+pub fn install(
+    window: &rune::WindowHandle,
+    wake: impl Fn() + 'static,
+    automation: bool,
+    cookie_jar: Option<std::path::PathBuf>,
+) {
     let Some(content) = content_view(window) else {
         eprintln!("attn-app: browser tiles are off: the window has no content view");
         return;
@@ -134,7 +147,9 @@ pub fn install(window: &rune::WindowHandle, wake: impl Fn() + 'static, automatio
         return;
     };
     WAKE.with_borrow_mut(|slot| *slot = Some(Box::new(wake)));
-    super::use_host(Box::new(WebKitHost::new(content, mtm, automation)));
+    super::use_host(Box::new(WebKitHost::new(
+        content, mtm, automation, cookie_jar,
+    )));
 }
 
 fn wake() {
@@ -196,7 +211,12 @@ impl WebKitHost {
         }
     }
 
-    fn new(content: Retained<NSView>, mtm: MainThreadMarker, unoccluded: bool) -> Self {
+    fn new(
+        content: Retained<NSView>,
+        mtm: MainThreadMarker,
+        unoccluded: bool,
+        cookie_jar: Option<std::path::PathBuf>,
+    ) -> Self {
         let world =
             unsafe { WKContentWorld::worldWithName(&NSString::from_str(CONTROL_WORLD), mtm) };
         let config = unsafe { WKWebViewConfiguration::new(mtm) };
@@ -221,6 +241,15 @@ impl WebKitHost {
                 true,
             );
             scripts.addUserScript(&single_tab);
+            if let Some(jar) = cookie_jar {
+                AWAITING_COOKIES.with_borrow_mut(|waiting| *waiting = Some(Vec::new()));
+                session_cookies::restore_then_keep(store.httpCookieStore(), jar, mtm, || {
+                    let waiting = AWAITING_COOKIES.with_borrow_mut(Option::take);
+                    for (web, url) in waiting.into_iter().flatten() {
+                        load(&web, &url);
+                    }
+                });
+            }
         }
         WebKitHost {
             mtm,
@@ -238,6 +267,15 @@ impl WebKitHost {
 }
 
 fn load(web: &WKWebView, url: &str) {
+    let waiting = AWAITING_COOKIES.with_borrow_mut(|waiting| {
+        waiting
+            .as_mut()
+            .map(|loads| loads.push((web.retain(), url.to_owned())))
+            .is_some()
+    });
+    if waiting {
+        return;
+    }
     if let Some(url) = NSURL::URLWithString(&NSString::from_str(url)) {
         unsafe { web.loadRequest(&NSURLRequest::requestWithURL(&url)) };
     }
@@ -265,6 +303,7 @@ impl BrowserHost for WebKitHost {
                 std::ptr::null_mut(),
             );
         }
+        session_cookies::watch(&web);
         clip.addSubview(&web);
         self.content.addSubview(&clip);
         load(&web, url);
@@ -318,6 +357,7 @@ impl BrowserHost for WebKitHost {
             shown
                 .web
                 .removeObserver_forKeyPath(&shown.location, ns_string!("URL"));
+            session_cookies::unwatch(&shown.web);
             shown.web.stopLoading();
             shown.web.setUIDelegate(None);
         }
@@ -673,6 +713,7 @@ fn delete_cookies(store: &WKHTTPCookieStore, doomed: Vec<Retained<NSHTTPCookie>>
             if left.get() == 0
                 && let Some(id) = id.take()
             {
+                session_cookies::changed();
                 reply(id, Ok("null".into()));
             }
         });
@@ -690,20 +731,41 @@ fn add_cookie(
         .get("cookie")
         .and_then(Value::as_object)
         .unwrap_or(params);
-    let text = |key: &str| source.get(key).and_then(Value::as_str);
-    let name = text("name")
+    source
+        .get("name")
+        .and_then(Value::as_str)
         .filter(|n| !n.is_empty())
         .ok_or("name must be a non-empty string")?;
     if host.is_empty() {
         return Err("current browser URL has no host".into());
     }
-    let domain = match text("domain") {
+    let mut source = source.clone();
+    match source.get("domain").and_then(Value::as_str) {
         Some(domain) if !domain_matches(host, domain) => {
             return Err("cookie domain does not match the current browser host".into());
         }
-        Some(domain) => domain.to_owned(),
-        None => host.to_owned(),
-    };
+        Some(_) => {}
+        None => {
+            source.insert("domain".into(), Value::from(host));
+        }
+    }
+    let cookie = http_cookie(&source).ok_or("set browser cookie: the cookie is not valid")?;
+    let id = Cell::new(Some(id));
+    let stored = RcBlock::new(move || {
+        if let Some(id) = id.take() {
+            session_cookies::changed();
+            reply(id, Ok("null".into()));
+        }
+    });
+    unsafe { store.setCookie_completionHandler(&cookie, Some(&stored)) };
+    Ok(())
+}
+
+/// The cookie `source` describes, in the shape `cookie_value` reads cookies out as.
+fn http_cookie(source: &Map<String, Value>) -> Option<Retained<NSHTTPCookie>> {
+    let text = |key: &str| source.get(key).and_then(Value::as_str);
+    let name = text("name").filter(|n| !n.is_empty())?;
+    let domain = text("domain").filter(|d| !d.is_empty())?;
     let mut keys: Vec<&NSString> = vec![
         unsafe { NSHTTPCookieName },
         unsafe { NSHTTPCookieValue },
@@ -713,7 +775,7 @@ fn add_cookie(
     let mut values: Vec<Retained<AnyObject>> = vec![
         object(NSString::from_str(name)),
         object(NSString::from_str(text("value").unwrap_or(""))),
-        object(NSString::from_str(&domain)),
+        object(NSString::from_str(domain)),
         object(NSString::from_str(text("path").unwrap_or("/"))),
     ];
     if source.get("secure").and_then(Value::as_bool) == Some(true) {
@@ -738,16 +800,7 @@ fn add_cookie(
         values.push(object(NSDate::dateWithTimeIntervalSince1970(expiry as f64)));
     }
     let properties = NSDictionary::from_retained_objects(&keys, &values);
-    let cookie = unsafe { NSHTTPCookie::cookieWithProperties(&properties) }
-        .ok_or("set browser cookie: the cookie is not valid")?;
-    let id = Cell::new(Some(id));
-    let stored = RcBlock::new(move || {
-        if let Some(id) = id.take() {
-            reply(id, Ok("null".into()));
-        }
-    });
-    unsafe { store.setCookie_completionHandler(&cookie, Some(&stored)) };
-    Ok(())
+    unsafe { NSHTTPCookie::cookieWithProperties(&properties) }
 }
 
 fn object<T: Message>(value: Retained<T>) -> Retained<AnyObject> {
@@ -772,6 +825,14 @@ fn cookie_value(cookie: &NSHTTPCookie) -> Value {
         "sameSite": same_site,
         "expiry": cookie.expiresDate().map(|date| date.timeIntervalSince1970() as i64),
     })
+}
+
+/// `cookie` as the jar keeps it: the agent's shape, with the domain as set, so a cookie for a
+/// domain and its subdomains stays one when restored.
+fn stored_cookie(cookie: &NSHTTPCookie) -> Value {
+    let mut stored = cookie_value(cookie);
+    stored["domain"] = Value::from(cookie.domain().to_string());
+    stored
 }
 
 /// The host, path and whether the scheme is https, of an absolute URL.
@@ -973,6 +1034,7 @@ define_class!(
             let url = url.to_string();
             let scheme = url.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
             if matches!(scheme.as_deref(), Some("http" | "https")) {
+                session_cookies::changed();
                 tell(Heard::Located { page: self.ivars().clone(), url });
             }
         }

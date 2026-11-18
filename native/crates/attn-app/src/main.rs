@@ -53,9 +53,15 @@ fn main() -> ExitCode {
     #[cfg(target_os = "macos")]
     let app = app.on_ready({
         let pages = handle.clone();
+        let cookie_jar = attn_app::instance::browser_cookie_jar(&launch.instance.bundle_id);
         move |window| {
             let pages = pages.clone();
-            attn_app::browser::mac::install(window, move || pages.wake(), automation);
+            attn_app::browser::mac::install(
+                window,
+                move || pages.wake(),
+                automation,
+                cookie_jar.clone(),
+            );
         }
     });
     let _automation = automation

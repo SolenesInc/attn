@@ -118,16 +118,28 @@ impl Instance {
     }
 }
 
-/// The debug folder of the app this bundle id names, the Tauri app's too: the automation
-/// manifest and the terminal incident log `attn debug incidents` reads.
-pub fn debug_dir(bundle_id: &str) -> Option<PathBuf> {
+/// The local data folder of the app this bundle id names, which the Tauri app of the same
+/// instance shares.
+pub fn app_data_dir(bundle_id: &str) -> Option<PathBuf> {
     let home = std::env::home_dir()?;
     let local = if cfg!(target_os = "macos") {
         home.join("Library/Application Support")
     } else {
         std::env::var_os("XDG_DATA_HOME").map_or_else(|| home.join(".local/share"), PathBuf::from)
     };
-    Some(local.join(bundle_id).join("debug"))
+    Some(local.join(bundle_id))
+}
+
+/// The debug folder of the app this bundle id names, the Tauri app's too: the automation
+/// manifest and the terminal incident log `attn debug incidents` reads.
+pub fn debug_dir(bundle_id: &str) -> Option<PathBuf> {
+    app_data_dir(bundle_id).map(|dir| dir.join("debug"))
+}
+
+/// Where browser tiles keep their session cookies between launches, in the file and format
+/// the Tauri app keeps its cookie jar in.
+pub fn browser_cookie_jar(bundle_id: &str) -> Option<PathBuf> {
+    app_data_dir(bundle_id).map(|dir| dir.join("browser").join("cookies.json"))
 }
 
 /// The app's own credential in `data_dir`, made on first use: the daemon trusts a `native-app`
