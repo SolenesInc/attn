@@ -1,5 +1,5 @@
 //! An editor tile's "Editor root" picker in its header: the notebook, the folder of the agent
-//! the desktop shows, the tile's own folder, or one the user browses to. A switch saves the
+//! the window acts on, the tile's own folder, or one the user browses to. A switch saves the
 //! open edit first and stays put when that save conflicts or fails.
 
 use attn_ui::Tokens;
@@ -10,7 +10,7 @@ use super::io;
 use super::model::SurfaceId;
 use super::params::Params;
 use crate::State;
-use attn_client::Facts;
+use attn_client::{Desktop, Facts};
 
 use super::Notebook;
 
@@ -25,10 +25,19 @@ fn select_key(tile: &str) -> String {
     format!("notebook.tile.{tile}.root")
 }
 
+/// The leaf a window acts on, with its desktop.
+type Acting<'a> = (&'a Desktop, &'a str);
+
 /// The options the picker offers for a tile on `root`, with the folder each one roots it at.
-fn options(facts: &Facts, root: Option<&str>) -> Vec<(String, Option<String>)> {
+fn options(
+    facts: &Facts,
+    acting: Option<Acting>,
+    root: Option<&str>,
+) -> Vec<(String, Option<String>)> {
     let notebook = super::notebook_root_of(facts);
-    let desktop = desktop_folder(facts).filter(|d| Some(d) != notebook.as_ref());
+    let desktop = acting
+        .and_then(|acting| desktop_folder(facts, acting))
+        .filter(|d| Some(d) != notebook.as_ref());
     let mut options = vec![(NOTEBOOK.to_owned(), None)];
     if let Some(folder) = &desktop {
         options.push((
@@ -45,10 +54,9 @@ fn options(facts: &Facts, root: Option<&str>) -> Vec<(String, Option<String>)> {
     options
 }
 
-/// The folder of the local agent in the current desktop's active leaf.
-fn desktop_folder(facts: &Facts) -> Option<String> {
-    let desktop = facts.current_desktop()?;
-    let session = crate::desktop::session_of_leaf(desktop, &desktop.active_pane_id)?;
+/// The folder of the local agent of the leaf the window acts on.
+fn desktop_folder(facts: &Facts, (desktop, leaf): Acting) -> Option<String> {
+    let session = crate::desktop::session_of_leaf(desktop, leaf)?;
     let session = facts.sessions.iter().find(|s| s.id == session)?;
     if session.host.as_deref().is_some_and(|h| !h.is_empty()) {
         return None;
@@ -63,9 +71,15 @@ fn basename(path: &str) -> &str {
         .unwrap_or(path)
 }
 
-fn select(facts: &Facts, notebook: &Notebook, tile: &str, params: &str) -> Select {
+fn select(
+    facts: &Facts,
+    notebook: &Notebook,
+    acting: Option<Acting>,
+    tile: &str,
+    params: &str,
+) -> Select {
     let root = Params::parse(params).root;
-    let options = options(facts, root.as_deref());
+    let options = options(facts, acting, root.as_deref());
     let current = options
         .iter()
         .find(|(label, folder)| label != BROWSE && *folder == root)
@@ -111,12 +125,13 @@ fn select(facts: &Facts, notebook: &Notebook, tile: &str, params: &str) -> Selec
 pub(crate) fn trigger(
     facts: &Facts,
     notebook: &Notebook,
+    acting: Acting,
     tile: &str,
     params: &str,
     t: &Tokens,
 ) -> El {
     let mut unused = Vec::new();
-    select(facts, notebook, tile, params).build(attn_ui::kit(t), &mut unused)
+    select(facts, notebook, Some(acting), tile, params).build(attn_ui::kit(t), &mut unused)
 }
 
 /// The picker's open list, over the window.
@@ -127,7 +142,11 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some((_, params)) = io::tile_params(state, tile) else {
         return;
     };
-    select(&state.facts, &state.notebook, tile, &params).build(attn_ui::kit(t), layers);
+    let acting = state.window.acting(&state.facts);
+    let acting = acting
+        .as_ref()
+        .map(|(desktop, leaf)| (*desktop, leaf.as_str()));
+    select(&state.facts, &state.notebook, acting, tile, &params).build(attn_ui::kit(t), layers);
 }
 
 fn browse(tile: &str, tx: &mut Tx) {

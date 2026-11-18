@@ -678,7 +678,7 @@ fn root_options(world: &mut World, tile: &str) -> Vec<String> {
             json!({ "target": { "role": "option", "name": "Notebook" } }),
         )
         .unwrap();
-    ["Notebook", "Desktop — a", "x", "Browse…"]
+    ["Notebook", "Desktop — a", "Desktop — b", "x", "Browse…"]
         .into_iter()
         .filter(|name| shows_option(world, name))
         .map(str::to_owned)
@@ -737,6 +737,67 @@ fn the_root_picker_offers_the_notebook_the_agent_s_folder_and_the_tile_s_own_fol
     assert_eq!(
         root_options(&mut world, "n"),
         ["Notebook", "Desktop — a", "x", "Browse…"]
+    );
+    world.gesture(|d| d.press("escape"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_root_picker_offers_the_folder_of_the_editor_shown_alone_while_another_window_selects_another_agent()
+ {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let mut opened_for_a = editor_tile("n", "");
+    opened_for_a["tile_session_id"] = json!("s-a");
+    let tiles = || row(vec![pane("a"), pane("b"), opened_for_a.clone()]);
+    let mut world = start_with(&disk, Some(tiles()));
+    world.daemon.emit(attn_protocol::SessionsUpdatedMessage {
+        sessions: Some(
+            ["a", "b"]
+                .map(|agent| Session {
+                    id: format!("s-{agent}"),
+                    label: format!("Agent {agent}"),
+                    directory: format!("/work/{agent}"),
+                    profile_id: "work".into(),
+                    ..Session::default()
+                })
+                .to_vec(),
+        ),
+        ..attn_protocol::SessionsUpdatedMessage::new()
+    });
+    let selected = |leaf: &str, revision: i64| {
+        let mut desktop = desktop(tiles(), revision);
+        desktop.panes.push(DesktopPane {
+            desktop_id: DESKTOP.into(),
+            pane_id: "b".into(),
+            runtime_id: "r-b".into(),
+            session_id: "s-b".into(),
+            kind: "agent".into(),
+            ..DesktopPane::default()
+        });
+        desktop.active_pane_id = leaf.into();
+        ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: DESKTOP.into(),
+                ..Profile::default()
+            },
+            desktops: vec![desktop],
+            ..ProfileArrangementChangedMessage::new()
+        }
+    };
+    world.daemon.emit(selected("n", 2));
+    world.settle();
+    world
+        .automate("run", json!({ "name": "terminal.toggleMaximize" }))
+        .unwrap();
+    world.settle();
+    world.daemon.emit(selected("b", 3));
+    world.settle();
+
+    assert_eq!(
+        root_options(&mut world, "n"),
+        ["Notebook", "Desktop — a", "Browse…"]
     );
     world.gesture(|d| d.press("escape"));
     assert!(world.runtime_is_at_rest());

@@ -585,6 +585,7 @@ pub(super) fn lone(
         outposts: &state.facts.outposts,
         pictures: &state.pictures,
         notebook: &state.notebook,
+        acting: &leaf.id,
         facts: &state.facts,
         marks: (&state.drafts, &state.readings),
         browsers: &state.browser,
@@ -643,6 +644,7 @@ fn screen(
                     &desktop.id,
                 );
                 let terminal_colors = crate::color_scheme(&facts.settings).colors(t.dark).terminal;
+                let acting = desk.acting_leaf(desktop);
                 let cx = TileCx {
                     desktop,
                     seeds,
@@ -673,6 +675,7 @@ fn screen(
                     outposts: &facts.outposts,
                     pictures,
                     notebook,
+                    acting: &acting,
                     facts,
                     marks,
                     browsers,
@@ -754,6 +757,8 @@ struct TileCx<'a> {
     outposts: &'a [attn_protocol::OutpostInfo],
     pictures: &'a crate::markdown::Pictures,
     notebook: &'a crate::notebook::Notebook,
+    /// The leaf this window acts on.
+    acting: &'a str,
     facts: &'a attn_client::Facts,
     marks: (&'a crate::markdown::Drafts, &'a crate::markdown::Readings),
     browsers: &'a crate::browser::Browsers,
@@ -1398,6 +1403,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
                 Some(crate::notebook::root_picker(
                     cx.facts,
                     cx.notebook,
+                    (cx.desktop, cx.acting),
                     &leaf.id,
                     params.as_deref().unwrap_or(""),
                     t,
