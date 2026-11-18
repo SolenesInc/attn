@@ -162,8 +162,10 @@ A language with no server still reads. Only the jumps are missing. Languages
 attn knows but has no built-in definition for, such as Java, C or Ruby, also
 show `no server`. Press `s` to start an agent on the machine that holds the
 files. The agent finds, installs or links a server, and defines one when
-needed. The key line links to that agent while it works, and the review gains
-navigation once the agent's `attn nav check` passes. Press `x` to stop the
+needed. It works in the review's checkout beside any agent already there. The
+key line links to that agent while it works, and the review gains navigation
+once the agent's `attn nav check` passes. When the agent stops without a working
+server, the key line offers `s` again, which starts another agent. Press `x` to stop the
 offer in this repository, and press `x` again to bring it back. `s` still works
 while the offer is off.
 

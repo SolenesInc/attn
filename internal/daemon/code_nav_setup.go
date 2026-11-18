@@ -151,6 +151,7 @@ func (d *Daemon) launchCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSe
 	}
 	if inspection.Branch != "" {
 		delegate.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: inspection.Branch}
+		delegate.AllowWorktreeReuse = protocol.Ptr(true)
 	} else {
 		delegate.Cwd = "~"
 	}

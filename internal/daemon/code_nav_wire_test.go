@@ -594,6 +594,43 @@ func TestASetupRefusesASecondAgentWhileItLaunchesAndKeepsItsAgentWhenTheAppThatA
 	})
 }
 
+func TestTheSetupKeyAgainAfterItsAgentWentIdleStartsAnotherAgentInTheSameCheckout(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Name the sum\n\n## Twice uses Add\n\n### use.go:3-5\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	shown := awaitNavigation(app, document, "go", "missing")
+	missing := navigation(shown.Review, "go")
+	setup := protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail}
+
+	first := requestCodeNavSetup(app, setup)
+	if !first.Success {
+		t.Fatalf("the first setup answered %+v (error %s), want the session it started", first, protocol.Deref(first.Error))
+	}
+	idle := protocol.Deref(first.SessionID)
+	agent := w.Launched(string(idle))
+	agent.Prompted()
+	agent.Reply("No gopls here. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, string(idle), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	again := requestCodeNavSetup(app, setup)
+	if !again.Success || protocol.Deref(again.SessionID) == idle {
+		t.Fatalf("setup again after the first agent went idle answered %+v (error %s), want another agent", again, protocol.Deref(again.Error))
+	}
+	testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.Path == document && protocol.Deref(navigation(m.Review, "go").SetupSessionID) == protocol.Deref(again.SessionID)
+	})
+}
+
 func TestAReviewOfALanguageWithNoDefinitionShowsItMissingUntilOneIsSet(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
