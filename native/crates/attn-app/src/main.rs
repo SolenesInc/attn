@@ -10,7 +10,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[global_allocator]
-static ALLOCATOR: procwatch::alloc::Counting = procwatch::alloc::Counting::system();
+static ALLOCATOR: procwatch::alloc::Counting =
+    procwatch::alloc::Counting::dormant(std::alloc::System);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -41,6 +42,7 @@ fn main() -> ExitCode {
         .then(|| attn_app::instance::debug_dir(&launch.instance.bundle_id))
         .flatten()
     {
+        ALLOCATOR.start();
         attn_app::frame_recorder::start(&debug);
     }
     let app = attn_app::native_app(&launch.instance.bundle_id)

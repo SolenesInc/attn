@@ -2504,7 +2504,7 @@ checksum = "9c4482d912d7671a7cd2089794f90ef3bb5f5f8c738230fb0fcd50fa020f0ed3"
 [[package]]
 name = "parley_engine"
 version = "0.12.0"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "fontique",
  "harfrust",
@@ -2734,7 +2734,7 @@ dependencies = [
 [[package]]
 name = "procwatch"
 version = "0.1.0"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "libc",
 ]
@@ -2956,7 +2956,7 @@ dependencies = [
 [[package]]
 name = "rune"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -3035,7 +3035,7 @@ dependencies = [
 [[package]]
 name = "rune-highlights"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "unicode-ident",
  "wasmparser",
@@ -3044,7 +3044,7 @@ dependencies = [
 [[package]]
 name = "rune-kit"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "icu_normalizer",
  "pulldown-cmark",
@@ -3058,7 +3058,7 @@ dependencies = [
 [[package]]
 name = "rune-mac"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "objc2 0.5.3",
  "rune-notify",
@@ -3067,7 +3067,7 @@ dependencies = [
 [[package]]
 name = "rune-mermaid"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "rune",
 ]
@@ -3075,12 +3075,12 @@ dependencies = [
 [[package]]
 name = "rune-motion"
 version = "0.1.0"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 
 [[package]]
 name = "rune-notify"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "block2 0.5.1",
  "objc2 0.5.3",
@@ -3089,7 +3089,7 @@ dependencies = [
 [[package]]
 name = "rune-perf"
 version = "0.1.0"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "procwatch",
  "serde_json",
@@ -3098,7 +3098,7 @@ dependencies = [
 [[package]]
 name = "rune-staging"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "wgpu",
 ]
@@ -3106,7 +3106,7 @@ dependencies = [
 [[package]]
 name = "rune-taffy"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a#a9c7adfbda4ea0c0f1cbf255cbd0882be9e33d4a"
+source = "git+https://github.com/SolenesInc/rune?rev=a63e52309eebf4dd395c0862514bb49f16dfa99f#a63e52309eebf4dd395c0862514bb49f16dfa99f"
 dependencies = [
  "taffy",
 ]
