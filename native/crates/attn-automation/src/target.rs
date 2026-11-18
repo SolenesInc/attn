@@ -1,9 +1,13 @@
-use rune::{ElementInfo, Runtime};
+use std::collections::HashMap;
+
+use rune::{AccessibleElement, ElementInfo, Runtime};
 use serde::{Deserialize, Serialize};
 
 /// An element named the way a person or an assistive tool would: by its key, or by its role
-/// and accessible name. A role alone matches its first element, and a key with a name matches
-/// only while that element carries the name.
+/// and accessible name. A role is the one the view gives the element, as `"option"`, or the
+/// one the accessibility tree prints for it, as `"list-box-option"`; a name is its label, its
+/// text, or the name the tree prints. Of several matching elements, the first that shows wins,
+/// else the first; a key with a name matches only while that element carries the name.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Target {
@@ -24,7 +28,7 @@ pub enum Target {
 pub struct Found {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    pub role: &'static str,
+    pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// x, y, width, height in the window's points.
@@ -43,25 +47,41 @@ pub struct Found {
     pub(crate) moving: bool,
 }
 
-fn named(e: &ElementInfo, name: &Option<String>) -> bool {
-    name.as_ref()
-        .is_none_or(|name| accessible_name(e) == Some(name))
-}
-
 impl Target {
-    fn matches(&self, e: &ElementInfo) -> bool {
+    fn matches(&self, e: &ElementInfo, read: Option<&AccessibleElement>) -> bool {
+        let named = |name: &Option<String>| {
+            name.as_ref().is_none_or(|name| {
+                accessible_name(e) == Some(name)
+                    || read.is_some_and(|a| a.name.as_ref() == Some(name))
+            })
+        };
         match self {
-            Target::Key { key, name } => e.key.as_deref() == Some(key) && named(e, name),
-            Target::Role { role, name } => e.role == role && named(e, name),
+            Target::Key { key, name } => e.key.as_deref() == Some(key) && named(name),
+            Target::Role { role, name } => {
+                (e.role == role || read.is_some_and(|a| a.role == *role)) && named(name)
+            }
         }
     }
 
-    /// The first live element it names, with whether it or an ancestor still moves.
+    /// The live element it names, the first that shows when several do, with whether it or an
+    /// ancestor still moves.
     pub fn find<S>(&self, rt: &Runtime<S>) -> Option<Found> {
         let elements = rt.elements();
-        let index = elements
-            .iter()
-            .position(|e| !e.exiting && self.matches(e))?;
+        let mut read: HashMap<String, AccessibleElement> = rt
+            .accessible_elements()
+            .into_iter()
+            .map(|a| (a.path.clone(), a))
+            .collect();
+        let matching: Vec<usize> = (0..elements.len())
+            .filter(|&i| {
+                !elements[i].exiting && self.matches(&elements[i], read.get(&elements[i].path))
+            })
+            .collect();
+        let shows = |&&i: &&usize| {
+            let [_, _, w, h] = elements[i].visible;
+            w > 0.0 && h > 0.0
+        };
+        let index = *matching.iter().find(shows).or(matching.first())?;
         let e = &elements[index];
         let mut moving = e.moving;
         let mut parent = e.parent;
@@ -79,10 +99,13 @@ impl Target {
             })
             .unwrap_or(&e.path)
             .clone();
+        let read = read.remove(&e.path);
         Some(Found {
             key: e.key.clone(),
-            role: e.role,
-            name: accessible_name(e).cloned(),
+            role: read.as_ref().map_or(e.role.to_owned(), |a| a.role.clone()),
+            name: read
+                .and_then(|a| a.name)
+                .or_else(|| accessible_name(e).cloned()),
             rect: e.rect,
             index,
             path: e.path.clone(),

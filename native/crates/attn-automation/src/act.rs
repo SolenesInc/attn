@@ -339,28 +339,25 @@ fn pointer<S: 'static>(
     }))
 }
 
-/// Asks the window, as assistive technology does, to scroll the element's nearest keyed
-/// element into view: input the window handles and draws, through Rune's own reveal.
+/// Asks the window, as assistive technology does, to scroll the element into view: input the
+/// window handles and draws, through Rune's own reveal.
 fn scroll_into_view<S: 'static>(rt: &mut Runtime<S>, found: &Found) -> Attempt {
     let elements = rt.elements();
-    let lineage = || std::iter::successors(Some(found.index), |&i| elements[i].parent);
-    let shown = lineage().skip(1).any(|p| {
-        let [_, _, w, h] = elements[p].visible;
-        w > 0.0 && h > 0.0
-    });
+    let shown =
+        std::iter::successors(elements[found.index].parent, |&i| elements[i].parent).any(|p| {
+            let [_, _, w, h] = elements[p].visible;
+            w > 0.0 && h > 0.0
+        });
     if !shown {
         return Attempt::Fail(format!(
             "{:?} is laid out but nothing of it shows",
             found.key
         ));
     }
-    let asked = lineage()
-        .filter_map(|i| elements[i].key.as_deref())
-        .any(|key| rt.accessibility_action(key, Action::ScrollIntoView, None));
-    if !asked {
+    if !rt.accessibility_action_at(&found.path, Action::ScrollIntoView, None) {
         return Attempt::Fail(format!(
-            "{:?} is outside its scroll view and nothing keyed around it scrolls into view",
-            found.key
+            "{:?} is outside its scroll view and does not scroll into view",
+            found.key.as_deref().unwrap_or(&found.path)
         ));
     }
     Attempt::Wait("the element to scroll into view".into())
@@ -368,7 +365,7 @@ fn scroll_into_view<S: 'static>(rt: &mut Runtime<S>, found: &Found) -> Attempt {
 
 #[cfg(test)]
 mod tests {
-    use rune::{Cx, El, Env, Link, Spring, el, text};
+    use rune::{Cx, El, Env, Link, ScrollSpec, Spring, col, el, row, text};
 
     use super::*;
 
@@ -448,5 +445,81 @@ mod tests {
         rt.frame(0.016);
         assert_eq!(receipt["matched"], true, "{receipt}");
         assert!(*rt.state(), "the link was followed");
+    }
+
+    fn tall_section(_: &bool, _: &mut Cx<bool>) -> El {
+        col()
+            .h(200.0)
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(
+                col().key("section").child(col().h(600.0)).child(
+                    row()
+                        .role("button")
+                        .label("Save")
+                        .h(20.0)
+                        .on_press(|saved: &mut bool| *saved = true)
+                        .child(text("Save")),
+                ),
+            )
+    }
+
+    #[test]
+    fn a_press_by_role_scrolls_an_unkeyed_button_into_view_inside_a_keyed_section_taller_than_its_scroll_view()
+     {
+        let mut rt = Runtime::new(false, tall_section, (300.0, 200.0), Env::default());
+        rt.frame(0.0);
+        let press = json!({"target": {"role": "button", "name": "Save"}});
+
+        let mut attempt = act(&mut rt, &Hooksless, "press", &press);
+        for frame in 1..20 {
+            let Attempt::Wait(_) = attempt else { break };
+            rt.frame(frame as f64 * 0.016);
+            attempt = act(&mut rt, &Hooksless, "press", &press);
+        }
+        let Attempt::Done(receipt) = attempt else {
+            panic!("the press never landed: {attempt:?}");
+        };
+        rt.frame(1.0);
+        assert_eq!(receipt["matched"], true, "{receipt}");
+        assert!(*rt.state(), "the button was pressed");
+    }
+
+    #[test]
+    fn a_role_and_name_the_tree_prints_find_an_option_and_the_first_that_shows_wins() {
+        fn options(_: &bool, _: &mut Cx<bool>) -> El {
+            col()
+                .child(
+                    col()
+                        .h(20.0)
+                        .scroll(ScrollSpec {
+                            stick_bottom: false,
+                        })
+                        .child(col().h(40.0))
+                        .child(
+                            row()
+                                .role("option")
+                                .on_press(|_: &mut bool| {})
+                                .child(text("Notebook")),
+                        ),
+                )
+                .child(
+                    row()
+                        .role("option")
+                        .on_press(|picked: &mut bool| *picked = true)
+                        .child(text("Notebook")),
+                )
+        }
+        let mut rt = Runtime::new(false, options, (300.0, 200.0), Env::default());
+        rt.frame(0.0);
+        let press = json!({"target": {"role": "list-box-option", "name": "Notebook"}});
+
+        let Attempt::Done(receipt) = act(&mut rt, &Hooksless, "press", &press) else {
+            panic!("the press did not reach the option");
+        };
+        rt.frame(0.016);
+        assert_eq!(receipt["target"]["role"], "list-box-option", "{receipt}");
+        assert!(*rt.state(), "the option that shows was pressed");
     }
 }

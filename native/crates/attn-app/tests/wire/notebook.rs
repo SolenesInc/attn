@@ -847,6 +847,33 @@ fn choosing_a_root_writes_it_without_the_open_file_and_the_notebook_writes_no_pa
 }
 
 #[test]
+fn a_root_option_named_by_the_role_and_name_the_tree_prints_is_found_and_pressed() {
+    let disk = Disk::with(&[("plan.md", PLAN)]);
+    let mut world = start_with(
+        &disk,
+        Some(row(vec![
+            pane("a"),
+            editor_tile("n", r#"{"root":"/other/x","path":"plan.md"}"#),
+        ])),
+    );
+    world
+        .automate("press", json!({ "target": { "key": root_trigger("n") } }))
+        .unwrap();
+    let notebook = json!({ "target": { "role": "list-box-option", "name": "Notebook" } });
+
+    let found = world.automate("find", notebook.clone()).unwrap();
+    assert_eq!(
+        (&found["role"], &found["name"]),
+        (&json!("list-box-option"), &json!("Notebook")),
+        "{found}"
+    );
+    world.automate("press", notebook).unwrap();
+    world.settle();
+
+    assert_eq!(last_params(&world), Some(json!("")));
+}
+
+#[test]
 fn browsing_roots_the_tile_at_the_chosen_folder_and_a_cancel_changes_nothing() {
     let disk = Disk::default();
     let mut world = start_with(&disk, Some(row(vec![pane("a"), editor_tile("n", "")])));
