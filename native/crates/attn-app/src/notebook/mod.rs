@@ -886,24 +886,36 @@ fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
 /// The images the open notes show, with the folder each is read from and how many times files
 /// there changed, for the window's pictures to read and read again.
 pub(crate) fn images(state: &State) -> Vec<(Option<String>, String, u64)> {
+    open_notes(state)
+        .flat_map(|(root, editor, changes)| {
+            editor
+                .images()
+                .into_iter()
+                .map(move |p| (root.clone(), p, changes))
+        })
+        .collect()
+}
+
+/// The widest an open note under each folder draws its images, in points.
+pub(crate) fn image_widths(state: &State) -> std::collections::HashMap<Option<String>, f32> {
+    let mut widths = std::collections::HashMap::new();
+    for (root, editor, _) in open_notes(state) {
+        let widest: &mut f32 = widths.entry(root).or_default();
+        *widest = widest.max(editor.width);
+    }
+    widths
+}
+
+fn open_notes(state: &State) -> impl Iterator<Item = (Option<String>, &editor::Editor, u64)> {
     let notebook = &state.notebook;
     notebook
         .fullscreen
         .iter()
         .chain(notebook.tiles.values())
-        .filter_map(|s| {
-            let open = s.open()?;
-            match &open.draft {
-                model::Draft::Note(editor) => {
-                    Some((io::root(state, s), editor.images(), s.changes))
-                }
-                model::Draft::Field(_) => None,
-            }
+        .filter_map(|s| match &s.open()?.draft {
+            model::Draft::Note(editor) => Some((io::root(state, s), &**editor, s.changes)),
+            model::Draft::Field(_) => None,
         })
-        .flat_map(|(root, paths, changes)| {
-            paths.into_iter().map(move |p| (root.clone(), p, changes))
-        })
-        .collect()
 }
 
 /// Where the note in the editor keyed `key` reads its images from, and its folder.

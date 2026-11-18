@@ -522,6 +522,69 @@ fn a_documents_local_images_show_through_the_daemon_and_open_larger() {
     rest(&mut world);
 }
 
+/// A 3200×40 strip of a screenshot: in a reader's 760 point measure at 2×, 1600 pixels across show it all.
+const WIDE_STRIP: &[u8] = include_bytes!("../fixtures/wide-strip.png");
+
+/// The largest level of the picture the image element labelled `label` draws from.
+fn picture_held(world: &World, label: &str) -> Option<(u32, u32)> {
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| !e.exiting && e.role == "image" && e.label.as_deref() == Some(label))
+        .unwrap_or_else(|| panic!("no image labelled {label} is drawn"))
+        .picture
+}
+
+#[test]
+fn a_documents_large_image_holds_the_size_it_draws_and_its_preview_the_whole_image_while_open() {
+    use base64::Engine;
+    let mut world = start();
+    world.daemon.on("tile_asset_read", |r| {
+        let data = base64::engine::general_purpose::STANDARD.encode(WIDE_STRIP);
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            data_uri: Some(format!("data:image/png;base64,{data}")),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.daemon.emit(content("![shot](shot.png)"));
+    world.settle();
+    assert_eq!(picture_held(&world, "shot"), Some((1600, 20)));
+
+    world.gesture(|app| app.click(Target::role("image").name("shot")));
+    world.settle();
+    assert_eq!(
+        world.daemon.sent_of("tile_asset_read").len(),
+        2,
+        "the preview reads the file again"
+    );
+    let preview = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("image-preview.picture"))
+        .expect("the preview shows the picture");
+    assert_eq!(preview.picture, Some((3200, 40)));
+
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert!(
+        world
+            .screen()
+            .find(Target::key("image-preview.picture"))
+            .is_none()
+    );
+    assert_eq!(picture_held(&world, "shot"), Some((1600, 20)));
+    rest(&mut world);
+}
+
 /// An 8×2 green PNG.
 const GREEN: &str = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAACCAIAAADq9gq6AAAAEElEQVR4nGNg+M+AHeGSAACOsQ/xb1SVcwAAAABJRU5ErkJggg==";
 

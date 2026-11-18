@@ -191,6 +191,9 @@ pub fn wall_clock_ms() -> i64 {
 
 const READS: Slices = Slices::ALL;
 
+/// Device pixels per point the app decodes pictures for: a Mac's Retina screen.
+pub(crate) const PICTURE_SCALE: f32 = 2.0;
+
 /// Hands the window every change to a slice it reads, through `deliver`: `AppHandle::update`
 /// in the app, the world's inbox in a wire test. The window sends its commands on `daemon` and
 /// takes what the link hears about terminals from `terminals`, and answers to its requests from

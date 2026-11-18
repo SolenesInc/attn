@@ -81,8 +81,16 @@ pub struct Pictures {
 
 /// What is open larger over the window.
 enum Shown {
-    Image { image: Image, alt: String },
-    Diagram { source: String },
+    /// A document's picture, and the read of its file whole when the document holds it smaller,
+    /// shown once it is ready so actual size is sharp.
+    Image {
+        image: Image,
+        alt: String,
+        whole: Option<Box<(Source, Load)>>,
+    },
+    Diagram {
+        source: String,
+    },
 }
 
 static ZOOM_OUT: Icon = Icon {
@@ -111,7 +119,19 @@ impl Pictures {
 
     /// Whether a picture is still decoding, which will wake the window when it is done.
     pub fn decoding(&self) -> bool {
-        self.loads.values().any(|l| matches!(l, Load::Decoding(..)))
+        self.loads
+            .values()
+            .chain(self.whole())
+            .any(|l| matches!(l, Load::Decoding(..)))
+    }
+
+    fn whole(&self) -> Option<&Load> {
+        match &self.shown {
+            Some(Shown::Image {
+                whole: Some(whole), ..
+            }) => Some(&whole.1),
+            _ => None,
+        }
     }
 
     /// The pictures of a document on `host`, by the paths its images resolve to: the one each
@@ -273,8 +293,30 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
             }
         }
     }
+    let widths = crate::notebook::image_widths(state);
+    let zoom = crate::settings::text_scale(&state.facts.settings);
+    let blurred: Vec<Source> = state
+        .pictures
+        .loads
+        .iter()
+        .filter(|(source, load)| match load {
+            Load::Ready(image) => holds_less(image, widest(source, &widths, zoom)),
+            _ => false,
+        })
+        .map(|(source, _)| source.clone())
+        .collect();
+    for source in blurred {
+        read(state, source, tx);
+    }
+    let pictures = &mut state.pictures;
+    let whole = match &mut pictures.shown {
+        Some(Shown::Image {
+            whole: Some(whole), ..
+        }) => Some(&mut whole.1),
+        _ => None,
+    };
     let mut changed = false;
-    for load in state.pictures.loads.values_mut() {
+    for load in pictures.loads.values_mut().chain(whole) {
         if let Load::Decoding(image, _) = load
             && image.is_ready()
         {
@@ -291,6 +333,26 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     changed | state.pictures.zoom.poll(now, tx)
 }
 
+/// The widest `source` draws, in the window's points at text size `zoom`: a note's column, or
+/// the reader's prose measure.
+fn widest(source: &Source, notes: &HashMap<Option<String>, f32>, zoom: f32) -> f32 {
+    let column = match &source.reader {
+        Reader::Notebook { root } => notes.get(root).copied(),
+        Reader::Tile { .. } | Reader::Ask(_) => None,
+    };
+    column.unwrap_or(super::PROSE_MEASURE) * zoom
+}
+
+/// Whether `image` holds a smaller picture than drawing it `width` points across shows, while
+/// its file has a larger one.
+fn holds_less(image: &Image, width: f32) -> bool {
+    let need = (width * crate::PICTURE_SCALE).ceil();
+    match (image.pixels().sharpest(), image.size()) {
+        (Some((held, _)), Some([own, _])) => held < own && (held as f32) < need,
+        _ => false,
+    }
+}
+
 fn read(state: &mut State, source: Source, tx: &mut Tx) {
     let before = state.pictures.loads.remove(&source);
     let previous = before.as_ref().and_then(Load::shown).cloned();
@@ -298,6 +360,17 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
         .pictures
         .loads
         .insert(source.clone(), Load::Asked(previous));
+    fetch(state, source, arrived, tx);
+}
+
+/// Reads `source`'s file through the daemon, and hands `then` its bytes, or `None` when it could
+/// not be read.
+fn fetch(
+    state: &mut State,
+    source: Source,
+    then: fn(&mut State, Source, Option<Vec<u8>>),
+    tx: &mut Tx,
+) {
     let path = source.path.clone();
     match source.reader.clone() {
         Reader::Tile { host } => state.ask(
@@ -314,7 +387,7 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
                     .and_then(|reply| reply.parse::<TileAssetReadResultMessage>())
                     .and_then(|result| result.data_uri)
                     .and_then(|uri| decoded(&uri));
-                arrived(state, source, bytes);
+                then(state, source, bytes);
             },
             tx,
         ),
@@ -336,7 +409,7 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
                             .decode(r.data_base64)
                             .ok()
                     });
-                arrived(state, source, bytes);
+                then(state, source, bytes);
             },
             tx,
         ),
@@ -355,7 +428,7 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
                     .filter(|result| result.success)
                     .and_then(|result| result.data_base64)
                     .and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok());
-                arrived(state, source, bytes);
+                then(state, source, bytes);
             },
             tx,
         ),
@@ -367,8 +440,13 @@ fn arrived(state: &mut State, source: Source, bytes: Option<Vec<u8>>) {
         return;
     };
     let previous = previous.clone();
+    let zoom = crate::settings::text_scale(&state.facts.settings);
+    let width = widest(&source, &crate::notebook::image_widths(state), zoom);
     let load = match (bytes, &state.pictures.cache) {
-        (Some(bytes), Some(cache)) => Load::Decoding(cache.load(bytes), previous),
+        (Some(bytes), Some(cache)) => Load::Decoding(
+            cache.load_across(bytes, width, crate::PICTURE_SCALE),
+            previous,
+        ),
         _ => Load::Failed,
     };
     if matches!(load, Load::Failed) {
@@ -387,14 +465,45 @@ fn decoded(data_uri: &str) -> Option<Vec<u8>> {
     base64::engine::general_purpose::STANDARD.decode(data).ok()
 }
 
-/// Opens `image` larger, over the window.
+/// Opens `image` larger, over the window, reading its file again to decode it whole when the
+/// document holds it smaller.
 pub(crate) fn show(state: &mut State, image: Image, alt: &str, tx: &mut Tx) {
     state.pictures.zoom.reset();
+    let smaller = holds_less(&image, f32::INFINITY);
+    let source = state
+        .pictures
+        .loads
+        .iter()
+        .find(|(_, load)| load.shown().is_some_and(|i| i.id() == image.id()))
+        .map(|(source, _)| source.clone())
+        .filter(|_| smaller);
     state.pictures.shown = Some(Shown::Image {
         image,
         alt: alt.to_owned(),
+        whole: source.clone().map(|s| Box::new((s, Load::Asked(None)))),
     });
+    if let Some(source) = source {
+        fetch(state, source, opened, tx);
+    }
     tx.focus(image_zoom::KEY, false);
+}
+
+fn opened(state: &mut State, source: Source, bytes: Option<Vec<u8>>) {
+    let pictures = &mut state.pictures;
+    let Some(Shown::Image {
+        whole: Some(whole), ..
+    }) = &mut pictures.shown
+    else {
+        return;
+    };
+    let (shown, load) = &mut **whole;
+    if *shown != source || !matches!(load, Load::Asked(_)) {
+        return;
+    }
+    *load = match (bytes, &pictures.cache) {
+        (Some(bytes), Some(cache)) => Load::Decoding(cache.load(bytes), None),
+        _ => Load::Failed,
+    };
 }
 
 /// Opens diagram `source`, `size` points at its natural size, over the window at 100% from its
@@ -424,7 +533,11 @@ fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<E
         &mut s.pictures.zoom
     }
     let preview = match state.pictures.shown.as_ref()? {
-        Shown::Image { image, alt } => {
+        Shown::Image { image, alt, whole } => {
+            let image = match whole.as_deref() {
+                Some((_, Load::Ready(whole))) => whole,
+                _ => image,
+            };
             let [w, h] = image.size()?;
             let label = if alt.is_empty() {
                 "Image preview"

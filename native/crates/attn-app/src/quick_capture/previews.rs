@@ -14,7 +14,6 @@ use super::{Message, Panel, result};
 /// The largest an image draws in the panel, in points at the largest text size: each picture
 /// holds only the pixels that fill a square this size, however large the image.
 const LARGEST: f32 = 132.0 * crate::settings::LARGEST_TEXT_SCALE;
-const SCALE: f32 = 2.0;
 
 #[derive(Default)]
 pub(crate) struct Previews {
@@ -74,7 +73,7 @@ pub(super) fn follow(panel: &mut Panel) -> bool {
             previews
                 .drafted
                 .entry(path)
-                .or_insert_with_key(|path| cache.file(path, LARGEST, SCALE));
+                .or_insert_with_key(|path| cache.file(path, LARGEST, crate::PICTURE_SCALE));
         }
     }
     let finished = panel.pictures().filter(|image| image.is_ready()).count();
@@ -156,9 +155,12 @@ fn download(
                         return download(panel, key, media_type, next, bytes, tx);
                     }
                     match &panel.previews.cache {
-                        Some(cache) => {
-                            Sent::Shown(cache.load_mime(bytes, &media_type, LARGEST, SCALE))
-                        }
+                        Some(cache) => Sent::Shown(cache.load_mime(
+                            bytes,
+                            &media_type,
+                            LARGEST,
+                            crate::PICTURE_SCALE,
+                        )),
                         None => Sent::Failed("Images cannot be shown here.".to_owned()),
                     }
                 }
