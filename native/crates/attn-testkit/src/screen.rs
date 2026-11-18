@@ -70,7 +70,46 @@ impl Node {
 /// The window's accessibility tree at one moment.
 pub struct Screen(pub(crate) Value);
 
+/// Roles a person operates. Each needs a name, or a screen reader says only what it is.
+const CONTROLS: [&str; 18] = [
+    "button",
+    "default-button",
+    "link",
+    "check-box",
+    "radio-button",
+    "switch",
+    "tab",
+    "list-box-option",
+    "menu-item",
+    "menu-item-check-box",
+    "menu-item-radio",
+    "tree-item",
+    "combo-box",
+    "text-input",
+    "multiline-text-input",
+    "search-input",
+    "slider",
+    "spin-button",
+];
+
 impl Screen {
+    /// The window's tree as a screen reader reads it. Panics when a control in it has no
+    /// name, since a test, like a person using a screen reader, could not tell it apart.
+    pub(crate) fn read(tree: Value) -> Screen {
+        let screen = Screen(tree);
+        let unnamed: Vec<Node> = screen
+            .nodes()
+            .into_iter()
+            .filter(|n| CONTROLS.contains(&n.role.as_str()))
+            .filter(|n| n.name.as_deref().is_none_or(|name| name.trim().is_empty()))
+            .collect();
+        assert!(
+            unnamed.is_empty(),
+            "controls with no accessible name: {unnamed:#?}"
+        );
+        screen
+    }
+
     pub fn find(&self, target: Target) -> Option<Node> {
         self.nodes().into_iter().find(|node| target.matches(node))
     }

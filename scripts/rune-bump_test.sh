@@ -23,7 +23,7 @@ write_crate() {
   printf '%s\n' "$body" >"$dir/crates/$name/src/lib.rs"
 }
 
-# A Rune with three crates and a [patch.crates-io] that patches nothing it uses,
+# A Rune with four crates and a [patch.crates-io] that patches nothing it uses,
 # forked into a main branch that carries one change, listed in FORK.md with its
 # tests and its commit.
 setup() {
@@ -40,6 +40,7 @@ pub use api::*;'
   write_crate "$up" rune-kit 'pub fn kit() -> u32 { 1 }'
   printf '\n[features]\nmarkdown = []\nmermaid = ["markdown"]\n' >>"$up/crates/rune-kit/Cargo.toml"
   write_crate "$up" rune-mermaid 'pub fn shapes() -> u32 { 3 }'
+  write_crate "$up" rune-perf 'pub fn frames() -> u32 { 4 }'
   mkdir -p "$up/vendor/winit/src"
   printf '[package]\nname = "winit"\nversion = "0.30.0"\nedition = "2021"\n' >"$up/vendor/winit/Cargo.toml"
   : >"$up/vendor/winit/src/lib.rs"

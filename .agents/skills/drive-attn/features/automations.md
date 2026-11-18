@@ -236,6 +236,7 @@ Steps:
 - **Keyboard and native input**: ⌘⇧J and the palette reach runs. The drawer and the form are pointer-first, and their controls take Tab and Enter like any form.
 - **Compatibility across versions**: a definition carrying `enabled` is refused with `enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'`, and one carrying `policy` with `policy has been removed; scheduled triggers take continuity and catch_up directly`. Unknown fields are refused by name.
 - **Flow**: in queue flow, runs stay out of the user's queue. The queue sidebar groups current sessions under their automation, and the queue bar counts them and outstanding turns. Superseded singleton sessions stay in run history, and their outstanding turns still join next-run navigation. In desktop flow sessions keep their tiles on the launch desktop, marked ⚡.
+- **Accessibility**: in the native app each row's blank stretch selects the row on a click but is hidden from VoiceOver, which reaches the row through `automations.select.<id>`. The time zone field names the highlighted zone as its active descendant, and the suggestion popup's body is not a control.
 
 ## Tests
 

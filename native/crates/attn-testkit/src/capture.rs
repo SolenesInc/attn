@@ -125,7 +125,7 @@ impl CaptureRuntime {
     }
 
     pub(crate) fn screen(&self) -> Screen {
-        Screen(self.runtime.accessibility_json())
+        Screen::read(self.runtime.accessibility_json())
     }
 
     /// Runs what was handed the panel, and draws it.

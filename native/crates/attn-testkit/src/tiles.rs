@@ -191,7 +191,7 @@ impl TileRuntime {
     }
 
     pub(crate) fn screen(&self) -> Screen {
-        Screen(self.runtime.accessibility_json())
+        Screen::read(self.runtime.accessibility_json())
     }
 
     /// Runs what the app handed the window, and draws it.

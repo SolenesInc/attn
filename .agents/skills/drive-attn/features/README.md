@@ -313,6 +313,9 @@ HEAD.
 - **Compatibility across versions**: a later version reading today's data
   and talking to agents an earlier version started, and retired commands.
 - **Flow**: what changes between queue flow and desktop flow.
+- **Accessibility**: what a screen reader hears, and what the accessibility
+  tree shows for it: names, roles, and the row a field names as its active
+  descendant.
 
 ## Features
 

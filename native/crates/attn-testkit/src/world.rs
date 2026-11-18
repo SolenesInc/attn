@@ -860,7 +860,7 @@ impl World {
     }
 
     pub fn screen(&self) -> Screen {
-        Screen(self.runtime.accessibility_json())
+        Screen::read(self.runtime.accessibility_json())
     }
 
     /// No frame requested and no wake deadline: an idle window that draws nothing.

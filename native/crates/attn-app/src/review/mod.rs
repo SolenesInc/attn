@@ -656,7 +656,11 @@ pub(crate) fn body(
                         .w_full()
                         .max_w(prose_width(*kind))
                         .child(block);
-                    cursor_frame(place_press(el, tile, key), current.is_some(), t)
+                    cursor_frame(
+                        place_press(el, tile, key).role("group"),
+                        current.is_some(),
+                        t,
+                    )
                 }
                 Part::Summary => keys::summary(
                     tile,

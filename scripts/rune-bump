@@ -253,7 +253,7 @@ bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --bra
   [ -n "$ledger" ] || die "FORK.md lists no tests"
   [ -x "$worktree/scripts/test.sh" ] || die "the new main has no scripts/test.sh, which runs the fork's tests"
   test_cargo() {
-    run env CARGO_TARGET_DIR="$clone/target" scripts/test.sh -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid "$@" </dev/null
+    run env CARGO_TARGET_DIR="$clone/target" scripts/test.sh -p rune -p rune-kit -p rune-mermaid -p rune-perf --features rune-kit/markdown,rune-kit/mermaid "$@" </dev/null
   }
   passed() { grep -qxF -e "test $1 ... ok" -e "test $1 - should panic ... ok" "$2"; }
   unit_tests=() integration_tests=() missing=""

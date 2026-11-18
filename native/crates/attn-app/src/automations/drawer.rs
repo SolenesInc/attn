@@ -261,9 +261,15 @@ fn definition_row(
                 .gap(space::S2)
                 .items_center()
                 .child(summary)
-                .child(row().grow(1.0).self_stretch().on_press_tx(
-                    move |state: &mut State, tx: &mut Tx| super::select(state, id, tx),
-                ))
+                .child(
+                    row()
+                        .grow(1.0)
+                        .self_stretch()
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            super::select(state, id, tx)
+                        })
+                        .a11y_hidden(),
+                )
                 .child(
                     row()
                         .gap(space::S2)

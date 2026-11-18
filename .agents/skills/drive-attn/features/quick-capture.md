@@ -103,6 +103,7 @@ Preconditions:
 - **Performance and idle cost**: the panel opens with the message field focused. The scenarios record the time from the key press to focus in `opening-latency.json`; in the VM the native panel took 45 ms, 97 ms median and 527 ms at most over 17 openings (2026-11-16). Nothing measures the hidden panel's idle cost. When a change touches the panel, check the panel with `docs/internal/perf-testing.md`.
 - **Harnesses**: the message is typed as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: the global shortcut, Enter, Shift+Enter, ⌘K with arrows and Enter, ⌘1 to ⌘4 and Escape reach every action. The panel shares the app's text size shortcuts. The message field keeps focus while the panel shows, including after a click elsewhere in the panel; the native panel loses it on a press outside its controls (seed `s-x0jmn8`).
+- **Accessibility**: in the native app, while the mailbox list is open, the message field names the highlighted mailbox as its active descendant (`capture.mailbox.<id>`), so VoiceOver reads it as ↑ and ↓ move. The scrim around the list closes it on a click and is not a control.
 
 ## Tests
 
