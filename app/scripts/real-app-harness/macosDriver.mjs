@@ -19,7 +19,14 @@ const INPUT_DRIVER_SOURCE = path.join(SCRIPT_DIR, 'InputDriver.swift');
 const INPUT_DRIVER_BUILD_DIR = path.join(SCRIPT_DIR, '.build');
 const INPUT_DRIVER_BINARY = path.join(INPUT_DRIVER_BUILD_DIR, 'attn-real-input-driver');
 const CODESIGN_IDENTITY_SCRIPT = path.resolve(SCRIPT_DIR, '..', '..', '..', 'scripts', 'macos-codesign-identity.sh');
+const INPUT_DRIVER_LIMIT_MS = 15_000;
 let inputDriverReady = null;
+
+function inputDriverOutput(error) {
+  const stderr = error?.stderr?.toString?.() || '';
+  if (error?.killed) return `${stderr}The input driver was killed after ${INPUT_DRIVER_LIMIT_MS / 1000} s, before it reported a result.`;
+  return stderr || error.message;
+}
 
 function delay(ms) {
   if (ms === 0) return Promise.resolve();
@@ -355,12 +362,11 @@ export class MacOSDriver extends TargetedWindowDriver {
     const fullArgs = ['--bundle-id', this.bundleId, ...args];
     try {
       await execFileAsync(binaryPath, fullArgs, {
-        timeout: 5_000,
+        timeout: INPUT_DRIVER_LIMIT_MS,
       });
     } catch (error) {
       const stderr = error?.stderr?.toString?.() || '';
-      const hint = describeInputDriverFailure(stderr);
-      throw new Error(`${hint}\n${stderr || error.message}`);
+      throw new Error(`${describeInputDriverFailure(stderr)}\n${inputDriverOutput(error)}`);
     }
   }
 
@@ -369,12 +375,11 @@ export class MacOSDriver extends TargetedWindowDriver {
     const fullArgs = ['--bundle-id', this.bundleId, ...args];
     try {
       const { stdout } = await execFileAsync(binaryPath, fullArgs, {
-        timeout: 5_000,
+        timeout: INPUT_DRIVER_LIMIT_MS,
       });
       return stdout.toString().trim();
     } catch (error) {
-      const stderr = error?.stderr?.toString?.() || '';
-      throw new Error(`macOS input driver capture failed: ${stderr || error.message}`);
+      throw new Error(`macOS input driver capture failed: ${inputDriverOutput(error)}`);
     }
   }
 }
