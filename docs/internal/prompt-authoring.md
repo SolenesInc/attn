@@ -161,4 +161,8 @@ and how many seeds review on main routed findings to. It reads only the session
 ledger, transcripts and the garden, and calls no model. `collect` appends one
 line per closed session to a history file in the Notebook, because harnesses
 delete old transcripts, so run it at least every two weeks. To judge a prompt
-change, compare a window before it with a window after it.
+change, compare a window before it with a window after it. The
+[improve-workflow](../../.agents/skills/improve-workflow/SKILL.md) skill does
+that every two weeks as a cycle: it judges the last change, reads the escapes
+that `node scripts/workflow-scorecard.mjs escapes` lists, and proposes the next
+change.

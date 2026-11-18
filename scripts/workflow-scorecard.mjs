@@ -7,6 +7,7 @@ import readline from 'node:readline';
 import { parseArgs, promisify } from 'node:util';
 
 const usage = `usage: node scripts/workflow-scorecard.mjs collect [--history <file>]
+       node scripts/workflow-scorecard.mjs escapes [--since <date>] [--until <date>] [--history <file>]
        node scripts/workflow-scorecard.mjs [--since <date>] [--until <date>] [--by week|day|skill] [--host <name>] [--history <file>]
 
 collect reads every closed Claude and Codex session in attn's session ledger
@@ -21,13 +22,21 @@ checks, and what review on main found. --since defaults to seven days before
 period. --by skill prints one table per attn-workflow text the sessions loaded,
 identified by a hash of the text, because a change reaches agents when each
 host is reinstalled, not when it lands. --host takes home, a host name or the
-start of a host id. Nothing here calls a model.
+start of a host id.
+
+escapes prints, for notes written in [--since, --until), every finding line
+review on main wrote, every rejected check on the seeds of Builders that ran
+then, and every note of the Sheriff, which is where a red main traced to a
+commit is recorded. The garden keeps a seed's notes for 30 days.
+
+Nothing here calls a model.
 
 The history file defaults to workflow-sessions.jsonl in the artifact folder of
 the seed improve-attn-workflow-record-real-work (s-4z5bcq).`;
 
 const historySeed = 's-4z5bcq';
 const reviewMainSlug = 'review-main';
+const sheriffSlug = 'sheriff';
 const transcriptReaders = 6;
 const gardenReaders = 8;
 const reviewWindow = 80;
@@ -274,12 +283,28 @@ const median = (values) => {
   return String(sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2));
 };
 
-async function everyNote(seed) {
-  const sinceStart = await attnJSON('seed', 'notes', seed, '--since', '0', '--kind', 'note');
+async function everyNote(seed, kind = 'note') {
+  const sinceStart = await attnJSON('seed', 'notes', seed, '--since', '0', '--kind', kind);
   if (!sinceStart.expired) return { notes: sinceStart.notes.filter((n) => n.seed_id === seed), keptSince: null };
-  const kept = await attnJSON('seed', 'notes', seed, '--since', String(sinceStart.expired.earliest), '--kind', 'note');
+  const kept = await attnJSON('seed', 'notes', seed, '--since', String(sinceStart.expired.earliest), '--kind', kind);
   return { notes: kept.notes.filter((n) => n.seed_id === seed), keptSince: new Date(Date.now() - sinceStart.expired.retention_seconds * 1000) };
 }
+
+const writtenWithin = (since, until) => (n) => new Date(n.created_at) >= since && new Date(n.created_at) < until;
+
+async function stepNotes(title, slug, since, until) {
+  const search = await attnJSON('seed', 'search', title, '--limit', '1000');
+  const seeds = search.hits.map((hit) => hit.seed).filter((seed) => seed.step_slug === slug);
+  const found = { notes: [], keptSince: null };
+  for (const seed of seeds) {
+    const { notes, keptSince } = await everyNote(seed.id);
+    found.notes.push(...notes.filter(writtenWithin(since, until)));
+    if (keptSince && keptSince > since) found.keptSince = keptSince;
+  }
+  return found;
+}
+
+const findingLines = (body) => [...body.matchAll(/^finding: ([0-9a-f]{7,40}) (s-[a-z0-9]{6}|-) (P[01]) .*$/gm)];
 
 async function gardenFacts(builderSeeds, since, until) {
   const notes = await pool([...builderSeeds], gardenReaders, async (seed) => {
@@ -300,22 +325,46 @@ async function gardenFacts(builderSeeds, since, until) {
     }
     if ([...reports.values()].some((count) => count > 1)) facts.rereported += 1;
   }
-  const search = await attnJSON('seed', 'search', 'Review main', '--limit', '1000');
-  const reviewSeeds = search.hits.map((hit) => hit.seed).filter((seed) => seed.step_slug === reviewMainSlug);
-  const findings = [];
-  facts.reviewNotes = 0;
-  for (const seed of reviewSeeds) {
-    const { notes: log, keptSince } = await everyNote(seed.id);
-    const inWindow = log.filter((n) => new Date(n.created_at) >= since && new Date(n.created_at) < until);
-    facts.reviewNotes += inWindow.length;
-    for (const note of inWindow) {
-      for (const [, sha, target, severity] of note.body.matchAll(/^finding: ([0-9a-f]{7,40}) (s-[a-z0-9]{6}|-) (P[01]) /gm)) findings.push({ sha, target, severity });
-    }
-    if (keptSince && keptSince > since) facts.findingsKeptSince = keptSince;
-  }
+  const review = await stepNotes('Review main', reviewMainSlug, since, until);
+  const findings = review.notes.flatMap((note) => findingLines(note.body).map(([, sha, target, severity]) => ({ sha, target, severity })));
+  facts.reviewNotes = review.notes.length;
+  if (review.keptSince) facts.findingsKeptSince = review.keptSince;
   facts.findings = findings.length;
   facts.findingSeeds = new Set(findings.map((f) => f.target).filter((t) => t !== '-')).size;
   return facts;
+}
+
+async function escapes(history, since, until) {
+  const dateOf = (n) => n.created_at.slice(0, 10);
+  const indent = (body) => body.trim().split('\n').map((line) => `    ${line}`).join('\n');
+  const builderSeeds = [...new Set(history
+    .filter((l) => l.role === 'Builder' && l.seed && new Date(l.started) < until && new Date(l.closed ?? until) >= since)
+    .map((l) => l.seed))];
+  const [review, sheriff, checkLogs] = await Promise.all([
+    stepNotes('Review main', reviewMainSlug, since, until),
+    stepNotes('Sheriff', sheriffSlug, since, until),
+    pool(builderSeeds, gardenReaders, async (seed) => {
+      try {
+        return (await everyNote(seed, 'check')).notes;
+      } catch {
+        return null;
+      }
+    }),
+  ]);
+  const unread = checkLogs.filter((log) => !log).length;
+  const rejections = checkLogs.filter(Boolean).flat().filter((n) => /^C\d+ rejected/.test(n.body)).filter(writtenWithin(since, until));
+  const findings = review.notes.flatMap((note) => findingLines(note.body).map(([line]) => `  ${dateOf(note)} ${line}  (review ${note.seed_id})`));
+
+  console.log(`Escapes from ${since.toISOString().slice(0, 10)} to ${until.toISOString().slice(0, 10)}`);
+  console.log(`\nfindings from review on main: ${findings.length}`);
+  for (const line of findings) console.log(line);
+  if (review.keptSince) console.log(`  the garden keeps review on main's notes only since ${review.keptSince.toISOString().slice(0, 10)}`);
+  console.log(`\nrejected checks on ${builderSeeds.length} Builder seeds: ${rejections.length}`);
+  for (const note of rejections) console.log(`  ${dateOf(note)} ${note.seed_id}\n${indent(note.body)}`);
+  if (unread) console.log(`  ${unread} Builder seeds could not be read from the garden`);
+  console.log(`\nSheriff notes, for a red main traced to a commit: ${sheriff.notes.length}`);
+  for (const note of sheriff.notes) console.log(`  ${dateOf(note)} ${note.seed_id}\n${indent(note.body)}`);
+  if (sheriff.keptSince) console.log(`  the garden keeps the Sheriff's notes only since ${sheriff.keptSince.toISOString().slice(0, 10)}`);
 }
 
 function matchesHost(line, wanted) {
@@ -391,7 +440,7 @@ const { values: options, positionals } = parseArgs({
     help: { type: 'boolean', short: 'h' },
   },
 });
-if (options.help || positionals.length > 1 || (positionals[0] && positionals[0] !== 'collect')) {
+if (options.help || positionals.length > 1 || (positionals[0] && !['collect', 'escapes'].includes(positionals[0]))) {
   console.error(usage);
   process.exit(options.help ? 0 : 2);
 }
@@ -406,7 +455,9 @@ if (positionals[0] === 'collect') {
   const lines = history.filter((l) => matchesHost(l, options.host));
   const onHost = options.host ? ` on ${options.host}` : '';
   const span = (start, end) => `${shortDate(start)} to ${shortDate(addDays(end, -1))}`;
-  if (options.by === 'skill') {
+  if (positionals[0] === 'escapes') {
+    await escapes(history, since, until);
+  } else if (options.by === 'skill') {
     const bySkill = Map.groupBy(lines.filter(startedWithin(since, until)), (l) => l.skill_hash);
     const judged = [...bySkill].filter(([, group]) => group.some((l) => l.role === 'Builder' || l.role === 'Orchestrator'));
     for (const [hash, group] of judged.sort(([, a], [, b]) => a.map((l) => l.started).sort()[0].localeCompare(b.map((l) => l.started).sort()[0]))) {
