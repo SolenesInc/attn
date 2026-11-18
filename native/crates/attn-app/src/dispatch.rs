@@ -49,6 +49,13 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
                 Outcome::Unavailable
             };
         }
+        if matches!(
+            action,
+            Action::TerminalSendAnnotations | Action::MarkdownSendAnnotations
+        ) && crate::desktop::run(state, &action, tx)
+        {
+            return Outcome::Ran;
+        }
         return if crate::desktop::forward_to_main(state, action) {
             Outcome::Ran
         } else {

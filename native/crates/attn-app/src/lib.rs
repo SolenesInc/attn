@@ -274,9 +274,7 @@ pub fn bind(
             crew::follow(state);
             automations::follow(state, tx);
             follow_terminals(state, tx);
-            if state.window.tile.is_none() {
-                annotations::draft::follow(state, tx);
-            }
+            annotations::draft::follow(state, tx);
         }));
     })
 }

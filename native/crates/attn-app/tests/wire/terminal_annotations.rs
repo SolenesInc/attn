@@ -665,7 +665,8 @@ fn a_comment_being_written_when_a_send_is_refused_is_saved_with_the_draft() {
     assert!(world.runtime_is_at_rest());
 }
 
-type Stored = std::sync::Arc<std::sync::Mutex<(Vec<SessionAnnotation>, i64)>>;
+/// The draft the daemon keeps: its marks, its note and its generation.
+type Stored = std::sync::Arc<std::sync::Mutex<(Vec<SessionAnnotation>, String, i64)>>;
 
 fn remembering() -> Daemon {
     remembering_in(Stored::default())
@@ -679,12 +680,15 @@ fn remembering_in(stored: Stored) -> Daemon {
     daemon
         .on("session_annotations_save", move |r| {
             let annotations = serde_json::from_value(r["annotations"].clone()).unwrap();
-            *kept.lock().unwrap() = (annotations, r["generation"].as_i64().unwrap());
+            let note = r["note"].as_str().unwrap_or_default().to_owned();
+            *kept.lock().unwrap() = (annotations, note, r["generation"].as_i64().unwrap());
             saved()
         })
         .on("session_annotations_get", move |_| {
-            let (annotations, generation) = read.lock().unwrap().clone();
-            draft_result(annotations, generation)
+            let (annotations, note, generation) = read.lock().unwrap().clone();
+            let mut draft = draft_result(annotations, generation);
+            draft["note"] = json!(note);
+            draft
         });
     daemon
 }
@@ -1215,4 +1219,122 @@ fn an_offline_sessions_marks_stay_and_say_its_machine_is_unreachable_with_no_sen
     lose(&mut world, "reachable");
     assert!(shows(&world, "terminal.r1.annotation.send"));
     assert!(!shows(&world, "terminal.r1.annotation.unreachable"));
+}
+
+/// Agent s1's terminal r1 in a window of its own at `out`, or back beside terminal r2 without.
+fn popped_out(out: bool) -> attn_protocol::Desktop {
+    let mut leaf = attn_testkit::tree::pane("t1");
+    if out {
+        leaf["window"] = json!({"x": 10.0, "y": 20.0, "width": 900.0, "height": 500.0});
+    }
+    attn_protocol::Desktop {
+        tree_json: attn_testkit::tree::row([leaf, attn_testkit::tree::pane("t2")]).to_string(),
+        ..super::terminal::desktop(vec![agent_pane(), pane("t2", "r2")])
+    }
+}
+
+#[test]
+fn an_agent_in_its_own_window_is_marked_and_sent_from_there_and_its_draft_comes_back_with_it() {
+    let daemon = remembering_in(Stored::default()).state(attn_protocol::InitialStateMessage {
+        desktops: Some(vec![popped_out(true)]),
+        ..showing(Vec::new(), "daemon-1")
+    });
+    submit_answers(&daemon, true, "delivered");
+    daemon.on("session_annotations_clear", |r| {
+        message(SessionAnnotationsClearResultMessage {
+            session_id: "s1".into(),
+            success: true,
+            generation: r["generation"].as_i64().unwrap(),
+            ..SessionAnnotationsClearResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    let windows = world.tile_windows();
+    assert_eq!(windows.len(), 1, "{windows:?}");
+    let window = windows[0].key.clone();
+    output(&world, 1, format!("{MESSAGE}\r\n").as_bytes());
+    world.settle();
+    assert_eq!(world.tile_terminal_text(&window, "r1")[0], MESSAGE);
+
+    let at = |app: &attn_testkit::Driver, col: u16, row: u16| {
+        let (rect, _) = app
+            .runtime
+            .presented("terminal.r1")
+            .expect("r1 is drawn in its window");
+        let metrics = attn_term::Fonts::default().metrics(attn_term::FONT_SIZE);
+        (
+            rect[0] + (f32::from(col) + 0.5) * metrics.cell_w,
+            rect[1] + (f32::from(row) + 0.5) * metrics.cell_h,
+        )
+    };
+    let drag = |world: &mut World, from: (u16, u16), to: (u16, u16)| {
+        world.tile_gesture(&window, |app| app.hold(alt()));
+        world.tile_gesture(&window, |app| {
+            let (a, b) = (at(app, from.0, from.1), at(app, to.0, to.1));
+            app.runtime.pointer_down(a.0, a.1);
+            app.runtime.pointer_move(b.0, b.1);
+            app.runtime.pointer_up(b.0, b.1);
+        });
+        world.tile_gesture(&window, |app| app.hold(Mods::default()));
+    };
+    let click_in = |world: &mut World, key: &str| {
+        let key = key.to_owned();
+        world.tile_gesture(&window, |app| app.click(Target::key(key)));
+    };
+
+    drag(&mut world, (4, 0), (20, 0));
+    click_in(&mut world, "terminal.r1.annotation.label.this-is-wrong");
+    assert_eq!(
+        saves(&world).last().unwrap()["annotations"][0]["quick_label_id"],
+        "this-is-wrong",
+        "the window saves the draft it marked"
+    );
+    click_in(&mut world, "terminal.r1.annotation.note.field");
+    world.tile_gesture(&window, |app| app.type_text("Look again"));
+    world.advance(Duration::from_millis(400));
+    assert_eq!(saves(&world).last().unwrap()["note"], "Look again");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("terminal.r1.annotation.panel"))
+            .is_none(),
+        "the main window does not draw the popped terminal"
+    );
+
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: super::terminal::profile(),
+            desktops: vec![popped_out(false)],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    let state = annotations(&mut world);
+    assert_eq!(state["marks"][0]["label"], "this-is-wrong", "{state}");
+    assert_eq!(state["note"], "Look again");
+
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: super::terminal::profile(),
+            desktops: vec![popped_out(true)],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    world.tile_gesture(&window, |app| {
+        let terminal = at(app, 30, 3);
+        app.click_at(terminal);
+    });
+    world.tile_gesture(&window, |app| app.press(SEND));
+    assert_eq!(
+        submitted(&world),
+        [payload(
+            &[("cache keeps every", "this-is-wrong", "")],
+            "Look again"
+        )],
+        "the send key in the window sends its terminal's marks"
+    );
+    world.advance(Duration::from_millis(2200));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
 }
