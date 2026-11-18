@@ -48,11 +48,25 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 		}
 	}
 
+	defaults := map[string]string{"theme": "dark", "projects_directory": "~/projects"}
+	for key, changed := range map[string]string{"theme": "light", "projects_directory": t.TempDir()} {
+		for _, value := range []string{changed, ""} {
+			if ack := gardenAdvisorSetSetting(app, key, value); !protocol.Deref(ack.Success) {
+				t.Errorf("set %s = %q acknowledged %+v, want success", key, value, ack)
+			}
+		}
+		if got := w.App().Initial.Settings[key]; got != defaults[key] {
+			t.Errorf("after setting %s back to empty a new app reads %q, want its default %q", key, got, defaults[key])
+		}
+	}
+
 	w.restart()
 	for key, want := range map[string]string{
 		"queue_mode_enabled":               "true",
 		"crew.away_seconds":                "9000",
 		"default_context_window_cap_codex": "128000",
+		"theme":                            "dark",
+		"projects_directory":               "~/projects",
 	} {
 		if got := w.App().Initial.Settings[key]; got != want {
 			t.Errorf("after a restart %s = %q, want %q", key, got, want)

@@ -25,8 +25,8 @@ commands:
                        and when a change applies
   get <key> [--json]    show the value in effect; empty when unset, unless
                        the setting is on by default
-  set <key> <value>     change a setting; "" restores the default for a
-                       true or false setting, or if the description allows it
+  set <key> <value>     change a setting; "" restores the default of a
+                       setting that has one, or if the description allows it
 "#;
 
 const SCOPE_PROFILE: &str = "profile";

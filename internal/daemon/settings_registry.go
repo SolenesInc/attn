@@ -209,11 +209,11 @@ func (d *Daemon) writableSettingHere(key string) (*setting.Setting, error) {
 }
 
 func validateSetting(d *Daemon, spec *setting.Setting, key, value string) error {
+	if strings.TrimSpace(value) == "" && (spec.Kind == setting.Bool || spec.Default != "") {
+		return nil
+	}
 	switch spec.Kind {
 	case setting.Bool:
-		if strings.TrimSpace(value) == "" {
-			return nil
-		}
 		return validateBooleanSetting(value)
 	case setting.Checked:
 		return settingValidators[spec](d, key, value)
