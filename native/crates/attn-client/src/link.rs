@@ -3,16 +3,16 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use attn_protocol::{
-    AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage, ClientHelloMessage,
-    CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage, GardenReviewUpdatedMessage,
-    GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
-    GitOperationStartedMessage, InitialStateMessage, InstallCodexUpdateResultMessage,
-    KittyImageResultMessage, KittyPlacementsMessage, MigrationChangedMessage,
-    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
-    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
-    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
-    QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
-    SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
+    AppPerformanceResultMessage, AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage,
+    ClientHelloMessage, CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage,
+    GardenReviewUpdatedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
+    GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
+    InstallCodexUpdateResultMessage, KittyImageResultMessage, KittyPlacementsMessage,
+    MigrationChangedMessage, NotificationListResultMessage, NotificationsUpdatedMessage,
+    OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
+    QuickCaptureReadMessage, QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage,
+    RuntimeRespawnedMessage, SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
     SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
     SessionsUpdatedMessage, SettingsUpdatedMessage, SharedCodexChangedMessage,
     UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
@@ -26,7 +26,7 @@ use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::frame::Frame;
-use crate::{CLIENT_KIND, Clock, Connection, MigrationMarker, Pulse, Refusal, Store};
+use crate::{CLIENT_KIND, Clock, Connection, MigrationMarker, Performance, Pulse, Refusal, Store};
 
 const FIRST_RETRY: Duration = Duration::from_secs(1);
 const LAST_RETRY: Duration = Duration::from_secs(5);
@@ -70,6 +70,9 @@ pub struct LinkConfig {
     /// Where the daemon leaves `migration-failure.json` when a data migration fails at start.
     /// A failed start that finds the marker stops the link instead of retrying.
     pub migration_marker: Option<std::path::PathBuf>,
+    /// What the link answers the daemon's `app_performance_request` with, on its own thread,
+    /// so a sample never wakes the window.
+    pub performance: Performance,
 }
 
 /// A daemon message that names the request it answers.
@@ -518,6 +521,17 @@ impl Task {
             eprintln!("attn-app: dropped a daemon message that is not a JSON object");
             return None;
         };
+        if header.event == "app_performance_request" {
+            let _ = self.shared.send(
+                serde_json::to_string(&AppPerformanceResultMessage {
+                    request_id: header.request_id.unwrap_or_default(),
+                    performance: self.config.performance.take(self.config.clock.now()),
+                    ..AppPerformanceResultMessage::new()
+                })
+                .expect("app_performance_result serializes"),
+            );
+            return None;
+        }
         let request_id = header.answers().filter(|id| !id.is_empty());
         if (request_id.is_some() || header.event == "command_error")
             && let Ok(body) = serde_json::from_str(text)

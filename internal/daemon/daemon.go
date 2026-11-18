@@ -278,8 +278,9 @@ type Daemon struct {
 	codeNavOutside codeNavOutside
 	codeNavSetups  codeNavSetups
 
-	browserControl  appRequests[browserControlResult]
-	calloutRequests appRequests[calloutReply]
+	browserControl         appRequests[browserControlResult]
+	calloutRequests        appRequests[calloutReply]
+	appPerformanceRequests appRequests[*protocol.AppPerformance]
 
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time

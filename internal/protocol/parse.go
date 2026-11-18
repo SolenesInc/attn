@@ -296,6 +296,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdCalloutResult:                 decodeInto[CalloutResultMessage],
 	CmdBrowserControl:                decodeInto[BrowserControlMessage],
 	CmdBrowserControlResult:          decodeInto[BrowserControlResultMessage],
+	CmdAppPerformanceResult:          decodeInto[AppPerformanceResultMessage],
 	CmdRenameSession:                 decodeInto[RenameSessionMessage],
 	CmdProfileCreate:                 decodeInto[ProfileCreateMessage],
 	CmdProfileRename:                 decodeInto[ProfileRenameMessage],

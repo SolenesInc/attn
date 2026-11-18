@@ -54,14 +54,17 @@ deletes what a connected outpost has not sent yet.
 
 A `process` sample holds the daemon's memory, goroutines, open files and CPU
 time, the database size, the bus size and the connected clients, and these
-fields, so that memory can be compared across builds at a similar workload. The
-build that took a sample is the build stored with its record, which an upload
-batch names.
+fields, so that memory, and the native app's CPU time and frames, can be
+compared across builds at a similar workload. The build that took a sample is
+the build stored with its record, which an upload batch names.
 
 ```json
 {"workload":{"sessions":9,"agents":7,"terminals":9,"panes_drawn":4,"desktops":3,"seeds":812},
  "processes":[{"role":"webkit_content","count":2,"resident_bytes":614000000,"footprint_bytes":1137000000,
-   "split":{"webkit_malloc_bytes":602000000,"owned_graphics_bytes":398000000,"gigacage_bytes":41000000}}]}
+   "split":{"webkit_malloc_bytes":602000000,"owned_graphics_bytes":398000000,"gigacage_bytes":41000000}},
+  {"role":"app","shell":"native","count":1,"resident_bytes":210000000,"footprint_bytes":160000000,
+   "performance":{"period_ms":1200000,"cpu_ms":1840,"frames_drawn":3100,"frames_unchanged":12,"frames_skipped":40,
+     "frame_ms":{"p50":1.21,"p95":3.4,"p99":7.9,"max":31.5}}}]}
 ```
 
 | Field | Holds |
@@ -77,6 +80,13 @@ batch names.
 | `processes[].resident_bytes` | Their total resident memory |
 | `processes[].footprint_bytes` | Their total physical footprint, as Activity Monitor's Memory column shows it. macOS only |
 | `processes[].split` | For `webkit_content` on macOS, the part of that footprint in three of `footprint`'s categories, summed over the processes: `webkit_malloc_bytes` (WebKit malloc), `owned_graphics_bytes` (owned physical footprint, graphics) and `gigacage_bytes` (JS VM Gigacage). Each counts the category's dirty and compressed memory. It is absent when `footprint` could not measure every WebContent process |
+| `processes[].performance` | For `app` with shell `native`, what the app measured since the daemon last asked, or since it started: the fields below. It is absent when the app did not answer within 10 seconds |
+| `performance.period_ms` | How long the measurement covers, not counting time the machine slept. It is about 20 minutes, longer when a sample failed or analytics was off |
+| `performance.cpu_ms` | The CPU time the app's process used, all threads, user and system |
+| `performance.frames_drawn` | Frames the main window drew |
+| `performance.frames_unchanged` | Frames a timer asked for that showed what was already on screen, so the window drew nothing |
+| `performance.frames_skipped` | Frames that were due but not drawn, because the window was covered or minimised, or no drawable came in time |
+| `performance.frame_ms` | For the drawn frames, the milliseconds from a frame's start until its commands went to the GPU: `p50`, `p95`, `p99` and `max`. The percentiles are within 1% of the frames' own times. Absent when no frame was drawn |
 
 The app tells the daemon its process id when it connects, and the daemon finds
 the app's WebKit processes from it. WebKit processes of other apps, and of other
@@ -84,8 +94,11 @@ attn instances, are not counted. On macOS, the kernel ties the WebKit processes 
 an app started from a terminal to that terminal, so that app's sample has an
 `app` entry and no `webkit_*` entries. The sample reads the kernel's process
 tables and, on macOS, runs `/usr/bin/footprint` once for all WebContent
-processes, which took 30-50 ms for WebContent of 0.4 to 1.9 GB. With
-`analytics.enabled` off, it reads nothing.
+processes, which took 30-50 ms for WebContent of 0.4 to 1.9 GB. The native app
+answers the daemon's request for its performance on its connection's thread,
+so a sample never wakes its window, and it keeps no timer: between samples an
+idle native app does nothing for analytics. With `analytics.enabled` off, the
+sample reads nothing.
 
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before
 it stores them:

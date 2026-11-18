@@ -267,6 +267,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSessionAnnotationsClear:       commandMetadata(false, true),
 	protocol.CmdSessionAnnotationsSubmit:      commandMetadata(true, true),
 	protocol.CmdCalloutResult:                 commandMetadata(false, true),
+	protocol.CmdAppPerformanceResult:          commandMetadata(false, false),
 	protocol.CmdCalloutShow:                   commandMetadata(false, true),
 	protocol.CmdCalloutAnchors:                commandMetadata(false, true),
 	protocol.CmdBrowserControlResult:          commandMetadata(false, true),

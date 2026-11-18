@@ -6,8 +6,8 @@ use std::time::Duration;
 use attn_app::State;
 use attn_app::screen::Screens;
 use attn_client::{
-    Clock, Connection, Frame, Link, LinkConfig, ManualClock, Parked, Pulse, Store, Subscription,
-    TerminalEvent,
+    Clock, Connection, Frame, Link, LinkConfig, ManualClock, Parked, Performance, Pulse, Store,
+    Subscription, TerminalEvent,
 };
 use rune::{Chord, Compositor, Env, Key, KeyEvent, Mods, Runtime, Tx};
 
@@ -42,6 +42,8 @@ pub struct World {
     pub daemon: Daemon,
     /// The clipboard the app copies to and pastes from, in place of the system's.
     pub clipboard: rune::clipboard::MemoryClipboard,
+    /// What the app's link answers the daemon's performance requests with.
+    pub performance: Performance,
     /// The user's folders the app saves into: `Downloads` and `home` under one temporary folder.
     files: tempfile::TempDir,
     runtime: Runtime<State>,
@@ -273,6 +275,7 @@ impl World {
             let pulse = pulse.clone();
             replies.sink(move || pulse.beat())
         };
+        let performance = Performance::default();
         let link = Link::start(
             LinkConfig {
                 daemon: daemon.address().to_string(),
@@ -294,6 +297,7 @@ impl World {
                 replies: answers,
                 start_daemon: Some(daemon.starter()),
                 migration_marker: Some(daemon.migration_marker()),
+                performance: performance.clone(),
             },
             store.clone(),
         );
@@ -353,6 +357,7 @@ impl World {
             });
         }
         let mut world = World {
+            performance,
             files,
             daemon,
             clipboard,

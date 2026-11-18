@@ -401,6 +401,7 @@ dependencies = [
  "attn-protocol",
  "futures-util",
  "httparse",
+ "libc",
  "serde",
  "serde_json",
  "tokio",

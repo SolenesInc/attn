@@ -528,6 +528,45 @@ type AnalyticsOutboxRow struct {
 	Record string `json:"record"`
 }
 
+type AppPerformance struct {
+	// CpuMs corresponds to the JSON schema field "cpu_ms".
+	CpuMs int `json:"cpu_ms"`
+
+	// FrameMs corresponds to the JSON schema field "frame_ms".
+	FrameMs *FrameTimes `json:"frame_ms,omitempty,omitzero"`
+
+	// FramesDrawn corresponds to the JSON schema field "frames_drawn".
+	FramesDrawn int `json:"frames_drawn"`
+
+	// FramesSkipped corresponds to the JSON schema field "frames_skipped".
+	FramesSkipped int `json:"frames_skipped"`
+
+	// FramesUnchanged corresponds to the JSON schema field "frames_unchanged".
+	FramesUnchanged int `json:"frames_unchanged"`
+
+	// PeriodMs corresponds to the JSON schema field "period_ms".
+	PeriodMs int `json:"period_ms"`
+}
+
+type AppPerformanceRequestMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AppPerformanceResultMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Performance corresponds to the JSON schema field "performance".
+	Performance AppPerformance `json:"performance"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
 type ApplyMonitorViewMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5123,6 +5162,20 @@ type ForwardAnalyticsMessage struct {
 
 	// Records corresponds to the JSON schema field "records".
 	Records []string `json:"records"`
+}
+
+type FrameTimes struct {
+	// Max corresponds to the JSON schema field "max".
+	Max float64 `json:"max"`
+
+	// P50 corresponds to the JSON schema field "p50".
+	P50 float64 `json:"p50"`
+
+	// P95 corresponds to the JSON schema field "p95".
+	P95 float64 `json:"p95"`
+
+	// P99 corresponds to the JSON schema field "p99".
+	P99 float64 `json:"p99"`
 }
 
 type FsChangedMessage struct {

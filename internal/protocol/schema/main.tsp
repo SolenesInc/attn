@@ -3188,6 +3188,29 @@ model CalloutResultMessage {
   missing?: CalloutAnchor[];
 }
 
+// The daemon asks the native app for its performance when it takes an
+// analytics process sample. The app answers with what it measured since it
+// last answered, or since it started.
+model AppPerformanceRequestMessage { event: "app_performance_request"; request_id: string; }
+
+model AppPerformanceResultMessage {
+  cmd: "app_performance_result";
+  request_id: string;
+  performance: AppPerformance;
+}
+
+model AppPerformance {
+  period_ms: safeint;
+  cpu_ms: safeint;
+  frames_drawn: safeint;
+  frames_unchanged: safeint;
+  frames_skipped: safeint;
+  frame_ms?: FrameTimes;
+}
+
+// Milliseconds from a drawn frame's start until its commands were submitted.
+model FrameTimes { p50: float64; p95: float64; p99: float64; max: float64; }
+
 // Ask the visible in-app browser host to perform an action. Sent by the CLI
 // over the unix socket; the daemon brokers it to a capable Tauri client.
 @extension("x-on", #{ home: true })
@@ -9573,6 +9596,7 @@ alias DaemonEvent =
   | PtyResizedMessage
   | CalloutShowRequestMessage
   | CalloutAnchorsRequestMessage
+  | AppPerformanceRequestMessage
   | BrowserControlRequestMessage
   | CommandErrorMessage
   | ClientEvictionNoticeMessage

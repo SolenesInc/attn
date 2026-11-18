@@ -43,7 +43,8 @@ also creates one view per kind of record, with a typed column for each field
 that [Telemetry](../guide/reference/telemetry.md) lists for the record, under
 the field's own name. A nested field takes its last name (`session.harness` is
 `harness`), except `tokens`, whose fields are `tokens_input`, `tokens_output`,
-`tokens_cache_read` and `tokens_cache_write`. Query the views. Read `events`
+`tokens_cache_read` and `tokens_cache_write`, and `frame_ms`, whose fields are
+`frame_ms_p50`, `frame_ms_p95`, `frame_ms_p99` and `frame_ms_max`. Query the views. Read `events`
 for a record no view covers, such as bus facts, and for the fields no view
 carries, such as the daemon's own memory, goroutines and database size in a
 `process` sample.
@@ -56,7 +57,8 @@ for a record made on an outpost, and empty on the home.
 
 A column is `NULL` only where a missing field means "unknown": `usd`, the
 `tokens_*` columns, `user_input_ms`, `wait_ms`, `footprint_bytes`, the three
-`split` columns of `process_samples`, and `daemon_uptime_s`. Any other missing
+`split` columns and the nine `performance` columns of `process_samples`, and
+`daemon_uptime_s`. Any other missing
 field reads as an empty string, `0` or `false`, so a session with no `model`
 yet has `model = ''`.
 
@@ -65,7 +67,7 @@ yet has `model = ''`.
 | `runs` | agent run | `session`, `started_by`, `duration_ms`, `ended`, `opened_turn`, `quiet_stop`, `turn_requested`, `turn_after_stop`, `user_input_ms`, `approvals`, `usage`, `tokens_input`, `tokens_output`, `tokens_cache_read`, `tokens_cache_write`, `usd`, `harness`, `model`, `model_requested`, `launch` |
 | `quiet_stops` | quiet stop verdict, with its run's fields | `session`, `verdict`, `failure`, `turn_after_stop`, `turn_requested`, `started_by`, `harness`, `model`, `launch` |
 | `cli_commands` | `attn` command since 2026-11-02, when commands began to be named by their typed path | `session`, `command` (hooks start with `_`), `caller`, `harness`, `ok`, `exit_code`, `error_kind`, `refusal` |
-| `process_samples` | process role in a `process` sample | `daemon_run`, `daemon_uptime_s` (`NULL` without the run's `daemon_start`), `role`, `shell`, `count`, `resident_bytes`, `footprint_bytes`, `webkit_malloc_bytes`, `owned_graphics_bytes`, `gigacage_bytes`, and the workload: `sessions`, `agents`, `terminals`, `panes_drawn`, `desktops`, `seeds` |
+| `process_samples` | process role in a `process` sample | `daemon_run`, `daemon_uptime_s` (`NULL` without the run's `daemon_start`), `role`, `shell`, `count`, `resident_bytes`, `footprint_bytes`, `webkit_malloc_bytes`, `owned_graphics_bytes`, `gigacage_bytes`, the native app's `period_ms`, `cpu_ms`, `frames_drawn`, `frames_unchanged`, `frames_skipped`, `frame_ms_p50`, `frame_ms_p95`, `frame_ms_p99` and `frame_ms_max`, and the workload: `sessions`, `agents`, `terminals`, `panes_drawn`, `desktops`, `seeds` |
 | `daemon_starts` | daemon start | `daemon_run`, `previous_end`, `stop_reason`, `previous_run` |
 | `app_actions` | app action | `action` (the record's name), `id`, `section`, `reason`, `to`, `wait_ms`, `kind` |
 

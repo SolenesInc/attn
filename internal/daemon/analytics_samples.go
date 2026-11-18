@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -18,9 +19,10 @@ import (
 )
 
 const (
-	analyticsSampleKind     = "analytics_sample"
-	analyticsSampleInterval = 20 * time.Minute
-	analyticsSampleTimeout  = time.Minute
+	analyticsSampleKind        = "analytics_sample"
+	analyticsSampleInterval    = 20 * time.Minute
+	analyticsSampleTimeout     = time.Minute
+	appPerformanceReplyTimeout = 10 * time.Second
 )
 
 type analyticsSample struct {
@@ -62,6 +64,11 @@ func (d *Daemon) analyticsSampleHandler(ctx context.Context, _ *jobs.Job) (any, 
 		return nil, err
 	}
 	sample.Processes = d.sampleProcessMemory(ctx, apps)
+	for i, process := range sample.Processes {
+		if process.Role == diag.RoleApp && process.Shell == string(shellNative) {
+			sample.Processes[i].Performance = d.nativeAppPerformance(apps)
+		}
+	}
 	return nil, d.appendAnalytics(analytics.StreamSample, "process", d.run.ID, sample)
 }
 
@@ -71,8 +78,9 @@ type connectedApps struct {
 }
 
 type appProcess struct {
-	pid   int
-	shell appShell
+	pid    int
+	shell  appShell
+	client *wsClient
 }
 
 func (d *Daemon) connectedApps() connectedApps {
@@ -82,8 +90,8 @@ func (d *Daemon) connectedApps() connectedApps {
 		if shell == shellNone {
 			return
 		}
-		app := appProcess{pid: client.processID(), shell: shell}
-		if app.pid > 0 && !slices.Contains(apps.processes, app) {
+		app := appProcess{pid: client.processID(), shell: shell, client: client}
+		if app.pid > 0 && !slices.ContainsFunc(apps.processes, func(seen appProcess) bool { return seen.pid == app.pid }) {
 			apps.processes = append(apps.processes, app)
 		}
 		for _, terminal := range client.attachedTerminals() {
@@ -91,6 +99,31 @@ func (d *Daemon) connectedApps() connectedApps {
 		}
 	})
 	return apps
+}
+
+func (d *Daemon) nativeAppPerformance(apps connectedApps) *protocol.AppPerformance {
+	for _, app := range apps.processes {
+		if app.shell != shellNative || !app.client.isTrustedAppClient() {
+			continue
+		}
+		reply, err := d.appPerformanceRequests.ask(app.client, appPerformanceReplyTimeout, func(requestID string) bool {
+			payload, err := json.Marshal(protocol.AppPerformanceRequestMessage{Event: protocol.EventAppPerformanceRequest, RequestID: requestID})
+			return err == nil && d.sendOutbound(app.client, outboundMessage{kind: messageKindText, payload: payload})
+		}, nil, nil)
+		if err != nil {
+			d.logf("analytics: asking the native app for its performance: %v", err)
+		}
+		return reply
+	}
+	return nil
+}
+
+func (d *Daemon) handleAppPerformanceResult(client *wsClient, msg *protocol.AppPerformanceResultMessage) {
+	if !client.isTrustedAppClient() {
+		d.sendCommandError(client, protocol.CmdAppPerformanceResult, "trusted app required")
+		return
+	}
+	d.appPerformanceRequests.answer(client, msg.RequestID, &msg.Performance)
 }
 
 func (d *Daemon) sampleWorkload(ctx context.Context, apps connectedApps) (analyticsWorkload, error) {

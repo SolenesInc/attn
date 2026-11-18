@@ -696,6 +696,7 @@ func (d *Daemon) wsMsgPump(client *wsClient) {
 	d.releasePtySizes(client)
 	d.browserControl.failFor(client, browserControlResult{err: "the in-app browser host disconnected"})
 	d.calloutRequests.failFor(client, calloutReply{err: fmt.Errorf("the attn app disconnected")})
+	d.appPerformanceRequests.failFor(client, nil)
 	d.logf("WebSocket message pump exited")
 }
 
@@ -703,7 +704,7 @@ func isAppResultFrame(data []byte) bool {
 	var peek struct {
 		Cmd string `json:"cmd"`
 	}
-	return json.Unmarshal(data, &peek) == nil && (peek.Cmd == protocol.CmdBrowserControlResult || peek.Cmd == protocol.CmdCalloutResult)
+	return json.Unmarshal(data, &peek) == nil && (peek.Cmd == protocol.CmdBrowserControlResult || peek.Cmd == protocol.CmdCalloutResult || peek.Cmd == protocol.CmdAppPerformanceResult)
 }
 
 func (c *wsClient) sendChannelClosed() bool {
@@ -1407,6 +1408,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 	case protocol.CmdCalloutResult:
 		d.handleCalloutResult(client, msg.(*protocol.CalloutResultMessage))
+	case protocol.CmdAppPerformanceResult:
+		d.handleAppPerformanceResult(client, msg.(*protocol.AppPerformanceResultMessage))
 	case protocol.CmdBrowserControlResult:
 		d.handleBrowserControlResult(client, msg.(*protocol.BrowserControlResultMessage))
 	case protocol.CmdRenameSession:

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use attn_automation::{Headless, Host, Server, Work};
-use attn_client::{Clock, LinkConfig, Pulse, ReplySink, Store, TerminalSink};
+use attn_client::{Clock, LinkConfig, Performance, Pulse, ReplySink, Store, TerminalSink};
 use rune::Env;
 
 use crate::State;
@@ -83,5 +83,6 @@ fn link_config() -> Result<impl FnOnce(TerminalSink, ReplySink) -> LinkConfig, S
         replies,
         start_daemon: None,
         migration_marker: None,
+        performance: Performance::default(),
     })
 }

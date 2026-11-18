@@ -448,7 +448,7 @@ func TestEachRecordKindReadsBackAsTypedColumnsThroughItsView(t *testing.T) {
 		record(analytics.StreamCLI, 3, "_hook-state", "h:aaaaaaaaaaaa", "2026-11-10 10:02:00", `{"ok":true,"exit_code":0,"caller":"agent","harness":"claude"}`),
 		record(analytics.StreamSample, 1, "daemon_start", "h:cccccccccccc", "2026-11-10 08:00:00", `{"previous_end":"stopped","stop_reason":"source_fingerprint_mismatch","previous_run":"h:dddddddddddd"}`),
 		record(analytics.StreamSample, 2, "process", "h:cccccccccccc", "2026-11-10 09:00:00",
-			`{"goroutines":80,"workload":{"sessions":9,"agents":7,"terminals":9,"panes_drawn":4,"desktops":3,"seeds":812},"processes":[{"role":"daemon","count":1,"resident_bytes":90000000,"footprint_bytes":70000000},{"role":"webkit_content","count":2,"resident_bytes":614000000,"footprint_bytes":1137000000,"split":{"webkit_malloc_bytes":602000000,"owned_graphics_bytes":398000000,"gigacage_bytes":41000000}},{"role":"app","shell":"native","count":1,"resident_bytes":50000000,"footprint_bytes":40000000}]}`),
+			`{"goroutines":80,"workload":{"sessions":9,"agents":7,"terminals":9,"panes_drawn":4,"desktops":3,"seeds":812},"processes":[{"role":"daemon","count":1,"resident_bytes":90000000,"footprint_bytes":70000000},{"role":"webkit_content","count":2,"resident_bytes":614000000,"footprint_bytes":1137000000,"split":{"webkit_malloc_bytes":602000000,"owned_graphics_bytes":398000000,"gigacage_bytes":41000000}},{"role":"app","shell":"native","count":1,"resident_bytes":50000000,"footprint_bytes":40000000,"performance":{"period_ms":1200000,"cpu_ms":1840,"frames_drawn":3100,"frames_unchanged":12,"frames_skipped":40,"frame_ms":{"p50":1.21,"p95":3.4,"p99":7.9,"max":31.5}}}]}`),
 		record(outpostSample, 1, "process", "h:eeeeeeeeeeee", "2026-11-10 09:30:00",
 			`{"workload":{"sessions":1,"agents":1,"terminals":1,"panes_drawn":0,"desktops":0,"seeds":0},"processes":[{"role":"pty_host","count":1,"resident_bytes":20000000}]}`),
 		record(analytics.StreamApp, 1, "shortcut", "", "2026-11-10 12:00:00", `{"id":"queue.next"}`),
@@ -475,11 +475,11 @@ func TestEachRecordKindReadsBackAsTypedColumnsThroughItsView(t *testing.T) {
 				"h:aaaaaaaaaaaa\t_hook-state\t\t\tagent\tclaude\ttrue\t0",
 		},
 		{
-			"SELECT daemon_run, outpost, daemon_uptime_s, role, shell, count, resident_bytes, footprint_bytes, webkit_malloc_bytes, owned_graphics_bytes, gigacage_bytes, sessions, agents, terminals, panes_drawn, desktops, seeds FROM process_samples ORDER BY at, role",
-			"h:cccccccccccc\t\t3600\tapp\tnative\t1\t50000000\t40000000\t\\N\t\\N\t\\N\t9\t7\t9\t4\t3\t812\n" +
-				"h:cccccccccccc\t\t3600\tdaemon\t\t1\t90000000\t70000000\t\\N\t\\N\t\\N\t9\t7\t9\t4\t3\t812\n" +
-				"h:cccccccccccc\t\t3600\twebkit_content\t\t2\t614000000\t1137000000\t602000000\t398000000\t41000000\t9\t7\t9\t4\t3\t812\n" +
-				"h:eeeeeeeeeeee\th:0123456789ab\t\\N\tpty_host\t\t1\t20000000\t\\N\t\\N\t\\N\t\\N\t1\t1\t1\t0\t0\t0",
+			"SELECT daemon_run, outpost, daemon_uptime_s, role, shell, count, resident_bytes, footprint_bytes, webkit_malloc_bytes, owned_graphics_bytes, gigacage_bytes, period_ms, cpu_ms, frames_drawn, frames_unchanged, frames_skipped, frame_ms_p50, frame_ms_p95, frame_ms_p99, frame_ms_max, sessions, agents, terminals, panes_drawn, desktops, seeds FROM process_samples ORDER BY at, role",
+			"h:cccccccccccc\t\t3600\tapp\tnative\t1\t50000000\t40000000\t\\N\t\\N\t\\N\t1200000\t1840\t3100\t12\t40\t1.21\t3.4\t7.9\t31.5\t9\t7\t9\t4\t3\t812\n" +
+				"h:cccccccccccc\t\t3600\tdaemon\t\t1\t90000000\t70000000\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t9\t7\t9\t4\t3\t812\n" +
+				"h:cccccccccccc\t\t3600\twebkit_content\t\t2\t614000000\t1137000000\t602000000\t398000000\t41000000\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t9\t7\t9\t4\t3\t812\n" +
+				"h:eeeeeeeeeeee\th:0123456789ab\t\\N\tpty_host\t\t1\t20000000\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t1\t1\t1\t0\t0\t0",
 		},
 		{
 			"SELECT daemon_run, previous_end, stop_reason, previous_run, build_os FROM daemon_starts",

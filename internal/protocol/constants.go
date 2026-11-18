@@ -319,6 +319,7 @@ const (
 	CmdCalloutResult                 = "callout_result"
 	CmdBrowserControl                = "browser_control"
 	CmdBrowserControlResult          = "browser_control_result"
+	CmdAppPerformanceResult          = "app_performance_result"
 	CmdRenameSession                 = "rename_session"
 	CmdSetSessionContextWindowCap    = "set_session_context_window_cap"
 )
@@ -582,6 +583,7 @@ const (
 	EventCalloutShowRequest              = "callout_show_request"
 	EventCalloutAnchorsRequest           = "callout_anchors_request"
 	EventBrowserControlRequest           = "browser_control_request"
+	EventAppPerformanceRequest           = "app_performance_request"
 	EventCommandError                    = "command_error"
 	EventClientEvictionNotice            = "client_eviction_notice"
 )

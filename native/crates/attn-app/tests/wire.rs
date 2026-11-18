@@ -39,6 +39,7 @@ mod wire {
     mod outpost_paths;
     mod outpost_updates;
     mod palette;
+    mod performance;
     mod picker;
     mod profile;
     mod queue;

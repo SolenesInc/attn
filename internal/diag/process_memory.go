@@ -3,6 +3,8 @@ package diag
 import (
 	"slices"
 	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -23,12 +25,13 @@ type Process struct {
 }
 
 type RoleMemory struct {
-	Role           string           `json:"role"`
-	Shell          string           `json:"shell,omitempty"`
-	Count          int              `json:"count"`
-	ResidentBytes  uint64           `json:"resident_bytes"`
-	FootprintBytes uint64           `json:"footprint_bytes,omitempty"`
-	Split          *WebContentSplit `json:"split,omitempty"`
+	Role           string                   `json:"role"`
+	Shell          string                   `json:"shell,omitempty"`
+	Count          int                      `json:"count"`
+	ResidentBytes  uint64                   `json:"resident_bytes"`
+	FootprintBytes uint64                   `json:"footprint_bytes,omitempty"`
+	Split          *WebContentSplit         `json:"split,omitempty"`
+	Performance    *protocol.AppPerformance `json:"performance,omitempty"`
 	pids           []int
 }
 

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "77b2d3aadf8a";
+pub const PROTOCOL_VERSION: &str = "4466f875013f";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -426,6 +426,47 @@ pub struct AnalyticsBuild {
 pub struct AnalyticsOutboxRow {
     pub id: i64,
     pub record: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AppPerformance {
+    pub cpu_ms: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_ms: Option<FrameTimes>,
+    pub frames_drawn: i64,
+    pub frames_skipped: i64,
+    pub frames_unchanged: i64,
+    pub period_ms: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AppPerformanceRequestMessage {
+    pub event: String,
+    pub request_id: String,
+}
+
+impl AppPerformanceRequestMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "app_performance_request".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AppPerformanceResultMessage {
+    pub cmd: String,
+    pub performance: AppPerformance,
+    pub request_id: String,
+}
+
+impl AppPerformanceResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "app_performance_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ApplyMonitorViewMessage {
@@ -4819,6 +4860,13 @@ impl ForwardAnalyticsMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FrameTimes {
+    pub max: f64,
+    pub p50: f64,
+    pub p95: f64,
+    pub p99: f64,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FsChangedMessage {

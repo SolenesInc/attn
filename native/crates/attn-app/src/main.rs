@@ -4,7 +4,8 @@ use attn_app::automation::{AppHooks, enabled, manifest_path};
 use attn_app::instance::remove_app_pid;
 use attn_app::window_host::WindowHost;
 use attn_automation::Server;
-use attn_client::{Pulse, Store};
+use attn_client::{Performance, Pulse, Store};
+use rune::{FrameEncoded, FrameOutcome};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -31,10 +32,14 @@ fn main() -> ExitCode {
     let store = Store::default();
     let frames = Pulse::default();
     let drawn = Arc::new(AtomicU64::new(0));
+    let performance = Performance::default();
     let app = attn_app::native_app(&launch.instance.bundle_id)
         .on_frame_encoded({
-            let frames = frames.clone();
-            move |_| frames.beat()
+            let (frames, performance) = (frames.clone(), performance.clone());
+            move |frame| {
+                measure(&performance, frame);
+                frames.beat();
+            }
         })
         .on_frame_drawn({
             let (frames, drawn) = (frames.clone(), drawn.clone());
@@ -73,7 +78,7 @@ fn main() -> ExitCode {
     let main = handle.clone();
     let (link, _window) = attn_app::connect(
         &store,
-        |terminals, replies| launch.link_config(terminals, replies),
+        |terminals, replies| launch.link_config(terminals, replies, performance),
         wall.clone(),
         frames,
         move || waker.wake(),
@@ -138,4 +143,14 @@ fn main() -> ExitCode {
     app.run();
     remove_app_pid();
     ExitCode::SUCCESS
+}
+
+fn measure(performance: &Performance, frame: &FrameEncoded) {
+    match frame.outcome() {
+        FrameOutcome::Drawn => {
+            performance.drawn(frame.update_ms().unwrap_or(0.0) + frame.encode_ms().unwrap_or(0.0))
+        }
+        FrameOutcome::Unchanged => performance.unchanged(),
+        _ => performance.skipped(),
+    }
 }

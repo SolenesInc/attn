@@ -6,7 +6,7 @@ use std::time::Duration;
 use attn_app::automation::AppHooks;
 use attn_app::{State, Update};
 use attn_automation::{Host, Inspection, Server};
-use attn_client::{Clock, Link, LinkConfig, Pulse, Store, Subscription};
+use attn_client::{Clock, Link, LinkConfig, Performance, Pulse, Store, Subscription};
 use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
 };
@@ -100,6 +100,7 @@ impl App {
                 replies,
                 start_daemon: None,
                 migration_marker: None,
+                performance: Performance::default(),
             },
             attn_app::WallClock::new(|| WALL_START_MS),
             host.frames.clone(),

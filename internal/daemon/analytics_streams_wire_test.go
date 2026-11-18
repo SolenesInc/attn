@@ -152,11 +152,12 @@ type processSampleProps struct {
 		Seeds      int `json:"seeds"`
 	} `json:"workload"`
 	Processes []struct {
-		Role           string `json:"role"`
-		Shell          string `json:"shell"`
-		Count          int    `json:"count"`
-		ResidentBytes  uint64 `json:"resident_bytes"`
-		FootprintBytes uint64 `json:"footprint_bytes"`
+		Role           string                   `json:"role"`
+		Shell          string                   `json:"shell"`
+		Count          int                      `json:"count"`
+		ResidentBytes  uint64                   `json:"resident_bytes"`
+		FootprintBytes uint64                   `json:"footprint_bytes"`
+		Performance    *protocol.AppPerformance `json:"performance"`
 	} `json:"processes"`
 }
 
@@ -254,6 +255,54 @@ func TestASampleNamesTheNativeAppsShell(t *testing.T) {
 
 		if sample.roleCount("app") != 1 || sample.appShell() != "native" {
 			t.Errorf("sample processes = %+v, want one app entry with shell native", sample.Processes)
+		}
+	})
+}
+
+func (p processSampleProps) appPerformance() *protocol.AppPerformance {
+	for _, process := range p.Processes {
+		if process.Role == "app" {
+			return process.Performance
+		}
+	}
+	return nil
+}
+
+func TestASampleCarriesWhatTheNativeAppMeasuredSinceTheLastSample(t *testing.T) {
+	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		observer := w.App()
+		setAnalyticsEnabled(observer, "true")
+		observer.Close()
+		hello := helloWithToken(protocol.Ptr(config.ClientToken()))
+		hello.ClientKind = protocol.ClientKindNativeApp
+		hello.BrowserHostToken = protocol.Ptr(browserHostToken)
+		hello.AppPid = protocol.Ptr(os.Getpid())
+		native := w.Connect(hello, nil)
+		testworld.Await[protocol.InitialStateMessage](native, protocol.EventInitialState, nil)
+		synctest.Wait()
+
+		w.advance(sampleInterval)
+		request := testworld.Await[protocol.AppPerformanceRequestMessage](native, protocol.EventAppPerformanceRequest, nil)
+		measured := protocol.AppPerformance{
+			PeriodMs: int(sampleInterval.Milliseconds()), CpuMs: 1840,
+			FramesDrawn: 3100, FramesUnchanged: 12, FramesSkipped: 40,
+			FrameMs: &protocol.FrameTimes{P50: 1.2, P95: 3.4, P99: 7.9, Max: 31.5},
+		}
+		native.Send(protocol.AppPerformanceResultMessage{Cmd: protocol.CmdAppPerformanceResult, RequestID: request.RequestID, Performance: measured})
+		synctest.Wait()
+
+		if got := newestProcessSample(t, native).appPerformance(); got == nil || *got.FrameMs != *measured.FrameMs || got.CpuMs != measured.CpuMs || got.FramesDrawn != measured.FramesDrawn || got.FramesSkipped != measured.FramesSkipped || got.PeriodMs != measured.PeriodMs {
+			t.Fatalf("the native app's sample entry has performance %+v, want %+v", got, measured)
+		}
+
+		mark := len(native.Log())
+		w.advance(sampleInterval)
+		testworld.AwaitSince[protocol.AppPerformanceRequestMessage](native, mark, protocol.EventAppPerformanceRequest, nil)
+		w.advance(time.Minute)
+		silent := newestProcessSample(t, native)
+		if silent.roleCount("app") != 1 || silent.appPerformance() != nil {
+			t.Errorf("a native app that does not answer left processes %+v, want its app entry without performance", silent.Processes)
 		}
 	})
 }
