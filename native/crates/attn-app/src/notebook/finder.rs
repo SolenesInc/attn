@@ -128,6 +128,7 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         .width(None)
         .label(LABEL)
         .placeholder("Find a note…")
+        .active_descendant(rows.get(finder.highlighted).map(|path| row_key(path)))
         .on_edit(|state: &mut State| {
             &mut state
                 .notebook
@@ -172,19 +173,17 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
     Some(finder::layer(t, "notebook.finder.layer", panel))
 }
 
+fn row_key(path: &str) -> String {
+    format!("notebook.finder.row.{path}")
+}
+
 fn option(path: &str, highlighted: bool, t: &Tokens) -> El {
     let name = path.rsplit('/').next().unwrap_or(path).to_owned();
     let picked = path.to_owned();
-    finder::path_option(
-        t,
-        format!("notebook.finder.row.{path}"),
-        &name,
-        path,
-        highlighted,
-    )
-    .role("option")
-    .label(format!("{name} {path}"))
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, picked.clone(), tx))
+    finder::path_option(t, row_key(path), &name, path, highlighted)
+        .role("option")
+        .label(format!("{name} {path}"))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, picked.clone(), tx))
 }
 
 /// The surface ⌘P finds a note in: the fullscreen notebook while it shows, else the editor

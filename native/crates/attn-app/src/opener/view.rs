@@ -21,6 +21,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .width(None)
         .label(LABEL)
         .placeholder("Open a markdown file…")
+        .active_descendant(at.map(|i| row_key(&rows[i])))
         .on_edit(|state: &mut State| &mut state.opener.query)
         .on_change(super::edited)
         .on_key(super::on_key)
@@ -51,16 +52,14 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     )
 }
 
+fn row_key(r: &Row) -> String {
+    format!("opener.row.{}", r.key)
+}
+
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     let picked = r.key.clone();
-    finder::path_option(
-        t,
-        format!("opener.row.{}", r.key),
-        &r.title,
-        &r.detail,
-        highlighted,
-    )
-    .role("option")
-    .label(format!("{} {}", r.title, r.detail))
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &picked, tx))
+    finder::path_option(t, row_key(r), &r.title, &r.detail, highlighted)
+        .role("option")
+        .label(format!("{} {}", r.title, r.detail))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &picked, tx))
 }

@@ -621,6 +621,18 @@ impl Launcher {
         }
     }
 
+    /// The key of the highlighted row, the one Enter picks, which the field names as its
+    /// active row for assistive technology.
+    pub(crate) fn active_row_key(&self, state: &State) -> Option<String> {
+        let w = self.which.key();
+        match &self.place {
+            Some(place) => place.highlight.map(|i| format!("{w}.where.row.{i}")),
+            None => self
+                .selected(state, &self.rows(state))
+                .map(|i| format!("{w}.row.{i}")),
+        }
+    }
+
     /// The highlighted row: while browsing, only one the user moved to; otherwise the one
     /// the user moved to or else the top one, once this opening's recents arrived.
     pub(crate) fn selected(&self, state: &State, rows: &[Row]) -> Option<usize> {

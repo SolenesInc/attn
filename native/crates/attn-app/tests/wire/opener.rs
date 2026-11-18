@@ -299,9 +299,19 @@ fn recents_show_before_the_index_answers_then_both_rank_in_one_list_each_file_on
 #[test]
 fn enter_opens_the_highlighted_file_by_its_absolute_path_for_the_agent_and_shows_it() {
     let mut world = start(Setup::default());
-    for key in ["down", "down", "up", "down", "enter"] {
+    for key in ["down", "down", "up", "down"] {
         press(&mut world, key);
     }
+    assert_eq!(
+        world
+            .screen()
+            .active_option()
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("journal.md /other/journal.md"),
+        "the field names the highlighted file"
+    );
+    press(&mut world, "enter");
     let opened = sent(&world, "open_markdown");
     assert_eq!(opened.len(), 1);
     assert_eq!(

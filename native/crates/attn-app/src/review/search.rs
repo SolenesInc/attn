@@ -321,6 +321,7 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
         .width(None)
         .label("Search")
         .placeholder("Search files by name and lines by text")
+        .active_descendant((!found.is_empty()).then(|| option_key(search.selected)))
         .on_edit(query_field)
         .on_change(changed)
         .on_key(on_key)

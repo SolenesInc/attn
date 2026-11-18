@@ -34,6 +34,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .width(None)
         .label(label.clone())
         .placeholder(placeholder)
+        .active_descendant(at.map(|i| row_key(&listing.rows[i])))
         .on_edit(|state: &mut State| &mut state.window.search.query)
         .on_change(super::edited)
         .on_key(super::on_key)
@@ -134,12 +135,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
 
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     let (pointing, pressing) = (r.key.clone(), r.key.clone());
-    let face = row_face(
-        r,
-        format!("palette.row.{}", r.key),
-        Place::Palette { highlighted },
-        t,
-    );
+    let face = row_face(r, row_key(r), Place::Palette { highlighted }, t);
     if let Look::Divider = r.look {
         return face;
     }
@@ -147,6 +143,10 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
         .py(ROW_PY)
         .on_pointer_move(move |state: &mut State, p| super::pointed(state, &pointing, (p.x, p.y)))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &pressing, tx))
+}
+
+fn row_key(r: &Row) -> String {
+    format!("palette.row.{}", r.key)
 }
 
 /// Where a row is drawn: in the palette, with its crew details and, on the highlighted row,

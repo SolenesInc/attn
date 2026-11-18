@@ -312,11 +312,15 @@ fn options(world: &World, prefix: &str) -> Vec<(String, bool)> {
         .collect()
 }
 
+/// The highlighted row, as a screen reader hears it from the focused field.
 fn selected(world: &World, prefix: &str) -> Option<String> {
-    options(world, prefix)
+    let shown = options(world, prefix)
         .into_iter()
         .find(|(_, selected)| *selected)
-        .map(|(name, _)| name)
+        .map(|(name, _)| name);
+    let heard = world.screen().active_option().and_then(|n| n.name);
+    assert_eq!(heard, shown, "the field names the highlighted row");
+    shown
 }
 
 fn where_shows(world: &World) -> bool {

@@ -394,6 +394,15 @@ fn the_mailbox_list_opens_with_cmd_k_and_picks_with_the_arrows() {
         "the chief first, then the profile's members"
     );
     press(&mut world, "down");
+    assert_eq!(
+        world
+            .capture_screen()
+            .active_option()
+            .and_then(|o| o.name)
+            .as_deref(),
+        Some("Fern"),
+        "the message field names the mailbox Enter picks"
+    );
     press(&mut world, "enter");
     assert!(
         world

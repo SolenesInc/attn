@@ -382,6 +382,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
         .width(None)
         .label("Path")
         .placeholder(placeholder)
+        .active_descendant(launcher.active_row_key(state))
         .on_edit(move |state: &mut State| super::field_mut(state, which))
         .on_change(move |state: &mut State, tx: &mut Tx| super::edited(state, which, tx))
         .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {

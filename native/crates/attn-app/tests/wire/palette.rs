@@ -175,13 +175,16 @@ fn titles(world: &World) -> Vec<String> {
         .collect()
 }
 
+/// The highlighted row's title, as a screen reader hears it from the focused field.
 fn highlighted(world: &World) -> Option<String> {
-    world
-        .screen()
+    let screen = world.screen();
+    let shown = screen
         .all(Target::role("list-box-option"))
         .into_iter()
-        .find(|n| n.is("selected"))
-        .and_then(|n| n.name)
+        .find(|n| n.is("selected"));
+    let heard = screen.active_option();
+    assert_eq!(heard, shown, "the field names the highlighted row");
+    heard.and_then(|n| n.name)
 }
 
 fn palette_named(world: &World) -> Option<String> {

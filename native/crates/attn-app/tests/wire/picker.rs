@@ -294,9 +294,10 @@ fn field_text(world: &World, which: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The highlighted row, as a screen reader hears it from the focused field.
 fn highlighted(world: &World, which: &str) -> Option<String> {
-    world
-        .screen()
+    let screen = world.screen();
+    let shown = screen
         .all(Target::role("list-box-option"))
         .into_iter()
         .filter(|n| {
@@ -304,8 +305,13 @@ fn highlighted(world: &World, which: &str) -> Option<String> {
                 .as_deref()
                 .is_some_and(|k| k.starts_with(&format!("{which}.row.")))
         })
-        .find(|n| n.is("selected"))
-        .and_then(|n| n.description.or(n.name))
+        .find(|n| n.is("selected"));
+    assert_eq!(
+        screen.active_option(),
+        shown,
+        "the field names the highlighted row"
+    );
+    shown.and_then(|n| n.description.or(n.name))
 }
 
 fn sent(world: &World, cmd: &str, field: &str) -> Vec<String> {

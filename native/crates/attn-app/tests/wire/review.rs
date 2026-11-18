@@ -2513,6 +2513,15 @@ fn keeps_the_picked_result_in_view_as_down_moves_it_down_a_long_search() {
     }
     world.settle();
     assert!(shows_inside(&world, list, "review.search.option.40"));
+    assert_eq!(
+        world
+            .screen()
+            .active_option()
+            .and_then(|n| n.key)
+            .as_deref(),
+        Some("review.search.option.40"),
+        "the field names the picked result"
+    );
     for _ in 0..30 {
         press(&mut world, Key::Up);
     }

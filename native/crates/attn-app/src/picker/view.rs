@@ -478,6 +478,7 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
                 .width(None)
                 .label("Path")
                 .placeholder("Type path (e.g., ~/projects) or search...")
+                .active_descendant(picker.highlight.map(|h| row_key(which, h.index)))
                 .on_edit(move |state: &mut State| state.window.launching.input_mut(which))
                 .on_change(move |state: &mut State, tx: &mut Tx| super::edited(state, which, tx))
                 .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
@@ -620,12 +621,16 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
     ]
 }
 
+fn row_key(which: Which, i: usize) -> String {
+    format!("{}.row.{i}", which.key())
+}
+
 fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Tokens) -> El {
     let which = picker.which;
     let highlighted = picker.highlight.is_some_and(|h| h.index == i);
     let path = r.path.clone();
     let option = col()
-        .key(format!("{}.row.{i}", which.key()))
+        .key(row_key(which, i))
         .role("option")
         .label(r.name.clone())
         .focus_selected(highlighted);

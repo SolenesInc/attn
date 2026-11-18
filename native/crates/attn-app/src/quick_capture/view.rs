@@ -133,6 +133,13 @@ fn compose(panel: &Panel, t: &Tokens) -> El {
     } else {
         field
     };
+    let picked = panel
+        .picking
+        .and_then(|at| panel.roster().get(at).map(|m| mailbox_key(&m.id)));
+    let field = match picked {
+        Some(key) => field.active_descendant(key),
+        None => field,
+    };
     let message = col()
         .key("capture.field")
         .w_full()
@@ -383,6 +390,10 @@ fn send_button(face: &str, enabled: bool, t: &Tokens) -> El {
         )
 }
 
+fn mailbox_key(id: &str) -> String {
+    format!("capture.mailbox.{id}")
+}
+
 fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
     let chosen = panel.mailbox();
     let options = panel.roster().into_iter().enumerate().map(|(index, m)| {
@@ -393,7 +404,7 @@ fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
             "Between sessions"
         };
         row()
-            .key(format!("capture.mailbox.{}", m.id))
+            .key(mailbox_key(&m.id))
             .role("option")
             .label(m.name.clone())
             .focus_selected(index == at)
@@ -442,7 +453,7 @@ fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
     el().absolute(0.0, 0.0)
         .w_full()
         .h_full()
-        .on_press_tx(|panel: &mut Panel, _: &mut Tx| panel.picking = None)
+        .on_background_press(|panel: &mut Panel| panel.picking = None)
         .child(col().w_full().items_start().pt(48.0).pl(18.0).child(list))
 }
 

@@ -963,10 +963,17 @@ fn the_finder_opens_a_note_by_name_inside_the_notebook_and_the_opener_once_it_cl
     assert_eq!(index.len(), 1);
     assert!(index[0].get("root").is_none());
 
-    world.gesture(|d| {
-        d.type_text("rust");
-        d.press("enter");
-    });
+    world.gesture(|d| d.type_text("rust"));
+    assert_eq!(
+        world
+            .screen()
+            .active_option()
+            .and_then(|n| n.key)
+            .as_deref(),
+        Some("notebook.finder.row.knowledge/rust-notes.md"),
+        "the field names the note Enter opens"
+    );
+    world.gesture(|d| d.press("enter"));
     assert!(
         world
             .screen()

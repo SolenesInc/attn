@@ -145,6 +145,13 @@ impl Screen {
         self.nodes().into_iter().find(|node| node.is("focused"))
     }
 
+    /// The option a screen reader hears as current while the keyboard stays in a field or
+    /// list: the element the focused one names as its active descendant.
+    pub fn active_option(&self) -> Option<Node> {
+        let key = self.focused()?.active_descendant?;
+        self.find(Target::Key(key))
+    }
+
     fn nodes(&self) -> Vec<Node> {
         self.values().into_iter().map(node).collect()
     }
