@@ -650,8 +650,7 @@ jobs:
     needs: [changes, app-acceptance-tauri, app-acceptance-native]
     # !cancelled() so a red matrix still reaches the gate instead of skipping.
     if: >-
-      !cancelled() && needs.changes.result == 'success' &&
-      (needs.changes.outputs.app_acceptance_tauri != 'carried' || needs.changes.outputs.app_acceptance != 'carried')
+      !cancelled() && needs.changes.result == 'success'
     permissions:
       actions: read
       contents: read
@@ -765,7 +764,6 @@ jobs:
         "native": ["native"],
         "app-acceptance-tauri": ["app_acceptance_tauri"],
         "app-acceptance-native": ["app_acceptance"],
-        "app-acceptance": ["app_acceptance_tauri", "app_acceptance"],
         "release-preflight": ["release_preflight"]}
     steps:
       - uses: actions/checkout@v4

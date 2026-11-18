@@ -65,7 +65,7 @@ fi
 
 expect linux-skipped 1 "{\"backend\":$skipped,\"frontend\":$ok}" '{"jobs":[]}'
 
-job_groups='{"backend":["daemon"],"app-acceptance-native":["app_acceptance"],"app-acceptance":["app_acceptance_tauri","app_acceptance"]}'
+job_groups='{"backend":["daemon"],"app-acceptance-native":["app_acceptance"],"gate":["app_acceptance_tauri","app_acceptance"]}'
 daemon_carried='{"daemon":{"run":"https://github.com/example/attn/actions/runs/5","commit":"2222222222222222222222222222222222222222"}}'
 JOB_GROUPS="$job_groups" CARRIED_JSON="$daemon_carried" \
   expect carried-skipped 0 "{\"backend\":$skipped,\"frontend\":$ok}" '{"jobs":[]}'
@@ -76,7 +76,7 @@ JOB_GROUPS="$job_groups" CARRIED_JSON="$daemon_carried" \
   expect uncarried-skipped 1 "{\"backend\":$ok,\"app-acceptance-native\":$skipped}" '{"jobs":[]}'
 
 JOB_GROUPS="$job_groups" CARRIED_JSON='{"app_acceptance":{"run":"r","commit":"c"}}' \
-  expect gate-skipped-with-one-group-carried 1 "{\"app-acceptance-native\":$skipped,\"app-acceptance\":$skipped}" '{"jobs":[]}'
+  expect job-skipped-with-one-of-its-groups-carried 1 "{\"app-acceptance-native\":$skipped,\"gate\":$skipped}" '{"jobs":[]}'
 
 JOB_GROUPS="$job_groups" CARRIED_JSON="$daemon_carried" \
   expect carried-group-ran-red 1 "{\"backend\":$failed}" "{\"jobs\":[$acceptance,{\"name\":\"Daemon (1)\",\"status\":\"completed\",\"conclusion\":\"failure\",\"runner_name\":\"GitHub Actions 1\",\"labels\":[\"ubuntu-24.04\"]}]}"
