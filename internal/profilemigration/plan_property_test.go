@@ -138,7 +138,7 @@ func TestFinishNeverLosesDuplicatesOrResurrectsALeaf(t *testing.T) {
 				before[id]++
 			}
 		}
-		outcome, err := Materialize(plan, live, w.desktops, counter())
+		outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 		if err != nil {
 			t.Fatalf("finish refused a checked, confirmed draft: %v", err)
 		}

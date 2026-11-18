@@ -139,7 +139,7 @@ func (m *materializer) finalDesktop(existing profiles.Desktop, slot int, tree la
 	return profiles.Settle(desktop)
 }
 
-func Materialize(plan Plan, live []GroupState, current []profiles.Desktop, newSplitID func() string) (Outcome, error) {
+func Materialize(plan Plan, live []GroupState, current []profiles.Desktop, launchDestinations map[string]bool, newSplitID func() string) (Outcome, error) {
 	if err := plan.Check(live); err != nil {
 		return Outcome{}, err
 	}
@@ -167,7 +167,7 @@ func Materialize(plan Plan, live []GroupState, current []profiles.Desktop, newSp
 			continue
 		}
 		leftover := m.leftover(desktop.ID)
-		if layouttree.LayoutEmpty(leftover) {
+		if layouttree.LayoutEmpty(leftover) && !launchDestinations[desktop.ID] {
 			outcome.Deleted = append(outcome.Deleted, desktop.ID)
 			continue
 		}

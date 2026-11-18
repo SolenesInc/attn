@@ -224,7 +224,7 @@ func TestClosedGroupsRetireFromTheDraftItsConfirmationsAndItsHistory(t *testing.
 func TestFinishRefusesUntilEveryLiveGroupIsConfirmed(t *testing.T) {
 	w := newWorld(3)
 	plan := must(t)(InitialPlan(w.manifest).Keep(w.live(), []string{"group-1", "group-2"}))
-	if _, err := Materialize(plan, w.live(), w.desktops, counter()); err == nil {
+	if _, err := Materialize(plan, w.live(), w.desktops, nil, counter()); err == nil {
 		t.Fatal("finish succeeded with group-3 unconfirmed")
 	}
 }
@@ -237,7 +237,7 @@ func TestFinishKeepsConcurrentAgentsWhereTheyWereLaunched(t *testing.T) {
 	plan := InitialPlan(w.manifest)
 	plan = must(t)(plan.Move(live, "group-2", "desktop-3", "", EdgeLeft, 0.4))
 	plan = must(t)(plan.Keep(live, []string{"group-1", "group-2", "group-3"}))
-	outcome, err := Materialize(plan, live, w.desktops, counter())
+	outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 	plan := InitialPlan(w.manifest)
 	plan = must(t)(plan.Move(live, "group-10", "slot-5", "", EdgeRight, 0))
 	plan = must(t)(plan.Keep(live, []string{"group-1", "group-2", "group-10"}))
-	outcome, err := Materialize(plan, live, w.desktops, counter())
+	outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 
 	plan = must(t)(plan.Move(live, "group-10", "desktop-2", "group-2", EdgeBottom, 0))
 	plan = must(t)(plan.Keep(live, []string{"group-10"}))
-	outcome, err = Materialize(plan, live, w.desktops, counter())
+	outcome, err = Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestAFreeSlotTakenDuringTheDraftReceivesTheGroupsMovedThere(t *testing.T) {
 
 	w.desktops = append(w.desktops, profiles.Desktop{ID: "desktop-new", ProfileID: "profile", ShortcutSlot: 9, Tree: layouttree.DefaultLayout("pane-launched"), ActivePaneID: "pane-launched", Panes: []profiles.Pane{agentPane("pane-launched")}})
 	live = w.live()
-	outcome, err := Materialize(plan.Reconcile(w.desktops).Retire(live), live, w.desktops, counter())
+	outcome, err := Materialize(plan.Reconcile(w.desktops).Retire(live), live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +345,7 @@ func TestASlotFreedDuringTheDraftBecomesATargetAgain(t *testing.T) {
 	}
 	plan = must(t)(plan.Move(live, "group-4", "slot-3", "", EdgeRight, 0))
 	plan = must(t)(plan.Keep(live, plan.Unconfirmed(live)))
-	outcome, err := Materialize(plan, live, w.desktops, counter())
+	outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
 	}

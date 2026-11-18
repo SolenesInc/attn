@@ -239,7 +239,15 @@ func finishPlacement(tx *sql.Tx, now string, view *ProfileMigrationView) (profil
 	if err != nil {
 		return profile, err
 	}
-	outcome, err := profilemigration.Materialize(view.Plan, view.Live, current, func() string { return newProfileEntityID("split") })
+	destinations, err := queryColumn[string](tx, `SELECT DISTINCT desktop_id FROM launch_desktops`)
+	if err != nil {
+		return profile, err
+	}
+	launchDestinations := make(map[string]bool, len(destinations))
+	for _, id := range destinations {
+		launchDestinations[id] = true
+	}
+	outcome, err := profilemigration.Materialize(view.Plan, view.Live, current, launchDestinations, func() string { return newProfileEntityID("split") })
 	if err != nil {
 		return profile, err
 	}
