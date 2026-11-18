@@ -265,14 +265,15 @@ setup patch-section
 mkdir -p "$work/upstream-src/vendor/wgpu-hal/src"
 printf '[package]\nname = "wgpu-hal"\nversion = "0.1.0"\nedition = "2021"\n' >"$work/upstream-src/vendor/wgpu-hal/Cargo.toml"
 : >"$work/upstream-src/vendor/wgpu-hal/src/lib.rs"
-bump --pick "$(upstream_commit "Upstream patches another crate" "" 'wgpu-hal = { path = "vendor/wgpu-hal" }')" &&
-  fail "moved the pin though Rune's [patch.crates-io] changed"
-grep -qF "Rune's [patch.crates-io] at $(fork_rev main) differs from native/Cargo.toml's" "$work/out" || fail "did not say Rune's [patch.crates-io] changed"
+patching="$(upstream_commit "Upstream patches another crate" "" 'wgpu-hal = { path = "vendor/wgpu-hal" }')"
+bump --pick "$patching" && fail "moved the pin though Rune's [patch.crates-io] changed"
+grep -qE "Rune's \[patch.crates-io\] at [0-9a-f]{40} differs from native/Cargo.toml's" "$work/out" || fail "did not say Rune's [patch.crates-io] changed"
+[ "$(fork_rev main)" = "$old_main" ] || fail "pushed main though native/Cargo.toml lacks Rune's new [patch.crates-io]"
 grep -qF "< wgpu-hal" "$work/out" || fail "did not show the [patch.crates-io] difference"
 pin_unchanged || fail "moved the pin though Rune's [patch.crates-io] changed"
 printf 'wgpu-hal = { git = "file://%s", rev = "%s" }\n' "$work/fork.git" "$old_main" >>"$work/attn/native/Cargo.toml"
 commit "$work/attn" "Repeat Rune's new patch"
-bump --rev "$(fork_rev main)" || fail "--rev failed after native/Cargo.toml repeated Rune's new [patch.crates-io]"
+bump --pick "$patching" || fail "the pick failed after native/Cargo.toml repeated Rune's new [patch.crates-io]"
 [ "$(pinned)" = "$(fork_rev main)" ] || fail "did not pin once native/Cargo.toml repeated Rune's new [patch.crates-io]"
 
 setup conflict
@@ -308,11 +309,50 @@ pub fn newer() {}")" && fail "picked though the fork's dev has commits upstream 
 grep -qF "dev only mirrors upstream" "$work/out" || fail "did not say the fork's dev must only mirror upstream"
 [ "$(fork_rev main)" = "$old_main" ] || fail "pushed main though the fork's dev diverged"
 
+candidates() { git -C "$work/fork.git" for-each-ref --format='%(refname)' refs/heads/rune-bump; }
+
 setup native-red
 bump --pick "$(upstream_commit "Upstream drops the greeting" 'pub fn answer() -> u32 { 42 }')" &&
   fail "reported success though the native suite fails"
-grep -qF "the native suite fails at $(fork_rev main)" "$work/out" || fail "did not say the native suite fails at the new rev"
+grep -qE "the native suite fails at [0-9a-f]{40}; the fork's main stays where it was" "$work/out" || fail "did not say the native suite fails at the new rev and main stays"
 grep -qF "greeting" "$work/out" || fail "did not show the native suite's failure"
+[ "$(fork_rev main)" = "$old_main" ] || fail "pushed a main attn's native suite fails against"
+[ -z "$(candidates)" ] || fail "left the candidate ref on the fork"
+
+setup breaking-branch
+git clone -q -b main "$work/fork.git" "$work/branch-src"
+git -C "$work/branch-src" checkout -q -b rename
+printf '%s\n' 'pub fn answer() -> u32 { 42 }' 'pub fn salutation() -> &'"'"'static str { "hi" }' >"$work/branch-src/crates/rune/src/api.rs"
+sed -i.bak "s/^| The answer stays 42/| The answer stays 42, and the greeting is a salutation/" "$work/branch-src/FORK.md" && rm "$work/branch-src/FORK.md.bak"
+commit "$work/branch-src" "Rename the greeting"
+git -C "$work/branch-src" push -q origin rename
+bump --branch rename && fail "reported success though the branch breaks attn"
+grep -qF "the fork's main stays where it was" "$work/out" || fail "did not say main stays when the branch breaks attn"
+grep -qF "run scripts/rune-bump --branch rename" "$work/out" || fail "did not say how to bring the branch in once attn is fixed"
+[ "$(fork_rev main)" = "$old_main" ] || fail "pushed a branch that breaks attn into the fork's main"
+[ -z "$(candidates)" ] || fail "left the candidate ref on the fork"
+git -C "$work/attn" checkout -q -- native
+sed -i 's/rune::greeting()/rune::salutation()/' "$work/attn/native/crates/app/src/lib.rs"
+bump --branch rename || fail "refused the branch once attn uses its new API"
+git -C "$work/fork.git" merge-base --is-ancestor rename main || fail "did not bring the branch into main once attn passes"
+[ "$(pinned)" = "$(fork_rev main)" ] || fail "did not pin the main it pushed"
+[ -z "$(candidates)" ] || fail "left the candidate ref on the fork after pushing main"
+
+setup main-moved
+git clone -q -b main "$work/fork.git" "$work/branch-src"
+git -C "$work/branch-src" checkout -q -b topic
+sed -i.bak "s/^| The answer stays 42/| The answer stays 42, and topic/" "$work/branch-src/FORK.md" && rm "$work/branch-src/FORK.md.bak"
+commit "$work/branch-src" "Topic fix"
+git -C "$work/branch-src" push -q origin topic
+git clone -q -b main "$work/fork.git" "$work/main-src"
+sed -i.bak "s/^| The answer stays 42/| The answer stays 42, and meanwhile/" "$work/main-src/FORK.md" && rm "$work/main-src/FORK.md.bak"
+commit "$work/main-src" "Another Builder lands meanwhile"
+printf 'test-native:\n\tgit -C "%s" push -q origin HEAD:main\n\tcd native && cargo test --workspace --locked\n' "$work/main-src" >"$work/attn/Makefile"
+commit "$work/attn" "A native suite during which main moves"
+moved="$(git -C "$work/main-src" rev-parse HEAD)"
+bump --branch topic && fail "reported success though main moved during the native suite"
+grep -qF "the fork's main moved while the native suite ran" "$work/out" || fail "did not say main moved during the native suite"
+[ "$(fork_rev main)" = "$moved" ] || fail "overwrote a main that moved during the native suite"
 
 setup rev
 fork_change "Fix on main"

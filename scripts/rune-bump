@@ -7,10 +7,12 @@ Moves native/'s Rune pin to a new revision of the fork's main and runs the
 native suite. --pick cherry-picks the named commits of upstream's dev onto main
 and records each in FORK.md; --branch merges a fork branch into main; --rev
 pins a revision already on main. FORK.md must record every commit on main that
-upstream's dev lacks: the commit changes FORK.md, or a row lists its hash. A new main must pass the tests FORK.md names before
-it is pushed and pinned. The pin move is left uncommitted."
+upstream's dev lacks: the commit changes FORK.md, or a row lists its hash. A
+new main must pass the tests FORK.md names and attn's native suite, run in this
+checkout against it, before it is pushed to the fork's main. The pin move is
+left uncommitted."
 
-mode="" targets=()
+mode="" targets=() again="scripts/rune-bump $*"
 case "${1-}" in
   --pick)
     [ "$#" -ge 2 ] || { echo "$usage" >&2; exit 2; }
@@ -29,8 +31,9 @@ attn="$(git rev-parse --show-toplevel)"
 manifest="$attn/native/Cargo.toml"
 
 logs="$(mktemp -d "${TMPDIR:-/tmp}/rune-bump.XXXXXX")"
-worktree=""
+worktree="" candidate=""
 cleanup() {
+  [ -z "$candidate" ] || git -C "$clone" push -q "$fork" ":$candidate" >/dev/null 2>&1 || true
   [ -z "$worktree" ] || git -C "$clone" worktree remove --force "$worktree" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -238,27 +241,43 @@ bring ${targets[0]} up to main, resolve, push it and run scripts/rune-bump --bra
   done
   [ -z "$missing" ] || die "FORK.md lists tests that did not run:$missing; name a unit test by its path in its crate, or an integration test by its file, such as crates/rune/tests/focus.rs, with ::<test> to run one of its tests"
 
-  step "push the fork's main"
-  run git -C "$worktree" push "$fork" "HEAD:refs/heads/main"
 fi
 
-step "move the pin from $old to $new"
+step "check native/Cargo.toml repeats Rune's [patch.crates-io]"
 patch_keys() {
   sed -n '/^\[patch.crates-io\]/,/^\[/p' | grep -oE '^[A-Za-z0-9_-]+ *=' | tr -d ' =' | sort || true
 }
 rune_manifest="$(git -C "$clone" show "$new:Cargo.toml")" || die "cannot read Rune's Cargo.toml at $new"
 if ! diff <(patch_keys <<<"$rune_manifest") <(patch_keys <"$manifest") >"$logs/patches.diff"; then
   cat "$logs/patches.diff" >&2
-  die "Rune's [patch.crates-io] at $new differs from native/Cargo.toml's (< Rune, > native); copy Rune's entries into native/Cargo.toml, pointed at the fork, commit, then run scripts/rune-bump --rev $new"
+  die "Rune's [patch.crates-io] at $new differs from native/Cargo.toml's (< Rune, > native); copy Rune's entries into native/Cargo.toml, pointed at the fork at the rev native/ pins now, commit, then run $again"
 fi
+
+if [ "$mode" != rev ]; then
+  step "push the new main as a candidate for the native suite"
+  candidate="refs/heads/rune-bump/$new"
+  run git -C "$clone" push "$fork" "$new:$candidate"
+fi
+
+step "move the pin from $old to $new"
 OLD="$old" NEW="$new" perl -pi -e 's/\Q$ENV{OLD}\E/$ENV{NEW}/g' "$manifest"
 (cd "$attn/native" && run cargo update -p rune)
 
 step "run the native suite"
+main_kept=""
+[ "$mode" = rev ] || main_kept="; the fork's main stays where it was"
 (cd "$attn" && run make test-native) || {
-  die "the native suite fails at $new; the pin move stays in native/ for you to fix or drop, and must not land red"
+  die "the native suite fails at $new$main_kept. The pin move stays in native/ for you to fix attn against; then drop it with git checkout -- native/Cargo.toml native/Cargo.lock and run $again"
 }
 grep -E '^test result' "$log" | sed 's/^/rune-bump:   /'
+
+if [ "$mode" != rev ]; then
+  step "push the fork's main"
+  if ! git -C "$clone" push "$fork" "$new:refs/heads/main" >>"$log" 2>&1; then
+    tail -n 20 "$log" >&2
+    die "the fork's main moved while the native suite ran, so $new is not pushed; drop the pin move with git checkout -- native/Cargo.toml native/Cargo.lock and run $again"
+  fi
+fi
 
 rm -rf "$logs"
 say "pinned Rune $new (was $old); native/Cargo.toml and native/Cargo.lock are ready to land"

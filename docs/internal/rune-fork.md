@@ -58,8 +58,9 @@ than pieces, since a deleted area can no longer take picks.
    file, such as `crates/rune/tests/press_keeps_focus.rs`, which runs the whole
    file, or with `::<test>` after the file to run one of its tests. Commit the
    row with the change; a later commit to the same change extends its row.
-6. Push the branch and name it on your seed. The Orchestrator brings it into
-   `main` with `scripts/rune-bump --branch <branch>`.
+6. Push the branch and bring it into `main` with
+   `scripts/rune-bump --branch <branch>`, from the attn checkout that holds the
+   attn side of your change, as [Move the pin](#move-the-pin) says.
 
 ## Take a change from upstream
 
@@ -94,8 +95,8 @@ In order, it:
 4. runs every test `FORK.md` names, through the new `main`'s
    `scripts/test.sh` on this machine's OS, and fails when one fails or does not
    run, so a stale row is caught;
-5. pushes `main`;
-6. moves the pin, as below.
+5. moves the pin and runs attn's native suite against the new `main`, then
+   pushes `main`, as below.
 
 A pick that conflicts stops the script, and nothing is pushed. Port it on a
 branch as a Builder would, then run `scripts/rune-bump --branch <branch>`.
@@ -105,13 +106,12 @@ reviewed" line in `FORK.md` to the last one you read.
 
 ## Move the pin
 
-Builders never move the pin. The Orchestrator moves it, and a move whose native
-suite fails does not land.
+The Builder whose change needs Rune moves the pin, and lands it in one landing
+with the attn side of the change. A move whose native suite fails does not land.
 
 - `scripts/rune-bump --pick <commit>...` picks from upstream, then moves the pin.
-- `scripts/rune-bump --branch <fork-branch>` merges a fork branch, such as a
-  Builder's, into `main`, checks the ledger, runs its tests, pushes `main` and
-  moves the pin. It refuses a branch that carries commits of upstream's `dev`
+- `scripts/rune-bump --branch <fork-branch>` merges a fork branch into `main`,
+  checks the ledger, runs its tests and moves the pin. It refuses a branch that carries commits of upstream's `dev`
   that `main` lacks, and one whose `FORK.md` keeps two versions of a line.
   When the merge conflicts, bring the branch up to `main`, resolve, and push it
   again.
@@ -123,14 +123,27 @@ Before moving the pin, the script fails when the crates Rune's
 `[patch.crates-io]` names at the new revision differ from those
 `native/Cargo.toml` repeats. An app that depends on Rune repeats those entries
 in its own workspace, because cargo ignores a dependency's `[patch]` section.
-Copy Rune's entries into `native/Cargo.toml`, pointed at the fork's new
-revision, commit, and run `scripts/rune-bump --rev <new rev>`.
+Copy Rune's entries into `native/Cargo.toml`, pointed at the fork at the
+revision `native/` pins now, commit, and run the same `scripts/rune-bump` again.
 
 The script then replaces the rev in `native/Cargo.toml`, runs
-`cargo update -p rune` and the native suite (`make test-native`), and leaves the
-pin move uncommitted. Commit it and land it with `scripts/land.sh`, which runs
-the native suite again on CI's Linux. The script stops at the first step that
-fails, names it and prints its output.
+`cargo update -p rune` and the native suite (`make test-native`) in your attn
+checkout, and leaves the pin move uncommitted. For `--pick` and `--branch`, the
+new `main` reaches the fork only once that suite passes. Until then cargo
+fetches it from a candidate branch, `rune-bump/<rev>`, which the script deletes
+when it exits. So a Rune change that breaks attn never reaches `main` ahead of
+its attn side, and another agent's `scripts/rune-bump` never builds attn against
+it. When the suite fails, fix attn against the pinned revision, drop the pin
+move with `git checkout -- native/Cargo.toml native/Cargo.lock`, and run the
+script again. When someone pushed `main` while the suite ran, the push is
+refused; drop the pin move and run the script again.
+
+Commit the pin move with the attn change and land both with `scripts/land.sh`,
+which runs the native suite again on CI's Linux. Between the push and that
+landing, `main` is ahead of attn's: another agent's run that merges onto it
+builds attn without your attn side, and fails if the Rune change breaks attn.
+Land soon after the push, and ask that agent to wait for your landing. The
+script stops at the first step that fails, names it and prints its output.
 
 ## Test builds and memory
 
