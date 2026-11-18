@@ -27,6 +27,20 @@ export function selectionShown(target: ShowTarget): Promise<void> {
   });
 }
 
+export function sessionUnplaced(sessionId: string): Promise<void> {
+  const placed = () => useProfilesStore.getState().desktops.some((desktop) => desktop.panes.some((pane) => pane.session_id === sessionId));
+  return new Promise((resolve) => {
+    let stop = () => {};
+    const check = () => {
+      if (placed()) return;
+      stop();
+      resolve();
+    };
+    stop = useProfilesStore.subscribe(check);
+    check();
+  });
+}
+
 // Resolves once the focus claim a confirmed show made is delivered with the keyboard in that leaf.
 export function focusLanded(desktopId: string, leafId: string): Promise<void> {
   const claim = useSessionStore.getState().focusRequest;

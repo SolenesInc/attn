@@ -344,6 +344,7 @@ async function main() {
       await client.request('dispatch_shortcut', { shortcutId: 'session.close' });
       await waitForSessionAbsentFromDaemon(observer, closingSessionId, 'target session unregistered after close shortcut');
       await waitForSessionGoneFromUi(client, closingSessionId, 'target session gone from UI/sidebar after close shortcut');
+      await client.request('await_session_unplaced', { sessionId: closingSessionId });
       note(`closing desktop session closed`, { closingSessionId });
     });
 

@@ -26,7 +26,7 @@ import { collectDesktopLayoutDiagnostics, projectDesktopBounds } from '../utils/
 import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot } from '../utils/terminalStyleSummary';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
-import { selectionShown } from './uiAutomationSelection';
+import { selectionShown, sessionUnplaced } from './uiAutomationSelection';
 import {
   clickElementWithModifiers,
   APP_BUILD_IDENTITY,
@@ -2407,6 +2407,14 @@ export function useUiAutomationBridge({
         openDockPanel(panelId);
         await settleUi();
         return { panelId };
+      }
+      case 'await_session_unplaced': {
+        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
+        if (!sessionId) {
+          throw new Error('await_session_unplaced requires sessionId');
+        }
+        await sessionUnplaced(sessionId);
+        return { sessionId };
       }
       case 'get_desktop': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : shownAgentId;
