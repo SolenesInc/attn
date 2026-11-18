@@ -146,7 +146,7 @@ Steps:
 - **Harnesses**: any harness reads and edits the files with its own tools and appends with the same `attn journal append`.
 - **Keyboard and native input**: ⌥⌘N, ⇧⌥⌘N, ⌘P inside the notebook, Esc to close fullscreen. ⌘Z and ⇧⌘Z reach the editor because attn removes the Edit menu's Undo and Redo, which would take them first. attn leaves ⌘E free for inline code.
 - **Compatibility across versions**: attn keeps frontmatter keys it does not know as written, and `index.md` and `log.md` carry no frontmatter.
-- **Accessibility**: in the native app the finder's field names the highlighted note as its active descendant (`notebook.finder.row.<path>`), so VoiceOver reads each note as ↑ and ↓ move.
+- **Accessibility**: in the native app the finder's field names the highlighted note as its active descendant (`notebook.finder.row.<path>`), so VoiceOver reads each note as ↑ and ↓ move. The editor (`notebook.editor`) is a multiline text input named "Note": its value is the note's markdown and its selection follows the caret, so VoiceOver reads the line or word the caret moves to and echoes typing. `bridge tree` shows the caret as `selection`, `[line + 1, character, line + 1, character]`.
 
 ## Tests
 

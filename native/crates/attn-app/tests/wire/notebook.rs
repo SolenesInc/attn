@@ -664,6 +664,46 @@ fn an_edit_made_just_before_the_tile_leaves_the_screen_is_saved_and_comes_back_w
     assert!(world.runtime_is_at_rest());
 }
 
+#[test]
+fn a_screen_reader_reads_the_note_as_an_editable_text_area_that_follows_the_caret() {
+    let disk = Disk::with(&[("knowledge/index.md", "# Plan\nFirst line\nSecond line")]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor"));
+        d.press("mod+up");
+    });
+
+    let editor = world.screen().focused().expect("the editor has focus");
+    assert_eq!(editor.key.as_deref(), Some("notebook.editor"));
+    assert_eq!(editor.role, "multiline-text-input");
+    assert_eq!(editor.name.as_deref(), Some("Note"));
+    assert_eq!(
+        editor.value.as_deref(),
+        Some("# Plan\nFirst line\nSecond line")
+    );
+    assert_eq!(editor.selection, Some([(0, 0), (0, 0)]));
+
+    world.gesture(|d| d.press("down"));
+    let caret = |world: &World| world.screen().get(Target::key("notebook.editor")).selection;
+    assert_eq!(caret(&world), Some([(1, 0), (1, 0)]));
+    world.gesture(|d| d.press("down"));
+    assert_eq!(caret(&world), Some([(2, 0), (2, 0)]));
+    world.gesture(|d| d.press("shift+alt+right"));
+    assert_eq!(caret(&world), Some([(2, 0), (2, 6)]));
+
+    world.gesture(|d| {
+        d.press("mod+down");
+        d.type_text("!");
+    });
+    let editor = world.screen().get(Target::key("notebook.editor"));
+    assert_eq!(
+        editor.value.as_deref(),
+        Some("# Plan\nFirst line\nSecond line!")
+    );
+    assert_eq!(editor.selection, Some([(2, 12), (2, 12)]));
+}
+
 fn root_trigger(tile: &str) -> String {
     format!("notebook.tile.{tile}.root-trigger")
 }

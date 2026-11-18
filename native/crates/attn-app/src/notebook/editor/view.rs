@@ -73,7 +73,11 @@ pub(crate) fn view(
         .key(key.to_owned())
         .role("textbox")
         .label(label)
-        .a11y_value(editor.text())
+        .a11y_text(
+            editor.text(),
+            editor.doc.offset(editor.doc.anchor),
+            editor.doc.offset(editor.doc.caret),
+        )
         .focusable(true)
         .w_full()
         .on_press_outside(move |state: &mut State, tx: &mut Tx| {

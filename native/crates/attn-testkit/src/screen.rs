@@ -56,6 +56,9 @@ pub struct Node {
     /// The key of the element inside it that assistive technology treats as current, as a
     /// list's selected row or a document's cursor.
     pub active_descendant: Option<String>,
+    /// A text's selection from its anchor to its focus, each as (line, character) counting
+    /// from 0; a caret's anchor and focus are equal.
+    pub selection: Option<[(u64, u64); 2]>,
     /// What assistive technology hears about the element's state: `focused`, `disabled`,
     /// `checked`, `selected` and the like.
     pub states: Vec<String>,
@@ -228,6 +231,14 @@ fn node(value: &Value) -> Node {
         description: field("description"),
         active_descendant: field("activeDescendant"),
         level: value.get("level").and_then(Value::as_u64),
+        selection: value
+            .get("selection")
+            .and_then(Value::as_array)
+            .and_then(|s| {
+                let n: Vec<u64> = s.iter().filter_map(Value::as_u64).collect();
+                let at = |line: u64, c: u64| Some((line.checked_sub(1)?, c));
+                Some([at(*n.first()?, *n.get(1)?)?, at(*n.get(2)?, *n.get(3)?)?])
+            }),
         states: value
             .get("states")
             .and_then(Value::as_array)
