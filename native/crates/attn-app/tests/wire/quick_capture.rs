@@ -652,15 +652,14 @@ fn recent_shows_the_picture_of_a_sent_image_read_in_chunks_from_the_daemon() {
     rest(&mut world);
 }
 
-/// Scrolls the recent messages up to their top with the wheel and presses "Show older
-/// messages" there, in one go, as a person does.
+/// Scrolls the recent messages up to their top with the wheel, then presses "Show older
+/// messages" there.
 fn show_older(world: &mut World) {
     world.capture_gesture(|d| {
         let (x, y) = d.runtime.find("capture.history.list").unwrap();
         d.runtime.wheel(x, y, 2000.0);
-        d.runtime.frame(0.0);
-        d.click(Target::role("button").name("Show older messages"));
     });
+    world.capture_gesture(|d| d.click(Target::role("button").name("Show older messages")));
 }
 
 #[test]
