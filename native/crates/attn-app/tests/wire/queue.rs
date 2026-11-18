@@ -2267,6 +2267,12 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
     arranged_on(&mut world, &message, "d3", 8);
     assert_eq!(
         bar_chips(&world),
+        every_bar_chip(8),
+        "desktop 3's single tile leaves its shelf room for every chip"
+    );
+    world.resize(CROWDED_AT_HOME);
+    assert_eq!(
+        bar_chips(&world),
         ["queue-bar.desktop.3", "queue-bar.desktop-extras"]
     );
 
@@ -2289,4 +2295,72 @@ fn a_crowded_queue_bar_shows_every_chip_again_when_its_desktops_change_and_fit_a
 
     arranged_on(&mut world, &message, "d1", 3);
     assert_eq!(bar_chips(&world), every_bar_chip(3));
+}
+
+/// How many desktop chips the queue bar draws on each frame `recording` sampled.
+fn bar_chips_drawn(recording: &rune::motion_gate::Recording) -> Vec<usize> {
+    (0..recording.frames)
+        .map(|k| {
+            recording
+                .tracks
+                .iter()
+                .filter(|t| {
+                    t.path
+                        .rsplit('/')
+                        .next()
+                        .is_some_and(|key| key.starts_with("queue-bar.desktop."))
+                        && t.frames.iter().any(|(f, snap)| *f == k && snap.op > 0.0)
+                })
+                .count()
+        })
+        .collect()
+}
+
+#[test]
+fn a_queue_bar_crowds_or_shows_every_chip_from_the_first_frame_of_a_resize_or_desktop_switch() {
+    let (mut world, message) = crowded_bar(true);
+    world.resize(ROOMY);
+
+    let narrowed = world.record(60.0, 0.25, |_, app| {
+        let scale = app.runtime.env.scale;
+        app.runtime.set_viewport(CROWDED_BESIDE_SHELF, scale);
+    });
+    let drawn = bar_chips_drawn(&narrowed);
+    assert_eq!(drawn[0], 8, "the roomy bar showed every chip: {drawn:?}");
+    assert!(
+        drawn[1..].iter().all(|n| *n == 1),
+        "narrowed, the bar draws only the window's desktop's chip from its first frame: {drawn:?}"
+    );
+
+    let switch_to = |current: &str| {
+        let message = message.clone();
+        let current = current.to_owned();
+        move |daemon: &Daemon, _: &mut attn_testkit::Driver| {
+            daemon.emit(ProfileArrangementChangedMessage {
+                profile: Profile {
+                    current_desktop_id: current,
+                    ..message.profiles.clone().unwrap().remove(0)
+                },
+                desktops: message.desktops.clone().unwrap(),
+                ..ProfileArrangementChangedMessage::new()
+            });
+        }
+    };
+    let roomier = world.record(60.0, 0.25, switch_to("d3"));
+    let drawn = bar_chips_drawn(&roomier);
+    assert!(
+        drawn[1..].iter().all(|n| *n == 8),
+        "on desktop 3, whose shelf leaves room, the bar measures again and shows every chip from the switch's first frame: {drawn:?}"
+    );
+
+    let back = world.record(60.0, 0.25, switch_to("d1"));
+    let drawn = bar_chips_drawn(&back);
+    assert!(
+        drawn[1..].iter().all(|n| *n == 1),
+        "back on desktop 1 it crowds from the switch's first frame: {drawn:?}"
+    );
+    assert_eq!(
+        bar_chips(&world),
+        ["queue-bar.desktop.1", "queue-bar.desktop-extras"]
+    );
 }

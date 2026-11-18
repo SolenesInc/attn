@@ -800,7 +800,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         .h_full()
         .items_center()
         .gap(6.0)
-        .on_layout(super::crowding::bar_laid_out)
+        .on_measure(super::crowding::bar_laid_out)
         .child(pill)
         .children(
             crate::notifications::critical_strip(&state.facts.notifications, t).map(|s| s.w(240.0)),
@@ -820,7 +820,7 @@ fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
         .h_full()
         .items_center()
         .gap(4.0)
-        .on_layout(move |state: &mut State, rect| {
+        .on_measure(move |state: &mut State, rect| {
             super::crowding::chips_laid_out(state, rect, crowded)
         })
         .children(chips.iter().map(|c| {

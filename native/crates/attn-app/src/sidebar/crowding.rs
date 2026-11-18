@@ -1,15 +1,16 @@
 //! Whether the queue bar's desktop chips overflow the bar, as the Tauri app's
 //! `useBarCrowded`. A crowded bar shows only the window's desktop's chip, gathers the others
 //! into the extras chip, and leaves out the runs chip. It stays crowded while what the bar holds
-//! is unchanged and the bar is narrower than the width the chips last needed.
+//! is unchanged and the bar is narrower than the width the chips last needed. The bar and its
+//! chips are measured before the frame paints, as the hook's layout effect measures them, so
+//! a bar that changes shows its chips crowded or whole from its first frame.
 
 use crate::State;
 
-/// What the bar holds that changes the room its chips need. Unlike the Tauri app's, it leaves
-/// out the window's desktop: Rune hears a layout only after drawing it, so measuring again on
-/// every desktop switch would flash every chip for a frame.
+/// What the bar holds that changes the room its chips need.
 #[derive(Clone, Debug, PartialEq)]
 struct Contents {
+    desktop: Option<String>,
     desktops: usize,
     runs: bool,
     critical: bool,
@@ -21,6 +22,7 @@ fn contents(state: &State) -> Contents {
         .iter()
         .any(|g| !g.runs.is_empty() || !g.needing_you.is_empty());
     Contents {
+        desktop: facts.current_desktop().map(|d| d.id.clone()),
         desktops: facts.desktops.len(),
         runs,
         critical: facts.notifications.unread_critical > 0,
