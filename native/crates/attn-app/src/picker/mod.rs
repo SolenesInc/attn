@@ -13,7 +13,7 @@ use attn_protocol::{
     RecentLocationsResultMessage, SessionPlacement, SetSettingMessage, SpawnResultMessage,
     SpawnSessionMessage,
 };
-use rune::{Chord, Key, KeyEvent, KeyPlatform, TextEdit, Tx};
+use rune::{Chord, Key, KeyEvent, KeyPlatform, LiveRegion, TextEdit, Tx};
 
 use crate::State;
 pub(crate) use agents::{Agents, TERMINAL};
@@ -874,10 +874,12 @@ pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut
     };
     if pressed("alt+q") {
         toggle_yolo(state, which);
+        say_yolo(state, which, tx);
         return true;
     }
     if pressed("alt+t") {
         choose_agent(state, which, TERMINAL);
+        say_agent(state, which, tx);
         return true;
     }
     let numbered = numbered(&agents, &state.window.launching.catalog);
@@ -886,11 +888,40 @@ pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut
             if agents.selectable(agent) {
                 let agent = agent.clone();
                 choose_agent(state, which, &agent);
+                say_agent(state, which, tx);
             }
             return true;
         }
     }
     (1..=9).any(|n| pressed(&format!("alt+{n}")))
+}
+
+/// Tell a screen reader the harness a key chose, since the keyboard stays in the path field.
+fn say_agent(state: &State, which: Which, tx: &mut Tx) {
+    if let Some(picker) = state.window.launching.slot(which) {
+        let agent = picker.agent(state);
+        tx.announce(
+            agents::named(&state.facts.settings, &agent),
+            LiveRegion::Polite,
+        );
+    }
+}
+
+/// Tell a screen reader what ⌥Q left the YOLO switch at, since the keyboard stays in the path
+/// field.
+fn say_yolo(state: &State, which: Which, tx: &mut Tx) {
+    let Some(picker) = state.window.launching.slot(which) else {
+        return;
+    };
+    let agent = picker.agent(state);
+    let words = if !agents::supports_yolo(&state.facts.settings, &agent) {
+        agents::no_yolo(&agent)
+    } else if picker.choice().yolo {
+        "YOLO on".to_owned()
+    } else {
+        "YOLO off".to_owned()
+    };
+    tx.announce(words, LiveRegion::Polite);
 }
 
 /// The agents ⌥1 to ⌥9 pick, in list order, once the catalog says the order.

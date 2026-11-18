@@ -355,15 +355,6 @@ pub(crate) fn capabilities(
     out
 }
 
-/// "Claude", "Codex", or a plugin harness's id in words, unless the daemon names it.
-pub(crate) fn label(settings: &BTreeMap<String, String>, agent: &str) -> String {
-    settings
-        .get(&format!("{agent}_display_name"))
-        .map(|n| n.trim().to_owned())
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| crate::picker::agents::label(agent))
-}
-
 /// The harnesses `agents` name, as a route offers them: the daemon's metadata where it has
 /// some, each available while this machine has it.
 pub(crate) fn choices(state: &State, agents: &[String]) -> Vec<RouteHarness> {

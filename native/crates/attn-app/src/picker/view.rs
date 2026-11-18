@@ -155,13 +155,7 @@ pub(crate) fn agent_options(state: &State, choice: &Choice, offer: &Offer) -> Ve
     listed(agents, &launching.catalog)
         .into_iter()
         .map(|agent| {
-            let label = state
-                .facts
-                .settings
-                .get(&format!("{agent}_display_name"))
-                .filter(|name| !name.trim().is_empty())
-                .cloned()
-                .unwrap_or_else(|| agents::label(&agent));
+            let label = agents::named(&state.facts.settings, &agent);
             let availability = agents.of(&agent);
             let selectable = availability != agents::Availability::Unavailable;
             let key = if !selectable {
@@ -221,10 +215,7 @@ pub(crate) fn yolo(state: &State, choice: &Choice, offer: &Offer) -> Yolo {
         title: if supported {
             "Run the agent without asking for permission".to_owned()
         } else {
-            format!(
-                "{} does not support yolo mode",
-                agents::yolo_label(&current)
-            )
+            agents::no_yolo(&current)
         },
     }
 }

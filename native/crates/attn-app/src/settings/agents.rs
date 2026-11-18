@@ -295,7 +295,7 @@ fn default_agent(state: &State, t: &Tokens) -> El {
     let availability = harnesses::availability(settings);
     let chosen = state.window.settings.autosave.draft(DEFAULT_AGENT);
     let options = ordered(settings).into_iter().map(|agent| {
-        let label = harnesses::label(settings, &agent);
+        let label = crate::picker::agents::named(settings, &agent);
         let status = harnesses::of(&availability, &agent);
         let unavailable = status == Availability::Unavailable;
         let mut option = super::pages::segment(
@@ -598,7 +598,7 @@ fn capabilities(agent: &str, caps: Option<&BTreeMap<String, bool>>, t: &Tokens) 
 fn agent_group(state: &State, agent: &str, t: &Tokens) -> El {
     let settings = &state.facts.settings;
     let page = &state.window.settings.agents;
-    let label = harnesses::label(settings, agent);
+    let label = crate::picker::agents::named(settings, agent);
     let status = harnesses::of(&harnesses::availability(settings), agent);
     let overrides = override_agents(settings).iter().any(|a| a == agent);
     let executable = harnesses::builtin(agent);

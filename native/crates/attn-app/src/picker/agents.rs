@@ -163,13 +163,23 @@ pub(crate) fn label(agent: &str) -> String {
     }
 }
 
-/// How the YOLO switch's title names an agent: the shell as the shell.
-pub(crate) fn yolo_label(agent: &str) -> String {
-    if agent == TERMINAL {
+/// "Claude", "Codex", or a plugin harness's id in words, unless the daemon names it.
+pub(crate) fn named(settings: &BTreeMap<String, String>, agent: &str) -> String {
+    settings
+        .get(&format!("{agent}_display_name"))
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| label(agent))
+}
+
+/// What the YOLO switch says for `agent`, a harness without the mode.
+pub(crate) fn no_yolo(agent: &str) -> String {
+    let name = if agent == TERMINAL {
         "Shell".into()
     } else {
         label(agent)
-    }
+    };
+    format!("{name} does not support yolo mode")
 }
 
 pub(crate) fn supports_yolo(settings: &BTreeMap<String, String>, agent: &str) -> bool {

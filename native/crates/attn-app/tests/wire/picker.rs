@@ -2312,3 +2312,27 @@ fn the_ghost_completion_follows_the_typed_text() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_screen_reader_hears_the_harness_and_yolo_the_option_keys_choose() {
+    let mut world = busy_desktop_with(&[], &[("claude_cap_yolo", "true")]);
+    open_dialog(&mut world);
+    let said = |world: &World| world.screen().announced().unwrap_or_default();
+
+    world.gesture(|app| app.press("alt+q"));
+    assert_eq!(said(&world), "YOLO on");
+    world.gesture(|app| app.press("alt+2"));
+    assert_eq!(said(&world), "Codex");
+    world.gesture(|app| app.press("alt+t"));
+    assert_eq!(said(&world), "Terminal");
+    world.gesture(|app| app.press("alt+q"));
+    assert_eq!(said(&world), "Shell does not support yolo mode");
+    world.gesture(|app| app.press("alt+1"));
+    world.gesture(|app| app.press("alt+q"));
+    assert_eq!(said(&world), "YOLO off");
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("new-session.path.field")
+    );
+    rest(&mut world);
+}

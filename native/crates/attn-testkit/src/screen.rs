@@ -191,6 +191,16 @@ impl Screen {
         self.find(Target::Key(key))
     }
 
+    /// What the window last told a screen reader through `Tx::announce`: the words, without
+    /// the mark that makes the same words said again a change.
+    pub fn announced(&self) -> Option<String> {
+        let node = self
+            .nodes()
+            .into_iter()
+            .find(|node| node.role == "status" && node.key.is_none())?;
+        Some(node.name?.trim_end_matches('\u{200b}').to_owned())
+    }
+
     fn nodes(&self) -> Vec<Node> {
         self.values().into_iter().map(node).collect()
     }
