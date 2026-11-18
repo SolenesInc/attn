@@ -12,8 +12,9 @@ mod view;
 pub mod mac;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use attn_client::{Reply, TileKey};
+use attn_client::{Desktop, Facts, Reply, TileKey};
 use attn_protocol::{
     BrowserControlRequestMessage, BrowserControlResultMessage, DesktopUpdateTileMessage,
 };
@@ -54,6 +55,17 @@ pub struct Browsers {
     waits: HashMap<String, Wait>,
     /// Counts changes to what the tiles show of the pages, for the view's memo.
     revision: u64,
+    wanted: Wanted,
+}
+
+/// The browser tiles `wanted` found, read again only when the desktops or the desktops it
+/// loads change, so a frame costs the same however many desktops the profile has.
+#[derive(Default)]
+struct Wanted {
+    of: Arc<Vec<Desktop>>,
+    profile: String,
+    loaded: (Option<String>, Option<String>),
+    tiles: Vec<(TileKey, String)>,
 }
 
 struct Page {
@@ -107,13 +119,32 @@ impl Browsers {
 /// The browser tiles whose pages the main window keeps: those on the current desktop and the
 /// one before it, as the Tauri app keeps them, and those popped out into tile windows, each
 /// with the address its tile stores.
-fn wanted(state: &State) -> Vec<(TileKey, String)> {
+fn wanted(state: &mut State) -> Vec<(TileKey, String)> {
     if state.window.tile.is_some() {
         return Vec::new();
     }
     let facts = &state.facts;
     let current = facts.current_desktop().map(|d| d.id.as_str());
     let previous = state.window.desk.previous_desktop.as_deref();
+    let memo = &mut state.browser.wanted;
+    if !Arc::ptr_eq(&memo.of, &facts.desktops)
+        || memo.profile != facts.profiles.selected
+        || memo.loaded.0.as_deref() != current
+        || memo.loaded.1.as_deref() != previous
+    {
+        memo.tiles = tiles_of(facts, current, previous);
+        memo.of = facts.desktops.clone();
+        memo.profile.clone_from(&facts.profiles.selected);
+        memo.loaded = (current.map(str::to_owned), previous.map(str::to_owned));
+    }
+    memo.tiles.clone()
+}
+
+fn tiles_of(
+    facts: &Facts,
+    current: Option<&str>,
+    previous: Option<&str>,
+) -> Vec<(TileKey, String)> {
     facts
         .desktops
         .iter()

@@ -815,6 +815,69 @@ fn an_action_on_a_desktop_the_window_has_not_loaded_says_to_open_that_desktop() 
     rest(&mut world);
 }
 
+/// The profile's current desktop becomes `current`, beside the browser's desktop and two
+/// empty ones.
+fn switch_to(world: &mut World, current: &str) {
+    let empty = |id: &str| Desktop {
+        id: id.into(),
+        profile_id: "work".into(),
+        order_key: id.into(),
+        revision: 1,
+        ..Desktop::default()
+    };
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            current_desktop_id: current.into(),
+            ..profile()
+        },
+        desktops: vec![
+            desktop(with_browser(START), 1),
+            empty("work/desktop_2"),
+            empty("work/desktop_3"),
+        ],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+}
+
+#[test]
+fn a_page_stays_open_while_its_desktop_is_the_previous_one_and_closes_one_switch_later() {
+    let (mut world, engine) = start(START);
+    let opened = |engine: &Engine| {
+        engine
+            .asked()
+            .iter()
+            .filter(|a| **a == Asked::Open(START.into()))
+            .count()
+    };
+    let closed = |engine: &Engine| {
+        engine
+            .asked()
+            .iter()
+            .filter(|a| **a == Asked::Close)
+            .count()
+    };
+    assert_eq!((opened(&engine), closed(&engine)), (1, 0));
+
+    switch_to(&mut world, "work/desktop_2");
+    assert_eq!(closed(&engine), 0, "the previous desktop keeps its page");
+
+    switch_to(&mut world, "work/desktop_3");
+    assert_eq!(
+        closed(&engine),
+        1,
+        "a desktop two switches back lets its page go"
+    );
+
+    switch_to(&mut world, DESKTOP);
+    assert_eq!(
+        opened(&engine),
+        2,
+        "the page opens again when its desktop is current"
+    );
+    rest(&mut world);
+}
+
 #[test]
 fn the_address_field_takes_the_page_where_it_says_and_the_reload_buttons_load_it_again() {
     for (typed, url) in [

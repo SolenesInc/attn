@@ -261,7 +261,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
 }
 
 fn place_tiles(state: &mut State, tx: &mut Tx) -> bool {
-    let may_show = crate::desktop::drawn_leaves(state).is_some_and(|(d, _)| {
+    let may_show = crate::desktop::drawn_desktop(state).is_some_and(|d| {
         d.leaves()
             .iter()
             .any(|l| matches!(l.tile(), Some(("notebook", _))))

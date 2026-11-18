@@ -471,16 +471,22 @@ pub(crate) fn tile_session(desktop: &Desktop, tile: &str) -> Option<String> {
 /// The desktop this window draws tiles of, with the tiles it draws: a tile window's one leaf on
 /// its own desktop while it is out, else the current desktop's tiles on screen.
 pub(crate) fn drawn_leaves(state: &crate::State) -> Option<(&Desktop, Vec<String>)> {
+    let desktop = drawn_desktop(state)?;
+    let leaves = match &state.window.tile {
+        Some(tile) => windows::is_popped(state, &tile.desktop, &tile.leaf)
+            .then(|| tile.leaf.clone())
+            .into_iter()
+            .collect(),
+        None => on_screen_leaves(state),
+    };
+    Some((desktop, leaves))
+}
+
+/// The desktop this window draws tiles of: a tile window's own desktop, else the current one.
+pub(crate) fn drawn_desktop(state: &crate::State) -> Option<&Desktop> {
     match &state.window.tile {
-        Some(tile) => {
-            let desktop = state.facts.desktops.iter().find(|d| d.id == tile.desktop)?;
-            let popped = windows::is_popped(state, &tile.desktop, &tile.leaf);
-            Some((
-                desktop,
-                popped.then(|| tile.leaf.clone()).into_iter().collect(),
-            ))
-        }
-        None => Some((state.facts.current_desktop()?, on_screen_leaves(state))),
+        Some(tile) => state.facts.desktops.iter().find(|d| d.id == tile.desktop),
+        None => state.facts.current_desktop(),
     }
 }
 
