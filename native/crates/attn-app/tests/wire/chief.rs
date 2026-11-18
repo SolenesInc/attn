@@ -333,7 +333,8 @@ fn a_first_setup_opens_on_its_own_and_saves_the_recommended_route_then_starts_th
 }
 
 #[test]
-fn the_first_setup_opens_on_its_own_while_the_empty_desktops_launcher_holds_the_keyboard() {
+fn the_first_setup_opens_on_its_own_over_the_empty_desktops_launcher_and_escape_gives_it_the_keys_back()
+ {
     let mut initial = state(
         Vec::new(),
         vec![desktop("only", "a0", "Desktop 1", Vec::new())],
@@ -349,6 +350,11 @@ fn the_first_setup_opens_on_its_own_while_the_empty_desktops_launcher_holds_the_
     world.settle();
     assert!(shows(&world, SETUP));
     assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+
+    press(&mut world, Key::Escape);
+
+    assert!(!shows(&world, SETUP));
+    assert_eq!(focused(&world).as_deref(), Some("launcher.path.field"));
 }
 
 #[test]
@@ -753,6 +759,23 @@ fn a_press_outside_the_first_setup_closes_it_and_hiding_and_showing_the_sidebar_
 fn a_press_on_an_agent_row_outside_the_first_setup_gives_that_agent_the_keyboard() {
     let mut world = start(initial(false, chief(false), Vec::new()));
     assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    arrive_shop(&mut world);
+    assert!(shows(&world, SETUP));
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.shop")));
+    world.gesture(|app| app.type_text("x"));
+
+    assert!(!shows(&world, SETUP));
+    assert_eq!(focused(&world).as_deref(), Some("terminal.r-shop"));
+    let typed: Vec<_> = sent(&world, "pty_input")
+        .iter()
+        .map(|input| (input["id"].clone(), input["data"].clone()))
+        .collect();
+    assert_eq!(typed, [(json!("r-shop"), json!("x"))]);
+}
+
+/// An agent named shop arrives on a desktop of its own, its terminal `r-shop`.
+fn arrive_shop(world: &mut World) {
     let agent = super::sidebar::session("shop", "idle");
     let arranged = state(
         vec![agent.clone()],
@@ -776,13 +799,28 @@ fn a_press_on_an_agent_row_outside_the_first_setup_gives_that_agent_the_keyboard
         ..ProfileArrangementChangedMessage::new()
     });
     world.settle();
+}
+
+#[test]
+fn escape_on_a_first_setup_that_opened_on_its_own_gives_the_keys_to_the_terminal_under_it() {
+    let mut world = start(initial(false, chief(false), Vec::new()));
+    assert_eq!(focused(&world).as_deref(), Some(PRIMARY));
+    arrive_shop(&mut world);
+    dispatch(
+        &mut world,
+        Action::GoToDesktop {
+            desktop: "d1".into(),
+        },
+    );
     assert!(shows(&world, SETUP));
 
-    world.gesture(|app| app.click(Target::key("sidebar.session.shop")));
+    press(&mut world, Key::Escape);
     world.gesture(|app| app.type_text("x"));
 
     assert!(!shows(&world, SETUP));
     assert_eq!(focused(&world).as_deref(), Some("terminal.r-shop"));
+    let window = world.automate("state", json!({"of": "window"})).unwrap();
+    assert_eq!(window["keyboard"]["pane"], json!("p0"));
     let typed: Vec<_> = sent(&world, "pty_input")
         .iter()
         .map(|input| (input["id"].clone(), input["data"].clone()))

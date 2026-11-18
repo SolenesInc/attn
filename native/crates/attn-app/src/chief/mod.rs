@@ -171,15 +171,21 @@ pub(crate) fn open_setup(state: &mut State, tx: &mut Tx) {
     edit(state, tx);
 }
 
-/// Closes the setup; `return_focus` puts the focus back on the slot.
+/// Closes the setup; `return_focus` gives the keys back to where the setup took them from: the
+/// slot when the user opened it, and the window when it opened on its own.
 pub(crate) fn dismiss(state: &mut State, return_focus: bool, tx: &mut Tx) {
-    let Some(key) = member(state).map(|m| m.id.clone()) else {
+    let Some((key, by_user)) = setup_wanted(state) else {
         return;
     };
     state.window.chief.editor = Some((key, false));
     state.window.chief.draft = None;
-    if return_focus {
-        focus_row(state, tx);
+    match (return_focus, by_user) {
+        (false, _) => {}
+        (true, true) => focus_row(state, tx),
+        (true, false) => {
+            tx.blur();
+            crate::picker::refocus_inline(state, tx);
+        }
     }
 }
 

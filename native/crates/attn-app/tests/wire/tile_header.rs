@@ -1978,10 +1978,12 @@ fn escape_closes_a_shown_chain_at_once_while_a_control_holds_the_keyboard() {
         ..InitialStateMessage::new()
     });
     key(&mut world, Key::Escape);
+    world.gesture(|app| app.click(Target::key("chief-slot")));
+    key(&mut world, Key::Escape);
     assert_eq!(
         world.screen().focused().and_then(|n| n.key).as_deref(),
         Some("chief-slot"),
-        "dismissing the Chief's first setup leaves the keyboard on its slot"
+        "dismissing the Chief's setup the user opened leaves the keyboard on its slot"
     );
     world.daemon.emit(ProfileArrangementChangedMessage {
         profile: profile(),
