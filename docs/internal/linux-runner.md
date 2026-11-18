@@ -55,7 +55,10 @@ checkouts can share one guest checkout and its build output.
 Guest build caches excluded by the repository's ignore rules survive sync.
 A lock prevents sync and commands from changing the same checkout concurrently.
 `test` and `soak` take turns on a checkout: a run that finds another one using
-it says so and waits, from any host, until that run ends.
+it says so and waits, from any host, until that run ends. With
+`--turn-limit <seconds>`, it waits at most that long, then prints
+`Gave up after <n>s waiting for the guest checkout <checkout>` and exits 75,
+leaving no waiter on the guest.
 
 `run` uses the last synced source, so run `sync` after you edit. `build` syncs
 and installs the packaged app. The app's existing build fingerprint check
@@ -129,6 +132,19 @@ uses that one guest checkout and its build output, so the machine holds one
 build of each app however many worktrees land. Landings take turns on it, and
 the landing prints its time on the machine, how much of it went to waiting for
 other landings, and each scenario's time.
+
+A landing waits at most 654 s for its turn, the median time a landing's
+scenarios took on CI's Linux when 20 real landings were replayed on both
+(`c4-replay.md` on seed `s-yg6h46`). Past that, waiting costs more than CI, so
+the landing prints how long it waited and runs its scenarios on CI's Linux.
+`ATTN_LAND_RUNNER_TURN_LIMIT=<seconds>` sets another limit for one landing.
+
+The landing runner is for landings. Anything else that runs there slows the
+landings queued behind it. Send diagnostic work, such as repeat runs, soaks and
+reproductions, to `attn-linux` instead, with
+`--provider ssh --target attn-linux`. On 2026-11-18, after `provision` there,
+`soak --checkout diag --scenario shelf-moves,native-sidebar-session` passed
+both, a Tauri scenario in 62 s and a native one in 10 s.
 
 The landing prints where it keeps the log from the machine.
 [What land.sh does](trunk-based-development.md#what-landsh-does) says what

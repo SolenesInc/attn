@@ -31,7 +31,9 @@ repository root.
   `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
   `scripts/ci-flake-report.sh` ranks failing tests across CI history.
 - Linux VM: `pnpm --dir app real-app:linux provision`
-  ([linux-runner](../../../docs/internal/linux-runner.md)).
+  ([linux-runner](../../../docs/internal/linux-runner.md)). Run repeat runs,
+  soaks and reproductions on `attn-linux` with `--provider ssh --target attn-linux`,
+  never on the landing runner, which landings queue for.
 - Platform skips go in the catalog entry as `skipOn` with a reason. A product
   failure on Linux is a finding, not a skip.
 

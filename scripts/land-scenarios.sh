@@ -95,8 +95,14 @@ record_runner_passes() {
   done
 }
 
+gave_up_on_runner() {
+  sed -n 's/^Gave up after \([0-9]*\)s waiting for the guest checkout .*/\1/p' "$runner_log" | grep .
+}
+
 run_on_ssh() {
-  local scenario seconds outcome failed="" started
+  local scenario seconds outcome failed="" started waited
+  # The median landing's scenarios took 654s on CI's Linux in c4-replay.md on seed s-yg6h46 (2026-11-17).
+  local turn_limit="${ATTN_LAND_RUNNER_TURN_LIMIT:-654}"
   runner_target="$1"
   if ! pnpm --silent --dir app real-app:linux status --provider ssh --target "$runner_target" >/dev/null 2>&1; then
     echo "land: the landing runner $runner_target cannot be reached, so the scenarios run on CI's Linux instead" >&2
@@ -107,10 +113,15 @@ run_on_ssh() {
   echo "land: running scenarios $scenarios on $runner_target, before the push: $runner_log"
   started=$SECONDS
   perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$runner_target" \
-    --checkout land --scenario "$scenarios" --out "$(dirname "$runner_log")/artifacts" >"$runner_log" 2>&1 &
+    --checkout land --turn-limit "$turn_limit" --scenario "$scenarios" --out "$(dirname "$runner_log")/artifacts" >"$runner_log" 2>&1 &
   runner_pid=$!
   wait "$runner_pid" || true
   runner_pid=""
+  if waited="$(gave_up_on_runner)"; then
+    echo "land: waited ${waited}s for a turn on the landing runner $runner_target, past its ${turn_limit}s limit, so the scenarios run on CI's Linux instead"
+    run_on_github "$scenarios"
+    return
+  fi
   record_runner_passes
   echo "land: the landing runner took $((SECONDS - started))s, $(waited_for_runner "$runner_log")s of it waiting for other landings"
   for scenario in ${scenarios//,/ }; do

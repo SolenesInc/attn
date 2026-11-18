@@ -94,6 +94,10 @@ case "$args" in
   *"real-app:linux status --provider ssh --target runner.invalid") exit "${LAND_RUNNER_REACH_EXIT:-0}" ;;
   *"real-app:linux soak "*)
     printf 'runner %s\n' "${args#*real-app:linux }" >>"$LAND_CHECK_LOG"
+    if [ -n "${LAND_RUNNER_GAVE_UP:-}" ]; then
+      echo "Gave up after ${LAND_RUNNER_GAVE_UP}s waiting for the guest checkout land" >&2
+      exit 75
+    fi
     echo "Waited ${LAND_RUNNER_WAITED:-0}s for the guest checkout land" >&2
     scenarios="${args#*--scenario }"
     scenarios="${scenarios%% *}"
@@ -517,17 +521,24 @@ no_land_scenario_refs
 git config attn.landRunner ssh:runner.invalid
 printf '// on the landing runner\n' >>internal/example/example.go
 land 'Go change on the landing runner while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
-grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --scenario shelf-peek --out ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario shelf-peek --out ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'scenario shelf-peek passed on runner.invalid in 2s'
 expect_recent_scenarios_ran
 
 printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
 land 'Change a scenario on the landing runner' LAND_RUNNER_WAITED=7
-grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --scenario shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed on the landing runner ran on CI' >&2; exit 1; fi
 expect_output 'scenario shelf-moves passed on runner.invalid in 2s'
 expect_output 's, 7s of it waiting for other landings'
 grep -rqE '^shelf-moves ssh:runner.invalid /.*/runner.log$' "$records" || { echo 'a scenario that passed on the landing runner left no pass record' >&2; exit 1; }
+
+printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '// busy runner\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+land 'Change a scenario while the landing runner stays busy past the turn limit' LAND_RUNNER_GAVE_UP=655
+grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a landing that gave up its wait for the landing runner did not run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output "waited 655s for a turn on the landing runner runner.invalid, past its 654s limit, so the scenarios run on CI's Linux instead"
+grep -qE '^shelf-moves github ' "$(ls -t "$records"/* | head -1)" || { echo 'a scenario that passed on CI after the wait left no pass record' >&2; exit 1; }
 
 printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
 land 'Change a scenario while the landing runner is down' LAND_RUNNER_REACH_EXIT=255

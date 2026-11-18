@@ -17,7 +17,7 @@ export function parseArgs(argv, env = process.env) {
   const options = { provider: env.ATTN_LINUX_PROVIDER || 'lima', name: env.ATTN_LINUX_VM || 'attn-linux',
     target: env.ATTN_LINUX_SSH_TARGET, sshConfig: env.ATTN_LINUX_SSH_CONFIG, checkout: checkoutHash };
   const values = { '--provider': 'provider', '--name': 'name', '--target': 'target', '--ssh-config': 'sshConfig',
-    '--checkout': 'checkout', '--instance': 'instance', '--out': 'out', '--scenario': 'scenario' };
+    '--checkout': 'checkout', '--instance': 'instance', '--out': 'out', '--scenario': 'scenario', '--turn-limit': 'turnLimit' };
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -33,6 +33,7 @@ export function parseArgs(argv, env = process.env) {
   if (positional.length > 1) throw new Error('Put guest command arguments after --');
   options.action = positional[0] || 'status';
   if (!/^[a-z0-9][a-z0-9-]{0,9}$/.test(options.checkout)) throw new Error('--checkout must be at most 10 lowercase letters, digits and dashes');
+  if (options.turnLimit !== undefined && !/^[1-9][0-9]*$/.test(options.turnLimit)) throw new Error('--turn-limit must be a whole number of seconds');
   options.instance ??= `linux-${options.checkout}`;
   if (!/^[a-z][a-z0-9-]{0,39}$/.test(options.instance) || ['default', 'prod', 'production'].includes(options.instance)) {
     throw new Error('--instance must name a non-production instance');
@@ -64,25 +65,30 @@ function guestRoot(provider, checkout) {
   return path.posix.join(home, '.local/share/attn-linux-runner', checkout);
 }
 
-async function takeTurn(provider, root) {
+async function takeTurn(provider, root, limit) {
   const turn = `${root}.turn`;
+  const checkout = path.posix.basename(root);
+  const wait = limit ? `flock -w ${limit} 8 || { echo gave-up; exit; }` : 'flock 8';
   const script = `set -e
 mkdir -p ${quote(root)}
 exec 8>${quote(turn)}
-flock -n 8 || { echo busy; flock 8; }
+flock -n 8 || { echo busy; ${wait}; }
 flock ${quote(`${root}/operation.lock`)} true
 echo took
 exec cat >/dev/null`;
   const holder = spawn('ssh', sshArgs(provider.connection(), `bash -c ${quote(script)}`), { stdio: ['pipe', 'pipe', 'inherit'] });
   const asked = Date.now();
   for await (const line of readline.createInterface({ input: holder.stdout })) {
-    if (line === 'busy') console.error(`Waiting for another run on the guest checkout ${path.posix.basename(root)}`);
+    if (line === 'busy') console.error(`Waiting for another run on the guest checkout ${checkout}`);
+    if (line === 'gave-up') {
+      throw Object.assign(new Error(`Gave up after ${Math.round((Date.now() - asked) / 1000)}s waiting for the guest checkout ${checkout}`), { exitCode: 75 });
+    }
     if (line === 'took') {
-      console.error(`Waited ${Math.round((Date.now() - asked) / 1000)}s for the guest checkout ${path.posix.basename(root)}`);
+      console.error(`Waited ${Math.round((Date.now() - asked) / 1000)}s for the guest checkout ${checkout}`);
       return () => holder.stdin.end();
     }
   }
-  throw new Error(`Could not take a turn on the guest checkout ${path.posix.basename(root)}`);
+  throw new Error(`Could not take a turn on the guest checkout ${checkout}`);
 }
 
 function collect(provider, root, destination) {
@@ -127,6 +133,8 @@ Options:
   --instance <name>           Default: linux-<checkout>; never production
   --out <directory>          Local artifacts destination
   --scenario <id>[,<id>...]  The scenarios soak runs, in order
+  --turn-limit <seconds>     test and soak: wait at most this long for another run on the guest
+                             checkout to finish, then exit 75. Default: wait until it finishes
 
 Examples:
   pnpm --dir app real-app:linux provision
@@ -158,7 +166,7 @@ Examples:
   const destination = path.resolve(options.out || path.join(os.tmpdir(), 'attn-linux-artifacts', options.provider, options.checkout));
   const execute = (args) => provider.ssh(`bash -c ${quote(guestCommand(root, options.instance, args))}`);
   if (['test', 'soak'].includes(options.action)) {
-    const release = await takeTurn(provider, root);
+    const release = await takeTurn(provider, root, options.turnLimit);
     try { return runScenarios(options, provider, root, destination, execute); }
     finally { release(); }
   }
