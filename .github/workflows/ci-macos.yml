@@ -273,7 +273,9 @@ jobs:
         run: make build-app APP=native CHANNEL=release
 
       - name: Check the native release app
-        run: ./scripts/check-macos-release-app.sh native/target/staged/attn.app "$(./scripts/version.sh)"
+        run: |
+          version="$(bash ./scripts/version.sh)"
+          ./scripts/check-macos-release-app.sh native/target/staged/attn.app "$version"
 
   full-macos:
     name: Full macOS run
