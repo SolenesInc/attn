@@ -7,7 +7,7 @@ import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRest
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { MOCK_AGENT_MODEL } from './mockAgent.mjs';
-import { appCliInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver, tabVisitsControls } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -100,10 +100,12 @@ try {
     const notebookRoot = cli('settings', 'get', 'notebook.root.effective', '--profile', profile.id).trim();
     const shownFolder = (await node('chief-setup.folder'))?.name;
     runner.assert(shownFolder === notebookRoot, "the folder shows the profile's Notebook", { shownFolder, notebookRoot });
-    await driver.pressKey('shift+Tab');
-    await assertFocus('chief-setup.folder.choose');
-    await screenshot('02-chief-folder-shown');
-    await driver.pressKey('Tab');
+    if (tabVisitsControls()) {
+      await driver.pressKey('shift+Tab');
+      await assertFocus('chief-setup.folder.choose');
+      await screenshot('02-chief-folder-shown');
+      await driver.pressKey('Tab');
+    }
     await assertFocus(PRIMARY);
     const bound = observer.waitForMessage((m) => m.event === 'crew_updated'
       && m.members?.find((member) => member.chief && member.profile_id === profile.id && member.binding_session)?.binding_session, "the Chief's session", 30_000);

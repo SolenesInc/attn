@@ -129,6 +129,15 @@ const darwinPlatform = {
     execFileSync('pbcopy', { input: text });
   },
 
+  tabVisitsControls() {
+    try {
+      const mode = execFileSync('defaults', ['read', '-g', 'AppleKeyboardUIMode'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      return (Number.parseInt(mode, 10) & 2) !== 0;
+    } catch {
+      return false;
+    }
+  },
+
   async launchApp({ appPath, env = null, logPath }) {
     const quiet = appShellInTree(appPath) === 'native' ? { MAC_APP_QUIET: '1' } : {};
     return spawnDetached(this.appExecutableInTree(appPath), { ...env, ...quiet }, appPath, logPath);
@@ -190,6 +199,10 @@ const linuxPlatform = {
   writeClipboard(text) {
     // xclip forks a holder child that inherits stdio; ignoring it keeps execFileSync from hanging.
     execFileSync('xclip', ['-selection', 'clipboard', '-in'], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
+  },
+
+  tabVisitsControls() {
+    return true;
   },
 
   launchEnvironment(env = null) {
@@ -323,6 +336,10 @@ export function appCliInTree(appPath) {
 
 export function appBuildIdentityInTree(appPath) {
   return appPlatform.appBuildIdentityInTree(appPath);
+}
+
+export function tabVisitsControls() {
+  return appPlatform.tabVisitsControls();
 }
 
 export { delay };
