@@ -137,7 +137,7 @@ wait_ready() {
 
 cmd_up() {
     [ -e app/node_modules/ws ] || pnpm --dir app install --frozen-lockfile
-    if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --field fingerprint)" ]; then
+    if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --app "$shell" --field fingerprint)" ]; then
         if [ "$shell" = native ]; then
             make build-app INSTANCE="$instance" APP=native
         else

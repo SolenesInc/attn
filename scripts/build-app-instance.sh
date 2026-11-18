@@ -9,7 +9,9 @@
 # no per-instance bundle metadata is ever hand-maintained.
 #
 # APP=native builds the native app (native/crates/attn-app) instead, into
-# native/target/staged, with the same identity baked in and the same sidecars.
+# native/target/staged, with the same sidecars. Its identity names the native
+# app's source (`scripts/source-fingerprint.sh --app native`), which covers
+# native/; the sidecars keep the SOURCE_FINGERPRINT they were built with.
 #
 # Inputs (env):
 #   INSTANCE                  instance name ("" = default/prod)
@@ -89,6 +91,8 @@ codesign_identity() {
 }
 
 if [ "$app_shell" = native ]; then
+  SOURCE_FINGERPRINT="$(bash ./scripts/source-fingerprint.sh --app native --field fingerprint)"
+  SOURCE_DIRTY_PATHS_BASE64="$(bash ./scripts/source-fingerprint.sh --app native --field dirty_paths_base64)"
   if [ -n "$instance" ]; then
     native_profile="${ATTN_APP_CARGO_PROFILE:-fast}"
   else

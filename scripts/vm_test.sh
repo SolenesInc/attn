@@ -31,10 +31,13 @@ says() { grep -qF "$2" <<<"$1"; }
 checkout="$sandbox/attn--shared"
 guest="$sandbox/guest"
 mkdir -p "$sandbox/bin" "$checkout/scripts" "$checkout/app/node_modules/ws" "$guest"
-cp "$script_dir/vm" "$checkout/scripts/vm"
-cat >"$checkout/scripts/source-fingerprint.sh" <<'FAKE'
-echo fingerprint
-FAKE
+cp "$script_dir/vm" "$script_dir/source-fingerprint.sh" "$checkout/scripts/"
+mkdir -p "$checkout/native/src"
+printf 'fn main() {}\n' >"$checkout/native/src/main.rs"
+printf 'node_modules/\ntarget/\n' >"$checkout/.gitignore"
+git -C "$checkout" init -q
+git -C "$checkout" add .
+git -C "$checkout" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -qm baseline
 
 cat >"$sandbox/bin/attn" <<'FAKE'
 #!/usr/bin/env bash
@@ -43,12 +46,20 @@ FAKE
 
 cat >"$sandbox/bin/make" <<'FAKE'
 #!/usr/bin/env bash
+app=tauri
 for arg in "$@"; do
-  case "$arg" in INSTANCE=*) instance="${arg#INSTANCE=}" ;; esac
+  case "$arg" in
+  INSTANCE=*) instance="${arg#INSTANCE=}" ;;
+  APP=*) app="${arg#APP=}" ;;
+  esac
 done
-resources="app/src-tauri/target/staged/attn-$instance.app/Contents/Resources"
+case "$app" in
+native) resources="native/target/staged/attn-$instance.app/Contents/Resources" ;;
+*) resources="app/src-tauri/target/staged/attn-$instance.app/Contents/Resources" ;;
+esac
 mkdir -p "$resources"
-echo '{"sourceFingerprint":"fingerprint"}' >"$resources/build-identity.json"
+printf '{"sourceFingerprint":"%s"}\n' "$(bash scripts/source-fingerprint.sh --app "$app")" >"$resources/build-identity.json"
+echo "$app $instance" >>"$FAKE_BUILDS"
 FAKE
 
 cat >"$sandbox/bin/macvm" <<'FAKE'
@@ -89,13 +100,14 @@ install-app)
   name="$(basename "$2")"
   instance="${name#attn-}"
   mkdir -p "$FAKE_GUEST/Applications" "$FAKE_GUEST/.attn-${instance%.app}"
+  rm -rf "$FAKE_GUEST/Applications/$name"
   cp -R "$2" "$FAKE_GUEST/Applications/$name"
   ;;
 *) exit 2 ;;
 esac
 FAKE
 chmod +x "$sandbox/bin/"*
-export PATH="$sandbox/bin:$PATH" FAKE_GUEST="$guest"
+export PATH="$sandbox/bin:$PATH" FAKE_GUEST="$guest" FAKE_BUILDS="$sandbox/builds"
 
 as() {
   local who="$1"
@@ -190,6 +202,25 @@ out="$(as attn-b adopt --instance nothing)"
 expect "adopt names a missing instance" says "$out" "no instance 'nothing'"
 expect "adopt on a missing instance takes nothing" absent "$guest/vm-instance-owners/nothing"
 as attn-b down --instance nothing >/dev/null
+
+# A change under native/ alone rebuilds the native app, and only the native app.
+builds_of() { grep -c "^$1$" "$FAKE_BUILDS"; }
+guest_source() { jq -r .sourceFingerprint "$guest/Applications/attn-$1.app/Contents/Resources/build-identity.json"; }
+APP=native as attn-a up --instance native >/dev/null
+as attn-a up --instance tauri >/dev/null
+APP=native as attn-a up --instance native >/dev/null
+as attn-a up --instance tauri >/dev/null
+expect "an unchanged tree builds the native app once" same "$(builds_of "native native")" 1
+expect "an unchanged tree builds the Tauri app once" same "$(builds_of "tauri tauri")" 1
+before="$(guest_source native)"
+printf 'fn main() { println!("changed"); }\n' >"$checkout/native/src/main.rs"
+APP=native as attn-a up --instance native >/dev/null
+expect "a change under native/ rebuilds the native app" same "$(builds_of "native native")" 2
+expect "a change under native/ reinstalls the native app" differ "$(guest_source native)" "$before"
+as attn-a up --instance tauri >/dev/null
+expect "a change under native/ does not rebuild the Tauri app" same "$(builds_of "tauri tauri")" 1
+APP=native as attn-a down --instance native >/dev/null
+as attn-a down --instance tauri >/dev/null
 
 echo "vm_test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

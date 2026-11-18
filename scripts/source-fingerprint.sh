@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 output_mode="text"
 field="fingerprint"
+app="tauri"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -20,12 +21,27 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --app)
+      app="${2:-}"
+      case "${app}" in
+        tauri|native) ;;
+        *)
+          echo "--app must be tauri or native, got: ${app}" >&2
+          exit 1
+          ;;
+      esac
+      shift 2
+      ;;
     --help|-h)
       cat <<'EOF'
 Usage:
   scripts/source-fingerprint.sh
   scripts/source-fingerprint.sh --field fingerprint
   scripts/source-fingerprint.sh --json
+  scripts/source-fingerprint.sh --app native --field fingerprint
+
+--app names the app the build packages: tauri (default) or native. A native
+build also covers native/.
 
 Fields:
   fingerprint
@@ -66,9 +82,10 @@ should_exclude_path() {
   # Only app + daemon source is tracked, and the guide pages the daemon binary
   # embeds. Everything else — other docs, tests, harness scripts, and CI
   # config — can change without invalidating the packaged app bundle, so
-  # skipping those paths keeps iteration fast. native/ builds a different app,
-  # not the Tauri bundle this fingerprint names.
+  # skipping those paths keeps iteration fast. native/ counts only for the
+  # native app's build.
   case "${relative_path}" in
+    native/*) [[ "${app}" == native ]] && return 1 || return 0 ;;
     internal/prompts/content/*) return 1 ;;
     cmd/prompt-editor/*|internal/prompts/scenarios/*|.prompt-editor/*) return 0 ;;
     scripts/build-app-instance.sh) return 1 ;;
@@ -78,7 +95,6 @@ should_exclude_path() {
     app/test-harness/*)             return 0 ;;
     docs/guide/*.go|docs/guide/tutorials/*|docs/guide/reference/*|docs/guide/diagrams/*.txt) return 1 ;;
     docs/*)                         return 0 ;;
-    native/*)                       return 0 ;;
     scripts/*)                      return 0 ;;
     .github/*)                      return 0 ;;
     *.md)                           return 0 ;;

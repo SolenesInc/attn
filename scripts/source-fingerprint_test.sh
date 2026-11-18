@@ -25,6 +25,11 @@ printf 'draft\n' > "$work/.prompt-editor/drafts/d-example.json"
 printf 'fn main() {}\n' > "$work/native/crates/attn-app/src/main.rs"
 [[ "$after" == "$(bash "$work/scripts/source-fingerprint.sh")" ]] || { echo 'Editor, documentation and native app edits must not invalidate the product build'; exit 1; }
 [[ "$manifest" == "$(bash "$work/scripts/source-fingerprint.sh" --field dirty_paths_base64)" ]] || { echo 'Excluded paths must not enter the build manifest'; exit 1; }
+native_manifest="$(bash "$work/scripts/source-fingerprint.sh" --app native --field dirty_paths_base64 | base64 --decode | tr '\0' '\n')"
+[[ "$native_manifest" == *'native/crates/attn-app/src/main.rs'* ]] || { echo 'Native app edits must enter the native build manifest'; exit 1; }
+native="$(bash "$work/scripts/source-fingerprint.sh" --app native)"
+printf 'fn main() { println!("changed"); }\n' > "$work/native/crates/attn-app/src/main.rs"
+[[ "$native" != "$(bash "$work/scripts/source-fingerprint.sh" --app native)" ]] || { echo 'Native app edits must invalidate the native build'; exit 1; }
 printf 'changed guide\n' > "$work/docs/guide/reference/example.md"
 guide="$(bash "$work/scripts/source-fingerprint.sh")"
 [[ "$after" != "$guide" ]] || { echo 'Guide edits must invalidate the product build'; exit 1; }

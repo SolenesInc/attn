@@ -117,7 +117,7 @@ export class UiAutomationClient {
     this.platform = platform;
     this.artifactsDir = artifactsDir;
     this.launch = null;
-    this.currentSourceIdentityPromise = null;
+    this.currentSourceIdentityPromises = new Map();
     this.verifiedBuildIdentityKey = null;
   }
 
@@ -404,13 +404,13 @@ export class UiAutomationClient {
     );
   }
 
-  async getCurrentSourceIdentity() {
-    if (!this.currentSourceIdentityPromise) {
-      this.currentSourceIdentityPromise = execFileAsync('bash', [SOURCE_FINGERPRINT_SCRIPT, '--json'], {
+  async getCurrentSourceIdentity(app = 'tauri') {
+    if (!this.currentSourceIdentityPromises.has(app)) {
+      this.currentSourceIdentityPromises.set(app, execFileAsync('bash', [SOURCE_FINGERPRINT_SCRIPT, '--app', app, '--json'], {
         cwd: REPO_ROOT,
-      }).then(({ stdout }) => JSON.parse(stdout));
+      }).then(({ stdout }) => JSON.parse(stdout)));
     }
-    return this.currentSourceIdentityPromise;
+    return this.currentSourceIdentityPromises.get(app);
   }
 
   resolveDaemonBinaryPath() {
@@ -465,7 +465,8 @@ export class UiAutomationClient {
   async ensureBuildMatchesCurrentSource(state) {
     const currentSource = await this.getCurrentSourceIdentity();
     const currentFingerprint = readNonEmptyString(currentSource?.fingerprint);
-    if (!currentFingerprint) {
+    const currentAppFingerprint = readNonEmptyString((await this.getCurrentSourceIdentity(appShellInTree(this.appPath)))?.fingerprint);
+    if (!currentFingerprint || !currentAppFingerprint) {
       throw new Error('current source fingerprint is unavailable');
     }
 
@@ -475,9 +476,9 @@ export class UiAutomationClient {
         'packaged app did not report build identity; rebuild and reinstall attn.app before running real-app scenarios'
       );
     }
-    if (appBuild.sourceFingerprint !== currentFingerprint) {
+    if (appBuild.sourceFingerprint !== currentAppFingerprint) {
       throw new Error(
-        `packaged app source mismatch: app reports ${appBuild.sourceFingerprint}, current source is ${currentFingerprint}; rebuild and reinstall attn.app`
+        `packaged app source mismatch: app reports ${appBuild.sourceFingerprint}, current source is ${currentAppFingerprint}; rebuild and reinstall attn.app`
       );
     }
 

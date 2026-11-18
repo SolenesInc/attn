@@ -55,7 +55,7 @@ macOS only. A paired program sends with `attn send` without the panel.
 
 Preconditions:
 
-- Run on macOS, in the macOS VM: the panel, the global shortcut, the File menu and sending need system input and focus, which a shared Mac forbids. Install the instance with `APP=native scripts/vm up`, or `make install INSTANCE=<name> APP=native`, and launch as [../SKILL.md](../SKILL.md) says for a native instance. `scripts/vm up` does not rebuild after a change under `native/` alone (seed `s-dwktd8`); run `make build-app INSTANCE=<name> APP=native` and `macvm install-app native/target/staged/attn-<name>.app` instead.
+- Run on macOS, in the macOS VM: the panel, the global shortcut, the File menu and sending need system input and focus, which a shared Mac forbids. Install the instance with `APP=native scripts/vm up`, or `make install INSTANCE=<name> APP=native`, and launch as [../SKILL.md](../SKILL.md) says for a native instance.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - Make a crew member, Fern, as [crew.md](crew.md)'s preconditions say: its home in the instance's `crew/fern` with a `CHARTER.md` before the daemon starts. Then run `./attn settings set codex_executable "$(node -p "require.resolve('./app/scripts/real-app-harness/mockAgent.mjs')")"` and `./attn crew set fern --cwd $C --agent codex`, where `$C` holds this fixture as `$C/.attn-mock-agent.json`:
 
