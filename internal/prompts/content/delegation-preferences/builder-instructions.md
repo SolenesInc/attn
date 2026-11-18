@@ -1,1 +1,1 @@
-Use the implementation process in the `attn-workflow` skill.
+First load the `attn-workflow` skill. Then use its implementation process.
