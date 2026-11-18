@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
@@ -9,16 +9,21 @@ import { ensureFreshWorld } from './freshWorld.mjs';
 import {
   assertProductionRunAllowed,
   currentHarnessInstance,
+  dataDirForInstance,
   defaultAppPathForInstance,
   defaultWSURLForInstance,
+  instanceCliEnv,
   isProductionHarnessTarget,
 } from './harnessInstance.mjs';
 import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './matrixDigest.mjs';
 import { ensureMockGitHubServer, stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenarios, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
-import { appShellInTree } from './platform.mjs';
+import { appCliInTree, appShellInTree } from './platform.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 import { parseShardSelector, readRecordedDurations, selectShard } from './shardPlan.mjs';
+import {
+  onlyWritableSettings, putBackStoredSettingsAndListLeaks, readStoredSettings, storedSettingsChangedBetween,
+} from './settingsIsolation.mjs';
 
 // Must run before any import that reads ATTN_HARNESS_INSTANCE at module load.
 // An unset ATTN_INSTANCE falls back to dev, never to prod.
@@ -245,6 +250,33 @@ function createOutputTailBuffer(maxLines = 40, maxLineLen = 400) {
   return { pushChunk, getTail };
 }
 
+function instanceCli(instance, appPath, args) {
+  const run = spawnSync(appCliInTree(appPath), args, { env: instanceCliEnv(instance), encoding: 'utf8' });
+  if (run.status !== 0) throw new Error(`attn ${args.join(' ')} exited ${run.status}: ${run.stderr || run.error?.message}`);
+  return run.stdout;
+}
+
+async function failIfSettingsLeaked(result, storedChanges, { instance, appPath }) {
+  let changes = storedChanges;
+  let report;
+  try {
+    instanceCli(instance, appPath, ['daemon', 'ensure']);
+    changes = onlyWritableSettings(storedChanges, JSON.parse(instanceCli(instance, appPath, ['settings', 'list', '--json'])).entries);
+    if (changes.length === 0) return;
+    const leaks = await putBackStoredSettingsAndListLeaks(changes);
+    console.log(`[settings] put back what ${result.id} stored: ${changes.map(({ key }) => key).join(', ')}`);
+    if (leaks.length === 0) return;
+    report = `${result.id} left settings changed, which the matrix put back: ${leaks.join('; ')}. `
+      + 'Queue each restore with queueDaemonSettingRestore before changing the setting.';
+  } catch (error) {
+    report = `${result.id} stored settings the matrix could not put back, so the next scenarios inherit them: `
+      + `${changes.map(({ key }) => key).join(', ')}: ${error?.message || error}`;
+  }
+  console.error(`[settings] ${report}`);
+  result.code ||= 1;
+  result.outputTail = `${result.outputTail}\n${report}`;
+}
+
 function runScenario(scenario, timeoutMs, runAgainstProd) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -376,6 +408,7 @@ async function main() {
       launchEnv: preflightLaunchEnv,
     });
   }
+  const dbPath = path.join(dataDirForInstance(instance), 'attn.db');
   matrixRun = { shard, app, results: [], active: null };
   const { results } = matrixRun;
   writeMatrixResults({ complete: false });
@@ -390,7 +423,12 @@ async function main() {
       });
       continue;
     }
+    const settingsBefore = productionTarget ? null : readStoredSettings(dbPath);
     const result = await runScenario(scenario, timeoutMs, runAgainstProd);
+    const settingChanges = settingsBefore ? storedSettingsChangedBetween(settingsBefore, readStoredSettings(dbPath)) : [];
+    if (settingChanges.length > 0) {
+      await failIfSettingsLeaked(result, settingChanges, { instance, appPath });
+    }
     recordScenarioResult(result);
     const status = result.code === 0 ? 'ok' : (result.timedOut ? 'timed-out' : 'failed');
     console.log(`--- ${scenario.id}: ${status} (${result.durationMs}ms) ---`);

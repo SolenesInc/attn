@@ -251,33 +251,25 @@ export async function restoreHarnessSettings({ write = writeDaemonSettings } = {
 
 export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForInstance(), timeoutMs = 10_000 } = {}) {
   const ws = new WebSocket(wsUrl);
-  const wanted = new Map(entries.map((entry) => [entry.key, entry.value]));
-  // The daemon coalesces snapshots, so several writes can land as one
-  // settings_updated naming one key. Read the snapshot instead of counting events.
-  const unwritten = (settings) => [...wanted]
-    .filter(([key, value]) => (settings?.[key] ?? '') !== value)
-    .map(([key]) => key);
+  const outstanding = new Map(entries.map((entry, index) => [`harness-setting-${index}`, entry]));
+  const pending = () => [...outstanding.values()].map(({ key }) => key).join(', ');
   try {
     await new Promise((resolve, reject) => {
-      let outstanding = [...wanted.keys()];
-      const timer = setTimeout(
-        () => reject(new Error(`timed out writing ${outstanding.join(', ')} to ${wsUrl}`)),
-        timeoutMs,
-      );
+      const timer = setTimeout(() => reject(new Error(`timed out writing ${pending()} to ${wsUrl}`)), timeoutMs);
       const settle = (error) => {
         clearTimeout(timer);
         if (error) reject(error); else resolve();
       };
       ws.on('error', settle);
-      ws.on('close', (code, reason) => settle(outstanding.length > 0
-        ? new Error(`daemon closed before writing ${outstanding.join(', ')} (code ${code}${reason?.length ? `: ${reason}` : ''})`)
+      ws.on('close', (code, reason) => settle(outstanding.size > 0
+        ? new Error(`daemon closed before writing ${pending()} (code ${code}${reason?.length ? `: ${reason}` : ''})`)
         : undefined));
       ws.on('open', () => {
         ws.send(JSON.stringify({
           ...harnessClientHello('harness-observer'),
         }));
-        for (const { key, value } of entries) {
-          ws.send(JSON.stringify({ cmd: 'set_setting', key, value }));
+        for (const [requestId, { key, value }] of outstanding) {
+          ws.send(JSON.stringify({ cmd: 'set_setting', request_id: requestId, key, value }));
         }
       });
       ws.on('message', (raw) => {
@@ -287,15 +279,16 @@ export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForInst
         } catch {
           return;
         }
-        if (data.event !== 'settings_updated') {
+        const entry = data.event === 'settings_updated' && outstanding.get(data.request_id);
+        if (!entry) {
           return;
         }
-        if (data.success === false && wanted.has(data.changed_key)) {
-          settle(new Error(data.error || `daemon refused setting ${data.changed_key}`));
+        if (data.success === false) {
+          settle(new Error(`daemon refused ${entry.key}=${entry.value || '""'}: ${data.error || 'no reason given'}`));
           return;
         }
-        outstanding = unwritten(data.settings);
-        if (outstanding.length === 0) settle();
+        outstanding.delete(data.request_id);
+        if (outstanding.size === 0) settle();
       });
     });
   } finally {

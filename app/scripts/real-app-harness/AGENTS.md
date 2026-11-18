@@ -47,7 +47,9 @@ repository root.
   which ones those are changes with the recorded durations. Leave no tile behind,
   and do not drive onto a desktop the scenario did not make. Before changing a
   setting, directly or through a key such as `shelf.fewerTiles`, queue its
-  restore with `queueDaemonSettingRestore`.
+  restore with `queueDaemonSettingRestore`. After each scenario the serial
+  matrix puts back every stored setting the scenario changed, and fails the
+  scenario when that changes a value the daemon shows.
 - `runShellCommandInPane` requires a shell. For a mock agent, submit a prompt
   matched by its fixture and wait for the resulting reply.
 - `profileCommand` awaits `profile_action_result`; CLI commands such as
