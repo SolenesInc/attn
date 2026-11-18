@@ -39,6 +39,7 @@ pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
     frame
         .window_drag()
         .preserve_focus_on_press(panel.face == Face::Compose)
+        .on_key(super::on_picker_key)
         .on_drop_files(
             |panel: &mut Panel, paths: &[std::path::PathBuf], tx: &mut Tx| {
                 panel.dropping = false;

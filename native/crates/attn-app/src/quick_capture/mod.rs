@@ -741,7 +741,9 @@ pub(crate) fn toggle_picker(panel: &mut Panel, tx: &mut Tx) {
     };
 }
 
-fn on_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
+/// The open mailbox list's keys, which it takes wherever the panel's keyboard focus sits, ahead
+/// of the panel's default button.
+pub(crate) fn on_picker_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let mods = ev.mods;
     if let (Some(at), false) = (panel.picking, mods.cmd || mods.ctrl || mods.alt) {
         let count = panel.roster().len();
@@ -764,7 +766,12 @@ fn on_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    if shortcut(panel, ev, tx) || text_size(panel, ev, tx) {
+    false
+}
+
+fn on_key(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let mods = ev.mods;
+    if on_picker_key(panel, ev, tx) || shortcut(panel, ev, tx) || text_size(panel, ev, tx) {
         return true;
     }
     if ev.key == Key::Escape {

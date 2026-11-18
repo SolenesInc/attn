@@ -2405,3 +2405,38 @@ fn return_in_the_mailbox_list_picks_a_mailbox_even_when_a_button_had_the_keyboar
     assert_eq!(capture_focus(&world).as_deref(), Some("capture.message"));
     rest(&mut world);
 }
+
+#[test]
+fn return_picks_the_highlighted_mailbox_when_an_assistive_client_focuses_recent_under_the_open_list()
+ {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    type_text(&mut world, "draft");
+    press(&mut world, "mod+k");
+    world.capture_gesture(|d| {
+        assert!(d.runtime.accessibility_action(
+            "capture.recent",
+            rune::accesskit::Action::Focus,
+            None
+        ));
+    });
+    assert_eq!(capture_focus(&world).as_deref(), Some("capture.recent"));
+
+    press(&mut world, "down");
+    press(&mut world, "enter");
+    assert!(
+        world.daemon.sent_of("quick_capture_send").is_empty(),
+        "the open list owns Return, not the panel's default button"
+    );
+    assert!(shows(&world, "To: Fern"));
+
+    press(&mut world, "enter");
+    let sent = world.daemon.sent_of("quick_capture_send");
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        sent[0]["mailbox"],
+        json!({"kind": "crew_member", "member_id": "fern"})
+    );
+    rest(&mut world);
+}
