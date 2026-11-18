@@ -28,8 +28,11 @@ as a maintainer:
   rendered markdown file, comments on it, and sends the batch to a session as
   one message.
 
-The app (the Tauri UI) is mac only for now; Linux support is in progress.
-The daemon runs on Linux, so daemon code stays portable.
+The app is the native Rust app on Rune in `native/`. It ships for macOS only
+for now. On Linux it builds from source and runs on X11, as CI's scenarios run
+it under Xvfb, and a released Linux app is later work. The Tauri app in `app/src` and `app/src-tauri` is the
+rollback: `APP=tauri` still builds it, and nobody develops it further. The
+daemon runs on Linux, so daemon code stays portable.
 
 ## What makes attn special?
 
@@ -180,7 +183,8 @@ system.
 ## Commands and verification
 
 - `./scripts/test-go.sh --packages -run TestName ./pkg`: Targeted Go tests
-- `pnpm --dir app exec vitest run src/path/to/file.test.tsx`: One frontend test file
+- `cd native && cargo test -p attn-app --test wire`: The app's wire tests
+  (`cargo test` alone runs the whole native workspace)
 - `make check-mobile`: The phone app's format, lint, type check and tests
 - `scripts/land.sh`: Run on Linux, on CI or the clone's landing runner, each
   catalog scenario the landing adds or changes and, when it changes product
@@ -196,10 +200,11 @@ system.
   alone
 - `make test`: Full Go suite (`make test-v` verbose, `make test-watch` on file
   changes), for CI or diagnosing a suite-wide failure
-- `make test-frontend`: Full frontend suite (`pnpm --dir app test:ui` for the Vitest UI)
-- `make test-e2e`: Browser tests (`pnpm --dir app e2e:headed` to watch them)
+- `make test-native`: Every test of the native workspace; `make check-native`
+  runs its formatting, `cargo check`, clippy and parity checks
+- `make test-frontend` and `make test-e2e`: The Tauri app's Vitest and browser
+  suites, for the rollback
 - `make test-scripts`: Shell script tests
-- `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
 - `pnpm --dir website dev`: Runs the website; `pnpm --dir website verify` checks
   the landing page, the guide placeholder and the About page in a build, or on a
@@ -207,7 +212,8 @@ system.
 
 Before landing or reporting done, run targeted tests for what you changed and
 check the affected surface. Do not run `make test`, `make lint`,
-`make test-frontend`, or another full suite locally: CI on `main` runs the full
+`make test-frontend`, or another full suite locally: `scripts/land.sh` runs
+every native test for a change under `native/`, and CI on `main` runs the full
 suites after landing. Neither CI nor `scripts/land.sh` runs the Tauri app's
 tests.
 
@@ -423,18 +429,19 @@ entry names:
 - Installing, launching, or verifying instances => docs/internal/instances.md
 - Checking a change live through every way into a feature => the drive-attn
   skill (.agents/skills/drive-attn) and its feature map
-- Frontend code or shortcuts => app/AGENTS.md
+- The app in `native/`: its code, shortcuts, tests or build output =>
+  docs/internal/native-app.md
+- The Tauri app, the rollback, in `app/src` and `app/src-tauri` =>
+  app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md
 - CPU, memory, or benchmarks => docs/internal/perf-testing.md
 - Terminal input that stops working =>
   docs/internal/diagnosing-terminal-input.md
 - Shared Rust PTY host => docs/internal/pty-host-verification.md
-- The native app in `native/`, its tests or its build output =>
-  docs/internal/native-app.md
 - Native views' spacing, type, corners or controls => "Layout, type and
   corners" in docs/internal/native-app.md
-- The Rune fork, its patches or the native app's pin => docs/internal/rune-fork.md
+- The Rune fork, its patches or the app's pin => docs/internal/rune-fork.md
 - The Cloud Relay's wire contract or its conformance suite =>
   docs/internal/cloud-relay-contract.md
 - The analytics ingest service (`cmd/attn-ingest`) =>
@@ -450,7 +457,7 @@ entry names:
   `<data-dir>/workers/<daemon-instance>/log/<terminal>.log`, the pane's
   `runtime_id`.
 - Shared PTY host: `<data-dir>/pty-hosts/<daemon-instance>/log/host.log`.
-- `attn debug incidents|diagnostics|input`: frontend terminal logs;
+- `attn debug incidents|diagnostics|input`: the app's terminal logs;
   `attn debug ls` lists them.
 - `attn state explain <session>`: why a session has its state, claim by claim.
 - `attn bus status`: event-log consumers, lag, and retention.

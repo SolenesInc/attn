@@ -88,16 +88,16 @@ Preconditions:
 - **Durability across restarts**: guidance is fixed when a harness starts. Claude Code gets the current guidance on every launch, a resume included. A Codex conversation resumed through the shared app-server keeps the developer instructions it started with (`docs/internal/harnesses/codex-app-server.md`). The references come from the running binary, so an agent always reads the installed version's.
 - **Linux**: `attn skill`, `attn prompts` and `attn presence` work the same where the CLI runs on Linux.
 - **Harnesses**: Claude Code reads the launch instructions as appended system instructions. Codex reads them as developer instructions. A plugin harness gets the instructions only when its driver asks for them (the `launch_instructions` capability). A Claude Code or Codex session attn did not launch has no attn map. Claude Code launches with its own `ListAgents` tool denied unless the daemon runs with `ATTN_CLAUDE_PEER_MESSAGING` on. Peers message each other through `attn agent msg` ([inbox.md](inbox.md)).
-- **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` check the text that those agents rely on, and `app/src/prompts/render.compatibility.test.ts` checks the app's renderer against it. `attn skill` prints the copy bundled with the running daemon, or with the `attnd` beside the CLI when no daemon runs.
+- **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` check the text that those agents rely on. `native/crates/attn-app/tests/prompts.rs` checks the app's renderer against it, and `app/src/prompts/render.compatibility.test.ts` checks the Tauri app's (the rollback). `attn skill` prints the copy bundled with the running daemon, or with the `attnd` beside the CLI when no daemon runs.
 
 ## Tests
 
 - Wire: `internal/daemon/agent_guidance_wire_test.go`, `internal/daemon/agent_skill_wire_test.go`, `internal/daemon/attn_skill_install_wire_test.go`, `internal/daemon/settings_skill_read_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`.
 - Wire: `internal/daemon/agent_tools_reading_wire_test.go` calls the `skill` and `guide` tools.
 - Stack: `cmd/attnd/skill_stack_test.go`, `cmd/attnd/prompts_stack_test.go`, each skill check with no daemon and through one.
-- Scenario: `prompt-composition`.
-- Kernel: `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `cmd/attnd/prompt_compatibility_test.go`, `internal/*/prompt_compatibility_test.go`.
-- App: `app/src/prompts/render.compatibility.test.ts`.
+- Scenario: `prompt-composition` in the Tauri app (the rollback).
+- Kernel: `native/crates/attn-app/tests/prompts.rs`, `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `cmd/attnd/prompt_compatibility_test.go`, `internal/*/prompt_compatibility_test.go`.
+- App: the Tauri app's (the rollback), `app/src/prompts/render.compatibility.test.ts`.
 
 ## Gotchas
 

@@ -43,8 +43,8 @@ and signatures of both clients by `internal/cloudlink/testdata/cloud_relay_vecto
 
 ### People
 
-- **Settings → Experimental** and the head of **Settings → Phones**, "Phone access" (`app/src/components/SettingsModalSections.tsx`), the home setting `phone_access_enabled`.
-- **Settings → Phones** (`app/src/components/PhonesSettings.tsx`; in the native app, `native/crates/attn-app/src/settings/phones.rs`), listed under Connectivity, dimmed and marked off until phone access is on: the link, "Pair a phone" per profile with Cancel beside a shown code, the paired phones with Revoke.
+- **Settings → Experimental** and the head of **Settings → Phones**, "Phone access" `settings.feature.phone_access_enabled`, the home setting `phone_access_enabled`.
+- **Settings → Phones** (`native/crates/attn-app/src/settings/phones.rs`), listed under Connectivity, dimmed and marked off until phone access is on: the link, a block per profile with "Pair a phone", the code as a QR image with Cancel beside it, the expired line, and the paired phones with Revoke.
 - Their own shell: `attn settings set phone_access_enabled true`.
 
 ### Agents
@@ -53,44 +53,39 @@ and signatures of both clients by `internal/cloudlink/testdata/cloud_relay_vecto
 
 ## Driving it
 
+`<profile>` is the profile's id, from the `settings.block.phones.<profile>` key in `bridge tree`.
+
 Preconditions:
 
-- A Cloud Relay of your own that passes the contract. Add `export ATTN_CLOUD_URL=http://127.0.0.1:<port>` to `$DRIVE_ENV` before starting the daemon. Without `ATTN_CLOUD_URL` the daemon dials `https://cloud.attn.codes`.
-- Use the baseline instance with its app, or the daemon alone for the link and the protocol.
+- A Cloud Relay of your own that passes the contract. Add `export ATTN_CLOUD_URL=http://127.0.0.1:<port>` to `$DRIVE_ENV` before `make install INSTANCE=<name>` starts the daemon. Without `ATTN_CLOUD_URL` the daemon dials `https://cloud.attn.codes`.
+- Use the baseline instance with its app, launched as [../SKILL.md](../SKILL.md) says, or the daemon alone for the link and the protocol. On Linux, the app needs a display: keep one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '. $DRIVE_ENV && bridge --launch ping; …'` running for the whole run. `bridge` itself needs no display. `bridge wait '{"target":{"key":"home"}}'` answers.
+- The phone for the Settings steps is the test phone in `internal/testworld/phone.go`, driven by a scratch Go test in the repository that you delete afterwards: `testworld.StartCloud` with `ATTN_TEST_CLOUD_URL` set to the relay, `ParsePhoneQR` of the scanned text, then `NewPhone(...).DialToPair`, `Pair` and `Hello`, and `AwaitClosed` to read how the relay ends it. A socket from `DialToPair` alone holds the code's window open without pairing. Unset the instance's `ATTN_*` routing in that test's shell.
 - For the phone app in a browser at a phone's size, run `pnpm --dir mobile exec vite --port 5180` with a Vite config that resolves `./appleCrypto` to `src/test/nobleCrypto.ts`, because the app encrypts only with CryptoKit and a browser has no CryptoKit. Pair it by pasting the QR code's text in Pairings. The client that asked for the code must stay connected while the phone pairs, because the code's window ends when that client leaves, so `wsctl request` is not enough. The Cloud Relay stand-in checks a phone's `Origin`, so serve the page and the relay from one host and port. A browser reports no keyboard, so check keyboard behavior on an iPhone.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-phones-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
-- **Off by default.** `./attn settings get phone_access_enabled` prints an empty line, which reads as off, and `ss -tnp` shows no connection from the daemon's pid to the Cloud Relay.
-- **The person turns it on.** Press ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`), click `[data-testid="settings-nav-experimental"]` natively, and click `[aria-label="Phone access"]` natively after `dom_native_point` scrolls it into view. `./attn settings get phone_access_enabled` prints `true`, and the daemon holds one connection to the Cloud Relay. From the person's shell, `./attn settings set phone_access_enabled true` does the same.
-- **Pairing and revoke.** Click `[data-testid="settings-nav-phones"]` natively, then "Pair a phone" in the profile's section. Click Cancel beside the code to end it, or leave the page, which does the same. To prove the relay token with a real phone, revoke it first, because the Cloud Relay does not check the token of a phone on the allowlist. A phone is the test phone in `internal/testworld/phone.go`. The stack test drives it end to end: `./scripts/test-go.sh --packages -v -run 'Phone|Pairing|TestEachProfile|TestDeletingAProfile|TestOnlyTheHome|TestUnreadableCloudKeys' ./cmd/attnd`, against a Go stand-in for the Cloud Relay, or against a real Cloud Relay with `ATTN_TEST_CLOUD_URL=http://127.0.0.1:<port>`.
+The steps press Linux's chords. On macOS, Settings is `mod+,`.
+
+- **Off by default.** `./attn settings get phone_access_enabled` prints an empty line, and `ss -tnp | grep :<relay port>` shows no `attnd`.
+- **The person turns it on.** Run `bridge key '{"chord":"mod+shift+,"}'`, `bridge press '{"target":{"key":"settings.nav.experimental"}}'` and `bridge press '{"target":{"key":"settings.feature.phone_access_enabled"}}'`. `./attn settings get phone_access_enabled` prints `true`. Press `settings.nav.phones`: `bridge wait '{"target":{"key":"settings.phones.link","name":"Connected to Attn Cloud at <relay URL>"}}'` answers, and `ss` shows one `attnd` socket to the relay. From the person's shell, `./attn settings set phone_access_enabled true` does the same.
+- **Pair through the QR code.** Press `settings.phones.<profile>.pair`. `settings.phones.<profile>.code.qr` shows as an image named "Pairing code for <profile name>", and the button reads "Show a new pairing code". Run `bridge shot '{"path":"<P>/phones-code.png"}'`, then `zbarimg --raw -q <P>/phones-code.png`: it prints the code's JSON. Pair the test phone with that text: it gets `welcome` for the profile. `bridge wait '{"target":{"role":"list-item","name":"<phone name>"}}'` answers with key `settings.phone.<profile>.<device>`, its `.seen` reads "Connected now", and the code is gone.
+- **Revoke.** Press `settings.phone.<profile>.<device>.revoke`: the row goes, and the phone's socket closes with `4403`.
+- **The window ends.** Show a code, scan it, and hold a socket on it. Each of these closes the socket with `4403`: pressing `settings.phones.<profile>.code.cancel`, after which the button reads "Pair a phone"; pressing `settings.nav.experimental`; `bridge key '{"chord":"escape"}'`, which closes Settings; and `./attn instance stop-app`.
+- **Off from the shell.** Launch again and open Settings → Phones. Run `./attn settings set phone_access_enabled false`: `settings.phones.link` reads "Phone access is off, so this home holds no connection to Attn Cloud.", `bridge tree` shows `settings.phones.<profile>.pair` disabled, and `ss` shows no `attnd` socket to the relay.
+- **The stack test.** `./scripts/test-go.sh --packages -v -run 'Phone|Pairing|TestEachProfile|TestDeletingAProfile|TestOnlyTheHome|TestUnreadableCloudKeys' ./cmd/attnd` drives pairing and revoke end to end against a Go stand-in for the Cloud Relay, or against a real Cloud Relay with `ATTN_TEST_CLOUD_URL=http://127.0.0.1:<port>`. To prove the relay token with a real phone, revoke it first, because the Cloud Relay does not check the token of a phone on the allowlist.
 - **The Home Gateway.** `./scripts/test-go.sh --packages -v -run 'TestHomeGateway|TestAPhone|TestAHome' ./internal/daemon`.
 - **The Crew section.** Run `./attn crew create Keel`, then start one member and leave another between sessions. In the phone app, Queue lists Crew first with the Chief on top. Tap the row between sessions: it shows starting, then `./attn crew list` shows the member in session, and the row opens its session.
 - **The phone terminal.** Spawn a Claude Code session in the paired profile and tap it in the phone app. The terminal shows the agent at the phone's width, and `attn debug daemon-log --grep pty_resize` shows a resize to the phone's size. Answer a numbered menu with the keys bar, and send a prompt from the composer. After a long reply, swipe down on the terminal and read text from well above the screen; a double tap returns to the bottom. In the desktop app, the tile shows the terminal scaled; clicking it takes the size back.
 - **The phone Garden.** Plant a plot in the paired profile with `./attn seed plot -f <file> --profile <id>`, a markdown body with a mermaid block and two children where one waits for the other. In the phone app, open Garden: the plot lists with its progress. Open the plot, then a child; add a note and park the child with a reason. `./attn seed notes <child>` shows the note by the user and the park's comment, and `./attn seed show <child>` shows it parked.
 - **Mentioned seeds in an ask.** Open an ask that mentions a seed in its prose. Enter a note on the phone, tap the mention, then go back. The seed opens and the note is still in the ask.
-- **Proof.** In `$P`, keep each `./attn settings` command's output, the `ss` lines, the test output, and `bridge capture_native_window_screenshot '{"path":"<P>/phones.png"}'` of Settings → Phones, `<P>` written out.
+- **Proof.** In `$P`, keep each command's output, the `ss` lines, the test output, the scratch test's output, `zbarimg`'s text, and `bridge shot` of the code, the paired phone and the page with phone access off, with `<P>` written out.
 
-### In the native app
+### In the Tauri app (the rollback)
 
-The native app's Settings → Phones (`native/crates/attn-app/src/settings/phones.rs`) has the link, a block per profile with its paired phones and Revoke, "Pair a phone" with the code as a QR image and Cancel, and the expired line. The "Phone access" switch heads the page and lists on Experimental. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation). `<profile>` is the profile's id, from the `settings.block.phones.<profile>` key in `bridge tree`.
+Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says.
 
-Preconditions:
-
-- The Cloud Relay and `ATTN_CLOUD_URL` as above, in `$DRIVE_ENV` before `make install INSTANCE=<name> APP=native` starts the daemon. On Linux, the app needs a display: keep one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '. $DRIVE_ENV && bridge --launch ping; …'` running for the whole run. `bridge` itself needs no display.
-- `bridge wait '{"target":{"key":"home"}}'` answers. Make `P` as above.
-- The phone is the test phone in `internal/testworld/phone.go`, driven by a scratch Go test in the repository that you delete afterwards: `testworld.StartCloud` with `ATTN_TEST_CLOUD_URL` set to the relay, `ParsePhoneQR` of the scanned text, then `NewPhone(...).DialToPair`, `Pair` and `Hello`, and `AwaitClosed` to read how the relay ends it. A socket from `DialToPair` alone holds the code's window open without pairing. Unset the instance's `ATTN_*` routing in that test's shell.
-
-The steps press Linux's chords; on macOS, Settings is `mod+,`.
-
-Steps:
-
-- **Off by default.** `./attn settings get phone_access_enabled` prints an empty line, and `ss -tnp | grep :<relay port>` shows no `attnd`.
-- **The person turns it on.** Run `bridge key '{"chord":"mod+shift+,"}'`, `bridge press '{"target":{"key":"settings.nav.experimental"}}'` and `bridge press '{"target":{"key":"settings.feature.phone_access_enabled"}}'`. `./attn settings get phone_access_enabled` prints `true`. Press `settings.nav.phones`: `bridge wait '{"target":{"key":"settings.phones.link","name":"Connected to Attn Cloud at <relay URL>"}}'` answers, and `ss` shows one `attnd` socket to the relay.
-- **Pair through the QR code.** Press `settings.phones.<profile>.pair`. `settings.phones.<profile>.code.qr` shows as an image named "Pairing code for <profile name>", and the button reads "Show a new pairing code". Run `bridge shot '{"path":"<P>/phones-code.png"}'`, then `zbarimg --raw -q <P>/phones-code.png`: it prints the code's JSON. Pair the test phone with that text: it gets `welcome` for the profile. `bridge wait '{"target":{"role":"list-item","name":"<phone name>"}}'` answers with key `settings.phone.<profile>.<device>`, its `.seen` reads "Connected now", and the code is gone.
-- **Revoke.** Press `settings.phone.<profile>.<device>.revoke`: the row goes, and the phone's socket closes with `4403`.
-- **The window ends.** Show a code, scan it, and hold a socket on it. Each of these closes the socket with `4403`: pressing `settings.phones.<profile>.code.cancel`, after which the button reads "Pair a phone"; pressing `settings.nav.experimental`; `bridge key '{"chord":"escape"}'`, which closes Settings; and `./attn instance stop-app`.
-- **Off from the shell.** Launch again and open Settings → Phones. Run `./attn settings set phone_access_enabled false`: `settings.phones.link` reads "Phone access is off, so this home holds no connection to Attn Cloud.", `bridge tree` shows `settings.phones.<profile>.pair` disabled, and `ss` shows no `attnd` socket to the relay.
-- **Proof.** In `$P`, keep each command's output, the `ss` lines, the scratch test's output, `zbarimg`'s text, and `bridge shot` of the code, the paired phone and the page with phone access off, with `<P>` written out.
+- **The person turns it on.** Press ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`), click `[data-testid="settings-nav-experimental"]` natively, and click `[aria-label="Phone access"]` natively after `dom_native_point` scrolls it into view. `./attn settings get phone_access_enabled` prints `true`, and the daemon holds one connection to the Cloud Relay.
+- **Pairing.** Click `[data-testid="settings-nav-phones"]` natively, then "Pair a phone" in the profile's section. Click Cancel beside the code to end it, or leave the page, which does the same.
+- **Proof.** Capture `bridge capture_native_window_screenshot '{"path":"<P>/phones.png"}'` of Settings → Phones.
 
 ## Contexts
 
@@ -119,6 +114,6 @@ Steps:
 - Wire: `internal/daemon/home_gateway_wire_test.go`, `internal/daemon/home_gateway_terminal_wire_test.go` (screen then output, focus ownership and hand-back, submit_prompt, output within credit during a flood).
 - Wire: `internal/daemon/home_gateway_garden_wire_test.go` (listing, detail, note, park and harvest, profile scope, `seed_changed` on another actor's note and body edit).
 - Phone: `mobile/src/main.scene.test.ts` (queue, session screen, composer, closing the keyboard), `mobile/src/terminal/scroll.test.ts` (what a drag and a double tap do: pan, scrollback rows, wheel lines), `mobile/src/garden/garden.scene.test.ts` (Garden sections, seed screen, note, move, unreachable and reconnecting homes, an open seed refreshed live and after a reconnect), `mobile/src/link.test.ts` (heartbeat, terminal attach and re-attach, the garden window, the home's answer to a wake).
-- App: `app/src/components/PhonesSettings.pairing.test.tsx`, `app/src/homeGateway/decode.test.ts`, and the switch in `app/src/components/SettingsModal.test.tsx`.
-- Native app: `native/crates/attn-app/tests/wire/settings/phones.rs` (the link, a code and its QR image, Cancel, leaving the page, closing Settings, another layer over it, a code that arrives after the person left, expiry, a refusal, revoke once, off, reading again after a reconnect), and the switch in `native/crates/attn-app/tests/wire/settings.rs`.
+- Wire: `native/crates/attn-app/tests/wire/settings/phones.rs` (the link, a code and its QR image, Cancel, leaving the page, closing Settings, another layer over it, a code that arrives after the person left, expiry, a refusal, revoke once, off, reading again after a reconnect), and the switch in `native/crates/attn-app/tests/wire/settings.rs`.
+- App, the Tauri app's (the rollback): `app/src/components/PhonesSettings.pairing.test.tsx`, `app/src/homeGateway/decode.test.ts`, and the switch in `app/src/components/SettingsModal.test.tsx`.
 - Script: `scripts/check-home-gateway-compat_test.sh`, `scripts/check-cloud-relay-privacy_test.sh`.

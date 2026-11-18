@@ -139,12 +139,12 @@ recommend no, since a parked seed can resume)> · <the default cap in the menu
 
 Ownership:
 
-    <internal/protocol/schema/main.tsp       new until_seed on SnoozeTurnMessage and turn_snoozed_for_seed on Session
-     internal/store/turn.go                  new SnoozedForSeed in TurnStamps, persisted in session_runtime
-     internal/sessionmonitor/commands.go     snooze stores the seed with the time; unsnooze clears both (F1)
-     internal/daemon/snooze.go               checks the seed is open before the snooze
-     internal/daemon/snooze_seed.go          new: durable consumer that unsnoozes sessions when their seed closes (F2)
-     app/src/components/SnoozeMenu.tsx       "Until a seed closes" choice with a seed picker>
+    <internal/protocol/schema/main.tsp             new until_seed on SnoozeTurnMessage and turn_snoozed_for_seed on Session
+     internal/store/turn.go                        new SnoozedForSeed in TurnStamps, persisted in session_runtime
+     internal/sessionmonitor/commands.go           snooze stores the seed with the time; unsnooze clears both (F1)
+     internal/daemon/snooze.go                     checks the seed is open before the snooze
+     internal/daemon/snooze_seed.go                new: durable consumer that unsnoozes sessions when their seed closes (F2)
+     native/crates/attn-app/src/sidebar/snooze.rs  "Until a seed closes" choice with a seed picker>
 
 Interfaces:
 

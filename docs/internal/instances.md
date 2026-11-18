@@ -77,12 +77,14 @@ Recording stay attached to the app across rebuilds. For a Linux VM, see [Local L
 for a macOS VM, see [macOS VM](macos-vm.md); for Windows through WSL, see
 [Windows VM](windows-vm.md).
 
-An instance has one app. `APP=native` on `make install` and `make run` builds
-and installs the native app from `native/` instead of the Tauri app, with the
-same `attnd`, `attn` and `attn-pty-host` beside it; installing again without it
-switches the instance back. `make run INSTANCE=<name>` opens the native app in
-the background, and it does not take focus. Production's `make run` brings it to
-the front, as it does the Tauri app.
+An instance has one app: the native app from `native/`, with `attnd`, `attn`
+and `attn-pty-host` beside it. `make run INSTANCE=<name>` opens it in the
+background, and it does not take focus. Production's `make run` brings it to the
+front. `APP=tauri` on `make install` and `make run` builds and installs the
+Tauri app instead, the rollback, with the same programs beside it. Installing
+again without `APP=tauri` switches the instance back. Only the Tauri app builds
+`DEMO=1` apps and the default-instance harness
+(`make build-default-instance-harness`), so those need `APP=tauri`.
 
 ## GitHub polling
 
@@ -152,7 +154,7 @@ node app/scripts/onboarding-rehearsal/rehearse.mjs <scenario> --rebuild
 ```
 
 `--rebuild` installs the daemon first, which is what a prompt change needs.
-`--rebuild-app` installs the whole app, for a change under `app/src`.
+`--rebuild-app` installs the whole app, for a change to the app.
 `--fresh-world` builds the scenario's saved state again. Saved state is
 migrated forward like any old install, so a schema change doesn't need this.
 The `upgrader` state needs the old chief-of-staff session role, which attn no

@@ -1,4 +1,15 @@
-# Frontend (Tauri + React)
+# The Tauri app (the rollback)
+
+`app/src` and `app/src-tauri` hold the Tauri app, the rollback for the native
+app in `native/`. `make install INSTANCE=<name> APP=tauri` builds it, and a
+hotfix release can ship it again, as
+[Making a release](../docs/internal/making-a-release.md#the-macos-app) says.
+Keep it building and its tests green. App work lands in `native/`:
+[Native app](../docs/internal/native-app.md). Seed `s-yxa3tt` deletes this app
+one release after the cut-over.
+
+`app/` also holds what both apps use: the real-app harness and the scenarios
+of both apps, in `app/scripts/real-app-harness`, and the onboarding rehearsal.
 
 ## Daemon connection
 

@@ -34,26 +34,28 @@ Stay on the host for:
 
 ```bash
 scripts/vm up
-scripts/vm drive create_session '{"label":"vm","cwd":"/Users/admin","agent":"shell"}'
+scripts/vm drive wait '{"target":{"key":"sidebar"}}'
 scripts/vm record 20 /tmp/clip.mp4
 scripts/vm shot /tmp/still.png
 scripts/vm down
 ```
 
-`up` installs `app/node_modules` if it is missing, builds the app with `DEMO=1`
-unless the staged bundle already matches the source, gets a VM, installs the
-app, opens it without taking focus and waits until it is ready. Run it again
-after changing code: it rebuilds and reinstalls only when the source changed.
+`up` installs `app/node_modules` if it is missing, builds the app unless the
+staged bundle already matches the source, gets a VM, installs the app, opens it
+without taking focus and waits until it is ready. Run it again after changing
+code: it rebuilds and reinstalls only when the source changed.
 
-`drive` sends one automation-bridge action to the app; `ui-automation-cli.mjs`
-in `app/scripts/real-app-harness` lists them. `record` adds a frame only when the
-window repaints, so a clip of a still window has few frames. Publish clips from
-the host with `./scripts/pr-evidence.sh publish`; its `record` command does not
-work in the VM, where `screencapture -v` writes an empty video.
+`drive` sends one automation action to the app.
+[Native app](native-app.md#automation) lists the actions. `record` adds a frame
+only when the window repaints, so a clip of a still window has few frames.
+Publish clips from the host with `./scripts/pr-evidence.sh publish`. Its
+`record` command does not work in the VM, where `screencapture -v` writes an
+empty video.
 
-`APP=native` on `up` and `shot` runs the native app instead, built without
-`DEMO=1`; `drive` then takes its actions, which
-[Native app](native-app.md#automation) lists.
+`APP=tauri` on `up`, `drive` and `shot` runs the Tauri app, the rollback,
+instead. `up` builds it with `DEMO=1`, and `drive` then takes the Tauri app's
+bridge actions, which `ui-automation-cli.mjs` in `app/scripts/real-app-harness`
+lists.
 
 Each agent gets its own instance by default, `vm-<worktree name>-<hash>`, even
 when agents share a checkout. `--instance NAME`, before or right after the
@@ -110,12 +112,12 @@ get a new one.
   agents load it.
 - Right after a boot the guest is busy for several minutes. A capture can time
   out then with `could not create image from display`; run it again.
-- The guest's display can stop showing a native window's new frames while the
+- The guest's display can stop showing the app window's new frames while the
   app keeps drawing them. `shot`, `record` and the screen then keep an old
   picture until the window is activated or resized. Real Macs don't do this
   (seed `s-bk8n80`), and current builds rarely trigger it (seed `s-bjt0b1`).
   The bridge's `find` and `wait` read the app's state, not the screen, so trust
   them over a still. When a still disagrees with them, run
   `macvm exec open -a Applications/attn-<instance>.app` and capture again.
-- Metal in the guest reports every drawable as skipped, so a native `--trace`
+- Metal in the guest reports every drawable as skipped, so the app's `--trace`
   writes `present_ms: null` on every frame. Measure presentation on the host.

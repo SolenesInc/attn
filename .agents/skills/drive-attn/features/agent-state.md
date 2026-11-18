@@ -23,10 +23,10 @@ Agents read the state of every session with `attn agent list` and
 
 ### People
 
-- Sidebar, in desktop flow (`app/src/components/SidebarRows.tsx`): each agent's row, `[data-testid="sidebar-session-<session>"]`, carries the state in `.session-lead[data-state]`, and its harness logo is labelled "<Harness> · <state>", such as "Claude · working". With harness logos off, a state dot takes its place ([harnesses.md](harnesses.md)).
-- Home screen, ⌘⇧H (`session.goToDashboard`, `app/src/shortcuts/registry.ts`): sessions grouped by state, "Waiting for input", "Pending approval", "Launching", "Working", "Scheduled", "Idle", "Recoverable" and "Unknown / error", each group with a `data-testid` such as `session-group-waiting` and `session-group-pending`, and each agent's activity line (`app/src/components/Dashboard.tsx`). The home screen itself is [home.md](home.md).
-- The palette's agent rows show whether an agent waits or needs approval (`app/src/components/palette/agentPaletteRows.ts`).
-- **Settings → Background agents** (`app/src/components/SessionActivitySettings.tsx`): the "Generate activity lines" switch (`[data-testid="settings-activity-toggle"]`, setting `activity.enabled`) stays disabled until the user chooses an agent in "Session activity model" (setting `activity.config`). Two refresh fields, "Refresh on home (seconds)" and "Refresh elsewhere in the app (seconds)", set how often lines are written.
+- Sidebar, in desktop flow (`native/crates/attn-app/src/sidebar/mod.rs`): each agent's row carries its state in the image `sidebar.session.<session>.state`, its harness logo labelled "<Harness> · <state>", such as "Claude · working", with the wire state as its value. With harness logos off, a state dot takes the logo's place ([harnesses.md](harnesses.md)).
+- Home screen, ⌘⇧H (`session.goToDashboard`, `native/crates/attn-app/src/keymap.rs`): sessions grouped by state, "Waiting for input", "Pending approval", "Launching", "Working", "Scheduled", "Idle", "Recoverable" and "Unknown / error", each group a list keyed `home.group.<state>`, such as `home.group.waiting` and `home.group.pending`, with each agent's activity line (`native/crates/attn-app/src/home/`). The home screen itself is [home.md](home.md).
+- The agent palette, ⌘K (`ui.actionMenu`): each agent row shows whether the agent waits or needs approval (`native/crates/attn-app/src/palette/view.rs`).
+- **Settings → Background agents** (`native/crates/attn-app/src/settings/background.rs`): the "Generate activity lines" switch (`settings.activity.toggle`, setting `activity.enabled`) stays disabled until the user chooses an agent in "Session activity model" (setting `activity.config`). Two refresh fields, "Refresh on home (seconds)" and "Refresh elsewhere in the app (seconds)", set how often lines are written.
 - Their own shell: the verbs below.
 
 ### Agents
@@ -47,7 +47,8 @@ Agents read the state of every session with `attn agent list` and
 
 Preconditions:
 
-- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new, and stay in desktop flow, the default.
+- Use the baseline instance with its app, launched as [../SKILL.md](../SKILL.md) says, then `bridge wait '{"target":{"key":"home"}}'`. Stay in desktop flow, the default. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- The steps press the macOS chords. On Linux press `mod+alt+h` for `mod+shift+h`, `mod+shift+k` for `mod+k` and `mod+shift+,` for `mod+,`.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-state.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - Make an agent folder with `S=$(mktemp -d /tmp/drive-attn-state-agent.XXXX) && echo "export S=$S" >> $DRIVE_ENV`, and save this fixture as `$S/.attn-mock-agent.json`:
 
@@ -59,67 +60,54 @@ Preconditions:
 ]}
 ```
 
-`<terminal>` is the agent's terminal id from `wsctl list`. Re-read a state with a deadline that fails the run, never after a fixed delay.
+`<terminal>` is the `runtime_id` of the agent's pane in `wsctl list`. `wsctl input` takes that id, not the session id. Re-read a state with a deadline that fails the run, never after a fixed delay.
 
-- **Launch.** Run `wsctl add-session --cwd $S --agent claude --label state-agent --id state-agent --place`. `./attn agent list` may show `state-agent` as `launching` for a moment. Re-read `./attn agent list` until the state is something else, with a deadline.
-- **Working, then waiting.** Run `wsctl input --id <terminal> --text "hello" --enter`. For at least 1.5 seconds `./attn agent list` shows `working`. Then `./attn agent list` shows `waiting_input` with TURN `owed`. `./attn agent peek state-agent` shows `state: waiting_input` and `turn: owed to this session`. In the app, `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-state-agent\"] .session-lead[data-state=\"waiting_input\"]","timeoutMs":5000}'` matches.
-- **A silent turn ends idle.** Run `wsctl input --id <terminal> --text "quiet" --enter`. The state goes `working`, then `idle`, and the sidebar row's `data-state` follows.
+- **Launch.** Run `wsctl add-session --cwd $S --agent claude --label state-agent --id state-agent --place`. `./attn agent list` may show `state-agent` as `launching` for a moment. Re-read `./attn agent list` until the state is something else, with a deadline. `bridge wait '{"target":{"key":"sidebar.session.state-agent.state"}}'` answers, an image named `Claude · idle`.
+- **Working, then waiting.** Run `wsctl input --id <terminal> --text "hello" --enter`. For at least 1.5 seconds `./attn agent list` shows `working`. Then `./attn agent list` shows `waiting_input` with TURN `owed`. `./attn agent peek state-agent` shows `state: waiting_input` and `turn: owed to this session`. In the app, `bridge wait '{"target":{"key":"sidebar.session.state-agent.state","name":"Claude · waiting input"}}'` answers.
+- **A silent turn ends idle.** Run `wsctl input --id <terminal> --text "quiet" --enter`. The state goes `working`, then `idle`, and the same wait with `Claude · idle` answers.
 - **An agent reads the list.** Run `wsctl input --id <terminal> --text "who" --enter`. `./attn agent peek state-agent` shows a table with the columns ID, NAME, AGENT, MEMBER, PROFILE, STATE and TURN, with `state-agent` as `working` while it ran the command.
 - **Needs approval.**
-  - With the agent idle at its prompt, report a permission prompt the way Claude Code's Notification hook does: run `echo '{"notification_type":"permission_prompt","message":"Allow edit?"}' | ./attn _hook-notification <terminal>`. It exits 0 and prints nothing. `./attn agent list` shows `pending_approval`.
-  - Press ⌘⇧H with `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`: `bridge dom_text '{"selector":"[data-testid=\"session-group-pending\"]"}'` reads `Pending approval` and `state-agent`.
-  - Open the agent palette with ⌘K (`bridge native_key '{"key":"k","modifiers":["command"]}'`): `bridge dom_wait '{"selector":"[data-testid=\"palette-agent-state-agent\"] .unified-palette-pill.is-approval","timeoutMs":5000}'` matches and the row reads `approval`.
-  - Press Escape.
-  - Answer the permission prompt by sending the agent a prompt, `wsctl input --id <terminal> --text "hello" --enter`: the state goes `working`, then `waiting_input`, and `session-group-waiting` holds the row. Open the agent palette again with ⌘K: the row's pill reads `waiting` (`.unified-palette-pill.is-waiting`).
+  - With the agent idle at its prompt, report a permission prompt the way Claude Code's Notification hook does: run `echo '{"notification_type":"permission_prompt","message":"Allow edit?"}' | ./attn _hook-notification <terminal>`. It exits 0 and prints nothing. `./attn agent list` shows `pending_approval`, and the sidebar row reads `Claude · pending approval`.
+  - Press ⌘⇧H with `bridge key '{"chord":"mod+shift+h"}'`. `bridge tree` shows `home.session.state-agent` inside the list `home.group.pending`, named "Pending approval", with the value `pending_approval`.
+  - Press ⌘K with `bridge key '{"chord":"mod+k"}'`. `palette.row.agent:state-agent.state` and `palette.row.agent:state-agent.status` read `approval`. Press `Escape`.
+  - Answer the permission prompt by sending the agent a prompt, `wsctl input --id <terminal> --text "hello" --enter`. The state goes `working`, then `waiting_input`. `bridge wait '{"target":{"key":"home.group.waiting"}}'` answers, named "Waiting for input", with `home.session.state-agent` in it. Press ⌘K again: the palette row reads `waiting`.
 - **Why.** Run `./attn state explain state-agent`. It prints `state:   waiting_input`, then a table with the columns OBSERVED, SOURCE, CLAIM, OUTCOME and WHY, holding a `hook_notify` row whose claim is `permission_prompt`, a `resolver` row applying `pending_approval`, and the rows that followed. `--json` prints the same facts.
 - **Peek is passive.** Run `./attn agent peek state-agent` twice. The `since` time on the state line does not move, and the agent's screen shows no input.
 - **A Claude suggestion.** The mock agent has no suggestions, so `./scripts/test-go.sh --packages -run TestAgentPeekLabelsARealClaudeSuggestionAndNotATypedDraft ./cmd/attnd` drives real `claude` against a mock API, and `TestAgentPeekFromHomeLabelsARealClaudeSuggestionOnAnOutpostAndNotATypedDraft` does it on an outpost, and `TestAgentPeekLabelsAClaudeSuggestionAndNotATypedDraft` paints the same cells from the fake. A labelled peek ends with `composer: the text on the ❯ line is Claude's suggestion, not typed by the user`, and `--json` has `screen.composer_suggestion: true`.
-- **Stopped.** Run `wsctl kill-session --id state-agent`. `./attn agent list` shows `idle`, peek shows `process exited with code`, `./attn state explain state-agent --json` holds an observation with source `resolver`, claim `idle` and detail `process_exited`, and the sidebar row's `data-state` follows. See [agent-launch.md](agent-launch.md) for resuming the agent.
+- **Stopped.** Run `wsctl kill-session --id state-agent`. `./attn agent list` shows `idle`, peek shows `process exited with code`, `./attn state explain state-agent --json` holds an observation with source `resolver`, claim `idle` and detail `process_exited`, and the sidebar row reads `Claude · idle` again. See [agent-launch.md](agent-launch.md) for resuming the agent.
 - **Activity lines.**
   - Run `./attn activity`. It prints `presence:` and a tier, then `activity: off (Settings › Background agents › Session activity)`.
-  - Open Settings with ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`) and click `[data-testid="settings-nav-backgroundAgents"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"settings-activity-toggle\"][disabled]","timeoutMs":5000}'` matches: the switch cannot be clicked until an agent is chosen.
-  - Run `./attn settings set activity.enabled true`. `./attn activity` prints `activity: on, but not runnable: session activity has no agent selected: choose claude or codex`, and `bridge dom_text '{"selector":"[data-testid=\"settings-activity-toggle\"]"}'` reads `Disable`.
+  - Press ⌘, with `bridge key '{"chord":"mod+,"}'`, then `bridge press '{"target":{"key":"settings.nav.backgroundAgents"}}'`. `settings.activity.toggle` reads "Enable", disabled, with the description "Choose an agent first".
+  - Run `./attn settings set activity.enabled true`. `./attn activity` prints `activity: on, but not runnable: session activity has no agent selected: choose claude or codex`, and `bridge wait '{"target":{"key":"settings.activity.toggle","name":"Disable"}}'` answers.
   - Run `./attn activity clear state-agent`: it prints `cleared the activity line for state-agent`.
-  - Put the setting back with `./attn settings set activity.enabled false`.
-- **Proof.** In `$P`, keep `./attn agent list --json` after each step, `./attn agent peek state-agent` after the reply, the approval and the stop, `./attn state explain state-agent --json`, `./attn activity` before and after the setting, and `bridge capture_screenshot '{"path":"<P>/state-home.png"}'` with the home screen showing the pending group, where `<P>` is the folder's path written out. Name each file for its way in, such as `state-approval-list.json`.
+  - Put the setting back with `./attn settings set activity.enabled false`, and press `Escape`.
+- **Proof.** In `$P`, keep `./attn agent list --json` after each step, `./attn agent peek state-agent` after the reply, the approval and the stop, `./attn state explain state-agent --json`, `./attn activity` before and after the setting, `bridge tree` after the approval and after the answer, and `bridge shot '{"path":"<P>/state-home.png"}'` with the home screen showing the pending group, where `<P>` is the folder's path written out. Name each file for its way in, such as `state-approval-list.json`.
 
-### In the native app
+### In the Tauri app (the rollback)
 
-The native app (`native/`) shows each agent's state in its sidebar row, the home screen's state groups and the agent palette, and has **Settings → Background agents** with the activity switch and its refresh fields. The CLI steps above read the same daemon in either app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
+Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. The CLI steps above are the same. These steps check what the Tauri app shows:
 
-Preconditions:
-
-- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
-- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Make `P`, `S` and the fixture as above.
-- The steps press the macOS chords. On Linux press `mod+alt+h` for `mod+shift+h`, `mod+shift+k` for `mod+k` and `mod+shift+,` for `mod+,`.
-- `<terminal>` is the `runtime_id` of the agent's pane in `wsctl list`. `wsctl input` takes that id, not the session id.
-
-Steps:
-
-- **Launch, working, then waiting.** Start `state-agent` as above. `bridge wait '{"target":{"key":"sidebar.session.state-agent.state"}}'` answers, an image named `Claude · idle`. Send `hello`: `bridge wait '{"target":{"key":"sidebar.session.state-agent.state","name":"Claude · waiting input"}}'` answers once `./attn agent list` shows `waiting_input`.
-- **A silent turn ends idle.** Send `quiet`: the same wait with `Claude · idle` answers.
-- **Needs approval.** Report the permission prompt with `_hook-notification` as above: the row reads `Claude · pending approval`. Press `mod+shift+h`: `bridge tree` shows `home.session.state-agent` inside the list `home.group.pending`, named "Pending approval", with the value `pending_approval`. Press `mod+k`: `palette.row.agent:state-agent.state` and `palette.row.agent:state-agent.status` read `approval`. Press `Escape`.
-- **Answered.** Send `hello` again: `bridge wait '{"target":{"key":"home.group.waiting"}}'` answers, named "Waiting for input", with `home.session.state-agent` in it, and the palette row reads `waiting`.
-- **Activity lines.** Press `mod+,` and `settings.nav.backgroundAgents`. `settings.activity.toggle` reads "Enable", disabled, with the description "Choose an agent first". Run `./attn settings set activity.enabled true`: `bridge wait '{"target":{"key":"settings.activity.toggle","name":"Disable"}}'` answers. Put the setting back and press `Escape`.
-- **Stopped.** Run `wsctl kill-session --id state-agent`: the row reads `Claude · idle` again, and peek shows `process exited with code`.
-- **Proof.** In `$P`, keep the CLI output the steps above name, `bridge tree` after the approval and after the answer, and `bridge shot '{"path":"<P>/native-state-home.png"}'` with home showing the pending group, with `<P>` written out.
+- **Waiting.** After the `hello` turn, `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-state-agent\"] .session-lead[data-state=\"waiting_input\"]","timeoutMs":5000}'` matches. After the `quiet` turn and after the stop, the row's `data-state` follows.
+- **Needs approval.** After the `_hook-notification` step, press ⌘⇧H with `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`: `bridge dom_text '{"selector":"[data-testid=\"session-group-pending\"]"}'` reads `Pending approval` and `state-agent`. Open the agent palette with ⌘K (`bridge native_key '{"key":"k","modifiers":["command"]}'`): `bridge dom_wait '{"selector":"[data-testid=\"palette-agent-state-agent\"] .unified-palette-pill.is-approval","timeoutMs":5000}'` matches and the row reads `approval`. Press Escape. After the answer, `session-group-waiting` holds the row, and the palette row's pill reads `waiting` (`.unified-palette-pill.is-waiting`).
+- **Activity lines.** Open Settings with ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`) and click `[data-testid="settings-nav-backgroundAgents"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"settings-activity-toggle\"][disabled]","timeoutMs":5000}'` matches. After `activity.enabled` is set, `bridge dom_text '{"selector":"[data-testid=\"settings-activity-toggle\"]"}'` reads `Disable`.
+- **Proof.** `bridge capture_screenshot '{"path":"<P>/state-home.png"}'` with the home screen showing the pending group.
 
 ## Contexts
 
 - **Durability across restarts**: after an app or daemon restart, each live agent's monitor reads the agent's state again on the machine where the agent runs. A machine restart marks the agents attn can bring back `recoverable`, and attn restarts them at once; a shell stays `recoverable` until it is opened.
 - **Outposts**: an agent on an outpost is watched by a monitor on that machine. While the agent's host is offline, the agent's row stays and attn marks it offline.
 - **Profiles**: `attn agent list` names every session on the daemon, across profiles, with a PROFILE column. The sidebar and home screen show the current profile's agents.
-- **Performance and idle cost**: the needs-approval dot flashes and the scheduled dot pulses, both opacity animations that run while an agent stays in that state. `internal/sessionmonitor/cost_bench_test.go` and `internal/transcript/parser_bench_test.go` measure reading transcripts. A change to the state indicator needs the repaint check in `docs/internal/perf-testing.md`.
+- **Performance and idle cost**: the state dot and logo are drawn still, with no animation in any state. In the Tauri app (the rollback), the needs-approval dot flashes and the scheduled dot pulses while an agent stays in that state. `internal/sessionmonitor/cost_bench_test.go` and `internal/transcript/parser_bench_test.go` measure reading transcripts. A change to the state indicator needs the repaint check in `docs/internal/perf-testing.md`.
 - **Harnesses**: Claude Code reports through hooks and its terminal title. Codex reports through hooks and, under shared Codex, its app-server. A plugin harness reports through its plugin's driver. `docs/internal/harnesses.md` records each harness's facts.
 - **Compatibility across versions**: Claude Code sessions launched before todo tracking was removed still call `attn _hook-todo`, which exits 0. Older launches carry their terminal identity as `ATTN_SESSION_ID` instead of `ATTN_TERMINAL_ID`.
 - **Flow**: in desktop flow, each desktop's rows show the state. In queue flow, the state also sets where an agent stands in the queue ([queue-flow.md](queue-flow.md)).
 
 ## Tests
 
-- Wire: `internal/daemon/session_state_edge_wire_test.go`, `internal/daemon/session_state_evidence_wire_test.go`, `internal/daemon/state_explain_wire_test.go`, `internal/daemon/stop_verdict_wire_test.go`, `internal/daemon/stop_yield_wire_test.go`, `internal/daemon/stop_outcomes_wire_test.go`, `internal/daemon/halt_replay_wire_test.go`, `internal/daemon/session_halt_wire_test.go`, `internal/daemon/session_approval_wire_test.go`, `internal/daemon/claude_stop_wire_test.go`, `internal/daemon/classifier_race_wire_test.go`, `internal/daemon/monitor_*_wire_test.go`, `internal/daemon/activity_*wire_test.go`, `internal/daemon/agent_peek_wire_test.go`, `internal/daemon/presence_wire_test.go`, `internal/daemon/program_status_wire_test.go`, `internal/daemon/transcript_binding_wire_test.go`, `internal/daemon/transcript_commentary_wire_test.go`, `internal/daemon/headless_launch_wire_test.go`, `internal/daemon/headless_tasks_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/sidebar.rs` (each row's harness and state), `home.rs`, `palette.rs` (the agent row's dot) and `settings/background.rs`.
+- Wire: `native/crates/attn-app/tests/wire/sidebar.rs` (each row's harness and state), `native/crates/attn-app/tests/wire/home.rs`, `native/crates/attn-app/tests/wire/palette.rs` (the agent row's dot), `native/crates/attn-app/tests/wire/settings/background.rs`, `internal/daemon/session_state_edge_wire_test.go`, `internal/daemon/session_state_evidence_wire_test.go`, `internal/daemon/state_explain_wire_test.go`, `internal/daemon/stop_verdict_wire_test.go`, `internal/daemon/stop_yield_wire_test.go`, `internal/daemon/stop_outcomes_wire_test.go`, `internal/daemon/halt_replay_wire_test.go`, `internal/daemon/session_halt_wire_test.go`, `internal/daemon/session_approval_wire_test.go`, `internal/daemon/claude_stop_wire_test.go`, `internal/daemon/classifier_race_wire_test.go`, `internal/daemon/monitor_*_wire_test.go`, `internal/daemon/activity_*wire_test.go`, `internal/daemon/agent_peek_wire_test.go`, `internal/daemon/presence_wire_test.go`, `internal/daemon/program_status_wire_test.go`, `internal/daemon/transcript_binding_wire_test.go`, `internal/daemon/transcript_commentary_wire_test.go`, `internal/daemon/headless_launch_wire_test.go`, `internal/daemon/headless_tasks_wire_test.go`.
 - Stack: `cmd/attnd/state_explain_stack_test.go`, `cmd/attnd/agent_stack_test.go`, `cmd/attnd/transcript_stack_test.go`, `cmd/attnd/shell_program_status_stack_test.go`, `internal/daemon/monitor_restart_stack_test.go`, `internal/daemon/monitor_conversation_stack_test.go`, `app/e2e/session-states.spec.ts`, `scripts/verify-monitor-routing.sh`.
 - Kernel: `internal/sessionstate/*_test.go`, `internal/classifier/*_test.go`, `internal/sessionmonitor/*_test.go`, `internal/transcript/*_test.go`, `internal/activity/*_test.go`, `internal/statemarker/*_test.go`, `cli/attn/src/hooks/`, `internal/daemon/stop_terminality_test.go`.
-- App: `app/src/App.arrivalPulse.test.tsx`, `app/src/App.sessionActivitySettings.test.tsx`, `app/src/components/Sidebar.harnessIcons.test.tsx`.
+- App, the Tauri app's (the rollback): `app/src/App.arrivalPulse.test.tsx`, `app/src/App.sessionActivitySettings.test.tsx`, `app/src/components/Sidebar.harnessIcons.test.tsx`.
 
 ## Gotchas
 

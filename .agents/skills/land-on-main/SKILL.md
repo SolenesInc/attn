@@ -163,7 +163,8 @@ A scenario that passed for the same diff in an earlier land, one that stopped
 after the pass, does not run again. The land prints the run that passed.
 
 The landing tests of the gate come from the shared test history. They are the
-groups of `scripts/landing-tests` that the changed paths match, the tests you
+groups of `scripts/landing-tests` that the changed paths match, which include
+every native test for a change under `native/`, the tests you
 changed, and every test that failed on `main` on your host's platform and has
 since passed there. A test stays in the gate until it has passed on 30 later
 `main` commits. A catalog scenario with that history on Linux runs in the

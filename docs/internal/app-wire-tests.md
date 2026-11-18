@@ -1,7 +1,10 @@
 # App wire tests
 
-An app wire test renders the real app with its real socket client and plays
-the daemon. [Testing](testing.md) is the strategy around it. The harness lives
+An app wire test of the Tauri app renders that app with its real socket client
+and plays the daemon. The Tauri app is the rollback, and its tests stay green
+until it is deleted. Write new app tests as
+[native wire tests](native-wire-tests.md). [Testing](testing.md) is the
+strategy around both. The harness lives
 in `app/src/test/`. Paths below are relative to `app/src`.
 
 ## The app and its daemon

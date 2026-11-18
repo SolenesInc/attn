@@ -45,14 +45,16 @@ Xcode Command Line Tools (`xcode-select --install`), then follow
 ### Linux
 
 The Linux app is still in progress, and releases don't package it yet, so build
-it from source. We test on Ubuntu 24.04.
+it from source. It runs on X11, and browser tiles are Mac only. We test on
+Ubuntu 24.04.
 
 Install the [build tools](#build-tools) and these packages:
 
 ```bash
-sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev \
-  libayatana-appindicator3-dev librsvg2-dev libssl-dev libxdo-dev \
-  desktop-file-utils xdg-utils
+sudo apt install build-essential pkg-config libfontconfig1-dev \
+  libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev mesa-vulkan-drivers \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libssl-dev libxdo-dev desktop-file-utils xdg-utils
 ```
 
 Then follow [Build from source](#build-from-source). On Linux, `make` installs

@@ -22,9 +22,9 @@ plant a seed from it. The user can also send attn vents to attn's maintainers.
 
 ### People
 
-- **Settings → Analytics**, the Vents list (`app/src/components/Analytics/AnalyticsSettings.tsx`). [telemetry.md](telemetry.md) says how to reach the section. The section exists only while usage analytics is on.
-- Keys on the list (`app/src/components/Analytics/useVentTriage.tsx`): `j`, `k` or the arrows move, `o` opens the vent's live session, `t` opens its transcript, `g` opens its stake seed, `p` plants a seed, `d` dismisses or restores, `s` files it under attn or tools, `u` undoes the last action, `x` sends or keeps it while sharing is on. A row click selects a vent, and the inspector's buttons (Open session, Transcript, Stake seed, Plant seed, Dismiss or Restore, File under attn or tools, Send or Keep here) do what the keys do.
-- Machine settings (`m`, `app/src/components/Analytics/AnalyticsMachine.tsx`): "Send vents" sets `analytics.share_vents` and "Tool vents" sets `analytics.tool_vents` in `attn settings`. The panel lists "Send vents" while sharing (`analytics.sharing_enabled`) or `analytics.share_vents` is on.
+- **Settings → Analytics**, the Vents list, `settings.analytics.views.vents` (`native/crates/attn-app/src/settings/analytics/view.rs`). [telemetry.md](telemetry.md) says how to reach the section. The section exists only while usage analytics is on.
+- Keys on the list (`native/crates/attn-app/src/settings/analytics/mod.rs`): `j`, `k` or the arrows move, `o` opens the vent's live session, `t` opens its transcript, `g` opens its stake seed, `p` plants a seed, `d` dismisses or restores, `s` files it under attn or tools, `u` undoes the last action, `x` sends or keeps it while sharing is on. A row press selects a vent, and the inspector's buttons, `settings.analytics.vent.action.<key>`, (Open session, Transcript, Stake seed, Plant seed, Dismiss or Restore, File under attn or tools, Send or Keep here) do what the keys do.
+- Machine settings (`m`, `settings.analytics.machine` in `native/crates/attn-app/src/settings/analytics/view.rs`): "Send vents" sets `analytics.share_vents` and "Tool vents" sets `analytics.tool_vents` in `attn settings`. The panel lists "Send vents" while sharing (`analytics.sharing_enabled`) or `analytics.share_vents` is on.
 - Where people see what agents do: the count of new vents on the Vents tab, each row's session label, `tools` mark and age, and the inspector's context.
 - Their own shell: `attn settings set analytics.enabled|analytics.tool_vents|analytics.share_vents true|false` (`cli/attn/src/commands/settings.rs`).
 
@@ -42,7 +42,7 @@ plant a seed from it. The user can also send attn vents to attn's maintainers.
 
 Preconditions:
 
-- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new. A named instance uploads nowhere, so a stray click on a sharing control cannot reach the real service ([telemetry.md](telemetry.md)).
+- Use the baseline instance with its app, launched as [../SKILL.md](../SKILL.md) says, then `bridge wait '{"target":{"key":"home"}}'`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+shift+,` where the steps press `mod+,`. A named instance uploads nowhere, so a stray press on a sharing control cannot reach the real service ([telemetry.md](telemetry.md)).
 - Turn usage analytics and tool vents on before the agent launches: `./attn settings set analytics.enabled true` prints `analytics.enabled = true`, and `./attn settings set analytics.tool_vents true` prints `analytics.tool_vents = true`.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-vents.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-vents-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
@@ -62,7 +62,7 @@ Preconditions:
 ]}
 ```
 
-`<terminal>` below is the agent's terminal id from `wsctl list`. `<vent>` is the first vent's id from the agent's reply. Send the prompts in this order: the list shows new vents newest first.
+`<terminal>` below is the `runtime_id` of the agent's pane in `wsctl list`. `<vent>` is the first vent's id from the agent's reply. Send the prompts in this order: the list shows new vents newest first.
 
 - **Guidance at launch.** Run `wsctl add-session --cwd $A --agent claude --label vent-agent --id vent-agent --cols 200` and re-run `ls $A/.attn-mock-agent/` until it lists a `.jsonl` file, with a deadline that fails the run. `grep -c "attn vent --about attn" $A/.attn-mock-agent/*.jsonl` prints 1, and so does `grep -c "attn vent --about tools"` on the same file.
 - **Send, and the one-per-turn limit.** Run `wsctl input --id <terminal> --text "vent twice" --enter`. `./attn agent peek vent-agent` shows `vent <vent> recorded. Keep working; nobody replies to vents.`, then a `mock agent error:` block that ends with `vent refused: the limit is 1 vent per turn, and this turn already has <vent>. Withdraw it (attn vent wit`. Match the refusal's first words (see Gotchas).
@@ -70,6 +70,22 @@ Preconditions:
 - **A tool vent, then a new attn vent.** Run `wsctl input --id <terminal> --text "tools" --enter`, then `wsctl input --id <terminal> --text "settle" --enter`. Peek shows a `recorded` line with a new id after each prompt.
 - **As a session from the shell.** `./attn vent --about attn --session vent-agent "x"` acts as `vent-agent`: it is refused with `vent refused: the limit is 1 vent per turn, and this turn already has` that session's last vent.
 - **Refusals from a plain shell.** `./attn vent --about attn "x"` exits 2 with `vent: no session — pass --session <id>, or run inside an attn session`. `./attn vent "x"` exits 2 with `vent: say what the vent is about:` and the two kinds.
+- **Review in the app.** Press `mod+,`, `settings.nav.analytics` and `settings.analytics.views.vents`. `settings.analytics.list` holds the group "New", with the `attn turn settle` vent above the tool vent, whose row reads `vent-agent · tools · …`, then the group "Done" with the withdrawn vent, its row ending `· withdrawn · now`. The rows are `list-box-option`s keyed `item<n>` in list order. `settings.analytics.inspector` shows the first vent: `settings.analytics.vent.text`, `.when`, `.agent`, `.seed`, `.build`, the buttons `settings.analytics.vent.action.<key>` and `settings.analytics.vent.destination`, "Kept on this machine".
+- **Dismiss and undo with keys.** Press `d`: `settings.analytics.toast` reads "Dismissed", described `Dismissed “vent-agent”.`, and the vent moves under "Done", its row marked `dismissed`. Press `u`: the toast reads "Undone." and the vent is back under "New".
+- **Move through the list.** Press `item0`, then `j`, `j`, `k`, `Down` and `Up`: after each, `settings.analytics.vent.text` names the next or previous vent.
+- **The inspector's buttons.** Press `item1`, the tool vent, then `settings.analytics.vent.action.d`: the toast reads `Dismissed “vent-agent”.` and the button is named "Restore". Press it again: `Restored “vent-agent”.`
+- **Plant a seed.** Press `item0` and `p`: the toast reads "Planted", described `Planted <slug> from “vent-agent”.`, and `./attn seed search "turn settle"` finds the seed. Press `u`: `./attn seed show <seed>` shows `status withered`.
+- **Refile.** Press `item1` and `s`: `Filed “vent-agent” under attn.` Press `s` again: `Filed “vent-agent” under tools; it stays on this machine.`
+- **Tool vents from Machine settings.** Drive "Send vents" and "Tool vents" as [telemetry.md](telemetry.md)'s "Machine settings and clearing" step does. With sharing and `analytics.share_vents` both off, the panel lists "Tool vents" alone. `./attn settings set analytics.share_vents true` adds "Send vents" above it.
+- **Open the session.** Press `item0` and `o`: `bridge state '{"of":"settings"}'` shows `open: false` and `bridge state '{"of":"window"}'` shows `on_screen: "vent-agent"`.
+- **From a file and from stdin.** After the steps that read the first agent's vents at the top of the list, start a second agent in its own folder, `A2`, launched the same way as `vent-agent2`, with a fixture of two turns: `{"includes": "from a file", "actions": [{"type": "attn", "args": ["vent", "--about", "tools", "--file", "<A2>/vent.txt"]}]}` and `{"includes": "from stdin", "actions": [{"type": "attn", "args": ["vent", "--about", "attn"], "input": "attn seed ready listed a parked seed."}]}`, with one line of text in `<A2>/vent.txt`. Send `vent from a file`, wait for the turn to end, then `vent from stdin`: peek shows a `recorded` line with a new id after each, and open **Settings → Analytics** again as "Review in the app" does: the list shows both texts under `vent-agent2`, the file's marked `tools`.
+- **Guidance without tool vents, and without analytics.** Run `./attn settings set analytics.tool_vents false` and launch a third agent with an empty fixture: its launch file holds `attn vent --about attn` once and `attn vent --about tools` not at all. Run `./attn settings set analytics.enabled false` and launch a fourth: its launch file never mentions `attn vent`.
+- **Proof.** In `$P`, keep the output of each `./attn` command with its exit code, `./attn agent peek vent-agent` after each prompt, `bridge tree` of `settings.analytics.list` and of the inspector after each key, `./attn seed show <seed> --json` after the plant and the undo, and `bridge shot '{"path":"<P>/vents.png"}'` with the list open, where `<P>` is the folder's path written out. Name each file for its way in, such as `vents-agent-send-peek.txt`. The `native-analytics-settings` scenario runs review, triage and planting.
+
+### In the Tauri app (the rollback)
+
+Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. The agent and shell steps above read the same daemon.
+
 - **Review in the app.** Read `bridge settings_get_state`. When `open` is false, press ⌘, with `bridge native_key '{"key":",","modifiers":["command"]}'`. When the state shows a `search`, clear the search as [settings.md](settings.md)'s GitHub hosts step does. Scroll the Analytics nav button into view with `bridge dom_scroll_into_view '{"selector":"[data-testid=\"settings-nav-analytics\"]"}'` before clicking it natively. Run `bridge dom_wait '{"selector":"ol[aria-label=\"Vents\"]","textIncludes":"attn turn settle","timeoutMs":5000}'`. `bridge dom_text '{"selector":"ol[aria-label=\"Vents\"]"}'` reads `New` above the `attn turn settle` vent and the `tools` vent, and `Done` above the withdrawn one, marked `withdrawn`.
 - **Dismiss and undo with keys.** Click `ol[aria-label="Vents"] li:first-child button` natively, the `attn turn settle` vent. Run `bridge native_key '{"key":"d"}'`: `bridge dom_wait '{"selector":"[role=\"status\"]","textIncludes":"Dismissed “vent-agent”","timeoutMs":5000}'` matches and the row moves under `Done`. Run `bridge native_key '{"key":"u"}'`: `[role="status"]` reads `Undone.` and the vent is back under `New`.
 - **Move through the list.** Click the first row natively, then press `j`, `j`, `k`, `arrowdown` and `arrowup` with `bridge native_key`. After each key, `bridge dom_text '{"selector":"[data-testid=\"analytics-inspector\"]"}'` names the next or previous vent.
@@ -78,30 +94,7 @@ Preconditions:
 - **Refile.** Click `ol[aria-label="Vents"] li:nth-child(2) button` natively, the tool vent, and run `bridge native_key '{"key":"s"}'`. `[role="status"]` reads `Filed “vent-agent” under attn.`. Press `s` again to file it back under tools.
 - **Tool vents from Machine settings.** Run `bridge native_key '{"key":"m"}'`, then click `[data-testid="analytics-machine"] .settings-row-card:nth-child(3) button` natively, the "Tool vents" row while sharing and `analytics.share_vents` are both off: `./attn settings get analytics.tool_vents` prints `false`. Click it again: `true`. Run `./attn settings set analytics.share_vents true`, select a row and press `m` again: a "Send vents" row appears above "Tool vents". Click its button natively: `./attn settings get analytics.share_vents` prints `false` and the row goes. Press `m` to close the panel.
 - **Open the session.** Closing Machine settings takes focus out of the page, so click `ol[aria-label="Vents"] li:first-child button` natively first, then run `bridge native_key '{"key":"o"}'`. The settings dialog closes (`bridge settings_get_state` shows `open: false`) and the app opens `vent-agent`, placing it on the current desktop: `bridge get_state` shows `activeLeaf.sessionId` set to `vent-agent`.
-- **From a file and from stdin.** After the steps that read the first agent's vents at the top of the list, start a second agent in its own folder, `A2`, launched the same way as `vent-agent2`, with a fixture of two turns: `{"includes": "from a file", "actions": [{"type": "attn", "args": ["vent", "--about", "tools", "--file", "<A2>/vent.txt"]}]}` and `{"includes": "from stdin", "actions": [{"type": "attn", "args": ["vent", "--about", "attn"], "input": "attn seed ready listed a parked seed."}]}`, with one line of text in `<A2>/vent.txt`. Send `vent from a file`, wait for the turn to end, then `vent from stdin`: peek shows a `recorded` line with a new id after each, and open **Settings → Analytics** again as "Review in the app" does: the list shows both texts under `vent-agent2`, the file's marked `tools`.
-- **Guidance without tool vents, and without analytics.** Run `./attn settings set analytics.tool_vents false` and launch a third agent with an empty fixture: its launch file holds `attn vent --about attn` once and `attn vent --about tools` not at all. Run `./attn settings set analytics.enabled false` and launch a fourth: its launch file never mentions `attn vent`.
-- **Proof.** In `$P`, keep the output of each `./attn` command with its exit code, `./attn agent peek vent-agent` after each prompt, `bridge dom_text` of the list and of `[data-testid="analytics-inspector"]` after each key, `./attn seed show <seed> --json` after the plant and the undo, and `bridge capture_screenshot '{"path":"<P>/vents.png"}'` with the list open, where `<P>` is the folder's path written out. Name each file for its way in, such as `vents-agent-send-peek.txt`.
-
-### In the native app
-
-The native app (`native/`) lists vents in **Settings → Analytics** with their inspector, the triage keys and buttons, and Machine settings' "Send vents" and "Tool vents". The agent and shell steps above read the same daemon in either app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation), not the Tauri reads above. Elements are found by key.
-
-Preconditions:
-
-- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+shift+,` where the steps press `mod+,`.
-- Launch with `bridge --launch ping`, then `bridge wait '{"target":{"key":"home"}}'`. Turn analytics and tool vents on, make `P`, `A` and the fixture, and send the agent's four prompts as above. `<terminal>` is the `runtime_id` of the agent's pane in `wsctl list`.
-
-Steps:
-
-- **Review in the app.** Press `mod+,`, `settings.nav.analytics` and `settings.analytics.views.vents`. `settings.analytics.list` holds the group "New", with the `attn turn settle` vent above the tool vent, whose row reads `vent-agent · tools · …`, then the group "Done" with the withdrawn vent, its row ending `· withdrawn · now`. The rows are `list-box-option`s keyed `item<n>` in list order. `settings.analytics.inspector` shows the first vent: `settings.analytics.vent.text`, `.when`, `.agent`, `.seed`, `.build`, the buttons `settings.analytics.vent.action.<key>` and `settings.analytics.vent.destination`, "Kept on this machine".
-- **Dismiss and undo with keys.** Press `d`: `settings.analytics.toast` reads "Dismissed", described `Dismissed “vent-agent”.`, and the vent moves under "Done", its row marked `dismissed`. Press `u`: the toast reads "Undone." and the vent is back under "New".
-- **Move through the list.** Press `item0`, then `j`, `j`, `k`, `Down` and `Up`: after each, `settings.analytics.vent.text` names the next or previous vent.
-- **The inspector's buttons.** Press `item1`, the tool vent, then `settings.analytics.vent.action.d`: the toast reads `Dismissed “vent-agent”.` and the button is named "Restore". Press it again: `Restored “vent-agent”.`
-- **Plant a seed.** Press `item0` and `p`: the toast reads "Planted", described `Planted <slug> from “vent-agent”.`, and `./attn seed search "turn settle"` finds the seed. Press `u`: `./attn seed show <seed>` shows `status withered`.
-- **Refile.** Press `item1` and `s`: `Filed “vent-agent” under attn.` Press `s` again: `Filed “vent-agent” under tools; it stays on this machine.`
-- **Machine settings.** Drive "Send vents" and "Tool vents" as [telemetry.md](telemetry.md)'s native Machine settings step does.
-- **Open the session.** Press `item0` and `o`: `bridge state '{"of":"settings"}'` shows `open: false` and `bridge state '{"of":"window"}'` shows `on_screen: "vent-agent"`.
-- **Proof.** In `$P`, keep each `./attn` answer, `bridge tree` of `settings.analytics.list` and of the inspector after each key, and `bridge shot '{"path":"<P>/native-vents.png"}'` with the list open, with `<P>` written out. The `native-analytics-settings` scenario runs review, triage and planting.
+- **Proof.** Keep `bridge dom_text` of the list and of `[data-testid="analytics-inspector"]` after each key, and `bridge capture_screenshot '{"path":"<P>/vents.png"}'` with the list open.
 
 ## Contexts
 
@@ -110,14 +103,14 @@ Steps:
 - **Outposts**: an agent's `attn vent` and `attn vent withdraw` on an outpost are recorded by the home, and the agent's vents show in the home's app.
 - **Profiles**: a vent belongs to its session's profile. **Settings → Analytics** lists, triages and clears only the current profile's vents.
 - **Harnesses**: every harness vents with the same `attn vent`. Each vent records the harness, its version, the model the harness reports and the model the session was launched with. A tool vent may be about the harness's own permissions or approval review.
-- **Keyboard and native input**: every triage action is one key, listed at the foot of the page. The page takes keys once the page has focus. The page takes focus when the section opens and after a row click. A key typed into a text field does nothing to the list.
+- **Keyboard and native input**: every triage action is one key, listed at the foot of the page. The page takes keys once the page has focus. The page takes focus when the section opens and after a row press. A key typed into a text field does nothing to the list.
 
 ## Tests
 
-- Wire: `internal/daemon/vents_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`; in the native app `native/crates/attn-app/tests/wire/settings/analytics.rs`.
+- Wire: `native/crates/attn-app/tests/wire/settings/analytics.rs`, `internal/daemon/vents_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`.
 - Stack: `cmd/attnd/vent_stack_test.go`.
-- Scenario: `analytics-settings`; in the native app `native-analytics-settings`.
-- App: `app/src/components/Analytics/AnalyticsSettings.vents.test.tsx`.
+- Scenario: `native-analytics-settings`, and in the Tauri app (the rollback) `analytics-settings`.
+- App: the Tauri app's (the rollback) `app/src/components/Analytics/AnalyticsSettings.vents.test.tsx`.
 
 ## Gotchas
 

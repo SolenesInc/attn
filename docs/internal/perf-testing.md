@@ -41,11 +41,11 @@ go test -run '^$' -bench . -benchmem ./internal/daemon/ ./internal/transcript/
 
 `allocs/op` is the stable signal. Compare `ns/op` only between runs on the same machine.
 
-## Cut-over gates
+## Performance gates
 
-`scenario-perf-gates` measures the gates the native app must hold before it
-replaces the Tauri app, on whichever app the instance has installed, so one
-session can measure both. Input reaches the shells only through the daemon, so
+`scenario-perf-gates` measures the performance gates the native app had to hold
+to replace the Tauri app. It runs on whichever app the instance has installed,
+so one session can measure the app against the Tauri app, the rollback. Input reaches the shells only through the daemon, so
 both apps get the same work. Each run launches the app fresh, places it
 unfocused at 1710×956 with 20 px on screen and above every other window, so
 nothing covers it and it draws as a window in view does, waits 20 s, then samples every
@@ -77,9 +77,9 @@ while it still paints and add the frame-time distribution from its frame
 recorder. `--profile` adds an 8 s `sample` of the app after each painting
 window, while it still paints.
 
-## Native frames
+## App frames
 
-The native app on a named instance, or with `ATTN_AUTOMATION=1`, records every
+The app on a named instance, or with `ATTN_AUTOMATION=1`, records every
 frame of its windows with Rune's `rune-perf`: the update (events, view, layout
 and paint) and the encode, together the frame's work on the UI thread, and the
 bytes the UI thread allocated. It writes
@@ -89,7 +89,7 @@ fewer. Frames slower than a 60 Hz refresh also land in `perf.log` and
 `perf-incident-NN.json` beside it while the app runs. Work is CPU time on the UI
 thread, not when the frame reached the screen.
 
-To see what one garden update or session fact costs the native app, open it on
+To see what one garden update or session fact costs the app, open it on
 the copy, run the burst, quit it and read the totals. An idle window draws
 nothing, so frames counted over the bursts are the bursts' frames:
 
@@ -106,9 +106,9 @@ These hand-run [harness](../../app/scripts/real-app-harness/AGENTS.md) scenarios
 measure the whole attn process tree, of either app, and compare against the
 machine's own baseline for that app (`~/.attn-perf-registry/`, or
 `perf-baselines.json` for committed reference machines). A regression sets
-`ok: false` in the verdict without failing the exit code. On the native app the
-baseline scenario refuses the probes that read the Tauri app's webview:
-`--pressure`, `--dock-probe`, `--switch-probe` and `--real-cmd`.
+`ok: false` in the verdict without failing the exit code. The probes
+`--pressure`, `--dock-probe`, `--switch-probe` and `--real-cmd` read the Tauri
+app's webview, so the baseline scenario takes them only on the rollback.
 
 | Scenario | Measures | Command |
 | --- | --- | --- |
@@ -264,8 +264,8 @@ Each run makes six mutations (a ringing note, a plain note, a check removed and
 restored, a wither and a replant), waits for the daemon to return to idle, and
 reports CPU milliseconds per mutation above the idle rate.
 
-For the native app's side, run the moves with the app open on the Garden and
-read its frames, as [Native frames](#native-frames) says.
+For the app's side, run the moves with the app open on the Garden and read its
+frames, as [App frames](#app-frames) says.
 
 `app-review-pull.mjs` measures the Tauri app's Garden in headless Chromium, on a
 bundle built against the instance:
@@ -356,8 +356,8 @@ For a before-and-after comparison, take a profile during the bursts instead,
 allocations, and read `projectSessionStateChanged` with `go tool pprof -top
 -cum`, using `-base <first snapshot>` for allocations.
 
-For the native app's side of the bursts, read its frames, as
-[Native frames](#native-frames) says.
+For the app's side of the bursts, read its frames, as
+[App frames](#app-frames) says.
 
 ## Daemon profiling
 

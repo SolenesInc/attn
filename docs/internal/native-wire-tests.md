@@ -1,9 +1,9 @@
 # Native wire tests
 
-A native wire test runs the native app's real view and real daemon link and
-plays the daemon. It is the native app's counterpart of an
-[app wire test](app-wire-tests.md), and [Testing](testing.md) is the strategy
-around both. The harness is the crate `attn-testkit` in
+A native wire test runs the app's real view and real daemon link and plays
+the daemon. It is attn's app wire test, and [Testing](testing.md) is the
+strategy around it. The Tauri app, the rollback, keeps its TypeScript
+[app wire tests](app-wire-tests.md) until it is deleted. The harness is the crate `attn-testkit` in
 `native/crates/attn-testkit`. Each crate keeps its wire tests in
 `tests/wire/`, one file per feature, listed as modules in `tests/wire.rs`:
 

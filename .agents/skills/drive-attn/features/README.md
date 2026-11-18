@@ -24,7 +24,9 @@ In the index, "both" means people and agents.
   model tasks off, the mock GitHub and a scratch tool home (`ATTN_TOOL_HOME`).
   The doctor passes before the first action.
 - On a fresh app, What's new covers the home screen and holds the palette
-  and most shortcuts. Run `bridge dismiss_whats_new` first.
+  and most shortcuts. Close it first: `bridge wait
+  '{"target":{"key":"whats-new-dialog"}}'`, then
+  `bridge key '{"chord":"escape"}'`.
 - If a feature needs realistic data, its file says so in the preconditions.
   Copy production data out read-only, and never point an instance at `~/.attn`.
 - If a feature needs more in the daemon's environment, its file says so in the
@@ -57,8 +59,8 @@ In the index, "both" means people and agents.
 
 ### Entrypoints and harnesses
 
-- People: `bridge` with native input (`native_key`, `native_text`,
-  `native_mouse`) for shortcuts, the palette and controls, and `./attn` for the
+- People: `bridge` input (`key`, `type`, `press`, `hover`, `drag`, `scroll`)
+  for shortcuts, the palette and controls, and `./attn` for the
   person's own shell.
 - Agents: a mock agent whose fixture runs the verb with an `attn` action.
   `./attn` from the instance shell stands in for an agent only on a verb
@@ -124,6 +126,76 @@ In the index, "both" means people and agents.
 
 ### In the app
 
+- Prefer stable handles to coordinates and tab order: element keys, an
+  element's role and accessible name, action ids, palette command ids, session
+  and seed ids. `bridge tree` prints every element with its key, role and name.
+- A target names an element by key, `{"key":"sidebar"}`, or by role and name,
+  `{"role":"group","name":"Agent t2"}`. [Native app](../../../../docs/internal/native-app.md#automation)
+  says how a target matches.
+- Shortcuts: press the platform's binding with `bridge key '{"chord":"..."}'`.
+  `mod` is ⌘ on macOS and Ctrl on Linux. The binding for an action id is in
+  `native/crates/attn-app/src/keymap.rs`, which holds one table for macOS and
+  one for Linux.
+- The palette: press `mod+shift+k` (`ui.commandPalette`; `mod+alt+k` on
+  Linux), type the command's title with `bridge type` into `palette.field`,
+  then press `Enter`. The map names the command id, and you type its title.
+- Settings: press `mod+,` (`ui.openSettings`; `mod+shift+,` on Linux), then
+  press the section's nav button, `settings.nav.<section>`.
+  [settings.md](settings.md) lists the section ids.
+- `bridge press`, `hover`, `drag` and `scroll` wait for their target to show
+  and stop moving, scroll it into view, and reply with a receipt that says
+  which element the input landed on. Read the receipt before you trust the
+  step. `at` aims at another point of the box, as fractions of it.
+- `bridge type` focuses its target first, then types. `bridge key` sends the
+  key to whatever holds the keyboard.
+- `bridge run '{"name":"<action id>"}'` dispatches an action without its key.
+  It is a way to set up, as [../SKILL.md](../SKILL.md#drive) says.
+- On a shared Mac, keep the parked launch and use only the bridge's input,
+  as [../SKILL.md](../SKILL.md#launch) requires. The bridge's input takes no
+  focus and leaves the pointer alone.
+- On Linux, run every command that reaches the app inside one
+  `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+
+### Waiting
+
+- Wait on real signals, never on sleeps. In the app, `bridge wait` waits for
+  a target to show and stop moving, or with `gone`, to go. `bridge state` with
+  `includes` waits until the slice holds a text, and with `expect` until the
+  slice's fields hold their values. Each gives up after 30 s, or the payload's
+  `timeout_ms`, and says what it waited for.
+- A read right after a native key, a click or a command can run before the
+  daemon answers. Where a step names a state, re-read the command or
+  `bridge` read that shows the state until the state appears, with a deadline
+  that fails the run: 30 seconds unless the step names another deadline.
+- For an agent, re-read `./attn agent list` or `./attn agent peek <session>`
+  until the state or reply you expect appears, with a deadline that fails
+  the run.
+
+### Runs
+
+- Start each recipe from the baseline unless the recipe's preconditions say
+  otherwise. When the next recipe needs a clean instance, remove what the
+  earlier recipe created, but never remove the proof.
+- In each recipe's preconditions, make a proof folder with `P=$(mktemp -d
+  /tmp/drive-attn-<feature>.XXXX)` and append `P` to the env file as above.
+  `bridge` JSON is single-quoted, so write the path out in the JSON. `<P>`
+  stands for the path of that folder.
+- Drive each way in once, in the file that documents the way in. Other files
+  link to that file. If the harnesses cannot reach a way in, keep the way in's
+  step in that file. In the step, state that the harnesses cannot reach the
+  way in, and make the step fail. Put the reason in that file's Gotchas.
+
+### In the Tauri app
+
+A recipe under `### In the Tauri app (the rollback)` drives the Tauri app,
+installed with `APP=tauri`, through its own bridge actions, which
+[../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) lists. In those recipes:
+
+- Wait with `bridge dom_wait`, which takes `selector` and `timeoutMs`, and
+  optionally `textIncludes`, `valueEquals` (an input's value), `absent: true`
+  and `focused: true`.
+- App proof is `get_state`, the feature's `*_get_state` or `dom_text`, and a
+  `bridge capture_native_window_screenshot`.
 - Prefer stable handles to coordinates and tab order: shortcut ids, palette
   command ids, `aria-label` and `data-testid` values, session and seed ids.
 - Shortcuts: press the macOS binding with `bridge native_key`. The binding
@@ -169,55 +241,24 @@ In the index, "both" means people and agents.
   `"window"` targets the named webview instead: `"window":"main"` for app
   controls, `"window":"capture"` for quick capture, or a browser host's
   label.
-- On a shared Mac, keep the parked launch and use only focus-free input, as
-  [../SKILL.md](../SKILL.md#launch) requires. `native_input_state` reads real
-  app focus, window focus, frontmost PID, secure-input state and window
-  geometry. Keep those receipts around native actions. The app must remain
-  inactive, unfocusable and parked. `native_pointer_trace_start` and
+- `native_input_state` reads real app focus, window focus, frontmost PID,
+  secure-input state and window geometry. Keep those receipts around native
+  actions. The app must remain inactive, unfocusable and parked.
+  `native_pointer_trace_start` and
   `native_pointer_trace_read` bracket trusted mouse events and CSS hover.
   `native_pointer_trace_read` stops the observation.
 - A drawer (asks, automations, garden) stays in the page while
   closed, hidden with `aria-hidden="true"`. Tell open from closed by that
   attribute, not by whether an inner selector is present.
 - DOM actions (`dom_click`, `dispatch_shortcut`, `settings_select_section`,
-  `sessions_set_filter` and the like) are the ones
-  [../SKILL.md](../SKILL.md#drive) says to use only to set up.
-
-### Waiting
-
-- Wait on real signals, never on sleeps. In the app, `bridge dom_wait` takes
-  `selector` and `timeoutMs`, and optionally `textIncludes`, `valueEquals`
-  (an input's value), `absent: true` and `focused: true`.
-- A read right after a native key, a click or a command can run before the
-  daemon answers. Where a step names a state, re-read the command or
-  `bridge` read that shows the state until the state appears, with a deadline
-  that fails the run: 30 seconds unless the step names another deadline.
-- For an agent, re-read `./attn agent list` or `./attn agent peek <session>`
-  until the state or reply you expect appears, with a deadline that fails
-  the run.
-
-### Runs
-
-- Start each recipe from the baseline unless the recipe's preconditions say
-  otherwise. When the next recipe needs a clean instance, remove what the
-  earlier recipe created, but never remove the proof.
-- In each recipe's preconditions, make a proof folder with `P=$(mktemp -d
-  /tmp/drive-attn-<feature>.XXXX)` and append `P` to the env file as above.
-  `bridge` JSON is single-quoted, so write the path out in the JSON. `<P>`
-  stands for the path of that folder.
-- Drive each way in once, in the file that documents the way in. Other files
-  link to that file. If the harnesses cannot reach a way in, keep the way in's
-  step in that file. In the step, state that the harnesses cannot reach the
-  way in, and make the step fail. Put the reason in that file's Gotchas.
+  `sessions_set_filter` and the like) are for setup only.
 
 ## Proof and skip reporting
 
 Follow [Evidence](../SKILL.md#evidence) for what to capture, and add these:
 
-- App proof is a `bridge` read (`get_state`, the feature's `*_get_state`, or
-  `dom_text`) and a `bridge capture_screenshot` that shows the instance
-  marker in the sidebar: `instance <name>` while the sidebar is expanded,
-  `<name>` on the collapsed sidebar or the queue bar
+- App proof is a `bridge` read (`state`, `find` or `tree`) and a
+  `bridge shot` that shows the instance marker
   ([instances.md](instances.md)).
 - CLI proof is the command, stdout, stderr and exit code.
 - Record the feature id and the way in with every artifact.
@@ -239,7 +280,7 @@ Every feature file has these sections, in this order:
 3. `## How to get to it`, with `### People` and `### Agents` always present.
    Add `### Triggers` only when something starts the feature without anyone
    invoking it.
-   - People: shortcuts as the macOS binding with the registry id, palette
+   - People: shortcuts as the macOS binding with the action id, palette
      command ids, native menus, deep links, controls, where people see and
      steer what agents do, and "Their own shell:" for the verbs they run.
    - Agents: every `attn` verb and subcommand an agent can run for the
@@ -258,6 +299,9 @@ Every feature file has these sections, in this order:
    commands for an action that needs setup, a native action and a read in one
    bullet. Use only the harnesses and conventions above. Cover every way in
    the file documents, and end with a **Proof.** bullet naming what to capture.
+   A recipe for the Tauri app, the rollback, goes last, under
+   `### In the Tauri app (the rollback)`, as [In the Tauri app](#in-the-tauri-app)
+   says.
 5. `## Contexts`: only the contexts below that apply, one bullet each saying
    how the feature behaves under it. A context left out does not apply.
 6. `## Tests`: pointers by kind, as paths or scenario ids, and nothing else.
@@ -265,8 +309,8 @@ Every feature file has these sections, in this order:
    - Wire: a real daemon driven as a protocol client:
      `internal/daemon/*_wire_test.go`, and the other `internal/daemon` tests
      that drive a daemon.
-   - Stack: real processes together: `*_stack_test.go` in any package and
-     `app/e2e/*.spec.ts`.
+   - Stack: real processes together: `*_stack_test.go` in any package, and
+     the Tauri app's `app/e2e/*.spec.ts`.
    - Scenario: an id in `app/scripts/real-app-harness/scenarioCatalog.mjs`,
      all on one line. A landing that changes product code and this file runs
      these scenarios before it pushes, so list the ones that prove this
@@ -274,12 +318,14 @@ Every feature file has these sections, in this order:
      after "outside the catalog".
    - Kernel: package tests that start no daemon, such as a specified
      function's tables or properties.
-   - App: frontend tests under `app/src`, the app wire tests `App.*.test.tsx`
-     included.
+   - App: the Tauri app's frontend tests under `app/src`, the app wire tests
+     `App.*.test.tsx` included. The native app's wire tests,
+     `native/crates/*/tests/wire/*.rs`, go under Wire.
    - A `scripts/verify-*` bundle sits under the kind of the tests it runs,
      and under Stack when it runs more than one kind.
 7. `## Gotchas`: traps that waste or invalidate a run, and what "working but
-   wrong" looks like for the feature.
+   wrong" looks like for the feature. Traps only the Tauri app has go in its
+   rollback recipe, under `Gotchas in the Tauri app:`.
 
 Write from the user's point of view. Name user paths, stable handles, required
 state, commands and observable results, never how the code works inside.
@@ -348,7 +394,7 @@ instance. A file whose recipe ran live says so here.
 
 ### Desktops and tiles
 
-- [Desktops and tiles](desktops.md) (both): Arrangements of tiles, like macOS Spaces: switch, split, sort, and move tiles between desktops. The row's keys, drags and settings ran live.
+- [Desktops and tiles](desktops.md) (both): Arrangements of tiles, like macOS Spaces: switch, split, sort, and move tiles between desktops. In the Tauri app, the row's keys, drags and settings ran live.
 - [Terminals](terminals.md) (both): A real PTY in a tile: what the user types and what the program prints, with scrollback, find, links and images.
 - [Markdown tiles](markdown.md) (both): Open a markdown file in a tile, rendered and live as the file changes.
 - [Notebook](notebook.md) (both): The user's notebook and daily journal, edited in a tile or fullscreen. The chief keeps the notebook too.

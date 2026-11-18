@@ -29,7 +29,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 
 - A maintainer's shell: the verbs below.
 - Make targets (`Makefile`): `build`, `install INSTANCE=<name>`, `install-daemon INSTANCE=<name>`, `run INSTANCE=<name>`, and for `dev` the aliases `dev`, `install-dev` and `install-daemon-dev`.
-- In the app: the instance marker `[data-testid="title-bar-instance-marker"]` in the title bar, which reads `<name>` with the title `Instance: <name>` in both flows, sidebar open or collapsed (`app/src/components/TitleBarControls.tsx`). The app also shows its refusal of a daemon from another instance (`app/src/utils/buildInstance.ts`), and why its daemon would not start, while the app retries.
+- In the app: the instance marker `titlebar.instance` in the title bar, which reads `<name>` with the description `Instance: <name>` (`native/crates/attn-app/src/shell.rs`). The app also shows its refusal of a daemon from another instance, "This daemon serves another instance" (`native/crates/attn-app/src/connection.rs`), and why its daemon would not start, while the app retries.
 
 ### Agents
 
@@ -38,7 +38,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 
 ### Triggers
 
-- An app starts its instance's daemon when it opens and retries until it starts (`ensure_daemon` in `app/src-tauri/core/src/lib.rs`, called from `app/src/hooks/useDaemonSocket.ts`).
+- An app starts its instance's daemon when it opens and retries until it starts (`daemon::ensure` in `native/crates/attn-app/src/daemon.rs`, which runs the bundled `attnd daemon ensure`, wired in `native/crates/attn-app/src/launch.rs`).
 
 ## Driving it
 
@@ -54,7 +54,7 @@ Preconditions:
 - **Stop with the terminals.** Start the daemon, run `wsctl add-session --cwd $P --agent shell --label stop-shell --id stop-shell`, and note the shell's PID from `wsctl list`. `./attn daemon stop` prints `stopped daemon (pid <n>)` and `terminals keep running in pids [<host>]`, and `ps -p <shell-pid>` still lists the shell. `./attn daemon stop --terminals` prints `daemon not running`, then `pty hosts 1 registered (1 terminated)` or `workers  1 registered (1 removed)`; `ps -p <shell-pid>` and `ps -p <host>` list nothing.
 - **Which build runs.** `./attn version` prints the version, channel and commit, with `dirty` when the source it ships differs from that commit. `./attn version --json` shows `sourceFingerprint`, equal to what `bash scripts/source-fingerprint.sh` prints for this tree: `git:<commit>` with `dirty` false when only tests, scripts or docs the binary does not embed changed, and `tree:<hash>` with `dirty` true otherwise.
 - **List.** `./attn instance list` prints a row for `<name>` marked `*` under `INSTANCE  PORT  DATA  APPDATA  APP  ORIGIN`, beside every other instance on the machine. `--json` adds what is running.
-- **Install the app and see the marker.** Launch the app as [../SKILL.md](../SKILL.md) says (`make install INSTANCE=<name>`, then `bridge --launch --wait-ready ping`). `./attn instance` shows `app` as `(installed)`, and `./attn instance list` shows this worktree's folder name under `ORIGIN`. `bridge dom_text '{"selector":"[data-testid=\"title-bar-instance-marker\"]"}'` reads `<name>`, with no session yet and after `wsctl add-session --cwd $P --agent shell --label marker-shell --id marker-shell`.
+- **Install the app and see the marker.** Launch the app as [../SKILL.md](../SKILL.md) says (`make install INSTANCE=<name>`, then `bridge --launch ping` and `bridge wait '{"target":{"key":"home"}}'`). On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`. `./attn instance` shows `app` as `(installed)`, and `./attn instance list` shows this worktree's folder name under `ORIGIN`. `bridge find '{"target":{"key":"titlebar.instance"}}'` is named `<name>`, with no session yet and after `wsctl add-session --cwd $P --agent shell --label marker-shell --id marker-shell`.
 - **The app starts its daemon.** With the app open, note the PID in `attn.pid` in the data folder (`./attn instance resolve --field dataDir`), then run `./attn daemon stop`: it prints `stopped daemon (pid <n>)`. Re-read `attn.pid` until it holds a new PID, with a deadline. `ps -p <pid> -o command=` shows the app's `appDaemon` running `daemon`, because the app reconnected and started the daemon with the app's environment. Do not run `./attn daemon ensure` meanwhile: it would start this checkout's daemon in the app's place.
 - **Swap only the daemon.** After a Go change, `make install-daemon INSTANCE=<name>` prints `Updated bundled daemon at` the instance's daemon path and restarts it. `"$(./attn instance resolve --field appDaemon)" version --json` shows the new `sourceFingerprint`. Without a change, the binary is replaced but the running daemon keeps its PID: `daemon ensure` restarts only a daemon of another build.
 - **Record the origin by hand.** Run `./attn instance set-origin <name> --worktree "$PWD"`. It prints `recorded origin for instance <name>:` and the folder, with the branch in parentheses when the checkout is on a branch. `./attn instance list --json` shows the same folder under `origin`. `./attn instance set-origin` with no name exits 1 naming `set-origin requires an instance name`.
@@ -62,7 +62,13 @@ Preconditions:
 - **Refusals.** `./attn instance clean` exits 1 with `attn instance: clean requires an instance name`. `./attn profile list` exits 2 with `attn profile was renamed to attn instance. Run: attn instance list`.
 - **The Linux scheme.** Run `./attn instance register-scheme`. On macOS it exits 1 with `attn instance: register-scheme is Linux-only`, which is as far as this machine goes. Report the Linux behavior as unreached. On Linux it prints `>>> Registered <scheme>:// for <name>` and the desktop entry's path, and `./attn instance` shows the `handler` row as `(registered)`.
 - **Clean.** `./attn instance clean <name>` prints `>>> Cleaning instance <name>`, then a line for the app, the daemon, the workers and each removed folder. `./attn instance` shows `(no daemon socket)` and `(not installed)`. `./attn instance-env --unset` prints the same `unset` lines, then `unset ATTN_INSTANCE`. The instance shell ends when [../SKILL.md](../SKILL.md)'s Cleanup removes the env file.
-- **Proof.** In `$P`, keep each command with its stdout, stderr and exit code. Also keep `./attn instance resolve` and `./attn version --json`, and `bridge capture_screenshot '{"path":"<P>/instance-marker.png"}'` with the marker in view, where `<P>` is the folder's path written out. Name each file for its way in, such as `instances-daemon-ensure.txt`.
+- **Proof.** In `$P`, keep each command with its stdout, stderr and exit code. Also keep `./attn instance resolve` and `./attn version --json`, and `bridge shot '{"path":"<P>/instance-marker.png"}'` with the marker in view, where `<P>` is the folder's path written out. Name each file for its way in, such as `instances-daemon-ensure.txt`.
+
+### In the Tauri app (the rollback)
+
+Install it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. Launch it with `bridge --launch --wait-ready ping`. The CLI steps above are the same.
+
+- **The marker.** `bridge dom_text '{"selector":"[data-testid=\"title-bar-instance-marker\"]"}'` reads `<name>`, with no session yet and after `wsctl add-session --cwd $P --agent shell --label marker-shell --id marker-shell`. In the collapsed desktop sidebar the marker can render as `dr…` even though `dom_text` returns the whole name, so expand the sidebar for instance proof: the expanded marker shows `instance <name>`. Capture it with `bridge capture_screenshot '{"path":"<P>/instance-marker.png"}'`.
 
 ## Contexts
 
@@ -70,17 +76,18 @@ Preconditions:
 - **Linux**: the app is a directory tree instead of a macOS bundle. `attn instance register-scheme` claims the deep-link scheme in the desktop database, and `make run` starts the app in the background, logging to `<data-dir>/app.log`.
 - **Profiles**: profiles live inside an instance. A new instance starts with its own profiles and sees none of production's.
 - **Compatibility across versions**: `attn profile` and `attn profile-env` were renamed to `attn instance` and `attn instance-env`, and exit 2 naming the new command. `attn daemon ensure` restarts a daemon that does not match the binary, and the CLI warns when its release differs from the running daemon's.
-- **Flow**: an expanded sidebar shows `instance <name>` in either flow. A collapsed sidebar in queue flow becomes the queue bar, which shows `<name>` under the same `data-testid`, so a check that reads `instance <name>` needs the sidebar expanded.
+- **Flow**: the marker sits in the title bar. In the Tauri app (the rollback), an expanded sidebar shows `instance <name>` in either flow, and a collapsed sidebar in queue flow becomes the queue bar, which shows `<name>` under the same `data-testid`, so a check that reads `instance <name>` needs the sidebar expanded.
 
 ## Tests
 
 - Stack: `cmd/attnd/daemon_ensure_stack_test.go`, `cmd/attnd/daemon_stop_stack_test.go`, `cmd/attnd/daemon_stack_test.go`, `cmd/attnd/daemon_startup_stack_test.go`, `cmd/attnd/daemon_socket_stack_test.go`, `cmd/attnd/pidlock_stack_test.go`, `cmd/attnd/instance_env_stack_test.go`, `cmd/attnd/version_stack_test.go`.
 - Kernel: `cmd/attnd/instance_test.go`, `cmd/attnd/instance_origin_test.go`, `cmd/attnd/instance_pty_host_test.go`, `cmd/attnd/instance_app_stop_test.go`, `internal/daemonctl/*_test.go`, `internal/desktopentry/*_test.go`.
-- App: `app/src/App.daemonEnsure.test.tsx`, `app/src/App.instanceMismatch.test.tsx`, `app/src/App.releaseUpdates.test.tsx`.
+- Wire: `native/crates/attn-app/tests/wire/connection.rs` (a daemon of another instance is refused).
+- App, the Tauri app's (the rollback): `app/src/App.daemonEnsure.test.tsx`, `app/src/App.instanceMismatch.test.tsx`, `app/src/App.releaseUpdates.test.tsx`.
 
 ## Gotchas
 
-- In the collapsed desktop sidebar, the `drive-6` marker can render as `dr…` even though `dom_text` returns `drive-6`. The full name is not visible in that screenshot. Expand the sidebar for instance proof. The expanded marker shows `instance drive-6`.
+- The marker cuts a long name short at 96 points, so a screenshot can show `dr…` while `bridge find` names the whole name. Prove the name with `bridge find`.
 - Bare `make install`, `make run` and `make install-daemon` act on production, and need the user's approval. Always pass `INSTANCE=<name>`.
 - `attn instance clean` with no instance name is refused. The default instance, production, is cleaned only with `--force`. Never pass `--force`.
 - `./attn` in a shell with no instance selected, or the `attn` on `PATH`, talks to production. Most verbs print `[attn instance=<name> socket=<socket> port=<port>]` on stderr while an instance is selected (`internal/config/banner.go`). No banner means no instance is selected. `./attn instance` shows the selection.
@@ -90,6 +97,6 @@ Preconditions:
 - `make build` replaces `./attn` for every maintainer sharing the checkout. Build in a checkout of your own when others are driving.
 - `(daemon socket present)` only means the socket file exists, and the file can outlive a daemon that just stopped. Tell a restarted daemon by the PID in `attn.pid`.
 - `attn instance list` shows other maintainers' instances too. Never stop, drive or clean an instance this run did not start.
-- An app built from this checkout never asks GitHub for a newer release, so the "Version … is available on GitHub." notice cannot show on an instance. `app/src/App.releaseUpdates.test.tsx` covers it.
+- An app built from this checkout never asks GitHub for a newer release, so a newer-release notice cannot show on an instance. In the Tauri app (the rollback), `app/src/App.releaseUpdates.test.tsx` covers its notice.
 - `dev` installs the enabled workflow skill into your harness homes. A named instance does not.
-- Working but wrong: the instance-mismatch refusal tells the user to launch `attn.app` or `attn-dev.app`, though a named instance's app has a name of its own.
+- In the Tauri app (the rollback), the instance-mismatch refusal tells the user to launch `attn.app` or `attn-dev.app`, though a named instance's app has a name of its own.

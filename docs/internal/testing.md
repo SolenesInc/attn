@@ -69,12 +69,11 @@ A kind names where the test enters and what it may fake. Fake nothing else.
   specification. Real: the function. Faked: nothing.
 - **Wire** enters and observes through the protocol, from one side. Real:
   everything on the other side of the protocol. Faked: agent binaries,
-  external services, clock, and network. An app wire test also fakes the
-  browser and the Tauri host.
-- **Stack** enters through the CLI, the protocol, or a browser page, across
-  processes. Real: daemon, PTY workers and host, CLI, frontend. Faked: agent
-  binaries, external services such as GitHub, and clock. The browser suite also
-  fakes the PTY.
+  external services, clock, and network. An app wire test also runs without a
+  window or GPU.
+- **Stack** enters through the CLI or the protocol, across processes. Real:
+  daemon, PTY workers and host, CLI, and the app without a window. Faked: agent
+  binaries, external services such as GitHub, and clock.
 - **Scenario** enters through native input and observes the screen, the
   protocol, and the CLI. Real: everything attn ships, packaged as shipped.
   Faked: agent binaries, external services such as GitHub, clock.
@@ -89,13 +88,10 @@ happened. No test sleeps or polls.
   world outside a bubble, which can run agents and watch folders, gives its
   daemon a stepped clock that the test moves. See
   [Daemon wire tests](daemon-wire-tests.md#timers).
-- App wire tests use Vitest fake timers. See
-  [App wire tests](app-wire-tests.md#waiting-and-time).
+- The app reads time through an injected clock, and an app wire test moves
+  it. See [Native wire tests](native-wire-tests.md).
 - Stack tests move one stepped clock shared by the daemon and every PTY worker
   it starts. See [CLI stack tests](cli-stack-tests.md).
-- Browser end-to-end specs wait for what the page shows (`expect`,
-  `expect.poll`, `page.waitForFunction`), or install `page.clock` and advance
-  the timers the behavior depends on.
 - Scenarios step each daemon with the harness's `stepClock`, as the
   [harness guide](../../app/scripts/real-app-harness/AGENTS.md) describes.
 - A process signals that it is ready by opening a pipe the test reads.
@@ -106,13 +102,15 @@ A stepped timer the test never advances fails at the hang guard instead of
 passing slowly. `make lint-go` rejects these in Go test code outside a `synctest.Test` body:
 `time.Sleep`, `time.Tick`, `time.NewTicker`, a bare `<-time.After`, and a
 `time.After` deadline other than `fakeagent.HangGuard`. `scripts/testtimelint`
-lists the few allowed exceptions with their reasons. `pnpm --dir app run lint`
-rejects `waitForTimeout` in `app/e2e`. In app, plugin, and SDK tests it rejects
-a sleep on `setTimeout` or `Bun.sleep`, and a poll with Testing Library's
-`waitFor` or `findBy*`, `vi.waitFor`, or `expect.poll`. `.oxlintrc.json` lists
-the files still allowed, with their reasons. Kernel socket deadlines, the
-operating system's file events, syncthing's own timers, and the shared PTY host
-keep real time.
+lists the few allowed exceptions with their reasons. Clippy rejects
+`std::thread::sleep`, `Instant::now` and `SystemTime::now` anywhere in
+`native/` (`native/clippy.toml`). In plugin and SDK tests, and in the Tauri
+app's, `pnpm --dir app run lint` rejects a sleep on `setTimeout` or
+`Bun.sleep`, and a poll with Testing Library's `waitFor` or `findBy*`,
+`vi.waitFor`, or `expect.poll`. `.oxlintrc.json` lists the files still
+allowed, with their reasons. Kernel socket deadlines,
+the operating system's file events, syncthing's own timers, and the
+shared PTY host keep real time.
 
 ### Wire
 
@@ -120,14 +118,9 @@ Wire tests are the default, and come in two forms:
 
 - A daemon wire test runs a real daemon with a real store, bus, and PTY layer,
   and acts as a protocol client.
-- An app wire test renders the real app with its real socket client and acts
-  as the daemon. It sends protocol messages and asserts on what renders and
-  what the app sends back. It runs in a simulated browser with the Tauri host
-  stubbed. Everything else attn ships in the frontend is real, apart from the
-  fakes [App wire tests](app-wire-tests.md) lists. `pnpm --dir app run lint`
-  fails a test that mocks one of attn's own modules. A test file that replaces
-  a module runs isolated, and every other file
-  [shares modules](app-wire-tests.md#shared-modules).
+- An app wire test runs the app's real view and real daemon link on Rune's
+  windowless `Runtime`, and acts as the daemon. It sends protocol messages and
+  asserts on what the app shows and what it sends back.
 
 Both use the generated protocol types, so a protocol change breaks both at
 once.
@@ -136,16 +129,20 @@ A fake agent binary behaves like the real harness from the outside: same
 hooks, transcript files, and terminal output. To simulate a network failure,
 wrap the client's `net.Conn` inside a `synctest` bubble.
 
-[Daemon wire tests](daemon-wire-tests.md) and [App wire tests](app-wire-tests.md)
-describe each form's harness. The native app in `native/` has its own app wire
-tests, in Rust: [Native wire tests](native-wire-tests.md).
+[Daemon wire tests](daemon-wire-tests.md) and
+[Native wire tests](native-wire-tests.md) describe each form's harness. The
+Tauri app, the rollback, keeps its own app wire tests in TypeScript until it is
+deleted: [App wire tests](app-wire-tests.md). New app tests are native wire
+tests.
 
 ### Stack
 
 Stack tests cover what only exists between processes: restarts, reconnects,
-signals, PTY ownership, CLI behavior, and Linux paths. The browser end-to-end
-suite is also a stack test: a real daemon serves the frontend to a browser.
-The suite mocks the PTY unless a test needs real terminals.
+signals, PTY ownership, CLI behavior, and Linux paths. A stack test that needs
+the app starts it without a window with `Stack.StartNativeApp` and drives it
+over its automation protocol, as [Native app](native-app.md#automation) says.
+The Tauri app's browser end-to-end suite in `app/e2e`, where a real daemon
+serves the Tauri frontend to a browser, stays with the rollback.
 
 [CLI stack tests](cli-stack-tests.md) describes the CLI stack harness.
 
@@ -206,9 +203,9 @@ Every test that reaches config paths follows the
 ## Running tests
 
 Before landing, run targeted tests for the behavior you changed, such as
-`./scripts/test-go.sh --packages -run TestName ./pkg` or one file with
-`pnpm --dir app exec vitest run`. The `land-on-main` skill covers the remaining
-steps of landing.
+`./scripts/test-go.sh --packages -run TestName ./pkg`, or the app's wire tests
+with `cargo test -p attn-app --test wire` from `native/`. The `land-on-main`
+skill covers the remaining steps of landing.
 
 `--packages` passes the remaining arguments to `go test` without running the
 full suite. `scripts/test-go.sh` passes leading `--unit` and `--receipt-out` options to
@@ -227,8 +224,8 @@ same isolated outer data directory, and each package's `TestMain` still creates
 a fresh directory when tests run. Go can reuse successful test results when
 their flags, environment, and file inputs also match.
 `scripts/test-go.sh`, `pnpm --dir app test` and `pnpm --dir app run e2e`
-record a receipt of each run. Running `vitest` or `playwright` directly records
-none.
+record a receipt of each run, and so do CI's `Native` jobs for `cargo test`.
+Running `vitest`, `playwright` or `cargo test` directly records none.
 See [Test history](test-history.md).
 
 The runner and Makefile also share the pinned native VT artifact between

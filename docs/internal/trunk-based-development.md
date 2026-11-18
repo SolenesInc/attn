@@ -145,15 +145,7 @@ read that one build. It waits for both and prints both outcomes, and a failure
 in either stops the push. The other checks run before them, because some
 rewrite tracked files.
 
-Before all of this, `land.sh` refuses a landing that changes `app/src` or
-`app/src-tauri`, other than files generated from the protocol schema or the
-prompts, while the Tauri app is frozen for the move to the native app. Only P0
-and P1 fixes to the shipped app land there; a fix in an area the native app
-already covers lands in both apps. Name the fix's seed to land one:
-`ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh`. `land.sh` refuses an id
-that names no seed.
-
-`land.sh` also refuses a landing with a commit whose author email
+Before all of this, `land.sh` refuses a landing with a commit whose author email
 differs from the global git identity, and names the commits. Running `git config`
 in a linked worktree writes to the config that every worktree of the clone
 shares, and nothing else would stop the wrong author from reaching `main`. On a

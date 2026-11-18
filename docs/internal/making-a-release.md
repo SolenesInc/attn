@@ -65,8 +65,11 @@ release commit's CI macOS run instead.
 `.github/workflows/release-macos-app.yml` builds `attn.app` for one app shell,
 checks it with `scripts/check-macos-release-app.sh`, signs it with the
 Developer ID certificate, and notarizes and packages it with
-`scripts/package-macos-release.sh`. Release calls it with `app: tauri`; the
-cut-over to the native app changes that one input.
+`scripts/package-macos-release.sh`. Release calls it with `app: native`. The
+Tauri app is the rollback: to ship it again, release a hotfix whose
+`.github/workflows/release.yml` passes `app: tauri`. The daemon is the same under
+both apps and its database only migrates forward, so a rollback changes the app
+and nothing else.
 
 Signing and notarization need the certificate and the App Store Connect key in
 the repository's secrets, which no Mac holds. To get a signed, notarized build
@@ -118,7 +121,7 @@ gh api --method POST repos/SolenesInc/attn/dispatches \
   -f event_type=release -F 'client_payload[tag]=<tag>'
 ```
 
-Update the What's New modal (`app/src/components/WhatsNewModal.tsx`) for milestones.
+Update What's New (`native/crates/attn-app/src/whats_new/`) for milestones.
 
 ## The `next` branch
 

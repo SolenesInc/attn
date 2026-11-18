@@ -1,8 +1,10 @@
 # Native app
 
-The native app is attn's desktop app rebuilt in Rust on
-[Rune](https://github.com/anomalyco/rune). It lives in `native/`, beside the
-Tauri app, until it replaces it. No release contains it yet.
+The native app is attn's desktop app, written in Rust on
+[Rune](https://github.com/anomalyco/rune). It lives in `native/`. The Tauri app
+in `app/src` and `app/src-tauri` is the rollback: `APP=tauri` still builds it,
+and nobody develops it further. Seed `s-yxa3tt` deletes it one release after
+the cut-over.
 
 ## Workspace
 
@@ -30,14 +32,15 @@ cargo test
 it is missing, then runs the whole suite from `native/`.
 
 To run the app, install it on a named instance with
-`make install INSTANCE=<name> APP=native`, as [Instances](instances.md) says.
+`make install INSTANCE=<name>`, as [Instances](instances.md) says.
 The build bakes the instance's name, port and bundle id into `attn-app`, and the
 app starts the `attnd` bundled beside it. A build without them, such as a bare
 `cargo run`, refuses to start.
 
-Without an instance, `make build-app APP=native` builds the release bundle,
-`native/target/staged/attn.app`, with the bundle id and URL scheme the Tauri
-release has, in the `release` profile and signed with the hardened runtime.
+Without an instance, `make build-app` builds the release bundle,
+`native/target/staged/attn.app`, in the `release` profile and signed with the
+hardened runtime. It keeps the bundle id and URL scheme of the Tauri releases
+before it, so it installs over them.
 [Making a release](making-a-release.md#the-macos-app) says how a release signs
 and notarizes it. CI macOS's `Native release preflight` builds it and checks it
 with `scripts/check-macos-release-app.sh`.
@@ -84,8 +87,8 @@ library. Keep a file there with a `'!'` entry when it gains a
 Every color the native app draws comes from `attn_ui::colors`: a color scheme
 holds the interface's `Tokens` and the terminals' `TerminalColors`, once for
 dark and once for light. The schemes are the files in `internal/colors/schemes`,
-which the daemon checks settings against and the Tauri app reads too; the native
-app includes them when it builds, and a scheme missing a color fails to load.
+which the daemon checks settings against. The app includes them when it
+builds, and a scheme missing a color fails to load.
 Tokens are named by what they mean, such as `state_waiting` or `find`, never by
 the view that uses them. `primary` fills the one main action and marks what is
 chosen in a switch, a check or a choice, `on_primary` is the words and marks on
@@ -429,10 +432,10 @@ story and, when it keeps a rule, its test.
 ## Automation
 
 Tests, scenarios, `scripts/vm drive` and drive-attn drive the native app over
-one automation protocol, `attn-automation`. Its envelope is the Tauri app's:
-newline-delimited JSON over loopback TCP, `{id, token, action, payload}` in and
-`{id, ok, result, error}` out, so one Node client connects to both shells. The
-actions are the native app's own.
+one automation protocol, `attn-automation`: newline-delimited JSON over
+loopback TCP, `{id, token, action, payload}` in and `{id, ok, result, error}`
+out. The Tauri app speaks the same envelope with its own actions, so one Node
+client connects to both apps.
 
 A target names an element by its key, `{"key": "sidebar"}`, or by its role and
 accessible name, `{"role": "group", "name": "Agent t2"}`. The role is the one
@@ -462,8 +465,8 @@ are on their way to the daemon.
 | `run` | `name`, an action id such as `session.toggleSidebar`, or `capture.shortcut=<binding>` | dispatches the action. `capture.shortcut=Control+Alt+KeyB` binds Quick Capture's system-wide shortcut as the shortcut editor does, and fails with the editor's reason when the system or the binding refuses it; nothing after `=` turns it off |
 | `state` | `of`, `includes`, `expect` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `outposts`, `profiles`, `window`, `settings`, `build`, `capture-shortcut`, the system-wide shortcut held and why the last binding failed, `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`, or `terminal-view:<runtime id>`, its cursor, the cursor's cell as `caret`, [x, y, width, height] in points from the terminal's top-left, what lies over it such as the selection, its images, how far it is scrolled back, what the copy key copies, the selected command block and its annotations, as the terminal holds them when read, whether or not a frame drew them, or `input-trace`, the window's input trace oldest first: each key, paste or composition by `traceId`, with `instantMs` on one monotonic clock for a key's arrival, on its `keydown`, and its `websocket_send`, and for the first output the link heard after the key left, `output_received` when the link heard it, `output_taken` when its terminal took it, and `echo_drawn` when the first frame that shows it was encoded, once any synchronized update holding the terminal's screen has ended. With `includes`, waits until one row of a terminal's text contains the text, and waits for a terminal not drawn yet; `includes` on any other slice fails at once, because it would match the text in any field, such as an id in `current_desktop` while the step asserts `on_screen`. With `expect`, an object, waits until each field it names has its value in the slice, nested objects field by field and arrays item by item, the same length; `{"$some": …}` agrees with a list when one item agrees with it, and `{"$includes": "…"}` with a text that contains it. Name in `expect` every field the step then asserts, so the wait is the assertion |
 | `native_windows`, `shot` | `path` for `shot` | the main window's platform id, labelled `main`, then each tile window's, labelled by its key; whether a tile window shows is the platform's to say. `shot` captures the main window |
-| `set_window_bounds` | `logicalBounds`: `{x, y, width, height}` in points | moves the main window's top-left corner toward `x, y`, as far as the system allows, and sizes its content to `width` by `height`, then replies `{scaleFactor, minimized, logicalBounds}` with where the window is once the view lays out at that size, as the Tauri app's request does. When the window never reaches the size, such as below its minimum size or taller than the screen's visible area, which macOS fits a window's height into, it fails naming the bounds asked for and the ones it has. Hosts without a window refuse it |
-| `get_window_bounds` | none | `{scaleFactor, minimized, logicalBounds}` for where the main window is now, as the Tauri app's request does. A scenario that needs only width widens with `driver.widenWindow(width)`, which keeps the height the screen gave the window. Hosts without a window refuse it |
+| `set_window_bounds` | `logicalBounds`: `{x, y, width, height}` in points | moves the main window's top-left corner toward `x, y`, as far as the system allows, and sizes its content to `width` by `height`, then replies `{scaleFactor, minimized, logicalBounds}` with where the window is once the view lays out at that size. When the window never reaches the size, such as below its minimum size or taller than the screen's visible area, which macOS fits a window's height into, it fails naming the bounds asked for and the ones it has. Hosts without a window refuse it |
+| `get_window_bounds` | none | `{scaleFactor, minimized, logicalBounds}` for where the main window is now. A scenario that needs only width widens with `driver.widenWindow(width)`, which keeps the height the screen gave the window. Hosts without a window refuse it |
 
 A request that waits, `state` with `includes` or `expect` among them, gives up after 30 s,
 or its payload's `timeout_ms`, and says what it waited for and, for `expect`, what the slice
@@ -484,8 +487,8 @@ Hosts run the protocol on the app's `Runtime`:
   have no native toolchain and skip these tests; `Native / ubuntu-24.04` builds
   `attn-app` and runs them.
 - The installed app serves it on a named instance, or with `ATTN_AUTOMATION=1`
-  (`0` turns it off), and writes its manifest where the Tauri app does:
-  `debug/ui-automation.json` in the bundle id's application data directory.
+  (`0` turns it off), and writes its manifest to `debug/ui-automation.json` in
+  the bundle id's application data directory.
   On macOS the Quick Capture panel serves its own, with the manifest
   `debug/ui-automation-capture.json` beside the app's. Its `run` takes
   `dismiss`, which hides the panel, and its `state` one slice, `capture`: the
@@ -504,12 +507,12 @@ Hosts run the protocol on the app's `Runtime`:
 ### Scenarios and the VM
 
 A catalog entry in `app/scripts/real-app-harness/scenarioCatalog.mjs` with
-`app: 'native'` runs against the native app; entries without it need the Tauri
-app. The install writes the shell into the tree's `build-identity.json`, and the
-serial matrix leaves out the entries for the other one, or refuses when they
-were named. The acceptance soak builds and installs the shell each named
-scenario needs. Install a native tree with
-`make install INSTANCE=<name> APP=native`.
+`app: 'native'` runs against the native app. Entries without it are the Tauri
+app's, and run only against a rollback build installed with `APP=tauri`. The
+install writes the app into the tree's `build-identity.json`, and the serial
+matrix leaves out the entries for the other app, or refuses when they were
+named. The acceptance soak builds and installs the app each named scenario
+needs. New scenarios are native ones.
 
 `createWindowDriver` returns a `NativeAppDriver` for a native tree. Its input
 goes through the automation server, so on both platforms it takes no focus and
@@ -518,8 +521,8 @@ the platform driver, from the harness process. `launchFreshNativeAppAndConnect`
 in `common.mjs` launches the app and connects. `scenario-native-sidebar-session.mjs`
 is the smallest example.
 
-`APP=native scripts/vm up` builds and runs the native app in the macOS VM.
-`drive` then takes the native app's actions, and `shot` uses its `shot` action.
+`scripts/vm up` builds and runs the native app in the macOS VM. `drive` then
+takes the actions above, and `shot` uses the `shot` action.
 
 ## Build output
 

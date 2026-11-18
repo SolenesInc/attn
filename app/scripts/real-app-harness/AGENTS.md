@@ -57,12 +57,36 @@ repository root.
 - `profileCommand` awaits `profile_action_result`; CLI commands such as
   `terminal_move` use their CLI response contract instead.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
-  On macOS it sends input without taking focus or moving the pointer, except
-  `menu`; on Linux, `xdotool` focuses the window the app reports through the
-  client and moves the pointer. Shared-Mac runs keep the parked
-  launch and never use activation, `menu` or physical input; see the
+  For the native app it returns a `NativeAppDriver`, whose input goes through
+  the app's automation server: it takes no focus and leaves the pointer alone
+  on both platforms. The driver finds, parks, places and captures the window
+  with the platform driver. Shared-Mac runs keep the parked launch and never
+  use activation or physical input; see the
   [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
   Scenarios requiring real focus or system input run on a dedicated display.
+- Point every pointer action at a target, an element's key or its role and
+  name: `driver.click`, `hover`, `drag` and `typeInto` take one, and `at` aims
+  at a fraction of the box. The app waits for the element to show and stop
+  moving and scrolls it into view, so a scenario never measures geometry or
+  waits for an animation before acting. A press replies with a receipt, and the
+  driver fails the step when the press landed elsewhere; pass
+  `{ allowMiss: true }` when that is the point. Every reply comes after the app
+  handled the input, so the next read sees its effect.
+  [Native app](../../../docs/internal/native-app.md#automation) lists the
+  actions behind the driver: `waitFor`, `state`, `tree`, `atRest`, `pressKey`,
+  `run` and the rest.
+- New scenarios are native ones: give the catalog entry `app: 'native'`.
+  `scenario-native-sidebar-session.mjs` is the smallest example. Entries
+  without it are the Tauri app's and run only against a rollback build
+  installed with `APP=tauri`.
+
+### The Tauri app's driver
+
+For the Tauri app, the rollback, `createWindowDriver` returns a driver that
+aims at DOM selectors. On macOS it sends input without taking focus or moving
+the pointer, except `menu`; on Linux, `xdotool` focuses the window the app
+reports through the client and moves the pointer.
+
 - Point every native pointer action at an element: `driver.click`,
   `rightClick`, `hover`, `drag` and `typeInto` take a selector or
   `{ selector, at, offset }` (`at` is a fraction of the box, default its
@@ -96,6 +120,9 @@ repository root.
   key monitor, which is where a browser tile's page keys are taken. Pass
   `{ queued: true }` to post the key into the queue instead, as a real key
   arrives. A queued key has no receipt, so wait for its effect.
+
+### Agents, clocks and verdicts
+
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need
@@ -144,8 +171,8 @@ repository root.
   showed when a step failed, before cleanup closes it: `failure-native.png` and
   `failure-evidence.json` (window and target geometry, the focused element,
   native focus and pointer, the UI diagnostics ring).
-- Check pane text and native screenshots before diagnosing. WebGL terminals need
-  native window captures.
+- Check pane text and window screenshots before diagnosing. The Tauri app's
+  WebGL terminals need native window captures.
 - Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`
   and `nvim`.
 

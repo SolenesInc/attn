@@ -54,7 +54,7 @@ deletes what a connected outpost has not sent yet.
 
 A `process` sample holds the daemon's memory, goroutines, open files and CPU
 time, the database size, the bus size and the connected clients, and these
-fields, so that memory, and the native app's CPU time and frames, can be
+fields, so that memory, and the app's CPU time and frames, can be
 compared across builds at a similar workload. The build that took a sample is
 the build stored with its record, which an upload batch names.
 
@@ -75,7 +75,7 @@ the build stored with its record, which an upload batch names.
 | `workload.panes_drawn` | Terminals a connected app is attached to, which are the terminals it draws while the shared PTY host is on. With the host off, the app also stays attached to some terminals it hides |
 | `workload.desktops`, `workload.seeds` | Desktops, and seeds in any state, in every profile |
 | `processes[].role` | `daemon`, `pty_worker`, `pty_host`, `app`, `webkit_content`, `webkit_gpu` or `webkit_networking`. A role with no running process has no entry, so an outpost, which has no app, lists only the first three |
-| `processes[].shell` | For `app`, which app the instance runs: `tauri` or `native` |
+| `processes[].shell` | For `app`, which app the instance runs: `native`, or `tauri` for the Tauri app, the rollback |
 | `processes[].count` | How many processes hold the role |
 | `processes[].resident_bytes` | Their total resident memory |
 | `processes[].footprint_bytes` | Their total physical footprint, as Activity Monitor's Memory column shows it. macOS only |
@@ -94,10 +94,10 @@ attn instances, are not counted. On macOS, the kernel ties the WebKit processes 
 an app started from a terminal to that terminal, so that app's sample has an
 `app` entry and no `webkit_*` entries. The sample reads the kernel's process
 tables and, on macOS, runs `/usr/bin/footprint` once for all WebContent
-processes, which took 30-50 ms for WebContent of 0.4 to 1.9 GB. The native app
+processes, which took 30-50 ms for WebContent of 0.4 to 1.9 GB. The app
 answers the daemon's request for its performance on its connection's thread,
 so a sample never wakes its window, and it keeps no timer: between samples an
-idle native app does nothing for analytics. With `analytics.enabled` off, the
+idle app does nothing for analytics. With `analytics.enabled` off, the
 sample reads nothing.
 
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before

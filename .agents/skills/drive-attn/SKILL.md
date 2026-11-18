@@ -77,9 +77,9 @@ shell's environment:
 . /tmp/drive-attn-<name>.env && bridge --launch --wait-ready ping   # {"frontendReady": true, "pong": true}
 ```
 
-For an instance installed with `APP=native`, launch with `bridge --launch ping`
-and then `bridge wait` on an element: `--wait-ready` asks for the Tauri app's
-`get_state`, which the native app does not have.
+`make install` installs the native app. To check a rollback build, install the
+Tauri app with `make install INSTANCE=<name> APP=tauri` and drive it with the
+Tauri bridge actions, as [The Tauri app](#the-tauri-app-the-rollback) says.
 
 `--launch` starts the app with the instance shell's environment and parks
 the app window at the screen's edge. Keep that default on a shared Mac. Never
@@ -87,9 +87,8 @@ activate or unpark the window, set the parking or always-on-top variables
 yourself, or send physical input. The forbidden actions include `open`,
 `make run`, `activateApp`, `osascript ... activate`, `cliclick` and the
 driver's `menu`.
-Use `native_key` for menu shortcuts and DOM scrolling for setup. A native
-input failure is a bridge or harness bug to diagnose, not permission to take
-focus. A scenario that requires activation or system input needs a dedicated
+Use `bridge key` for menu shortcuts. An input failure is a bridge or harness
+bug to diagnose, not permission to take focus. A scenario that requires activation or system input needs a dedicated
 display. Such a scenario cannot prove a shared-Mac recipe. On macOS,
 `make run INSTANCE=<name>` opens the app through Launch Services, which does
 not pass the env file's exports to the app. On a shared Mac, launch with
@@ -122,8 +121,10 @@ Most verbs, `seed`, `agent`, `daemon` and `preflight` among them, also print
 instance is selected. `./attn instance` shows the selection instead. To check
 the build, run `version --json` on the same binary and compare its
 `sourceFingerprint` with the output of `bash scripts/source-fingerprint.sh`
-for your tree. The two must match. `bridge --wait-ready` refuses an app built
-from other source. For a daemon-only instance, run the check through `./attn`:
+for your tree. The two must match. For the app's own build, compare
+`bridge state '{"of":"build"}'` with
+`bash scripts/source-fingerprint.sh --app native`. For a daemon-only instance,
+run the check through `./attn`:
 
 ```bash
 . /tmp/drive-attn-<name>.env && ./attn preflight --agent claude
@@ -139,7 +140,7 @@ prints `FAIL (2 failed, 0 warnings)` and exits 1. Everything else must pass.
 | `./attn <verb>` in the instance shell | A person's own shell. Agents, for verbs that need no session | Every CLI verb, `--json` output, exit codes | The app. Verbs that act as a session, such as `seed tend`, `seed watch` and `terminal`, refuse without one |
 | Mock agent | Agents | The CLI and prompts as a session in the instance sees them | Model judgment: it does only what its fixture says |
 | `wsctl` | The daemon protocol | Sessions, desktops and tiles (`wsctl list`), spawning, terminal input and screens by session or terminal id, a seed page's Resume (`seed-continuation`, `seed-resume`), and any request answered by an event carrying its `request_id` (`request --json <payload> --event <event>`) | What the app shows |
-| `bridge` | People | Native keys, text and clicks inside the window, UI state, screenshots | The macOS menu bar |
+| `bridge` | People | Keys, text and presses inside the window, the app's state and accessibility tree, screenshots | The macOS menu bar |
 | Scenarios | People, as committed proof | The packaged app, through `createWindowDriver({ appPath, client })`, menus included | A quick local loop: CI runs them |
 
 **Mock agent.** The daemon launches `mockAgent.mjs` for `claude` and `codex`.
@@ -163,21 +164,16 @@ actions: `attn` runs an attn verb as that session, `reply` prints text,
 . /tmp/drive-attn-<name>.env && ./attn agent peek <session>   # the agent's screen, as text
 ```
 
-**bridge.** Reads: `get_state`, the feature reads such as `garden_get_state`,
-`dom_text '{"selector":"..."}'`, and `dom_wait
-'{"selector":"...","timeoutMs":5000}'`, which waits for a selector. Native
-input: `native_key '{"key":"t","modifiers":["command","shift"]}'`,
-`native_text '{"text":"..."}'`, `native_mouse
-'{"action":"click","x":0.5,"y":0.5}'` with window-relative coordinates from
-`dom_native_point '{"selector":"..."}'`.
-Capture: `capture_screenshot '{"path":"<file>"}'`. DOM actions (`dom_click`,
-`dispatch_shortcut`, `garden_toggle_frame` and the like) skip native input:
-use them to set up, never as proof of a person's way in. The actions are the
-`case` labels in `app/src/hooks/useUiAutomationBridge.ts` and
-`app/src/hooks/uiAutomationDomActions.ts`, the native ones in
-`app/src-tauri/core/src/native_input.rs` and
-`app/src-tauri/core/src/ui_automation.rs`, and quick capture's in
-`app/src/quickCapture/automationBridge.ts`.
+**bridge.** Reads: `tree` for the accessibility tree, `find` and
+`wait '{"target":{"key":"..."}}'` for one element, and `state '{"of":"..."}'`
+for a slice of the store or the window, such as `sessions`, `desktops`,
+`settings` or `terminal:<runtime id>`. Input: `key '{"chord":"mod+shift+k"}'`,
+`type '{"text":"...","target":{...}}'`, `press`, `hover`, `drag` and `scroll`
+on a target. Capture: `shot '{"path":"<file>"}'`. `run '{"name":"<action id>"}'`
+dispatches an action without its key: use it to set up, never as proof of a
+person's way in. [Native app](../../../docs/internal/native-app.md#automation)
+lists every action and its payload. `bridge --capture` drives the Quick Capture
+panel, which serves its own actions.
 
 **Scenarios.** Read the scenario and the harness guide before running one.
 On a shared Mac, use a focus-free scenario directly, such as
@@ -246,3 +242,31 @@ feature's ways in, a recipe that drives the ways in, the contexts that apply
 to the feature, and where the feature's tests live. Drive every way in that
 the file lists before you call a change done. When you find a way in, a trap
 or a test that the file lacks, fix the file in the same change.
+
+## The Tauri app (the rollback)
+
+The Tauri app is the rollback for the native app. Seed `s-yxa3tt` deletes it
+one release after the cut-over. Drive it only to check a rollback build:
+
+1. Install it with `make install INSTANCE=<name> APP=tauri`.
+2. Launch it with `bridge --launch --wait-ready ping`. `--wait-ready` also
+   refuses a Tauri app built from other source. Then run
+   `bridge dismiss_whats_new`, unless the recipe replays What's new.
+3. Follow the `### In the Tauri app (the rollback)` recipe of the feature file.
+
+Its `bridge` actions differ from the native app's. Reads: `get_state`, the
+feature reads such as `garden_get_state`, `dom_text '{"selector":"..."}'`, and
+`dom_wait '{"selector":"...","timeoutMs":5000}'`. Input:
+`native_key '{"key":"t","modifiers":["command","shift"]}'`,
+`native_text '{"text":"..."}'`, and `native_mouse
+'{"action":"click","x":0.5,"y":0.5}'` with window-relative coordinates from
+`dom_native_point '{"selector":"..."}'`. Capture:
+`capture_native_window_screenshot '{"path":"<file>"}'`. DOM actions
+(`dom_click`, `dispatch_shortcut`, `garden_toggle_frame` and the like) skip
+native input: use them to set up, never as proof. The actions are the `case`
+labels in `app/src/hooks/useUiAutomationBridge.ts` and
+`app/src/hooks/uiAutomationDomActions.ts`, the native input ones in
+`app/src-tauri/core/src/native_input.rs` and
+`app/src-tauri/core/src/ui_automation.rs`, and quick capture's in
+`app/src/quickCapture/automationBridge.ts`. The conventions for driving it are
+in [features/README.md](features/README.md#in-the-tauri-app).
