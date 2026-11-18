@@ -1,8 +1,8 @@
 name: Set up Linux app dependencies
-description: Install the packaged app's apt packages from a frozen layer in the GitHub cache. Only a job with build-on-miss may reach the Ubuntu mirror.
+description: Install the packaged app's apt packages from a frozen layer in the GitHub cache. Only the jobs with build-on-miss, the ones that build the app and the Native job, may reach the Ubuntu mirror.
 inputs:
   build-on-miss:
-    description: '"true" for the one job in a run that builds the layer on a cache miss. Every other job fails on a miss.'
+    description: '"true" for a job that runs beside the build jobs and cannot wait for their layer. It builds the layer on a cache miss. Every other job fails on a miss.'
     required: false
     default: 'false'
 runs:
@@ -26,6 +26,7 @@ runs:
     - name: Build apt layer from the Ubuntu mirror
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
+      working-directory: ${{ github.workspace }}
       run: ${{ github.action_path }}/apt-layer.sh build "$RUNNER_TEMP/apt-layer"
 
     - name: Save apt layer
