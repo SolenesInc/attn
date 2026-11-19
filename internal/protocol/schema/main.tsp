@@ -1606,21 +1606,6 @@ model FsWriteMessage {
   request_id?: string; // set by the WS frontend to correlate the result event
 }
 
-model FsRenameMessage {
-  cmd: "fs_rename";
-  path: string;
-  new_path: string;
-  root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
-  request_id?: string;
-}
-
-model FsDeleteMessage {
-  cmd: "fs_delete";
-  path: string;
-  root?: string; // Absolute directory to operate under; omitted/empty = the notebook root.
-  request_id?: string;
-}
-
 // Check whether a path exists under the root, without reading it. Used to flag
 // in-notebook markdown links that point at a missing note.
 model FsExistsMessage {
@@ -8423,15 +8408,6 @@ model FsWriteResult {
   current_hash?: string;
 }
 
-model FsRenameResult {
-  path: string;
-  new_path: string;
-}
-
-model FsDeleteResult {
-  path: string;
-}
-
 model FsListResultMessage {
   event: "fs_list_result";
   request_id: string;
@@ -8454,22 +8430,6 @@ model FsReadAssetResultMessage {
   success: boolean;
   error?: string;
   result?: FsReadAssetResult;
-}
-
-model FsRenameResultMessage {
-  event: "fs_rename_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  result?: FsRenameResult;
-}
-
-model FsDeleteResultMessage {
-  event: "fs_delete_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  result?: FsDeleteResult;
 }
 
 // Result of fs_write (hash-CAS). A conflict is a successful response the UI
@@ -9040,8 +9000,6 @@ alias DaemonEvent =
   | FsReadResultMessage
   | FsReadAssetResultMessage
   | FsWriteResultMessage
-  | FsRenameResultMessage
-  | FsDeleteResultMessage
   | FsExistsResultMessage
   | FsExistsManyResultMessage
   | FsWatchResultMessage

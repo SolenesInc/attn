@@ -247,64 +247,6 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newPath, rawRoot string) {
-	oldRel, oldErr := fsdoc.CleanPath(oldPath)
-	newRel, newErr := fsdoc.CleanPath(newPath)
-	err := errors.Join(oldErr, newErr)
-	var result *protocol.FsRenameResult
-	store, root, storeErr := d.fsStoreFor(client, rawRoot)
-	if err == nil {
-		err = storeErr
-	}
-	if err == nil {
-		d.mutateRoot(root, func() []notebook.SelfWrite {
-			var hash string
-			if _, hash, err = store.Read(oldRel); err != nil {
-				return nil
-			}
-			if err = store.Rename(oldRel, newRel); err != nil {
-				return nil
-			}
-			return []notebook.SelfWrite{{Rel: oldRel}, {Rel: newRel, Hash: hash}}
-		})
-		if err == nil {
-			result = &protocol.FsRenameResult{Path: oldRel, NewPath: newRel}
-			d.broadcastFsChanged(root, originUI, oldRel, newRel)
-		}
-	}
-	msg := protocol.FsRenameResultMessage{Event: protocol.EventFsRenameResult, RequestID: requestID, Success: err == nil, Result: result}
-	if err != nil {
-		msg.Error = protocol.Ptr(err.Error())
-	}
-	d.sendToClient(client, msg)
-}
-
-func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot string) {
-	rel, err := fsdoc.CleanPath(path)
-	var result *protocol.FsDeleteResult
-	store, root, storeErr := d.fsStoreFor(client, rawRoot)
-	if err == nil {
-		err = storeErr
-	}
-	if err == nil {
-		d.mutateRoot(root, func() []notebook.SelfWrite {
-			if err = store.Delete(rel); err != nil {
-				return nil
-			}
-			return []notebook.SelfWrite{{Rel: rel}}
-		})
-		if err == nil {
-			result = &protocol.FsDeleteResult{Path: rel}
-			d.broadcastFsChanged(root, originUI, rel)
-		}
-	}
-	msg := protocol.FsDeleteResultMessage{Event: protocol.EventFsDeleteResult, RequestID: requestID, Success: err == nil, Result: result}
-	if err != nil {
-		msg.Error = protocol.Ptr(err.Error())
-	}
-	d.sendToClient(client, msg)
-}
-
 func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path, rawRoot string) {
 	var result *protocol.FsExistsResult
 	store, _, err := d.fsStoreFor(client, rawRoot)

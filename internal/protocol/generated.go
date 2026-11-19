@@ -4993,42 +4993,6 @@ type FsChangedMessage struct {
 	Root string `json:"root"`
 }
 
-type FsDeleteMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// Root corresponds to the JSON schema field "root".
-	Root *string `json:"root,omitempty,omitzero"`
-}
-
-type FsDeleteResult struct {
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-}
-
-type FsDeleteResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Result corresponds to the JSON schema field "result".
-	Result *FsDeleteResult `json:"result,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type FsEntry struct {
 	// IsDir corresponds to the JSON schema field "is_dir".
 	IsDir bool `json:"is_dir"`
@@ -5263,48 +5227,6 @@ type FsReadResultMessage struct {
 
 	// Result corresponds to the JSON schema field "result".
 	Result *FsReadResult `json:"result,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
-type FsRenameMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// NewPath corresponds to the JSON schema field "new_path".
-	NewPath string `json:"new_path"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// Root corresponds to the JSON schema field "root".
-	Root *string `json:"root,omitempty,omitzero"`
-}
-
-type FsRenameResult struct {
-	// NewPath corresponds to the JSON schema field "new_path".
-	NewPath string `json:"new_path"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-}
-
-type FsRenameResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Result corresponds to the JSON schema field "result".
-	Result *FsRenameResult `json:"result,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`

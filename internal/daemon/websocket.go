@@ -1009,16 +1009,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("sendFsWriteWSResult", func() {
 			d.sendFsWriteWSResult(client, protocol.Deref(fsWrite.RequestID), fsWrite.Path, fsWrite.Content, protocol.Deref(fsWrite.BaseHash), protocol.Deref(fsWrite.Root))
 		})
-	case protocol.CmdFsRename:
-		fsRename := msg.(*protocol.FsRenameMessage)
-		d.life.Go("sendFsRenameWSResult", func() {
-			d.sendFsRenameWSResult(client, protocol.Deref(fsRename.RequestID), fsRename.Path, fsRename.NewPath, protocol.Deref(fsRename.Root))
-		})
-	case protocol.CmdFsDelete:
-		fsDelete := msg.(*protocol.FsDeleteMessage)
-		d.life.Go("sendFsDeleteWSResult", func() {
-			d.sendFsDeleteWSResult(client, protocol.Deref(fsDelete.RequestID), fsDelete.Path, protocol.Deref(fsDelete.Root))
-		})
 	case protocol.CmdFsExists:
 		fsExists := msg.(*protocol.FsExistsMessage)
 		d.life.Go("sendFsExistsWSResult", func() {

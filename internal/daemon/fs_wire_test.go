@@ -76,20 +76,6 @@ func fsAskExists(p *testworld.Peer, path string) protocol.FsExistsResultMessage 
 	})
 }
 
-func fsAskRename(p *testworld.Peer, root, from, to string) protocol.FsRenameResultMessage {
-	p.T.Helper()
-	return fsRequest[protocol.FsRenameResultMessage](p, protocol.EventFsRenameResult, func(id *string) any {
-		return protocol.FsRenameMessage{Cmd: protocol.CmdFsRename, RequestID: id, Path: from, NewPath: to, Root: fsRoot(root)}
-	})
-}
-
-func fsAskDelete(p *testworld.Peer, root, path string) protocol.FsDeleteResultMessage {
-	p.T.Helper()
-	return fsRequest[protocol.FsDeleteResultMessage](p, protocol.EventFsDeleteResult, func(id *string) any {
-		return protocol.FsDeleteMessage{Cmd: protocol.CmdFsDelete, RequestID: id, Path: path, Root: fsRoot(root)}
-	})
-}
-
 func fsAskAsset(p *testworld.Peer, path string) protocol.FsReadAssetResultMessage {
 	p.T.Helper()
 	return fsRequest[protocol.FsReadAssetResultMessage](p, protocol.EventFsReadAssetResult, func(id *string) any {
@@ -206,12 +192,6 @@ func TestNotebookFileCommandsRoundTripThroughTheApp(t *testing.T) {
 	if read := fsAskRead(app, "", "notes/todo.txt"); read.Result == nil || read.Result.Content != "oat milk" || read.Result.Hash != *saved.Result.Hash {
 		t.Fatalf("reading after the edit = %+v, want the new content at the edit's hash", read.Result)
 	}
-	if renamed := fsAskRename(app, "", "notes/todo.txt", "notes/plan.txt"); !renamed.Success || renamed.Result == nil || renamed.Result.NewPath != "notes/plan.txt" {
-		t.Fatalf("renaming = %+v (%s)", renamed.Result, protocol.Deref(renamed.Error))
-	}
-	if deleted := fsAskDelete(app, "", "notes/plan.txt"); !deleted.Success || deleted.Result == nil || deleted.Result.Path != "notes/plan.txt" {
-		t.Fatalf("deleting = %+v (%s)", deleted.Result, protocol.Deref(deleted.Error))
-	}
 }
 
 func TestFsChangedTellsTheAppsWhoChangedAFileUnderWhichRoot(t *testing.T) {
@@ -239,24 +219,8 @@ func TestFsChangedTellsTheAppsWhoChangedAFileUnderWhichRoot(t *testing.T) {
 		t.Fatalf("watching %s: %s", elsewhere, protocol.Deref(watched.Error))
 	}
 	fsAskWrite(app, elsewhere, "a.md", "x", "")
-	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool { return m.Root == elsewhere && slices.Contains(m.Paths, "a.md") })
-	if renamed := fsAskRename(app, elsewhere, "a.md", "b.md"); !renamed.Success {
-		t.Fatalf("renaming outside the notebook: %s", protocol.Deref(renamed.Error))
-	}
-	if moved := fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool { return m.Root == elsewhere && slices.Contains(m.Paths, "b.md") }); moved.Origin != "ui" {
-		t.Fatalf("the rename outside the notebook arrived as %+v", moved)
-	}
-	if deleted := fsAskDelete(app, elsewhere, "b.md"); !deleted.Success {
-		t.Fatalf("deleting outside the notebook: %s", protocol.Deref(deleted.Error))
-	}
-	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
-		return m.Root == elsewhere && slices.Equal(m.Paths, []string{"b.md"})
-	})
-
-	fsAskWrite(app, "", "c.md", "x", "")
-	fsAskRename(app, "", "c.md", "d.md")
-	if renamed := fsAwaitChanged(watcher, func(m protocol.FsChangedMessage) bool { return m.Root == root && slices.Contains(m.Paths, "d.md") }); renamed.Origin != "ui" || !slices.Contains(renamed.Paths, "c.md") {
-		t.Fatalf("the notebook's rename arrived as %+v, want both names from the ui", renamed)
+	if moved := fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool { return m.Root == elsewhere && slices.Contains(m.Paths, "a.md") }); moved.Origin != "ui" {
+		t.Fatalf("the write outside the notebook arrived as %+v, want origin ui", moved)
 	}
 }
 
@@ -375,11 +339,11 @@ func TestExplicitFsRootsAreOnlyForTheAuthenticatedAppAndNeverTheDataDir(t *testi
 			t.Errorf("listing %s = %+v (%s), want a refusal mentioning %q", c.name, listed.Entries, protocol.Deref(listed.Error), c.want)
 		}
 	}
-	if deleted := fsAskDelete(app, intoDataDir, "attn.db"); deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "outside the attn data dir") {
-		t.Fatalf("deleting attn.db through a symlink to the data dir = %+v (%s)", deleted.Result, protocol.Deref(deleted.Error))
+	if planted := fsAskWrite(app, intoDataDir, "planted.md", "x", ""); planted.Success || !strings.Contains(protocol.Deref(planted.Error), "outside the attn data dir") {
+		t.Fatalf("writing through a symlink to the data dir = %+v (%s)", planted.Result, protocol.Deref(planted.Error))
 	}
-	if _, err := os.Stat(filepath.Join(w.Dir, "attn.db")); err != nil {
-		t.Fatalf("the refused delete touched the data dir: %v", err)
+	if _, err := os.Stat(filepath.Join(w.Dir, "planted.md")); !os.IsNotExist(err) {
+		t.Fatalf("the refused write touched the data dir: %v", err)
 	}
 	if saved := fsAskWrite(app, legitimate, "note.md", "hello", ""); !saved.Success || saved.Result == nil || saved.Result.Conflict {
 		t.Fatalf("writing through a symlink outside the data dir = %+v (%s)", saved.Result, protocol.Deref(saved.Error))

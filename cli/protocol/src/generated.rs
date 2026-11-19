@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "df3227f81e38";
+pub const PROTOCOL_VERSION: &str = "97977eb0636a";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4488,49 +4488,6 @@ impl FsChangedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FsDeleteMessage {
-    pub cmd: String,
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub root: Option<String>,
-}
-
-impl FsDeleteMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "fs_delete".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FsDeleteResult {
-    pub path: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FsDeleteResultMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    pub event: String,
-    pub request_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result: Option<FsDeleteResult>,
-    pub success: bool,
-}
-
-impl FsDeleteResultMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "fs_delete_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FsEntry {
     pub is_dir: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4791,51 +4748,6 @@ impl FsReadResultMessage {
     pub fn new() -> Self {
         Self {
             event: "fs_read_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FsRenameMessage {
-    pub cmd: String,
-    pub new_path: String,
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub root: Option<String>,
-}
-
-impl FsRenameMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "fs_rename".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FsRenameResult {
-    pub new_path: String,
-    pub path: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FsRenameResultMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    pub event: String,
-    pub request_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result: Option<FsRenameResult>,
-    pub success: bool,
-}
-
-impl FsRenameResultMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "fs_rename_result".to_string(),
             ..Self::default()
         }
     }
