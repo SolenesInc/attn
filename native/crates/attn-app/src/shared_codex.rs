@@ -487,6 +487,16 @@ pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
     Some(banner.build(t, cx))
 }
 
+/// The message the banner shows: its stage and the versions it names.
+pub(crate) fn identity(state: &State) -> Option<String> {
+    let codex = current(state)?;
+    let stage = stage(state, codex)?;
+    Some(format!(
+        "{stage:?}:{:?}:{:?}:{:?}",
+        codex.installed_version, codex.latest_version, codex.running_version
+    ))
+}
+
 /// The banner, naming every blocker when `whole`.
 pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
     let codex = current(state)?;

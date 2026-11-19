@@ -34,6 +34,12 @@ pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
     Some(banner.build(t, cx))
 }
 
+/// The message the banner shows: the warnings the last handshake brought.
+pub(crate) fn identity(state: &State) -> Option<String> {
+    let warnings = &state.window.warnings.shown;
+    (!warnings.is_empty()).then(|| format!("{:p}", Arc::as_ptr(warnings)))
+}
+
 pub(crate) fn said(state: &State) -> Option<Banner> {
     let warnings = &state.window.warnings.shown;
     if warnings.is_empty() {

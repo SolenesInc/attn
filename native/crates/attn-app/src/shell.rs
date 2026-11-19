@@ -166,8 +166,9 @@ pub enum Layer {
     /// The confirm before restarting the shared Codex now or reloading its old tiles;
     /// `Window::shared_codex` holds it.
     SharedCodex,
-    /// A banner's details: everything it says, whole.
-    BannerDetails(Band),
+    /// A banner's details: everything it says, whole, for as long as the banner says the
+    /// message whose identity it holds.
+    BannerDetails(Band, u64),
 }
 
 /// The banners over the window's work.
@@ -180,39 +181,57 @@ pub enum Band {
 }
 
 pub(crate) fn opens_details(band: Band) -> impl Fn(&mut State, &mut Tx) + 'static {
-    move |state: &mut State, _: &mut Tx| state.window.layer = Some(Layer::BannerDetails(band))
+    move |state: &mut State, _: &mut Tx| {
+        if let Some(message) = message(state, band) {
+            state.window.layer = Some(Layer::BannerDetails(band, message));
+        }
+    }
 }
 
 pub(crate) fn close_details(state: &mut State) {
-    if matches!(state.window.layer, Some(Layer::BannerDetails(_))) {
+    if matches!(state.window.layer, Some(Layer::BannerDetails(..))) {
         state.window.layer = None;
     }
 }
 
-fn said(state: &State, band: Band) -> Option<attn_ui::blocks::Banner> {
-    match band {
+/// The message a band's banner shows, by its identity.
+fn message(state: &State, band: Band) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+    let identity = match band {
+        Band::UpdateRun => crate::update_run::identity(state),
+        Band::OutpostUpdates => crate::outpost_updates::identity(state),
+        Band::SharedCodex => crate::shared_codex::identity(state),
+        Band::Warnings => crate::warnings::identity(state),
+    }?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    identity.hash(&mut hasher);
+    Some(hasher.finish())
+}
+
+/// Closes a banner's details once its banner says another message or none, so a new message
+/// starts closed.
+pub(crate) fn follow_details(state: &mut State) -> bool {
+    let Some(Layer::BannerDetails(band, shown)) = state.window.layer else {
+        return false;
+    };
+    let moved_on = message(state, band) != Some(shown);
+    if moved_on {
+        state.window.layer = None;
+    }
+    moved_on
+}
+
+fn banner_details(state: &State, band: Band, shown: u64, t: &Tokens, layers: &mut Vec<El>) {
+    if message(state, band) != Some(shown) {
+        return;
+    }
+    let banner = match band {
         Band::UpdateRun => crate::update_run::said(state),
         Band::OutpostUpdates => crate::outpost_updates::said(state),
         Band::SharedCodex => crate::shared_codex::said(state, true),
         Band::Warnings => crate::warnings::said(state),
-    }
-}
-
-/// Closes a banner's details once its banner is gone, so the next banner of its band starts
-/// closed.
-pub(crate) fn follow_details(state: &mut State) -> bool {
-    let Some(Layer::BannerDetails(band)) = state.window.layer else {
-        return false;
     };
-    let gone = said(state, band).is_none();
-    if gone {
-        state.window.layer = None;
-    }
-    gone
-}
-
-fn banner_details(state: &State, band: Band, t: &Tokens, layers: &mut Vec<El>) {
-    if let Some(banner) = said(state, band) {
+    if let Some(banner) = banner {
         banner.build_details(
             t,
             |state: &mut State, _: &mut Tx| close_details(state),
@@ -877,7 +896,9 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         Some(Layer::Crew) => crate::crew::overlays(state, t, &mut layers),
         Some(Layer::SharedCodex) => crate::shared_codex::confirm(state, t, &mut layers),
-        Some(Layer::BannerDetails(band)) => banner_details(state, band, t, &mut layers),
+        Some(Layer::BannerDetails(band, shown)) => {
+            banner_details(state, band, shown, t, &mut layers)
+        }
         None => {}
     }
     layers.extend(crate::home::pull_requests::merge_confirmation(state, t));

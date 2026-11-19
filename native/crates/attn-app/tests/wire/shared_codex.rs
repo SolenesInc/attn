@@ -430,6 +430,14 @@ fn the_band_says_why_each_blocker_holds_the_restart_opens_its_tile_and_relaunche
         );
     };
     details(&mut world);
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key(format!("whole.{BAND}.text")))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("Codex 0.163.0 installed. Restarts when agents are idle.")
+    );
     let named: Vec<String> = world
         .screen()
         .descendants(Target::key(format!("{BAND}.whole-dialog")))
@@ -490,6 +498,21 @@ fn details_open_when_its_banner_goes_away_leave_the_next_banner_closed() {
     assert!(
         world.screen().find(Target::key(&dialog)).is_none(),
         "the next banner opened with the last one's details"
+    );
+}
+
+#[test]
+fn details_close_when_the_wait_they_were_opened_for_becomes_a_restart() {
+    let (mut world, _prefs) = start(Some(every_blocker()));
+    let dialog = format!("{BAND}.whole-dialog");
+    click(&mut world, &format!("{BAND}.details"));
+    assert!(world.screen().find(Target::key(&dialog)).is_some());
+
+    change(&mut world, "work", Some(installed("0.163.0", "restarting")));
+    assert!(banner(&world).is_some());
+    assert!(
+        world.screen().find(Target::key(&dialog)).is_none(),
+        "the restart opened with the wait's details"
     );
 }
 
@@ -984,4 +1007,26 @@ fn a_long_blocker_name_stays_inside_the_band_with_its_ring_whole_at_the_smallest
     press(&mut world, Key::Text(" ".into()));
     let shown = sent(&world, "desktop_show_session");
     assert_eq!(shown.last().unwrap()["session_id"], WORKTREE_BASENAME);
+}
+
+#[test]
+fn a_single_long_blocker_offers_details_naming_it_whole_with_its_controls() {
+    let (mut world, _names, _dir) = long_blockers(1);
+    let name = format!("{WORKTREE_BASENAME}-1");
+    click(&mut world, &format!("{BAND}.details"));
+    let go = format!("whole.{BAND}.blocker.{name}.go");
+    assert_eq!(
+        world.screen().find(Target::key(&go)).and_then(|n| n.name),
+        Some(format!("Go to {name}"))
+    );
+    assert!(
+        world.rect(&go)[3] > 16.25 + 0.5,
+        "Details cuts {name} short to one line"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("whole.{BAND}.blocker.{name}.relaunch")))
+            .is_some()
+    );
 }

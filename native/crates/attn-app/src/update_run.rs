@@ -172,6 +172,11 @@ pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
     Some(banner.build(t, cx))
 }
 
+/// The message the banner shows: its run and the run's phase.
+pub(crate) fn identity(state: &State) -> Option<String> {
+    shown(state).map(|run| format!("{}:{}", run.id, run.phase))
+}
+
 pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
     let run = shown(state)?;
     let connected = state.facts.connection == Connection::Connected;

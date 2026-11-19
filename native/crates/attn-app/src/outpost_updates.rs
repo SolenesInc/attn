@@ -240,6 +240,11 @@ pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
     Some(banner.build(t, cx))
 }
 
+/// The message the banner shows: its headline.
+pub(crate) fn identity(state: &State) -> Option<String> {
+    shown(state).map(|updates| headline(&updates))
+}
+
 pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
     let updates = shown(state)?;
     let connected = state.facts.connection == Connection::Connected;

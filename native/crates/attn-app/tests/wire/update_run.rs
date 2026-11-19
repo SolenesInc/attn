@@ -567,6 +567,36 @@ fn at_every_width_a_failure_cut_short_offers_details() {
 }
 
 #[test]
+fn details_close_when_retry_from_them_starts_a_new_run() {
+    let failed = could_not_stage(&[
+        "build-linux-primary.us-east-1.example.dev",
+        "ci-runner-07.build-and-validation.platform.example.org",
+        "studio",
+    ]);
+    let mut world = start_sized(&[("uiScale", "1.5")], Some(failed.clone()), SMALLEST);
+    click(&mut world, "update-run.details");
+    click(&mut world, "whole.update-run.retry");
+    assert_eq!(without_outposts(&world), vec![None]);
+
+    change(&mut world, run("r2", "staging", vec![]));
+    assert!(
+        !has(&world, "update-run.whole-dialog"),
+        "the new run opened with the failure's details"
+    );
+    change(
+        &mut world,
+        UpdateRun {
+            id: "r2".into(),
+            ..failed
+        },
+    );
+    assert!(
+        !has(&world, "update-run.whole-dialog"),
+        "the new run's failure opened with the last one's details"
+    );
+}
+
+#[test]
 fn every_control_of_a_twelve_outpost_failure_is_reached_by_tab_in_its_details_and_shown_with_its_ring()
  {
     let hosts = twelve_hosts();

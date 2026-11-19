@@ -123,7 +123,8 @@ impl Banner {
     }
 
     /// Opens the dialog that holds the banner whole, offered last among the actions while the bar
-    /// cuts something short.
+    /// may cut something short: a sentence past its lines, more than the bar names, or a note
+    /// that holds a control, whose name the bar may elide.
     pub fn details<S: 'static>(mut self, open: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
         self.details = Some(Box::new(move |b: Button| b.on_press_tx(open)));
         self
@@ -218,7 +219,11 @@ impl Banner {
             .child(door::icon(glyph(self.tone), IconSize::Regular).color(paint.glyph));
         let column_key = format!("{}.said", self.key);
         let column = cx.layout_with(&column_key, |r| r[2]);
-        let mut cut_short = self.holds_more;
+        let mut cut_short = self.holds_more
+            || self
+                .notes
+                .iter()
+                .any(|note| !matches!(note, Note::Words { .. }));
         let sentence = self.sentence.map(|sentence| {
             let natural = width_of(&sentence.said, Type::Name);
             let least = match column {

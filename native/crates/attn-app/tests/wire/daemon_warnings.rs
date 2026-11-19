@@ -165,6 +165,7 @@ fn shortens_the_links_in_a_github_cli_warning_to_their_host_and_opens_the_full_a
         banner_text(&world),
         [
             "GitHub CLI not installed. PR monitoring disabled. See",
+            "Details",
             "github.com/…",
             "See",
             "cli.github.com",
