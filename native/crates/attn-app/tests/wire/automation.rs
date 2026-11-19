@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use attn_protocol::{Desktop, DesktopPane, InitialStateMessage, Profile};
 use attn_testkit::{Daemon, Target, World, tree};
 use serde_json::json;
@@ -128,11 +129,7 @@ fn a_chord_and_an_action_id_reach_the_same_action() {
 }
 
 fn toggle_sidebar() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "mod+b"
-    } else {
-        "mod+alt+b"
-    }
+    if mac() { "mod+b" } else { "mod+alt+b" }
 }
 
 #[test]

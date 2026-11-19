@@ -10,12 +10,12 @@ use super::{Editor, Kind, Pos};
 pub(crate) fn on_key(editor: &mut Editor, ev: &KeyEvent, now: f64, tx: &mut Tx) -> bool {
     let m = ev.mods;
     let shift = m.shift;
-    let word = if cfg!(target_os = "macos") {
+    let word = if rune::KeyPlatform::current() == rune::KeyPlatform::Mac {
         m.alt
     } else {
         m.ctrl
     };
-    let line_jump = if cfg!(target_os = "macos") {
+    let line_jump = if rune::KeyPlatform::current() == rune::KeyPlatform::Mac {
         m.cmd
     } else {
         false
@@ -91,7 +91,7 @@ pub(crate) fn on_key(editor: &mut Editor, ev: &KeyEvent, now: f64, tx: &mut Tx) 
         Key::Command('z') if shift => {
             editor.doc.redo();
         }
-        Key::Command('y') if !cfg!(target_os = "macos") => {
+        Key::Command('y') if rune::KeyPlatform::current() != rune::KeyPlatform::Mac => {
             editor.doc.redo();
         }
         Key::Command('z') => {

@@ -62,8 +62,21 @@ runner. A landing that changes `native/`, the protocol schema or `cli/protocol`
 runs `make check-native` and every test of the workspace, as
 [Trunk-based development](trunk-based-development.md#what-landsh-does) says.
 CI's `Native / ubuntu-24.04` job runs the same checks when those paths change,
-and on every push to `main`. CI macOS's `Native / macos-15` runs them when
-those paths change, nightly, and on a release commit.
+and on every push to `main`.
+
+That job also runs the `attn-app` wire suite a second time with
+`RUNE_KEY_PLATFORM=mac`, which gives Rune macOS's keymap: its chords, labels
+and text-editing keys. This second run catches macOS key mistakes on Linux.
+Code and tests that depend on which keys a platform uses ask
+`KeyPlatform::current()`, and wire tests ask `wire::mac()`, because
+`cfg!(target_os = "macos")` cannot change in the second run. Code that compiles
+or behaves differently on macOS for any other reason, such as windows, the
+browser's WebKit view and Quick Capture, keeps its `cfg(target_os = "macos")`.
+
+CI macOS's `Native / macos-15` runs the checks nightly, on a release commit, and
+when a path in `native_macos` in `.github/path-filters.yml` changes. Those paths
+cover the code that has such a `cfg`, the Rune pin and the VT library. Add a
+file there when it gains a `cfg(target_os = "macos")`.
 
 ## Colors
 

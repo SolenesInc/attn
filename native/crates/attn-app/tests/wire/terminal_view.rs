@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use attn_protocol::AttachResultMessage;
 use attn_term::{FONT_SIZE, Metrics, SNAPSHOT_FORMAT};
 use attn_testkit::{World, message};
@@ -9,19 +10,15 @@ use super::terminal::{
 };
 
 /// The terminal's copy key: ⌘C on macOS, Ctrl+Shift+C elsewhere, where Ctrl+C is the shell's.
-pub(crate) const COPY: &str = if cfg!(target_os = "macos") {
-    "mod+c"
-} else {
-    "mod+shift+c"
-};
+pub(crate) fn copy_key() -> &'static str {
+    if mac() { "mod+c" } else { "mod+shift+c" }
+}
 
 /// The copy-command key, which copies a selection as Markdown: ⇧⌘C on macOS, Ctrl+Alt+C
 /// elsewhere.
-pub(crate) const COPY_COMMAND: &str = if cfg!(target_os = "macos") {
-    "mod+shift+c"
-} else {
-    "ctrl+alt+c"
-};
+pub(crate) fn copy_command_key() -> &'static str {
+    if mac() { "mod+shift+c" } else { "ctrl+alt+c" }
+}
 
 pub(crate) fn view(world: &mut World) -> Value {
     world.terminal_view("r1").expect("r1 is drawn")
@@ -242,7 +239,7 @@ fn a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again() 
     );
 
     world.clipboard.set_text("something else");
-    world.gesture(|app| app.press(COPY));
+    world.gesture(|app| app.press(copy_key()));
     assert_eq!(copied(&mut world).as_deref(), Some("alpha beta\ngamma"));
     assert_eq!(inputs(&world), [], "the copy key reaches no program");
     assert!(world.runtime_is_at_rest());
@@ -277,7 +274,7 @@ fn the_copy_command_key_copies_a_selection_as_markdown_with_its_styles() {
         "plain copy keeps the wrapped rows apart"
     );
 
-    world.gesture(|app| app.press(COPY_COMMAND));
+    world.gesture(|app| app.press(copy_command_key()));
     assert_eq!(
         copied(&mut world),
         Some(format!(
@@ -444,7 +441,7 @@ fn a_selection_on_a_programs_screen_follows_its_text_when_the_wheel_scrolls_the_
     world.settle();
     assert_eq!(washes(&mut world), [], "the wash goes when its text does");
     world.clipboard.set_text("other");
-    world.gesture(|app| app.press(COPY));
+    world.gesture(|app| app.press(copy_key()));
     assert_eq!(copied(&mut world).as_deref(), Some("selected first"));
     assert!(world.runtime_is_at_rest());
 }
@@ -456,15 +453,17 @@ fn the_copy_key_with_nothing_selected_never_reaches_the_program() {
     output(&world, 1, b"alpha\r\n\x1b[>1u");
     world.settle();
     world.clipboard.set_text("kept");
-    world.gesture(|app| app.press(COPY));
+    world.gesture(|app| app.press(copy_key()));
     assert_eq!(inputs(&world), []);
     assert_eq!(copied(&mut world).as_deref(), Some("kept"));
     assert!(world.runtime_is_at_rest());
 }
 
-#[cfg(not(target_os = "macos"))]
 #[test]
 fn ctrl_shift_v_pastes_into_the_terminal_on_linux() {
+    if mac() {
+        return;
+    }
     let mut world = World::start(one_terminal());
     world.open_desktop();
     world.clipboard.set_text("echo pasted\nls");

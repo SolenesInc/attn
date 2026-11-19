@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -1064,7 +1065,7 @@ fn the_send_key_sends_the_marks_of_the_document_tile_that_holds_the_keyboard() {
     );
     world.gesture(|app| app.click(Target::key("tile.m")));
     world.settle();
-    let chord = if cfg!(target_os = "macos") {
+    let chord = if mac() {
         "cmd+enter"
     } else {
         "ctrl+shift+enter"

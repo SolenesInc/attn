@@ -338,9 +338,11 @@ fn keys_the_daemon_refuses_are_counted_under_their_tile_until_a_typed_key_goes_t
     );
 }
 
-#[cfg(not(target_os = "macos"))]
 #[test]
 fn plain_ctrl_and_a_letter_belong_to_the_shell_on_linux() {
+    if crate::wire::mac() {
+        return;
+    }
     let rebound = r#"{"version":1,"overrides":{"ui.showShortcuts":{"key":"c","meta":true}},"dock":{"collapsed":false,"items":[]}}"#;
     let mut world = World::start(
         Daemon::scripted().state(state(two_terminals(), &[("keybindings_config", rebound)])),
@@ -650,9 +652,11 @@ fn a_sequence_that_leads_with_a_default_takes_its_keys() {
     rest(&mut world);
 }
 
-#[cfg(not(target_os = "macos"))]
 #[test]
 fn a_ctrl_letter_after_a_leader_ends_it_and_never_reaches_the_shell() {
+    if crate::wire::mac() {
+        return;
+    }
     let mut world = World::start(
         Daemon::scripted().state(state(two_terminals(), &[("keybindings_config", SEQUENCE)])),
     );
@@ -666,9 +670,11 @@ fn a_ctrl_letter_after_a_leader_ends_it_and_never_reaches_the_shell() {
     rest(&mut world);
 }
 
-#[cfg(not(target_os = "macos"))]
 #[test]
 fn a_rebind_saved_with_the_shifted_character_takes_the_keys_of_its_physical_key() {
+    if crate::wire::mac() {
+        return;
+    }
     let config = r#"{"version":1,"overrides":{"ui.showShortcuts":{"key":"!","code":"Digit1","meta":true,"shift":true}},"dock":{"collapsed":false,"items":[]}}"#;
     let mut world =
         World::start(Daemon::scripted().state(state(vec![], &[("keybindings_config", config)])));

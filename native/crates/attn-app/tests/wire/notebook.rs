@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -1752,11 +1753,7 @@ fn find_matches_on_a_line_whose_lowercase_changes_length_and_replaces_exactly_th
 }
 
 fn word(key: &str) -> String {
-    let word = if cfg!(target_os = "macos") {
-        "alt"
-    } else {
-        "ctrl"
-    };
+    let word = if mac() { "alt" } else { "ctrl" };
     format!("{word}+{key}")
 }
 

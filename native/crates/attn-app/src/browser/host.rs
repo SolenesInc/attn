@@ -168,7 +168,7 @@ pub fn page_edit(ev: &KeyEvent) -> Option<PageEdit> {
     let Key::Command(c) = ev.key else {
         return None;
     };
-    if ev.mods.alt || (cfg!(target_os = "macos") && ev.mods.ctrl) {
+    if ev.mods.alt || (KeyPlatform::current() == KeyPlatform::Mac && ev.mods.ctrl) {
         return None;
     }
     match (c, ev.mods.shift) {

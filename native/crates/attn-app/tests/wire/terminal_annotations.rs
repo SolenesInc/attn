@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use std::time::Duration;
 
 use attn_protocol::{
@@ -545,11 +546,13 @@ fn cleared(world: &World) -> Vec<Value> {
 }
 
 /// The send key: ⌘Enter on macOS, Ctrl+Shift+Enter elsewhere.
-const SEND: &str = if cfg!(target_os = "macos") {
-    "mod+enter"
-} else {
-    "mod+shift+enter"
-};
+fn send_key() -> &'static str {
+    if mac() {
+        "mod+enter"
+    } else {
+        "mod+shift+enter"
+    }
+}
 
 #[test]
 fn the_send_key_sends_the_marks_and_the_note_as_one_message_and_clears_the_draft() {
@@ -580,7 +583,7 @@ fn the_send_key_sends_the_marks_and_the_note_as_one_message_and_clears_the_draft
 
     let terminal = cell(&world, 30, 4);
     world.gesture(|app| app.click_at(terminal));
-    world.gesture(|app| app.press(SEND));
+    world.gesture(|app| app.press(send_key()));
     assert_eq!(
         submitted(&world),
         [payload(
@@ -1051,7 +1054,7 @@ fn with_nothing_marked_no_panel_shows_and_the_send_key_does_nothing() {
     assert!(!panel_shows(&mut world));
     let terminal = cell(&world, 30, 4);
     world.gesture(|app| app.click_at(terminal));
-    world.gesture(|app| app.press(SEND));
+    world.gesture(|app| app.press(send_key()));
     assert!(submitted(&world).is_empty());
     assert!(super::terminal::inputs(&world).is_empty());
     assert!(
@@ -1208,7 +1211,7 @@ fn an_offline_sessions_marks_stay_and_say_its_machine_is_unreachable_with_no_sen
         Some("studio is unreachable")
     );
     assert!(!shows(&world, "terminal.r1.annotation.send"));
-    world.gesture(|app| app.press(SEND));
+    world.gesture(|app| app.press(send_key()));
     assert!(
         world
             .daemon
@@ -1326,7 +1329,7 @@ fn an_agent_in_its_own_window_is_marked_and_sent_from_there_and_its_draft_comes_
         let terminal = at(app, 30, 3);
         app.click_at(terminal);
     });
-    world.tile_gesture(&window, |app| app.press(SEND));
+    world.tile_gesture(&window, |app| app.press(send_key()));
     assert_eq!(
         submitted(&world),
         [payload(

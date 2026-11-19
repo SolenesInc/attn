@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use std::time::Duration;
 
 use attn_protocol::Session;
@@ -31,9 +32,9 @@ fn hover(world: &mut World, col: u16, row: u16) {
 /// Holds ⌘ on macOS and Ctrl elsewhere, or lets go of every modifier.
 fn accelerator(world: &mut World, held: bool) {
     let mods = Mods {
-        logo: held && cfg!(target_os = "macos"),
+        logo: held && mac(),
         cmd: held,
-        ctrl: held && !cfg!(target_os = "macos"),
+        ctrl: held && !mac(),
         ..Mods::default()
     };
     world.gesture(|app| app.runtime.physical_input(PhysicalInput::Modifiers(mods)));

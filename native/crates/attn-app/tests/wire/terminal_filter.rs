@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use attn_testkit::{Target, World};
 use rune::{Key, KeyEvent, Mods};
 
@@ -5,11 +6,9 @@ use super::terminal::{inputs, one_terminal, output, typed};
 use super::terminal_blocks::{pick, ran, right_click};
 
 /// The find key: ⌘F on macOS, Ctrl+Shift+F elsewhere.
-const FIND: &str = if cfg!(target_os = "macos") {
-    "mod+f"
-} else {
-    "mod+shift+f"
-};
+fn find_key() -> &'static str {
+    if mac() { "mod+f" } else { "mod+shift+f" }
+}
 
 fn started(text: &[u8]) -> World {
     let mut world = World::start(one_terminal());
@@ -140,7 +139,7 @@ fn find_and_the_filter_take_each_others_place() {
     open_filter(&mut world);
     let at = super::terminal::cell(&world, 1, 3);
     world.gesture(|app| app.click_at(at));
-    world.gesture(|app| app.press(FIND));
+    world.gesture(|app| app.press(find_key()));
     let screen = world.screen();
     assert!(screen.find(Target::key("terminal.r1.filter")).is_none());
     assert!(

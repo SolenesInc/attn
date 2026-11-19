@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use attn_protocol::{AttachBlock, AttachResultMessage, AttachSnapshot, PtyResizedMessage};
 use attn_term::{SNAPSHOT_FORMAT, Vt};
 use attn_testkit::{Answer, World};
@@ -6,7 +7,7 @@ use rune::PointerButton;
 use serde_json::Value;
 
 use super::terminal::{attached, cell, inputs, live_with_modes, one_terminal, output};
-use super::terminal_view::{COPY, COPY_COMMAND, copied, view};
+use super::terminal_view::{copied, copy_command_key, copy_key, view};
 
 /// A shell's prompt, its command line and its output, marked with OSC 133 as an integrated
 /// shell marks them, ending on the next prompt.
@@ -86,9 +87,9 @@ fn a_click_selects_the_command_block_under_it_and_the_copy_keys_copy_it_whole_or
             (2, "Outline { top: false, bottom: true }".into()),
         ]
     );
-    world.gesture(|app| app.press(COPY));
+    world.gesture(|app| app.press(copy_key()));
     assert_eq!(copied(&mut world).as_deref(), Some("echo hi\nhi\nthere"));
-    world.gesture(|app| app.press(COPY_COMMAND));
+    world.gesture(|app| app.press(copy_command_key()));
     assert_eq!(copied(&mut world).as_deref(), Some("echo hi"));
     assert_eq!(inputs(&world), [], "the copy keys reach no program");
 
@@ -111,7 +112,7 @@ fn a_click_on_the_command_line_selects_the_command_the_shell_sent() {
 
     click(&mut world, 4, 0);
     assert_eq!(view(&mut world)["copies"], "ls -la");
-    world.gesture(|app| app.press(COPY));
+    world.gesture(|app| app.press(copy_key()));
     assert_eq!(copied(&mut world).as_deref(), Some("ls -la"));
     assert!(world.runtime_is_at_rest());
 }
@@ -124,9 +125,9 @@ fn the_copy_command_key_without_a_block_keeps_the_clipboard_and_passes_the_key_o
     world.settle();
 
     world.clipboard.set_text("kept");
-    world.gesture(|app| app.press(COPY_COMMAND));
+    world.gesture(|app| app.press(copy_command_key()));
     assert_eq!(copied(&mut world).as_deref(), Some("kept"));
-    if cfg!(target_os = "macos") {
+    if mac() {
         assert_eq!(
             inputs(&world),
             [],
@@ -321,7 +322,7 @@ fn a_restored_screen_brings_back_the_blocks_the_daemon_kept() {
 
     click(&mut world, 1, 1);
     assert_eq!(view(&mut world)["block"], 7);
-    world.gesture(|app| app.press(COPY));
+    world.gesture(|app| app.press(copy_key()));
     assert_eq!(copied(&mut world).as_deref(), Some("make\nbuilt"));
 
     output(&world, 2, &ran("ls", "a\r\n"));

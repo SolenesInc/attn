@@ -2,6 +2,10 @@
 static ALLOCATOR: attn_testkit::allocations::Counting = attn_testkit::allocations::Counting;
 
 mod wire {
+    pub(crate) fn mac() -> bool {
+        rune::KeyPlatform::current() == rune::KeyPlatform::Mac
+    }
+
     mod app_actions;
     mod asks;
     mod automation;

@@ -38,7 +38,7 @@ jobs:
       cli: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.cli == 'true' }}
       pty_upgrade: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.pty_upgrade == 'true' }}
       tauri: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.tauri == 'true' }}
-      native: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native == 'true' }}
+      native: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native_macos == 'true' }}
       app_acceptance: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.app_acceptance == 'true' }}
       native_release: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native_release == 'true' }}
     steps:

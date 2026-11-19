@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use std::time::Duration;
 
 use attn_app::whats_new::{BANNER_PREF, RELEASE, SEEN_PREF};
@@ -3658,11 +3659,9 @@ fn sent_for(world: &World, cmd: &str, runtime: &str) -> Vec<Value> {
 }
 
 /// The find key: ⌘F on macOS, Ctrl+Shift+F elsewhere, where Ctrl+F is the shell's.
-const FIND: &str = if cfg!(target_os = "macos") {
-    "mod+f"
-} else {
-    "mod+shift+f"
-};
+fn find_key() -> &'static str {
+    if mac() { "mod+f" } else { "mod+shift+f" }
+}
 
 #[test]
 fn an_agent_pops_out_into_a_window_with_its_live_terminal_and_comes_back_attached() {
@@ -3727,7 +3726,7 @@ fn an_agent_pops_out_into_a_window_with_its_live_terminal_and_comes_back_attache
         "{first} then {last}"
     );
 
-    world.tile_gesture(&key, |w| w.press(FIND));
+    world.tile_gesture(&key, |w| w.press(find_key()));
     let field = Target::key("terminal.r-a.find.field");
     assert!(world.tile_screen(&key).find(field.clone()).is_some());
     assert!(world.screen().find(field).is_none());

@@ -1,3 +1,4 @@
+use crate::wire::mac;
 use attn_testkit::{Target, World};
 use rune::{Key, KeyEvent, Mods, PointerButton};
 
@@ -5,11 +6,9 @@ use super::terminal::{attn_scheme, cell, inputs, one_terminal, output, typed};
 use super::terminal_view::view;
 
 /// The find key: ⌘F on macOS, Ctrl+Shift+F elsewhere, where Ctrl+F is the shell's.
-const FIND: &str = if cfg!(target_os = "macos") {
-    "mod+f"
-} else {
-    "mod+shift+f"
-};
+fn find_key() -> &'static str {
+    if mac() { "mod+f" } else { "mod+shift+f" }
+}
 
 fn find_wash() -> String {
     attn_scheme()["dark"]["terminal"]["find"]
@@ -19,7 +18,7 @@ fn find_wash() -> String {
 }
 
 fn open(world: &mut World) {
-    world.gesture(|app| app.press(FIND));
+    world.gesture(|app| app.press(find_key()));
 }
 
 fn count(world: &World) -> String {

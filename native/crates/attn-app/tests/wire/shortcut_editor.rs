@@ -680,9 +680,11 @@ fn recording_saves_the_accelerator_and_waits_past_a_lone_modifier() {
     assert!(world.runtime_is_at_rest());
 }
 
-#[cfg(target_os = "macos")]
 #[test]
 fn control_is_refused_as_a_modifier_on_macos() {
+    if !crate::wire::mac() {
+        return;
+    }
     let mut world = start(None);
     open_editor(&mut world);
 
