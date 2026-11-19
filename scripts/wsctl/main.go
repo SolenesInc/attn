@@ -80,7 +80,7 @@ Commands:
   add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
-  screen --id I                       (I: a session id, or a terminal id from list's terminal_bindings)
+  screen --id I                       (for screen, input and attach, I is a session id or a terminal id from list's terminal_bindings)
   input --id I --text T [--enter]
   attach --id I --cols C --rows R [--text T] [--enter]   (a second client, such as a phone: asks for that size, types, and stays attached until interrupted)
   list
