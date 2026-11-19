@@ -181,7 +181,9 @@ system.
 - `make check-mobile`: The phone app's format, lint, type check and tests
 - `scripts/land.sh`: Run on Linux, on CI or the clone's landing runner, each
   catalog scenario the landing adds or changes and, when it changes product
-  code, each scenario listed by a feature file it changes, then fast compile,
+  code, each scenario listed by a feature file it changes, and, for a native
+  change landed from a host other than Linux, the native wire suite on the
+  landing runner; on the landing host run fast compile,
   typecheck, lint, generated-file and script checks, and the landing tests, then
   push to `main`. The landing tests are the
   `scripts/landing-tests` groups the changed paths match, the tests the change

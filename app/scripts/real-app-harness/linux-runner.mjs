@@ -23,6 +23,7 @@ export function parseArgs(argv, env = process.env) {
     const arg = argv[i];
     if (arg === '--') { options.commandArgs = argv.slice(i + 1); break; }
     if (arg === '--help' || arg === '-h') { options.help = true; continue; }
+    if (arg === '--native-wire') { options.nativeWire = true; continue; }
     if (values[arg]) {
       const value = argv[++i];
       if (!value || value.startsWith('--')) throw new Error(`${arg} needs a value`);
@@ -120,7 +121,9 @@ Actions:
               collect artifacts even on failure
   soak        Sync, build each app the --scenario list needs once, then run each scenario once under
               Xvfb in a freshly installed guest instance, as CI's Acceptance soak does; print a
-              "Scenario <id> passed|failed in <n>s" line per scenario; collect artifacts even on failure
+              "Scenario <id> passed|failed in <n>s" line per scenario; collect artifacts even on failure.
+              With --native-wire, first run the native wire suite (make test-native-wire) and print
+              "Native wire tests passed|failed in <n>s"; a failure stops the run before the scenarios
   artifacts   Copy the guest artifacts directory to --out
   clean       Remove the installed guest instance using its own CLI
 
@@ -133,6 +136,7 @@ Options:
   --instance <name>           Default: linux-<checkout>; never production
   --out <directory>          Local artifacts destination
   --scenario <id>[,<id>...]  The scenarios soak runs, in order
+  --native-wire              soak: run the native wire suite before the scenarios
   --turn-limit <seconds>     test and soak: wait at most this long for another run on the guest
                              checkout to finish, then exit 75. Default: wait until it finishes
 
@@ -154,7 +158,10 @@ Examples:
   if (!['sync', 'provision', 'run', 'build', 'test', 'soak', 'artifacts', 'clean'].includes(options.action)) {
     throw new Error(`Unknown action: ${options.action}`);
   }
-  if (options.action === 'soak') soakScenarios(options.scenario ?? '');
+  if (options.action === 'soak') {
+    if (!options.scenario && !options.nativeWire) throw new Error('soak needs --scenario, --native-wire or both');
+    soakScenarios(options.scenario);
+  }
   if (options.action === 'provision') {
     provider.up();
     provider.ssh('bash -s', {
@@ -208,8 +215,17 @@ function runMatrix(options, execute) {
   execute(underXvfb(['real-app:serial-matrix', ...(options.commandArgs || [])]));
 }
 
+function runNativeWire(execute) {
+  const started = Date.now();
+  let verdict = 'passed';
+  try { execute(['make', 'test-native-wire']); } catch { verdict = 'failed'; }
+  console.log(`Native wire tests ${verdict} in ${Math.round((Date.now() - started) / 1000)}s`);
+  if (verdict === 'failed') throw Object.assign(new Error('The native wire suite failed'), { exitCode: 1 });
+}
+
 function runSoak(options, execute) {
   const scenarios = soakScenarios(options.scenario);
+  if (options.nativeWire) runNativeWire(execute);
   for (const app of new Set(scenarios.map(scenarioApp))) buildApp(execute, options.instance, app);
   const failed = [];
   for (const scenario of scenarios) {
@@ -228,7 +244,7 @@ function runSoak(options, execute) {
 }
 
 function soakScenarios(list) {
-  return list.split(',').map((id) => resolveScenario(id));
+  return list ? list.split(',').map((id) => resolveScenario(id)) : [];
 }
 
 function runScenarios(options, provider, root, destination, execute) {

@@ -83,6 +83,11 @@ stops the run before any scenario starts, with no scenario line, and exits with
 the build's status. It also runs scenarios that the serial matrix leaves to the
 soak. Like `test`, it copies the artifacts even when a scenario fails.
 
+`soak --native-wire` first runs the native app's wire suite,
+`make test-native-wire`, and prints `Native wire tests passed in <n>s` or
+`Native wire tests failed in <n>s`. A failure ends the run before any scenario.
+With `--native-wire`, `--scenario` may be left out.
+
 Before they build, `test` and `soak` install the app's Node dependencies from
 `app/pnpm-lock.yaml` through `make app/node_modules/.attn-installed`, which
 installs only when `app/package.json` or the lockfile changed. The scenario
@@ -132,7 +137,8 @@ cold one on a fresh GitHub runner.
    `git config --add attn.landRunner ssh:<target>`.
    `git config --unset-all attn.landRunner` goes back to GitHub.
 
-A landing's scenarios then run as one `real-app:linux soak --checkout land` on
+A landing's scenarios, and the native wire suite of a native landing from a
+host other than Linux, then run as one `real-app:linux soak --checkout land` on
 that machine, so the landing syncs once and builds each app once, and each
 scenario starts from an empty instance. Every landing, from any clone or host,
 uses that one guest checkout and its build output, so the machine holds one

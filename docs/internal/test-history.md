@@ -324,7 +324,7 @@ a Mac, is `UNAVAILABLE`, with the reason.
 
 A native scenario is chosen like any other test, though no group lists one and
 the checkout's inventory does not hold them. `land` writes it as
-`native <scenario>`, and `land.sh` hands it to `scripts/land-scenarios.sh`,
+`native <scenario>`, and `land.sh` hands it to `scripts/land-linux.sh`,
 which runs it with the scenarios the landing selects for other reasons, as
 [Trunk-based development](trunk-based-development.md#what-landsh-does) says.
 The scenario step, not this selection, says when one does not run on Linux or

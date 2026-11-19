@@ -222,7 +222,7 @@ lint: lint-go lint-frontend
 
 GO_PACKAGES ?= ./...
 
-.PHONY: compile-go check-go check-frontend check-browser-runtime check-mobile check-native test-native
+.PHONY: compile-go check-go check-frontend check-browser-runtime check-mobile check-native test-native test-native-wire
 compile-go: $(NATIVE_VT_DEP)
 	go list -test -deps -export $(GO_PACKAGES) >/dev/null
 
@@ -270,6 +270,9 @@ check-native: $(NATIVE_VT_DEP)
 
 test-native: $(NATIVE_VT_DEP)
 	cd native && cargo test --workspace --locked
+
+test-native-wire: $(NATIVE_VT_DEP)
+	cd native && cargo test --locked -p attn-app --test wire
 
 check-browser-runtime: $(APP_NODE_MODULES)
 	cd app && pnpm run build:browser-runtime

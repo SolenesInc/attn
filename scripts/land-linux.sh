@@ -95,6 +95,42 @@ record_runner_passes() {
   done
 }
 
+linux_checks() {
+  if [ -n "$native_wire" ] && [ -n "$scenarios" ]; then
+    echo "the native wire suite and scenarios $scenarios"
+  elif [ -n "$native_wire" ]; then
+    echo "the native wire suite"
+  else
+    echo "scenarios $scenarios"
+  fi
+}
+
+run_without_runner() {
+  if [ -n "$native_wire" ]; then
+    echo "land: $1, so the native wire suite runs on Linux only in CI's Native job, after the push" >&2
+  fi
+  if [ -n "$scenarios" ]; then
+    echo "land: $1, so the scenarios run on CI's Linux instead" >&2
+    run_on_github "$scenarios"
+  fi
+}
+
+settle_native_wire() {
+  local seconds
+  if seconds="$(sed -n 's/^Native wire tests passed in \([0-9]*\)s$/\1/p' "$runner_log")" && [ -n "$seconds" ]; then
+    echo "land: the native wire suite passed on $runner_target in ${seconds}s"
+    return
+  fi
+  if seconds="$(sed -n 's/^Native wire tests failed in \([0-9]*\)s$/\1/p' "$runner_log")" && [ -n "$seconds" ]; then
+    grep -E '^test .* FAILED$' "$runner_log" | head -20 >&2 || true
+    echo "land: the native wire suite failed on Linux, on $runner_target in ${seconds}s, so nothing was pushed to main. Log: $runner_log" >&2
+  else
+    echo "land: the native wire suite did not finish on $runner_target, so nothing was pushed to main. Log: $runner_log" >&2
+  fi
+  echo "land: to run it on attn-linux: pnpm --dir app real-app:linux sync --provider ssh --target attn-linux, then the same with run -- make test-native-wire" >&2
+  exit 1
+}
+
 gave_up_on_runner() {
   sed -n 's/^Gave up after \([0-9]*\)s waiting for the guest checkout .*/\1/p' "$runner_log" | grep .
 }
@@ -103,9 +139,12 @@ soaked_on_runner() {
   local turn_limit="$2"
   runner_target="$1"
   runner_log="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-runner.XXXXXX")/runner.log"
-  echo "land: running scenarios $scenarios on $runner_target, before the push: $runner_log"
-  perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$runner_target" \
-    --checkout land --turn-limit "$turn_limit" --scenario "$scenarios" --out "$(dirname "$runner_log")/artifacts" >"$runner_log" 2>&1 &
+  local soak=(soak --provider ssh --target "$runner_target" --checkout land --turn-limit "$turn_limit")
+  [ -z "$scenarios" ] || soak+=(--scenario "$scenarios")
+  soak+=(--out "$(dirname "$runner_log")/artifacts")
+  [ -z "$native_wire" ] || soak+=(--native-wire)
+  echo "land: running $(linux_checks) on $runner_target, before the push: $runner_log"
+  perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux "${soak[@]}" >"$runner_log" 2>&1 &
   runner_pid=$!
   wait "$runner_pid" || true
   runner_pid=""
@@ -124,8 +163,7 @@ run_on_ssh() {
     fi
   done
   if [ "${#reachable[@]}" = 0 ]; then
-    echo "land: no landing runner can be reached, so the scenarios run on CI's Linux instead" >&2
-    run_on_github "$scenarios"
+    run_without_runner "no landing runner can be reached"
     return
   fi
   if [ "${#reachable[@]}" -gt 1 ]; then
@@ -135,12 +173,12 @@ run_on_ssh() {
     done
   fi
   if [ -z "$took" ] && ! soaked_on_runner "${reachable[0]}" "$turn_limit"; then
-    echo "land: waited $(gave_up_on_runner)s for a turn on the landing runner $runner_target, past its ${turn_limit}s limit, so the scenarios run on CI's Linux instead"
-    run_on_github "$scenarios"
+    run_without_runner "waited $(gave_up_on_runner)s for a turn on the landing runner $runner_target, past its ${turn_limit}s limit"
     return
   fi
   record_runner_passes
   echo "land: the landing runner took $((SECONDS - started))s, $(waited_for_runner "$runner_log")s of it waiting for other landings"
+  [ -z "$native_wire" ] || settle_native_wire
   for scenario in ${scenarios//,/ }; do
     if seconds="$(scenario_seconds "$scenario" passed)" && [ -n "$seconds" ]; then
       echo "land: scenario $scenario passed on $runner_target in ${seconds}s"
@@ -154,8 +192,10 @@ run_on_ssh() {
   if [ -n "$failed" ]; then run_on_github "$failed"; fi
 }
 
-run_landing_scenarios() {
-  usage="usage: scripts/land-scenarios.sh <base> [<scenario that failed on main recently>...]"
+run_linux_checks() {
+  usage="usage: scripts/land-linux.sh [--native-wire] <base> [<scenario that failed on main recently>...]"
+  native_wire=""
+  if [ "${1:-}" = --native-wire ]; then native_wire=1; shift; fi
   [ "$#" -ge 1 ] || { echo "$usage" >&2; exit 2; }
   base="$1"
   shift
@@ -163,10 +203,9 @@ run_landing_scenarios() {
   cd "$(git rev-parse --show-toplevel)"
 
   scenarios="$(git diff --name-only "$base...HEAD" | node app/scripts/real-app-harness/landing-scenarios.mjs "$@")"
-  [ -n "$scenarios" ] || exit 0
   record="$(git rev-parse --git-common-dir)/attn-land-scenarios/$(git diff "$base...HEAD" | git patch-id --verbatim | cut -d' ' -f1)"
-  scenarios="$(unrecorded_scenarios)"
-  [ -n "$scenarios" ] || exit 0
+  [ -z "$scenarios" ] || scenarios="$(unrecorded_scenarios)"
+  [ -n "$scenarios$native_wire" ] || exit 0
 
   ref="" run_id="" dispatched="" watch_pid="" runner_pid=""
   trap cleanup EXIT
@@ -180,7 +219,7 @@ run_landing_scenarios() {
       *) echo "land: git config attn.landRunner is $runner; set it to github or ssh:<target>, once for each landing runner" >&2; exit 2 ;;
     esac
   done < <(git config --get-all attn.landRunner || true)
-  if [ "${#runners[@]}" = 0 ]; then run_on_github "$scenarios"; else run_on_ssh "${runners[@]}"; fi
+  if [ "${#runners[@]}" = 0 ]; then run_without_runner "this clone has no landing runner"; else run_on_ssh "${runners[@]}"; fi
 }
 
-run_landing_scenarios "$@"
+run_linux_checks "$@"

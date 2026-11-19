@@ -25,6 +25,14 @@ dispatches a fixer. The release process writes release notes from the commits.
 landing selects on Linux beside a fast gate for the paths the landing
 changes, and pushes.
 
+Each check runs in one of two places:
+
+- On the host that lands: the fast gate and the landing tests, both below.
+- On Linux, through `scripts/land-linux.sh`: the scenarios, on the landing
+  runner or on CI's Linux, and, for a landing from a host other than Linux
+  that changes a path of the `native` landing group, the native wire suite
+  (`make test-native-wire`), on the landing runner.
+
 A landing selects three kinds of scenario:
 
 - each scenario it adds or changes, because a scenario can pass on the Mac where
@@ -53,6 +61,19 @@ uses the Acceptance soak workflow. A scenario that fails on the landing runner,
 or that the runner does not finish, runs again on the workflow, and only that
 run blocks the landing.
 Unset, or `github`, is the workflow.
+
+The native wire suite runs on Linux because the native app measures and
+draws text with the fonts of the machine it runs on: 65dce7a01, landed from a
+Mac, passed its landing tests there and failed 382 wire tests on Linux. A
+landing from Linux already runs the suite in its landing tests, so only a
+landing from another host runs it on the landing runner, in the same turn as
+its scenarios and before them. A failure there stops the push and names the
+failed tests. When the clone has no landing runner, no landing runner can be
+reached, or another landing keeps it busy past the limit, the landing says so
+and pushes, and the suite runs on Linux only in CI's Native job after the push.
+The landing runners and CI's Linux all run Ubuntu 24.04 with DejaVu Sans Mono,
+so they agree on fonts; a Fedora host such as ai-sandbox has none of the
+terminal's named fonts and can fail where they pass.
 
 A scenario that passed for the landing's diff does not run again. The diff is
 `git diff origin/main...HEAD`, identified by `git patch-id --verbatim`, so it
