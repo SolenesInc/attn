@@ -132,10 +132,6 @@ try {
   fs.closeSync(log);
   const [ready] = await once(outpost.stdio[3], 'data');
   runner.assert(ready.toString().includes('ready'), 'outpost reported readiness', ready.toString());
-  const freezeOutpostRightAfterHeartbeat = async () => {
-    await homeClock.awaitNextArming('bridge-stall');
-    outpost.kill('SIGSTOP');
-  };
   const address = 'scenario-outpost';
   await ssh.route(address, outpostEnv, binary);
   ssh.requireConfirmation(address);
@@ -301,7 +297,7 @@ try {
     await waitForPaneAttached(client, remoteAgent, remoteAgentPane.paneId);
     await waitForPaneText(client, remoteAgent, remoteAgentPane.paneId, value => value.includes('REMOTE_READY'), 'remote agent before silence');
     const stalled = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'stalled'));
-    await freezeOutpostRightAfterHeartbeat();
+    outpost.kill('SIGSTOP');
     await homeClock.advance('3s');
     await stalled;
     const notice = `${tile(remoteAgentPane.paneId)} .desktop-pane-offline-strip`;
@@ -328,7 +324,7 @@ try {
     const before = await client.request('read_pane_text', splitPane);
     const stalled = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'stalled'));
     const lost = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'lost'));
-    await freezeOutpostRightAfterHeartbeat();
+    outpost.kill('SIGSTOP');
     await homeClock.advance('3s');
     await stalled;
     await wait(`${tile(splitPane.paneId)}[data-offline]`, { absent: true });

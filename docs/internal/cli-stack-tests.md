@@ -66,20 +66,25 @@ returns `testworld.Main(m)`.
 - `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
   the daemon started. Every stack uses this stepped clock. The clock drives
   these timers:
-  - the bridge's stall, loss, retry, and dial-answer timers
+  - the bridge's heartbeat, stall, loss, retry, and dial-answer timers
   - a terminal's kill escalation
   - a folder watch's window
   - the background job runner's schedule
   - the transcript watchers' discovery grace and quiet window
   - the daemon's periodic loops: database backup, GitHub hosts refresh, PR
     poll, and branch monitor
+  - the GitHub client's request budget
 
   When a fake agent writes a transcript, the transcript poll fires without an
   advance, as [Daemon wire tests](daemon-wire-tests.md#timers) describe. The
   shared PTY host is not Go and keeps real time.
-  Heartbeats and kernel socket deadlines keep real time, so a dial may still
-  fail without an advance. Await the connected or stalled row before you
-  advance the liveness timers.
+  Each side of a bridge sends a heartbeat when its clock passes the heartbeat
+  interval and answers every heartbeat it receives at once. A home whose
+  outpost runs answers within the advance, so advance a connected pair in
+  steps shorter than `bridge.StallAfter` and `AwaitTimer(bridge.StallTimer)`
+  after each. A longer step stalls even a running outpost. Kernel socket
+  deadlines keep real time, so a dial may still fail without an advance.
+  Await the connected or stalled row before you advance the liveness timers.
 - `s.AwaitTimer(name)` waits until the timer with that `stepclock.Name`, such
   as `bridge.RetryTimer` or `pty.KillDeadlineTimer`, is pending in the daemon or
   one of its workers. The timer must have been armed or reset after the last

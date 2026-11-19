@@ -168,10 +168,6 @@ try {
   fs.closeSync(log);
   const [ready] = await once(outpost.stdio[3], 'data');
   runner.assert(ready.toString().includes('ready'), 'outpost reported readiness', ready.toString());
-  const freezeOutpostRightAfterHeartbeat = async () => {
-    await homeClock.awaitNextArming('bridge-stall');
-    outpost.kill('SIGSTOP');
-  };
   const address = 'scenario-outpost';
   await ssh.route(address, outpostEnv, binary);
   ssh.requireConfirmation(address);
@@ -347,7 +343,7 @@ try {
   await runner.step('stalled_agent_notice_and_recovery', async () => {
     await focusTile(agent);
     const stalled = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'stalled'));
-    await freezeOutpostRightAfterHeartbeat();
+    outpost.kill('SIGSTOP');
     await homeClock.advance('3s');
     await stalled;
     await driver.state('outposts', { includes: 'stalled' });
@@ -370,7 +366,7 @@ try {
     const before = await text(split);
     const stalled = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'stalled'));
     const lost = receive((rows) => rows.some((item) => item.name === 'Studio' && item.state === 'lost'));
-    await freezeOutpostRightAfterHeartbeat();
+    outpost.kill('SIGSTOP');
     await homeClock.advance('3s');
     await stalled;
     await driver.state('outposts', { includes: 'stalled' });

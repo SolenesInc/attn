@@ -238,31 +238,18 @@ func TestEveryPullRequestUpdateReachesWatchersOnTheHomeAndTheOutpostWhileOnlyThe
 	seedStatusIs("after #71 merges", armedOnAWatchedPull, "harvested")
 	seedStatusIs("after #75 merges", armedOnAnUnwatchedPull, "harvested")
 
-	mark := len(app.Log())
-	pair.Disconnect()
-	awaitOutpostState(app, mark, pair.Host, protocol.OutpostStateLost)
-	outpost.Advance(protocol.HeatHotInterval)
-	outpost.App()
-	onOutpost.cli = cli
-	pastHotIntervalsAlone := func(times int) {
-		t.Helper()
-		for range times {
-			home.Advance(protocol.HeatHotInterval)
-			home.AwaitJobsSettled()
-		}
-	}
 	gh.UpdatePR(repo, 74, func(pr *mockserver.MockPR) { pr.Gone = true })
-	pastHotIntervalsAlone(1)
+	pastHotInterval(1)
 	hears("once GitHub cannot find #74", map[pullRequestWatcher][]string{
 		onHome: {"monitoring is delayed #74"},
 	})
-	pastHotIntervalsAlone(int(protocol.HeatColdInterval/protocol.HeatHotInterval) + 1)
+	pastHotInterval(int(protocol.HeatColdInterval/protocol.HeatHotInterval) + 1)
 	hears("after GitHub cannot find #74 for longer than the cold interval", map[pullRequestWatcher][]string{
 		onHome: {"watch ended #74"},
 	})
 
 	ended := len(gh.Requests())
-	pastHotIntervalsAlone(2)
+	pastHotInterval(2)
 	for _, request := range gh.Requests()[ended:] {
 		if request.Path == "/graphql" && fmt.Sprint(request.Body["variables"].(map[string]any)["number"]) == "74" {
 			t.Errorf("after its watch ended, #74 was read again: %+v", request)

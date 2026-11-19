@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 	"golang.org/x/time/rate"
 )
 
@@ -38,6 +39,8 @@ var ErrRateLimited = errors.New("GitHub rate limit exceeded")
 var ErrNoToken = errors.New("no GitHub token available")
 
 var ErrNotFound = errors.New("GitHub cannot find it")
+
+const BudgetTimer stepclock.Name = "github-budget"
 
 type APIError struct {
 	StatusCode int
@@ -222,19 +225,25 @@ func (c *Client) send(ctx context.Context, httpClient *http.Client, method, path
 }
 
 func (c *Client) awaitBudget(ctx context.Context) error {
-	if c.selfLimiter.Allow() {
+	clock := stepclock.Process()
+	now := clock.Now()
+	reservation := c.selfLimiter.ReserveN(now, 1)
+	delay := reservation.DelayFrom(now)
+	if delay == 0 {
 		return nil
 	}
-	waiting, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-	defer context.AfterFunc(c.stopPacing, func() { cancel(ErrStopping) })()
-	if err := c.selfLimiter.Wait(waiting); err != nil {
-		if cause := context.Cause(waiting); cause != nil {
-			return cause
-		}
-		return fmt.Errorf("waiting for attn's budget of %v GitHub requests per second, burst %d: %w", c.selfLimiter.Limit(), c.selfLimiter.Burst(), err)
+	budget := clock.NewTimer(BudgetTimer, delay)
+	defer budget.Stop()
+	select {
+	case <-budget.C():
+		return nil
+	case <-c.stopPacing.Done():
+		reservation.CancelAt(clock.Now())
+		return ErrStopping
+	case <-ctx.Done():
+		reservation.CancelAt(clock.Now())
+		return fmt.Errorf("waiting for attn's budget of %v GitHub requests per second, burst %d: %w", c.selfLimiter.Limit(), c.selfLimiter.Burst(), context.Cause(ctx))
 	}
-	return nil
 }
 
 func (c *Client) recordResponse(requestPath string, resp *http.Response) {

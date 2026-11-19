@@ -110,9 +110,9 @@ lists the few allowed exceptions with their reasons. `pnpm --dir app run lint`
 rejects `waitForTimeout` in `app/e2e`. In app, plugin, and SDK tests it rejects
 a sleep on `setTimeout` or `Bun.sleep`, and a poll with Testing Library's
 `waitFor` or `findBy*`, `vi.waitFor`, or `expect.poll`. `.oxlintrc.json` lists
-the files still allowed, with their reasons. Heartbeats, kernel socket
-deadlines, the operating system's file events, syncthing's own timers, and the
-shared PTY host keep real time.
+the files still allowed, with their reasons. Kernel socket deadlines, the
+operating system's file events, syncthing's own timers, and the shared PTY host
+keep real time.
 
 ### Wire
 

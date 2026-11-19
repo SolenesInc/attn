@@ -23,13 +23,19 @@ const (
 )
 
 const (
-	StallTimer  stepclock.Name = "bridge-stall"
-	LostTimer   stepclock.Name = "bridge-lost"
-	AnswerTimer stepclock.Name = "bridge-answer"
-	RetryTimer  stepclock.Name = "bridge-retry"
+	HeartbeatTimer stepclock.Name = "bridge-heartbeat"
+	StallTimer     stepclock.Name = "bridge-stall"
+	LostTimer      stepclock.Name = "bridge-lost"
+	AnswerTimer    stepclock.Name = "bridge-answer"
+	RetryTimer     stepclock.Name = "bridge-retry"
 )
 
 var errNoFrames = fmt.Errorf("no frame for %s", LostAfter)
+
+type heartbeat struct {
+	Beat uint64 `json:"beat,omitempty"`
+	Echo bool   `json:"echo,omitempty"`
+}
 
 type State string
 
@@ -93,17 +99,22 @@ func (c *Conn) run(ctx context.Context, transport ssh.Conn, channels <-chan ssh.
 	failed := make(chan error, 1)
 	var workers sync.WaitGroup
 	workers.Go(func() { c.dispatch(channels, handlers, handlersAfter) })
+	echoes := make(chan struct{}, 1)
 	workers.Go(func() {
 		for {
-			var frame struct {
-				Beat uint64 `json:"beat"`
-			}
+			var frame heartbeat
 			if err := decoder.Decode(&frame); err != nil {
 				select {
 				case failed <- err:
 				default:
 				}
 				return
+			}
+			if frame.Beat != 0 {
+				select {
+				case echoes <- struct{}{}:
+				default:
+				}
 			}
 			select {
 			case life <- struct{}{}:
@@ -113,18 +124,29 @@ func (c *Conn) run(ctx context.Context, transport ssh.Conn, channels <-chan ssh.
 		}
 	})
 	workers.Go(func() {
-		ticker := time.NewTicker(HeartbeatInterval)
-		defer ticker.Stop()
+		clock := stepclock.Process()
+		beat := clock.NewTimer(HeartbeatTimer, HeartbeatInterval)
+		defer beat.Stop()
 		encoder := json.NewEncoder(channel)
-		for seq := uint64(1); ; seq++ {
+		var seq uint64
+		var answeredAt time.Time
+		for {
+			var frame heartbeat
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-beat.C():
+				beat.Reset(HeartbeatInterval)
+				if clock.Now().Sub(answeredAt) <= HeartbeatInterval {
+					continue
+				}
+				seq++
+				frame.Beat = seq
+			case <-echoes:
+				frame.Echo = true
+				answeredAt = clock.Now()
 			}
-			if err := encoder.Encode(struct {
-				Beat uint64 `json:"beat"`
-			}{seq}); err != nil {
+			if err := encoder.Encode(frame); err != nil {
 				select {
 				case failed <- err:
 				default:
