@@ -1622,3 +1622,105 @@ fn the_launcher_keeps_its_first_result_and_its_key_hints_in_the_smallest_window(
         }
     }
 }
+
+/// Each text inside the element keyed `within`, with its box and the part of it its clips leave.
+fn texts_in(world: &World, within: &str) -> Vec<(String, [f32; 4], [f32; 4])> {
+    let rt = world.runtime();
+    let all = rt.elements();
+    let Some(outer) = all.iter().find(|e| e.key.as_deref() == Some(within)) else {
+        return Vec::new();
+    };
+    all.iter()
+        .filter(|e| {
+            std::iter::successors(e.parent, |&p| all[p].parent).any(|p| all[p].path == outer.path)
+        })
+        .filter_map(|e| Some((e.text.clone()?, e.rect, e.visible)))
+        .filter(|(said, _, _)| !said.trim().is_empty())
+        .collect()
+}
+
+/// The width each text inside `within` takes, by what it says.
+fn widths(texts: &[(String, [f32; 4], [f32; 4])]) -> std::collections::HashMap<String, f32> {
+    texts
+        .iter()
+        .map(|(said, r, _)| (said.clone(), r[2]))
+        .collect()
+}
+
+fn launcher_world(scale: &str, w: &str, current: &'static str, window: (f32, f32)) -> World {
+    let mut world = world(Setup {
+        settings: vec![("uiScale".into(), scale.into())],
+        outposts: vec![
+            OutpostInfo {
+                name: LONG_MACHINE.into(),
+                ..sandbox()
+            },
+            field_lab(),
+        ],
+        current,
+        window: Some(window),
+        ..Setup::default()
+    });
+    if w == "new-session" {
+        press_action(&mut world, &Action::SessionNew);
+    }
+    world
+}
+
+#[test]
+fn a_long_machine_name_ends_in_an_ellipsis_only_when_its_line_has_no_room_and_is_never_cut() {
+    for (scale, w, current) in [
+        ("1", "new-session", "d1"),
+        ("1.5", "new-session", "d1"),
+        ("1", "launcher", "d2"),
+        ("1.5", "launcher", "d2"),
+    ] {
+        for typed in [String::new(), format!("{LONG_MACHINE}:{DEEP}/")] {
+            let shoot = |window: (f32, f32)| {
+                let mut world = launcher_world(scale, w, current, window);
+                if !typed.is_empty() {
+                    world.gesture(|app| app.type_text(&typed));
+                }
+                let within = if typed.is_empty() {
+                    format!("{w}.row.0")
+                } else {
+                    format!("{w}.section.0")
+                };
+                texts_in(&world, &within)
+            };
+            let small = shoot((800.0, 600.0));
+            let natural = widths(&shoot((2400.0, 1600.0)));
+            let case = format!("{w} at {scale}x text with {typed:?}");
+            assert!(!small.is_empty(), "{case}: nothing drawn");
+            for (said, r, v) in &small {
+                assert!(
+                    (r[0] - v[0]).abs() < 0.5 && (r[0] + r[2] - v[0] - v[2]).abs() < 0.5,
+                    "{case}: {said:?} at {r:?} is cut to {v:?} with no ellipsis"
+                );
+            }
+            let given = widths(&small);
+            let gave_way = |said: &str| {
+                natural
+                    .get(said)
+                    .is_some_and(|&whole| given.get(said).copied().unwrap_or(0.0) + 0.5 < whole)
+            };
+            let others: Vec<&String> = given
+                .keys()
+                .filter(|said| said.as_str() != LONG_MACHINE && natural.contains_key(*said))
+                .collect();
+            if gave_way(LONG_MACHINE) {
+                assert!(
+                    others.iter().any(|said| gave_way(said)),
+                    "{case}: the machine name gives way while the rest of its line keeps its room: {given:?} of {natural:?}"
+                );
+            }
+            if !typed.is_empty() && gave_way(LONG_MACHINE) {
+                let folder = format!("{DEEP}/");
+                assert!(
+                    given.get(&folder).copied().unwrap_or(0.0) < 0.5,
+                    "{case}: the machine gives way before the folder does: {given:?}"
+                );
+            }
+        }
+    }
+}

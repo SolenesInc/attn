@@ -67,7 +67,6 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Vec<El> {
             .w_full()
             .h_full()
             .pt(80.0)
-            .pb(16.0)
             .items_center()
             .child(frame),
     ]

@@ -41,10 +41,6 @@ const OPTION_H: f32 = 24.0;
 /// line with the 3 points round it it had at 10.5, which its 2-point bottom edge paints over.
 const CAP_H: f32 = 18.0;
 const RADIUS: f32 = 10.0;
-/// The most of a recent row's line its machine takes, dot and name: a 14-character name such as
-/// `landing-runner` measures 112 in `BADGE` with its dot, so names that long stay whole and a
-/// longer one ends in an ellipsis; the row's own name gives way in the rest.
-const MACHINE_SHARE: f32 = 140.0;
 
 /// The launcher's own shades of the color scheme, as Tauri's `--launcher-*` variables mix them.
 struct Look {
@@ -468,34 +464,51 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
 
 /// A list's section header: letter-spaced capitals.
 fn section(title: &str, look: &Look) -> El {
-    text(title.to_owned())
+    section_frame(capitals(title, look))
+}
+
+/// The room round a list's section header.
+fn section_frame(header: El) -> El {
+    header.px(10.0).pt(10.0).pb(6.0)
+}
+
+/// Words in a section header's letter-spaced capitals.
+fn capitals(words: &str, look: &Look) -> El {
+    text(words.to_owned())
         .font(SECTION)
         .text_case(TextCase::Uppercase)
         .color(look.text_section)
-        .px(10.0)
-        .pt(10.0)
-        .pb(6.0)
 }
 
-/// The folder list's header on one line: the folder gives way in its middle, and the words
-/// around it and the machine it is on stay whole.
-fn folders_in(directory: &str, on: &str, look: &Look) -> El {
-    let part = |said: &str| {
-        text(said.to_owned())
-            .font(SECTION)
-            .text_case(TextCase::Uppercase)
-            .color(look.text_section)
-            .a11y_hidden()
-    };
-    row()
-        .label(format!("Folders in {directory}{on}"))
+/// The folder list's header on one line. The folder takes only the room the words around it
+/// leave and truncates in its middle; when even that is gone, the machine truncates at its end.
+/// "Folders in" and "on" stay whole.
+fn folders_in(directory: &str, machine: Option<&str>, look: &Look) -> El {
+    let folder_w = crate::desktop::text_w(&directory.to_uppercase(), SECTION);
+    let row = row()
+        .label(match machine {
+            Some(machine) => format!("Folders in {directory} on {machine}"),
+            None => format!("Folders in {directory}"),
+        })
         .min_w(0.0)
-        .px(10.0)
-        .pt(10.0)
-        .pb(6.0)
-        .child(part("Folders in "))
-        .child(part(directory).truncate_middle().shrink().min_w(0.0))
-        .children((!on.is_empty()).then(|| part(on)))
+        .child(capitals("Folders in ", look).a11y_hidden())
+        .child(
+            capitals(directory, look)
+                .truncate_middle()
+                .w(0.0)
+                .grow(1.0)
+                .max_w(folder_w)
+                .a11y_hidden(),
+        )
+        .children(machine.map(|machine| {
+            row()
+                .shrink()
+                .min_w(0.0)
+                .a11y_hidden()
+                .child(capitals(" on ", look))
+                .child(capitals(machine, look).truncate())
+        }));
+    section_frame(row)
 }
 
 /// The scrolling list under the field.
@@ -640,11 +653,7 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, loo
                     .display(state, directory, host)
                     .trim_end_matches('/')
             ),
-            if outposts.is_empty() {
-                String::new()
-            } else {
-                format!(" on {}", machine_name(outposts, host))
-            },
+            (!outposts.is_empty()).then(|| machine_name(outposts, host)),
         )),
         _ => None,
     };
@@ -655,7 +664,9 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, loo
                 (Kind::Recent, _) => section("Recent", look),
                 (Kind::Machine, _) => section("Browse a machine", look),
                 (Kind::Elsewhere, _) => section("Found elsewhere", look),
-                (Kind::Folder, Some((directory, on))) => folders_in(directory, on, look),
+                (Kind::Folder, Some((directory, machine))) => {
+                    folders_in(directory, machine.as_deref(), look)
+                }
                 (Kind::Folder, None) => section("Folders", look),
             };
             children.push(heading.key(format!("{w}.section.{i}")));
@@ -772,7 +783,6 @@ fn location_row(
                 .label(name.clone())
                 .description(reach_word)
                 .items_center()
-                .max_w(MACHINE_SHARE)
                 .shrink()
                 .min_w(0.0)
                 .gap(5.0)
