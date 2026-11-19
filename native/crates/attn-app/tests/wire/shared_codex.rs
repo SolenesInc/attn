@@ -407,12 +407,11 @@ fn the_band_says_why_each_blocker_holds_the_restart_opens_its_tile_and_relaunche
     let (mut world, _prefs) = start(Some(every_blocker()));
     assert_eq!(
         banner(&world).unwrap(),
-        "Codex 0.163.0 installed. Restarts when agents are idle. Waiting on \
+        "Codex 0.163.0 installed. Restarts when agents are idle. [Restart now] Waiting on \
          [Go to fix-auth] (working), \
          [Go to docs-sweep] (waiting on an approval), \
          [Go to nightly-triage] (asking a question), \
-         [Go to plan-cache] (still starting or asking whether to trust its folder). [Relaunch plan-cache] \
-         [Restart now]"
+         [Go to plan-cache] (still starting or asking whether to trust its folder). [Relaunch plan-cache]"
     );
     click_button(&mut world, "Go to docs-sweep");
     let shown = sent(&world, "desktop_show_session");
@@ -544,7 +543,7 @@ fn install_runs_in_a_tile_on_the_current_desktop_and_a_failure_shows_where_the_u
     world.settle();
     assert_eq!(
         banner(&world).unwrap(),
-        "Codex 0.163.0 is available. Install failed: codex update exited 1. [Install] [Dismiss Codex update]"
+        "Codex 0.163.0 is available. [Install] Install failed: codex update exited 1. [Dismiss Codex update]"
     );
 
     click_button(&mut world, "Install");
@@ -628,7 +627,7 @@ fn a_closed_update_comes_back_to_say_why_an_install_from_the_palette_failed() {
     run_command(&mut world, "Install Codex update");
     assert_eq!(
         banner(&world).unwrap(),
-        "Codex 0.163.0 is available. Install failed: codex update exited 1. [Install] [Dismiss Codex update]"
+        "Codex 0.163.0 is available. [Install] Install failed: codex update exited 1. [Dismiss Codex update]"
     );
     click_button(&mut world, "Dismiss Codex update");
     assert_eq!(banner(&world), None);
@@ -776,7 +775,7 @@ fn an_install_from_another_profile_finishing_keeps_the_profile_on_screen() {
     world.settle();
     assert_eq!(
         banner(&world).unwrap(),
-        "Codex 0.164.0 is available. Install failed: codex update exited 1. [Install] [Dismiss Codex update]"
+        "Codex 0.164.0 is available. [Install] Install failed: codex update exited 1. [Dismiss Codex update]"
     );
 }
 

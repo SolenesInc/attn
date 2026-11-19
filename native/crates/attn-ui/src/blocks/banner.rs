@@ -37,8 +37,9 @@ enum Note {
 }
 
 /// The bar under the title bar that tells the person about something the whole window cares
-/// about: a sentence, its notes, its actions right after them, and dismiss alone at the far
-/// edge.
+/// about: a sentence, its actions right beside it, its notes after them or on a line of their
+/// own, and dismiss alone at the far edge. The glyph, the actions and dismiss sit on the
+/// sentence's first line.
 pub struct Banner {
     key: String,
     label: String,
@@ -88,9 +89,9 @@ impl Banner {
         self
     }
 
-    /// Quieter words after the sentence, ending in an ellipsis before they push an action away.
-    /// Notes that hold a link or a button run on as one sentence instead, onto a second line
-    /// where they need one, so no control is cut.
+    /// Quieter words after the sentence and its actions. Notes that do not fit there move
+    /// together to a line of their own under the sentence, and a note longer than that line
+    /// ends in an ellipsis.
     pub fn note(mut self, key: impl Into<String>, said: impl Into<String>) -> Self {
         self.notes.push(Note::Words {
             key: key.into(),
@@ -131,8 +132,9 @@ impl Banner {
         self
     }
 
-    /// What the banner offers, after its words, in the order given: the action that moves
-    /// things forward first. The first action of a banner that needs the person is primary.
+    /// What the banner offers, right after its sentence, in the order given: the action that
+    /// moves things forward first. The first action of a banner that needs the person is
+    /// primary.
     pub fn action(mut self, key: impl Into<String>, button: Button) -> Self {
         self.actions.push((key.into(), button));
         self
@@ -166,33 +168,16 @@ impl Banner {
 
     pub fn build(self, t: &Tokens) -> El {
         let paint = Paint::of(self.tone, t);
+        let band = Size::Compact.height();
         let glyph = row()
-            .h(Size::Compact.height())
+            .h(band)
             .items_center()
             .a11y_hidden()
             .child(rune::icon(glyph(self.tone), GLYPH).color(paint.glyph));
-        let sentence = self
-            .sentence
-            .map(|(key, said)| words(said, Type::Name, paint.ink).key(key).wrap().shrink());
-        let notes = (!self.notes.is_empty()).then(|| {
-            let words_only = self.notes.iter().all(|n| matches!(n, Note::Words { .. }));
-            let notes = self.notes.into_iter().map(|note| paint.note(note));
-            let notes = row()
-                .key(format!("{}.notes", self.key))
-                .items_center()
-                .grow(1.0)
-                .shrink()
-                .children(notes);
-            if words_only {
-                door::gap(notes, Space::S8).clip_soft(0.0)
-            } else {
-                door::gap(notes.flex_wrap(), Space::S4)
-            }
+        let sentence = self.sentence.map(|(key, said)| {
+            let said = words(said, Type::Name, paint.ink).key(key).wrap().shrink();
+            door::first_line_in(row().shrink().child(said), Type::Name, band)
         });
-        let said = door::gap(row().items_center(), Space::S8)
-            .shrink()
-            .children(sentence)
-            .children(notes);
         let primary = self.tone == BannerTone::Warn;
         let actions = self
             .actions
@@ -208,10 +193,32 @@ impl Banner {
                 row().child(El::from(button.key(key)))
             });
         let countdown = self.countdown.map(|(key, seconds)| {
-            words(format!("Closing in {seconds}s"), Type::Body, paint.quiet)
+            let said = words(format!("Closing in {seconds}s"), Type::Body, paint.quiet)
                 .key(key)
-                .single_line()
+                .single_line();
+            door::first_line_in(row().child(said), Type::Body, band)
         });
+        let head = door::gap(row().items_start(), Space::S8)
+            .shrink()
+            .children(sentence)
+            .children(actions)
+            .children(countdown);
+        let notes = (!self.notes.is_empty()).then(|| {
+            let words_only = self.notes.iter().all(|n| matches!(n, Note::Words { .. }));
+            let notes = self.notes.into_iter().map(|note| paint.note(note));
+            let between = if words_only { Space::S8 } else { Space::S4 };
+            let notes = row()
+                .flex_wrap()
+                .items_center()
+                .min_h(band)
+                .shrink()
+                .children(notes);
+            door::gaps(notes, Space::S0, between)
+        });
+        let said = door::gaps(row().flex_wrap().items_start(), Space::S0, Space::S8)
+            .shrink()
+            .child(head)
+            .children(notes);
         let dismiss = self
             .dismiss
             .map(|(key, label, press)| paint.dismiss(key, label, press));
@@ -220,13 +227,11 @@ impl Banner {
             .role("region")
             .label(self.label)
             .w_full()
-            .items_center()
+            .items_start()
             .fill(paint.fill)
             .border_sides([0.0, 0.0, 1.0, 0.0], paint.edge)
             .child(glyph)
             .child(said)
-            .children(actions)
-            .children(countdown)
             .child(row().grow(1.0))
             .children(dismiss);
         let bar = door::inset(door::gap(bar, Space::S8), Space::S12, Space::S6);

@@ -32,6 +32,11 @@ pub(crate) fn gap(e: El, gap: Space) -> El {
     e.gap(gap.pt())
 }
 
+/// The gap between the lines a wrapping row breaks onto, and between the items on a line.
+pub(crate) fn gaps(e: El, lines: Space, items: Space) -> El {
+    e.gaps(lines.pt(), items.pt())
+}
+
 pub(crate) fn inset(e: El, x: Space, y: Space) -> El {
     e.px(x.pt()).py(y.pt())
 }
@@ -54,4 +59,10 @@ pub(crate) fn line(input: rune_kit::TextInput, kind: Type) -> rune_kit::TextInpu
 
 pub(crate) fn area(area: rune_kit::TextArea, kind: Type, x: Space, y: Space) -> rune_kit::TextArea {
     area.font(style(kind)).padding(x.pt(), y.pt())
+}
+
+/// `e`, which holds text set as `kind`, moved down so its first line centres in a band `band`
+/// high, beside controls that centre in the same band.
+pub(crate) fn first_line_in(e: El, kind: Type, band: f32) -> El {
+    e.pt(((band - style(kind).line_px()) / 2.0).max(0.0))
 }

@@ -716,19 +716,99 @@ fn banner_parts(rt: &Runtime<()>, tone: &str) -> (ElementInfo, ElementInfo) {
 }
 
 #[test]
-fn a_banners_first_action_starts_one_rhythm_after_the_words_before_it() {
+fn a_banners_first_action_starts_one_rhythm_after_its_sentence_at_any_width() {
     for variant in ["Rest", "Notes", "Two actions", "Inline controls", "Long"] {
         let rt = story(true, "Library/Banner", variant);
         for (tone, _) in BANNERS {
-            let before = rt
-                .playground_element(&format!("banner.{tone}.notes"))
-                .unwrap_or_else(|| banner_parts(&rt, tone).1);
+            let (_, sentence) = banner_parts(&rt, tone);
             let action = element(&rt, &format!("banner.{tone}.action"));
-            let gap = action.rect[0] - (before.rect[0] + before.rect[2]);
+            let gap = action.rect[0] - (sentence.rect[0] + sentence.rect[2]);
             assert!(
                 (gap - 8.0).abs() < 0.5,
-                "{variant}: {tone}'s action starts {gap} after the words before it, not 8"
+                "{variant}: {tone}'s action starts {gap} after its sentence, not 8"
             );
+        }
+    }
+}
+
+/// The height of a compact control, the band a banner's first line centres on.
+const BAND: f32 = 26.0;
+
+#[test]
+fn a_banners_glyph_actions_and_dismiss_sit_on_its_first_line() {
+    let line = |rt: &Runtime<()>, tone: &str| banner_parts(rt, tone).1.rect[3];
+    let rest = story(true, "Library/Banner", "Rest");
+    for variant in BANNER_VARIANTS {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            let (bar, sentence) = banner_parts(&rt, tone);
+            let band = bar.rect[1] + 6.0 + BAND / 2.0;
+            let centre = |e: &ElementInfo| e.rect[1] + e.rect[3] / 2.0;
+            let first_line = sentence.rect[1] + line(&rest, tone) / 2.0;
+            let mut parts = vec![("sentence's first line".to_owned(), first_line)];
+            for part in ["action", "second", "dismiss", "countdown"] {
+                if let Some(e) = rt.playground_element(&format!("banner.{tone}.{part}")) {
+                    parts.push((part.to_owned(), centre(&e)));
+                }
+            }
+            let all = rt.elements();
+            let glyph = all
+                .iter()
+                .find(|e| e.parent.is_some_and(|p| all[p].path == bar.path))
+                .expect("a banner draws its glyph first");
+            parts.push(("glyph".to_owned(), centre(glyph)));
+            for (part, y) in parts {
+                assert!(
+                    (y - band).abs() < 0.5,
+                    "{variant}: {tone}'s {part} centres at {y}, off its first line at {band}"
+                );
+            }
+        }
+    }
+}
+
+/// The row that holds `tone`'s notes: the parent of its first note.
+fn notes_of(rt: &Runtime<()>, tone: &str) -> Option<ElementInfo> {
+    let all = rt.elements();
+    let first = ["note.0", "waiting"]
+        .iter()
+        .find_map(|n| rt.playground_element(&format!("banner.{tone}.{n}")))?;
+    let note = all.iter().find(|e| e.path == first.path)?;
+    note.parent.map(|p| all[p].clone())
+}
+
+#[test]
+fn a_banners_notes_follow_its_actions_or_take_a_line_of_their_own_under_its_sentence() {
+    for variant in ["Notes", "Two actions", "Inline controls", "Long"] {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            let (bar, sentence) = banner_parts(&rt, tone);
+            let notes = notes_of(&rt, tone).expect("the story's banners have notes");
+            let last = ["second", "action"]
+                .iter()
+                .find_map(|part| rt.playground_element(&format!("banner.{tone}.{part}")))
+                .expect("the story's banners act");
+            let first_line = (notes.rect[1] - (bar.rect[1] + 6.0)).abs() < 0.5;
+            assert!(
+                !(first_line && variant == "Inline controls"),
+                "{variant}: {tone}'s notes, wider than the bar, stay on its first line"
+            );
+            if first_line {
+                let gap = notes.rect[0] - (last.rect[0] + last.rect[2]);
+                assert!(
+                    (gap - 8.0).abs() < 0.5,
+                    "{variant}: {tone}'s notes start {gap} after its last action, not 8"
+                );
+            } else {
+                assert!(
+                    (notes.rect[0] - sentence.rect[0]).abs() < 0.5
+                        && notes.rect[1] >= sentence.rect[1] + BAND - 6.0,
+                    "{variant}: {tone}'s notes at {:?} are neither on the first line nor on a line \
+                     of their own under the sentence at {:?}",
+                    notes.rect,
+                    sentence.rect
+                );
+            }
         }
     }
 }
@@ -755,9 +835,7 @@ fn a_banners_dismiss_ends_at_its_inset() {
 #[test]
 fn a_banner_is_as_tall_in_every_tone_with_or_without_an_action() {
     let mut heights = Vec::new();
-    let one_line = BANNER_VARIANTS
-        .into_iter()
-        .filter(|v| !matches!(*v, "Long" | "Inline controls"));
+    let one_line = ["Rest", "No action", "Sentence only", "Countdown"];
     for variant in one_line {
         let rt = story(true, "Library/Banner", variant);
         for (tone, _) in BANNERS {
@@ -817,6 +895,40 @@ fn every_control_of_a_banner_lies_inside_it_clear_of_the_others() {
                         b.rect
                     );
                 }
+            }
+        }
+    }
+}
+
+/// How the library sets a note: `Type::Body`, 13/400.
+const NOTE: rune::TextStyle = rune::TextStyle::new(13.0, 400.0);
+
+#[test]
+fn a_banners_note_ends_in_an_ellipsis_only_when_its_line_is_too_short_for_it() {
+    for variant in BANNER_VARIANTS {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            let Some(notes) = notes_of(&rt, tone) else {
+                continue;
+            };
+            let all = rt.elements();
+            let words = all.iter().filter(|e| {
+                e.text.is_some()
+                    && !e.focusable
+                    && e.parent.is_some_and(|p| all[p].path == notes.path)
+            });
+            for note in words {
+                let said = note.text.as_deref().unwrap_or_default();
+                let (whole, _) = rune::text::measure(said, &[], NOTE, None);
+                let shortened = note.rect[2] + 0.5 < whole;
+                let alone = note.rect[2] + 0.5 >= notes.rect[2];
+                assert!(
+                    !shortened || alone,
+                    "{variant}: {tone}'s note {said:?} is cut to {} of its {whole} beside other \
+                     notes on a line {} wide",
+                    note.rect[2],
+                    notes.rect[2]
+                );
             }
         }
     }

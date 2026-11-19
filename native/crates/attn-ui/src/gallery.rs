@@ -560,7 +560,7 @@ pub enum BannerCase {
 }
 
 /// The tones a banner story draws, each keyed `banner.{tone}`, with its sentence at
-/// `banner.{tone}.text`, its notes at `banner.{tone}.notes`, its first action at
+/// `banner.{tone}.text`, its first note at `banner.{tone}.note.0`, its first action at
 /// `banner.{tone}.action` and its dismiss at `banner.{tone}.dismiss`.
 pub const BANNERS: [(&str, BannerTone); 4] = [
     ("warn", BannerTone::Warn),
