@@ -1,5 +1,9 @@
-use attn_protocol::{DaemonWarning, InitialStateMessage};
+use attn_protocol::{
+    DaemonWarning, Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
+};
+use attn_testkit::tree::tile;
 use attn_testkit::{Daemon, Target, World};
+use serde_json::json;
 
 fn warned(warnings: &[(&str, &str)]) -> World {
     World::start(
@@ -59,6 +63,75 @@ fn the_daemons_start_warnings_show_until_dismissed_and_the_daemon_is_told_they_w
     );
     assert_eq!(world.daemon.sent_of("clear_warnings").len(), 1);
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_warning_raised_after_the_handshake_survives_a_tile_popping_out_and_shows_on_the_next_connection()
+ {
+    let profile = Profile {
+        id: "work".into(),
+        name: "Work".into(),
+        current_desktop_id: "work/desktop_1".into(),
+        ..Profile::default()
+    };
+    let mut notes = tile("notes", "markdown");
+    notes["tile_params"] = json!({"path": "/work/notes.md"}).to_string().into();
+    let mut desktop = Desktop {
+        id: profile.current_desktop_id.clone(),
+        profile_id: profile.id.clone(),
+        name: "Desktop 1".into(),
+        tree_json: notes.to_string(),
+        active_pane_id: "notes".into(),
+        revision: 1,
+        ..Desktop::default()
+    };
+    let state = |warning: &str| InitialStateMessage {
+        profiles: Some(vec![profile.clone()]),
+        selected_profile_id: Some(profile.id.clone()),
+        desktops: Some(vec![desktop.clone()]),
+        warnings: Some(vec![DaemonWarning {
+            code: "worker_recovery_partial".into(),
+            message: warning.into(),
+        }]),
+        ..InitialStateMessage::new()
+    };
+    let mut world = World::start(Daemon::scripted().state(state("Skipped 2 workers.")));
+    assert_eq!(world.daemon.sent_of("clear_warnings").len(), 1);
+
+    world
+        .daemon
+        .answer_hello_with(state("Recovered 1 session late."));
+    notes["window"] = json!({"x": 10, "y": 20, "width": 500, "height": 400});
+    desktop.tree_json = notes.to_string();
+    desktop.revision += 1;
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile.clone(),
+        desktops: vec![desktop.clone()],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+
+    let windows = world.tile_windows();
+    assert_eq!(windows.len(), 1);
+    assert!(
+        world
+            .tile_screen(&windows[0].key)
+            .find(Target::key("daemon-warnings"))
+            .is_none()
+    );
+    assert_eq!(world.daemon.sent_of("clear_warnings").len(), 1);
+
+    world.reconnect();
+
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("daemon-warnings.text"))
+            .name
+            .as_deref(),
+        Some("Recovered 1 session late.")
+    );
+    assert_eq!(world.daemon.sent_of("clear_warnings").len(), 2);
 }
 
 #[test]

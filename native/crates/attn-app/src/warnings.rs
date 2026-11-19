@@ -14,8 +14,12 @@ use crate::State;
 /// The warnings the window shows: those the last handshake brought, until dismissed.
 pub(crate) type Shown = Arc<Vec<DaemonWarning>>;
 
-/// A handshake completed: show what it brought, and tell the daemon they were seen.
+/// A handshake completed: the main window shows what it brought and tells the daemon they were
+/// seen. A tile window shows no banner, so it acknowledges nothing.
 pub(crate) fn connected(state: &mut State) {
+    if state.window.tile.is_some() {
+        return;
+    }
     state.window.warnings = state.facts.warnings.clone();
     if !state.window.warnings.is_empty() {
         let _ = state.daemon.send(&ClearWarningsMessage::new());
