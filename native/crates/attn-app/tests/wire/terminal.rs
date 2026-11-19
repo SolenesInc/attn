@@ -66,11 +66,15 @@ pub(crate) fn one_terminal() -> Daemon {
 }
 
 pub(crate) fn output(world: &World, seq: u32, data: &[u8]) {
+    world.daemon.emit_frame(output_frame(seq, data));
+}
+
+pub(crate) fn output_frame(seq: u32, data: &[u8]) -> Vec<u8> {
     let mut frame = vec![0x01, 2];
     frame.extend_from_slice(b"r1");
     frame.extend_from_slice(&seq.to_be_bytes());
     frame.extend_from_slice(data);
-    world.daemon.emit_frame(frame);
+    frame
 }
 
 pub(crate) fn attached() -> AttachResultMessage {

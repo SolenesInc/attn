@@ -244,3 +244,76 @@ fn a_key_automation_types_arrives_when_automation_types_it() {
         .collect();
     assert_eq!(names, ["keydown", "websocket_send"]);
 }
+
+#[test]
+fn a_key_s_echo_is_drawn_when_the_synchronized_update_holding_it_ends() {
+    let mut world = live_terminal(one_agent());
+    world.gesture(|app| app.type_text("x"));
+    let input = world.daemon.sent_of("pty_input")[0].clone();
+    let trace = input["trace_id"].as_str().unwrap().to_owned();
+
+    output(&world, 2, b"\x1b[?2026hheld-echo");
+    world.settle();
+    let rows = world
+        .automate("state", json!({"of": "terminal:r1"}))
+        .unwrap();
+    assert!(!rows.to_string().contains("held-echo"), "{rows:?}");
+    let names: Vec<String> = hops(&mut world, &trace)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(
+        names,
+        ["websocket_send", "output_received", "output_taken"],
+        "the screen still shows the old grid, so the echo isn't drawn yet"
+    );
+
+    output(&world, 3, b"\x1b[?2026l");
+    world.settle();
+    let rows = world
+        .automate("state", json!({"of": "terminal:r1"}))
+        .unwrap();
+    assert!(rows.to_string().contains("held-echo"), "{rows:?}");
+    let names: Vec<String> = hops(&mut world, &trace)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names.last().map(String::as_str), Some("echo_drawn"));
+}
+
+#[test]
+fn output_that_arrived_before_a_key_was_sent_is_not_its_echo() {
+    let mut world = live_terminal(one_agent());
+    let earlier = super::terminal::output_frame(2, b"background output");
+    world.type_while_earlier_output_arrives(earlier, "x");
+    let input = world.daemon.sent_of("pty_input")[0].clone();
+    let trace = input["trace_id"].as_str().unwrap().to_owned();
+    let names: Vec<String> = hops(&mut world, &trace)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(
+        names,
+        ["websocket_send"],
+        "output heard before the key left is not its echo"
+    );
+
+    output(&world, 3, b"x");
+    world.settle();
+
+    let hops = hops(&mut world, &trace);
+    let names: Vec<&str> = hops.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "websocket_send",
+            "output_received",
+            "output_taken",
+            "echo_drawn"
+        ]
+    );
+    assert!(
+        hops.windows(2).all(|pair| pair[0].1 <= pair[1].1),
+        "each hop happens after the one before: {hops:?}"
+    );
+}

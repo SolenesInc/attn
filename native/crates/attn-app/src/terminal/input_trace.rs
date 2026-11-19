@@ -217,10 +217,23 @@ pub struct InputTrace {
     field_trace: Option<TraceId>,
     observed: HashMap<String, Observed>,
     epoch: Epoch,
-    /// The last input sent to each terminal, until its first output comes back.
-    awaiting: HashMap<String, TraceId>,
-    /// Inputs whose echo the terminals took this frame, until the frame draws it.
+    /// The last input sent to each terminal, until the first output that left after it.
+    awaiting: HashMap<String, Awaiting>,
+    /// Inputs whose echo a terminal took, until a frame draws that terminal's screen.
     drawing: Vec<(String, TraceId, f64)>,
+}
+
+struct Awaiting {
+    trace: TraceId,
+    left: Instant,
+}
+
+/// The write that carries an input to the daemon: when it left, and the connection it left on.
+pub(crate) struct Write<'a> {
+    pub left: Instant,
+    pub socket_open: bool,
+    pub connected: bool,
+    pub probe: Option<&'a str>,
 }
 
 struct Epoch(Instant);
@@ -334,19 +347,12 @@ impl InputTrace {
     }
 
     /// The write that carries `trace`'s input left for the daemon, or found no connection.
-    pub(crate) fn sent(
-        &mut self,
-        trace: &TraceId,
-        runtime: &str,
-        socket_open: bool,
-        connected: bool,
-        probe: Option<&str>,
-        now: f64,
-    ) {
+    pub(crate) fn sent(&mut self, trace: &TraceId, runtime: &str, write: Write, now: f64) {
         let event = Event {
-            socket_state: Some(if socket_open { 1 } else { 3 }),
-            initial_state_received: Some(connected),
-            probe_id: probe.map(str::to_owned),
+            socket_state: Some(if write.socket_open { 1 } else { 3 }),
+            initial_state_received: Some(write.connected),
+            probe_id: write.probe.map(str::to_owned),
+            instant_ms: Some(self.ms(write.left)),
             ..self.event(
                 trace,
                 Stage::Transport,
@@ -355,12 +361,12 @@ impl InputTrace {
                 now,
             )
         };
-        let event = Event {
-            instant_ms: Some(self.ms(hop_time())),
-            ..event
+        let awaiting = Awaiting {
+            trace: trace.clone(),
+            left: write.left,
         };
-        self.awaiting.insert(runtime.to_owned(), trace.clone());
-        let unready = (!socket_open || !connected).then_some("transport_unready");
+        self.awaiting.insert(runtime.to_owned(), awaiting);
+        let unready = (!write.socket_open || !write.connected).then_some("transport_unready");
         let observed = self.observed.entry(runtime.to_owned()).or_default();
         observed.last_send = Some(event.clone());
         self.observe(&event, unready, now);
@@ -381,11 +387,17 @@ impl InputTrace {
     }
 
     /// Terminal `runtime` took output the link heard at `received`: the echo of the last input
-    /// sent to it, when none came back since.
+    /// sent to it, when it is the first output heard after that input left.
     pub(crate) fn output(&mut self, runtime: &str, received: Instant, now: f64) {
-        let Some(trace) = self.awaiting.remove(runtime) else {
+        let Some(awaiting) = self
+            .awaiting
+            .get(runtime)
+            .filter(|awaiting| received >= awaiting.left)
+        else {
             return;
         };
+        let trace = awaiting.trace.clone();
+        self.awaiting.remove(runtime);
         for (event, at) in [("output_received", received), ("output_taken", hop_time())] {
             let event = Event {
                 instant_ms: Some(self.ms(at)),
@@ -396,13 +408,18 @@ impl InputTrace {
         self.drawing.push((runtime.to_owned(), trace, now));
     }
 
-    /// The frame that draws the echoes the terminals took is encoded.
-    pub(crate) fn drawn(&mut self) {
+    /// A frame that draws the screens of the terminals `shown` names is encoded: the echoes
+    /// those terminals took are drawn.
+    pub(crate) fn drawn(&mut self, shown: impl Fn(&str) -> bool) {
         if self.drawing.is_empty() {
             return;
         }
         let at = self.ms(hop_time());
-        for (runtime, trace, now) in std::mem::take(&mut self.drawing) {
+        let (drawn, waiting) = std::mem::take(&mut self.drawing)
+            .into_iter()
+            .partition(|(runtime, ..)| shown(runtime));
+        self.drawing = waiting;
+        for (runtime, trace, now) in drawn {
             let event = Event {
                 instant_ms: Some(at),
                 ..self.event(&trace, Stage::Echo, "echo_drawn", Some(&runtime), now)

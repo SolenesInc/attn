@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 
 use crate::State;
 use crate::requests::Answer;
-use crate::terminal::{Decision, TraceId, Typed};
+use crate::terminal::{Decision, TraceId, Typed, Write, input_trace};
 
 /// Input slower than this, from the key's arrival to its handler or from a write to the
 /// daemon's receipt, is an incident.
@@ -292,7 +292,8 @@ pub(crate) fn type_into(
         .decide(trace, terminal, Decision::Sent, at.clock);
     let runtime = terminal.to_owned();
     let answering = probe.clone();
-    let open = state.ask_as(
+    let left = input_trace::hop_time();
+    let socket_open = state.ask_as(
         probe.clone(),
         &input,
         move |state: &mut State, answer: Answer, tx: &mut Tx| {
@@ -305,15 +306,18 @@ pub(crate) fn type_into(
         },
         tx,
     );
-    let connected = state.terminals.connected();
-    state.terminals.trace.lock().unwrap().sent(
-        trace,
-        terminal,
-        open,
-        connected,
-        Some(&probe),
-        at.clock,
-    );
+    let write = Write {
+        left,
+        socket_open,
+        connected: state.terminals.connected(),
+        probe: Some(&probe),
+    };
+    state
+        .terminals
+        .trace
+        .lock()
+        .unwrap()
+        .sent(trace, terminal, write, at.clock);
     Typed::Taken
 }
 

@@ -33,7 +33,7 @@ pub(crate) use annotating::{
 pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
-pub(crate) use input_trace::{Decision, Heard, InputTrace, Target, TraceId};
+pub(crate) use input_trace::{Decision, Heard, InputTrace, Target, TraceId, Write};
 pub(crate) use latency::type_into;
 pub(crate) use links::accelerator;
 pub(crate) use seeds::SeedCard;
@@ -953,11 +953,18 @@ impl Terminals {
         }
         term.phase = Phase::Live;
         for (data, trace) in std::mem::take(&mut term.held) {
-            let open = send_input(&id, &data, "user", Some(&trace), daemon);
+            let left = input_trace::hop_time();
+            let socket_open = send_input(&id, &data, "user", Some(&trace), daemon);
+            let write = Write {
+                left,
+                socket_open,
+                connected: self.connected,
+                probe: None,
+            };
             self.trace
                 .lock()
                 .unwrap()
-                .sent(&trace, &id, open, self.connected, None, tx.clock());
+                .sent(&trace, &id, write, tx.clock());
         }
         let at = term.sent_at;
         if attaching.relaid && attaching.policy != Policy::RelaunchRestore {
@@ -1007,11 +1014,15 @@ impl Terminals {
         self.trace.lock().unwrap().decide(trace, id, outcome, now);
         match outcome {
             Decision::Sent => {
-                let open = send_input(id, data, "user", Some(trace), daemon);
-                self.trace
-                    .lock()
-                    .unwrap()
-                    .sent(trace, id, open, self.connected, None, now);
+                let left = input_trace::hop_time();
+                let socket_open = send_input(id, data, "user", Some(trace), daemon);
+                let write = Write {
+                    left,
+                    socket_open,
+                    connected: self.connected,
+                    probe: None,
+                };
+                self.trace.lock().unwrap().sent(trace, id, write, now);
             }
             Decision::Refused => return Typed::Refused,
             _ => {}
@@ -1277,10 +1288,7 @@ impl Terminals {
         id: &str,
         term: &mut Term,
     ) {
-        if term.synchronizing_since.is_none()
-            && !term.holding_hidden_screen
-            && term.vt.sync(&mut term.grid)
-        {
+        if Terminals::grid_follows_screen(term) && term.vt.sync(&mut term.grid) {
             term.view.seeds = None;
         }
         let placed = Terminals::kitty_images(images, id, term);
@@ -1291,6 +1299,22 @@ impl Terminals {
         overlays.extend(Terminals::seed_overlays(term, seeds, previewing, theme));
         term.grid.set_overlays(overlays);
         term.scrolled_back = term.vt.scrolled_back();
+    }
+
+    /// Whether the terminal's grid takes what its screen holds, rather than keeping what it
+    /// showed while the program draws a synchronized update or the screen is hidden.
+    fn grid_follows_screen(term: &Term) -> bool {
+        term.synchronizing_since.is_none() && !term.holding_hidden_screen
+    }
+
+    /// A frame drew this window's terminals: the echoes are drawn of each terminal whose grid
+    /// took its screen.
+    pub(crate) fn echoes_drawn(&self) {
+        self.trace.lock().unwrap().drawn(|id| {
+            self.panes
+                .get(id)
+                .is_some_and(Terminals::grid_follows_screen)
+        });
     }
 
     /// Terminal `id` brought up to what its screen holds now, whether or not a frame drew it.

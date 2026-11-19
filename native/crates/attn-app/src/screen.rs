@@ -19,7 +19,7 @@ fn theme_terminals(rt: &mut Runtime<State>) -> TerminalColors {
 }
 
 fn echoes_drawn(rt: &mut Runtime<State>) {
-    rt.state().terminals.trace.lock().unwrap().drawn();
+    rt.state().terminals.echoes_drawn();
 }
 
 impl Screens {

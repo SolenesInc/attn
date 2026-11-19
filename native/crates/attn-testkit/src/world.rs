@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
@@ -77,11 +77,16 @@ static APP_ON_KEY: OnceLock<OnKey> = OnceLock::new();
 thread_local! {
     /// The app's key handler left the last key it heard.
     static LEFT: Cell<bool> = const { Cell::new(false) };
+    /// What happens once before the app's key handler hears the next key.
+    static BEFORE_KEY: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
 }
 
 /// The app's key handler, noting the keys it leaves: macOS's menu bar acts on a standard
 /// item's key, such as Window > Close's ⌘W, only when the window leaves it.
 fn heard(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if let Some(deliver) = BEFORE_KEY.take() {
+        deliver();
+    }
     let took = APP_ON_KEY.get().expect("the app's key handler")(state, ev, tx);
     LEFT.set(!took);
     took
@@ -427,6 +432,44 @@ impl World {
         });
         self.settle();
         self.main_frame(0.0);
+        self.settle();
+    }
+
+    /// Types `text` while the daemon sends `frame`, which the app's link hears after the
+    /// window's frame took the terminals' events and before its key handler runs: output that
+    /// arrived before the key left, which the window takes only on its next frame.
+    pub fn type_while_earlier_output_arrives(&mut self, frame: Vec<u8>, text: &str) {
+        let (key_started, await_key) = std::sync::mpsc::channel();
+        let (output_queued, await_output) = std::sync::mpsc::channel();
+        BEFORE_KEY.set(Some(Box::new(move || {
+            key_started.send(()).unwrap();
+            await_output.recv_timeout(STUCK).unwrap();
+        })));
+        std::thread::scope(|scope| {
+            let daemon = &self.daemon;
+            let terminals = self.terminals.clone();
+            let pulse = &self.pulse;
+            scope.spawn(move || {
+                await_key.recv_timeout(STUCK).unwrap();
+                daemon.emit_frame(frame);
+                loop {
+                    let seen = pulse.count();
+                    if !terminals.is_empty() {
+                        break;
+                    }
+                    assert!(
+                        pulse.wait_past(seen, STUCK),
+                        "the app link never queued the output"
+                    );
+                }
+                output_queued.send(()).unwrap();
+            });
+            Driver {
+                runtime: &mut self.runtime,
+            }
+            .type_text(text);
+            self.runtime.frame(0.0);
+        });
         self.settle();
     }
 
