@@ -7,9 +7,9 @@ use rune_kit::{
 use crate::blocks::{Banner, BannerTone};
 use crate::colors::scheme_for;
 use crate::system::{
-    Button as Action, Choice, Look, Segment, Segmented, Size, Space, Tone, Trigger, TriggerLook,
-    Type, area_box, arrows, choices, disclosure, door, expander, icon_box, line_box, number_box,
-    press_area, stepper, switch, tag, words,
+    Button as Action, Choice, FieldState, Look, Segment, Segmented, Size, Space, Tone, Trigger,
+    TriggerLook, Type, area_box, arrows, choices, disclosure, door, expander, icon_box, line_box,
+    number_box, press_area, stepper, switch, tag, words,
 };
 use crate::{Dialog, DialogFrame, Tokens, kit};
 
@@ -368,10 +368,17 @@ fn baseline(s: &Library, cx: &mut Cx<Library>) -> El {
                 .into(),
         )
         .child(
-            el().w(160.0)
-                .child(line_box(line, false, &t).key("baseline.line").into()),
+            el().w(160.0).child(
+                line_box(line, FieldState::Ready, &t)
+                    .key("baseline.line")
+                    .into(),
+            ),
         )
-        .child(number_box(number, false, &t).key("baseline.number").into())
+        .child(
+            number_box(number, FieldState::Ready, &t)
+                .key("baseline.number")
+                .into(),
+        )
         .child(tag("baseline.tag", "Running", Tone::Good, &t).into());
     library_stage(&t, row)
 }
@@ -381,34 +388,31 @@ fn field_boxes(s: &Library, cx: &mut Cx<Library>) -> El {
         cx.force_focus_rings();
     }
     let t = library_tokens(cx);
+    let field = match (s.disabled, s.failed) {
+        (true, _) => FieldState::Disabled,
+        (false, failed) => FieldState::failed_if(failed),
+    };
     let line = TextInput::new(&s.line)
         .key("field.line.input")
         .label("Name")
         .placeholder("Automation name")
-        .invalid(s.failed)
         .on_edit(|s: &mut Library| &mut s.line);
     let number = TextInput::new(&s.number)
         .key("field.number.input")
         .label("Sidebar width")
         .placeholder("240")
-        .invalid(s.failed)
         .on_edit(|s: &mut Library| &mut s.number);
     let area = rune_kit::TextArea::new(&s.area)
         .key("field.area.input")
         .label("Prompt")
         .placeholder("What the agent does each run")
         .rows(3)
-        .invalid(s.failed)
         .on_edit(|s: &mut Library| &mut s.area);
     let column = door::gap(col(), Space::S16)
         .w(if s.narrow { 160.0 } else { 280.0 })
-        .child(line_box(line, s.disabled, &t).key("field.line").into())
-        .child(
-            number_box(number, s.disabled, &t)
-                .key("field.number")
-                .into(),
-        )
-        .child(area_box(area, s.disabled, &t).key("field.area").into());
+        .child(line_box(line, field, &t).key("field.line").into())
+        .child(number_box(number, field, &t).key("field.number").into())
+        .child(area_box(area, field, &t).key("field.area").into());
     library_stage(&t, column)
 }
 
@@ -850,7 +854,7 @@ fn steppers(s: &Library, cx: &mut Cx<Library>) -> El {
                 noop,
             )
             .into(),
-            number_box(number, s.disabled, &t)
+            number_box(number, FieldState::disabled_if(s.disabled), &t)
                 .key("stepper.number")
                 .into(),
         ],

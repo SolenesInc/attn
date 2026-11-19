@@ -6,7 +6,7 @@ use attn_ui::blocks::BannerTone;
 use attn_ui::colors::scheme_for;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use rune::render::Instance;
-use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
+use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Key, KeyEvent, Mods, Runtime, el};
 
 const WINDOW: (f32, f32) = (1400.0, 800.0);
 const SCALE: f32 = 2.0;
@@ -360,6 +360,73 @@ fn a_focused_field_draws_the_ring_every_control_draws() {
             );
         }
     }
+}
+
+/// Tab, as a person with keyboard navigation on does, until the keyboard is inside `key`.
+fn tab_into(rt: &mut Runtime<()>, key: &str) {
+    rt.set_full_keyboard_access(true);
+    let path = element(rt, key).path;
+    let stage = rt
+        .elements()
+        .into_iter()
+        .find(|e| path.starts_with(&e.path) && e.path.ends_with("playground-stage-1"))
+        .expect("the story has a stage");
+    let (x, y) = (stage.rect[0] + 2.0, stage.rect[1] + 2.0);
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.pointer_leave();
+    rt.frame(1.0);
+    for _ in 0..20 {
+        rt.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0);
+        if rt
+            .elements()
+            .iter()
+            .any(|e| e.focused && e.path.starts_with(&path))
+        {
+            rt.frame(1.0);
+            return;
+        }
+    }
+    panic!("Tab never reached {key}");
+}
+
+/// Whether the frame draws an edge of `ink` exactly on `rect`, in points.
+fn edge_of(rt: &Runtime<()>, rect: [f32; 4], ink: rune::Color) -> bool {
+    let ink = [ink.r, ink.g, ink.b].map(rune::theme::srgb_encode);
+    rt.instances.iter().any(|i| {
+        near(i.rect, device(rect))
+            && i.params[0] > 0.0
+            && i.border[3] > 0.99
+            && (0..3).all(|c| (i.border[c] - ink[c]).abs() < 0.01)
+    })
+}
+
+#[test]
+fn a_failed_field_keeps_its_red_edge_inside_the_ring_while_focused() {
+    let mut lost = Vec::new();
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let red = attn_ui::kit(&t).c.danger.fg;
+        for key in FIELD_BOXES {
+            let mut rt = story(dark, "Library/Field box", "Failed");
+            tab_into(&mut rt, key);
+            let field = element(&rt, key);
+            let ring = ring_of(&rt, &field, &t).is_some();
+            let edge = edge_of(&rt, field.rect, red);
+            println!("{key} dark={dark}: ring={ring} red_edge={edge}");
+            if !(ring && edge) {
+                lost.push(format!("{key} dark={dark}"));
+            }
+        }
+    }
+    assert!(
+        lost.is_empty(),
+        "failed and focused, these lose the ring or the red edge: {lost:?}"
+    );
 }
 
 #[test]

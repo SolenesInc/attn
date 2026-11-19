@@ -731,6 +731,45 @@ fn a_field_saves_when_focus_leaves_it_and_shows_saved_only_once_the_daemon_ackno
     );
 }
 
+/// Whether the frame draws a red edge round the field box holding `input`, and the warm focus
+/// ring outside that edge.
+fn refused_edge_and_ring(world: &World, input: &str) -> (bool, bool) {
+    let rt = world.runtime();
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(rt.env.system_dark)
+        .ui;
+    let encode = |c: rune::Color| [c.r, c.g, c.b].map(rune::theme::srgb_encode);
+    let (red, warm) = (encode(attn_ui::kit(&t).c.danger.fg), encode(t.warning));
+    let inked = |i: &&rune::render::Instance, ink: [f32; 3]| {
+        i.params[0] > 0.0
+            && i.border[3] > 0.99
+            && (0..3).all(|c| (i.border[c] - ink[c]).abs() < 0.01)
+    };
+    let holds = |outer: [f32; 4], inner: [f32; 4]| {
+        outer[0] < inner[0]
+            && outer[1] < inner[1]
+            && outer[0] + outer[2] > inner[0] + inner[2]
+            && outer[1] + outer[3] > inner[1] + inner[3]
+    };
+    let field = world
+        .screen()
+        .bounds(Target::key(input))
+        .unwrap_or_else(|| panic!("{input} is laid out"))
+        .map(|v| v * rt.env.scale);
+    let Some(edge) = rt
+        .instances
+        .iter()
+        .find(|i| inked(i, red) && holds(i.rect, field))
+    else {
+        return (false, false);
+    };
+    let ring = rt
+        .instances
+        .iter()
+        .any(|i| inked(&i, warm) && holds(i.rect, edge.rect));
+    (true, ring)
+}
+
 #[test]
 fn a_refused_value_is_sent_once_per_enter_shows_its_reason_beside_the_field_and_retry_resends() {
     let (daemon, _) = keeping(&[], |key, value| {
@@ -745,6 +784,17 @@ fn a_refused_value_is_sent_once_per_enter_shows_its_reason_beside_the_field_and_
     retype(&mut world, &key, "9000");
     press(&mut world, Key::Enter);
     assert_eq!(writes(&world).len(), 1);
+    let refused = world.screen().get(Target::key(&key));
+    assert!(
+        refused.is("focused") && refused.is("invalid"),
+        "the refused field keeps the keyboard and reads as invalid: {:?}",
+        refused.states
+    );
+    assert_eq!(
+        refused_edge_and_ring(&world, &key),
+        (true, true),
+        "a refused field keeps its red edge inside the focus ring"
+    );
     let refusal = world
         .screen()
         .get(Target::key("settings.refusal.sidebar_width"));

@@ -176,6 +176,7 @@ fn sheets() -> Vec<Sheet> {
                 column("Filled", "Filled", Gesture::None),
                 column("Focus", "Empty", Gesture::Click),
                 column("Failed", "Failed", Gesture::None),
+                column("Failed, focused", "Failed", Gesture::Tab),
                 column("Disabled", "Disabled", Gesture::None),
                 column("Disabled empty", "Disabled empty", Gesture::None),
                 column("Selected text", "Selected text", Gesture::None),
@@ -303,7 +304,14 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
             rt.pointer_up(cx, cy);
             rt.pointer_leave();
         }
-        Gesture::Tab if target.focusable => tab_to(&mut rt, &target.path),
+        Gesture::Tab
+            if rt
+                .elements()
+                .iter()
+                .any(|e| e.focusable && e.path.starts_with(&target.path)) =>
+        {
+            tab_to(&mut rt, &target.path)
+        }
         Gesture::Tab => {}
     }
     for _ in 0..3 {

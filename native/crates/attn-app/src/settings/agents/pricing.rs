@@ -2,7 +2,7 @@
 //! model the built-in table misses, and the form that adds one.
 
 use attn_ui::Tokens;
-use attn_ui::system::{Button, Look, disclosure, line_box, number_box};
+use attn_ui::system::{Button, FieldState, Look, disclosure, line_box, number_box};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
@@ -245,7 +245,7 @@ fn rate_input(label: &str, input: TextInput, t: &Tokens) -> El {
     col()
         .gap(space::S1)
         .child(text(name.clone()).font(CAPTION).color(t.text_secondary))
-        .child(number_box(input.label(name).placeholder("0"), false, t).into())
+        .child(number_box(input.label(name).placeholder("0"), FieldState::Ready, t).into())
 }
 
 fn card_typed(state: &mut State, model: &str) {
@@ -440,7 +440,7 @@ fn new_form(state: &State, t: &Tokens) -> El {
                             })
                             .on_submit(add)
                             .on_blur(add),
-                        false,
+                        FieldState::Ready,
                         t,
                     ))
                     .w(280.0),

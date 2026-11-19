@@ -7,7 +7,7 @@ mod pricing;
 use std::collections::{BTreeMap, BTreeSet};
 
 use attn_ui::Tokens;
-use attn_ui::system::{Segment, Segmented, disclosure, line_box, number_box};
+use attn_ui::system::{FieldState, Segment, Segmented, disclosure, line_box, number_box};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
@@ -240,22 +240,22 @@ fn field(
 ) -> El {
     let drafts = &state.window.settings.autosave;
     let field = drafts.field(&key);
+    let refused = FieldState::failed_if(field.is_some_and(|f| f.error.is_some()));
     let empty = rune::TextEdit::default();
     let (edit, submit, left) = (key.clone(), key.clone(), key.clone());
     let mut input = TextInput::new(field.map_or(&empty, |f| &f.draft))
         .key(super::field_key(&key))
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
-        .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(&edit))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, &left, tx));
     let boxed = match step {
         Some(step) => {
             input = input.trailing(super::pages::setting_arrows(&key, step, t));
-            El::from(number_box(input, false, t))
+            El::from(number_box(input, refused, t))
         }
-        None => El::from(line_box(input, false, t)),
+        None => El::from(line_box(input, refused, t)),
     };
     let saved = drafts.shows_saved_mark(&key).then(|| {
         text("Saved")

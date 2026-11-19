@@ -13,7 +13,7 @@ use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
-use attn_ui::system::{Button, Tone, line_box, tag};
+use attn_ui::system::{Button, FieldState, Tone, line_box, tag};
 
 use super::pages::{CAPTION, after_block, block, warning};
 use crate::State;
@@ -605,7 +605,7 @@ fn add_form(state: &State, t: &Tokens) -> El {
                     .placeholder(name_placeholder)
                     .on_edit(|state: &mut State| &mut panel(state).name)
                     .on_submit(add),
-                false,
+                FieldState::Ready,
                 t,
             )
             .into(),
@@ -619,7 +619,7 @@ fn add_form(state: &State, t: &Tokens) -> El {
                     .placeholder("user@host")
                     .on_edit(|state: &mut State| &mut panel(state).destination)
                     .on_submit(add),
-                false,
+                FieldState::Ready,
                 t,
             )
             .into(),

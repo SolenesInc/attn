@@ -28,7 +28,7 @@ pub use choice::{Choice, choices};
 pub use control::Control;
 pub use disclosure::disclosure;
 pub use expander::{expander, opens_in_place};
-pub use field_box::{area_box, line_box, number_box};
+pub use field_box::{FieldState, area_box, line_box, number_box};
 pub use icon_box::icon_box;
 pub use layers::{hover_layer, pressed_layer};
 pub use press_area::press_area;

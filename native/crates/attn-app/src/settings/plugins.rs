@@ -15,7 +15,7 @@ use rune::tok::space;
 use rune::{El, FileDialogOptions, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
-use attn_ui::system::{Button, Look, Tone, line_box, number_box, tag};
+use attn_ui::system::{Button, FieldState, Look, Tone, line_box, number_box, tag};
 
 use super::pages::{CAPTION, warning};
 use crate::State;
@@ -315,7 +315,7 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
             let name = name.clone();
             move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, tx)
         });
-    let priority = El::from(number_box(priority, busy, t));
+    let priority = El::from(number_box(priority, FieldState::disabled_if(busy), t));
     let saved = plugins.saved.contains_key(&name).then(|| {
         text("Saved")
             .key(id("saved"))
@@ -446,7 +446,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         "git@host:team/my-attn-plugin.git or /Users/you/src/my-attn-plugin",
                     )
                     .on_edit(|state: &mut State| &mut panel(state).source),
-                busy,
+                FieldState::disabled_if(busy),
                 t,
             ))
             .grow(1.0),

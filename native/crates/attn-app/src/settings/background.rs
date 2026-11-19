@@ -2,7 +2,7 @@
 //! advisor, and the context cap of headless runs.
 
 use attn_ui::Tokens;
-use attn_ui::system::{Button, arrows, number_box};
+use attn_ui::system::{Button, FieldState, arrows, number_box};
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 use serde::{Deserialize, Serialize};
@@ -373,7 +373,7 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
         .min_w(0.0)
         .gap(7.0)
         .child(field_label(label, t))
-        .child(El::from(number_box(input, false, t)))
+        .child(El::from(number_box(input, FieldState::Ready, t)))
 }
 
 fn interval_edit<'a>(state: &'a mut State, part: &str) -> &'a mut TextEdit {

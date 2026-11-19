@@ -5,7 +5,9 @@ use std::cell::RefCell;
 use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
 use attn_ui::keycap;
-use attn_ui::system::{Button, Segment, Segmented, arrows, line_box, number_box, switch};
+use attn_ui::system::{
+    Button, FieldState, Segment, Segmented, arrows, line_box, number_box, switch,
+};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, TextStyle, Tx, col, row, text};
@@ -138,12 +140,12 @@ pub(super) fn number_field(
     t: &Tokens,
 ) -> El {
     let field = state.window.settings.autosave.field(key);
+    let refused = FieldState::failed_if(field.is_some_and(|f| f.error.is_some()));
     let empty = rune::TextEdit::default();
     let draft = TextInput::new(field.map_or(&empty, |f| &f.draft))
         .key(super::field_key(key))
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
-        .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx))
@@ -155,7 +157,7 @@ pub(super) fn number_field(
             row()
                 .gap(space::S2)
                 .items_center()
-                .child(El::from(number_box(draft, false, t)))
+                .child(El::from(number_box(draft, refused, t)))
                 .children(saved_mark(state, key, t)),
         )
         .children(refusal(state, key, t))
@@ -222,21 +224,21 @@ pub(super) fn wide_setting_field(
     t: &Tokens,
 ) -> El {
     let field = state.window.settings.autosave.field(key);
+    let refused = FieldState::failed_if(field.is_some_and(|f| f.error.is_some()));
     let empty = rune::TextEdit::default();
     let mut draft = TextInput::new(field.map_or(&empty, |f| &f.draft))
         .key(super::field_key(key))
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
-        .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx));
     let boxed = match step {
         Some(step) => {
             draft = draft.trailing(setting_arrows(key, step, t));
-            El::from(number_box(draft, false, t))
+            El::from(number_box(draft, refused, t))
         }
-        None => El::from(line_box(draft, false, t)),
+        None => El::from(line_box(draft, refused, t)),
     };
     col()
         .w_full()
