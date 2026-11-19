@@ -288,6 +288,26 @@ outline!(
     r#"<path d="M10 13H8.04M10 13h1.96" opacity="0.45"/><path d="M5.24 11.45 4.13 11.09M7.06 8.95 6.37 8.01M10 8V6.83M12.94 8.95l.69-.94M14.76 11.45l1.11-.36"/><circle cx="10" cy="13" r="3.4" fill="currentColor" stroke="none"/>"#
 );
 
+outline!(
+    NEEDS_YOU,
+    16.0,
+    "1.6",
+    r#"<path d="M8 2.2 14.3 13H1.7z"/><path d="M8 6.6v3.2M8 11.5v.1"/>"#
+);
+outline!(
+    FAILED,
+    16.0,
+    "1.6",
+    r#"<circle cx="8" cy="8" r="6"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/>"#
+);
+outline!(
+    DONE,
+    16.0,
+    "1.6",
+    r#"<circle cx="8" cy="8" r="6"/><path d="M5.3 8.2l1.9 1.9 3.6-4"/>"#
+);
+outline!(WORKING, 16.0, "1.6", r#"<path d="M8 2a6 6 0 1 0 6 6"/>"#);
+
 /// The characters the Tauri app draws as text that no bundled font carries, drawn as that
 /// character looks.
 macro_rules! mark {

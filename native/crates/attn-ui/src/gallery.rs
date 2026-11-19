@@ -4,6 +4,7 @@ use rune_kit::{
     TextInput, Toast, ToastRegion, Tooltip,
 };
 
+use crate::blocks::{Banner, BannerTone};
 use crate::colors::scheme_for;
 use crate::system::{
     Button as Action, Choice, Look, Segment, Segmented, Size, Space, Tone, Trigger, TriggerLook,
@@ -56,6 +57,7 @@ pub struct Library {
     pub disabled: bool,
     pub failed: bool,
     pub narrow: bool,
+    pub banner: BannerCase,
     pub line: TextEdit,
     pub number: TextEdit,
     pub area: TextEdit,
@@ -182,6 +184,21 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Narrow", |s| {
                     s.long = true;
                     s.narrow = true;
+                }),
+        )
+        .story(
+            Story::new("Library/Banner", Library::default, banners)
+                .variant("Rest", |_| {})
+                .variant("No action", |s| s.banner = BannerCase::NoAction)
+                .variant("Sentence only", |s| s.banner = BannerCase::SentenceOnly)
+                .variant("Notes", |s| s.banner = BannerCase::Notes)
+                .variant("Countdown", |s| s.banner = BannerCase::Countdown)
+                .variant("Two actions", |s| s.banner = BannerCase::TwoActions)
+                .variant("Inline controls", |s| s.banner = BannerCase::InlineControls)
+                .variant("Long", |s| s.banner = BannerCase::Long)
+                .variant("Focus", |s| {
+                    s.rings = true;
+                    s.banner = BannerCase::Notes;
                 }),
         )
         .story(
@@ -527,6 +544,138 @@ fn tooltip(_: &Showcase, cx: &mut Cx<Showcase>) -> El {
 }
 
 fn noop(_: &mut Library, _: &mut Tx) {}
+
+/// What a banner story's variant puts in each banner.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BannerCase {
+    #[default]
+    Rest,
+    NoAction,
+    SentenceOnly,
+    Notes,
+    Countdown,
+    TwoActions,
+    InlineControls,
+    Long,
+}
+
+/// The tones a banner story draws, each keyed `banner.{tone}`, with its sentence at
+/// `banner.{tone}.text`, its notes at `banner.{tone}.notes`, its first action at
+/// `banner.{tone}.action` and its dismiss at `banner.{tone}.dismiss`.
+pub const BANNERS: [(&str, BannerTone); 4] = [
+    ("warn", BannerTone::Warn),
+    ("calm", BannerTone::Calm),
+    ("good", BannerTone::Good),
+    ("bad", BannerTone::Bad),
+];
+
+/// The smallest main window's width, which a top banner spans.
+const BANNER_WIDTH: f32 = 800.0;
+
+const LONG_SENTENCE: &str = "Codex 0.163.0 didn’t start: the app server exited with status 1 \
+    before it answered its first request, after loading a configuration it could not read. Still \
+    on 0.162.1, nothing was interrupted.";
+
+fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
+    if s.rings {
+        cx.force_focus_rings();
+    }
+    let t = library_tokens(cx);
+    let drawn = BANNERS.iter().map(|&(name, tone)| {
+        let (sentence, action, notes): (&str, &str, &[&str]) = match tone {
+            BannerTone::Warn => (
+                "ai-sandbox runs a different build than home.",
+                "Update outposts",
+                &[
+                    "ai-sandbox: Connecting.",
+                    "studio: Building attn for Linux.",
+                ],
+            ),
+            BannerTone::Calm => (
+                "Updating outposts.",
+                "Updating…",
+                &["ai-sandbox: Copying it over.", "studio: Checking it runs."],
+            ),
+            BannerTone::Good => (
+                "Updated ai-sandbox and studio.",
+                "Show what changed",
+                &["Both outposts run the home’s build."],
+            ),
+            BannerTone::Bad => (
+                "Couldn’t update ai-sandbox.",
+                "Retry",
+                &["ssh: connect to host ai-sandbox port 22: Connection timed out"],
+            ),
+        };
+        let case = s.banner;
+        let key = format!("banner.{name}");
+        let sentence = if case == BannerCase::Long {
+            LONG_SENTENCE
+        } else {
+            sentence
+        };
+        let mut banner = Banner::new(key.clone(), format!("Banner {name}"), tone)
+            .says(format!("{key}.text"), sentence);
+        if matches!(
+            case,
+            BannerCase::Notes | BannerCase::TwoActions | BannerCase::Long
+        ) {
+            for (i, note) in notes.iter().enumerate() {
+                banner = banner.note(format!("{key}.note.{i}"), *note);
+            }
+        }
+        if case == BannerCase::InlineControls {
+            banner = banner
+                .note(format!("{key}.waiting"), "Waiting on")
+                .link(format!("{key}.go.a"), "fix-auth", "Go to fix-auth", noop)
+                .note(format!("{key}.reason.a"), "(working),")
+                .link(
+                    format!("{key}.go.b"),
+                    "plan-cache",
+                    "Go to plan-cache",
+                    noop,
+                )
+                .note(format!("{key}.reason.b"), "(still starting)")
+                .note_button(
+                    format!("{key}.relaunch"),
+                    Action::new("Relaunch").on_press_tx(noop),
+                );
+        }
+        let acts = !matches!(
+            case,
+            BannerCase::NoAction | BannerCase::SentenceOnly | BannerCase::Countdown
+        );
+        if acts {
+            banner = banner.action(
+                format!("{key}.action"),
+                Action::new(action)
+                    .disabled(tone == BannerTone::Calm)
+                    .on_press_tx(noop),
+            );
+        }
+        if case == BannerCase::TwoActions {
+            banner = banner.action(
+                format!("{key}.second"),
+                Action::new("Update without ai-sandbox").on_press_tx(noop),
+            );
+        }
+        if case == BannerCase::Countdown {
+            banner = banner.countdown(format!("{key}.countdown"), 5);
+        }
+        if case != BannerCase::SentenceOnly {
+            banner = banner.dismiss(
+                format!("{key}.dismiss"),
+                format!("Dismiss {name}"),
+                |_: &mut Library| {},
+            );
+        }
+        banner.build(&t)
+    });
+    library_stage(
+        &t,
+        door::gap(col().w(BANNER_WIDTH), Space::S16).children(drawn),
+    )
+}
 
 fn stack(t: &Tokens, children: impl IntoIterator<Item = El>) -> El {
     library_stage(

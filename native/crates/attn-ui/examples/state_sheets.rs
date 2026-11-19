@@ -2,18 +2,20 @@
 //! dark and in light, one PNG per sheet and appearance. The hover and pressed columns put the
 //! pointer on the control; every other column is a gallery variant.
 //!
-//!     state_sheets OUT
+//!     state_sheets OUT [NAME]
+//!
+//! With NAME, only the sheets whose name starts with it.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use attn_ui::colors::scheme_for;
-use attn_ui::gallery::{BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
+use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use attn_ui::system::{Type, words};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Key, KeyEvent, Mods, Runtime, col, el};
 
-const WINDOW: (f32, f32) = (1100.0, 800.0);
+const WINDOW: (f32, f32) = (1400.0, 800.0);
 const SCALE: f32 = 2.0;
 const MARGIN: f32 = 12.0;
 const ROW_LABEL_WIDTH: f32 = 170.0;
@@ -32,6 +34,9 @@ struct Column {
     label: &'static str,
     variant: &'static str,
     gesture: Gesture,
+    /// What the gesture lands on, by the suffix it adds to the row's key; the row itself when
+    /// `None`.
+    aim: Option<&'static str>,
 }
 
 struct Sheet {
@@ -46,6 +51,21 @@ const fn column(label: &'static str, variant: &'static str, gesture: Gesture) ->
         label,
         variant,
         gesture,
+        aim: None,
+    }
+}
+
+const fn aimed(
+    label: &'static str,
+    variant: &'static str,
+    gesture: Gesture,
+    aim: &'static str,
+) -> Column {
+    Column {
+        label,
+        variant,
+        gesture,
+        aim: Some(aim),
     }
 }
 
@@ -165,6 +185,41 @@ fn sheets() -> Vec<Sheet> {
         },
     ];
     all.extend(controls);
+    let banner_rows: Vec<(String, String)> = BANNERS
+        .iter()
+        .map(|&(tone, _)| (tone.to_owned(), format!("banner.{tone}")))
+        .collect();
+    all.push(Sheet {
+        name: "banner-states",
+        story: "Library/Banner",
+        rows: banner_rows.clone(),
+        columns: vec![
+            column("Rest", "Rest", Gesture::None),
+            aimed("Hover action", "Rest", Gesture::Hover, ".action"),
+            aimed("Pressed action", "Rest", Gesture::Press, ".action"),
+            aimed("Focus action", "Rest", Gesture::Tab, ".action"),
+            aimed("Hover dismiss", "Rest", Gesture::Hover, ".dismiss"),
+            aimed("Pressed dismiss", "Rest", Gesture::Press, ".dismiss"),
+            aimed("Focus dismiss", "Rest", Gesture::Tab, ".dismiss"),
+        ],
+    });
+    all.push(Sheet {
+        name: "banner-content",
+        story: "Library/Banner",
+        rows: banner_rows,
+        columns: [
+            "No action",
+            "Sentence only",
+            "Notes",
+            "Countdown",
+            "Two actions",
+            "Inline controls",
+            "Long",
+        ]
+        .into_iter()
+        .map(|variant| column(variant, variant, Gesture::None))
+        .collect(),
+    });
     all
 }
 
@@ -228,7 +283,14 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
         .playground_element(key)
         .unwrap_or_else(|| panic!("{story} {} has no {key}", column.variant));
     let [x, y, w, h] = found.rect;
-    let (cx, cy) = (x + w / 2.0, y + h / 2.0);
+    let target = match column.aim {
+        Some(aim) => rt
+            .playground_element(&format!("{key}{aim}"))
+            .unwrap_or_else(|| panic!("{story} {} has no {key}{aim}", column.variant)),
+        None => found.clone(),
+    };
+    let [tx, ty, tw, th] = target.rect;
+    let (cx, cy) = (tx + tw / 2.0, ty + th / 2.0);
     match column.gesture {
         Gesture::None => {}
         Gesture::Hover => rt.pointer_move(cx, cy),
@@ -241,7 +303,8 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
             rt.pointer_up(cx, cy);
             rt.pointer_leave();
         }
-        Gesture::Tab => tab_to(&mut rt, &found.path),
+        Gesture::Tab if target.focusable => tab_to(&mut rt, &target.path),
+        Gesture::Tab => {}
     }
     for _ in 0..3 {
         rt.frame(1.0);
@@ -437,7 +500,12 @@ fn main() {
         .unwrap_or_else(|| panic!("usage: state_sheets OUT"))
         .into();
     std::fs::create_dir_all(&out).unwrap_or_else(|e| panic!("{}: {e}", out.display()));
-    for sheet in sheets() {
+    let only = std::env::args().nth(2);
+    let wanted = |sheet: &Sheet| {
+        only.as_deref()
+            .is_none_or(|name| sheet.name.starts_with(name))
+    };
+    for sheet in sheets().into_iter().filter(wanted) {
         for dark in [true, false] {
             shoot(&sheet, dark, &out);
         }

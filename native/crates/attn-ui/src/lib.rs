@@ -2,6 +2,7 @@ use std::sync::RwLock;
 
 use rune::{Color, Shadow};
 
+pub mod blocks;
 pub mod colors;
 mod scroll_bar;
 pub mod system;

@@ -2,12 +2,13 @@
 //! element tree, colours and clips from what the frame draws.
 
 use attn_ui::Tokens;
+use attn_ui::blocks::BannerTone;
 use attn_ui::colors::scheme_for;
-use attn_ui::gallery::{BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
+use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use rune::render::Instance;
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
 
-const WINDOW: (f32, f32) = (1100.0, 800.0);
+const WINDOW: (f32, f32) = (1400.0, 800.0);
 const SCALE: f32 = 2.0;
 const REGULAR_INSET: f32 = 12.0;
 const RING_REACH: f32 = 4.0;
@@ -697,4 +698,153 @@ fn disabled_draws_every_part_of_every_control_at_half_strength() {
             );
         }
     }
+}
+const BANNER_VARIANTS: [&str; 8] = [
+    "Rest",
+    "No action",
+    "Sentence only",
+    "Notes",
+    "Countdown",
+    "Two actions",
+    "Inline controls",
+    "Long",
+];
+
+fn banner_parts(rt: &Runtime<()>, tone: &str) -> (ElementInfo, ElementInfo) {
+    let key = format!("banner.{tone}");
+    (element(rt, &key), element(rt, &format!("{key}.text")))
+}
+
+#[test]
+fn a_banners_first_action_starts_one_rhythm_after_the_words_before_it() {
+    for variant in ["Rest", "Notes", "Two actions", "Inline controls", "Long"] {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            let before = rt
+                .playground_element(&format!("banner.{tone}.notes"))
+                .unwrap_or_else(|| banner_parts(&rt, tone).1);
+            let action = element(&rt, &format!("banner.{tone}.action"));
+            let gap = action.rect[0] - (before.rect[0] + before.rect[2]);
+            assert!(
+                (gap - 8.0).abs() < 0.5,
+                "{variant}: {tone}'s action starts {gap} after the words before it, not 8"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_banners_dismiss_ends_at_its_inset() {
+    for variant in BANNER_VARIANTS
+        .into_iter()
+        .filter(|v| *v != "Sentence only")
+    {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            let (bar, _) = banner_parts(&rt, tone);
+            let dismiss = element(&rt, &format!("banner.{tone}.dismiss"));
+            let inset = (bar.rect[0] + bar.rect[2]) - (dismiss.rect[0] + dismiss.rect[2]);
+            assert!(
+                (inset - 12.0).abs() < 0.5,
+                "{variant}: {tone}'s dismiss ends {inset} from the bar's edge, not 12"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_banner_is_as_tall_in_every_tone_with_or_without_an_action() {
+    let mut heights = Vec::new();
+    for variant in BANNER_VARIANTS.into_iter().filter(|v| *v != "Long") {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            heights.push((variant, tone, banner_parts(&rt, tone).0.rect[3]));
+        }
+    }
+    let first = heights[0].2;
+    assert!(
+        heights.iter().all(|&(_, _, h)| (h - first).abs() < 0.5),
+        "banners at several heights: {heights:?}"
+    );
+}
+
+/// The least contrast hover stands from rest, in dark and in light, as `attn_ui::system`'s
+/// layers measure it.
+const HOVER_STEP: (f32, f32) = (1.20, 1.17);
+/// WCAG's AA contrast for text below 18 points, and for a focus indicator against what it
+/// sits on.
+const TEXT_READS: f32 = 4.5;
+const RING_READS: f32 = 3.0;
+
+#[test]
+fn a_banner_stands_apart_from_the_title_bar_and_its_words_and_ring_read_on_it() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let rt = story(dark, "Library/Banner", "Focus");
+        let app = [t.bg_app.r, t.bg_app.g, t.bg_app.b].map(rune::theme::srgb_encode);
+        let hover = if dark { HOVER_STEP.0 } else { HOVER_STEP.1 };
+        for (tone, kind) in BANNERS {
+            let (bar, sentence) = banner_parts(&rt, tone);
+            let fill = surface(&rt, &bar, t.bg_panel);
+            let apart = contrast(fill, app);
+            assert!(
+                apart >= hover,
+                "dark={dark}: {tone}'s fill stands {apart:.2}:1 from the title bar, under a hover step"
+            );
+            let ink = drawn_over(sentence.text_color.expect("the sentence is text"), fill);
+            let reads = contrast(ink, fill);
+            assert!(
+                reads >= TEXT_READS,
+                "dark={dark}: {tone}'s sentence reads {reads:.2}:1 on its fill"
+            );
+            let note = inside(
+                &rt,
+                &format!("banner.{tone}"),
+                &format!("banner.{tone}.note.0"),
+            );
+            let quiet = drawn_over(note.text_color.expect("a note is text"), fill);
+            let reads = contrast(quiet, fill);
+            assert!(
+                reads >= TEXT_READS,
+                "dark={dark}: {tone}'s notes read {reads:.2}:1 on its fill"
+            );
+            if kind == BannerTone::Bad {
+                for part in ["action", "dismiss"] {
+                    let control = element(&rt, &format!("banner.{tone}.{part}"));
+                    let ring = ring_around(&rt, &control).unwrap_or_else(|| {
+                        panic!("dark={dark}: {tone}'s {part} draws no focus ring")
+                    });
+                    let edge = [ring.border[0], ring.border[1], ring.border[2]];
+                    let shows = contrast(edge, fill);
+                    assert!(
+                        shows >= RING_READS,
+                        "dark={dark}: {tone}'s {part} ring stands {shows:.2}:1 from the fill"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Ink of colour `c` as the frame blends it over `below`.
+fn drawn_over(c: rune::Color, below: [f32; 3]) -> [f32; 3] {
+    let [r, g, b] = [c.r, c.g, c.b].map(rune::theme::srgb_encode);
+    over([r * c.a, g * c.a, b * c.a, c.a], below)
+}
+
+/// The ring drawn round `e`, in any colour, outside its edge.
+fn ring_around<'a>(rt: &'a Runtime<()>, e: &ElementInfo) -> Option<&'a Instance> {
+    let [x, y, w, h] = device(e.rect);
+    let reach = RING_REACH * SCALE;
+    rt.instances.iter().find(|i| {
+        let [ix, iy, iw, ih] = i.rect;
+        ix < x
+            && iy < y
+            && x - ix <= reach + 1.0
+            && y - iy <= reach + 1.0
+            && (ix + iw) - (x + w) <= reach + 1.0
+            && (iy + ih) - (y + h) <= reach + 1.0
+            && ix + iw > x + w
+            && i.params[0] > 0.0
+    })
 }
