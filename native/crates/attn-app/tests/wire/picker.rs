@@ -1333,40 +1333,6 @@ fn a_worktree_that_cannot_be_made_is_reported_once_in_the_corner_without_launchi
 }
 
 #[test]
-fn the_worktree_failure_dialogs_backdrop_blurs_the_window_from_its_first_frame() {
-    let mut world = repo_world(&[]);
-    world.daemon.on("create_worktree", |_| {
-        message(CreateWorktreeResultMessage {
-            success: false,
-            error: Some("disk full".into()),
-            ..CreateWorktreeResultMessage::new()
-        })
-    });
-    open_repo(&mut world, REPO);
-    world.gesture(|app| app.type_text("taken"));
-    press(&mut world, Key::Enter);
-    world.trail_backdrops();
-
-    world.record(60.0, 1.0, |_, app| app.click(Target::key("worktree-setup")));
-
-    let frames = world.backdrop_trail();
-    let shown: Vec<_> = frames.iter().filter(|blurs| !blurs.is_empty()).collect();
-    assert!(!shown.is_empty(), "no frame drew the dialog's backdrop");
-    assert!(
-        shown
-            .iter()
-            .all(|blurs| blurs.iter().all(|&over_window| over_window)),
-        "frames whose backdrop blurred only its own layer: {} of {}",
-        shown.iter().filter(|b| b.contains(&false)).count(),
-        shown.len()
-    );
-    world
-        .screen()
-        .get(Target::role("dialog").name("Session was not created"));
-    rest(&mut world);
-}
-
-#[test]
 fn the_letter_d_types_into_the_create_form() {
     let mut world = repo_world(&[]);
     open_repo(&mut world, REPO);

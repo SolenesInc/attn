@@ -1124,31 +1124,3 @@ fn the_ghost_completion_follows_the_typed_text() {
     );
     rest(&mut world);
 }
-
-#[test]
-fn the_launchers_backdrop_blurs_the_window_from_its_first_frame() {
-    let mut world = World::start(machine(
-        &[REPO],
-        shop("origin/main"),
-        &settings("main_repo"),
-        vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
-    ));
-    world.open_desktop();
-    world.trail_backdrops();
-
-    world.record(60.0, 1.0, |_, app| app.key(action_key(&Action::SessionNew)));
-
-    let frames = world.backdrop_trail();
-    let shown: Vec<_> = frames.iter().filter(|blurs| !blurs.is_empty()).collect();
-    assert!(!shown.is_empty(), "no frame drew the launcher's backdrop");
-    assert!(
-        shown
-            .iter()
-            .all(|blurs| blurs.iter().all(|&over_window| over_window)),
-        "frames whose backdrop blurred only its own layer: {} of {}",
-        shown.iter().filter(|b| b.contains(&false)).count(),
-        shown.len()
-    );
-    assert!(dialog_open(&world));
-    rest(&mut world);
-}

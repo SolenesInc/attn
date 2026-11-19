@@ -1,6 +1,7 @@
 pub mod allocations;
 mod capture;
 mod daemon;
+mod frames;
 mod screen;
 mod tiles;
 pub mod tree;

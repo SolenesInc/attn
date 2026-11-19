@@ -141,15 +141,15 @@ impl CaptureRuntime {
     }
 
     fn frame(&mut self) {
-        self.runtime.frame(0.0);
+        crate::frames::draw(&mut self.runtime, 0.0);
         if self.runtime.animating {
             self.runtime.settle_all();
-            self.runtime.frame(0.0);
+            crate::frames::draw(&mut self.runtime, 0.0);
         }
     }
 
     pub(crate) fn advance(&mut self, by: std::time::Duration) {
-        self.runtime.frame(by.as_secs_f64());
+        crate::frames::draw(&mut self.runtime, by.as_secs_f64());
     }
 
     pub(crate) fn idle(&self) -> bool {

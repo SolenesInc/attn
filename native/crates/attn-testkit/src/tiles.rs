@@ -200,10 +200,10 @@ impl TileRuntime {
         for update in updates {
             self.runtime.update(update);
         }
-        self.runtime.frame(0.0);
+        crate::frames::draw(&mut self.runtime, 0.0);
         self.land_motion();
         while self.runtime.has_pending_input() {
-            self.runtime.frame(0.0);
+            crate::frames::draw(&mut self.runtime, 0.0);
             self.land_motion();
         }
         if self.shown && self.screens.redraws(&self.runtime) {
@@ -213,7 +213,7 @@ impl TileRuntime {
 
     /// Moves the window's clock on by `by`, as `World::advance` moves the main window's.
     pub(crate) fn advance(&mut self, by: std::time::Duration) {
-        self.runtime.frame(by.as_secs_f64());
+        crate::frames::draw(&mut self.runtime, by.as_secs_f64());
     }
 
     /// Lands the motion the last frame started.
@@ -223,7 +223,7 @@ impl TileRuntime {
                 break;
             }
             self.runtime.settle_all();
-            self.runtime.frame(0.0);
+            crate::frames::draw(&mut self.runtime, 0.0);
         }
     }
 
