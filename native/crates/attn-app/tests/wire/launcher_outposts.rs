@@ -24,6 +24,10 @@ const NOTES: &str = "/home/me/notes";
 const SENSOR: &str = "/home/me/projects/sensor-hub";
 const SANDBOX: &str = "outpost-ai";
 const FIELD: &str = "outpost-field";
+/// A folder deep in a worktree with a long CJK name, as a probe of the smallest window found it.
+const DEEP: &str = "/home/me/projects/account-permissions-migration-本番の権限を移行する作業ツリー-東京リージョン/deploy/production/identity/permissions/migration/terraform/environments/tokyo/identity-provider/deployment-configurations";
+/// The longest machine name a probe of the smallest window gave an outpost.
+const LONG_MACHINE: &str = "build-and-release-platform-tokyo-region-primary-outpost";
 
 fn sandbox() -> OutpostInfo {
     OutpostInfo {
@@ -91,6 +95,7 @@ fn disk(folders: &[(&str, &[&'static str])]) -> Disk {
 
 fn sandbox_disk() -> Disk {
     disk(&[
+        (DEEP, &["deploy"]),
         (HOME, &["projects", "scratch"]),
         ("/home/me/projects", &["evals", "shop"]),
         ("/home/me/scratch", &[]),
@@ -238,6 +243,8 @@ struct Setup {
     settings: Vec<(String, String)>,
     outposts: Vec<OutpostInfo>,
     sandbox_harnesses: Vec<&'static str>,
+    current: &'static str,
+    window: Option<(f32, f32)>,
 }
 
 impl Default for Setup {
@@ -246,6 +253,8 @@ impl Default for Setup {
             settings: Vec::new(),
             outposts: vec![sandbox(), field_lab()],
             sandbox_harnesses: vec!["claude", "codex"],
+            current: "d1",
+            window: None,
         }
     }
 }
@@ -263,7 +272,7 @@ fn world(setup: Setup) -> World {
     settings.extend(setup.settings);
     let state = InitialStateMessage {
         selected_profile_id: Some("work".into()),
-        profiles: Some(vec![profile("d1")]),
+        profiles: Some(vec![profile(setup.current)]),
         desktops: Some(desktops()),
         settings: Some(settings.clone()),
         outposts: Some(setup.outposts),
@@ -348,7 +357,10 @@ fn world(setup: Setup) -> World {
             })
         })
         .on("spawn_session", placed);
-    let mut world = World::start(daemon);
+    let mut world = match setup.window {
+        Some(size) => World::start_sized(daemon, size),
+        None => World::start(daemon),
+    };
     world.open_desktop();
     world
 }
@@ -881,6 +893,7 @@ fn a_harness_an_outpost_lacks_reads_as_missing_there_while_this_mac_checks_for_i
         settings: vec![("claude_available".into(), "checking".into())],
         outposts: vec![sandbox()],
         sandbox_harnesses: vec!["codex"],
+        ..Setup::default()
     });
     assert_eq!(
         harness(&world, "claude").description.as_deref(),
@@ -1536,4 +1549,76 @@ fn an_outpost_that_failed_to_say_its_harnesses_is_asked_again_when_it_is_reachab
     world.settle();
     assert!(!harness(&world, "codex").is("disabled"));
     rest(&mut world);
+}
+
+#[test]
+fn the_launcher_keeps_its_first_result_and_its_key_hints_in_the_smallest_window() {
+    for (scale, w, current) in [
+        ("1", "new-session", "d1"),
+        ("1.5", "new-session", "d1"),
+        ("1", "launcher", "d2"),
+    ] {
+        {
+            for typed in [
+                String::new(),
+                format!("{LONG_MACHINE}:{DEEP}/"),
+                format!("{LONG_MACHINE}:{DEEP}/private/"),
+            ] {
+                let mut world = world(Setup {
+                    settings: vec![("uiScale".into(), scale.into())],
+                    outposts: vec![
+                        OutpostInfo {
+                            name: LONG_MACHINE.into(),
+                            ..sandbox()
+                        },
+                        field_lab(),
+                    ],
+                    current,
+                    window: Some((800.0, 600.0)),
+                    ..Setup::default()
+                });
+                if w == "new-session" {
+                    press_action(&mut world, &Action::SessionNew);
+                }
+                if !typed.is_empty() {
+                    world.gesture(|app| app.type_text(&typed));
+                }
+                let screen = world.screen();
+                let (vw, vh) = world.runtime().window_viewport();
+                let inside = |b: [f32; 4], [x, y, w, h]: [f32; 4]| {
+                    b[0] >= x - 0.5
+                        && b[1] >= y - 0.5
+                        && b[0] + b[2] <= x + w + 0.5
+                        && b[1] + b[3] <= y + h + 0.5
+                };
+                let zoom: f32 = scale.parse().expect("a text scale");
+                let window = [0.0, 0.0, vw / zoom, vh / zoom];
+                let first = screen
+                    .all(Target::role("list-box-option"))
+                    .into_iter()
+                    .find_map(|n| {
+                        n.key
+                            .filter(|k| k.starts_with(&format!("{w}.row.")))
+                            .and_then(|k| screen.bounds(Target::key(k)))
+                    });
+                let list = screen.bounds(Target::key(format!("{w}.locations")));
+                let hints = screen.bounds(Target::key(format!("{w}.hints")));
+                let case = format!("{w} at {scale}x text with {typed:?}");
+                let refused = typed.ends_with("/private/");
+                if !refused {
+                    let first = first.unwrap_or_else(|| panic!("{case}: no first result"));
+                    let list = list.unwrap_or_else(|| panic!("{case}: no result list"));
+                    assert!(
+                        inside(first, list) && inside(first, window),
+                        "{case}: the first result {first:?} is not whole in the list {list:?} and the window {window:?}"
+                    );
+                }
+                let hints = hints.unwrap_or_else(|| panic!("{case}: no key hints"));
+                assert!(
+                    inside(hints, window),
+                    "{case}: the key hints {hints:?} leave the window {window:?}"
+                );
+            }
+        }
+    }
 }

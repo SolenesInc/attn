@@ -67,6 +67,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Vec<El> {
             .w_full()
             .h_full()
             .pt(80.0)
+            .pb(16.0)
             .items_center()
             .child(frame),
     ]
@@ -107,7 +108,7 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
             .h_full()
             .items_center()
             .pt(EMPTY_DESKTOP_DROP * crate::shell::TITLE_BAR_HEIGHT)
-            .child(el().h_frac(EMPTY_DESKTOP_DROP))
+            .child(el().h_frac(EMPTY_DESKTOP_DROP).shrink().min_h(0.0))
             .child(frame.key("launcher").role("group").label("New agent")),
     )
 }

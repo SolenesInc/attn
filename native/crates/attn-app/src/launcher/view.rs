@@ -41,6 +41,10 @@ const OPTION_H: f32 = 24.0;
 /// line with the 3 points round it it had at 10.5, which its 2-point bottom edge paints over.
 const CAP_H: f32 = 18.0;
 const RADIUS: f32 = 10.0;
+/// The most of a recent row's line its machine takes, dot and name: a 14-character name such as
+/// `landing-runner` measures 112 in `BADGE` with its dot, so names that long stay whole and a
+/// longer one ends in an ellipsis; the row's own name gives way in the rest.
+const MACHINE_SHARE: f32 = 140.0;
 
 /// The launcher's own shades of the color scheme, as Tauri's `--launcher-*` variables mix them.
 struct Look {
@@ -150,7 +154,7 @@ pub(crate) fn framed(state: &State, launcher: &Launcher, t: &Tokens) -> El {
         Which::Inline => &dialog_shadows(t, 20.0, 50.0, 0.45)[..2],
     };
     surface(
-        frame(state, launcher, t, &look),
+        frame(state, launcher, t, &look).shrink().min_h(0.0),
         RADIUS,
         look.frame,
         t,
@@ -158,6 +162,8 @@ pub(crate) fn framed(state: &State, launcher: &Launcher, t: &Tokens) -> El {
     )
     .w_full()
     .max_w(DIALOG_W)
+    .shrink()
+    .min_h(0.0)
 }
 
 fn frame(state: &State, launcher: &Launcher, t: &Tokens, look: &Look) -> El {
@@ -452,7 +458,8 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
                 } else {
                     look.text_quiet
                 })
-                .wrap()
+                .wrap_anywhere()
+                .max_lines(2)
                 .min_w(0.0)
                 .mx(2.0)
                 .mt(8.0)
@@ -465,11 +472,30 @@ fn section(title: &str, look: &Look) -> El {
         .font(SECTION)
         .text_case(TextCase::Uppercase)
         .color(look.text_section)
-        .wrap()
+        .px(10.0)
+        .pt(10.0)
+        .pb(6.0)
+}
+
+/// The folder list's header on one line: the folder gives way in its middle, and the words
+/// around it and the machine it is on stay whole.
+fn folders_in(directory: &str, on: &str, look: &Look) -> El {
+    let part = |said: &str| {
+        text(said.to_owned())
+            .font(SECTION)
+            .text_case(TextCase::Uppercase)
+            .color(look.text_section)
+            .a11y_hidden()
+    };
+    row()
+        .label(format!("Folders in {directory}{on}"))
         .min_w(0.0)
         .px(10.0)
         .pt(10.0)
         .pb(6.0)
+        .child(part("Folders in "))
+        .child(part(directory).truncate_middle().shrink().min_w(0.0))
+        .children((!on.is_empty()).then(|| part(on)))
 }
 
 /// The scrolling list under the field.
@@ -480,6 +506,8 @@ fn results(key: String, label: &str, children: Vec<El>, t: &Tokens) -> El {
         .label(label)
         .w_full()
         .max_h(340.0)
+        .shrink()
+        .min_h(0.0)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
@@ -604,30 +632,33 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, loo
         }
         _ => None,
     };
-    let folder_title = match browsed {
-        Some((Some(Listing::Listed { directory, .. }), host)) => format!(
-            "Folders in {}/{}",
-            launcher
-                .display(state, directory, host)
-                .trim_end_matches('/'),
+    let listed_in = match browsed {
+        Some((Some(Listing::Listed { directory, .. }), host)) => Some((
+            format!(
+                "{}/",
+                launcher
+                    .display(state, directory, host)
+                    .trim_end_matches('/')
+            ),
             if outposts.is_empty() {
                 String::new()
             } else {
                 format!(" on {}", machine_name(outposts, host))
-            }
-        ),
-        _ => "Folders".to_owned(),
+            },
+        )),
+        _ => None,
     };
     let mut children = Vec::new();
     for (i, r) in rows.iter().enumerate() {
         if i == 0 || rows[i - 1].kind != r.kind {
-            let title = match r.kind {
-                Kind::Recent => "Recent".to_owned(),
-                Kind::Machine => "Browse a machine".to_owned(),
-                Kind::Elsewhere => "Found elsewhere".to_owned(),
-                Kind::Folder => folder_title.clone(),
+            let heading = match (r.kind, &listed_in) {
+                (Kind::Recent, _) => section("Recent", look),
+                (Kind::Machine, _) => section("Browse a machine", look),
+                (Kind::Elsewhere, _) => section("Found elsewhere", look),
+                (Kind::Folder, Some((directory, on))) => folders_in(directory, on, look),
+                (Kind::Folder, None) => section("Folders", look),
             };
-            children.push(section(&title, look).key(format!("{w}.section.{i}")));
+            children.push(heading.key(format!("{w}.section.{i}")));
         }
         children.push(location_row(
             state,
@@ -741,9 +772,18 @@ fn location_row(
                 .label(name.clone())
                 .description(reach_word)
                 .items_center()
+                .max_w(MACHINE_SHARE)
+                .shrink()
+                .min_w(0.0)
                 .gap(5.0)
                 .child(machine_dot(shown, t, look))
-                .child(badge(name, look))
+                .child(
+                    badge(name, look)
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                        .min_w(0.0),
+                )
         });
     let unreachable = r.kind != Kind::Machine
         && reach
