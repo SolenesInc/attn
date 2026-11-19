@@ -473,9 +473,9 @@ func (d *Daemon) recordWorktreeRemoval(wt *store.Worktree, opts deleteWorktreeOp
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 }
 
-func (d *Daemon) seedsForWorktree(wt *store.Worktree) ([]string, error) {
+func (d *Daemon) seedsForWorktree(machine string, wt *store.Worktree) ([]string, error) {
 	var seeds []string
-	err := d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
+	err := d.eachSeedExecutionOn(machine, func(seed garden.Seed, dispatch garden.Execution) {
 		if worktreeOwnsExecution(wt, dispatch) {
 			seeds = append(seeds, seed.ID)
 		}
@@ -505,9 +505,9 @@ func (d *Daemon) seedOwnedWorktrees(ctx context.Context, repo string) (map[strin
 	return owned, nil
 }
 
-func (d *Daemon) worktreeSeedOwnersHere(_ context.Context, msg protocol.WorktreeSeedOwnersMessage) (protocol.WorktreeSeedOwners, error) {
+func (d *Daemon) worktreeSeedOwnersHere(ctx context.Context, msg protocol.WorktreeSeedOwnersMessage) (protocol.WorktreeSeedOwners, error) {
 	owned := make(map[string]bool)
-	err := d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
+	err := d.eachSeedExecutionOn(originMachine(ctx), func(seed garden.Seed, dispatch garden.Execution) {
 		if garden.Closed(seed.Status) {
 			return
 		}
@@ -537,7 +537,7 @@ func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Execution) bool {
 		attngit.CanonicalizePath(dispatch.RepositoryRoot) == attngit.CanonicalizePath(wt.MainRepo)
 }
 
-func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Execution)) error {
+func (d *Daemon) eachSeedExecutionOn(machine string, visit func(garden.Seed, garden.Execution)) error {
 	dispatches, err := d.dispatchesCollection()
 	if err != nil {
 		return fmt.Errorf("reading seed executions: %w", err)
@@ -553,7 +553,7 @@ func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Execution)) er
 		}
 		for _, doc := range read.Documents {
 			seed, err := garden.Decode(doc.Body)
-			if err != nil || protocol.TrimID(seed.LastExecutionID) == "" {
+			if err != nil || protocol.TrimID(seed.LastExecutionID) == "" || d.sessionHost(protocol.TrimID(seed.LastExecutionID)) != machine {
 				continue
 			}
 			execution, found, err := d.store.GetDocument(*dispatches, string(seed.LastExecutionID))

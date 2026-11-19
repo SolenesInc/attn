@@ -350,38 +350,24 @@ func pathAtOrBelow(path, root string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func (d *Daemon) gardenKeepsBranch(repository, branch string) bool {
+func (d *Daemon) gardenKeepsBranch(machine, repository, branch string) bool {
 	repository = attngit.CanonicalizePath(repository)
 	branch = strings.TrimSpace(branch)
 	if repository == "" || branch == "" {
 		return false
 	}
-	after := ""
-	for {
-		read, _, err := d.runDocQuery(docstore.Query{
-			Namespace: garden.Namespace, Collection: garden.CollectionSeeds,
-			Limit: docstore.MaxLimit, After: after,
-		})
-		if err != nil {
-			d.logf("garden: checking whether %s still owns branch %s: %v", repository, branch, err)
-			return true
+	keeps := false
+	err := d.eachSeedExecutionOn(machine, func(seed garden.Seed, execution garden.Execution) {
+		if !keeps && !garden.Closed(seed.Status) && strings.TrimSpace(execution.Branch) == branch &&
+			attngit.CanonicalizePath(execution.RepositoryRoot) == repository {
+			keeps = true
 		}
-		for _, doc := range read.Documents {
-			seed, err := garden.Decode(doc.Body)
-			if err != nil || garden.Closed(seed.Status) || protocol.TrimID(seed.LastExecutionID) == "" {
-				continue
-			}
-			execution, ok := d.gardenDispatch(seed.LastExecutionID)
-			if ok && attngit.CanonicalizePath(execution.RepositoryRoot) == repository &&
-				strings.TrimSpace(execution.Branch) == branch {
-				return true
-			}
-		}
-		if len(read.Documents) < docstore.MaxLimit {
-			return false
-		}
-		after = read.Documents[len(read.Documents)-1].ID
+	})
+	if err != nil {
+		d.logf("garden: checking whether %s still owns branch %s: %v", repository, branch, err)
+		return true
 	}
+	return keeps
 }
 
 func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Execution, string, bool) {
