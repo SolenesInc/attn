@@ -187,7 +187,8 @@ roles or set a role's model.
 - Orchestrator: executes an agreed plan. It starts Builders, reviews their work
   and verifies the result.
 - Builder: implements an agreed change.
-- Reviewer: reviews a change or a PR, only when you ask for one.
+- Reviewer: reviews a plan before you dispatch it, or a change or a PR, only when
+  you ask for one.
 
 [Building with roles](../tutorials/building-with-roles.md) walks through a whole
 change with them.
