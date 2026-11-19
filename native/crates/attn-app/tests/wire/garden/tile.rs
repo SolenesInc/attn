@@ -762,3 +762,42 @@ fn keeps_the_lines_a_log_entry_was_written_in_and_leaves_its_code_alone() {
     assert!(read.contains(&"x\ny".to_owned()), "{read:?}");
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_seed_tile_centers_its_plans_prose_at_the_reading_measure_and_a_wide_table_inside_its_padding()
+{
+    const PARAGRAPH: &str = "A paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.";
+    const CELL: &str = "a cell that runs long enough that the table wants more room than the prose";
+    let plan = || {
+        with(seed("s-wide11", "Wide plan"), |s| {
+            s.body = format!("{PARAGRAPH}\n\n| One | Two |\n| --- | --- |\n| {CELL} | {CELL} |\n")
+        })
+    };
+    let mut world = start("s-wide11", vec![plan()], move |r| {
+        document(r, plan(), Vec::new(), &[])
+    });
+    world.resize((3200.0, 900.0));
+    world.settle();
+    let screen = world.screen();
+    let [vx, _, vw, _] = screen.bounds(Target::key("seed-tile.t.viewport")).unwrap();
+    let [px, _, pw, _] = screen
+        .bounds(Target::role("label").name(PARAGRAPH))
+        .unwrap();
+    let [tx, _, tw, _] = screen.bounds(Target::role("table")).unwrap();
+    assert!(vw > 1200.0, "the tile is wide: {vw}");
+    assert_eq!(pw, 760.0, "the plan's prose keeps the reading measure");
+    assert!(tw > pw, "the table takes more room than the prose: {tw}");
+    let axis = vx + vw / 2.0;
+    for (what, x, w) in [("prose", px, pw), ("table", tx, tw)] {
+        assert!(
+            (x + w / 2.0 - axis).abs() < 1.0,
+            "the {what} is centered on the tile: {x} + {w} around {axis}"
+        );
+    }
+    assert!(
+        tx - vx >= 12.0 && vx + vw - (tx + tw) >= 12.0,
+        "the table keeps the tile's padding: {tx}..{} in {vx}..{}",
+        tx + tw,
+        vx + vw
+    );
+}

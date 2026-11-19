@@ -4163,7 +4163,8 @@ fn a_wide_table_in_a_review_wraps_its_cells_inside_the_document() {
 }
 
 #[test]
-fn a_table_in_a_review_takes_the_cards_width_while_its_prose_keeps_the_reviews_measure() {
+fn a_table_in_a_review_takes_the_cards_width_while_its_prose_keeps_the_reviews_measure_centered_over_it()
+ {
     let cell = |n: usize| format!("cell {n} of a table that is wider than a paragraph");
     let table = format!(
         "\n| One | Two | Three |\n| --- | --- | --- |\n| {} | {} | {} |\n",
@@ -4182,10 +4183,15 @@ fn a_table_in_a_review_takes_the_cards_width_while_its_prose_keeps_the_reviews_m
         "the table runs past the 644-point prose measure: its last cell ends {} in",
         cx + cw - x
     );
-    let [_, _, prose, _] = screen
+    let [px, _, prose, _] = screen
         .bounds(Target::role("label").name("Add used to return its sum directly."))
         .unwrap();
     assert_eq!(prose, 644.0, "the review's prose keeps its measure");
+    let [tx, _, tw, _] = screen.bounds(Target::role("table")).unwrap();
+    assert!(
+        (px + prose / 2.0 - (tx + tw / 2.0)).abs() < 1.0,
+        "the prose is centered over the table: prose at {px}, table {tx} wide {tw}"
+    );
 }
 
 #[test]

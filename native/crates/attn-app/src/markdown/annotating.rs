@@ -115,6 +115,11 @@ impl Readings {
         }
     }
 
+    /// The widest any document view lays out, in points, once one has.
+    pub(crate) fn widest(&self) -> Option<f32> {
+        self.widths.values().max().map(|w| *w as f32)
+    }
+
     /// The document `view` scrolls laid out `width` points across.
     pub(crate) fn measured(&mut self, view: &str, width: f32, tx: &mut Tx) {
         let width = width.round() as u32;

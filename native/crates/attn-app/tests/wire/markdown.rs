@@ -585,6 +585,39 @@ fn a_documents_large_image_holds_the_size_it_draws_and_its_preview_the_whole_ima
     rest(&mut world);
 }
 
+#[test]
+fn a_large_image_on_a_wide_document_tile_holds_the_width_it_draws_past_the_prose_measure() {
+    use base64::Engine;
+    let mut world = start();
+    world.resize((3600.0, 900.0));
+    world.daemon.on("tile_asset_read", |r| {
+        let data = base64::engine::general_purpose::STANDARD.encode(WIDE_STRIP);
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            data_uri: Some(format!("data:image/png;base64,{data}")),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.daemon.emit(content("![shot](shot.png)"));
+    world.settle();
+    let [_, _, drawn, _] = world
+        .screen()
+        .bounds(Target::role("image").name("shot"))
+        .unwrap();
+    assert!(
+        drawn > 1520.0,
+        "the picture takes the wide column, past the measure: {drawn}"
+    );
+    assert_eq!(
+        picture_held(&world, "shot"),
+        Some((3200, 40)),
+        "drawn {drawn} points across at 2x, the whole picture is held"
+    );
+    rest(&mut world);
+}
+
 /// An 8×2 green PNG.
 const GREEN: &str = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAACCAIAAADq9gq6AAAAEElEQVR4nGNg+M+AHeGSAACOsQ/xb1SVcwAAAABJRU5ErkJggg==";
 
@@ -1253,62 +1286,81 @@ fn a_press_on_a_control_in_an_inactive_document_tile_takes_the_tile_and_the_cont
 
 const MEASURED: &str = "---\ntitle: Launch plan\n---\n# The plan\n\nA paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.\n\n> a quote that also runs long enough to wrap before it reaches across a wide tile, as prose does\n\n| One | Two |\n| --- | --- |\n| 1 | 2 |\n\n```sh\nmake check\n```\n";
 
-/// The widths of the document's prose (heading, paragraph, quote) and of its wide blocks (front
-/// matter, table, code block), and the document view's width, in a window `width` wide.
-fn measured_at(width: f32) -> (Vec<f32>, Vec<f32>, f32) {
+/// The document's prose (heading, paragraph, quote) and its wide blocks (front matter, table,
+/// code block), each as its left edge and width, and the document view's, in a window `width`
+/// wide.
+fn measured_at(width: f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>, [f32; 2]) {
     let mut world = start_with(document_tile("m", PLAN));
     world.resize((width, 900.0));
     world.daemon.emit(content(MEASURED));
     world.settle();
     let screen = world.screen();
-    let width_of = |target: Target| {
+    let span_of = |target: Target| {
         let described = format!("{target:?}");
-        screen
+        let [x, _, w, _] = screen
             .bounds(target)
-            .unwrap_or_else(|| panic!("{described} is drawn"))[2]
+            .unwrap_or_else(|| panic!("{described} is drawn"));
+        [x, w]
     };
     let prose = vec![
-        width_of(Target::role("heading").name("The plan")),
-        width_of(Target::role("label").name(
+        span_of(Target::role("heading").name("The plan")),
+        span_of(Target::role("label").name(
             "A paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.",
         )),
-        width_of(Target::role("blockquote")),
+        span_of(Target::role("blockquote")),
     ];
     let wide = vec![
-        width_of(Target::role("note").name("Front matter")),
-        width_of(Target::role("table")),
-        width_of(Target::role("code")),
+        span_of(Target::role("note").name("Front matter")),
+        span_of(Target::role("table")),
+        span_of(Target::role("code")),
     ];
-    let document = width_of(Target::key("tile.m.document"));
+    let document = span_of(Target::key("tile.m.document"));
     (prose, wide, document)
 }
 
+fn centered_on(spans: &[[f32; 2]], axis: f32) {
+    for [x, w] in spans {
+        assert!(
+            (x + w / 2.0 - axis).abs() < 1.0,
+            "every block is centered on {axis}: {spans:?}"
+        );
+    }
+}
+
 #[test]
-fn a_wide_document_tile_fills_with_its_card_while_prose_keeps_its_reading_measure() {
-    let (prose, wide, document) = measured_at(2100.0);
+fn a_wide_document_tile_centers_prose_at_its_reading_measure_and_wide_blocks_across_the_card() {
+    let (prose, wide, [x, document]) = measured_at(2100.0);
     assert!(document > 1700.0, "the tile is wide: {document}");
-    let text = wide[0];
+    let text = wide[0][1];
     assert!(
         document - text < 120.0,
         "the card fills the tile: its text is {text} of {document}"
     );
-    for w in &wide {
+    for [_, w] in &wide {
         assert!(
             (w - text).abs() < 1.0,
             "a wide block takes the card: {wide:?}"
         );
     }
-    assert_eq!(prose, [760.0; 3], "prose keeps the reading measure");
+    assert_eq!(
+        prose.iter().map(|[_, w]| *w).collect::<Vec<_>>(),
+        [760.0; 3],
+        "prose keeps the reading measure"
+    );
+    let axis = x + document / 2.0;
+    centered_on(&prose, axis);
+    centered_on(&wide, axis);
 
-    let (prose, wide, document) = measured_at(900.0);
+    let (prose, wide, [x, document]) = measured_at(900.0);
     assert!(document < 760.0, "the tile is narrow: {document}");
-    let text = wide[0];
-    for w in prose.iter().chain(&wide) {
+    let text = wide[0][1];
+    for [_, w] in prose.iter().chain(&wide) {
         assert!(
             (w - text).abs() < 1.0,
             "every block shares the card: {prose:?} {wide:?}"
         );
     }
+    centered_on(&prose, x + document / 2.0);
 }
 
 #[test]

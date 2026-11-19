@@ -655,6 +655,7 @@ pub(crate) fn body(
                         .key(key.clone())
                         .w_full()
                         .max_w(prose_width(*kind))
+                        .self_center()
                         .child(block);
                     cursor_frame(
                         place_press(el, tile, key).role("group"),
@@ -1017,8 +1018,8 @@ fn spaced(parts: impl Iterator<Item = ((f32, f32), El)>) -> Vec<El> {
         .collect()
 }
 
-/// How wide a prose part of kind `block` runs: the review's measure for the text blocks the
-/// Tauri review caps; a code block, table or anything else takes the card.
+/// How wide a prose part of kind `block` runs, centered in the card: the review's measure for
+/// the text blocks the Tauri review caps; a code block, table or anything else takes the card.
 fn prose_width(block: document::Prose) -> f32 {
     match block {
         document::Prose::Other => f32::INFINITY,

@@ -294,13 +294,14 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         }
     }
     let widths = crate::notebook::image_widths(state);
+    let tiles = state.readings.widest();
     let zoom = crate::settings::text_scale(&state.facts.settings);
     let blurred: Vec<Source> = state
         .pictures
         .loads
         .iter()
         .filter(|(source, load)| match load {
-            Load::Ready(image) => holds_less(image, widest(source, &widths, zoom)),
+            Load::Ready(image) => holds_less(image, widest(source, &widths, tiles, zoom)),
             _ => false,
         })
         .map(|(source, _)| source.clone())
@@ -333,12 +334,19 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     changed | state.pictures.zoom.poll(now, tx)
 }
 
-/// The widest `source` draws, in the window's points at text size `zoom`: a note's column, or
-/// the reader's prose measure.
-fn widest(source: &Source, notes: &HashMap<Option<String>, f32>, zoom: f32) -> f32 {
+/// The widest `source` draws, in the window's points at text size `zoom`: a note's column, a
+/// tile's widest document view, as a picture takes the column up to its own size, or the
+/// reader's prose measure.
+fn widest(
+    source: &Source,
+    notes: &HashMap<Option<String>, f32>,
+    tiles: Option<f32>,
+    zoom: f32,
+) -> f32 {
     let column = match &source.reader {
         Reader::Notebook { root } => notes.get(root).copied(),
-        Reader::Tile { .. } | Reader::Ask(_) => None,
+        Reader::Tile { .. } => tiles,
+        Reader::Ask(_) => None,
     };
     column.unwrap_or(super::PROSE_MEASURE) * zoom
 }
@@ -441,7 +449,12 @@ fn arrived(state: &mut State, source: Source, bytes: Option<Vec<u8>>) {
     };
     let previous = previous.clone();
     let zoom = crate::settings::text_scale(&state.facts.settings);
-    let width = widest(&source, &crate::notebook::image_widths(state), zoom);
+    let width = widest(
+        &source,
+        &crate::notebook::image_widths(state),
+        state.readings.widest(),
+        zoom,
+    );
     let load = match (bytes, &state.pictures.cache) {
         (Some(bytes), Some(cache)) => Load::Decoding(
             cache.load_across(bytes, width, crate::PICTURE_SCALE),
