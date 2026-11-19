@@ -103,7 +103,7 @@ func readinessObservation() *prreadiness.Observation {
 
 func watchPRForRefresh(t *testing.T, d *Daemon, sessionID string, mode prreadiness.Mode, reviewer string) {
 	t.Helper()
-	rec, err := d.sessionPullRequestIdentity(protocol.SessionID(sessionID), "https://github.com/victorarias/attn/pull/71")
+	rec, err := d.sessionPullRequestIdentity("", protocol.SessionID(sessionID), "https://github.com/victorarias/attn/pull/71")
 	if err != nil {
 		t.Fatal(err)
 	}

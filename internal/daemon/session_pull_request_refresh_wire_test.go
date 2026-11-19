@@ -1195,3 +1195,52 @@ func TestAClosedSessionsWatchCanBeListedAndEndedByItsSessionID(t *testing.T) {
 		}
 	})
 }
+
+func TestAnotherProfilesSessionsPullRequestsDoNotExistForACaller(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "closed", "live", "neighbour")
+		side := createProfile(w.App(), "Side")
+		if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), protocol.SessionAgentClaude, side.ID); err != nil {
+			t.Fatalf("register stranger: %v", err)
+		}
+		watchPullRequestOn(t, cli, "closed", protocol.PullRequestWatchModeGreen)
+		watchPullRequestOn(t, cli, "live", protocol.PullRequestWatchModeGreen)
+		closeSession(t, cli, "closed", "work finished")
+
+		stranger := cli.WithCaller(protocol.TerminalID(w.Terminal("stranger")))
+		for _, target := range []string{"closed", "live"} {
+			unknown := "unknown session " + target
+			if listed, err := stranger.PullRequests(protocol.SessionID(target), ""); err == nil || !strings.Contains(err.Error(), unknown) {
+				t.Errorf("another profile's agent lists %s's pull requests = %+v (%v), want %q", target, listed, err, unknown)
+			}
+			if err := stranger.UnwatchSessionPullRequest(protocol.SessionID(target), "", shopPull(71)); err == nil || !strings.Contains(err.Error(), unknown) {
+				t.Errorf("another profile's agent unwatches for %s = %v, want %q", target, err, unknown)
+			}
+			if err := stranger.WatchSessionPullRequest(protocol.SessionID(target), "", shopPull(72), protocol.PullRequestWatchModeGreen, ""); err == nil || !strings.Contains(err.Error(), unknown) {
+				t.Errorf("another profile's agent watches for %s = %v, want %q", target, err, unknown)
+			}
+		}
+		if err := stranger.ForgetSessionPullRequest("live", shopPull(71)); err == nil || !strings.Contains(err.Error(), "unknown session live") {
+			t.Errorf("another profile's agent forgets live's pull request = %v, want unknown session", err)
+		}
+		if err := stranger.RecordPullRequestCreated("live", shopPull(73)); err == nil || !strings.Contains(err.Error(), "unknown session live") {
+			t.Errorf("another profile's agent records a pull request for live = %v, want unknown session", err)
+		}
+
+		if _, readinessReads := gh.fetchesDuring(w, protocol.HeatHotInterval); readinessReads == 0 {
+			t.Errorf("after another profile's attempts GitHub was not asked about the watched pull request, want the watches kept")
+		}
+		neighbour := cli.WithCaller(protocol.TerminalID(w.Terminal("neighbour")))
+		for _, target := range []string{"closed", "live"} {
+			listed, err := neighbour.PullRequests(protocol.SessionID(target), "")
+			if err != nil || len(listed) != 1 || listed[0].URL != shopPull(71) || !protocol.Deref(listed[0].Watching) {
+				t.Errorf("an agent in the same profile lists %s's pull requests = %+v (%v), want the watch intact", target, listed, err)
+			}
+		}
+		if err := neighbour.UnwatchSessionPullRequest("closed", "", shopPull(71)); err != nil {
+			t.Errorf("an agent in the same profile unwatches for the closed session: %v", err)
+		}
+	})
+}

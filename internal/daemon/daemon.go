@@ -3201,15 +3201,15 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdFilesEdited:
 		d.handleFilesEdited(conn, msg.(*protocol.FilesEditedMessage))
 	case protocol.CmdPullRequestCreated:
-		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage))
+		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage), caller)
 	case protocol.CmdPullRequestForget:
-		d.handlePullRequestForget(conn, msg.(*protocol.PullRequestForgetMessage))
+		d.handlePullRequestForget(conn, msg.(*protocol.PullRequestForgetMessage), caller)
 	case protocol.CmdPullRequestWatch:
-		d.handlePullRequestWatch(conn, msg.(*protocol.PullRequestWatchMessage))
+		d.handlePullRequestWatch(conn, msg.(*protocol.PullRequestWatchMessage), caller)
 	case protocol.CmdPullRequestUnwatch:
-		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
+		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage), caller)
 	case protocol.CmdPullRequestList:
-		d.handlePullRequestList(conn, msg.(*protocol.PullRequestListMessage))
+		d.handlePullRequestList(conn, msg.(*protocol.PullRequestListMessage), caller)
 	case protocol.CmdQuery:
 		d.handleQuery(conn, msg.(*protocol.QueryMessage))
 	case protocol.CmdCallerSession:

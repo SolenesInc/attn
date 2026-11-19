@@ -478,7 +478,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			return nil, true, err
 		}
 		d.notePluginDriverReport(params.SessionID)
-		rec, err := d.sessionPullRequestIdentity(params.SessionID, params.URL)
+		rec, err := d.sessionPullRequestIdentity(params.SessionID, params.SessionID, params.URL)
 		if err != nil {
 			return nil, true, err
 		}

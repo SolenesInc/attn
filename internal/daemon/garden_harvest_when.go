@@ -378,7 +378,7 @@ func (d *Daemon) harvestWhenPullRequest(seedID string, url string, sessionID pro
 			"harvest --when-merged needs a session to track the pull request; run `attn seed harvest %s --when-merged <pr-url>` from an attn session", seedID)
 	}
 	if url = strings.TrimSpace(url); url != "" {
-		named, err := d.sessionPullRequestIdentity(sessionID, url)
+		named, err := d.sessionPullRequestIdentity(sessionID, sessionID, url)
 		if err != nil {
 			return store.SessionPullRequestRecord{}, err
 		}

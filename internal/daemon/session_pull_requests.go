@@ -21,12 +21,12 @@ type sessionPullRequestFact struct {
 	PRID string `json:"pr_id"`
 }
 
-func (d *Daemon) handlePullRequestCreated(conn net.Conn, msg *protocol.PullRequestCreatedMessage) {
+func (d *Daemon) handlePullRequestCreated(conn net.Conn, msg *protocol.PullRequestCreatedMessage, caller protocol.SessionID) {
 	sessionID := msg.ID
 	if msg.TerminalID != nil {
 		sessionID = d.sessionInTerminal(*msg.TerminalID)
 	}
-	rec, err := d.sessionPullRequestIdentity(sessionID, msg.URL)
+	rec, err := d.sessionPullRequestIdentity(caller, sessionID, msg.URL)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -38,8 +38,8 @@ func (d *Daemon) handlePullRequestCreated(conn net.Conn, msg *protocol.PullReque
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullRequestForgetMessage) {
-	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullRequestForgetMessage, caller protocol.SessionID) {
+	rec, err := d.sessionPullRequestIdentity(caller, msg.ID, msg.URL)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -51,8 +51,8 @@ func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullReques
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequestWatchMessage) {
-	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequestWatchMessage, caller protocol.SessionID) {
+	rec, err := d.sessionPullRequestIdentity(caller, msg.ID, msg.URL)
 	if err == nil {
 		err = d.watchSessionPullRequest(rec, protocol.Deref(msg.SeedID), prreadiness.Mode(msg.Mode), protocol.Deref(msg.Reviewer))
 	}
@@ -63,8 +63,8 @@ func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequest
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullRequestUnwatchMessage) {
-	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullRequestUnwatchMessage, caller protocol.SessionID) {
+	rec, err := d.sessionPullRequestIdentity(caller, msg.ID, msg.URL)
 	if err == nil {
 		if seedID := protocol.Deref(msg.SeedID); seedID != "" {
 			err = d.unwatchSeedPullRequest(rec, seedID)
@@ -79,8 +79,8 @@ func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullReque
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handlePullRequestList(conn net.Conn, msg *protocol.PullRequestListMessage) {
-	pullRequests, err := d.listPullRequests(protocol.TrimID(msg.ID), strings.TrimSpace(protocol.Deref(msg.SeedID)))
+func (d *Daemon) handlePullRequestList(conn net.Conn, msg *protocol.PullRequestListMessage, caller protocol.SessionID) {
+	pullRequests, err := d.listPullRequests(caller, protocol.TrimID(msg.ID), strings.TrimSpace(protocol.Deref(msg.SeedID)))
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -91,11 +91,11 @@ func (d *Daemon) handlePullRequestList(conn net.Conn, msg *protocol.PullRequestL
 	json.NewEncoder(conn).Encode(protocol.Response{Ok: true, PullRequests: pullRequests})
 }
 
-func (d *Daemon) listPullRequests(sessionID protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {
+func (d *Daemon) listPullRequests(caller, sessionID protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {
+	if !d.sessionKnownTo(caller, sessionID) {
+		return nil, fmt.Errorf("unknown session %s", sessionID)
+	}
 	if seedID == "" {
-		if !d.sessionKnown(sessionID) {
-			return nil, fmt.Errorf("unknown session %s", sessionID)
-		}
 		return d.sessionPullRequestsTo(sessionID, d.inboxRoleAddresses(sessionID)), nil
 	}
 	seed, err := d.seedOfSessionProfile(sessionID, seedID)
@@ -116,8 +116,16 @@ func (d *Daemon) listPullRequests(sessionID protocol.SessionID, seedID string) (
 	return d.sessionPullRequestsForBroadcast(records, []who.Address{address}, byPR), nil
 }
 
-func (d *Daemon) sessionKnown(id protocol.SessionID) bool {
-	return d.store.Get(id) != nil || d.store.SessionClosed(id)
+func (d *Daemon) sessionKnownTo(caller, id protocol.SessionID) bool {
+	if d.store.Get(id) == nil && !d.store.SessionClosed(id) {
+		return false
+	}
+	if caller = protocol.TrimID(caller); caller == "" || caller == id {
+		return true
+	}
+	callerProfile, callerErr := d.store.SessionProfileID(caller)
+	targetProfile, targetErr := d.store.SessionProfileID(id)
+	return callerErr == nil && targetErr == nil && callerProfile == targetProfile
 }
 
 func (d *Daemon) seedOfSessionProfile(sessionID protocol.SessionID, seedID string) (garden.Seed, error) {
@@ -293,13 +301,13 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 	return nil
 }
 
-func (d *Daemon) sessionPullRequestIdentity(id protocol.SessionID, url string) (store.SessionPullRequestRecord, error) {
+func (d *Daemon) sessionPullRequestIdentity(caller, id protocol.SessionID, url string) (store.SessionPullRequestRecord, error) {
 	var rec store.SessionPullRequestRecord
 	sessionID := protocol.TrimID(id)
 	if sessionID == "" {
 		return rec, fmt.Errorf("pull request report needs a session id")
 	}
-	if !d.sessionKnown(sessionID) {
+	if !d.sessionKnownTo(caller, sessionID) {
 		return rec, fmt.Errorf("unknown session %s", sessionID)
 	}
 	host, owner, repository, number, err := automation.ParsePullRequestURL(url)
