@@ -280,10 +280,18 @@ impl Sheet<'_> {
         let key = self.key("plan");
         let t = *self.t;
         let kept = self.readings.kept(&view);
+        let in_card = matches!(self.go, Go::Tile { .. });
+        let width = kept.width.map(|w| w as f32);
+        let (padding, text_width) = if in_card {
+            let (padding, text) = crate::markdown::card_inside(width.unwrap_or(0.0));
+            (padding, width.map(|_| text))
+        } else {
+            (0.0, width)
+        };
         let style = {
             let look = body_look(t.text_primary.alpha(0.9), &t);
-            match kept.width {
-                Some(width) => look.text_width(width as f32),
+            match text_width {
+                Some(width) => look.text_width(width),
                 None => look,
             }
         };
@@ -320,7 +328,11 @@ impl Sheet<'_> {
                         state.readings.measured(&view, w, tx)
                     }
                 })
-                .child(reading)
+                .child(if in_card {
+                    crate::markdown::card(padding, reading, &t)
+                } else {
+                    reading
+                })
         };
         if let (Go::Tile { tile, .. }, Some(drafts)) = (&self.go, self.drafts) {
             let (reading, over) = crate::markdown::seed_reader(

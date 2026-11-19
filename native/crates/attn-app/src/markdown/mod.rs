@@ -47,6 +47,23 @@ fn card_padding(room: f32) -> f32 {
     }
 }
 
+/// The reader's card around `reading`, `padding` inside its border.
+pub(crate) fn card(padding: f32, reading: El, t: &Tokens) -> El {
+    col()
+        .w_full()
+        .padding(padding)
+        .radius(radius::LG)
+        .fill(t.bg_panel)
+        .border(CARD_BORDER, t.border.alpha(0.5))
+        .child(reading)
+}
+
+/// The padding of a card `width` points across and the text column it leaves.
+pub(crate) fn card_inside(width: f32) -> (f32, f32) {
+    let padding = card_padding(width);
+    (padding, (width - 2.0 * (padding + CARD_BORDER)).max(0.0))
+}
+
 /// The card's padding and the text column inside it, in a document view `area` points across,
 /// for a card at most `widest` points wide.
 fn card_fit(area: Option<u32>, widest: f32) -> (f32, Option<f32>) {
@@ -140,15 +157,7 @@ pub(crate) fn body(
             })
             .child(document)
     };
-    let card = |reading: El| {
-        col()
-            .w_full()
-            .padding(padding)
-            .radius(radius::LG)
-            .fill(t.bg_panel)
-            .border(CARD_BORDER, t.border.alpha(0.5))
-            .child(reading)
-    };
+    let card = |reading: El| card(padding, reading, t);
     let document = links::Document {
         path: content.path.clone(),
         session: session.map(str::to_owned),

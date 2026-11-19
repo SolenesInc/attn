@@ -764,8 +764,8 @@ fn keeps_the_lines_a_log_entry_was_written_in_and_leaves_its_code_alone() {
 }
 
 #[test]
-fn a_seed_tile_centers_its_plans_prose_at_the_reading_measure_and_a_wide_table_inside_its_padding()
-{
+fn a_seed_tile_centers_its_plans_prose_at_the_reading_measure_and_a_wide_table_inside_the_readers_card()
+ {
     const PARAGRAPH: &str = "A paragraph that runs long enough to wrap well before it could reach across a wide tile, so its width is the reading measure and not the words in it.";
     const CELL: &str = "a cell that runs long enough that the table wants more room than the prose";
     let plan = || {
@@ -794,10 +794,19 @@ fn a_seed_tile_centers_its_plans_prose_at_the_reading_measure_and_a_wide_table_i
             "the {what} is centered on the tile: {x} + {w} around {axis}"
         );
     }
+    let [cx, _, cw, _] = screen
+        .bounds(Target::role("document").name("Plan"))
+        .unwrap();
     assert!(
-        tx - vx >= 12.0 && vx + vw - (tx + tw) >= 12.0,
-        "the table keeps the tile's padding: {tx}..{} in {vx}..{}",
-        tx + tw,
+        cx - vx >= 12.0 && vx + vw - (cx + cw) >= 12.0,
+        "the plan's card keeps the tile's padding: {cx}..{} in {vx}..{}",
+        cx + cw,
         vx + vw
+    );
+    assert!(
+        tx - cx >= 28.0 && cx + cw - (tx + tw) >= 28.0,
+        "the table sits inside the card's padding, as the Tauri reader's card holds it: {tx}..{} in {cx}..{}",
+        tx + tw,
+        cx + cw
     );
 }
