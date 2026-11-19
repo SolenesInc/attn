@@ -154,7 +154,9 @@ thread_local! {
     static GPU: Gpu = Gpu::headless();
 }
 
-fn label_view(said: &String, cx: &mut Cx<String>) -> El {
+struct Label(String);
+
+fn label_view(Label(said): &Label, cx: &mut Cx<Label>) -> El {
     let t = scheme_for(None).colors(cx.system_dark()).ui;
     el().w_full()
         .h_full()
@@ -174,7 +176,7 @@ fn label(said: &str, size: (f32, f32), dark: bool) -> Image {
         ..AppSpec::new(
             "label",
             size,
-            || LABEL.with_borrow(Clone::clone),
+            || Label(LABEL.with_borrow(Clone::clone)),
             label_view,
         )
     })
