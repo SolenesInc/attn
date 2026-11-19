@@ -2218,21 +2218,26 @@ fn arranged_on(world: &mut World, message: &InitialStateMessage, current: &str, 
     world.settle();
 }
 
+/// The title bar's leading points macOS's traffic lights take. The bar's room is measured
+/// beside them on every platform, since Linux reports none.
+const MACOS_WINDOW_CONTROLS: f32 = 69.0;
 /// Wide enough for every chip of eight desktops, the runs chip and the waiting pill.
 const ROOMY: (f32, f32) = (1400.0, 900.0);
 /// At Home, too narrow for the chips of eight desktops beside the waiting pill and the runs
-/// chip (403 px of bar), with room for the crowded bar (184 px) beside the macOS traffic lights.
+/// chip (they need a window 903 wide), with room for the crowded bar (it keeps off the toolbar
+/// down to 678).
 const CROWDED_AT_HOME: (f32, f32) = (800.0, 900.0);
 /// On desktop 1, too narrow for the chips of eight desktops beside the waiting pill, the runs
-/// chip and the shelf (553 px of bar), with room for the crowded bar beside the shelf (334 px)
-/// and the macOS traffic lights.
-const CROWDED_BESIDE_SHELF: (f32, f32) = (900.0, 900.0);
+/// chip and its two tiles' shelf (they need a window 1047 wide), and wide enough for them beside
+/// desktop 3's single tile (903).
+const CROWDED_BESIDE_SHELF: (f32, f32) = (975.0, 900.0);
 
 /// The queue bar crowded by eight desktops, on desktop 1 where its tiles leave the shelf
 /// beside the chips, or at Home.
 fn crowded_bar(on_desktop: bool) -> (World, InitialStateMessage) {
     let message = crowding_desktops(8);
     let mut world = World::start(Daemon::scripted().state(message.clone()));
+    world.window_controls_take(MACOS_WINDOW_CONTROLS);
     if on_desktop {
         world.gesture(|app| app.click(Target::key("queue.desktop.1")));
     }
