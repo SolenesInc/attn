@@ -1116,12 +1116,18 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         .transition(tile_transition(&leaf.kind));
     let key = format!("tile.{}", leaf.id);
     let below = header_height(pane_of(desktop, &leaf.id).is_some());
-    look.frame(frame, t)
+    let content = col()
+        .key(format!("{key}.content"))
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .clip_rounded(0.0)
         .child(header(leaf, &title, &look, cx))
         .child(body)
         .children(look.veil(&key, below, t))
         .children(look.marks(&key, t))
-        .children(super::arrival::overlay(cx.rings, &leaf.id, t))
+        .children(super::arrival::overlay(cx.rings, &leaf.id, t));
+    look.frame(frame, t).child(content)
 }
 
 fn browser_page(desktop: &Desktop, leaf: &Leaf) -> attn_client::TileKey {
