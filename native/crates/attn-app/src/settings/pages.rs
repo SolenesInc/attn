@@ -348,14 +348,15 @@ pub(super) fn segmented(
     t: &Tokens,
     choose: fn(&mut State, &'static str, &mut Tx),
 ) -> El {
-    Segmented::new(format!("settings.choice.{key}"), label)
+    let track: El = Segmented::new(format!("settings.choice.{key}"), label)
         .options(options.iter().enumerate().map(|(i, &(value, name))| {
             Segment::new(format!("segment{i}"), name)
                 .chosen(value == chosen)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| choose(state, value, tx))
         }))
         .build(t)
-        .into()
+        .into();
+    track.self_start()
 }
 
 /// The switch in a feature page's head, which turns the feature on and off.

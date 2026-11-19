@@ -965,3 +965,24 @@ fn a_saved_override_with_a_missing_rate_or_an_unknown_field_says_it_is_invalid_a
         rest(&mut world);
     }
 }
+
+#[test]
+fn a_choice_keeps_to_its_own_width_and_the_default_agent_leaves_its_description_the_row() {
+    let mut world = on_agents(&both(&[("garden.tender_resume", "any")]));
+    let block = world.rect("settings.block.seeds-on-standby");
+    let choice = world.rect("settings.choice.garden.tender_resume");
+    assert!(
+        choice[2] < block[2] / 2.0,
+        "the resume choice spans {} of its block's {}",
+        choice[2],
+        block[2]
+    );
+    let agent = world.rect("settings.default-agent");
+    let body = world.rect("settings.body");
+    assert!(
+        agent[2] < body[2] / 3.0,
+        "the default agent choice spans {} of the page's {}",
+        agent[2],
+        body[2]
+    );
+}
