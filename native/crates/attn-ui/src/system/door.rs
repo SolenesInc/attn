@@ -44,6 +44,10 @@ pub(crate) fn corner(e: El, radius: Radius) -> El {
     e.radius(radius.pt())
 }
 
+pub(crate) fn line(input: rune_kit::TextInput, kind: Type) -> rune_kit::TextInput {
+    input.text_style(style(kind))
+}
+
 pub(crate) fn area(area: rune_kit::TextArea, kind: Type, x: Space, y: Space) -> rune_kit::TextArea {
     area.font(style(kind)).padding(x.pt(), y.pt())
 }

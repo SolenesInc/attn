@@ -35,8 +35,7 @@ pub fn area_box(area: TextArea, disabled: bool, t: &Tokens) -> Control {
 
 fn single_line(input: TextInput, disabled: bool, t: &Tokens) -> Control {
     let size = Size::Regular;
-    let field = input
-        .text_style(door::style(Type::Body))
+    let field = door::line(input, Type::Body)
         .height(size.height())
         .disabled(disabled)
         .build(kit(disabled, t));
