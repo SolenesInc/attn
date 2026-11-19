@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 use attn_protocol::{Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage};
 use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Notice, Prose, Status};
 use attn_ui::system::Button;
 use attn_ui::type_;
 use rune::tok::space;
@@ -95,40 +96,29 @@ fn retry(state: &mut State, id: String, tx: &mut Tx) {
     );
 }
 
-pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
     let k = crate::settings::pages::kit(t);
     let tasks = &state.window.settings.tasks;
     if let Some(error) = &tasks.error {
         return vec![
-            col()
-                .key("settings.tasks.error")
-                .role("alert")
-                .label(error.clone())
-                .gap(space::S2)
-                .child(text(error.clone()).font(CAPTION).color(t.text_muted))
-                .child(El::from(
+            Notice::error("settings.tasks.error", error.clone())
+                .action(
                     Button::new("Try again")
                         .on_press_tx(read)
                         .build(t)
                         .key("settings.tasks.try-again"),
-                )),
+                )
+                .build(t),
         ];
     }
     if tasks.list.is_empty() {
-        let said = text(if tasks.loading {
-            "Loading tasks…"
-        } else {
-            "No background tasks."
-        })
-        .key("settings.tasks.empty")
-        .font(CAPTION);
         return vec![if tasks.loading {
-            said.color(t.text_muted).pt(6.0).pb(10.0)
+            Status::new("settings.tasks.empty", "Loading tasks…", true).build(t)
         } else {
-            said.color(t.text_dimmed).pt(2.0).pb(8.0)
+            Prose::empty("settings.tasks.empty", "No background tasks.").build(t)
         }];
     }
-    vec![
+    vec![Block::custom(
         col()
             .key("settings.tasks")
             .role("list")
@@ -141,7 +131,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                     .iter()
                     .map(|task| row_of(tasks, task, now_ms, t, k)),
             ),
-    ]
+    )]
 }
 
 fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens, k: &rune_kit::Kit) -> El {

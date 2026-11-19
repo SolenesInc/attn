@@ -9,7 +9,8 @@ use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::{Select, SelectAppearance, TextInput};
 
 use super::super::autosave::{self, Codec, PLAIN};
-use super::super::pages::{CAPTION, S4, refusal_beside};
+use super::super::controls::refusal_beside;
+use super::super::pages::{CAPTION, S4};
 use super::hint;
 use crate::State;
 

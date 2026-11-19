@@ -3,6 +3,7 @@
 
 use attn_protocol::{Harness, HarnessModel};
 use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Status};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, row, text};
@@ -481,27 +482,20 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
     ))
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let listed = harnesses::listed(state);
     let entries = entries(state);
     let mut out = Vec::new();
-    out.extend(harnesses::failure_row(state, "models", t));
+    out.extend(harnesses::failure_notice(state, "models", t));
     if harnesses::first_loading(state) {
-        out.push(
-            caption(
-                "settings.models.loading".into(),
-                "Loading harnesses…".into(),
-                t,
-            )
-            .role("status"),
-        );
+        out.push(Status::new("settings.models.loading", "Loading harnesses…", true).build(t));
     }
-    let harness_blocks = listed
+    let harness_blocks: Vec<El> = listed
         .iter()
         .map(|h| harness_block(state, h, &entries, t))
         .chain(missing_harnesses(&listed, &entries, t))
         .collect();
-    out.extend(blocks(harness_blocks, t));
+    out.extend(blocks(harness_blocks, t).into_iter().map(Block::custom));
     out
 }
 

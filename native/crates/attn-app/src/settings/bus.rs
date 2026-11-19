@@ -11,9 +11,10 @@ use rune::tok::space;
 use rune::{Align, El, Tx, col, row, text};
 
 use super::Section;
-use attn_ui::system::{self, Look, Tone, tag};
+use attn_ui::blocks::{Actions, Block, Facts, Inline, Notice, Prose, Stack, Status};
+use attn_ui::system::{self, Look, Tone, Type, tag, words};
 
-use super::pages::{self, CAPTION};
+use super::pages::{self};
 use crate::State;
 
 /// The daemon answers with one pass over the whole log, 209 ms at 945k rows, so the page reads
@@ -114,56 +115,37 @@ fn switch(state: &mut State, consumer: String, enabled: bool, tx: &mut Tx) {
     );
 }
 
-pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
     let bus = &state.window.settings.bus;
     let Some(status) = &bus.status else {
         return vec![match &bus.error {
-            Some(error) => col()
-                .key("settings.bus.error")
-                .role("alert")
-                .label(error.clone())
-                .gap(space::S2)
-                .child(text(error.clone()).font(CAPTION).color(t.warning))
-                .child(
+            Some(error) => Notice::warn("settings.bus.error", error.clone())
+                .action(
                     system::Button::new("Try again")
                         .on_press_tx(read)
                         .build(t)
-                        .key("settings.bus.try-again")
-                        .into(),
-                ),
-            None => text("Reading the event log…")
-                .key("settings.bus.loading")
-                .font(CAPTION)
-                .color(t.text_tertiary),
+                        .key("settings.bus.try-again"),
+                )
+                .build(t),
+            None => Status::new("settings.bus.loading", "Reading the event log…", true).build(t),
         }];
     };
-    let mut page: Vec<El> = Vec::new();
+    let mut page: Vec<Block> = Vec::new();
     if let Some(error) = &bus.error {
-        page.push(
-            text(error.clone())
-                .key("settings.bus.error")
-                .role("alert")
-                .label(error.clone())
-                .font(CAPTION)
-                .color(t.warning)
-                .wrap(),
-        );
+        page.push(Notice::warn("settings.bus.error", error.clone()).build(t));
     }
     if !status.health.is_empty() {
-        page.push(
-            col()
+        page.push(Block::custom(
+            Stack::tight()
                 .key("settings.bus.health")
                 .role("list")
                 .label("Event bus health")
-                .gap(space::S1)
                 .children(status.health.iter().enumerate().map(|(i, finding)| {
                     let error = finding.level == "error";
                     let level = if error { "Error" } else { "Warning" };
-                    row()
+                    Inline::loose()
                         .role("listitem")
                         .label(format!("{level}: {}", finding.message))
-                        .gap(space::S2)
-                        .items_center()
                         .child(
                             El::from(tag(
                                 format!("settings.bus.health.{i}.level"),
@@ -174,51 +156,51 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                             .role("status"),
                         )
                         .child(
-                            text(finding.message.clone())
-                                .font(CAPTION)
-                                .color(if error { t.error } else { t.warning })
-                                .wrap()
-                                .grow(1.0)
-                                .min_w(0.0),
+                            words(
+                                finding.message.clone(),
+                                Type::Small,
+                                if error { t.error } else { t.warning },
+                            )
+                            .wrap()
+                            .shrink(),
                         )
                 })),
-        );
+        ));
     }
     page.push(summary(status, now_ms, t));
-    page.extend(producers(bus, status, t));
-    page.extend(consumers(bus, status, now_ms, t));
+    page.extend(producers(bus, status, t).into_iter().map(Block::custom));
+    page.extend(
+        consumers(bus, status, now_ms, t)
+            .into_iter()
+            .map(Block::custom),
+    );
     page.push(
-        row()
-            .key("settings.bus.footer")
-            .gap(space::S3)
-            .items_center()
-            .child(
+        Actions::new()
+            .push(
                 system::Button::new(if bus.loading { "Reading…" } else { "Refresh" })
                     .disabled(bus.loading)
                     .on_press_tx(read)
                     .build(t)
                     .key("settings.bus.refresh")
-                    .label("Refresh")
-                    .into(),
+                    .label("Refresh"),
             )
-            .child(
-                text(if status.delivering {
-                    "Read from the daemon that owns delivery, so a consumer that is registered but not running is visible."
-                } else {
-                    "Read from the daemon, which is running no durable delivery loops right now, so there is nothing to report as running or stalled."
-                })
-                .key("settings.bus.delivery")
-                .font(CAPTION)
-                .color(t.text_muted)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
-            ),
+            .build(),
     );
-    vec![col().w_full().gap(10.0).children(page)]
+    page.push(
+        Prose::hint(
+            "settings.bus.delivery",
+            if status.delivering {
+                "Read from the daemon that owns delivery, so a consumer that is registered but not running is visible."
+            } else {
+                "Read from the daemon, which is running no durable delivery loops right now, so there is nothing to report as running or stalled."
+            },
+        )
+        .build(t),
+    );
+    page
 }
 
-fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> El {
+fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> Block {
     let stats = [
         ("events", "Events", count(status.rows)),
         ("weight", "Weight", bytes(status.bytes)),
@@ -234,20 +216,15 @@ fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> El {
             span(status.retention_seconds).unwrap_or_default(),
         ),
     ];
-    row()
-        .key("settings.bus.summary")
-        .w_full()
-        .equal_columns(stats.len())
-        .gap(8.0)
-        .children(stats.into_iter().map(|(key, label, value)| {
-            stat_tile(
-                format!("settings.bus.summary.{key}"),
-                label,
-                value,
-                t.text_primary,
-                t,
-            )
-        }))
+    stats
+        .into_iter()
+        .fold(
+            Facts::new().key("settings.bus.summary").tiles(),
+            |facts, (key, label, value)| {
+                facts.code(format!("settings.bus.summary.{key}"), label, value)
+            },
+        )
+        .build(t)
 }
 
 /// A stat tile's name, as the Tauri app's `.bus-stat-label`: uppercase, spaced .06em.

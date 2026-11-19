@@ -8,10 +8,8 @@ use attn_protocol::{
 use std::collections::BTreeMap;
 
 use attn_ui::Tokens;
-use rune::tok::space;
-use rune::{El, Tx, row, text};
+use rune::Tx;
 
-use super::pages::CAPTION;
 use super::route::RouteHarness;
 use crate::State;
 
@@ -453,24 +451,5 @@ pub(super) fn failure_notice(
                     .key(format!("settings.{block}.harness-retry")),
             )
             .build(t),
-    )
-}
-
-pub(super) fn failure_row(state: &State, block: &str, t: &Tokens) -> Option<El> {
-    let error = failure(state)?;
-    Some(
-        row()
-            .key(format!("settings.{block}.harness-error"))
-            .role("alert")
-            .label(error.to_owned())
-            .gap(space::S2)
-            .items_center()
-            .child(text(error.to_owned()).font(CAPTION).color(t.error).wrap())
-            .child(El::from(
-                attn_ui::system::Button::new("Retry")
-                    .on_press_tx(retry)
-                    .build(t)
-                    .key(format!("settings.{block}.harness-retry")),
-            )),
     )
 }

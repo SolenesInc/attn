@@ -13,9 +13,10 @@ use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
-use attn_ui::system::{Button, FieldState, Tone, line_box, tag};
+use attn_ui::blocks::{Actions, Block, Field, Notice, Prose, Section};
+use attn_ui::system::{Button, FieldState, Look, Tone, line_box, tag};
 
-use super::pages::{CAPTION, after_block, block, warning};
+use super::pages::{CAPTION, warning};
 use crate::State;
 use crate::action::Action;
 
@@ -575,7 +576,7 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
         .children(unreachable_note)
 }
 
-fn add_form(state: &State, t: &Tokens) -> El {
+fn add_form(state: &State, t: &Tokens) -> Block {
     let page = &state.window.settings.outposts;
     let destination = page.destination.text.trim().to_owned();
     let name_placeholder = if destination.is_empty() {
@@ -583,97 +584,79 @@ fn add_form(state: &State, t: &Tokens) -> El {
     } else {
         destination
     };
-    let field = |label: &str, input: El| {
-        col()
-            .w_full()
-            .gap(7.0)
-            .child(type_::upper(label, type_::BOLD_CAPS).color(t.text_dimmed))
-            .child(input)
-    };
-    col()
-        .key("settings.outposts.add")
-        .role("form")
-        .label("Add an outpost")
-        .w_full()
-        .gap(10.0)
-        .child(field(
-            "Name",
-            line_box(
-                TextInput::new(&page.name)
-                    .key("settings.outposts.name")
-                    .label("Name")
-                    .placeholder(name_placeholder)
-                    .on_edit(|state: &mut State| &mut panel(state).name)
-                    .on_submit(add),
-                FieldState::Ready,
-                t,
-            )
-            .into(),
-        ))
-        .child(field(
-            "ssh destination",
-            line_box(
-                TextInput::new(&page.destination)
-                    .key("settings.outposts.destination")
-                    .label("ssh destination")
-                    .placeholder("user@host")
-                    .on_edit(|state: &mut State| &mut panel(state).destination)
-                    .on_submit(add),
-                FieldState::Ready,
-                t,
-            )
-            .into(),
-        ))
-        .child(row().child(action(
-            "settings.outposts.submit".into(),
-            "Add outpost",
-            !can_add(state),
-            t,
-            add,
-        )))
+    Section::new("settings.block.outposts.add", "Add an outpost")
+        .description("Add the destination you use with ssh. attn installs your home's build there and pins its identity on first contact.")
+        .push(
+            Field::new("settings.outposts.add.name", "Name")
+                .control(line_box(
+                    TextInput::new(&page.name)
+                        .key("settings.outposts.name")
+                        .label("Name")
+                        .placeholder(name_placeholder)
+                        .on_edit(|state: &mut State| &mut panel(state).name)
+                        .on_submit(add),
+                    FieldState::Ready,
+                    t,
+                ))
+                .build(t),
+        )
+        .push(
+            Field::new("settings.outposts.add.destination", "ssh destination")
+                .control(line_box(
+                    TextInput::new(&page.destination)
+                        .key("settings.outposts.destination")
+                        .label("ssh destination")
+                        .placeholder("user@host")
+                        .on_edit(|state: &mut State| &mut panel(state).destination)
+                        .on_submit(add),
+                    FieldState::Ready,
+                    t,
+                ))
+                .build(t),
+        )
+        .push(
+            Actions::new()
+                .push(
+                    Button::new("Add outpost")
+                        .look(Look::Primary)
+                        .disabled(!can_add(state))
+                        .on_press_tx(add)
+                        .build(t)
+                        .key("settings.outposts.submit"),
+                )
+                .build(),
+        )
+        .build(t)
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let page = &state.window.settings.outposts;
-    let mut shown = vec![block(
-        "outposts.add",
-        "Add an outpost",
-        "Add the destination you use with ssh. attn installs your home's build there and pins its identity on first contact.",
-        t,
-        vec![add_form(state, t)],
-    )];
+    let mut shown = vec![add_form(state, t)];
     if let Some(error) = page.terminal_error.as_ref().or(page.command_error.as_ref()) {
-        shown.push(warning("settings.outposts.error".into(), error.clone(), t));
+        shown.push(Notice::error("settings.outposts.error", error.clone()).build(t));
     }
     if !connected(state) {
-        shown.push(status(
-            "settings.outposts.offline".into(),
-            NOT_CONNECTED.into(),
-            t,
-        ));
+        shown.push(Notice::info("settings.outposts.offline", NOT_CONNECTED).build(t));
     }
     let listed = &state.facts.outposts;
     let list = if listed.is_empty() {
-        text("No outposts added.")
-            .key("settings.outposts.empty")
-            .label("No outposts added.")
-            .font(type_::BODY)
-            .color(t.text_tertiary)
+        Prose::empty("settings.outposts.empty", "No outposts added.").build(t)
     } else {
-        col()
-            .key("settings.outposts.list")
-            .role("list")
-            .label("Outposts")
-            .w_full()
-            .gap(space::S2)
-            .children(listed.iter().map(|outpost| card(state, outpost, t)))
+        Block::custom(
+            col()
+                .key("settings.outposts.list")
+                .role("list")
+                .label("Outposts")
+                .w_full()
+                .gap(space::S2)
+                .children(listed.iter().map(|outpost| card(state, outpost, t))),
+        )
     };
-    shown.push(after_block(block(
-        "outposts.list",
-        "Outposts",
-        "Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, releases enrollment and stops its daemon over ssh, then forgets this outpost. Its binary, data and Notebook stay. If ssh cannot reach it, run this instance's attn enrollment leave and attn daemon stop commands there.",
-        t,
-        vec![list],
-    ), t));
+    shown.push(
+        Section::new("settings.block.outposts.list", "Outposts")
+            .description("Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, releases enrollment and stops its daemon over ssh, then forgets this outpost. Its binary, data and Notebook stay. If ssh cannot reach it, run this instance's attn enrollment leave and attn daemon stop commands there.")
+            .push(list)
+            .build(t),
+    );
     shown
 }

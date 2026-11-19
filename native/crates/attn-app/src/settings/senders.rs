@@ -4,11 +4,12 @@
 use attn_client::{Connection, Slices};
 use attn_protocol::{PairedSender, SenderUnpairMessage, SendersGetMessage};
 use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Notice, Prose, Section, Status};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 
-use super::pages::{CAPTION, block, warning};
+use super::pages::CAPTION;
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -115,33 +116,24 @@ fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
         ))
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let Some(senders) = state.facts.senders.as_ref() else {
         return vec![
-            text("Loading paired senders…")
-                .key("settings.senders.loading")
-                .font(type_::BODY)
-                .color(t.text_tertiary),
+            Status::new("settings.senders.loading", "Loading paired senders…", true).build(t),
         ];
     };
-    let mut body = Vec::new();
-    if senders.is_empty() {
-        let command = "attn send pair --name <name>";
-        let said = format!("No paired senders. A program pairs with {command}.");
-        let start = said.find(command).unwrap_or_default();
-        body.push(
-            rune::rich(
-                said.clone(),
-                vec![rune::Span::new(start, start + command.len()).mono()],
+    let mut section = Section::new("settings.block.senders", "Paired senders")
+        .description("A removed sender is refused at once and must pair again to send.");
+    section = if senders.is_empty() {
+        section.push(
+            Prose::empty(
+                "settings.senders.empty",
+                "No paired senders. A program pairs with `attn send pair --name <name>`.",
             )
-            .key("settings.senders.empty")
-            .label(said)
-            .font(type_::BODY)
-            .color(t.text_tertiary)
-            .wrap(),
-        );
+            .build(t),
+        )
     } else {
-        body.push(
+        section.push(Block::custom(
             col()
                 .key("settings.senders.list")
                 .role("list")
@@ -149,16 +141,10 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                 .w_full()
                 .gap(space::S2)
                 .children(senders.iter().map(|s| paired_sender(s, t))),
-        );
-    }
+        ))
+    };
     if let Some(error) = &state.window.settings.senders.error {
-        body.push(warning("settings.senders.error".into(), error.clone(), t));
+        section = section.push(Notice::warn("settings.senders.error", error.clone()).build(t));
     }
-    vec![block(
-        "senders",
-        "Paired senders",
-        "A removed sender is refused at once and must pair again to send.",
-        t,
-        body,
-    )]
+    vec![section.build(t)]
 }

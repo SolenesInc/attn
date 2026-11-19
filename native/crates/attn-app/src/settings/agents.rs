@@ -7,18 +7,20 @@ mod pricing;
 use std::collections::{BTreeMap, BTreeSet};
 
 use attn_ui::Tokens;
-use attn_ui::system::{FieldState, Segment, Segmented, disclosure, line_box, number_box};
+use attn_ui::blocks::{Block, Inline, Notice, Prose, Section, SettingRow, Stack};
+use attn_ui::system::{
+    Control, FieldState, Segment, Segmented, Tone, Type, disclosure, line_box, number_box, switch,
+    tag, words,
+};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
 use rune_kit::TextInput;
 
 use super::autosave::{self, Codec, PLAIN, TRIMMED};
+use super::controls::{feature, feature_note, feature_switch, refusal, segmented};
 use super::harnesses::{self, Availability};
-use super::pages::{
-    CAPTION, S4, block, blocks, feature, feature_note, feature_switch, plain_row, refusal,
-    row_card, row_words, toggle,
-};
+use super::pages::{CAPTION, S4};
 use super::route::{self, Route, RouteHarness, Rules, Target, TierInfo};
 use crate::{State, setting};
 
@@ -198,15 +200,24 @@ pub(super) fn wanted(state: &State) -> Vec<(String, bool)> {
         .collect()
 }
 
-fn setting_toggle(key: &'static str, name: &str, disabled: bool, t: &Tokens, state: &State) -> El {
+fn setting_toggle(
+    key: &'static str,
+    name: &str,
+    disabled: bool,
+    t: &Tokens,
+    state: &State,
+) -> Control {
     let on = setting::on(&state.facts.settings, key);
-    toggle(
-        &format!("settings.toggle.{key}"),
+    switch(
+        format!("settings.toggle.{key}"),
         name,
         on,
+        false,
         disabled,
         t,
-        move |state, tx| autosave::apply(state, key, if on { "false" } else { "true" }, tx),
+        move |state: &mut State, tx: &mut Tx| {
+            autosave::apply(state, key, if on { "false" } else { "true" }, tx)
+        },
     )
 }
 
@@ -252,7 +263,7 @@ fn field(
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, &left, tx));
     let boxed = match step {
         Some(step) => {
-            input = input.trailing(super::pages::setting_arrows(&key, step, t));
+            input = input.trailing(super::controls::setting_arrows(&key, step, t));
             El::from(number_box(input, refused, t))
         }
         None => El::from(line_box(input, refused, t)),
@@ -289,7 +300,7 @@ fn refused(state: &State, key: &str) -> bool {
     drafts_error(state, key).is_some()
 }
 
-fn default_agent(state: &State, t: &Tokens) -> El {
+fn default_agent(state: &State, t: &Tokens) -> Control {
     let settings = &state.facts.settings;
     let availability = harnesses::availability(settings);
     let chosen = state.window.settings.autosave.draft(DEFAULT_AGENT);
@@ -328,18 +339,9 @@ fn default_agent(state: &State, t: &Tokens) -> El {
     Segmented::new("settings.default-agent", "Default session agent")
         .options(options)
         .build(t)
-        .into()
 }
 
-fn asks(state: &State, t: &Tokens) -> El {
-    let feature = feature(ASKS);
-    plain_row(
-        row_words(feature.name, feature.summary, t).children(feature_note(state, ASKS, t)),
-        feature_switch(state, ASKS, false, t).into(),
-    )
-}
-
-fn session_defaults(state: &State, t: &Tokens) -> El {
+fn session_defaults(state: &State, t: &Tokens) -> Block {
     let settings = &state.facts.settings;
     let availability = harnesses::availability(settings);
     let any = ordered(settings)
@@ -348,44 +350,56 @@ fn session_defaults(state: &State, t: &Tokens) -> El {
     let migrating = settings
         .get("pty_backend_mode")
         .is_some_and(|m| m.to_lowercase() == "migrating");
-    let mut body = Vec::new();
+    let mut section = Section::new("settings.block.session-defaults", "Session defaults");
     if !any {
-        body.push(warning(
-            "settings.agents.none",
-            "No supported agent CLI found in PATH.",
-            t,
-        ));
+        section = section.push(
+            Notice::warn(
+                "settings.agents.none",
+                "No supported agent CLI found in PATH.",
+            )
+            .build(t),
+        );
     }
-    body.push(plain_row(
-        row_words("Default agent", "Used for new sessions and opening PRs.", t),
-        default_agent(state, t),
-    ));
-    body.push(plain_row(
-        row_words(
-            "Auto-approve",
-            "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval.",
-            t,
-        ),
-        setting_toggle(AUTO_APPROVE, "Auto-approve", false, t, state),
-    ));
-    body.push(asks(state, t));
-    body.push(plain_row(
-        row_words(
-            "Direct agent launches",
-            "Start agents without an attn process beside each one, which uses less memory. On by default; applies to new and reloaded agents.",
-            t,
-        ),
-        setting_toggle(DIRECT_LAUNCH, "Direct agent launches", false, t, state),
-    ));
-    body.push(plain_row(
-        row_words(
-            "Shared terminal host",
-            "Run terminals in one shared process, which uses less memory, and stream output only to the terminals the window shows. On by default; applies to new and reloaded terminals.",
-            t,
-        ),
-        setting_toggle(SHARED_HOST, "Shared terminal host", !migrating, t, state),
-    ));
-    block("session-defaults", "Session defaults", "", t, body)
+    let asks = feature(ASKS);
+    section
+        .push(
+            SettingRow::new(
+                "Default agent",
+                "Used for new sessions and opening PRs.",
+                default_agent(state, t),
+            )
+            .build(t),
+        )
+        .push(
+            SettingRow::new(
+                "Auto-approve",
+                "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval.",
+                setting_toggle(AUTO_APPROVE, "Auto-approve", false, t, state),
+            )
+            .build(t),
+        )
+        .push(
+            SettingRow::new(asks.name, asks.summary, feature_switch(state, ASKS, false, t))
+                .note(feature_note(state, ASKS, t))
+                .build(t),
+        )
+        .push(
+            SettingRow::new(
+                "Direct agent launches",
+                "Start agents without an attn process beside each one, which uses less memory. On by default; applies to new and reloaded agents.",
+                setting_toggle(DIRECT_LAUNCH, "Direct agent launches", false, t, state),
+            )
+            .build(t),
+        )
+        .push(
+            SettingRow::new(
+                "Shared terminal host",
+                "Run terminals in one shared process, which uses less memory, and stream output only to the terminals the window shows. On by default; applies to new and reloaded terminals.",
+                setting_toggle(SHARED_HOST, "Shared terminal host", !migrating, t, state),
+            )
+            .build(t),
+        )
+        .build(t)
 }
 
 fn resume_choice(settings: &BTreeMap<String, String>) -> &'static str {
@@ -396,109 +410,81 @@ fn resume_choice(settings: &BTreeMap<String, String>) -> &'static str {
     }
 }
 
-/// A standby case's verdict, as the Tauri app's `.settings-standby-verdict`.
-const VERDICT: rune::TextStyle = rune::TextStyle::new(12.0, 700.0);
-/// The title of the standby cases, as `.settings-standby-explain-title`.
-const STANDBY_TITLE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).tracking(0.7);
+/// The verdicts' column: "Resumes" measures 68 as a tag.
+const VERDICT_W: f32 = 72.0;
 
-fn seeds_on_standby(state: &State, t: &Tokens) -> El {
+fn seeds_on_standby(state: &State, t: &Tokens) -> Block {
     let settings = &state.facts.settings;
     let choice = resume_choice(settings);
     let ring = settings.get(OWN_PR_COMMENTS).is_some_and(|v| v == "ring");
     let cases = STANDBY_MAIL.iter().map(|(case, resumes)| {
         let resumes = resumes.contains(&choice);
-        let verdict = if resumes { "Resumes" } else { "Waits" };
-        let (ink, fill) = if resumes {
-            (t.warning, t.warning.alpha(0.14))
+        let (verdict, tone) = if resumes {
+            ("Resumes", Tone::Warn)
         } else {
-            (t.text_secondary, t.bg_button)
+            ("Waits", Tone::Neutral)
         };
-        row()
+        Inline::loose()
             .role("listitem")
             .label(format!("{verdict} {case}"))
-            .gap(10.0)
-            .items_center()
             .child(
-                text(verdict)
-                    .font(VERDICT)
-                    .color(ink)
-                    .a11y_hidden()
-                    .w(70.0)
-                    .py(2.0)
-                    .center()
-                    .radius(4.0)
-                    .fill(fill),
-            )
-            .child(
-                text(*case)
-                    .font(type_::BODY)
-                    .color(t.text_primary)
-                    .wrap()
+                rune::row()
+                    .w(VERDICT_W)
+                    .child(El::from(tag(
+                        format!("settings.standby.{verdict}"),
+                        verdict,
+                        tone,
+                        t,
+                    )))
                     .a11y_hidden(),
             )
+            .child(words(*case, Type::Body, t.text_primary).a11y_hidden())
     });
     let own_comments =
         "Enable if you want to give feedback to agents by writing comments on the PR";
-    block(
-        "seeds-on-standby",
-        "Seeds on standby",
-        "Resume a closed agent when mail reaches its seed.",
+    let ring_switch = El::from(switch(
+        "settings.toggle.pull_requests.own_comments",
+        "Ring on my own PR comments",
+        ring,
+        false,
+        false,
         t,
-        vec![
-            El::from(super::pages::segmented(
-                TENDER_RESUME,
-                "Resume for",
-                RESUME_CHOICES,
-                choice,
-                t,
-                |state, value, tx| autosave::apply(state, TENDER_RESUME, value, tx),
-            ))
-            .self_start(),
-            col()
-                .w_full()
-                .max_w(640.0)
-                .gap(8.0)
-                .py(12.0)
-                .px(14.0)
-                .radius(8.0)
-                .fill(t.bg_elevated)
-                .border(1.0, t.border)
-                .child(type_::upper("A closed agent on standby", STANDBY_TITLE).color(t.text_tertiary))
-                .child(
-                    col()
-                        .key("settings.standby.cases")
-                        .role("list")
-                        .label("A closed agent on standby")
-                        .gap(6.0)
-                        .children(cases),
-                )
-                .child(super::pages::hint(
-                    "attn always starts a session for a crew member who tends the seed, whatever you pick.",
-                    t,
-                )),
-            row_card(
-                "Ring on my own PR comments",
-                own_comments,
-                t,
-                toggle(
-                    "settings.toggle.pull_requests.own_comments",
-                    "Ring on my own PR comments",
-                    ring,
-                    false,
-                    t,
-                    move |state, tx| {
-                        autosave::apply(
-                            state,
-                            OWN_PR_COMMENTS,
-                            if ring { "quiet" } else { "ring" },
-                            tx,
-                        )
-                    },
-                )
-                .description(own_comments),
-            ),
-        ],
-    )
+        move |state: &mut State, tx: &mut Tx| {
+            autosave::apply(
+                state,
+                OWN_PR_COMMENTS,
+                if ring { "quiet" } else { "ring" },
+                tx,
+            )
+        },
+    ))
+    .description(own_comments);
+    Section::new("settings.block.seeds-on-standby", "Seeds on standby")
+        .description("Resume a closed agent when mail reaches its seed.")
+        .push(Block::control(segmented(
+            TENDER_RESUME,
+            "Resume for",
+            RESUME_CHOICES,
+            choice,
+            t,
+            |state, value, tx| autosave::apply(state, TENDER_RESUME, value, tx),
+        )))
+        .push(Block::custom(
+            Stack::tight()
+                .key("settings.standby.cases")
+                .role("list")
+                .label("A closed agent on standby")
+                .children(cases),
+        ))
+        .push(
+            Prose::hint(
+                "settings.standby.hint",
+                "attn always starts a session for a crew member who tends the seed, whatever you pick.",
+            )
+            .build(t),
+        )
+        .push(SettingRow::new("Ring on my own PR comments", own_comments, ring_switch).build(t))
+        .build(t)
 }
 
 fn availability_word(status: Availability) -> &'static str {
@@ -753,19 +739,18 @@ fn agent_head(
 /// An agent's name in its group's head.
 const AGENT_NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let agents = ordered(&state.facts.settings);
-    let mut page = blocks(
-        vec![session_defaults(state, t), seeds_on_standby(state, t)],
-        t,
-    );
-    page.extend([
-        col()
-            .key("settings.agents.list")
-            .w_full()
-            .gap(12.0)
-            .children(agents.iter().map(|agent| agent_group(state, agent, t))),
-        pricing::page(state, t),
-    ]);
-    page
+    vec![
+        session_defaults(state, t),
+        seeds_on_standby(state, t),
+        Block::custom(
+            col()
+                .key("settings.agents.list")
+                .w_full()
+                .gap(12.0)
+                .children(agents.iter().map(|agent| agent_group(state, agent, t))),
+        ),
+        Block::custom(pricing::page(state, t)),
+    ]
 }

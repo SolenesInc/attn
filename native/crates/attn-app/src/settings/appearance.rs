@@ -7,7 +7,7 @@ use attn_ui::colors::{SCHEMES, has_overrides};
 use attn_ui::system::{Button, Choice, Look, stepper};
 use rune::{El, Tx};
 
-use super::pages::{number_field, segmented};
+use super::controls::{number_field, segmented};
 use crate::State;
 use crate::action::Action;
 use crate::sidebar::width;

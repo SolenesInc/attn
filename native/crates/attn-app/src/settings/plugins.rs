@@ -10,6 +10,7 @@ use attn_protocol::{
     RemovePluginMessage, SetPluginPriorityMessage,
 };
 use attn_ui::Tokens;
+use attn_ui::blocks::{Actions, Block, Field, Notice, Prose, Status};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, FileDialogOptions, TextEdit, Tx, col, row, text};
@@ -429,16 +430,13 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
         .children(details)
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let plugins = &state.window.settings.plugins;
     let listed = &state.facts.plugins;
     let busy = plugins.busy.is_some();
-    let form = row()
-        .w_full()
-        .gap(space::S2)
-        .items_center()
-        .child(
-            El::from(line_box(
+    let mut page = vec![
+        Field::new("settings.plugins.add", "Plugin source")
+            .control(line_box(
                 TextInput::new(&plugins.source)
                     .key("settings.plugins.source")
                     .label("Plugin source")
@@ -449,54 +447,47 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                 FieldState::disabled_if(busy),
                 t,
             ))
-            .grow(1.0),
-        )
-        .child(
-            Button::new("Browse")
-                .disabled(busy)
-                .on_press_tx(|_: &mut State, tx: &mut Tx| browse(tx))
-                .build(t)
-                .key("settings.plugins.browse")
-                .into(),
-        )
-        .child(
-            Button::new("Install Plugin")
-                .disabled(busy)
-                .on_press_tx(install)
-                .build(t)
-                .key("settings.plugins.install")
-                .into(),
-        );
-    let mut page = vec![form];
+            .action(
+                Button::new("Browse")
+                    .disabled(busy)
+                    .on_press_tx(|_: &mut State, tx: &mut Tx| browse(tx))
+                    .build(t)
+                    .key("settings.plugins.browse"),
+            )
+            .build(t),
+        Actions::new()
+            .push(
+                Button::new("Install Plugin")
+                    .look(Look::Primary)
+                    .disabled(busy)
+                    .on_press_tx(install)
+                    .build(t)
+                    .key("settings.plugins.install"),
+            )
+            .build(),
+    ];
     if let Some(error) = &plugins.error {
-        page.push(warning("settings.plugins.error".into(), error.clone(), t));
+        page.push(Notice::warn("settings.plugins.error", error.clone()).build(t));
     }
     page.extend(listed.issues.iter().map(|issue| {
-        warning(
+        Notice::warn(
             format!("settings.plugins.issue.{}", issue.path),
             format!("{}: {}", issue.path, issue.error),
-            t,
         )
+        .build(t)
     }));
-    let empty = |message: &str| {
-        text(message.to_owned())
-            .key("settings.plugins.empty")
-            .label(message.to_owned())
-            .font(type_::BODY)
-            .color(t.text_tertiary)
-    };
     if plugins.loading {
-        page.push(empty("Loading plugins..."));
+        page.push(Status::new("settings.plugins.empty", "Loading plugins...", true).build(t));
     } else if listed.plugins.is_empty() {
-        page.push(empty("No plugins installed."));
+        page.push(Prose::empty("settings.plugins.empty", "No plugins installed.").build(t));
     } else {
-        page.push(
+        page.push(Block::custom(
             col()
                 .key("settings.plugins.list")
                 .w_full()
                 .gap(space::S2)
                 .children(listed.plugins.iter().map(|plugin| card(state, plugin, t))),
-        );
+        ));
     }
     page
 }

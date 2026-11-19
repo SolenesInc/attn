@@ -2247,6 +2247,115 @@ fn settings_page_states(dark: bool) {
     snap(&mut world, "settings-connectivity-empty", dark);
 }
 
+/// A Settings page in the smallest window at the largest text, its state changed by `change` and
+/// the daemon answering as `answer` scripts it.
+fn settings_smallest_page(
+    dark: bool,
+    section: &str,
+    search: &str,
+    settings: &[(&str, &str)],
+    change: impl FnOnce(&mut InitialStateMessage),
+    answer: impl FnOnce(&Daemon),
+) {
+    let mut all = vec![("uiScale", "1.5")];
+    all.extend_from_slice(settings);
+    let mut world = settings_world(dark, section, search, &all, change, answer);
+    world.resize((800.0, 600.0));
+    snap(&mut world, &format!("settings-smallest-{section}"), dark);
+    world.gesture(|app| app.update(|_, tx| tx.scroll_to_bottom_instant("settings.body")));
+    snap(
+        &mut world,
+        &format!("settings-smallest-{section}-bottom"),
+        dark,
+    );
+}
+
+/// The pages whose structure moved onto blocks before their lists, each at the smallest size
+/// with the longest real content it meets.
+fn settings_smallest_pages(dark: bool) {
+    settings_smallest_page(dark, "agents", "agents", &[], |_| {}, |_| {});
+    settings_smallest_page(
+        dark,
+        "outposts",
+        "outposts",
+        SWITCHED_ON,
+        |state| {
+            state.outposts = Some(vec![attn_protocol::OutpostInfo {
+                id: "outpost-1".into(),
+                name: "engineering-observability-staging-builder".into(),
+                destination: "deploy-automation@builder-07.eu-north-1.internal.example.com".into(),
+                state: "error".into(),
+                reach: "unreachable".into(),
+                state_since: "2026-11-12T08:00:00Z".into(),
+                last_error: Some("ssh: connect to host builder-07.eu-north-1.internal.example.com port 22: Connection timed out after 30 seconds while the daemon was still pairing".into()),
+                ..attn_protocol::OutpostInfo::default()
+            }]);
+        },
+        |_| {},
+    );
+    settings_smallest_page(
+        dark,
+        "eventBus",
+        "event bus",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("bus_status_get", |r: &Request| {
+                message(BusStatusResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    earliest: 1_048_576,
+                    head: 1_049_000,
+                    rows: 1_048_576_000,
+                    bytes: 987_654_321_000,
+                    oldest_at: "2025-08-02T10:24:55Z".into(),
+                    newest_at: "2026-08-10T19:28:01Z".into(),
+                    delivering: true,
+                    retention_seconds: 365.0 * 86400.0,
+                    recent_window_seconds: 3600.0,
+                    baseline_window_seconds: 86400.0,
+                    surge_rate_per_hour: 1000.0,
+                    pin_alarm_seconds: 3600.0,
+                    ..BusStatusResultMessage::new()
+                })
+            });
+        },
+    );
+    settings_smallest_page(dark, "backgroundTasks", "task runner", &[], |_| {}, |_| {});
+    settings_smallest_page(dark, "senders", "senders", &[], |_| {}, |_| {});
+    settings_smallest_page(dark, "phones", "phones", SWITCHED_ON, |_| {}, |_| {});
+    settings_smallest_page(
+        dark,
+        "plugins",
+        "plugins",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("list_plugins", |_| {
+            message(attn_protocol::PluginsUpdatedMessage {
+                plugins: vec![attn_protocol::PluginInfo {
+                    name: "services-pilot-worktrees-with-a-long-provider-name".into(),
+                    version: "0.1.0".into(),
+                    dir: "/Users/someone/src/attn-plugins/services-pilot-worktrees-with-a-long-provider-name".into(),
+                    priority: 10,
+                    runtime_state: "failed".into(),
+                    health_status: Some("unhealthy".into()),
+                    last_exit: Some("exit status 1: could not reach the provider's API at https://pilot.example.com/v2/worktrees after 3 attempts".into()),
+                    can_uninstall: true,
+                    ..attn_protocol::PluginInfo::default()
+                }],
+                issues: Some(vec![attn_protocol::PluginIssue {
+                    path: "/Users/someone/src/attn-plugins/broken-plugin/attn-plugin.json".into(),
+                    error: "manifest names a harness that no binary on PATH provides".into(),
+                }]),
+                ..attn_protocol::PluginsUpdatedMessage::new()
+            })
+        });
+        },
+    );
+    settings_smallest_page(dark, "models", "models", &[], |_| {}, |_| {});
+}
+
 /// The event bus with one live consumer, its Disable, and the footer's Refresh.
 fn settings_event_bus(dark: bool) {
     settings_section(dark, "eventBus", "event bus", &[], |daemon| {
@@ -4226,6 +4335,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             settings_bottom(dark, "experimental", "experimental", SWITCHED_ON)
         });
         scene("settings_page_states", || settings_page_states(dark));
+        scene("settings_smallest_pages", || settings_smallest_pages(dark));
         scene("automation_new", || automation_new(dark));
         scene("automations_empty", || automations_empty(dark));
         scene("automations_listed", || automations_listed(dark));

@@ -10,12 +10,14 @@ use attn_protocol::{
     PhonePairingRevokeMessage, PhonesGetMessage, Profile,
 };
 use attn_ui::Tokens;
+use attn_ui::blocks::{Actions, Block, Notice, Section, Stack, Status};
+use attn_ui::system::{Type, words};
 use attn_ui::type_;
 use qrcodegen::{QrCode, QrCodeEcc, QrSegment, Version};
 use rune::tok::space;
 use rune::{El, Pixels, Tx, col, row, text};
 
-use super::pages::{CAPTION, block, blocks, warning};
+use super::pages::CAPTION;
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -321,19 +323,13 @@ fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> El {
         ))
 }
 
-fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &Tokens) -> El {
+fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &Tokens) -> Block {
     let key = format!("settings.phones.{}.code", profile.id);
     let expires = epoch_ms(&code.expires_at);
     if expires.is_some_and(|at| at <= state.window.now_ms) {
         let said =
             format!("Pairing code expired after {PAIRING_LIFETIME_MINUTES} min; show a new one.");
-        return text(said.clone())
-            .key(format!("{key}.expired"))
-            .role("status")
-            .label(said)
-            .font(CAPTION)
-            .color(t.warning)
-            .wrap();
+        return Notice::warn(format!("{key}.expired"), said).build(t);
     }
     let until = expires.map_or_else(|| code.expires_at.clone(), crate::calendar::time_of_day);
     let id = profile.id.clone();
@@ -350,29 +346,30 @@ fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &T
                 .label(format!("Pairing code for {}", profile.name))
                 .w(QR_SIZE)
                 .h(QR_SIZE)
-                .radius(6.0)
                 .pixels(pixels)
         });
-    col()
-        .key(key.clone())
-        .gap(space::S2)
-        .children(image)
-        .child(
-            text(format!(
-                "Scan with the attn app. The code works once, until {until}."
-            ))
-            .font(CAPTION)
-            .color(t.text_tertiary)
-            .wrap(),
-        )
-        .child(
-            row().child(El::from(
-                attn_ui::system::Button::new("Cancel")
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| cancel(state, &id, tx))
-                    .build(t)
-                    .key(format!("{key}.cancel")),
-            )),
-        )
+    Block::custom(
+        Stack::tight()
+            .key(key.clone())
+            .children(image)
+            .child(
+                words(
+                    format!("Scan with the attn app. The code works once, until {until}."),
+                    Type::Small,
+                    t.text_tertiary,
+                )
+                .wrap(),
+            )
+            .child(
+                El::from(
+                    attn_ui::system::Button::new("Cancel")
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| cancel(state, &id, tx))
+                        .build(t)
+                        .key(format!("{key}.cancel")),
+                )
+                .self_start(),
+            ),
+    )
 }
 
 fn profile_block(
@@ -380,7 +377,7 @@ fn profile_block(
     phones: &attn_protocol::PhonesUpdatedMessage,
     profile: &Profile,
     t: &Tokens,
-) -> El {
+) -> Block {
     let code = phones
         .pairing_codes
         .iter()
@@ -390,9 +387,13 @@ fn profile_block(
         .iter()
         .filter(|p| p.profile_id == profile.id)
         .collect();
-    let mut body = Vec::new();
+    let mut section = Section::new(
+        format!("settings.block.phones.{}", profile.id),
+        format!("Phones for {}", profile.name),
+    )
+    .description("A phone you pair here sees this profile's agents and nothing else.");
     if !paired.is_empty() {
-        body.push(
+        section = section.push(Block::custom(
             col()
                 .key(format!("settings.phones.{}.list", profile.id))
                 .role("list")
@@ -400,67 +401,56 @@ fn profile_block(
                 .w_full()
                 .gap(space::S2)
                 .children(paired.into_iter().map(|p| paired_phone(p, t))),
-        );
-    }
-    if let Some(code) = code {
-        body.push(pairing_code(state, code, profile, t));
-    }
-    if let Some(error) = state.window.settings.phones.errors.get(&profile.id) {
-        body.push(warning(
-            format!("settings.phones.{}.error", profile.id),
-            error.clone(),
-            t,
         ));
     }
+    if let Some(code) = code {
+        section = section.push(pairing_code(state, code, profile, t));
+    }
+    if let Some(error) = state.window.settings.phones.errors.get(&profile.id) {
+        section = section.push(
+            Notice::warn(
+                format!("settings.phones.{}.error", profile.id),
+                error.clone(),
+            )
+            .build(t),
+        );
+    }
     let id = profile.id.clone();
-    body.push(
-        El::from(
-            attn_ui::system::Button::new(if code.is_some() {
-                "Show a new pairing code"
-            } else {
-                "Pair a phone"
-            })
-            .disabled(phones.link.state == "off")
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| pair(state, &id, tx))
-            .build(t)
-            .key(format!("settings.phones.{}.pair", profile.id)),
+    section
+        .push(
+            Actions::new()
+                .push(
+                    attn_ui::system::Button::new(if code.is_some() {
+                        "Show a new pairing code"
+                    } else {
+                        "Pair a phone"
+                    })
+                    .disabled(phones.link.state == "off")
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| pair(state, &id, tx))
+                    .build(t)
+                    .key(format!("settings.phones.{}.pair", profile.id)),
+                )
+                .build(),
         )
-        .w_full(),
-    );
-    block(
-        &format!("phones.{}", profile.id),
-        &profile.name,
-        "A phone you pair here sees this profile's agents and nothing else.",
-        t,
-        body,
-    )
-    .label(format!("Phones for {}", profile.name))
+        .build(t)
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let Some(phones) = state.facts.phones.as_ref() else {
-        return vec![
-            text("Loading phones…")
-                .key("settings.phones.loading")
-                .font(type_::BODY)
-                .color(t.text_tertiary),
-        ];
+        return vec![Status::new("settings.phones.loading", "Loading phones…", true).build(t)];
     };
     let (said, bad) = link_text(&phones.link);
-    let link = text(said.clone())
-        .key("settings.phones.link")
-        .role("status")
-        .label(said)
-        .font(CAPTION)
-        .color(if bad { t.warning } else { t.text_tertiary })
-        .wrap();
-    let mut shown = vec![block(
-        "phones.cloud",
-        "Attn Cloud",
-        "Phones reach this home through Attn Cloud, which relays end-to-end encrypted traffic it cannot read.",
-        t,
-        vec![link],
-    )];
+    let link = if bad {
+        Notice::warn("settings.phones.link", said).build(t)
+    } else {
+        Status::new("settings.phones.link", said, false).build(t)
+    };
+    let mut shown = vec![
+        Section::new("settings.block.phones.cloud", "Attn Cloud")
+            .description("Phones reach this home through Attn Cloud, which relays end-to-end encrypted traffic it cannot read.")
+            .push(link)
+            .build(t),
+    ];
     shown.extend(
         state
             .facts
@@ -469,5 +459,5 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
             .iter()
             .map(|profile| profile_block(state, phones, profile, t)),
     );
-    blocks(shown, t)
+    shown
 }
