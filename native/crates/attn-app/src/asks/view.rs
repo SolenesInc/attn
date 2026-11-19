@@ -1181,7 +1181,8 @@ fn ask_mark(glyph: String, t: &Tokens) -> El {
         .child(text(glyph).font(MARKER_TYPE).color(t.bg_app))
 }
 
-const MARK_W: f32 = 18.0;
+/// The ask mark's width: its 6-point insets round "?", which measures 7.2 in `MARKER_TYPE`.
+const MARK_W: f32 = 19.2;
 
 /// The Tauri app's `.title-bar-count-badge`: the open asks' count over the button's corner.
 const BADGE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();

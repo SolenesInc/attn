@@ -164,7 +164,9 @@ const ROW_MIN_H: f32 = 22.0;
 const DESCRIPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 const PILL_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 const KIND_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
-const PILL_W: f32 = 64.0;
+/// The status column: "unreachable", the longest status word, measures 71 in `PILL_TYPE`, with
+/// the 2.5 a side it had at 10 points.
+const PILL_W: f32 = 76.0;
 const AGE_MIN_W: f32 = 36.0;
 const TAG_W: f32 = 34.0;
 const KIND_W: f32 = 42.0;

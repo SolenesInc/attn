@@ -1081,8 +1081,10 @@ fn badged_lead(key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
         }))
 }
 
+/// A slot's digit one line high: digits have no descenders, so the badge holds only the digit and
+/// its insets.
 const SLOT_TYPE: rune::TextStyle = rune::TextStyle {
-    line_height: 8.0,
+    line_height: 12.0,
     ..rune::TextStyle::new(12.0, 400.0).mono()
 };
 

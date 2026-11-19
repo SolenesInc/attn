@@ -896,6 +896,60 @@ fn an_agent_row_s_dot_follows_its_turn_and_reach_not_its_state() {
 }
 
 #[test]
+fn an_agent_row_s_status_word_draws_inside_its_pill() {
+    let away = Session {
+        host: Some("gone-outpost".into()),
+        state: "working".into(),
+        ..session("away")
+    };
+    let mut world = World::start(daemon(
+        initial(
+            vec![desktop("d1", "work", 1, vec![agent_pane("away")])],
+            vec![away],
+        ),
+        vec![],
+    ));
+    open_agents(&mut world);
+    assert_eq!(
+        row_text(&world, "agent:away", "status").as_deref(),
+        Some("unreachable")
+    );
+
+    let rt = world.runtime();
+    let pill = world
+        .screen()
+        .bounds(Target::key("palette.row.agent:away.status"))
+        .expect("the status word is laid out")
+        .map(|v| v * rt.env.scale);
+    let [_, y, _, h] = pill;
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(rt.env.system_dark)
+        .ui;
+    let red = [t.error.r, t.error.g, t.error.b].map(rune::theme::srgb_encode);
+    let glyphs: Vec<[f32; 4]> = rt
+        .instances
+        .iter()
+        .filter(|i| {
+            i.params[1] == rune::render::KIND_GLYPH
+                && (0..3).all(|c| (i.fill[c] - red[c]).abs() < 0.01)
+        })
+        .map(|i| i.rect)
+        .filter(|g| {
+            let mid = g[1] + g[3] / 2.0;
+            mid > y && mid < y + h
+        })
+        .collect();
+    let [x, _, w, _] = pill;
+    assert!(!glyphs.is_empty(), "the status word draws no glyphs");
+    for g in glyphs {
+        assert!(
+            g[0] >= x - 0.5 && g[0] + g[2] <= x + w + 0.5,
+            "a glyph of the status word at {g:?} runs outside its pill {pill:?}"
+        );
+    }
+}
+
+#[test]
 fn a_query_filters_every_kind_of_row_and_drops_the_queue_tag() {
     let mut world = World::start(daemon(crew_and_queue(), vec![]));
     open_agents(&mut world);

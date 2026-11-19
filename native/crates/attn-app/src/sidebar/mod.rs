@@ -599,6 +599,10 @@ fn rule_face(desktop: &DesktopHeader, keys: Option<String>, key: &str, t: &Token
 const DESKTOP_NAME: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
 
 /// The digits of a desktop's number chip, as the Tauri app's `.desktop-number`.
+/// A desktop number's chip: `NUMBER_TYPE`'s 15-point line with the 0.75 above and below it had
+/// at 10 points.
+const NUMBER_H: f32 = 16.5;
+
 pub(crate) const NUMBER_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0).mono();
 
 /// The Tauri app's faint white line, `rgba(255, 255, 255, .07)`.
@@ -621,7 +625,7 @@ pub(crate) fn wash(t: &Tokens, alpha: f32) -> rune::Color {
 pub(crate) fn desktop_number(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
     let chip = row()
         .min_w(16.0)
-        .h(14.0)
+        .h(NUMBER_H)
         .px(3.0)
         .center()
         .radius(3.0)

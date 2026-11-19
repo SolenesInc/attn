@@ -37,8 +37,9 @@ const FIELD_PAD_X: f32 = 12.0;
 /// A harness option's height, which makes the toggle group `.launcher-controls .agent-toggle`'s
 /// 28 points with its padding: its border takes no room.
 const OPTION_H: f32 = 24.0;
-/// The height of a hint's keycap, `.new-session-launcher .picker-footer kbd`.
-const CAP_H: f32 = 16.0;
+/// The height of a hint's keycap, `.new-session-launcher .picker-footer kbd`: `CAP`'s 15-point
+/// line with the 3 points round it it had at 10.5, which its 2-point bottom edge paints over.
+const CAP_H: f32 = 18.0;
 const RADIUS: f32 = 10.0;
 
 /// The launcher's own shades of the color scheme, as Tauri's `--launcher-*` variables mix them.

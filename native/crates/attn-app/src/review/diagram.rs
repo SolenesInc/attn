@@ -11,14 +11,15 @@ use rune::tok::radius;
 use rune::{Color, El, LineCap, Shape, TextStyle, canvas, col, el, text};
 use rune_kit::ScrollBar;
 
-const CHAR_WIDTH: f32 = 6.6;
-const CAPTION_CHAR_WIDTH: f32 = 5.9;
+/// A label's and a caption's width a character at 12 points, 0.6 of their size as at 11 and 10.
+const CHAR_WIDTH: f32 = 7.2;
+const CAPTION_CHAR_WIDTH: f32 = 7.1;
 const LABEL_LIMIT: usize = 48;
 const LINE_LIMIT: usize = 26;
 const CAPTION_LIMIT: usize = 34;
 const CAPTION_LINES: usize = 3;
-const LINE_HEIGHT: f32 = 14.0;
-const CAPTION_LINE_HEIGHT: f32 = 13.0;
+const LINE_HEIGHT: f32 = 15.0;
+const CAPTION_LINE_HEIGHT: f32 = 15.5;
 const BOX_HEIGHT: f32 = 30.0;
 const TWO_LINE_BOX_HEIGHT: f32 = 42.0;
 const ROW_PAD: f32 = 16.0;

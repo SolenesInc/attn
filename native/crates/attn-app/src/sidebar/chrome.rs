@@ -243,8 +243,8 @@ fn waiting_mark(waiting: usize, look: Look, t: &Tokens) -> Option<El> {
             .inert(),
         Look::Bar => row()
             .pin(None, Some(-6.0), Some(-6.0), None)
-            .min_w(15.0)
-            .h(15.0)
+            .min_w(WAITING_SIDE)
+            .h(WAITING_SIDE)
             .px(4.0)
             .center()
             .radius(999.0)
@@ -895,5 +895,9 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
             .hover(t.bg_elevated),
     )
 }
+
+/// The bar's waiting count: `COUNT_TYPE`'s 15-point line with the 1.5 above and below it had at
+/// 9.5 points.
+const WAITING_SIDE: f32 = 18.0;
 
 const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0).mono();
