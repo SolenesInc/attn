@@ -157,8 +157,10 @@ func (r *modelCallsRunning) done() {
 }
 
 type modelCallOutcome struct {
-	result agentdriver.ModelCallResult
-	err    error
+	target  modelCallTarget
+	refused error
+	result  agentdriver.ModelCallResult
+	err     error
 }
 
 func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelCallMessage) {
@@ -176,86 +178,97 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 		d.sendError(conn, fmt.Sprintf("limit_ms must be a positive number of milliseconds, not %d", msg.LimitMs))
 		return
 	}
-	ctx, cancel := context.WithCancel(d.life.Context())
-	defer cancel()
-	target, err := d.modelCallTarget(ctx, msg)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
 	if !d.modelCallsRunning.admit() {
 		d.sendError(conn, fmt.Sprintf("%d model calls are already running, attn's limit; retry when one answers", modelCallsRunningTripwire))
 		return
 	}
 	defer d.modelCallsRunning.done()
-	d.modelCallSpare.used(d)
+	limit := time.Duration(msg.LimitMs) * time.Millisecond
+	deadline := d.clock.NewTimer(ModelCallLimitTimer, limit)
+	defer deadline.Stop()
+	ctx, cancel := context.WithCancel(d.life.Context())
+	defer cancel()
 	goTransport(func() {
 		_, _ = io.Copy(io.Discard, conn)
 		cancel()
 	})
 
-	limit := time.Duration(msg.LimitMs) * time.Millisecond
-	deadline := d.clock.NewTimer(ModelCallLimitTimer, limit)
-	defer deadline.Stop()
 	answered := make(chan modelCallOutcome, 1)
+	var target atomic.Pointer[modelCallTarget]
 	var bySpare atomic.Bool
-	if !d.life.Go("modelCallAnswer", func() { answered <- d.answerModelCall(ctx, target, msg, &bySpare) }) {
+	if !d.life.Go("modelCallAnswer", func() { answered <- d.answerModelCall(ctx, msg, &target, &bySpare) }) {
 		return
 	}
-	response := protocol.SenderModelCallResult{Harness: target.harness, Model: target.model}
 	var outcome modelCallOutcome
+	passedLimit := false
 	select {
 	case outcome = <-answered:
-		if outcome.err != nil {
-			response.Error = protocol.Ptr(outcome.err.Error())
-		} else {
-			response.Text = protocol.Ptr(outcome.result.Text)
-			if outcome.result.ModelTime > 0 {
-				response.ModelMs = protocol.Ptr(int(outcome.result.ModelTime.Milliseconds()))
-			}
-		}
 	case <-deadline.C():
 		cancel()
+		passedLimit = true
 		outcome.err = fmt.Errorf("the model did not answer within %s", limit)
-		response.Error = protocol.Ptr(outcome.err.Error())
-		response.LimitMs = protocol.Ptr(msg.LimitMs)
 	case <-ctx.Done():
 		outcome.err = errors.New("the caller closed the connection")
 	}
-	d.logModelCall(sender.Name, msg.Purpose, target, bySpare.Load(), time.Since(arrived), outcome)
-	if ctx.Err() != nil && response.LimitMs == nil {
+	if outcome.refused != nil {
+		d.sendError(conn, outcome.refused.Error())
 		return
+	}
+	if resolved := target.Load(); resolved != nil {
+		outcome.target = *resolved
+	}
+	d.logModelCall(sender.Name, msg.Purpose, outcome.target, bySpare.Load(), time.Since(arrived), outcome)
+	response := protocol.SenderModelCallResult{Harness: outcome.target.harness, Model: outcome.target.model}
+	switch {
+	case outcome.err == nil:
+		response.Text = protocol.Ptr(outcome.result.Text)
+		if outcome.result.ModelTime > 0 {
+			response.ModelMs = protocol.Ptr(int(outcome.result.ModelTime.Milliseconds()))
+		}
+	case passedLimit:
+		response.Error = protocol.Ptr(outcome.err.Error())
+		response.LimitMs = protocol.Ptr(msg.LimitMs)
+	case ctx.Err() != nil:
+		return
+	default:
+		response.Error = protocol.Ptr(outcome.err.Error())
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SenderModelCallResult: &response})
 }
 
-func (d *Daemon) answerModelCall(ctx context.Context, target modelCallTarget, msg *protocol.SenderModelCallMessage, bySpare *atomic.Bool) modelCallOutcome {
-	workDir, err := os.MkdirTemp("", "attn-model-call-*")
+func (d *Daemon) answerModelCall(ctx context.Context, msg *protocol.SenderModelCallMessage, resolved *atomic.Pointer[modelCallTarget], bySpare *atomic.Bool) modelCallOutcome {
+	d.modelCallSpare.used(d)
+	target, err := d.modelCallTarget(ctx, msg)
 	if err != nil {
-		return modelCallOutcome{err: fmt.Errorf("create the call's scratch directory: %w", err)}
+		return modelCallOutcome{refused: err}
 	}
-	defer os.RemoveAll(workDir)
+	resolved.Store(&target)
 	request := agentdriver.ModelCallRequest{
 		Executable:   target.executable,
 		Model:        target.model,
 		SystemPrompt: msg.System,
 		Input:        msg.Input,
-		WorkDir:      workDir,
 	}
 	if spare := d.modelCallSpare.take(d, target.harness); spare != nil {
 		bySpare.Store(true)
 		result, err := spare.Answer(ctx, request)
 		if !errors.Is(err, agentdriver.ErrSpareUnusable) {
-			return modelCallOutcome{result: result, err: err}
+			return modelCallOutcome{target: target, result: result, err: err}
 		}
 		bySpare.Store(false)
 		d.logf("model call: the %s spare could not answer, so the call runs cold: %v", target.harness, err)
 	}
+	workDir, err := os.MkdirTemp("", "attn-model-call-*")
+	if err != nil {
+		return modelCallOutcome{err: fmt.Errorf("create the call's scratch directory: %w", err)}
+	}
+	defer os.RemoveAll(workDir)
+	request.WorkDir = workDir
 	result, err := agentdriver.AnswerModelCall(ctx, target.provider, request)
 	if err != nil {
 		err = fmt.Errorf("%s: %w", target.harness, err)
 	}
-	return modelCallOutcome{result: result, err: err}
+	return modelCallOutcome{target: target, result: result, err: err}
 }
 
 func (d *Daemon) logModelCall(sender, purpose string, target modelCallTarget, bySpare bool, took time.Duration, outcome modelCallOutcome) {

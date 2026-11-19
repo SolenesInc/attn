@@ -84,7 +84,11 @@ type claudeSpare struct {
 func (s *claudeSpare) Close() {
 	s.closed.Do(func() {
 		_ = s.stdin.Close()
-		_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
+		select {
+		case <-s.exited:
+		default:
+			_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
+		}
 	})
 	select {
 	case <-s.exited:
