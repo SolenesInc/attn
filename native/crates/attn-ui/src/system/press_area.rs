@@ -31,6 +31,6 @@ pub fn press_area<S: 'static>(
         door::inset(area, size.inset(), super::Space::S0),
         size.inset(),
     );
-    let area = layers::pressable(door::corner(area, Radius::Control), t.text_primary);
+    let area = layers::pressable(door::corner(area, Radius::Control), t.bg_panel, t);
     Control::new(focus::ring(area, t), size)
 }

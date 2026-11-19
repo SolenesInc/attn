@@ -107,12 +107,12 @@ fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
                         .color(t.text_tertiary),
                 ),
         )
-        .child(
-            crate::settings::pages::Action::new("Remove")
+        .child(El::from(
+            attn_ui::system::Button::new("Remove")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| remove(state, &id, tx))
                 .build(t)
                 .key(format!("{key}.remove")),
-        )
+        ))
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {

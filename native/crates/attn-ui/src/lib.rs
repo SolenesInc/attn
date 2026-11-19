@@ -202,6 +202,7 @@ fn input_ring(t: &Tokens) -> Shadow {
     Shadow {
         spread: 1.0,
         color: t.border,
+        inset: true,
         ..Shadow::default()
     }
 }

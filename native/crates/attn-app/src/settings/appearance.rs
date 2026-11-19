@@ -7,7 +7,9 @@ use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
 
-use super::pages::{block, blocks, button, named_button, number_field, row_card, segmented};
+use attn_ui::system::{Button, stepper};
+
+use super::pages::{block, blocks, number_field, row_card, segmented};
 use crate::State;
 use crate::action::Action;
 use crate::sidebar::width;
@@ -18,11 +20,6 @@ const COLOR_SCHEME: &str = "color_scheme";
 const COLOR_OVERRIDES: &str = "color_overrides";
 const UI_SCALE: &str = "uiScale";
 const GARDEN_SCALE: &str = "gardenScale";
-/// The narrowest tile width's field, as wide as the Tauri app draws it.
-const TILE_COLS_FIELD: f32 = 174.0;
-/// The sidebar width's field: the Tauri app draws it 66 points wide, and native's larger
-/// monospace needs six more for "240" to clear the arrows.
-const SIDEBAR_FIELD: f32 = 72.0;
 const MIN_SCALE: f32 = 0.7;
 pub(crate) const MAX_SCALE: f32 = 1.5;
 const SCALE_STEP: f32 = 0.1;
@@ -202,11 +199,14 @@ fn color_schemes(state: &State, t: &Tokens) -> El {
                     .font(type_::LABEL)
                     .color(t.text_secondary),
             )
-            .child(button(
-                "settings.color-overrides.reset".into(),
-                "Reset",
-                t,
-                |state, _| store(state, COLOR_OVERRIDES, String::new()),
+            .child(El::from(
+                Button::new("Reset")
+                    .on_press_tx(|state: &mut State, _: &mut Tx| {
+                        store(state, COLOR_OVERRIDES, String::new())
+                    })
+                    .build(t)
+                    .key("settings.color-overrides.reset")
+                    .label("Reset"),
             ))
     });
     col()
@@ -217,10 +217,6 @@ fn color_schemes(state: &State, t: &Tokens) -> El {
         .children(custom)
 }
 
-/// A font size's value between its buttons, as the Tauri app's `.settings-font-scale-value`:
-/// native's 12 points, bold.
-const SCALE_VALUE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0);
-
 fn scale_control(
     key: &str,
     what: &str,
@@ -230,38 +226,23 @@ fn scale_control(
     up: fn(&mut State, &mut Tx),
     reset: Option<(&'static str, Press)>,
 ) -> El {
-    let step = |dir: &str, said: &str, shown: &str, press: Press| {
-        named_button(
-            format!("settings.scale.{key}.{dir}"),
-            &format!("{said} {what} font size"),
-            shown,
-            t,
-            press,
+    El::from(stepper(
+        &format!("settings.scale.{key}"),
+        &format!("{what} font size"),
+        value,
+        t,
+        down,
+        up,
+    ))
+    .children(reset.map(|(label, press)| {
+        El::from(
+            Button::new(label)
+                .on_press_tx(press)
+                .build(t)
+                .key(format!("settings.scale.{key}.reset"))
+                .label(label),
         )
-        .w(38.0)
-        .px(0.0)
-    };
-    row()
-        .key(format!("settings.scale.{key}"))
-        .gap(8.0)
-        .items_center()
-        .child(step("down", "Decrease", "−", down))
-        .child(
-            row().min_w(72.0).center().child(
-                text(value.clone())
-                    .key(format!("settings.scale.{key}.value"))
-                    .role("status")
-                    .label(value)
-                    .font(SCALE_VALUE)
-                    .color(t.text_primary),
-            ),
-        )
-        .child(step("up", "Increase", "+", up))
-        .children(
-            reset.map(|(label, press)| {
-                button(format!("settings.scale.{key}.reset"), label, t, press)
-            }),
-        )
+    }))
 }
 
 type Press = fn(&mut State, &mut Tx);
@@ -305,11 +286,14 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
     let sidebar_draft = sidebar_width.draft(width::SETTING);
     let default_width = (width::DEFAULT as i64).to_string();
     let use_default = (!sidebar_draft.is_empty() && sidebar_draft != default_width).then(|| {
-        button(
-            "settings.sidebar-width.default".into(),
-            "Use default",
-            t,
-            |state, tx| super::autosave::apply(state, width::SETTING, "", tx),
+        El::from(
+            Button::new("Use default")
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                    super::autosave::apply(state, width::SETTING, "", tx)
+                })
+                .build(t)
+                .key("settings.sidebar-width.default")
+                .label("Use default"),
         )
     });
     blocks(
@@ -377,7 +361,6 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                             NARROWEST_TILE_COLS,
                             "Narrowest tile width (columns)",
                             "",
-                            TILE_COLS_FIELD,
                             1.0,
                             t,
                         ),
@@ -399,7 +382,6 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                                 width::SETTING,
                                 "Sidebar width (pixels)",
                                 &default_width,
-                                SIDEBAR_FIELD,
                                 1.0,
                                 t,
                             ))

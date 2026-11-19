@@ -311,14 +311,14 @@ fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> El {
                         .color(t.text_tertiary),
                 ),
         )
-        .child(
-            crate::settings::pages::Action::new("Revoke")
+        .child(El::from(
+            attn_ui::system::Button::new("Revoke")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     revoke(state, &device, &profile, tx)
                 })
                 .build(t)
                 .key(format!("{key}.revoke")),
-        )
+        ))
 }
 
 fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &Tokens) -> El {
@@ -366,12 +366,12 @@ fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &T
             .wrap(),
         )
         .child(
-            row().child(
-                crate::settings::pages::Action::new("Cancel")
+            row().child(El::from(
+                attn_ui::system::Button::new("Cancel")
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| cancel(state, &id, tx))
                     .build(t)
                     .key(format!("{key}.cancel")),
-            ),
+            )),
         )
 }
 
@@ -414,15 +414,17 @@ fn profile_block(
     }
     let id = profile.id.clone();
     body.push(
-        crate::settings::pages::Action::new(if code.is_some() {
-            "Show a new pairing code"
-        } else {
-            "Pair a phone"
-        })
-        .disabled(phones.link.state == "off")
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| pair(state, &id, tx))
-        .build(t)
-        .key(format!("settings.phones.{}.pair", profile.id))
+        El::from(
+            attn_ui::system::Button::new(if code.is_some() {
+                "Show a new pairing code"
+            } else {
+                "Pair a phone"
+            })
+            .disabled(phones.link.state == "off")
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| pair(state, &id, tx))
+            .build(t)
+            .key(format!("settings.phones.{}.pair", profile.id)),
+        )
         .w_full(),
     );
     block(

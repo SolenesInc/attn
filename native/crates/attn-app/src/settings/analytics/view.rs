@@ -3,6 +3,7 @@
 use attn_protocol::{GetAnalyticsStatusResultMessage, Seed, Vent};
 use attn_ui::Tokens;
 use attn_ui::keycap;
+use attn_ui::system::{self, Look};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
@@ -14,7 +15,7 @@ use rune_kit::{
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
 use super::{Analytics, Confirm, Records, SEND_VENTS, TOOL_VENTS};
 use crate::State;
-use crate::settings::pages::{Action, CAPTION, Look, S4, switch};
+use crate::settings::pages::{CAPTION, S4};
 
 pub(super) const PAGE: &str = "settings.analytics";
 pub(super) const LIST: &str = "settings.analytics.list";
@@ -749,37 +750,41 @@ fn confirming(yes: &str, on_yes: fn(&mut State, &mut Tx), t: &Tokens) -> El {
     row()
         .gap(space::S2)
         .child(
-            Action::new(yes)
+            system::Button::new(yes)
                 .look(Look::Danger)
                 .on_press_tx(on_yes)
                 .build(t)
-                .key("settings.analytics.confirm.yes"),
+                .key("settings.analytics.confirm.yes")
+                .into(),
         )
         .child(
-            Action::new("Keep")
+            system::Button::new("Keep")
                 .on_press(|state: &mut State| state.window.settings.analytics.confirm = None)
                 .build(t)
-                .key("settings.analytics.confirm.keep"),
+                .key("settings.analytics.confirm.keep")
+                .into(),
         )
 }
 
 fn asking(label: &str, confirm: Confirm, t: &Tokens) -> El {
-    Action::new(label)
+    system::Button::new(label)
         .look(Look::Danger)
         .on_press(move |state: &mut State| state.window.settings.analytics.confirm = Some(confirm))
         .build(t)
+        .into()
 }
 
 fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> El {
     let on = crate::setting::on(&state.facts.settings, key);
-    switch(
+    system::switch(
         format!("settings.analytics.switch.{key}"),
         label,
         on,
         false,
         t,
-        move |state, tx| super::set(state, key, !on, tx),
+        move |state: &mut State, tx: &mut Tx| super::set(state, key, !on, tx),
     )
+    .into()
 }
 
 fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> El {
@@ -822,14 +827,15 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> El {
     let share_control = if offering_delete {
         confirming("Delete from server", super::forget, t)
     } else {
-        switch(
-            "settings.analytics.switch.sharing".into(),
+        system::switch(
+            "settings.analytics.switch.sharing",
             "Share with attn's maintainers",
             sharing,
             false,
             t,
             super::toggle_sharing,
         )
+        .into()
     };
     let kept = format!(
         "{}Dismissed and withdrawn vents are kept 30 days.",

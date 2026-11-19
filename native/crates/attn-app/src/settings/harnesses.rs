@@ -437,12 +437,7 @@ pub(crate) fn headless_agents(
 }
 
 /// The harness list's failure with its Retry, as each block that lists harnesses shows it.
-pub(super) fn failure_row(
-    state: &State,
-    block: &str,
-    retry_look: super::pages::Look,
-    t: &Tokens,
-) -> Option<El> {
+pub(super) fn failure_row(state: &State, block: &str, t: &Tokens) -> Option<El> {
     let error = failure(state)?;
     Some(
         row()
@@ -452,12 +447,11 @@ pub(super) fn failure_row(
             .gap(space::S2)
             .items_center()
             .child(text(error.to_owned()).font(CAPTION).color(t.error).wrap())
-            .child(
-                super::pages::Action::new("Retry")
-                    .look(retry_look)
+            .child(El::from(
+                attn_ui::system::Button::new("Retry")
                     .on_press_tx(retry)
                     .build(t)
                     .key(format!("settings.{block}.harness-retry")),
-            ),
+            )),
     )
 }

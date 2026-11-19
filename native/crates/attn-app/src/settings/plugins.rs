@@ -15,7 +15,9 @@ use rune::tok::space;
 use rune::{El, FileDialogOptions, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
-use super::pages::{CAPTION, NUMBER_FIELD, Tone, pill, warning};
+use attn_ui::system::{Button, Look, Tone, line_box, number_box, tag};
+
+use super::pages::{CAPTION, warning};
 use crate::State;
 use crate::requests::Answer;
 
@@ -248,7 +250,7 @@ fn runtime_tone(phase: &str) -> Tone {
         "connected" => Tone::Good,
         "starting" | "backoff" => Tone::Warn,
         "parked" => Tone::Bad,
-        _ => Tone::Plain,
+        _ => Tone::Neutral,
     }
 }
 
@@ -256,7 +258,7 @@ fn health_tone(health: &str) -> Tone {
     match health {
         "healthy" => Tone::Good,
         "unhealthy" => Tone::Bad,
-        _ => Tone::Plain,
+        _ => Tone::Neutral,
     }
 }
 
@@ -282,7 +284,6 @@ fn meta(key: String, label: &str, value: String, t: &Tokens) -> El {
 }
 
 fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
-    let k = crate::settings::pages::kit(t);
     let plugins = &state.window.settings.plugins;
     let name = plugin.name.clone();
     let busy = plugins.busy.is_some();
@@ -300,8 +301,6 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
     let priority = TextInput::new(typed.unwrap_or(&shown))
         .key(priority_key(&name))
         .label(format!("{name} priority"))
-        .disabled(busy)
-        .width(Some(NUMBER_FIELD / 2.0))
         .on_edit(move |state: &mut State| {
             panel(state)
                 .priorities
@@ -315,8 +314,8 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
         .on_blur({
             let name = name.clone();
             move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, tx)
-        })
-        .build(k);
+        });
+    let priority = El::from(number_box(priority, busy, t));
     let saved = plugins.saved.contains_key(&name).then(|| {
         text("Saved")
             .key(id("saved"))
@@ -385,7 +384,7 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
         .link_target
         .as_ref()
         .filter(|l| !l.is_empty())
-        .map(|_| pill(id("linked"), "Linked".into(), Tone::Plain, t));
+        .map(|_| El::from(tag(id("linked"), "Linked", Tone::Neutral, t)).role("status"));
     col()
         .key(format!("settings.plugin.{name}"))
         .role("group")
@@ -402,25 +401,29 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
                 .gap(space::S2)
                 .items_center()
                 .child(text(name.clone()).font(type_::LABEL).color(t.text_primary))
-                .child(pill(
-                    id("version"),
-                    format!("v{}", plugin.version),
-                    Tone::Plain,
-                    t,
-                ))
+                .child(
+                    El::from(tag(
+                        id("version"),
+                        &format!("v{}", plugin.version),
+                        Tone::Neutral,
+                        t,
+                    ))
+                    .role("status"),
+                )
                 .children(link)
-                .child(pill(id("runtime"), phase.clone(), runtime_tone(&phase), t))
-                .child(pill(id("health"), health.clone(), health_tone(&health), t))
+                .child(El::from(tag(id("runtime"), &phase, runtime_tone(&phase), t)).role("status"))
+                .child(El::from(tag(id("health"), &health, health_tone(&health), t)).role("status"))
                 .child(row().grow(1.0))
                 .child(
-                    crate::settings::pages::Action::new("Remove")
-                        .look(crate::settings::pages::Look::Danger)
+                    Button::new("Remove")
+                        .look(Look::Danger)
                         .disabled(busy || !plugin.can_uninstall)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             remove(state, &removing, tx)
                         })
                         .build(t)
-                        .key(id("remove")),
+                        .key(id("remove"))
+                        .into(),
                 ),
         )
         .children(details)
@@ -435,33 +438,34 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
         .gap(space::S2)
         .items_center()
         .child(
-            super::pages::input(
+            El::from(line_box(
                 TextInput::new(&plugins.source)
                     .key("settings.plugins.source")
                     .label("Plugin source")
                     .placeholder(
                         "git@host:team/my-attn-plugin.git or /Users/you/src/my-attn-plugin",
                     )
-                    .disabled(busy)
-                    .on_edit(|state: &mut State| &mut panel(state).source)
-                    .width(None),
+                    .on_edit(|state: &mut State| &mut panel(state).source),
+                busy,
                 t,
-            )
+            ))
             .grow(1.0),
         )
         .child(
-            crate::settings::pages::Action::new("Browse")
+            Button::new("Browse")
                 .disabled(busy)
                 .on_press_tx(|_: &mut State, tx: &mut Tx| browse(tx))
                 .build(t)
-                .key("settings.plugins.browse"),
+                .key("settings.plugins.browse")
+                .into(),
         )
         .child(
-            crate::settings::pages::Action::new("Install Plugin")
+            Button::new("Install Plugin")
                 .disabled(busy)
                 .on_press_tx(install)
                 .build(t)
-                .key("settings.plugins.install"),
+                .key("settings.plugins.install")
+                .into(),
         );
     let mut page = vec![form];
     if let Some(error) = &plugins.error {
@@ -512,26 +516,29 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         .filter(|p| p.connected || p.running)
         .count();
     let health = match problems {
-        0 => pill(
-            "settings.pill.plugins.health".into(),
-            "healthy".into(),
+        0 => El::from(tag(
+            "settings.pill.plugins.health",
+            "healthy",
             Tone::Good,
             t,
-        ),
-        n => pill(
-            "settings.pill.plugins.health".into(),
-            format!("{n} issue{}", if n == 1 { "" } else { "s" }),
+        ))
+        .role("status"),
+        n => El::from(tag(
+            "settings.pill.plugins.health",
+            &format!("{n} issue{}", if n == 1 { "" } else { "s" }),
             Tone::Bad,
             t,
-        ),
+        ))
+        .role("status"),
     };
     vec![
         health,
-        pill(
-            "settings.pill.plugins.running".into(),
-            format!("{running}/{} running", listed.plugins.len()),
-            Tone::Plain,
+        El::from(tag(
+            "settings.pill.plugins.running",
+            &format!("{running}/{} running", listed.plugins.len()),
+            Tone::Neutral,
             t,
-        ),
+        ))
+        .role("status"),
     ]
 }

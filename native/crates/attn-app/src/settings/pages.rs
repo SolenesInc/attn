@@ -5,10 +5,11 @@ use std::cell::RefCell;
 use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
 use attn_ui::keycap;
+use attn_ui::system::{Button, Segment, Segmented, arrows, line_box, number_box, switch};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, TextStyle, Tx, col, row, text};
-use rune_kit::{Button, TextInput};
+use rune_kit::TextInput;
 
 use super::autosave;
 use crate::State;
@@ -116,160 +117,6 @@ pub(super) fn plain_row(words: El, control: El) -> El {
         .child(control)
 }
 
-pub(super) fn button(
-    key: String,
-    label: &str,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    named_button(key, label, label, t, press)
-}
-
-/// A button that shows `shown` and is announced as `label`.
-pub(super) fn named_button(
-    key: String,
-    label: &str,
-    shown: &str,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    Action::new(shown)
-        .on_press_tx(press)
-        .build(t)
-        .key(key)
-        .label(label.to_owned())
-}
-
-/// The modifiers of the Tauri app's `.settings-action`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) enum Look {
-    #[default]
-    Plain,
-    /// `.primary`: the page's one main action, filled `warning`.
-    Primary,
-    /// `.quiet`: no fill or edge until the pointer is over it.
-    Quiet,
-    /// `.danger`: an action that removes or turns something off.
-    Danger,
-    /// Delegation's `.quiet.danger`: a quiet action in `error`.
-    QuietDanger,
-}
-
-/// The Tauri app's `.settings-action`, the button every settings page acts with: 38 points
-/// tall, a `border_hover` edge, a `bg_button` fill and a bold label in `text_secondary`.
-pub(super) struct Action {
-    shown: String,
-    look: Look,
-    disabled: bool,
-    height: f32,
-    ink: Option<rune::Color>,
-    button: Button,
-}
-
-/// A settings action's label and a switch's state word: native's 12 points, at the Tauri
-/// app's weight.
-const ACTION_LABEL: rune::TextStyle = rune::TextStyle::new(12.0, 700.0);
-
-impl Action {
-    pub(super) fn new(shown: impl Into<String>) -> Action {
-        let shown = shown.into();
-        Action {
-            button: Button::new(shown.clone()),
-            shown,
-            look: Look::Plain,
-            disabled: false,
-            height: 38.0,
-            ink: None,
-        }
-    }
-
-    /// The button's height, 38 points unless set.
-    pub(super) fn height(mut self, height: f32) -> Self {
-        self.height = height;
-        self
-    }
-
-    /// The label's color, the look's own unless set.
-    pub(super) fn ink(mut self, ink: rune::Color) -> Self {
-        self.ink = Some(ink);
-        self
-    }
-
-    pub(super) fn look(mut self, look: Look) -> Self {
-        self.look = look;
-        self
-    }
-
-    pub(super) fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
-        self.button = self.button.disabled(disabled);
-        self
-    }
-
-    pub(super) fn help(mut self, help: impl Into<String>) -> Self {
-        self.button = self.button.help(help);
-        self
-    }
-
-    pub(super) fn on_press(mut self, press: impl Fn(&mut State) + 'static) -> Self {
-        self.button = self.button.on_press(press);
-        self
-    }
-
-    pub(super) fn on_press_tx(mut self, press: impl Fn(&mut State, &mut Tx) + 'static) -> Self {
-        self.button = self.button.on_press_tx(press);
-        self
-    }
-
-    pub(super) fn build(self, t: &Tokens) -> El {
-        let white = t.highlight;
-        let (fill, edge, ink, hover) = match self.look {
-            Look::Plain => (t.bg_button, t.border_hover, t.text_secondary, t.bg_panel),
-            Look::Primary => (
-                t.warning,
-                t.warning.alpha(0.8),
-                attn_ui::warning_ink(t),
-                attn_ui::colors::mix_srgb(t.warning, white, 0.3),
-            ),
-            Look::Quiet => (
-                rune::Color::TRANSPARENT,
-                rune::Color::TRANSPARENT,
-                t.text_secondary,
-                t.bg_button,
-            ),
-            Look::QuietDanger => (
-                rune::Color::TRANSPARENT,
-                rune::Color::TRANSPARENT,
-                t.error,
-                t.bg_button,
-            ),
-            Look::Danger => (
-                t.bg_button,
-                t.error.alpha(0.38),
-                attn_ui::colors::mix_srgb(t.error, white, 0.24),
-                t.bg_panel,
-            ),
-        };
-        let ink = self.ink.unwrap_or(ink);
-        let shown = self.shown;
-        let button = self
-            .button
-            .variant(rune_kit::ButtonVariant::Ghost)
-            .label_with(move |_, _| text(shown).font(ACTION_LABEL).color(ink))
-            .build(kit(t))
-            .h(self.height)
-            .px(14.0)
-            .radius(6.0)
-            .fill(fill)
-            .border(1.0, edge);
-        if self.disabled {
-            button
-        } else {
-            button.hover(hover)
-        }
-    }
-}
-
 /// The kit the settings pages build with: the Tauri app's settings paint primary actions in
 /// `warning`, where the rest of the app paints them in `brand`.
 pub(super) fn kit(t: &Tokens) -> &'static rune_kit::Kit {
@@ -279,125 +126,7 @@ pub(super) fn kit(t: &Tokens) -> &'static rune_kit::Kit {
     })
 }
 
-/// A switch that reads On or Off when `show_state` asks for it, drawn as the Tauri app's
-/// `.settings-switch`: a 36 by 20 track, `warning` when on.
-pub(super) fn switch(
-    key: String,
-    label: &str,
-    on: bool,
-    show_state: bool,
-    t: &Tokens,
-    toggle: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let (track, edge, knob) = if on {
-        (t.warning, t.warning, attn_ui::warning_ink(t))
-    } else {
-        (t.bg_button, t.border_hover, t.text_tertiary)
-    };
-    let knob = rune::el()
-        .key("thumb")
-        .size(14.0, 14.0)
-        .radius(7.0)
-        .absolute(if on { 19.0 } else { 3.0 }, 3.0)
-        .fill(knob);
-    let track = rune::el()
-        .key("control")
-        .size(36.0, 20.0)
-        .radius(10.0)
-        .fill(track)
-        .border(1.0, edge)
-        .child(knob)
-        .a11y_hidden();
-    row()
-        .key(key)
-        .role("switch")
-        .label(label.to_owned())
-        .checked(on)
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.warning)
-        .gap(10.0)
-        .items_center()
-        .child(track)
-        .children(show_state.then(|| {
-            text(if on { "On" } else { "Off" })
-                .font(ACTION_LABEL)
-                .color(t.text_secondary)
-                .a11y_hidden()
-        }))
-        .on_press_tx(toggle)
-}
-
-/// The track of the Tauri app's `.settings-segmented`, as wide as its options.
-pub(super) fn segment_track(key: impl Into<String>, label: &str, t: &Tokens) -> El {
-    row()
-        .key(key.into())
-        .role("radiogroup")
-        .label(label.to_owned())
-        .focus_group()
-        .gap(6.0)
-        .padding(5.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-}
-
-/// One option of a segment track; the chosen one is `warning`, as `.settings-segmented-option`.
-pub(super) fn segment(key: String, name: &str, chosen: bool, t: &Tokens) -> El {
-    let (fill, ink) = if chosen {
-        (t.warning, attn_ui::warning_ink(t))
-    } else {
-        (rune::Color::TRANSPARENT, t.text_secondary)
-    };
-    let mut option = row()
-        .key(key)
-        .role("radio")
-        .label(name.to_owned())
-        .checked(chosen)
-        .focusable(true)
-        .focus_selected(chosen)
-        .focus_ring(2.0, 1.0, t.warning)
-        .h(32.0)
-        .px(12.0)
-        .center()
-        .radius(6.0)
-        .fill(fill)
-        .child(
-            text(name.to_owned())
-                .font(rune::TextStyle {
-                    weight: 700.0,
-                    ..type_::BODY
-                })
-                .color(ink)
-                .a11y_hidden(),
-        );
-    if chosen {
-        option = option.border(1.0, t.warning.alpha(0.8));
-    } else {
-        option = option.hover(t.bg_button);
-    }
-    option
-}
-
-/// The Tauri app's `.settings-input`: 38 points tall, monospace, on `bg_input`, with its
-/// placeholder in `text_dimmed`.
-pub(super) fn input(field: TextInput, t: &Tokens) -> El {
-    let dimmed_placeholder = attn_ui::kit(&Tokens {
-        brand: t.warning,
-        text_tertiary: t.text_dimmed,
-        ..*t
-    });
-    field
-        .text_style(dimmed_placeholder.ty.ui_compact.mono())
-        .height(38.0)
-        .build(dimmed_placeholder)
-        .fill(t.bg_input)
-        .pl(10.0)
-}
-
-/// The width of a field that holds a number.
-pub(super) const NUMBER_FIELD: f32 = 160.0;
-
-/// A field `width` points wide that edits the number setting `key`, with arrows that step it
+/// A field that edits the number setting `key`, with arrows that step it
 /// by `step`: it saves on Enter, when the focus leaves it and on each step, and shows its Saved
 /// mark beside it and its refusal under it.
 pub(super) fn number_field(
@@ -405,7 +134,6 @@ pub(super) fn number_field(
     key: &'static str,
     label: &str,
     placeholder: &str,
-    width: f32,
     step: f64,
     t: &Tokens,
 ) -> El {
@@ -419,8 +147,7 @@ pub(super) fn number_field(
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx))
-        .trailing(setting_arrows(key, step, t))
-        .width(Some(width));
+        .trailing(setting_arrows(key, step, t));
     col()
         .items_end()
         .gap(space::S1)
@@ -428,7 +155,7 @@ pub(super) fn number_field(
             row()
                 .gap(space::S2)
                 .items_center()
-                .child(input(draft, t))
+                .child(El::from(number_box(draft, false, t)))
                 .children(saved_mark(state, key, t)),
         )
         .children(refusal(state, key, t))
@@ -437,10 +164,14 @@ pub(super) fn number_field(
 /// The arrows that step the number setting `key` by `step` and save it.
 pub(super) fn setting_arrows(key: &str, step: f64, t: &Tokens) -> El {
     let setting = key.to_owned();
-    arrows(&super::field_key(key), t, move |state, up, tx| {
-        let next = stepped_value(state.window.settings.autosave.draft(&setting), step, up);
-        autosave::apply(state, &setting, &next, tx);
-    })
+    arrows(
+        &super::field_key(key),
+        t,
+        move |state: &mut State, up, tx| {
+            let next = stepped_value(state.window.settings.autosave.draft(&setting), step, up);
+            autosave::apply(state, &setting, &next, tx);
+        },
+    )
 }
 
 /// The Saved mark a field shows beside itself once its value lands.
@@ -499,8 +230,7 @@ pub(super) fn wide_setting_field(
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
-        .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx))
-        .width(None);
+        .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx));
     if let Some(step) = step {
         draft = draft.trailing(setting_arrows(key, step, t));
     }
@@ -512,52 +242,16 @@ pub(super) fn wide_setting_field(
                 .w_full()
                 .gap(8.0)
                 .items_center()
-                .child(col().grow(1.0).min_w(0.0).child(input(draft, t)))
+                .child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .child(El::from(line_box(draft, false, t))),
+                )
                 .children(saved_mark(state, key, t))
                 .children(beside),
         )
         .children(refusal(state, key, t))
-}
-
-/// The up and down arrows a number input shows at its right edge, keyed `{key}.up` and
-/// `{key}.down`; `step` runs with `true` for up.
-pub(super) fn arrows(
-    key: &str,
-    t: &Tokens,
-    step: impl Fn(&mut State, bool, &mut Tx) + Clone + 'static,
-) -> El {
-    let glyph = &kit(t).glyph;
-    let arrow = |up: bool| {
-        let step = step.clone();
-        row()
-            .key(format!("{key}.{}", if up { "up" } else { "down" }))
-            .role("button")
-            .label(if up { "Increase" } else { "Decrease" })
-            .w(14.0)
-            .h(9.0)
-            .center()
-            .child(
-                rune::icon(
-                    if up {
-                        glyph.chevron_up
-                    } else {
-                        glyph.chevron_down
-                    },
-                    8.0,
-                )
-                .color(t.text_secondary)
-                .a11y_hidden(),
-            )
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| step(state, up, tx))
-    };
-    col()
-        .h(19.0)
-        .w(14.0)
-        .mr(4.0)
-        .radius(3.0)
-        .border(1.0, t.border)
-        .child(arrow(true))
-        .child(arrow(false))
 }
 
 /// The refusals the page draws beside their controls, by setting, with where a refused close
@@ -635,9 +329,15 @@ fn refusal_row(key: String, reason: &str, t: &Tokens) -> El {
         .gap(space::S2)
         .items_center()
         .child(text(reason.to_owned()).font(CAPTION).color(t.error).wrap())
-        .child(button(retry_key(&key), "Retry", t, move |state, tx| {
-            autosave::commit(state, &retried, tx)
-        }))
+        .child(El::from(
+            Button::new("Retry")
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    autosave::commit(state, &retried, tx)
+                })
+                .build(t)
+                .key(retry_key(&key))
+                .label("Retry"),
+        ))
 }
 
 /// The choice among `options` for the setting `key`, saved when one is picked.
@@ -649,13 +349,14 @@ pub(super) fn segmented(
     t: &Tokens,
     choose: fn(&mut State, &'static str, &mut Tx),
 ) -> El {
-    let track = segment_track(format!("settings.choice.{key}"), label, t).children(
-        options.iter().enumerate().map(|(i, &(value, name))| {
-            segment(format!("segment{i}"), name, value == chosen, t)
+    Segmented::new(format!("settings.choice.{key}"), label)
+        .options(options.iter().enumerate().map(|(i, &(value, name))| {
+            Segment::new(format!("segment{i}"), name)
+                .chosen(value == chosen)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| choose(state, value, tx))
-        }),
-    );
-    row().child(track)
+        }))
+        .build(t)
+        .into()
 }
 
 /// The switch in a feature page's head, which turns the feature on and off.
@@ -668,8 +369,11 @@ pub(super) fn feature_switch(state: &State, key: &'static str, show_state: bool,
         on,
         show_state,
         t,
-        move |state, tx| autosave::apply(state, key, if on { "false" } else { "true" }, tx),
+        move |state: &mut State, tx: &mut Tx| {
+            autosave::apply(state, key, if on { "false" } else { "true" }, tx)
+        },
     )
+    .into()
 }
 
 /// The declared feature `key`.
@@ -903,14 +607,16 @@ pub(super) fn toggle(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Action::new(if on { "Disable" } else { "Enable" })
-        .disabled(disabled)
-        .on_press_tx(press)
-        .build(t)
-        .key(key.to_owned())
-        .role("switch")
-        .label(name.to_owned())
-        .checked(on)
+    El::from(
+        Button::new(if on { "Disable" } else { "Enable" })
+            .disabled(disabled)
+            .on_press_tx(press)
+            .build(t)
+            .key(key),
+    )
+    .role("switch")
+    .label(name.to_owned())
+    .checked(on)
 }
 
 /// A toggle that turns the boolean setting `key` on and off, saved as soon as it flips.
@@ -924,42 +630,6 @@ pub(super) fn setting_switch(state: &State, key: &'static str, label: &str, t: &
         t,
         move |state, tx| autosave::apply(state, key, if on { "false" } else { "true" }, tx),
     )
-}
-
-/// How a pill reads: good news, something to look at, a problem, or a plain count.
-#[derive(Clone, Copy)]
-pub(super) enum Tone {
-    Good,
-    Warn,
-    Bad,
-    Plain,
-}
-
-/// A small status marker: a page's state beside its heading, or a plugin's.
-pub(super) fn pill(key: String, label: String, tone: Tone, t: &Tokens) -> El {
-    let (ink, fill, edge) = match tone {
-        Tone::Plain => (t.text_secondary, t.bg_elevated, t.border),
-        Tone::Good => tinted(
-            t.success,
-            attn_ui::colors::mix_srgb(t.text_primary, t.success, 0.73),
-        ),
-        Tone::Warn => tinted(t.warning, t.warning),
-        Tone::Bad => tinted(t.error, t.error),
-    };
-    type_::upper(&label, type_::BADGE)
-        .key(key)
-        .role("status")
-        .color(ink)
-        .px(space::S2)
-        .py(3.0)
-        .radius(999.0)
-        .fill(fill)
-        .border(1.0, edge)
-}
-
-/// A pill's ink, fill and border on `tone`, as the Tauri app's `.settings-pill.good`.
-fn tinted(tone: rune::Color, ink: rune::Color) -> (rune::Color, rune::Color, rune::Color) {
-    (ink, tone.alpha(0.11), tone.alpha(0.42))
 }
 
 /// A warning line, as the Tauri pages show a plugin's trouble.

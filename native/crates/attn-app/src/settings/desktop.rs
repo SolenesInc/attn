@@ -6,9 +6,9 @@ use attn_ui::type_;
 use rune::{El, FileDialogOptions, Tx, col, row, text};
 
 use super::autosave;
-use super::pages::{
-    Action, Tone, block, blocks, field_label, pill, row_card, setting_switch, wide_setting_field,
-};
+use attn_ui::system::{Button, Tone, tag};
+
+use super::pages::{block, blocks, field_label, row_card, setting_switch, wide_setting_field};
 use crate::{State, setting};
 
 pub(crate) const EDITOR: &str = "editor_executable";
@@ -41,11 +41,12 @@ fn folder_field(
     title: &'static str,
     t: &Tokens,
 ) -> El {
-    let browse = Action::new("Browse")
-        .on_press_tx(move |_, tx| browse(key, title, tx))
+    let browse = Button::new("Browse")
+        .on_press_tx(move |_: &mut State, tx: &mut Tx| browse(key, title, tx))
         .build(t)
         .key(format!("settings.browse.{key}"))
-        .label("Browse");
+        .label("Browse")
+        .into();
     wide_setting_field(state, key, label, placeholder, None, Some(browse), t)
 }
 
@@ -201,20 +202,16 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
     let (sent, sent_tone) = if open {
         ("sent files open", Tone::Good)
     } else {
-        ("sent files ignored", Tone::Plain)
+        ("sent files ignored", Tone::Neutral)
     };
     vec![
-        pill(
-            "settings.pill.desktop.projects".into(),
-            projects.into(),
+        El::from(tag(
+            "settings.pill.desktop.projects",
+            projects,
             projects_tone,
             t,
-        ),
-        pill(
-            "settings.pill.desktop.sent-files".into(),
-            sent.into(),
-            sent_tone,
-            t,
-        ),
+        ))
+        .role("status"),
+        El::from(tag("settings.pill.desktop.sent-files", sent, sent_tone, t)).role("status"),
     ]
 }

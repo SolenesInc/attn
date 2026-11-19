@@ -53,6 +53,11 @@ impl Choice {
         } else {
             (t.border, t.text_secondary)
         };
+        let fill = if self.chosen {
+            t.bg_elevated
+        } else {
+            t.bg_panel
+        };
         let dot = door::corner(el().size(DOT, DOT), Radius::Round)
             .border(
                 if self.chosen { 4.0 } else { 1.0 },
@@ -86,7 +91,7 @@ impl Choice {
             .min_h(Size::Regular.height())
             .items_center()
             .fill(if self.chosen {
-                t.bg_elevated
+                fill
             } else {
                 Color::TRANSPARENT
             })
@@ -96,7 +101,7 @@ impl Choice {
             .child(named)
             .on_press_tx(press);
         let row = door::inset(door::gap(row, Space::S12), Space::S12, Space::S8);
-        let row = layers::pressable(door::corner(row, Radius::Card), ink);
+        let row = layers::pressable(door::corner(row, Radius::Card), fill, t);
         Control::new(focus::ring_on_edge(row, t), Size::Regular)
     }
 }

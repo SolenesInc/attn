@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use attn_protocol::{DelegationChoice, DelegationPreferences, DelegationRole};
 use attn_ui::Tokens;
+use attn_ui::system::{self, Look, Size};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Icon, TextEdit, Tx, col, icon, row, text};
@@ -14,7 +15,7 @@ use super::table::{self, Field, NEW, Slot};
 use super::{Delegation, commit, commit_undoable, page_state, page_state_mut, persist};
 use crate::State;
 use crate::settings::harnesses;
-use crate::settings::pages::{Action, CAPTION, Look, switch, warning};
+use crate::settings::pages::{CAPTION, warning};
 use crate::settings::route::{self, Route, RouteHarness, Rules, Target};
 use crate::settings::sections::Section;
 
@@ -184,8 +185,8 @@ pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
         return None;
     }
     let on = page_state(state).preferences.as_ref()?.enabled;
-    Some(switch(
-        "settings.delegation.switch".into(),
+    Some(El::from(system::switch(
+        "settings.delegation.switch",
         "Delegation preferences",
         on,
         true,
@@ -197,7 +198,7 @@ pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
             next.enabled = !next.enabled;
             commit(state, next, tx);
         },
-    ))
+    )))
 }
 
 fn button(
@@ -206,7 +207,11 @@ fn button(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Action::new(label).look(look).on_press_tx(press).build(t)
+    system::Button::new(label)
+        .look(look)
+        .on_press_tx(press)
+        .build(t)
+        .into()
 }
 
 fn harness_rules(state: &State) -> Rules {
@@ -328,13 +333,13 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         .a11y_hidden(),
                 )
                 .child(
-                    Action::new("Undo")
+                    system::Button::new("Undo")
                         .look(Look::Quiet)
-                        .height(30.0)
-                        .ink(t.warning)
+                        .size(Size::Compact)
                         .on_press_tx(super::undo)
                         .build(t)
-                        .key("settings.delegation.undo.button"),
+                        .key("settings.delegation.undo.button")
+                        .into(),
                 ),
         );
     }
@@ -664,7 +669,7 @@ fn role_row(
     actions = actions.child(
         button(
             "Delete",
-            Look::QuietDanger,
+            Look::Danger,
             t,
             move |state: &mut State, tx: &mut Tx| {
                 let Some(preferences) = page_state(state).preferences.clone() else {
@@ -1130,12 +1135,13 @@ fn empty_panel(can_adopt: bool, t: &Tokens) -> El {
             row()
                 .gap(space::S2)
                 .child(
-                    Action::new("Add Attn roles")
+                    system::Button::new("Add Attn roles")
                         .look(Look::Primary)
                         .disabled(!can_adopt)
                         .on_press_tx(adopt)
                         .build(t)
-                        .key("settings.delegation.adopt"),
+                        .key("settings.delegation.adopt")
+                        .into(),
                 )
                 .child(button("+ Custom role", Look::Plain, t, add_role).key("settings.delegation.add")),
         )
@@ -1336,11 +1342,12 @@ fn adoption_panel(
                     .key("settings.delegation.adoption.cancel"),
                 )
                 .child(
-                    Action::new("Add Attn roles")
+                    system::Button::new("Add Attn roles")
                         .look(Look::Primary)
                         .on_press_tx(confirm_adoption)
                         .build(t)
-                        .key("settings.delegation.adoption.confirm"),
+                        .key("settings.delegation.adoption.confirm")
+                        .into(),
                 ),
         )
 }

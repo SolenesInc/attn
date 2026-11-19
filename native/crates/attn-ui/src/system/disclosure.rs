@@ -43,6 +43,6 @@ pub fn disclosure<S: 'static>(
         .on_press_tx(press);
     let line = door::gap(door::inset(line, size.inset(), Space::S0), Space::S8);
     let line = door::hang_left(line, size.inset());
-    let line = layers::pressable(door::corner(line, Radius::Control), ink);
+    let line = layers::pressable(door::corner(line, Radius::Control), t.bg_panel, t);
     Control::new(focus::ring(line, t), size)
 }

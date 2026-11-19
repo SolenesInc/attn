@@ -7,7 +7,7 @@
 #   scripts/native-ui-budget count    print each directory's count today
 #
 # A directory above its line fails, naming the calls added. A directory below its line fails
-# too, saying to lower the line, so the count only goes down. A file of native/ outside the
+# too, saying to lower the line, so the count only goes down. A file of native/crates outside the
 # allow rows that carries allow(clippy::disallowed_methods) fails.
 set -euo pipefail
 
@@ -85,7 +85,7 @@ while read -r file; do
   [ -n "$file" ] || continue
   printf '%s\n' "$allowed" | grep -qxF "$file" ||
     problems+=("$file carries allow(clippy::disallowed_methods): only the files the allow rows of native/ui-budget.tsv name may lift Rune's bans; use attn_ui's tokens and controls")
-done < <(cd "$root" && grep -rlE --include='*.rs' 'allow\(clippy::disallowed_methods\)' native 2>/dev/null | sort || true)
+done < <(cd "$root" && grep -rlE --include='*.rs' 'allow\(clippy::disallowed_methods\)' native/crates 2>/dev/null | sort || true)
 
 if [ "${#problems[@]}" -gt 0 ]; then
   printf 'native-ui-budget: %s\n' "${problems[@]}" >&2

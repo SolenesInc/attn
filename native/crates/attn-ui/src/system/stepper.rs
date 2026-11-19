@@ -73,7 +73,7 @@ pub fn arrows<S: 'static>(
                 .a11y_hidden(),
             )
             .on_press_tx(move |s: &mut S, tx: &mut Tx| step(s, up, tx));
-        layers::pressable(arrow, t.text_secondary)
+        layers::pressable(arrow, t.bg_input, t)
     };
     let pair = col()
         .w(ARROW.0)

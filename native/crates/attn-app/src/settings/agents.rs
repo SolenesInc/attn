@@ -7,6 +7,7 @@ mod pricing;
 use std::collections::{BTreeMap, BTreeSet};
 
 use attn_ui::Tokens;
+use attn_ui::system::{Segment, Segmented, disclosure, line_box};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
@@ -248,8 +249,7 @@ fn field(
         .invalid(field.is_some_and(|f| f.error.is_some()))
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(&edit))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
-        .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, &left, tx))
-        .width(None);
+        .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, &left, tx));
     if let Some(step) = step {
         input = input.trailing(super::pages::setting_arrows(&key, step, t));
     }
@@ -274,7 +274,7 @@ fn field(
                     col()
                         .grow(1.0)
                         .min_w(0.0)
-                        .child(super::pages::input(input, t)),
+                        .child(El::from(line_box(input, false, t))),
                 )
                 .children(saved),
         )
@@ -298,30 +298,25 @@ fn default_agent(state: &State, t: &Tokens) -> El {
         let label = crate::picker::agents::named(settings, &agent);
         let status = harnesses::of(&availability, &agent);
         let unavailable = status == Availability::Unavailable;
-        let mut option = super::pages::segment(
-            format!("settings.default-agent.{agent}"),
-            &label,
-            chosen == agent,
-            t,
-        )
-        .disabled(unavailable)
-        .children((status == Availability::Checking).then(|| {
-            text("…")
-                .key(format!("settings.default-agent.{agent}.checking"))
-                .role("img")
-                .label("checking")
-                .color(t.text_tertiary)
-        }));
+        let mut option = Segment::new(format!("settings.default-agent.{agent}"), &label)
+            .chosen(chosen == agent)
+            .disabled(unavailable);
+        if status == Availability::Checking {
+            option = option.trailing(
+                text("…")
+                    .key(format!("settings.default-agent.{agent}.checking"))
+                    .role("img")
+                    .label("checking")
+                    .color(t.text_tertiary),
+            );
+        }
         let help = match status {
             Availability::Unavailable => Some(format!("{label} CLI not found in PATH")),
             Availability::Checking => Some(format!("Checking for {label} on this machine")),
             Availability::Available => None,
         };
-        if unavailable {
-            option = option.layer_opacity(0.45);
-        }
         if let Some(help) = help {
-            option = option.help(help.clone()).description(help);
+            option = option.help(help);
         }
         let picked = agent.clone();
         option.on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -331,11 +326,10 @@ fn default_agent(state: &State, t: &Tokens) -> El {
             }
         })
     });
-    row().child(
-        super::pages::segment_track("settings.default-agent", "Default session agent", t)
-            .items_center()
-            .children(options),
-    )
+    Segmented::new("settings.default-agent", "Default session agent")
+        .options(options)
+        .build(t)
+        .into()
 }
 
 fn asks(state: &State, t: &Tokens) -> El {
@@ -654,18 +648,23 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> El {
     }
     let advanced_open = refusal_inside || page.advanced.contains(agent);
     let toggled = agent.to_owned();
-    content = content.child(disclosure(
-        format!("settings.agent.{agent}.advanced"),
-        "Advanced",
-        advanced_open,
-        t,
-        move |state| {
-            let advanced = &mut state.window.settings.agents.advanced;
-            if !advanced.remove(&toggled) {
-                advanced.insert(toggled.clone());
-            }
-        },
-    ));
+    content = content.child(
+        disclosure(
+            format!("settings.agent.{agent}.advanced"),
+            "Advanced",
+            advanced_open,
+            &[],
+            false,
+            t,
+            move |state: &mut State, _: &mut Tx| {
+                let advanced = &mut state.window.settings.agents.advanced;
+                if !advanced.remove(&toggled) {
+                    advanced.insert(toggled.clone());
+                }
+            },
+        )
+        .into(),
+    );
     if advanced_open {
         let mut fields = row().w_full().equal_columns(2).gap(10.0).items_start();
         if executable {
@@ -761,45 +760,6 @@ fn chevron(open: bool, t: &Tokens) -> El {
         &attn_ui::icon::EXPAND
     };
     rune::icon(icon, 12.0).color(t.text_tertiary)
-}
-
-/// A line that shows and hides what follows it, as the Tauri app's
-/// `.settings-agent-advanced > summary`.
-fn disclosure(
-    key: String,
-    title: &str,
-    open: bool,
-    t: &Tokens,
-    toggle: impl Fn(&mut State) + 'static,
-) -> El {
-    let triangle = if open {
-        attn_ui::glyph::CARET_DOWN
-    } else {
-        attn_ui::glyph::CARET_RIGHT
-    };
-    row()
-        .key(key)
-        .role("button")
-        .label(title.to_owned())
-        .expanded(open)
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.text_secondary)
-        .w_full()
-        .gap(6.0)
-        .items_center()
-        .py(16.0)
-        .child(
-            text(triangle)
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .a11y_hidden(),
-        )
-        .child(
-            text(title.to_owned())
-                .font(type_::BODY)
-                .color(t.text_secondary),
-        )
-        .on_press(toggle)
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {

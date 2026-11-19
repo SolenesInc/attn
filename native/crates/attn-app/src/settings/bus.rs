@@ -12,7 +12,9 @@ use rune::{Align, El, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
 use super::Section;
-use super::pages::{self, CAPTION, Tone, pill};
+use attn_ui::system::{self, Look, Tone, tag};
+
+use super::pages::{self, CAPTION};
 use crate::State;
 
 /// The daemon answers with one pass over the whole log, 209 ms at 945k rows, so the page reads
@@ -125,10 +127,11 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 .gap(space::S2)
                 .child(text(error.clone()).font(CAPTION).color(t.warning))
                 .child(
-                    crate::settings::pages::Action::new("Try again")
+                    system::Button::new("Try again")
                         .on_press_tx(read)
                         .build(t)
-                        .key("settings.bus.try-again"),
+                        .key("settings.bus.try-again")
+                        .into(),
                 ),
             None => text("Reading the event log…")
                 .key("settings.bus.loading")
@@ -163,12 +166,15 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                         .label(format!("{level}: {}", finding.message))
                         .gap(space::S2)
                         .items_center()
-                        .child(pill(
-                            format!("settings.bus.health.{i}.level"),
-                            level.into(),
-                            if error { Tone::Bad } else { Tone::Warn },
-                            t,
-                        ))
+                        .child(
+                            El::from(tag(
+                                format!("settings.bus.health.{i}.level"),
+                                level,
+                                if error { Tone::Bad } else { Tone::Warn },
+                                t,
+                            ))
+                            .role("status"),
+                        )
                         .child(
                             text(finding.message.clone())
                                 .font(CAPTION)
@@ -189,12 +195,13 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
             .gap(space::S3)
             .items_center()
             .child(
-                crate::settings::pages::Action::new(if bus.loading { "Reading…" } else { "Refresh" })
+                system::Button::new(if bus.loading { "Reading…" } else { "Refresh" })
                     .disabled(bus.loading)
                     .on_press_tx(read)
                     .build(t)
                     .key("settings.bus.refresh")
-                    .label("Refresh"),
+                    .label("Refresh")
+                    .into(),
             )
             .child(
                 text(if status.delivering {
@@ -391,12 +398,13 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
                         .truncate(),
                 )
                 .children(p.surging.then(|| {
-                    pill(
+                    El::from(tag(
                         format!("settings.bus.producer.{}.loud", p.name),
-                        "Loud".into(),
+                        "Loud",
                         Tone::Warn,
                         t,
-                    )
+                    ))
+                    .role("status")
                 }));
             let cells = vec![
                 count(p.events),
@@ -492,12 +500,13 @@ fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens
                     .color(t.text_primary),
             )
             .children(marks.iter().enumerate().map(|(i, (mark, tone, help))| {
-                let badge = pill(
+                let badge = El::from(tag(
                     format!("settings.bus.consumer.{}.mark.{i}", c.name),
-                    mark.clone(),
+                    mark,
                     *tone,
                     t,
-                );
+                ))
+                .role("status");
                 match help {
                     Some(help) => badge.help(help.clone()),
                     None => badge,
@@ -523,19 +532,15 @@ fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens
         label.extend(cells.iter().cloned());
         let consumer = c.name.clone();
         let enabled = c.enabled;
-        let action =
-            crate::settings::pages::Action::new(if enabled { "Disable" } else { "Enable" })
-                .look(if enabled {
-                    crate::settings::pages::Look::Danger
-                } else {
-                    crate::settings::pages::Look::Plain
-                })
-                .disabled(bus.switching.is_some())
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    switch(state, consumer.clone(), !enabled, tx)
-                })
-                .build(t)
-                .key(format!("settings.bus.consumer.{}.switch", c.name));
+        let action = system::Button::new(if enabled { "Disable" } else { "Enable" })
+            .look(if enabled { Look::Danger } else { Look::Plain })
+            .disabled(bus.switching.is_some())
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                switch(state, consumer.clone(), !enabled, tx)
+            })
+            .build(t)
+            .key(format!("settings.bus.consumer.{}.switch", c.name))
+            .into();
         let row = table_row(
             format!("settings.bus.consumer.{}", c.name),
             label.join(", "),
@@ -565,7 +570,7 @@ fn marks(
     if c.holds_retention_floor && !c.pin_alarm {
         marks.push((
             "Retention floor".to_owned(),
-            Tone::Plain,
+            Tone::Neutral,
             Some("Retention stops at this consumer's cursor".to_owned()),
         ));
     }

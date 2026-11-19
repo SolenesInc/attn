@@ -13,7 +13,9 @@ use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 
-use super::pages::{CAPTION, Tone, after_block, block, pill, warning};
+use attn_ui::system::{Button, Tone, line_box, tag};
+
+use super::pages::{CAPTION, after_block, block, warning};
 use crate::State;
 use crate::action::Action;
 
@@ -229,7 +231,7 @@ fn state_tone(state: &str) -> Tone {
         "connected" => Tone::Good,
         "stalled" => Tone::Warn,
         "lost" | "refused" => Tone::Bad,
-        _ => Tone::Plain,
+        _ => Tone::Neutral,
     }
 }
 
@@ -346,11 +348,12 @@ fn action(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    crate::settings::pages::Action::new(label)
+    Button::new(label)
         .disabled(disabled)
         .on_press_tx(press)
         .build(t)
         .key(key)
+        .into()
 }
 
 fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
@@ -551,12 +554,15 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
                                 .color(t.text_tertiary),
                         ),
                 )
-                .child(pill(
-                    part("state"),
-                    outpost.state.clone(),
-                    state_tone(&outpost.state),
-                    t,
-                )),
+                .child(
+                    El::from(tag(
+                        part("state"),
+                        &outpost.state,
+                        state_tone(&outpost.state),
+                        t,
+                    ))
+                    .role("status"),
+                ),
         )
         .children(details)
         .child(
@@ -592,29 +598,31 @@ fn add_form(state: &State, t: &Tokens) -> El {
         .gap(10.0)
         .child(field(
             "Name",
-            super::pages::input(
+            line_box(
                 TextInput::new(&page.name)
                     .key("settings.outposts.name")
                     .label("Name")
                     .placeholder(name_placeholder)
                     .on_edit(|state: &mut State| &mut panel(state).name)
-                    .on_submit(add)
-                    .width(None),
+                    .on_submit(add),
+                false,
                 t,
-            ),
+            )
+            .into(),
         ))
         .child(field(
             "ssh destination",
-            super::pages::input(
+            line_box(
                 TextInput::new(&page.destination)
                     .key("settings.outposts.destination")
                     .label("ssh destination")
                     .placeholder("user@host")
                     .on_edit(|state: &mut State| &mut panel(state).destination)
-                    .on_submit(add)
-                    .width(None),
+                    .on_submit(add),
+                false,
                 t,
-            ),
+            )
+            .into(),
         ))
         .child(row().child(action(
             "settings.outposts.submit".into(),

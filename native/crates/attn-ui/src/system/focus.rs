@@ -10,6 +10,13 @@ pub(crate) fn ring(e: El, t: &Tokens) -> El {
     e.focus_ring(WIDTH, OFFSET, t.warning)
 }
 
+/// The ring a field draws while focus is anywhere inside it, from the pointer or the keyboard:
+/// the same drawing as [`ring`], since the field's own editor is what takes focus.
+pub(crate) fn ring_within(e: El, t: &Tokens) -> El {
+    e.focus_within_ring(WIDTH, OFFSET, t.warning)
+        .focus_within_flat()
+}
+
 /// The ring of a bordered control in a tight list, drawn over its own edge, so it never
 /// reaches a neighbour.
 pub(crate) fn ring_on_edge(e: El, t: &Tokens) -> El {

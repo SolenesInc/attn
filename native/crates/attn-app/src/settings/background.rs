@@ -2,6 +2,7 @@
 //! advisor, and the context cap of headless runs.
 
 use attn_ui::Tokens;
+use attn_ui::system::{Button, arrows, line_box};
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::TextInput;
 use serde::{Deserialize, Serialize};
@@ -9,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use super::autosave::{self, Codec};
 use super::harnesses;
 use super::pages::{
-    Action, CAPTION, Look, arrows, block, blocks, field_label, hint, input as input_style,
-    refusal_beside, row_card, stepped_value, wide_setting_field,
+    CAPTION, block, blocks, field_label, hint, refusal_beside, row_card, stepped_value,
+    wide_setting_field,
 };
 use super::route::{self, Route, Rules, Target};
 use crate::State;
@@ -357,8 +358,7 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
         .on_blur(|state: &mut State, tx: &mut Tx| {
             autosave::commit_on_leave(state, ACTIVITY_INTERVALS, tx)
         })
-        .width(None)
-        .trailing(arrows(&key, t, move |state, up, tx| {
+        .trailing(arrows(&key, t, move |state: &mut State, up, tx| {
             let edit = interval_edit(state, part);
             let next = stepped_value(&edit.text, 1.0, up)
                 .parse::<i64>()
@@ -373,7 +373,7 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
         .min_w(0.0)
         .gap(7.0)
         .child(field_label(label, t))
-        .child(input_style(input, t))
+        .child(El::from(line_box(input, false, t)))
 }
 
 fn interval_edit<'a>(state: &'a mut State, part: &str) -> &'a mut TextEdit {
@@ -390,11 +390,11 @@ fn session_activity(state: &State, t: &Tokens) -> El {
     let saved = parse_activity(settings.get(ACTIVITY_CONFIG).map(String::as_str));
     let enabled = crate::setting::on(settings, ACTIVITY_ENABLED);
     let blocked = !enabled && saved.agent.is_empty();
-    let mut toggle = Action::new(if enabled { "Disable" } else { "Enable" }).disabled(blocked);
+    let mut toggle = Button::new(if enabled { "Disable" } else { "Enable" }).disabled(blocked);
     if blocked {
         toggle = toggle.help("Choose an agent first");
     }
-    let toggle = toggle
+    let toggle: El = toggle
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             autosave::apply(
                 state,
@@ -404,7 +404,8 @@ fn session_activity(state: &State, t: &Tokens) -> El {
             )
         })
         .build(t)
-        .key("settings.activity.toggle");
+        .key("settings.activity.toggle")
+        .into();
     let mut body = vec![row_card(
         "Generate activity lines",
         "Off by default. Choose an agent below to enable.",
@@ -418,7 +419,7 @@ fn session_activity(state: &State, t: &Tokens) -> El {
             t,
         ));
     }
-    body.extend(harnesses::failure_row(state, "activity", Look::Plain, t));
+    body.extend(harnesses::failure_row(state, "activity", t));
     body.push(route::chip(
         state,
         t,
@@ -483,12 +484,7 @@ fn garden_advisor(state: &State, t: &Tokens) -> El {
             t,
         ));
     }
-    body.extend(harnesses::failure_row(
-        state,
-        "garden-advisor",
-        Look::Plain,
-        t,
-    ));
+    body.extend(harnesses::failure_row(state, "garden-advisor", t));
     body.push(route::chip(
         state,
         t,

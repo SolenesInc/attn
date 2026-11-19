@@ -9,9 +9,10 @@ use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, col, row, text};
 
+use attn_ui::system::{Button, Tone, tag};
+
 use super::pages::{
-    Tone, block, blocks, button, field_label, hint, pill, row_card, setting_switch,
-    wide_setting_field,
+    block, blocks, field_label, hint, row_card, setting_switch, wide_setting_field,
 };
 use crate::action::Action;
 use crate::{State, setting};
@@ -152,11 +153,14 @@ fn muted_list(
                         .grow(1.0)
                         .min_w(0.0),
                 )
-                .child(button(
-                    format!("settings.unmute.{kind}.{name}"),
-                    "Unmute",
-                    t,
-                    move |state, _| unmute(state, &pressed),
+                .child(El::from(
+                    Button::new("Unmute")
+                        .on_press_tx(move |state: &mut State, _: &mut rune::Tx| {
+                            unmute(state, &pressed)
+                        })
+                        .build(t)
+                        .key(format!("settings.unmute.{kind}.{name}"))
+                        .label("Unmute"),
                 ))
         }))
 }
@@ -329,26 +333,23 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
     let (settle, tone) = if on {
         ("auto-settle on", Tone::Good)
     } else {
-        ("auto-settle off", Tone::Plain)
+        ("auto-settle off", Tone::Neutral)
     };
     vec![
-        pill(
-            "settings.pill.hygiene.auto-settle".into(),
-            settle.into(),
-            tone,
+        El::from(tag("settings.pill.hygiene.auto-settle", settle, tone, t)).role("status"),
+        El::from(tag(
+            "settings.pill.hygiene.repos",
+            &format!("{} repos", muted_repos(state).len()),
+            Tone::Neutral,
             t,
-        ),
-        pill(
-            "settings.pill.hygiene.repos".into(),
-            format!("{} repos", muted_repos(state).len()),
-            Tone::Plain,
+        ))
+        .role("status"),
+        El::from(tag(
+            "settings.pill.hygiene.authors",
+            &format!("{} authors", muted_authors(state).len()),
+            Tone::Neutral,
             t,
-        ),
-        pill(
-            "settings.pill.hygiene.authors".into(),
-            format!("{} authors", muted_authors(state).len()),
-            Tone::Plain,
-            t,
-        ),
+        ))
+        .role("status"),
     ]
 }

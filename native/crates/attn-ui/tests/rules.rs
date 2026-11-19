@@ -220,11 +220,11 @@ const PRESSABLE: &[(&str, &str)] = &[
     ("Library/Disclosure", "disclosure"),
 ];
 
-/// Tripwires under the weakest layer measured: Danger's red ink at 8% and 12% on its fill in
-/// light, 1.10:1 hovered and 1.26:1 held down (pressed is measured with the pointer still over
-/// it, as a press is).
-const HOVER_FLOOR: f32 = 1.09;
-const PRESSED_FLOOR: f32 = 1.24;
+/// The steps F5 states for a list row, hover then pressed against rest, in dark and in light.
+const ROW_STEPS_DARK: (f32, f32) = (1.20, 1.66);
+const ROW_STEPS_LIGHT: (f32, f32) = (1.17, 1.50);
+/// Blending in 8-bit steps and the layers' search land a hundredth either side.
+const ROUNDING: f32 = 0.01;
 
 #[test]
 fn hover_and_pressed_show_on_every_control_in_dark_and_light() {
@@ -232,6 +232,11 @@ fn hover_and_pressed_show_on_every_control_in_dark_and_light() {
     for &(name, subject) in PRESSABLE {
         for dark in [true, false] {
             let t = tokens(dark);
+            let (hover_floor, pressed_floor) = if dark {
+                ROW_STEPS_DARK
+            } else {
+                ROW_STEPS_LIGHT
+            };
             let mut rt = story_at(dark, name, None);
             let find = |rt: &Runtime<()>| match subject.split_once('/') {
                 Some((within, key)) => inside(rt, within, key),
@@ -253,10 +258,132 @@ fn hover_and_pressed_show_on_every_control_in_dark_and_light() {
                 "{subject} dark={dark}: hover {h:.2}:1, pressed {p:.2}:1"
             ));
             assert!(
-                h >= HOVER_FLOOR && p >= PRESSED_FLOOR,
+                h >= hover_floor - ROUNDING && p >= pressed_floor - ROUNDING,
                 "{subject}, dark={dark}: hover {h:.2}:1 and pressed {p:.2}:1 against rest"
             );
         }
     }
     println!("{}", measured.join("\n"));
+}
+
+fn click(rt: &mut Runtime<()>, e: &ElementInfo) {
+    let (x, y) = (e.rect[0] + e.rect[2] / 2.0, e.rect[1] + e.rect[3] / 2.0);
+    rt.pointer_move(x, y);
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0);
+    rt.frame(1.0);
+}
+
+fn hover(rt: &mut Runtime<()>, e: &ElementInfo) {
+    rt.pointer_move(e.rect[0] + e.rect[2] / 2.0, e.rect[1] + e.rect[3] / 2.0);
+    rt.frame(1.0);
+    rt.frame(1.0);
+}
+
+/// Every box the frame draws for `e` itself, ring aside: whatever sits within a point or two of
+/// its rectangle, in points.
+fn drawn_edges(rt: &Runtime<()>, e: &ElementInfo) -> Vec<[f32; 4]> {
+    let [x, y, w, h] = e.rect;
+    rt.instances
+        .iter()
+        .map(|i| i.rect.map(|v| v / SCALE))
+        .filter(|[ix, iy, iw, ih]| {
+            (ix - x).abs() <= 1.5
+                && (iy - y).abs() <= 1.5
+                && (ix + iw - x - w).abs() <= 1.5
+                && (iy + ih - y - h).abs() <= 1.5
+        })
+        .collect()
+}
+
+#[test]
+fn focus_and_every_other_state_leave_a_fields_edge_where_it_was() {
+    for dark in [true, false] {
+        let rest = story(dark, "Library/Field box", "Filled");
+        for key in FIELD_BOXES {
+            let at_rest = element(&rest, key).rect;
+            let mut states: Vec<(&str, Runtime<()>)> = Vec::new();
+            for variant in ["Filled", "Failed", "Disabled", "Disabled empty"] {
+                states.push((variant, story(dark, "Library/Field box", variant)));
+            }
+            let mut hovered = story(dark, "Library/Field box", "Filled");
+            let e = element(&hovered, key);
+            hover(&mut hovered, &e);
+            states.push(("Hover", hovered));
+            let mut focused = story(dark, "Library/Field box", "Filled");
+            let e = element(&focused, key);
+            click(&mut focused, &e);
+            states.push(("Focus", focused));
+            for (state, rt) in &states {
+                let e = element(rt, key);
+                assert!(
+                    near(e.rect, at_rest),
+                    "{key} {state}, dark={dark}: laid out at {:?}, at rest {at_rest:?}",
+                    e.rect
+                );
+                for edge in drawn_edges(rt, &e) {
+                    assert!(
+                        edge.iter().zip(at_rest).all(|(a, b)| (a - b).abs() < 0.26),
+                        "{key} {state}, dark={dark}: draws an edge at {edge:?}, its box is {at_rest:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_focused_field_draws_the_ring_every_control_draws() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        for key in FIELD_BOXES {
+            let mut rt = story(dark, "Library/Field box", "Filled");
+            let e = element(&rt, key);
+            click(&mut rt, &e);
+            let field = element(&rt, key);
+            let ring = ring_of(&rt, &field, &t)
+                .unwrap_or_else(|| panic!("{key}, dark={dark}: focused, draws no ring"));
+            let [x, y, w, h] = ring.rect.map(|v| v / SCALE);
+            let reach = field.rect[0] - x;
+            assert!(
+                (reach - RING_REACH).abs() < 0.5
+                    && (field.rect[1] - y - RING_REACH).abs() < 0.5
+                    && (x + w - field.rect[0] - field.rect[2] - RING_REACH).abs() < 0.5
+                    && (y + h - field.rect[1] - field.rect[3] - RING_REACH).abs() < 0.5,
+                "{key}, dark={dark}: ring {:?} does not stand {RING_REACH} outside {:?}",
+                [x, y, w, h],
+                field.rect
+            );
+        }
+    }
+}
+
+#[test]
+fn a_field_beside_a_regular_button_shares_its_top_and_bottom() {
+    for dark in [true, false] {
+        let rt = story(dark, "Library/Baseline", "Rest");
+        let button = element(&rt, "baseline.plain");
+        for key in [
+            "baseline.primary",
+            "baseline.quiet",
+            "baseline.line",
+            "baseline.number",
+        ] {
+            let e = element(&rt, key);
+            let drawn = drawn_edges(&rt, &e);
+            let (top, bottom) = drawn
+                .iter()
+                .fold((e.rect[1], e.rect[1] + e.rect[3]), |(t, b), r| {
+                    (t.min(r[1]), b.max(r[1] + r[3]))
+                });
+            assert!(
+                (top - button.rect[1]).abs() < 0.26
+                    && (bottom - button.rect[1] - button.rect[3]).abs() < 0.26,
+                "dark={dark}: {key} spans {top}..{bottom}, a Regular button {}..{}",
+                button.rect[1],
+                button.rect[1] + button.rect[3]
+            );
+        }
+    }
 }

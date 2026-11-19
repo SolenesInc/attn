@@ -159,7 +159,18 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
             Story::new("Library/Button", Library::default, buttons)
                 .variant("Rest", |_| {})
                 .variant("Focus", |s| s.rings = true)
-                .variant("Disabled", |s| s.disabled = true),
+                .variant("Disabled", |s| s.disabled = true)
+                .variant("Long label", |s| s.long = true)
+                .variant("Narrow", |s| {
+                    s.long = true;
+                    s.narrow = true;
+                }),
+        )
+        .story(
+            Story::new("Library/Baseline", Library::default, baseline).variant("Rest", |s| {
+                s.line = TextEdit::new("api-review");
+                s.number = TextEdit::new("600");
+            }),
         )
         .story(
             Story::new("Library/Field box", Library::default, field_boxes)
@@ -174,14 +185,24 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Failed", |s| {
                     s.failed = true;
                     s.line = TextEdit::new("api review");
+                    s.number = TextEdit::new("6O0");
+                    s.area = TextEdit::new("Review the change against the plan.");
                 })
                 .variant("Disabled", |s| {
                     s.disabled = true;
                     s.line = TextEdit::new("api-review");
+                    s.number = TextEdit::new("600");
+                    s.area = TextEdit::new("Review the change against the plan.");
+                })
+                .variant("Disabled empty", |s| s.disabled = true)
+                .variant("Selected text", |s| {
+                    s.line = TextEdit::new("api-review");
+                    s.line.set_selection(0, 3);
+                    s.line.focused = true;
                 })
                 .variant("Long text", |s| {
                     s.line = TextEdit::new(LONG);
-                    s.number = TextEdit::new("1234567");
+                    s.number = TextEdit::new("123456789012");
                     s.area = TextEdit::new(LONG);
                 })
                 .variant("Narrow", |s| {
@@ -210,24 +231,81 @@ fn buttons(s: &Library, cx: &mut Cx<Library>) -> El {
     let rows = SIZES.iter().map(|&(size_key, size)| {
         door::gap(row().items_center(), Space::S16).children(BUTTONS.iter().map(
             |&(look_key, look)| {
-                let shown = match look {
-                    Look::Primary => "Save",
-                    Look::Plain => "Browse",
-                    Look::Quiet => "Undo",
-                    Look::Danger => "Remove",
+                let shown = match (look, s.long) {
+                    (Look::Primary, false) => "Save",
+                    (Look::Plain, false) => "Browse",
+                    (Look::Quiet, false) => "Undo",
+                    (Look::Danger, false) => "Remove",
+                    (Look::Primary, true) => "Save and restart every agent",
+                    (Look::Plain, true) => "Browse for a folder to watch",
+                    (Look::Quiet, true) => "Undo the last three changes",
+                    (Look::Danger, true) => "Remove this automation for good",
                 };
-                Action::new(shown)
+                let button: El = Action::new(shown)
                     .look(look)
                     .size(size)
                     .disabled(s.disabled)
                     .on_press_tx(|_: &mut Library, _: &mut Tx| {})
                     .build(&t)
                     .key(format!("button.{look_key}.{size_key}"))
-                    .into()
+                    .into();
+                if s.narrow {
+                    el().w(NARROW_BUTTON).child(button)
+                } else {
+                    button
+                }
             },
         ))
     });
     library_stage(&t, door::gap(col(), Space::S24).children(rows))
+}
+
+/// The narrowest column a button is drawn in: a sidebar's footer.
+const NARROW_BUTTON: f32 = 120.0;
+
+/// One row of every control that sits on a line with others, so their edges and words line up.
+fn baseline(s: &Library, cx: &mut Cx<Library>) -> El {
+    let t = library_tokens(cx);
+    let line = TextInput::new(&s.line)
+        .key("baseline.line.input")
+        .label("Name")
+        .on_edit(|s: &mut Library| &mut s.line);
+    let number = TextInput::new(&s.number)
+        .key("baseline.number.input")
+        .label("Width")
+        .on_edit(|s: &mut Library| &mut s.number);
+    let noop = |_: &mut Library, _: &mut Tx| {};
+    let row = door::gap(row().items_center(), Space::S8)
+        .child(
+            Action::new("Save")
+                .look(Look::Primary)
+                .on_press_tx(noop)
+                .build(&t)
+                .key("baseline.primary")
+                .into(),
+        )
+        .child(
+            Action::new("Browse")
+                .on_press_tx(noop)
+                .build(&t)
+                .key("baseline.plain")
+                .into(),
+        )
+        .child(
+            Action::new("Undo")
+                .look(Look::Quiet)
+                .on_press_tx(noop)
+                .build(&t)
+                .key("baseline.quiet")
+                .into(),
+        )
+        .child(
+            el().w(160.0)
+                .child(line_box(line, false, &t).key("baseline.line").into()),
+        )
+        .child(number_box(number, false, &t).key("baseline.number").into())
+        .child(tag("baseline.tag", "Running", Tone::Good, &t).into());
+    library_stage(&t, row)
 }
 
 fn field_boxes(s: &Library, cx: &mut Cx<Library>) -> El {
@@ -240,26 +318,29 @@ fn field_boxes(s: &Library, cx: &mut Cx<Library>) -> El {
         .label("Name")
         .placeholder("Automation name")
         .invalid(s.failed)
-        .disabled(s.disabled)
         .on_edit(|s: &mut Library| &mut s.line);
     let number = TextInput::new(&s.number)
         .key("field.number.input")
         .label("Sidebar width")
         .placeholder("240")
-        .disabled(s.disabled)
+        .invalid(s.failed)
         .on_edit(|s: &mut Library| &mut s.number);
     let area = rune_kit::TextArea::new(&s.area)
         .key("field.area.input")
         .label("Prompt")
         .placeholder("What the agent does each run")
         .rows(3)
-        .disabled(s.disabled)
+        .invalid(s.failed)
         .on_edit(|s: &mut Library| &mut s.area);
     let column = door::gap(col(), Space::S16)
         .w(if s.narrow { 160.0 } else { 280.0 })
-        .child(line_box(line, &t).key("field.line").into())
-        .child(number_box(number, &t).key("field.number").into())
-        .child(area_box(area, &t).key("field.area").into());
+        .child(line_box(line, s.disabled, &t).key("field.line").into())
+        .child(
+            number_box(number, s.disabled, &t)
+                .key("field.number")
+                .into(),
+        )
+        .child(area_box(area, s.disabled, &t).key("field.area").into());
     library_stage(&t, column)
 }
 
@@ -517,7 +598,7 @@ fn steppers(s: &Library, cx: &mut Cx<Library>) -> El {
                 noop,
             )
             .into(),
-            number_box(number, &t).key("stepper.number").into(),
+            number_box(number, false, &t).key("stepper.number").into(),
         ],
     )
 }

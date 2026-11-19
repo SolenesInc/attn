@@ -104,7 +104,7 @@ impl Segment {
         if self.disabled {
             return option.layer_opacity(DISABLED);
         }
-        let option = layers::pressable(option, ink);
+        let option = layers::pressable(option, if self.chosen { fill } else { t.bg_input }, t);
         match self.press {
             Some(press) => press(option),
             None => option,

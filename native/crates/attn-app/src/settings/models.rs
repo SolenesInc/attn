@@ -10,7 +10,9 @@ use rune::{El, Key, KeyEvent, Tx, col, row, text};
 use super::autosave::{self, Codec};
 use super::catalogs::{self, TIER_OVERRIDES};
 use super::harnesses;
-use super::pages::{Action, BLOCK_HEADING, CAPTION, Look, block, blocks, warning};
+use attn_ui::system::Button;
+
+use super::pages::{BLOCK_HEADING, CAPTION, block, blocks, warning};
 use super::route::{TierInfo, TierOverride, tier_label, tier_overrides};
 use crate::State;
 
@@ -483,7 +485,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
     let listed = harnesses::listed(state);
     let entries = entries(state);
     let mut out = Vec::new();
-    out.extend(harnesses::failure_row(state, "models", Look::Plain, t));
+    out.extend(harnesses::failure_row(state, "models", t));
     if harnesses::first_loading(state) {
         out.push(
             caption(
@@ -512,9 +514,10 @@ fn quiet(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    Action::new(shown)
+    Button::new(shown)
         .on_press_tx(press)
         .build(t)
         .key(key)
-        .label(label.to_owned())
+        .label(label)
+        .into()
 }

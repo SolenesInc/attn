@@ -2,6 +2,7 @@
 //! model the built-in table misses, and the form that adds one.
 
 use attn_ui::Tokens;
+use attn_ui::system::{Button, Look, disclosure, line_box, number_box};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, TextEdit, Tx, col, row, text};
@@ -244,10 +245,7 @@ fn rate_input(label: &str, input: TextInput, t: &Tokens) -> El {
     col()
         .gap(space::S1)
         .child(text(name.clone()).font(CAPTION).color(t.text_secondary))
-        .child(crate::settings::pages::input(
-            input.label(name).placeholder("0").width(Some(110.0)),
-            t,
-        ))
+        .child(number_box(input.label(name).placeholder("0"), false, t).into())
 }
 
 fn card_typed(state: &mut State, model: &str) {
@@ -326,13 +324,14 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
                         .grow(1.0),
                 )
                 .child(
-                    crate::settings::pages::Action::new("Remove")
-                        .look(crate::settings::pages::Look::Danger)
+                    Button::new("Remove")
+                        .look(Look::Danger)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             autosave::apply(state, &remove, "", tx)
                         })
                         .build(t)
-                        .key(format!("settings.price.{model}.remove")),
+                        .key(format!("settings.price.{model}.remove"))
+                        .into(),
                 ),
         )
         .children(parse_card(raw).is_none().then(|| {
@@ -431,19 +430,20 @@ fn new_form(state: &State, t: &Tokens) -> El {
                 .gap(space::S1)
                 .child(text("Exact model ID").font(CAPTION).color(t.text_secondary))
                 .child(
-                    crate::settings::pages::input(
-                    TextInput::new(&new.model)
-                        .key(NEW_MODEL)
-                        .label("Exact model ID")
-                        .placeholder("provider-model-id")
-                        .on_edit(|state: &mut State| {
-                            &mut state.window.settings.agents.pricing.new.model
-                        })
-                        .on_submit(add)
-                        .on_blur(add)
-                        .width(Some(280.0)),
+                    El::from(line_box(
+                        TextInput::new(&new.model)
+                            .key(NEW_MODEL)
+                            .label("Exact model ID")
+                            .placeholder("provider-model-id")
+                            .on_edit(|state: &mut State| {
+                                &mut state.window.settings.agents.pricing.new.model
+                            })
+                            .on_submit(add)
+                            .on_blur(add),
+                        false,
                         t,
-                    ),
+                    ))
+                    .w(280.0),
                 ),
         )
         .child(row().gap(space::S2).wrap().children(rates))
@@ -507,15 +507,20 @@ pub(super) fn page(state: &State, t: &Tokens) -> El {
         .w_full()
         .mt(24.0)
         .pb(S4)
-        .child(super::disclosure(
-            "settings.pricing".into(),
-            "Model pricing overrides",
-            pricing.open,
-            t,
-            |state| {
-                let pricing = &mut state.window.settings.agents.pricing;
-                pricing.open = !pricing.open;
-            },
-        ))
+        .child(
+            disclosure(
+                "settings.pricing",
+                "Model pricing overrides",
+                pricing.open,
+                &[],
+                false,
+                t,
+                |state: &mut State, _: &mut Tx| {
+                    let pricing = &mut state.window.settings.agents.pricing;
+                    pricing.open = !pricing.open;
+                },
+            )
+            .into(),
+        )
         .children(pricing.open.then_some(body))
 }

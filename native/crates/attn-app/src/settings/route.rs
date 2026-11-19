@@ -1249,13 +1249,13 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
                 .gap(space::S2)
                 .items_center()
                 .children(provider)
-                .child(
-                    crate::settings::pages::Action::new(format!("Use “{query}”"))
+                .child(El::from(
+                    attn_ui::system::Button::new(format!("Use “{query}”"))
                         .disabled(unsupported)
                         .on_press_tx(use_manual)
                         .build(t)
                         .key("settings.route-picker.manual"),
-                ),
+                )),
         );
     }
     main = main.children(effort_control(p, view, t));

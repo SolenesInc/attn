@@ -144,8 +144,8 @@ fn action(state: &State, t: &Tokens) -> El {
         .gap(space::S2)
         .pt(space::S2)
         .child(
-            row().child(
-                crate::settings::pages::Action::new(if running {
+            row().child(El::from(
+                attn_ui::system::Button::new(if running {
                     "Updating…"
                 } else {
                     "Update attn"
@@ -154,7 +154,7 @@ fn action(state: &State, t: &Tokens) -> El {
                 .on_press_tx(start)
                 .build(t)
                 .key("settings.updates.start"),
-            ),
+            )),
         )
         .children(error)
 }
