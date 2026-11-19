@@ -1647,12 +1647,18 @@ fn widths(texts: &[(String, [f32; 4], [f32; 4])]) -> std::collections::HashMap<S
         .collect()
 }
 
-fn launcher_world(scale: &str, w: &str, current: &'static str, window: (f32, f32)) -> World {
+fn launcher_world(
+    scale: &str,
+    w: &str,
+    current: &'static str,
+    machine: &str,
+    window: (f32, f32),
+) -> World {
     let mut world = world(Setup {
         settings: vec![("uiScale".into(), scale.into())],
         outposts: vec![
             OutpostInfo {
-                name: LONG_MACHINE.into(),
+                name: machine.into(),
                 ..sandbox()
             },
             field_lab(),
@@ -1668,58 +1674,81 @@ fn launcher_world(scale: &str, w: &str, current: &'static str, window: (f32, f32
 }
 
 #[test]
-fn a_long_machine_name_ends_in_an_ellipsis_only_when_its_line_has_no_room_and_is_never_cut() {
+fn a_machine_takes_at_most_half_a_recent_row_and_a_folder_gives_way_before_its_machine() {
     for (scale, w, current) in [
         ("1", "new-session", "d1"),
         ("1.5", "new-session", "d1"),
         ("1", "launcher", "d2"),
         ("1.5", "launcher", "d2"),
     ] {
-        for typed in [String::new(), format!("{LONG_MACHINE}:{DEEP}/")] {
-            let shoot = |window: (f32, f32)| {
-                let mut world = launcher_world(scale, w, current, window);
-                if !typed.is_empty() {
-                    world.gesture(|app| app.type_text(&typed));
+        for machine in [LONG_MACHINE, "landing-runner"] {
+            for typed in [String::new(), format!("{machine}:{DEEP}/")] {
+                if typed.is_empty() && w == "launcher" && scale == "1.5" {
+                    continue;
                 }
                 let within = if typed.is_empty() {
                     format!("{w}.row.0")
                 } else {
                     format!("{w}.section.0")
                 };
-                texts_in(&world, &within)
-            };
-            let small = shoot((800.0, 600.0));
-            let natural = widths(&shoot((2400.0, 1600.0)));
-            let case = format!("{w} at {scale}x text with {typed:?}");
-            assert!(!small.is_empty(), "{case}: nothing drawn");
-            for (said, r, v) in &small {
-                assert!(
-                    (r[0] - v[0]).abs() < 0.5 && (r[0] + r[2] - v[0] - v[2]).abs() < 0.5,
-                    "{case}: {said:?} at {r:?} is cut to {v:?} with no ellipsis"
-                );
-            }
-            let given = widths(&small);
-            let gave_way = |said: &str| {
-                natural
-                    .get(said)
-                    .is_some_and(|&whole| given.get(said).copied().unwrap_or(0.0) + 0.5 < whole)
-            };
-            let others: Vec<&String> = given
-                .keys()
-                .filter(|said| said.as_str() != LONG_MACHINE && natural.contains_key(*said))
-                .collect();
-            if gave_way(LONG_MACHINE) {
-                assert!(
-                    others.iter().any(|said| gave_way(said)),
-                    "{case}: the machine name gives way while the rest of its line keeps its room: {given:?} of {natural:?}"
-                );
-            }
-            if !typed.is_empty() && gave_way(LONG_MACHINE) {
-                let folder = format!("{DEEP}/");
-                assert!(
-                    given.get(&folder).copied().unwrap_or(0.0) < 0.5,
-                    "{case}: the machine gives way before the folder does: {given:?}"
-                );
+                let shoot = |window: (f32, f32)| {
+                    let mut world = launcher_world(scale, w, current, machine, window);
+                    if !typed.is_empty() {
+                        world.gesture(|app| app.type_text(&typed));
+                    }
+                    let row = world.screen().bounds(Target::key(within.clone()));
+                    let half = world
+                        .screen()
+                        .bounds(Target::key(format!("{w}.row.0.machine")));
+                    (texts_in(&world, &within), row, half)
+                };
+                let (small, row, machine_box) = shoot((800.0, 600.0));
+                let natural = widths(&shoot((2400.0, 1600.0)).0);
+                let case = format!("{w} at {scale}x text, machine {machine:?}, typed {typed:?}");
+                assert!(!small.is_empty(), "{case}: nothing drawn");
+                for (said, r, v) in &small {
+                    assert!(
+                        (r[0] - v[0]).abs() < 0.5 && (r[0] + r[2] - v[0] - v[2]).abs() < 0.5,
+                        "{case}: {said:?} at {r:?} is cut to {v:?} with no ellipsis"
+                    );
+                }
+                let given = widths(&small);
+                let whole = |said: &str| {
+                    natural
+                        .get(said)
+                        .is_some_and(|&n| given.get(said).copied().unwrap_or(0.0) + 0.5 >= n)
+                };
+                if typed.is_empty() {
+                    let (row, machine_box) = (
+                        row.expect("the first recent row"),
+                        machine_box.expect("its machine"),
+                    );
+                    assert!(
+                        machine_box[2] <= row[2] / 2.0 + 0.5,
+                        "{case}: the machine takes {} of a {} row",
+                        machine_box[2],
+                        row[2]
+                    );
+                    assert!(
+                        given.get("shop").copied().unwrap_or(0.0) > 0.5,
+                        "{case}: the row's own name is squeezed to nothing: {given:?}"
+                    );
+                    for said in ["main checkout", "179d"] {
+                        assert!(
+                            whole(said),
+                            "{case}: {said:?} gives way: {given:?} of {natural:?}"
+                        );
+                    }
+                    if machine == "landing-runner" {
+                        assert!(whole(machine), "{case}: {machine:?} gives way: {given:?}");
+                    }
+                } else if !whole(machine) {
+                    let folder = format!("{DEEP}/");
+                    assert!(
+                        given.get(&folder).copied().unwrap_or(0.0) < 0.5,
+                        "{case}: the machine gives way before the folder does: {given:?}"
+                    );
+                }
             }
         }
     }

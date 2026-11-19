@@ -783,7 +783,7 @@ fn location_row(
                 .label(name.clone())
                 .description(reach_word)
                 .items_center()
-                .shrink()
+                .max_w_frac(0.5)
                 .min_w(0.0)
                 .gap(5.0)
                 .child(machine_dot(shown, t, look))
