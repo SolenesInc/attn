@@ -33,7 +33,9 @@ func TestOutpostSettingsCopyRoutePersistAndRestoreLocalValues(t *testing.T) {
 		t.Helper()
 		testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == value })
 	}
-	await("theme", "dark")
+	testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["theme"] == "dark" && m.Settings["default_model_claude"] == "home-model" && m.Settings["default_context_window_cap_codex"] == "256000"
+	})
 	requireStdout(t, outpost.Attn("settings", "get", "theme"), "dark")
 	requireStdout(t, outpost.Attn("settings", "get", "default_model_claude"), "home-model")
 	requireStdout(t, outpost.Attn("settings", "get", "default_context_window_cap_codex"), "256000")
