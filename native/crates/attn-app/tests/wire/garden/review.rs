@@ -448,6 +448,26 @@ fn lays_the_expanded_review_out_as_the_seeds_it_holds_beside_the_seed_and_the_de
 }
 
 #[test]
+fn the_expanded_reviews_seed_body_starts_under_the_seeds_title() {
+    let (mut world, _) = open_review(item(), vec![reviewed()]);
+    click(&mut world, "Expand the garden");
+
+    let screen = world.screen();
+    let [title, ..] = screen
+        .bounds(Target::role("heading").name(SEED))
+        .expect("the seed's title");
+    let [body, _, body_w, _] = screen
+        .bounds(Target::role("label").name(BODY_TEXT))
+        .expect("the seed's body");
+    assert_eq!(body, title, "the body starts at the title's edge");
+    assert!(
+        body_w <= attn_ui::blocks::DOCUMENT,
+        "the body keeps the document measure: {body_w}"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn opens_the_review_the_daemon_shows_and_takes_its_progressive_updates() {
     let mut world = reviewing(item());
     assert!(advice(&world).iter().any(|w| w == "Park"));

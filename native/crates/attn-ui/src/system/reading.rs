@@ -65,12 +65,15 @@ impl Reading {
 /// across the text with hairline rules. Paragraphs, lists, quotes and headings stop at the
 /// document measure.
 pub fn document_style(t: &Tokens) -> MarkdownStyle {
+    family(t).prose_measure(DOCUMENT)
+}
+
+fn family(t: &Tokens) -> MarkdownStyle {
     let kit = crate::kit(t);
     let text = t.text_primary.alpha(0.9);
     let code = crate::colors::syntax(t.dark);
     let pt = |s: Space| s.pt();
     MarkdownStyle::from_kit(kit)
-        .prose_measure(DOCUMENT)
         .text(text)
         .body_font(Reading::Text.style(t))
         .heading_font(1, Reading::Title.style(t))
@@ -142,7 +145,8 @@ pub fn document_style(t: &Tokens) -> MarkdownStyle {
 }
 
 /// A seed's body or a log entry's words in `ink`: a document at the interface's `Body` size,
-/// since it is read beside the interface rather than on its own, with its lists drawn closer.
+/// since it is read beside the interface rather than on its own, across the column it is given
+/// and with its lists drawn closer.
 pub fn note_style(ink: Color, t: &Tokens) -> MarkdownStyle {
     let body = TextStyle {
         line_height: NOTE_LINE,
@@ -152,7 +156,7 @@ pub fn note_style(ink: Color, t: &Tokens) -> MarkdownStyle {
         family: crate::kit(t).ty.body.family,
         ..body
     };
-    document_style(t)
+    family(t)
         .body_font(body)
         .list_font(body)
         .list(Space::S24.pt(), Space::S4.pt())

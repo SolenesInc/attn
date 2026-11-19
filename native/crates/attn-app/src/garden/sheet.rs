@@ -258,6 +258,11 @@ impl Sheet<'_> {
         };
         let style = {
             let look = attn_ui::system::note_style(t.text_primary, &t);
+            let look = if in_card {
+                look.prose_measure(attn_ui::blocks::DOCUMENT)
+            } else {
+                look
+            };
             match text_width {
                 Some(width) => look.text_width(width),
                 None => look,
@@ -303,7 +308,7 @@ impl Sheet<'_> {
                 .child(if in_card {
                     crate::markdown::card(padding, reading, &t)
                 } else {
-                    reading
+                    reading.max_w(attn_ui::blocks::DOCUMENT)
                 })
         };
         if let (Go::Tile { tile, .. }, Some(drafts)) = (&self.go, self.drafts) {
