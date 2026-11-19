@@ -571,6 +571,7 @@ fn draw<S: 'static>(
     let mut renderer = Renderer::new(&gpu.device, format);
     renderer.set_srgb_blend(rt.srgb_blend());
     renderer.attach_text(&mut rt.text.atlas);
+    rt.text.atlas.invalidate();
     let target = Offscreen::with_format(&gpu.device, size.0, size.1, format);
     renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
     renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, size);
@@ -606,8 +607,29 @@ fn save(name: &str, dark: bool, (w, h, rgba): (u32, u32, Vec<u8>)) {
 
 fn snap(world: &mut World, name: &str, dark: bool) {
     let mut shot = None;
-    world.gesture(|app| shot = Some(pixels(app.runtime, &mut Screens::default())));
+    let mut cost = None;
+    world.gesture(|app| {
+        shot = Some(pixels(app.runtime, &mut Screens::default()));
+        cost = Some((app.runtime.elements().len(), app.runtime.instances.len()));
+    });
     save(name, dark, shot.expect("the window drew"));
+    if let Some((nodes, instances)) = cost {
+        record_cost(name, dark, nodes, instances);
+    }
+}
+
+/// Each screen's layout nodes and draw instances, beside its pictures in `cost.tsv`.
+fn record_cost(name: &str, dark: bool, nodes: usize, instances: usize) {
+    use std::io::Write;
+    let appearance = if dark { "dark" } else { "light" };
+    let path = OUT.with_borrow(|out| out.join("cost.tsv"));
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    writeln!(file, "{name}-{appearance}\t{nodes}\t{instances}")
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 }
 
 /// Draws a window with no terminals: the Quick Capture panel's.

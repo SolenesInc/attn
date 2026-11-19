@@ -406,6 +406,8 @@ entry names:
 - Shared Rust PTY host => docs/internal/pty-host-verification.md
 - The native app in `native/`, its tests or its build output =>
   docs/internal/native-app.md
+- Native views' spacing, type, corners or controls => "Layout, type and
+  corners" in docs/internal/native-app.md
 - The Rune fork, its patches or the native app's pin => docs/internal/rune-fork.md
 - The Cloud Relay's wire contract or its conformance suite =>
   docs/internal/cloud-relay-contract.md

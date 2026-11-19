@@ -123,8 +123,10 @@ rename popovers, a tile header's usage popover and its seeds popover for one
 seed, and the desktop overview. The `screenshot_tour` example of `attn-app`
 sets each one up on the wire-test world and draws it on Rune's offscreen GPU
 renderer, so it needs no window and no VM, and two runs of the same source match
-pixel for pixel. Each screen starts its own world: a second shot of one world
-draws only the glyphs its last frame added.
+pixel for pixel. Each shot uploads every glyph it draws, so a second shot of one
+world draws its text too. Beside the pictures, `cost.tsv` lists each screen's
+layout nodes and draw instances, so a change reports what a screen costs before
+and after.
 
 ```sh
 scripts/native-screenshot-tour shoot /tmp/tour/base origin/main
@@ -148,6 +150,50 @@ checkout also builds the release dependencies and the base, about ten minutes
 more. Shoot every
 screen: the diff is what catches the screen a change was not expected to touch.
 `cargo clean` removes the base worktree with the rest of `native/target`.
+
+## Layout, type and corners
+
+Views do not choose a gap, an inset, a font or a corner. They take attn's
+controls from `attn_ui::system`, which carry those choices once for the whole
+app:
+
+- **Tokens.** Spacing is a scale of nine steps, 0, 2, 4, 6, 8, 12, 16, 24 and
+  32. Only `attn-ui` can name a step: no view can make one or pass one. Text is
+  set by what it is, with `words(text, Type::…, ink)`: `PageTitle`, `Heading`,
+  `Name`, `Body`, `Small`, `Label`, `Tag`, `Mono` and `Control`; text between
+  backticks is set in `Mono`. Corners are `Radius::{Tag, Control, Card, Panel,
+  Round}`. A control is `Size::Regular` (32 high, its words 12 in from its edge)
+  or `Size::Compact` (26 high, 8 in), and it carries its size in its type,
+  `Control`, so whatever holds it can line its words up.
+- **Controls.** `Button` in four looks (`Primary`, `Plain`, `Quiet`, `Danger`)
+  and two sizes, `switch`, `Segmented`, the field boxes `line_box`,
+  `number_box` and `area_box`, `stepper` and the number field's `arrows`,
+  `expander`, `tag`, `icon_box`, `Choice`, `press_area` and `disclosure`. Each
+  wraps rune-kit's control where one exists. Hover and pressed lay the
+  control's own ink over it at 8% and 12%; the keyboard draws a 2-point warm
+  ring outside its edge, and a field turns its own edge warm.
+- **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
+  spacing, font and corner methods (`gap`, `padding`, `px`…, `radius`, `font`,
+  `TextStyle::new` and the rest). While views move onto the system,
+  `scripts/native-ui-budget` in `make check-native` holds each directory of
+  `attn-app/src`, and `attn-ui/src`, to its line in `native/ui-budget.tsv`:
+  a count above its line fails, and a count below it fails until the line is
+  lowered, so the count only goes down. It also fails when a file of `native/`
+  outside the file's `allow` rows carries `allow(clippy::disallowed_methods)`.
+  Once every line is 0, `native/clippy.toml` rejects the raw methods for the
+  whole workspace, as it does Rune's colour constructors.
+- **The gallery.** `attn_ui::gallery` has a playground story for every control,
+  with a variant for each state it can be in. `cargo run -p attn-ui --example
+  state_sheets -- OUT` draws each control's state sheet, every state side by
+  side with a real pointer for hover and pressed, in dark and in light, with no
+  window and no VM. `attn-ui/tests/rules.rs` reads the stories' rectangles and
+  what the frame draws, and holds the rules the controls keep: one text inset in
+  every field box, one width for number fields, a stepper's value at one width,
+  a focus ring never cut or dimmed, and hover and pressed at their measured
+  contrast.
+
+A control a view needs that the system lacks is added to `attn-ui` with its
+story and, when it keeps a rule, its test.
 
 ## Automation
 
