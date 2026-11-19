@@ -1307,3 +1307,37 @@ fn overlay_insts(grid: &Grid, theme: TerminalColors) -> (Vec<Inst>, Vec<Inst>) {
     }
     (washes, lines)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::font::FONT_SIZE;
+
+    fn glyph_ids(raster: &mut Raster, text: &str) -> Vec<u32> {
+        let layout = raster.layout(text, 0);
+        layout
+            .lines()
+            .flat_map(|line| line.items().collect::<Vec<_>>())
+            .filter_map(|item| match item {
+                PositionedLayoutItem::GlyphRun(run) => {
+                    Some(run.glyphs().map(|g| g.id).collect::<Vec<_>>())
+                }
+                PositionedLayoutItem::InlineBox(_) => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_character_the_terminal_families_lack_draws_from_an_installed_font_that_has_it() {
+        let metrics = Fonts::default().metrics(FONT_SIZE);
+        let mut raster = Raster::new(2.0, metrics);
+        for text in ["\u{23f5}", "\u{23f5}\u{23f5} auto mode on"] {
+            assert!(
+                !glyph_ids(&mut raster, text).contains(&0),
+                "{text:?} drew .notdef"
+            );
+        }
+    }
+}
