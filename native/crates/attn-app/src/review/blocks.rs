@@ -570,7 +570,7 @@ pub(super) fn view(
             _ => block,
         };
         let block = super::place_press(
-            super::cursor_frame(block, cursor == Some(i), t),
+            attn_ui::blocks::here(block, cursor == Some(i), t),
             tile,
             keyed,
         );

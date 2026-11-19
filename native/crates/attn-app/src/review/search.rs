@@ -379,7 +379,7 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
                 .child(where_.a11y_hidden())
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, i, tx));
             if on {
-                el.fill(super::cursor_tint(t)).focus_selected(true)
+                el.fill(attn_ui::blocks::here_tint(t)).focus_selected(true)
             } else {
                 el
             }

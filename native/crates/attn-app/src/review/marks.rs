@@ -564,7 +564,7 @@ pub(crate) fn sheet(
                     row()
                         .gap(4.0)
                         .items_center()
-                        .child(super::keys::caps("esc", t))
+                        .child(attn_ui::blocks::caps("esc", t))
                         .child(
                             text("keep reviewing")
                                 .font(type_::LABEL)
@@ -609,7 +609,7 @@ pub(crate) fn send(
 /// A button of the send sheet: its key's cap and what it does, bordered, in the accent when
 /// `picked`, as the Tauri sheet's verdicts and Send.
 fn button(key: &str, what: &str, picked: bool, t: &Tokens) -> El {
-    let cap = super::keys::caps(key, t).a11y_hidden();
+    let cap = attn_ui::blocks::caps(key, t).a11y_hidden();
     let words = text(what.to_owned())
         .font(type_::BODY)
         .color(if picked {

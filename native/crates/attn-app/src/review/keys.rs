@@ -5,13 +5,15 @@ use std::collections::HashSet;
 
 use attn_protocol::{ReviewBundle, ReviewFile};
 use attn_ui::Tokens;
-use attn_ui::keycap;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, TextStyle, col, row, text};
+use attn_ui::blocks::{
+    Block, Byline, Card, Head, Inline, KeyLine, Note, Reader, Room, Stack, Surface, caps, hint,
+    key_tab, place,
+};
+use attn_ui::system::{Type, words};
+use rune::{El, row};
 
 use super::frames::Frame;
-use super::{Review, Spot, cursor_frame, frame_press, place_press, prefix};
+use super::{Review, Spot, frame_press, place_press, prefix};
 
 fn short(commit: &str) -> &str {
     &commit[..commit.len().min(9)]
@@ -77,42 +79,29 @@ pub(super) fn summary(
         Some(toggle) => format!("{said} · ↵ {toggle}"),
         None => said,
     };
-    let words = |w: &str| text(w.to_owned()).font(FACT).color(t.text_secondary);
-    let chip = |commit: &str| {
-        text(short(commit).to_owned())
-            .font(type_::MONO_CAPTION)
-            .color(t.text_secondary)
-            .px(6.0)
-            .py(2.0)
-            .radius(4.0)
-            .fill(t.bg_elevated)
-    };
-    let fact = || row().gap(4.0).items_center();
+    let fact = |w: &str| words(w, Type::Body, t.text_secondary);
+    let commit = |c: &str| words(short(c), Type::Mono, t.text_secondary);
     let commits = match base {
-        Some(base) => fact()
-            .child(words("base"))
-            .child(chip(base))
-            .child(words("→ head"))
-            .child(chip(&bundle.head)),
-        None => fact()
-            .child(words("a tour at head"))
-            .child(chip(&bundle.head)),
+        Some(base) => Inline::tight()
+            .child(fact("base"))
+            .child(commit(base))
+            .child(fact("→ head"))
+            .child(commit(&bundle.head)),
+        None => Inline::tight()
+            .child(fact("a tour at head"))
+            .child(commit(&bundle.head)),
     };
-    let lines = fact()
-        .child(text(format!("+{added}")).font(FACT).color(t.success))
-        .child(text(format!("−{removed}")).font(FACT).color(t.error));
-    let mut meta = row()
+    let lines = Inline::tight()
+        .child(words(format!("+{added}"), Type::Body, t.success))
+        .child(words(format!("−{removed}"), Type::Body, t.error));
+    let meta = Byline::new()
         .key(format!("{prefix}.facts"))
+        .wrap()
+        .push_all([commits, fact(&files), lines, fact(&stops)].map(El::a11y_hidden))
+        .build(t)
         .role("button")
         .label(said)
         .w_full()
-        .flex_wrap()
-        .gaps(4.0, 12.0)
-        .items_center()
-        .px(6.0)
-        .py(2.0)
-        .radius(4.0)
-        .children([commits, words(&files), lines, words(&stops)].map(El::a11y_hidden))
         .children(toggle.map(|toggle| {
             row()
                 .grow(1.0)
@@ -120,59 +109,43 @@ pub(super) fn summary(
                 .child(hint("↵", toggle, t))
                 .a11y_hidden()
         }));
-    if !bundle.files.is_empty() {
-        meta = meta.expanded(review.files_shown);
-    }
+    let meta = if bundle.files.is_empty() {
+        meta
+    } else {
+        meta.expanded(review.files_shown)
+    };
     let files = review.files_shown.then(|| {
         bundle.files.iter().zip(0..).map(|(file, i)| {
             let current = cursor == Some(&Spot::File(file.path.clone()));
-            let el = cursor_frame(file_row(prefix, i, file, t), current, t);
+            let el = place(file_row(prefix, i, file, t), current, t);
             place_press(el, tile, format!("{prefix}.file.{i}"))
         })
     });
     let problems = (!bundle.problems.is_empty()).then(|| {
-        col()
+        Stack::tight()
             .role("list")
             .label("Problems in the review document")
-            .gap(space::S1)
             .children(bundle.problems.iter().map(|p| {
                 let at = if p.line > 0 {
                     format!("line {}: ", p.line)
                 } else {
                     String::new()
                 };
-                text(format!("{at}{}", p.message))
-                    .font(type_::BODY)
-                    .color(t.warning)
-                    .wrap()
+                words(format!("{at}{}", p.message), Type::Body, t.warning).wrap()
             }))
     });
-    col()
-        .role("region")
-        .label("The change")
-        .w_full()
-        .gap(space::S1)
-        .px(16.0)
-        .py(12.0)
-        .radius(12.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border.alpha(0.5))
-        .child(place_press(
-            cursor_frame(meta, cursor == Some(&Spot::Facts), t),
+    Card::new(format!("{prefix}.change"))
+        .push(place_press(
+            place(meta, cursor == Some(&Spot::Facts), t),
             tile,
             format!("{prefix}.facts"),
         ))
-        .children(files.into_iter().flatten())
-        .children(problems)
+        .push_all(files.into_iter().flatten())
+        .push_all(problems)
+        .build(t)
+        .role("region")
+        .label("The change")
 }
-
-/// The change's facts, at the Tauri summary's 13 points.
-const FACT: TextStyle = TextStyle {
-    size: 13.0,
-    line_height: 18.0,
-    weight: 400.0,
-    ..type_::LABEL
-};
 
 fn file_row(prefix: &str, i: usize, file: &ReviewFile, t: &Tokens) -> El {
     let stat = if file.binary {
@@ -191,28 +164,19 @@ fn file_row(prefix: &str, i: usize, file: &ReviewFile, t: &Tokens) -> El {
     .flatten()
     .collect::<Vec<_>>()
     .join(" ");
-    row()
+    Inline::loose()
         .key(format!("{prefix}.file.{i}"))
         .role("row")
         .label(label)
         .w_full()
-        .gap(space::S2)
-        .px(6.0)
-        .py(2.0)
-        .child(
-            text(file.status.clone())
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .w(72.0),
-        )
-        .child(
-            text(file.path.clone())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
-        .children(from.map(|f| text(f).font(type_::LABEL).color(t.text_tertiary)))
-        .child(text(stat).font(type_::LABEL).color(t.text_secondary))
+        .child(words(file.status.clone(), Type::Small, t.text_tertiary).w(STATUS))
+        .child(words(file.path.clone(), Type::Small, t.text_primary))
+        .children(from.map(|f| words(f, Type::Small, t.text_tertiary)))
+        .child(words(stat, Type::Small, t.text_secondary))
 }
+
+/// A file's status column: as wide as "renamed" and "modified" are in `Small`.
+const STATUS: f32 = 72.0;
 
 /// The files the review leaves out, each with why, keyed `key`; places of the document of
 /// review tile `tile` when it names one.
@@ -222,32 +186,21 @@ pub(super) fn not_shown(
     cursor: Option<&Spot>,
     t: &Tokens,
 ) -> El {
-    col()
+    Stack::tight()
         .key(key.to_owned())
         .role("list")
         .label("Not shown")
         .w_full()
-        .gap(space::S1)
         .children(bundle.not_shown.iter().zip(0..).map(|(entry, j)| {
             let current = cursor == Some(&Spot::NotShown(entry.path.clone()));
-            let el = row()
+            let el = Inline::loose()
                 .key(format!("{key}.entry.{j}"))
                 .role("row")
                 .label(format!("{} {}", entry.path, entry.reason))
                 .w_full()
-                .gap(space::S2)
-                .child(
-                    text(entry.path.clone())
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_primary),
-                )
-                .child(
-                    text(entry.reason.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .wrap(),
-                );
-            let el = cursor_frame(el.px(6.0).py(2.0), current, t);
+                .child(words(entry.path.clone(), Type::Mono, t.text_primary))
+                .child(words(entry.reason.clone(), Type::Small, t.text_secondary).wrap());
+            let el = place(el, current, t);
             match tile {
                 Some(tile) => place_press(el, tile, format!("{key}.entry.{j}")),
                 None => el,
@@ -335,98 +288,28 @@ pub(super) fn key_line(
     t: &Tokens,
 ) -> El {
     let prefix = &prefix(tile);
-    let entry = |keys: &str, what: &str| hint(keys, what.to_owned(), t);
     let keys = keys_for(frame, file_open, sides, marking);
-    let tabs = (offered.len() > 1).then(|| {
-        row()
-            .role("tablist")
-            .label("Frames")
-            .gap(2.0)
-            .pr(space::S2)
-            .border_sides([0.0, 1.0, 0.0, 0.0], t.border.alpha(0.6))
-            .children(
-                Frame::ALL
-                    .iter()
-                    .filter(|(f, _, _)| offered.contains(f))
-                    .map(|(f, key, name)| {
-                        let on = *f == frame;
-                        let tab = row()
-                            .gap(4.0)
-                            .items_center()
-                            .px(8.0)
-                            .py(2.0)
-                            .radius(4.0)
-                            .border(1.0, if on { t.border } else { t.border.alpha(0.0) })
-                            .fill(if on {
-                                super::range_tint(t)
-                            } else {
-                                rune::Color::TRANSPARENT
-                            })
-                            .child(caps(key, t).a11y_hidden())
-                            .child(
-                                text(*name)
-                                    .font(TextStyle {
-                                        weight: 400.0,
-                                        ..type_::LABEL
-                                    })
-                                    .color(if on { t.text_primary } else { t.text_secondary })
-                                    .a11y_hidden(),
-                            )
-                            .role("tab")
-                            .label(format!("{key} {name}"))
-                            .key(format!("{prefix}.frame.{key}"))
-                            .checked(on);
-                        frame_press(tab, tile, *f)
-                    }),
-            )
-    });
-    let entries = row()
-        .grow(1.0)
-        .min_w(0.0)
-        .flex_wrap()
-        .gaps(4.0, 16.0)
-        .items_center()
-        .children(tabs)
-        .children(servers)
-        .children(keys.iter().map(|(k, w)| entry(k, w)));
-    row()
-        .key(format!("{prefix}.keys"))
-        .role("toolbar")
-        .label("Review keys")
-        .w_full()
-        .min_h(28.0)
-        .gap(16.0)
-        .items_center()
-        .px(space::S2)
-        .py(space::S1)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.6))
-        .child(entries)
-        .child(entry("?", "all keys"))
-}
-
-/// `keys` as the review draws them, one keycap per key: "f r h" is three caps.
-pub(super) fn caps(keys: &str, t: &Tokens) -> El {
-    keycap::Keys::outlined(&keys.split(' ').collect::<Vec<_>>())
-        .colors(t.text_secondary, t.border, rune::Color::TRANSPARENT)
+    let tabs = if offered.len() > 1 {
+        Frame::ALL
+            .iter()
+            .filter(|(f, _, _)| offered.contains(f))
+            .map(|(f, key, name)| {
+                let tab = key_tab(key, name, *f == frame, t).key(format!("{prefix}.frame.{key}"));
+                frame_press(tab, tile, *f)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut line = KeyLine::new(format!("{prefix}.keys"), "Review keys")
+        .tabs(tabs)
+        .end(hint("?", "all keys", t));
+    if let Some(servers) = servers {
+        line = line.push(servers);
+    }
+    keys.iter()
+        .fold(line, |line, (k, w)| line.push(hint(k, *w, t)))
         .build(t)
-}
-
-/// A key and what it does, as the review's key line names them.
-fn hint(keys: &str, what: String, t: &Tokens) -> El {
-    row()
-        .label(format!("{keys} {what}"))
-        .gap(4.0)
-        .items_center()
-        .child(caps(keys, t).a11y_hidden())
-        .child(
-            text(what)
-                .font(TextStyle {
-                    weight: 400.0,
-                    ..type_::LABEL
-                })
-                .color(t.text_muted)
-                .a11y_hidden(),
-        )
 }
 
 const ALL_KEYS: &[(&str, &str)] = &[
@@ -524,47 +407,39 @@ const ALL_KEYS: &[(&str, &str)] = &[
 
 /// Every key the review takes, with what it does.
 pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
-    col()
+    let rows = ALL_KEYS.iter().map(|(keys, what)| {
+        let keys = if *keys == "send" {
+            send_label()
+        } else {
+            (*keys).to_owned()
+        };
+        Block::custom(
+            Inline::top()
+                .role("row")
+                .label(format!("{keys}: {what}"))
+                .child(row().min_w(KEYS).child(caps(&keys, t)).a11y_hidden())
+                .child(words(*what, Type::Body, t.text_primary).wrap().grow(1.0)),
+        )
+    });
+    let head = Head::new(format!("{prefix}.sheet.title"), "Keys")
+        .lead("Selecting text and typing still writes a comment, as in any markdown tile.");
+    let reader = Reader::new()
+        .head(head)
+        .push_all(read_only.then(|| {
+            Note::new(
+                format!("{prefix}.sheet.read-only"),
+                "This file is outside the repository and read-only: c, a and i do nothing here.",
+            )
+            .build(t)
+        }))
+        .push_all(rows)
+        .build(format!("{prefix}.sheet.page"), Room::Narrow, t);
+    Surface::panel(reader, t)
         .key(format!("{prefix}.sheet"))
         .role("dialog")
         .label("Review keys")
-        .px(20.0)
-        .py(16.0)
-        .gap(space::S2)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .box_shadow(attn_ui::frame::shadow(t, 18.0, 40.0, 0.32))
-        .child(text("Keys").font(type_::TITLE).color(t.text_primary))
-        .child(
-            text("Selecting text and typing still writes a comment, as in any markdown tile.")
-                .font(crate::markdown::font(t, None))
-                .color(t.text_primary.alpha(0.9))
-                .wrap(),
-        )
-        .children(read_only.then(|| {
-            text("This file is outside the repository and read-only: c, a and i do nothing here.")
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap()
-        }))
-        .children(ALL_KEYS.iter().map(|(keys, what)| {
-            let keys = if *keys == "send" {
-                send_label()
-            } else {
-                (*keys).to_owned()
-            };
-            row()
-                .role("row")
-                .label(format!("{keys}: {what}"))
-                .gap(space::S3)
-                .child(row().min_w(80.0).child(caps(&keys, t)).a11y_hidden())
-                .child(
-                    text(*what)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .wrap()
-                        .grow(1.0),
-                )
-        }))
 }
+
+/// The column the sheet's keycaps stand in: past the widest, "Shift+Enter".
+const KEYS: f32 = 80.0;

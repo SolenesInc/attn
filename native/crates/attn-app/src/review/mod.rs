@@ -654,7 +654,7 @@ pub(crate) fn body(
                         .max_w(prose_width(*kind))
                         .self_center()
                         .child(block);
-                    cursor_frame(
+                    attn_ui::blocks::here(
                         place_press(el, tile, key).role("group"),
                         current.is_some(),
                         t,
@@ -1191,29 +1191,6 @@ fn participant(flow: &ReviewFlow, id: &str) -> String {
     let lower = label.to_ascii_lowercase();
     let end = lower.find("<br").unwrap_or(label.len());
     label[..end].trim().to_owned()
-}
-
-/// A place's element, marked when the cursor stands on it: the Tauri review's accent tint
-/// over whatever fills it, with an accent bar inside its left edge.
-pub(crate) fn cursor_frame(el: El, current: bool, t: &Tokens) -> El {
-    if current {
-        let tint = cursor_tint(t);
-        el.gradient(tint, tint)
-            .border_sides([0.0, 0.0, 0.0, 2.0], t.accent)
-            .focus_selected(true)
-    } else {
-        el
-    }
-}
-
-/// The tint that marks the place the cursor is on, a search result picked or lines selected.
-pub(crate) fn cursor_tint(t: &Tokens) -> rune::Color {
-    t.accent.alpha(0.22)
-}
-
-/// The quieter tint of a picked frame or side, as the Tauri review's range color.
-pub(crate) fn range_tint(t: &Tokens) -> rune::Color {
-    t.accent.alpha(0.08)
 }
 
 /// The send key on a review tile that holds the keyboard: the send sheet opens with the

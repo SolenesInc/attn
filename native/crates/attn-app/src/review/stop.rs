@@ -112,7 +112,7 @@ pub(super) fn stop(
         .key(keyed);
         let line = match selected {
             Some((a, b)) if j >= a && j <= b && cursor != Some(j) => {
-                let tint = super::cursor_tint(t);
+                let tint = attn_ui::blocks::here_tint(t);
                 line.gradient(tint, tint)
             }
             _ => line,
@@ -122,7 +122,7 @@ pub(super) fn stop(
             .filter(|(at, _)| r.now == Some(*at))
             .map(|(_, m)| super::marks::mark_row(m, t))
             .collect();
-        let line = super::cursor_frame(line, cursor == Some(j), t);
+        let line = attn_ui::blocks::here(line, cursor == Some(j), t);
         std::iter::once(super::place_press(line, tile, row_key(key, j)))
             .chain(notes)
             .chain(marked)
@@ -178,7 +178,7 @@ pub(super) fn action(what: &str, key: &str, keyed: String, t: &Tokens) -> El {
                 .color(t.text_secondary)
                 .a11y_hidden(),
         )
-        .child(super::keys::caps(key, t).a11y_hidden())
+        .child(attn_ui::blocks::caps(key, t).a11y_hidden())
 }
 
 /// A stop's header strip: where it is, the lines it shows, and `actions` at its right end.
@@ -231,7 +231,7 @@ pub(super) fn script(key: &str, stop: &ReviewStop, stage: Option<Option<i64>>, t
     let notes = col().py(2.0).children(stop.notes.iter().map(|n| {
         let el = note(n, SCRIPT_NOTE_INDENT, t);
         if at(n) {
-            let tint = super::cursor_tint(t);
+            let tint = attn_ui::blocks::here_tint(t);
             el.gradient(tint, tint)
         } else {
             el

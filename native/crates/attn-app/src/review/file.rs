@@ -257,7 +257,7 @@ pub(super) fn view(
                 .color(t.text_muted)
                 .a11y_hidden(),
         )
-        .child(super::keys::caps("⌃o", t).a11y_hidden());
+        .child(attn_ui::blocks::caps("⌃o", t).a11y_hidden());
     let back = super::file_view_press(back, tile, stage, false);
     let lines = file
         .rows
@@ -302,7 +302,7 @@ pub(super) fn view(
                         .color(t.text_muted)
                         .a11y_hidden(),
                 )
-                .child(super::keys::caps("esc", t).a11y_hidden());
+                .child(attn_ui::blocks::caps("esc", t).a11y_hidden());
             super::file_view_press(close, tile, stage, true)
         }));
     let problem = file.problem.clone().map(|p| {
@@ -437,12 +437,12 @@ fn rows_view(
                     _ => line,
                 };
                 let line = if selecting && i >= from && i <= to && i != cursor {
-                    let tint = super::cursor_tint(&tokens);
+                    let tint = attn_ui::blocks::here_tint(&tokens);
                     line.gradient(tint, tint)
                 } else {
                     line
                 };
-                let line = super::cursor_frame(line, i == cursor, &tokens);
+                let line = attn_ui::blocks::here(line, i == cursor, &tokens);
                 super::file_row_press(line, &tile_, id, i)
             },
         )
