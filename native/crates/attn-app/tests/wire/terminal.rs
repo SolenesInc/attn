@@ -1917,7 +1917,7 @@ fn a_screen_reader_does_not_hear_a_command_that_scrolled_the_screen_as_it_wrappe
     world.listen_as_screen_reader();
     world.settle();
 
-    let command = format!("echo {}PRIVATE-INPUT{}", "x".repeat(140), "z".repeat(115));
+    let command = format!("echo {}MIDDLE-OF-CMD{}", "x".repeat(140), "z".repeat(115));
     world.gesture(|app| app.type_text(&command));
     world.gesture(|app| app.press("Enter"));
     let mut frame = command.into_bytes();
@@ -1926,7 +1926,7 @@ fn a_screen_reader_does_not_hear_a_command_that_scrolled_the_screen_as_it_wrappe
     );
     output(&world, 2, &frame);
     world.settle();
-    assert!(drew(&mut world, "PRIVATE-INPUT"));
+    assert!(drew(&mut world, "MIDDLE-OF-CMD"));
     world.advance(Duration::from_secs(1));
     assert_eq!(world.screen().announced().as_deref(), Some("finished"));
 }
