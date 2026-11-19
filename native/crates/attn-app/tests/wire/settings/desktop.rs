@@ -252,3 +252,68 @@ fn the_worktree_sweep_switch_follows_a_change_from_the_shell_and_saves() {
     assert!(checked(&world, "worktree_sweep_enabled"));
     rest(&mut world);
 }
+
+#[test]
+fn a_refused_notebook_folder_shows_its_refusal_in_view_in_the_smallest_window_at_the_largest_text()
+{
+    let (daemon, _) = super::keeping(&[("uiScale", "1.5")], |key, _| {
+        (key == "notebook.root").then(|| "cannot create directory: permission denied".to_owned())
+    });
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_desktop(&mut world);
+    retype(&mut world, &field("notebook.root"), "~/elsewhere");
+    press(&mut world, Key::Enter);
+    let body = world.rect("settings.body");
+    let refusal = world.rect("settings.refusal.notebook.root");
+    assert!(
+        refusal[1] >= body[1] && refusal[1] + refusal[3] <= body[1] + body[3],
+        "the refusal at {refusal:?} lies inside the page's view {body:?}"
+    );
+    let focused = world.rect(&field("notebook.root"));
+    assert!(
+        focused[1] >= body[1] && focused[1] + focused[3] <= body[1] + body[3],
+        "the refused field at {focused:?} stays inside the page's view {body:?}"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_refusal_that_arrives_after_the_keyboard_moved_on_leaves_the_page_where_the_person_is() {
+    let (daemon, _) = accepting(&[("uiScale", "1.5")]);
+    daemon.on("set_setting", |_| ());
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_desktop(&mut world);
+    retype(&mut world, &field("notebook.root"), "部署/ノート");
+    press(&mut world, Key::Enter);
+    press(&mut world, Key::Tab);
+    press(&mut world, Key::Tab);
+    let switch = "settings.switch.worktree_sweep_enabled";
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(switch),
+        "Tab reaches the sweep switch"
+    );
+    let sent = world.daemon.sent_of("set_setting");
+    let request = sent.last().expect("the notebook folder was sent");
+    world.daemon.emit(SettingsUpdatedMessage {
+        request_id: request["request_id"].as_str().map(str::to_owned),
+        changed_key: Some("notebook.root".into()),
+        success: Some(false),
+        error: Some("cannot create directory: permission denied".into()),
+        ..SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    assert!(
+        named(&world, "settings.refusal.notebook.root").is_some(),
+        "the refusal shows under its field"
+    );
+    let body = world.rect("settings.body");
+    let focused = world.rect(switch);
+    assert!(
+        focused[1] >= body[1] && focused[1] + focused[3] <= body[1] + body[3],
+        "the focused switch at {focused:?} stays inside the page's view {body:?}"
+    );
+    rest(&mut world);
+}

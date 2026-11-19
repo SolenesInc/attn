@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use attn_ui::block_gallery::BLOCK_SUBJECTS;
 use attn_ui::colors::scheme_for;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
+use attn_ui::settings_gallery::{SETTINGS_SUBJECTS, SETTINGS_VARIANTS};
 use attn_ui::system::{Type, words};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Key, KeyEvent, Mods, Runtime, col, el};
@@ -526,7 +527,7 @@ const BLOCK_VARIANTS: &[(&str, &[&str])] = &[
     ("Blocks/Page", &["Saving", "Refused", "Off"]),
     ("Blocks/Section", &[]),
     ("Blocks/Setting row", &[]),
-    ("Blocks/Field", &["Failed", "Disabled"]),
+    ("Blocks/Field", &["Saved", "Failed", "Disabled"]),
     ("Blocks/Notice and status", &[]),
     ("Blocks/Choices", &["Second chosen", "Disabled"]),
     ("Blocks/Disclosure", &["Open", "Failed", "Disabled"]),
@@ -589,7 +590,8 @@ fn main() {
             shoot(&sheet, dark, &out);
         }
     }
-    for (&(story, keys), &(_, extra)) in BLOCK_SUBJECTS.iter().zip(BLOCK_VARIANTS) {
+    let settings = SETTINGS_SUBJECTS.iter().zip(SETTINGS_VARIANTS);
+    for (&(story, keys), &(_, extra)) in BLOCK_SUBJECTS.iter().zip(BLOCK_VARIANTS).chain(settings) {
         if !wanted(&block_sheet(story)) {
             continue;
         }

@@ -11,9 +11,9 @@ use rune::{El, col, row, text};
 
 use attn_ui::system::{Button, Tone, tag};
 
-use super::pages::{
-    block, blocks, field_label, hint, row_card, setting_switch, wide_setting_field,
-};
+use attn_ui::blocks::{Block, Section, SettingRow};
+
+use super::controls::{SettingField, setting_switch};
 use crate::action::Action;
 use crate::{State, setting};
 
@@ -121,6 +121,17 @@ fn muted_list(
     empty: &str,
     t: &Tokens,
     unmute: fn(&mut State, &str),
+) -> Block {
+    Block::custom(muted_rows(kind, title, names, empty, t, unmute))
+}
+
+fn muted_rows(
+    kind: &str,
+    title: &str,
+    names: Vec<String>,
+    empty: &str,
+    t: &Tokens,
+    unmute: fn(&mut State, &str),
 ) -> El {
     if names.is_empty() {
         return text(empty.to_owned())
@@ -173,158 +184,84 @@ fn shortcut(state: &State, action: &Action) -> String {
         .unwrap_or_default()
 }
 
-/// One of auto-settle's windows, as a Tauri `.settings-field` in its two-column grid: its
-/// label, a number field that steps by `step`, and what the window is.
-fn seconds_field(
-    state: &State,
-    key: &'static str,
-    label: &str,
-    step: f64,
-    said: &str,
-    t: &Tokens,
-) -> El {
-    col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(7.0)
-        .child(field_label(label, t))
-        .child(wide_setting_field(
-            state,
-            key,
-            label,
-            "",
-            Some(step),
-            None,
-            t,
-        ))
-        .child(hint(said, t).wrap())
-}
-
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let settle = shortcut(state, &Action::SessionSettle);
     let keep = shortcut(state, &Action::SessionCancelCountdown);
-    blocks(
-        vec![
-            block(
-                "auto-settle",
-                "Auto-settle",
-                "Closes a turn for you once you have steered the agent and walked away, so the queue does not fill up with turns you have already dealt with. Off by default.",
-                t,
-                vec![
-                    row_card(
-                        "Settle a turn once you have steered the agent",
-                        &format!(
-                            "When an agent you owe a turn goes back to work and stays there, its terminal tile runs a countdown and then settles the turn for you — the same thing {settle} does. Press {keep} to keep the turn instead. Anything that makes the agent want you again — a question, an approval, an error, a finished run — cancels it. Off by default."
-                        ),
-                        t,
-                        setting_switch(
-                            state,
-                            AUTO_SETTLE,
-                            "Settle a turn once you have steered the agent",
-                            t,
-                        ),
-                    ),
-                    row()
-                        .w_full()
-                        .gap(10.0)
-                        .items_start()
-                        .child(seconds_field(
-                            state,
-                            AUTO_SETTLE_ARM,
-                            "Wait before counting down (seconds)",
-                            5.0,
-                            "How long the agent must keep working before anything starts. Nothing is shown during this window.",
-                            t,
-                        ))
-                        .child(seconds_field(
-                            state,
-                            AUTO_SETTLE_COUNTDOWN,
-                            "Countdown before settling (seconds)",
-                            1.0,
-                            &format!(
-                                "How long the countdown runs on the tile — your window to press {keep} and keep the turn."
-                            ),
-                            t,
-                        )),
-                ],
-            ),
-            block(
-                "quiet-notifications",
-                "Quiet notifications",
-                "Keeps agents whose run attn started only to deliver a notification from sending you to them. On by default.",
-                t,
-                vec![row_card(
-                    "Quiet notifications in the queue",
-                    "When attn starts an agent's run to deliver a notification (a message, a seed update, a pull request update), the agent stays out of your queue when it stops, unless it needs an approval or opens its turn to ask for you. An agent that was waiting for you leaves the queue when a notification sets it working, without moving you.",
-                    t,
-                    setting_switch(
-                        state,
-                        QUIET_NOTIFICATIONS,
-                        "Quiet notifications in the queue",
-                        t,
-                    ),
-                )],
-            ),
-            block(
-                "hidden-sessions",
-                "Hidden sessions",
-                "Shared Codex sessions that keep running without an attn tile. On by default.",
-                t,
-                vec![row_card(
-                    "Show hidden sessions in the queue",
-                    "Switching sessions inside Codex can leave the previous session running without a tile. Include these hidden sessions in the queue; selecting one opens it in a terminal.",
-                    t,
-                    setting_switch(
-                        state,
-                        HIDDEN_SESSIONS,
-                        "Show hidden sessions in the queue",
-                        t,
-                    ),
-                )],
-            ),
-            block(
-                "crew",
-                "Crew",
-                "Crew members and the Chief that are owed a turn. They stay in the Crew section either way. Off by default.",
-                t,
-                vec![row_card(
-                    "Put the crew in the queue",
-                    "A crew member or the Chief that is owed a turn also waits in the queue. Its row stays in the Crew section.",
-                    t,
-                    setting_switch(state, CREW, "Put the crew in the queue", t),
-                )],
-            ),
-            block(
-                "muted-repositories",
+    let switch_row = |key: &'static str, title: &str, copy: &str| {
+        SettingRow::new(title, copy, setting_switch(state, key, title, t)).build(t)
+    };
+    vec![
+        Section::new("settings.block.auto-settle", "Auto-settle")
+            .description("Closes a turn for you once you have steered the agent and walked away, so the queue does not fill up with turns you have already dealt with. Off by default.")
+            .push(switch_row(
+                AUTO_SETTLE,
+                "Settle a turn once you have steered the agent",
+                &format!(
+                    "When an agent you owe a turn goes back to work and stays there, its terminal tile runs a countdown and then settles the turn for you — the same thing {settle} does. Press {keep} to keep the turn instead. Anything that makes the agent want you again — a question, an approval, an error, a finished run — cancels it. Off by default."
+                ),
+            ))
+            .push(
+                SettingField::new(AUTO_SETTLE_ARM, "Wait before counting down (seconds)")
+                    .step(5.0)
+                    .hint("How long the agent must keep working before anything starts. Nothing is shown during this window.")
+                    .build(state, t),
+            )
+            .push(
+                SettingField::new(AUTO_SETTLE_COUNTDOWN, "Countdown before settling (seconds)")
+                    .step(1.0)
+                    .hint(format!(
+                        "How long the countdown runs on the tile — your window to press {keep} and keep the turn."
+                    ))
+                    .build(state, t),
+            )
+            .build(t),
+        Section::new("settings.block.quiet-notifications", "Quiet notifications")
+            .description("Keeps agents whose run attn started only to deliver a notification from sending you to them. On by default.")
+            .push(switch_row(
+                QUIET_NOTIFICATIONS,
+                "Quiet notifications in the queue",
+                "When attn starts an agent's run to deliver a notification (a message, a seed update, a pull request update), the agent stays out of your queue when it stops, unless it needs an approval or opens its turn to ask for you. An agent that was waiting for you leaves the queue when a notification sets it working, without moving you.",
+            ))
+            .build(t),
+        Section::new("settings.block.hidden-sessions", "Hidden sessions")
+            .description("Shared Codex sessions that keep running without an attn tile. On by default.")
+            .push(switch_row(
+                HIDDEN_SESSIONS,
+                "Show hidden sessions in the queue",
+                "Switching sessions inside Codex can leave the previous session running without a tile. Include these hidden sessions in the queue; selecting one opens it in a terminal.",
+            ))
+            .build(t),
+        Section::new("settings.block.crew", "Crew")
+            .description("Crew members and the Chief that are owed a turn. They stay in the Crew section either way. Off by default.")
+            .push(switch_row(
+                CREW,
+                "Put the crew in the queue",
+                "A crew member or the Chief that is owed a turn also waits in the queue. Its row stays in the Crew section.",
+            ))
+            .build(t),
+        Section::new("settings.block.muted-repositories", "Muted Repositories")
+            .description("Repositories hidden from the attention queue.")
+            .push(muted_list(
+                "repo",
                 "Muted Repositories",
-                "Repositories hidden from the attention queue.",
+                muted_repos(state),
+                "No muted repositories",
                 t,
-                vec![muted_list(
-                    "repo",
-                    "Muted Repositories",
-                    muted_repos(state),
-                    "No muted repositories",
-                    t,
-                    unmute_repo,
-                )],
-            ),
-            block(
-                "muted-authors",
+                unmute_repo,
+            ))
+            .build(t),
+        Section::new("settings.block.muted-authors", "Muted Authors")
+            .description("Authors hidden from the attention queue.")
+            .push(muted_list(
+                "author",
                 "Muted Authors",
-                "Authors hidden from the attention queue.",
+                muted_authors(state),
+                "No muted authors",
                 t,
-                vec![muted_list(
-                    "author",
-                    "Muted Authors",
-                    muted_authors(state),
-                    "No muted authors",
-                    t,
-                    unmute_author,
-                )],
-            ),
-        ],
-        t,
-    )
+                unmute_author,
+            ))
+            .build(t),
+    ]
 }
 
 /// Whether auto-settle is on, and how many repositories and authors are muted.

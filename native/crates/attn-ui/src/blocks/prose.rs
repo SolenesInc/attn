@@ -8,6 +8,7 @@ pub struct Prose {
     key: String,
     said: String,
     quiet: bool,
+    kind: Type,
 }
 
 impl Prose {
@@ -17,6 +18,20 @@ impl Prose {
             key: key.into(),
             said: said.into(),
             quiet: false,
+            kind: Type::Body,
+        }
+    }
+
+    /// That a list or a part of a page has nothing in it yet.
+    pub fn empty(key: impl Into<String>, said: impl Into<String>) -> Prose {
+        Prose::lead(key, said).quiet(true)
+    }
+
+    /// Small print about the blocks above it, such as how to add to a list.
+    pub fn hint(key: impl Into<String>, said: impl Into<String>) -> Prose {
+        Prose {
+            kind: Type::Small,
+            ..Prose::lead(key, said).quiet(true)
         }
     }
 
@@ -34,7 +49,7 @@ impl Prose {
         };
         Block::new(
             Kind::Prose,
-            words(self.said, Type::Body, ink)
+            words(self.said, self.kind, ink)
                 .key(self.key)
                 .wrap()
                 .max_w(READING),

@@ -16,6 +16,8 @@ pub struct Field {
     value: Option<String>,
     hint: Option<String>,
     error: Option<String>,
+    mark: Option<El>,
+    refusal: Option<El>,
 }
 
 impl Field {
@@ -30,6 +32,8 @@ impl Field {
             value: None,
             hint: None,
             error: None,
+            mark: None,
+            refusal: None,
         }
     }
 
@@ -66,6 +70,20 @@ impl Field {
         self
     }
 
+    /// A mark at the end of the label's line, such as Saved, so the control keeps its width when
+    /// it comes and goes.
+    pub fn mark(mut self, mark: Option<El>) -> Self {
+        self.mark = mark;
+        self
+    }
+
+    /// Why the value was refused, with its way to try again ([`super::Refusal`]), right under the
+    /// control, above the hint, so it shows where the person is looking.
+    pub fn refusal(mut self, refusal: Option<El>) -> Self {
+        self.refusal = refusal;
+        self
+    }
+
     pub fn build(self, t: &Tokens) -> Block {
         let label = door::gap(
             row()
@@ -77,10 +95,10 @@ impl Field {
         .child(
             words(self.label, Type::Label, t.text_tertiary)
                 .wrap()
-                .shrink()
-                .min_w(0.0),
+                .grow_from(1.0, 0.0),
         )
-        .children(self.note.map(|n| words(n, Type::Small, t.text_muted)));
+        .children(self.note.map(|n| words(n, Type::Small, t.text_muted)))
+        .children(self.mark);
         let value = self.value.map(|v| {
             let shown = words(v.clone(), Type::Body, t.text_secondary)
                 .key(format!("{}.value", self.key))
@@ -113,12 +131,13 @@ impl Field {
             .children(controls)
             .children(value)
             .children(
-                self.hint
-                    .map(|h| words(h, Type::Small, t.text_tertiary).wrap()),
-            )
-            .children(
                 self.error
                     .map(|e| words(e, Type::Small, t.error).role("alert").wrap()),
+            )
+            .children(self.refusal)
+            .children(
+                self.hint
+                    .map(|h| words(h, Type::Small, t.text_tertiary).wrap()),
             );
         Block::new(Kind::Field, door::gap(field, Space::S6))
     }

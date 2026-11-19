@@ -752,16 +752,22 @@ fn snap(world: &mut World, name: &str, dark: bool) {
     let mut shot = None;
     let mut cost = None;
     let mut cut = Vec::new();
+    let mut reach = None;
     world.gesture(|app| {
         shot = Some(pixels(app.runtime, &mut Screens::default()));
-        cost = Some((app.runtime.elements().len(), app.runtime.instances.len()));
-        cut = cut_text(&app.runtime.elements());
+        let elements = app.runtime.elements();
+        cost = Some((elements.len(), app.runtime.instances.len()));
+        cut = cut_text(&elements);
+        reach = Some(reach_of(&elements));
     });
     save(name, dark, shot.expect("the window drew"));
     if let Some((nodes, instances)) = cost {
         record_cost(name, dark, nodes, instances);
     }
     record_cuts(name, dark, &cut);
+    if dark && let Some(reach) = reach {
+        record_reach(name, &reach);
+    }
 }
 
 /// Text a clip cuts across its line: what it says and how many points of it the clip hides.
@@ -823,6 +829,35 @@ fn record_cuts(name: &str, dark: bool, cut: &[(String, f32)]) {
     for line in lines {
         writeln!(file, "{line}").unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     }
+}
+
+/// What tests and scripts find a screen by: each Tab stop in order, then every other keyed
+/// element, each with its role and accessible name.
+fn reach_of(elements: &[rune::ElementInfo]) -> String {
+    let line = |e: &rune::ElementInfo| {
+        format!(
+            "{}\t{}\t{}\n",
+            e.key.as_deref().unwrap_or("-"),
+            e.role,
+            e.label.as_deref().unwrap_or("-").replace('\n', " ")
+        )
+    };
+    let live = elements.iter().filter(|e| !e.exiting && !e.inert);
+    let stops: String = live.clone().filter(|e| e.focusable).map(line).collect();
+    let mut keyed: Vec<String> = live
+        .filter(|e| !e.focusable && e.key.is_some())
+        .map(line)
+        .collect();
+    keyed.sort();
+    format!("# tab stops\n{stops}# keyed\n{}", keyed.concat())
+}
+
+/// Each screen's Tab stops and keyed elements, in `reach/NAME.tsv`, for diffing two tours.
+fn record_reach(name: &str, reach: &str) {
+    let dir = OUT.with_borrow(|out| out.join("reach"));
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
+    let path = dir.join(format!("{name}.tsv"));
+    std::fs::write(&path, reach).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 }
 
 /// Each screen's layout nodes and draw instances, beside its pictures in `cost.tsv`.
@@ -2064,6 +2099,152 @@ fn settings_updates(dark: bool) {
         ],
         |_| {},
     );
+}
+
+/// The daemon's refusal of every setting write, as a long one echoing a path it could not make.
+const LONG_REFUSAL: &str = "cannot create directory /Users/someone/プロジェクト/社内プラットフォーム/InternationalEngineeringObservability/ワークツリー: permission denied";
+
+fn refusing(daemon: &Daemon) {
+    daemon.on("set_setting", |r: &Request| {
+        message(attn_protocol::SettingsUpdatedMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            changed_key: r["key"].as_str().map(str::to_owned),
+            success: Some(false),
+            error: Some(LONG_REFUSAL.into()),
+            ..attn_protocol::SettingsUpdatedMessage::new()
+        })
+    });
+}
+
+/// `setting`'s field on a Settings page, typed into and refused, in the window as it is and in
+/// the smallest window at 150% text.
+fn settings_refused(dark: bool, section: &str, search: &str, setting: &str, typed: &str) {
+    for smallest in [false, true] {
+        let scale: &[(&str, &str)] = if smallest { &[("uiScale", "1.5")] } else { &[] };
+        let mut world = settings_world(dark, section, search, scale, |_| {}, refusing);
+        if smallest {
+            world.resize((800.0, 600.0));
+        }
+        let field = format!("settings.input.{setting}.field");
+        world.gesture(|app| {
+            app.update(|_, tx| tx.scroll_center_in_instant("settings.body", &field))
+        });
+        world.gesture(|app| app.click(Target::key(field.clone())));
+        world.gesture(|app| app.type_text(typed));
+        tap(&mut world, Key::Enter);
+        world.gesture(|app| {
+            app.update(|_, tx| tx.scroll_center_in_instant("settings.body", &field))
+        });
+        let name = if smallest {
+            "settings-smallest"
+        } else {
+            "settings"
+        };
+        snap(&mut world, &format!("{name}-{section}-refused"), dark);
+    }
+}
+
+/// The structural states of the Settings pages that have them: a refused field, a list with
+/// its rows, a list with none, a refused action, and each long page's end.
+fn settings_page_states(dark: bool) {
+    settings_refused(
+        dark,
+        "desktop",
+        "files",
+        "projects_directory",
+        "/Users/someone/プロジェクト",
+    );
+    settings_refused(
+        dark,
+        "hygiene",
+        "attention queue",
+        "auto_settle_arm_seconds",
+        "9999",
+    );
+    settings_bottom(dark, "desktop", "files", &[]);
+    settings_refused(
+        dark,
+        "backgroundAgents",
+        "background agents",
+        "activity.intervals#watching",
+        "45",
+    );
+    settings_bottom(dark, "backgroundAgents", "background agents", &[]);
+    let mut world = settings_world(
+        dark,
+        "hygiene",
+        "attention queue",
+        &[],
+        |state| {
+            state.repos = Some(
+                [
+                    "acme/api",
+                    "acme/a-repository-with-a-very-long-name-for-its-organisation",
+                ]
+                .into_iter()
+                .map(|repo| attn_protocol::RepoState {
+                    repo: repo.into(),
+                    muted: true,
+                    collapsed: false,
+                })
+                .collect(),
+            );
+            state.authors = Some(vec![attn_protocol::AuthorState {
+                author: "dependabot".into(),
+                muted: true,
+            }]);
+        },
+        |_| {},
+    );
+    world.gesture(|app| app.update(|_, tx| tx.scroll_to_bottom_instant("settings.body")));
+    snap(&mut world, "settings-hygiene-muted", dark);
+    settings_bottom(dark, "hygiene", "attention queue", &[]);
+    let mut world = settings_world(
+        dark,
+        "updates",
+        "updates",
+        &[
+            ("self_update_enabled", "true"),
+            ("update_install_kind", "release_app"),
+            ("update_current_version", "0.13.0"),
+            ("update_current_commit", "abcdef1234567"),
+            (
+                "update_check_error",
+                "the release feed at https://example.com/releases/latest.json did not answer",
+            ),
+        ],
+        |_| {},
+        |daemon| {
+            daemon.on("start_update", |_| {
+                message(attn_protocol::StartUpdateResultMessage {
+                    success: false,
+                    error: Some("the build failed: see /tmp/run-1.log".into()),
+                    ..attn_protocol::StartUpdateResultMessage::new()
+                })
+            });
+        },
+    );
+    world.gesture(|app| app.click(Target::key("settings.updates.start")));
+    snap(&mut world, "settings-updates-refused", dark);
+    settings_section(
+        dark,
+        "updates",
+        "updates",
+        &[
+            ("self_update_enabled", "true"),
+            ("update_install_kind", "source"),
+        ],
+        |_| {},
+    );
+    let mut world = settings_world(
+        dark,
+        "connectivity",
+        "github",
+        &[],
+        |state| state.github_hosts = Some(Vec::new()),
+        |_| {},
+    );
+    snap(&mut world, "settings-connectivity-empty", dark);
 }
 
 /// The event bus with one live consumer, its Disable, and the footer's Refresh.
@@ -4044,6 +4225,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("settings_bottom", || {
             settings_bottom(dark, "experimental", "experimental", SWITCHED_ON)
         });
+        scene("settings_page_states", || settings_page_states(dark));
         scene("automation_new", || automation_new(dark));
         scene("automations_empty", || automations_empty(dark));
         scene("automations_listed", || automations_listed(dark));

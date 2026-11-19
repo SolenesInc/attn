@@ -472,3 +472,39 @@ fn a_refused_advisor_pick_shows_why_and_keeps_settings_open_on_it() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_refused_refresh_window_keeps_both_windows_where_they_are_on_every_frame() {
+    let mut world = on_background(&[]);
+    for part in ["present", "watching"] {
+        let key = field(&format!("activity.intervals#{part}"));
+        retype(&mut world, &key, "9999");
+        let rec = world.record(60.0, 1.0, |_, app| {
+            app.key(rune::KeyEvent {
+                key: rune::Key::Enter,
+                mods: rune::Mods::default(),
+            })
+        });
+        assert!(
+            world
+                .screen()
+                .find(Target::key("settings.refusal.activity.intervals"))
+                .is_some(),
+            "{part}: the refusal shows"
+        );
+        for window in ["watching", "present"] {
+            let path = format!("/{}", field(&format!("activity.intervals#{window}")));
+            let track = rec
+                .tracks
+                .iter()
+                .find(|t| t.path.ends_with(&path))
+                .unwrap_or_else(|| panic!("the {window} window is on screen"));
+            let places: Vec<[f32; 4]> = track.frames.iter().map(|(_, s)| s.rect).collect();
+            assert!(
+                places.windows(2).all(|w| w[0][1] == w[1][1]),
+                "refusing {part}: the {window} window moved: {places:?}"
+            );
+        }
+    }
+    rest(&mut world);
+}

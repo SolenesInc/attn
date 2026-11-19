@@ -62,7 +62,10 @@ pub const BLOCK_SUBJECTS: &[(&str, &[&str])] = &[
         "Blocks/Setting row",
         &["row.stepper", "row.number", "row.switch", "row.button"],
     ),
-    ("Blocks/Field", &["field.name", "field.path", "field.read"]),
+    (
+        "Blocks/Field",
+        &["field.name", "field.path", "field.read", "field.count"],
+    ),
     (
         "Blocks/Notice and status",
         &["notice.error", "notice.warn", "notice.info", "status"],
@@ -95,6 +98,7 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         )))
         .story(
             common(Story::new("Blocks/Field", Blocks::default, fields))
+                .variant("Saved", |s| s.saving = true)
                 .variant("Failed", |s| s.failed = true)
                 .variant("Disabled", |s| s.disabled = true),
         )
@@ -125,7 +129,7 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         )))
 }
 
-fn common(story: Story<Blocks>) -> Story<Blocks> {
+pub(crate) fn common(story: Story<Blocks>) -> Story<Blocks> {
     story
         .variant("Rest", |_| {})
         .variant("Focus", |s| s.rings = true)
@@ -141,7 +145,7 @@ fn common(story: Story<Blocks>) -> Story<Blocks> {
         })
 }
 
-fn tokens(cx: &Cx<Blocks>) -> Tokens {
+pub(crate) fn tokens(cx: &Cx<Blocks>) -> Tokens {
     scheme_for(None).colors(cx.system_dark()).ui
 }
 
@@ -151,7 +155,7 @@ fn width(s: &Blocks) -> f32 {
 }
 
 /// The story's blocks on a page of the story's width, as Settings lays them.
-fn stage(s: &Blocks, cx: &mut Cx<Blocks>, t: &Tokens, blocks: Vec<Block>) -> El {
+pub(crate) fn stage(s: &Blocks, cx: &mut Cx<Blocks>, t: &Tokens, blocks: Vec<Block>) -> El {
     if s.rings {
         cx.force_focus_rings();
     }
@@ -167,7 +171,7 @@ fn stage(s: &Blocks, cx: &mut Cx<Blocks>, t: &Tokens, blocks: Vec<Block>) -> El 
     )
 }
 
-fn noop(_: &mut Blocks, _: &mut Tx) {}
+pub(crate) fn noop(_: &mut Blocks, _: &mut Tx) {}
 
 fn copy(s: &Blocks, short: &'static str) -> &'static str {
     if s.long { LONG_COPY } else { short }
@@ -429,8 +433,9 @@ fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .hint(copy(s, "Shown in the sidebar and the ledger."))
             .error(s.failed.then(|| "A name can't hold a space.".to_owned()))
             .build(&t),
-        Field::new("field.path", "Folder")
-            .control(line_box(path, FieldState::disabled_if(s.disabled), &t).key("field.path.box"))
+        Field::new("field.path", title(s, "Folder"))
+            .mark(s.saving.then(|| saved("field.path.saved", &t)))
+            .control(line_box(path, path_state(s), &t).key("field.path.box"))
             .action(
                 Button::new("Browse")
                     .disabled(s.disabled)
@@ -438,6 +443,23 @@ fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                     .build(&t)
                     .key("field.path.browse"),
             )
+            .refusal((s.failed || s.long).then(|| {
+                Refusal::new(
+                    "field.path.refusal",
+                    if s.long {
+                        "cannot create directory /Users/you/projects/platform/InternationalEngineeringObservability/worktrees: permission denied"
+                    } else {
+                        "cannot create directory: permission denied"
+                    },
+                )
+                .retry(
+                    Button::new("Retry")
+                        .on_press_tx(noop)
+                        .build(&t)
+                        .key("field.path.retry"),
+                )
+                .build(&t)
+            }))
             .build(&t),
         Field::new("field.read", "Model")
             .value(if s.long {
@@ -446,8 +468,34 @@ fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                 "Opus 4.5"
             })
             .build(&t),
+        Field::new("field.count", "Wait before counting down (seconds)")
+            .control(
+                number_box(
+                    TextInput::new(&s.number)
+                        .key("field.count.input")
+                        .label("Wait before counting down (seconds)")
+                        .trailing(arrows("field.count.input", &t, |_: &mut Blocks, _: bool, _: &mut Tx| {}))
+                        .on_edit(|s: &mut Blocks| &mut s.number),
+                    FieldState::Ready,
+                    &t,
+                )
+                .key("field.count.box"),
+            )
+            .hint(copy(
+                s,
+                "How long the agent must keep working before anything starts.",
+            ))
+            .build(&t),
     ];
     stage(s, cx, &t, fields)
+}
+
+fn path_state(s: &Blocks) -> FieldState {
+    if s.disabled {
+        FieldState::Disabled
+    } else {
+        FieldState::failed_if(s.failed)
+    }
 }
 
 fn notices(s: &Blocks, cx: &mut Cx<Blocks>) -> El {

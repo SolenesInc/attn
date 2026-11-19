@@ -2,17 +2,15 @@
 //! advisor, and the context cap of headless runs.
 
 use attn_ui::Tokens;
-use attn_ui::system::{Button, FieldState, arrows, number_box};
-use rune::{El, TextEdit, Tx, col, row, text};
+use attn_ui::blocks::{Block, Field, Notice, Prose, Section, SettingRow};
+use attn_ui::system::{FieldState, arrows, number_box, switch};
+use rune::{El, TextEdit, Tx};
 use rune_kit::TextInput;
 use serde::{Deserialize, Serialize};
 
 use super::autosave::{self, Codec};
+use super::controls::{SettingField, refusal_beside, saved_mark, stepped_value};
 use super::harnesses;
-use super::pages::{
-    CAPTION, block, blocks, field_label, hint, refusal_beside, row_card, stepped_value,
-    wide_setting_field,
-};
 use super::route::{self, Route, Rules, Target};
 use crate::State;
 
@@ -332,16 +330,7 @@ pub(super) fn wanted(state: &State) -> Vec<(String, bool)> {
         .collect()
 }
 
-fn warning(key: &str, said: String, t: &Tokens) -> El {
-    text(said.clone())
-        .key(key.to_owned())
-        .label(said)
-        .font(CAPTION)
-        .color(t.warning)
-        .wrap()
-}
-
-fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) -> El {
+fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) -> Block {
     let page = &state.window.settings.background;
     let edit = if part == "watching" {
         &page.watching
@@ -369,11 +358,24 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
             intervals_typed(state, tx);
             autosave::commit(state, ACTIVITY_INTERVALS, tx);
         }));
-    col()
-        .min_w(0.0)
-        .gap(7.0)
-        .child(field_label(label, t))
-        .child(El::from(number_box(input, FieldState::Ready, t)))
+    let refused = state
+        .window
+        .settings
+        .autosave
+        .field(ACTIVITY_INTERVALS)
+        .is_some_and(|f| f.error.is_some());
+    let mut field = Field::new(
+        format!("settings.setting.{ACTIVITY_INTERVALS}.{part}"),
+        label,
+    )
+    .control(number_box(input, FieldState::failed_if(refused), t));
+    if part == "watching" {
+        field = field.mark(saved_mark(state, ACTIVITY_INTERVALS, t));
+    } else {
+        let first = super::part_field_key(ACTIVITY_INTERVALS, "watching");
+        field = field.refusal(refusal_beside(state, ACTIVITY_INTERVALS, first, t));
+    }
+    field.build(t)
 }
 
 fn interval_edit<'a>(state: &'a mut State, part: &str) -> &'a mut TextEdit {
@@ -385,87 +387,76 @@ fn interval_edit<'a>(state: &'a mut State, part: &str) -> &'a mut TextEdit {
     }
 }
 
-fn session_activity(state: &State, t: &Tokens) -> El {
+fn session_activity(state: &State, t: &Tokens) -> Block {
     let settings = &state.facts.settings;
     let saved = parse_activity(settings.get(ACTIVITY_CONFIG).map(String::as_str));
     let enabled = crate::setting::on(settings, ACTIVITY_ENABLED);
     let blocked = !enabled && saved.agent.is_empty();
-    let mut toggle = Button::new(if enabled { "Disable" } else { "Enable" }).disabled(blocked);
-    if blocked {
-        toggle = toggle.help("Choose an agent first");
-    }
-    let toggle: El = toggle
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+    let mut toggle = El::from(switch(
+        "settings.activity.toggle",
+        "Generate activity lines",
+        enabled,
+        false,
+        blocked,
+        t,
+        move |state: &mut State, tx: &mut Tx| {
             autosave::apply(
                 state,
                 ACTIVITY_ENABLED,
                 if enabled { "false" } else { "true" },
                 tx,
             )
-        })
-        .build(t)
-        .key("settings.activity.toggle")
-        .into();
-    let mut body = vec![row_card(
-        "Generate activity lines",
-        "Off by default. Choose an agent below to enable.",
-        t,
-        toggle,
-    )];
-    if activity_agents(state).is_empty() {
-        body.push(warning(
-            "settings.activity.no-agents",
-            "No installed agent supports scoped headless tasks.".into(),
-            t,
-        ));
+        },
+    ));
+    if blocked {
+        toggle = toggle.help("Choose an agent first");
     }
-    body.extend(harnesses::failure_row(state, "activity", t));
-    body.push(route::chip(
-        state,
-        t,
-        target(ACTIVITY_ROUTE),
-        "Session activity model",
-        true,
-    ));
-    body.push(
-        row()
-            .w_full()
-            .equal_columns(2)
-            .gap(10.0)
-            .items_start()
-            .child(interval_field(
-                state,
-                "watching",
-                "Refresh on home (seconds)",
-                t,
-            ))
-            .child(interval_field(
-                state,
-                "present",
-                "Refresh elsewhere in the app (seconds)",
-                t,
-            )),
-    );
-    body.extend(refusal_beside(
-        state,
-        ACTIVITY_INTERVALS,
-        super::part_field_key(ACTIVITY_INTERVALS, "watching"),
-        t,
-    ));
-    body.push(
-        hint("A session that has written nothing since its last line is skipped, so blocked and finished agents cost nothing however long home stays open.", t)
-            .wrap(),
-    );
-    block(
-        "session-activity",
-        "Session activity",
-        "Summarize each session on Home using its transcript. This sends transcript excerpts to the selected model and incurs usage costs. Updates run only while you use attn.",
-        t,
-        body,
-    )
+    let mut section = Section::new("settings.block.session-activity", "Session activity")
+        .description("Summarize each session on Home using its transcript. This sends transcript excerpts to the selected model and incurs usage costs. Updates run only while you use attn.")
+        .push(
+            SettingRow::new(
+                "Generate activity lines",
+                "Off by default. Choose an agent below to enable.",
+                toggle,
+            )
+            .build(t),
+        );
+    if activity_agents(state).is_empty() {
+        section = section.push(
+            Notice::warn(
+                "settings.activity.no-agents",
+                "No installed agent supports scoped headless tasks.",
+            )
+            .build(t),
+        );
+    }
+    section
+        .push_all(harnesses::failure_notice(state, "activity", t))
+        .push(Block::custom(route::chip(
+            state,
+            t,
+            target(ACTIVITY_ROUTE),
+            "Session activity model",
+            true,
+        )))
+        .push(interval_field(state, "watching", "Refresh on home (seconds)", t))
+        .push(interval_field(
+            state,
+            "present",
+            "Refresh elsewhere in the app (seconds)",
+            t,
+        ))
+        .push(
+            Prose::hint(
+                "settings.activity.hint",
+                "A session that has written nothing since its last line is skipped, so blocked and finished agents cost nothing however long home stays open.",
+            )
+            .build(t),
+        )
+        .build(t)
 }
 
-fn garden_advisor(state: &State, t: &Tokens) -> El {
+fn garden_advisor(state: &State, t: &Tokens) -> Block {
     let settings = &state.facts.settings;
     let agent = config(state, GARDEN_ADVISOR).agent;
     let runs_here = |suffix: &str| {
@@ -473,64 +464,47 @@ fn garden_advisor(state: &State, t: &Tokens) -> El {
             .get(&format!("{agent}_{suffix}"))
             .is_none_or(|v| v != "false")
     };
-    let mut body = Vec::new();
+    let mut section = Section::new("settings.block.garden-advisor", "Garden advisor")
+        .description("Classifies seeds during Review garden and can draft a handoff. It runs in the background with this saved agent and cannot change a seed.");
     if !(runs_here("available") && runs_here("cap_headless_task")) {
-        body.push(warning(
-            "settings.garden-advisor.unavailable",
-            format!(
-                "{} is saved for Garden review but cannot run headless tasks here.",
-                crate::picker::agents::label(&agent)
-            ),
-            t,
-        ));
+        section = section.push(
+            Notice::warn(
+                "settings.garden-advisor.unavailable",
+                format!(
+                    "{} is saved for Garden review but cannot run headless tasks here.",
+                    crate::picker::agents::label(&agent)
+                ),
+            )
+            .build(t),
+        );
     }
-    body.extend(harnesses::failure_row(state, "garden-advisor", t));
-    body.push(route::chip(
-        state,
-        t,
-        target(ADVISOR_ROUTE),
-        "Garden advisor model",
-        true,
-    ));
-    block(
-        "garden-advisor",
-        "Garden advisor",
-        "Classifies seeds during Review garden and can draft a handoff. It runs in the background with this saved agent and cannot change a seed.",
-        t,
-        body,
-    )
+    section
+        .push_all(harnesses::failure_notice(state, "garden-advisor", t))
+        .push(Block::custom(route::chip(
+            state,
+            t,
+            target(ADVISOR_ROUTE),
+            "Garden advisor model",
+            true,
+        )))
+        .build(t)
 }
 
-fn compaction(state: &State, t: &Tokens) -> El {
-    block(
-        "compaction",
-        "Compaction",
-        &format!(
+fn compaction(state: &State, t: &Tokens) -> Block {
+    Section::new("settings.block.compaction", "Compaction")
+        .description(format!(
             "Token threshold for background runs. An empty value uses the default of {} tokens.",
             thousands(DEFAULT_CONTEXT_WINDOW_CAP)
-        ),
-        t,
-        vec![
-            row().w_full().equal_columns(2).gap(10.0).child(
-                col()
-                    .min_w(0.0)
-                    .gap(7.0)
-                    .child(field_label("Headless runs", t))
-                    .child(wide_setting_field(
-                        state,
-                        HEADLESS_CONTEXT_CAP,
-                        "Headless runs",
-                        "",
-                        Some(1000.0),
-                        None,
-                        t,
-                    )),
-            ),
-        ],
-    )
+        ))
+        .push(
+            SettingField::new(HEADLESS_CONTEXT_CAP, "Headless runs")
+                .step(1000.0)
+                .build(state, t),
+        )
+        .build(t)
 }
 
-/// `128000` as `128,000`, as the Tauri page writes it.
+/// `128000` as `128,000`.
 pub(super) fn thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::new();
@@ -543,13 +517,10 @@ pub(super) fn thousands(n: u64) -> String {
     out
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
-    blocks(
-        vec![
-            session_activity(state, t),
-            garden_advisor(state, t),
-            compaction(state, t),
-        ],
-        t,
-    )
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
+    vec![
+        session_activity(state, t),
+        garden_advisor(state, t),
+        compaction(state, t),
+    ]
 }

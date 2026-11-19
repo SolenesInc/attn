@@ -734,7 +734,6 @@ fn route_field(
         }
         col()
             .gap(4.0)
-            .min_w(0.0)
             .child(words(name, Type::Label, t.text_tertiary))
             .child(shown)
     };
@@ -746,7 +745,8 @@ fn route_field(
         .child(
             row()
                 .w_full()
-                .gap(16.0)
+                .gaps(10.0, 16.0)
+                .flex_wrap()
                 .items_start()
                 .children(line.into_iter().map(|(name, v)| {
                     let grow = if name == "Model" { 2.0 } else { 1.0 };

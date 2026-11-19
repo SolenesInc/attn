@@ -437,6 +437,25 @@ pub(crate) fn headless_agents(
 }
 
 /// The harness list's failure with its Retry, as each block that lists harnesses shows it.
+/// Why the harness list could not be read, with Retry, keyed for the part of the page `block`.
+pub(super) fn failure_notice(
+    state: &State,
+    block: &str,
+    t: &Tokens,
+) -> Option<attn_ui::blocks::Block> {
+    let error = failure(state)?;
+    Some(
+        attn_ui::blocks::Notice::error(format!("settings.{block}.harness-error"), error)
+            .action(
+                attn_ui::system::Button::new("Retry")
+                    .on_press_tx(retry)
+                    .build(t)
+                    .key(format!("settings.{block}.harness-retry")),
+            )
+            .build(t),
+    )
+}
+
 pub(super) fn failure_row(state: &State, block: &str, t: &Tokens) -> Option<El> {
     let error = failure(state)?;
     Some(

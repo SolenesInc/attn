@@ -2,13 +2,12 @@
 //! Notebook folder and what attn does with a file an agent sends.
 
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::{El, FileDialogOptions, Tx, col, row, text};
+use attn_ui::blocks::{Block, Prose, Section, SettingRow};
+use attn_ui::system::{Button, Tone, tag};
+use rune::{El, FileDialogOptions, Tx};
 
 use super::autosave;
-use attn_ui::system::{Button, Tone, tag};
-
-use super::pages::{block, blocks, field_label, row_card, setting_switch, wide_setting_field};
+use super::controls::{SettingField, setting_switch};
 use crate::{State, setting};
 
 pub(crate) const EDITOR: &str = "editor_executable";
@@ -33,155 +32,81 @@ fn browse(key: &'static str, title: &'static str, tx: &mut Tx) {
     });
 }
 
-fn folder_field(
-    state: &State,
-    key: &'static str,
-    label: &str,
-    placeholder: &str,
-    title: &'static str,
-    t: &Tokens,
-) -> El {
-    let browse = Button::new("Browse")
+fn browse_button(key: &'static str, title: &'static str, t: &Tokens) -> El {
+    Button::new("Browse")
         .on_press_tx(move |_: &mut State, tx: &mut Tx| browse(key, title, tx))
         .build(t)
         .key(format!("settings.browse.{key}"))
         .label("Browse")
-        .into();
-    wide_setting_field(state, key, label, placeholder, None, Some(browse), t)
+        .into()
 }
 
-/// What a field is for, under its label, as the Tauri app's `.settings-status`.
-fn field_status(said: &str, t: &Tokens) -> El {
-    text(said.to_owned())
-        .font(type_::MONO_CAPTION)
-        .color(t.text_secondary)
-        .wrap()
-}
-
-fn stacked(label: &str, status: Option<&str>, field: El, t: &Tokens) -> El {
-    col()
-        .w_full()
-        .gap(7.0)
-        .child(field_label(label, t))
-        .children(status.map(|said| field_status(said, t)))
-        .child(field)
-}
-
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let effective = state
         .facts
         .settings
         .get(NOTEBOOK_ROOT_EFFECTIVE)
         .filter(|root| !root.is_empty())
         .map(|root| {
-            let line = format!("This profile uses: {root}");
-            row()
-                .key("settings.notebook.effective")
-                .label(line)
-                .flex_wrap()
-                .items_center()
-                .gaps(2.0, 4.0)
-                .child(
-                    text("This profile uses:")
-                        .font(type_::BODY)
-                        .color(t.text_tertiary)
-                        .a11y_hidden(),
-                )
-                .child(
-                    text(root.clone())
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_tertiary)
-                        .wrap()
-                        .shrink()
-                        .a11y_hidden(),
-                )
+            Prose::hint(
+                "settings.notebook.effective",
+                format!("This profile uses: `{root}`"),
+            )
+            .build(t)
         });
-    blocks(
-        vec![
-            block(
-                "editor",
-                "Editor",
-                "The editor used when opening files.",
-                t,
-                vec![stacked(
-                    "Editor",
-                    Some("Used when opening files"),
-                    wide_setting_field(state, EDITOR, "Editor", "$EDITOR", None, None, t),
-                    t,
-                )],
-            ),
-            block(
-                "projects-directory",
-                "Projects Directory",
-                "Directory where Git repositories are cloned and opened in worktrees.",
-                t,
-                vec![stacked(
-                    "Projects directory",
-                    None,
-                    folder_field(
-                        state,
-                        PROJECTS_DIRECTORY,
-                        "Projects directory",
-                        "/Users/you/projects",
-                        "Select Projects Directory",
-                        t,
-                    ),
-                    t,
-                )],
-            ),
-            block(
-                "worktree-sweep",
-                "Worktree sweep",
-                "Reclaims worktrees whose work has landed. A worktree is only removed when it has been idle for 14 days, has no uncommitted or stashed changes, has nothing unpushed beyond what merged, holds no live session or open seed, and its branch is on the repository's integration branch — as a merged pull request, as an ancestor, or with an identical tree. Everything it keeps says why, and every removal lands in the sweep log and as a note on the seeds that worked there. On by default.",
-                t,
-                vec![row_card(
+    vec![
+        Section::new("settings.block.locations", "Locations")
+            .description("Where attn opens files, clones repositories and keeps your Notebook.")
+            .push(
+                SettingField::new(EDITOR, "Editor")
+                    .placeholder("$EDITOR")
+                    .hint("The editor used when opening files.")
+                    .build(state, t),
+            )
+            .push(
+                SettingField::new(PROJECTS_DIRECTORY, "Projects directory")
+                    .placeholder("/Users/you/projects")
+                    .hint("Where Git repositories are cloned and opened in worktrees.")
+                    .action(browse_button(PROJECTS_DIRECTORY, "Select Projects Directory", t))
+                    .build(state, t),
+            )
+            .push(
+                SettingField::new(NOTEBOOK_ROOT, "Notebook folder")
+                    .placeholder("~/attn-notebook")
+                    .hint("Your durable Notebook: dated journals, the knowledge base and seed files, as plain markdown you own. Each profile has its own folder, synced with outposts. Changing it points attn at the new folder; your existing notes are not moved, so move or sync the folder yourself to bring them along. Leave blank for ~/attn-notebook, separate per instance.")
+                    .action(browse_button(NOTEBOOK_ROOT, "Select Notebook Folder", t))
+                    .build(state, t),
+            )
+            .push_all(effective)
+            .build(t),
+        Section::new("settings.block.worktree-sweep", "Worktree sweep")
+            .description("Reclaims worktrees whose work has landed. A worktree is only removed when it has been idle for 14 days, has no uncommitted or stashed changes, has nothing unpushed beyond what merged, holds no live session or open seed, and its branch is on the repository's integration branch — as a merged pull request, as an ancestor, or with an identical tree. Everything it keeps says why, and every removal lands in the sweep log and as a note on the seeds that worked there. On by default.")
+            .push(
+                SettingRow::new(
                     "Reclaim merged worktrees in the background",
                     "Turning it off stops removals; the daemon keeps refreshing worktree state so the Worktrees list in the ledger surface stays accurate, and the keep pins you set stay set.",
-                    t,
                     setting_switch(
                         state,
                         WORKTREE_SWEEP,
                         "Reclaim merged worktrees in the background",
                         t,
                     ),
-                )],
-            ),
-            block(
-                "notebook-root",
-                "Notebook Folder",
-                "Where attn keeps your durable Notebook — dated journals, the knowledge base and seed files — as plain markdown you own. Each profile has its own folder, synced with outposts. Changing it points attn at the new folder; your existing notes are not moved, so move or sync the folder yourself if you want the current contents to come along.",
-                t,
-                std::iter::once(stacked(
-                    "Notebook folder",
-                    Some("Leave blank for ~/attn-notebook, separate per instance."),
-                    folder_field(
-                        state,
-                        NOTEBOOK_ROOT,
-                        "Notebook folder",
-                        "~/attn-notebook",
-                        "Select Notebook Folder",
-                        t,
-                    ),
-                    t,
-                ))
-                .chain(effective)
-                .collect(),
-            ),
-            block(
-                "sent-files",
-                "Sent files",
-                "When an agent hands you a file with its send-file tool, attn opens the ones it can show as desktop tiles. On by default.",
-                t,
-                vec![row_card(
+                )
+                .build(t),
+            )
+            .build(t),
+        Section::new("settings.block.sent-files", "Sent files")
+            .description("When an agent hands you a file with its send-file tool, attn opens the ones it can show as desktop tiles. On by default.")
+            .push(
+                SettingRow::new(
                     "Open files agents send you",
                     "A markdown file an agent sends opens as a live-reloading tile beside its terminal, so you see it without hunting through the transcript. File types attn cannot show are left alone.",
-                    t,
                     setting_switch(state, OPEN_SENT_FILES, "Open files agents send you", t),
-                )],
-            ),
-        ],
-        t,
-    )
+                )
+                .build(t),
+            )
+            .build(t),
+    ]
 }
 
 /// Whether the projects directory field holds a path the daemon does not have yet, and

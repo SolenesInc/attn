@@ -1383,7 +1383,10 @@ fn a_heads_aside_gives_way_to_its_title_and_stays_on_the_page() {
 
 #[test]
 fn no_part_of_a_block_runs_past_its_sides_at_any_width() {
-    for &(story, subjects) in attn_ui::block_gallery::BLOCK_SUBJECTS {
+    for &(story, subjects) in attn_ui::block_gallery::BLOCK_SUBJECTS
+        .iter()
+        .chain(attn_ui::settings_gallery::SETTINGS_SUBJECTS)
+    {
         for variant in WIDTHS {
             let rt = block_story(true, story, variant);
             for key in subjects {
@@ -1453,7 +1456,10 @@ fn holds_all(outer: [f32; 4], inner: [f32; 4]) -> bool {
 
 #[test]
 fn a_controls_box_and_ring_take_in_everything_it_draws_at_any_width() {
-    for &(story, _) in attn_ui::block_gallery::BLOCK_SUBJECTS {
+    for &(story, _) in attn_ui::block_gallery::BLOCK_SUBJECTS
+        .iter()
+        .chain(attn_ui::settings_gallery::SETTINGS_SUBJECTS)
+    {
         for variant in WIDTHS {
             let rt = block_story(true, story, variant);
             let elements = rt.elements();

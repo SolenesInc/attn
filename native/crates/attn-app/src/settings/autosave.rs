@@ -214,10 +214,12 @@ pub(crate) fn commit(state: &mut State, key: &str, tx: &mut Tx) {
         Err(reason) => {
             field.error = Some(reason);
             field.confirmed = false;
+            show_refusal(key, tx);
             super::flushed(state, tx);
             return;
         }
     };
+    tx.instant();
     field.pending = true;
     let key = key.to_owned();
     let sent = key.clone();
@@ -269,10 +271,26 @@ fn landed(state: &mut State, key: &str, draft: String, outcome: Result<(), Strin
             field.confirmed = false;
         }
     }
-    if std::mem::take(&mut field.requested) {
+    tx.instant();
+    let refused = field.error.is_some();
+    let requested = std::mem::take(&mut field.requested);
+    if refused {
+        show_refusal(key, tx);
+    }
+    if requested {
         commit(state, key, tx);
     }
     super::flushed(state, tx);
+}
+
+/// Lands `key`'s refusal on its frame, then shows it as far as the control that holds the
+/// keyboard stays in view: each by the least movement, the focused control last.
+fn show_refusal(key: &str, tx: &mut Tx) {
+    tx.instant();
+    tx.scroll_into_view_in(super::BODY, format!("settings.refusal.{key}"));
+    if let Some(focused) = tx.focused().map(str::to_owned) {
+        tx.scroll_into_view_in(super::BODY, focused);
+    }
 }
 
 /// Commits every field: before the dialog closes or changes page.

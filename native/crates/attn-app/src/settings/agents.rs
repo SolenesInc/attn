@@ -335,7 +335,7 @@ fn asks(state: &State, t: &Tokens) -> El {
     let feature = feature(ASKS);
     plain_row(
         row_words(feature.name, feature.summary, t).children(feature_note(state, ASKS, t)),
-        feature_switch(state, ASKS, false, t),
+        feature_switch(state, ASKS, false, t).into(),
     )
 }
 
@@ -445,14 +445,15 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> El {
         "Resume a closed agent when mail reaches its seed.",
         t,
         vec![
-            super::pages::segmented(
+            El::from(super::pages::segmented(
                 TENDER_RESUME,
                 "Resume for",
                 RESUME_CHOICES,
                 choice,
                 t,
                 |state, value, tx| autosave::apply(state, TENDER_RESUME, value, tx),
-            ),
+            ))
+            .self_start(),
             col()
                 .w_full()
                 .max_w(640.0)

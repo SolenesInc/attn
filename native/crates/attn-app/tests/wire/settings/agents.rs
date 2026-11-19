@@ -986,3 +986,34 @@ fn a_choice_keeps_to_its_own_width_and_the_default_agent_leaves_its_description_
         body[2]
     );
 }
+
+#[test]
+fn a_long_refusal_keeps_the_refused_executable_in_view_in_the_smallest_window() {
+    let path = "/home/someone/projects/engineering/platform/worktrees/upgrade-agent-tooling/custom-home/.local/share/claude/versions/2.1.45/bin/claude";
+    let settings = both(&[("uiScale", "1.5")]);
+    let (daemon, stored) = keeping(&settings, |key, value| {
+        (key == "claude_executable").then(|| {
+            format!("exec: \"{value}\": stat {value}: no such file or directory; claude_executable must name an executable file: {value}")
+        })
+    });
+    let mut world = on_agents_with(daemon, &stored);
+    world.resize((800.0, 600.0));
+    open_advanced(&mut world, "claude");
+    let input = field("claude_executable");
+    retype(&mut world, &input, path);
+    press(&mut world, Key::Enter);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("settings.refusal.claude_executable"))
+            .is_some(),
+        "the refusal shows"
+    );
+    let body = world.rect("settings.body");
+    let focused = world.rect(&input);
+    assert!(
+        focused[1] >= body[1] && focused[1] + focused[3] <= body[1] + body[3],
+        "the refused field at {focused:?} stays inside the page's view {body:?}"
+    );
+    rest(&mut world);
+}

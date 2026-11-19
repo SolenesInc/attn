@@ -5,15 +5,13 @@ use std::collections::BTreeMap;
 
 use attn_protocol::StartUpdateMessage;
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, row, text};
+use attn_ui::blocks::{Actions, Block, Facts, Notice};
+use attn_ui::system::{Button, Look};
+use rune::Tx;
 
-use super::pages::CAPTION;
 use crate::State;
 
 const UPDATABLE_KINDS: &[&str] = &["release_app", "release_binary", "source", "named_instance"];
-const LABEL_W: f32 = 110.0;
 
 /// Why the last Update attn did not start.
 #[derive(Default)]
@@ -88,73 +86,52 @@ fn start(state: &mut State, tx: &mut Tx) {
     );
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let settings = &state.facts.settings;
     let get = |key: &str| settings.get(key).map(String::as_str).unwrap_or_default();
     let kind = get("update_install_kind");
     let commit: String = get("update_current_commit").chars().take(9).collect();
-    let facts = [
-        ("install", "Installed as", install_label(kind).to_owned()),
-        (
-            "build",
-            "Build",
-            format!("{} ({commit})", get("update_current_version")),
-        ),
-        ("available", "Available", availability(settings)),
+    let mut page = vec![
+        Facts::new()
+            .key("settings.updates")
+            .fact(
+                "settings.updates.install",
+                "Installed as",
+                install_label(kind),
+            )
+            .code(
+                "settings.updates.build",
+                "Build",
+                format!("{} ({commit})", get("update_current_version")),
+            )
+            .fact(
+                "settings.updates.available",
+                "Available",
+                availability(settings),
+            )
+            .build(t),
     ];
-    let mut page =
-        vec![
-            col()
-                .key("settings.updates")
-                .gap(space::S2)
-                .children(facts.into_iter().map(|(key, label, value)| {
-                    row()
-                        .gap(space::S3)
-                        .child(text(label).font(CAPTION).color(t.text_tertiary).w(LABEL_W))
-                        .child(
-                            text(value.clone())
-                                .key(format!("settings.updates.{key}"))
-                                .label(format!("{label} {value}"))
-                                .font(type_::BODY)
-                                .color(t.text_primary)
-                                .wrap()
-                                .grow(1.0)
-                                .min_w(0.0),
-                        )
-                })),
-        ];
     if updatable(settings) {
-        page.push(action(state, t));
+        let running = running(state);
+        page.push(
+            Actions::new()
+                .push(
+                    Button::new(if running {
+                        "Updating…"
+                    } else {
+                        "Update attn"
+                    })
+                    .look(Look::Primary)
+                    .disabled(running)
+                    .on_press_tx(start)
+                    .build(t)
+                    .key("settings.updates.start"),
+                )
+                .build(),
+        );
+        if let Some(why) = &state.window.settings.updates.error {
+            page.push(Notice::error("settings.updates.error", why.clone()).build(t));
+        }
     }
     page
-}
-
-fn action(state: &State, t: &Tokens) -> El {
-    let running = running(state);
-    let error = state.window.settings.updates.error.as_ref().map(|why| {
-        text(why.clone())
-            .key("settings.updates.error")
-            .role("alert")
-            .label(why.clone())
-            .font(CAPTION)
-            .color(t.error)
-            .wrap()
-    });
-    col()
-        .gap(space::S2)
-        .pt(space::S2)
-        .child(
-            row().child(El::from(
-                attn_ui::system::Button::new(if running {
-                    "Updating…"
-                } else {
-                    "Update attn"
-                })
-                .disabled(running)
-                .on_press_tx(start)
-                .build(t)
-                .key("settings.updates.start"),
-            )),
-        )
-        .children(error)
 }

@@ -8,8 +8,8 @@ use rune_kit::{ScrollBar, TextInput};
 use super::pages::CAPTION;
 use super::sections::{self, Section};
 use super::{
-    agents, analytics, appearance, background, bus, delegation, desktop, hygiene, models, outposts,
-    pages, phones, plugins, route, senders, tasks, updates,
+    agents, analytics, appearance, background, bus, controls, delegation, desktop, experimental,
+    github, hygiene, models, outposts, phones, plugins, route, senders, tasks, updates,
 };
 use crate::State;
 use crate::setting;
@@ -23,8 +23,14 @@ const MAX_HEIGHT: f32 = 880.0;
 const INSET: f32 = 20.0;
 const HEADER_HEIGHT: f32 = 58.0;
 const NAV_WIDTH: f32 = 258.0;
+/// The most of the dialog the navigation takes: in the smallest window at 150% text the dialog
+/// is 493 wide and the navigation keeps 164, where "Files and locations" fits on one line.
+const NAV_SHARE: f32 = 1.0 / 3.0;
 const CONTROL_HEIGHT: f32 = 34.0;
 const SEARCH_WIDTH: f32 = 280.0;
+/// The narrowest the search field gets before the title gives way: its placeholder, "Search
+/// settings", measures 92 in Caption, inside its insets and with room to type after it.
+const SEARCH_FLOOR: f32 = 160.0;
 
 /// The settings modal over the whole window, while it is open.
 pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
@@ -97,6 +103,8 @@ fn header(state: &State, t: &Tokens) -> El {
         .build(attn_ui::kit(t));
     let search = row()
         .w(SEARCH_WIDTH)
+        .min_w(SEARCH_FLOOR)
+        .shrink()
         .h(CONTROL_HEIGHT)
         .px(10.0)
         .items_center()
@@ -144,6 +152,7 @@ fn nav(state: &State, t: &Tokens) -> El {
         .role("navigation")
         .label("Settings sections")
         .w(NAV_WIDTH)
+        .max_w_frac(NAV_SHARE)
         .h_full()
         .gap(20.0)
         .py(18.0)
@@ -229,18 +238,18 @@ fn body(state: &State, t: &Tokens) -> El {
     let section = state.window.settings.section;
     let item = section.item();
     let summary = match item.feature {
-        Some(key) => pages::feature(key).summary,
+        Some(key) => controls::feature(key).summary,
         None => item.description,
     };
     let mut head = Head::new("settings.heading", item.label).lead(summary);
     if let Some(note) = item
         .feature
-        .and_then(|key| pages::feature_note(state, key, t))
+        .and_then(|key| controls::feature_note(state, key, t))
     {
         head = head.note(note);
     }
     if let Some(key) = item.feature {
-        head = head.aside(pages::feature_switch(state, key, true, t));
+        head = head.aside(controls::feature_switch(state, key, true, t));
     }
     let pills = pills(state, section, t);
     if !pills.is_empty() {
@@ -257,7 +266,7 @@ fn body(state: &State, t: &Tokens) -> El {
         .push_all(blocks)
         .group(format!("settings.section.{}", section.id()), item.label)
         .dimmed(off)
-        .build("settings.body", t)
+        .build(super::BODY, t)
 }
 
 /// Saving…, Saved, or the refusals no field shows beside itself: what the page says, and
@@ -274,7 +283,7 @@ fn status(state: &State, t: &Tokens) -> (&'static str, Vec<El>) {
     let parts = said
         .map(|s| words(s, Type::Small, t.text_tertiary))
         .into_iter()
-        .chain(pages::unanchored_refusals(state, t))
+        .chain(controls::unanchored_refusals(state, t))
         .collect();
     (said.unwrap_or_default(), parts)
 }
@@ -283,18 +292,18 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
     let legacy = |els: Vec<El>| vec![Block::custom(col().w_full().children(els))];
     match section {
         Section::General => appearance::page(state, t),
-        Section::Connectivity => legacy(pages::github_hosts(state, t)),
-        Section::Experimental => legacy(pages::experimental(state, t)),
+        Section::Connectivity => github::page(state, t),
+        Section::Experimental => experimental::page(state, t),
         Section::BackgroundTasks => legacy(tasks::page(state, state.window.now_ms, t)),
         Section::EventBus => legacy(bus::page(state, state.window.now_ms, t)),
         Section::Analytics => legacy(analytics::page(state, t)),
-        Section::BackgroundAgents => legacy(background::page(state, t)),
+        Section::BackgroundAgents => background::page(state, t),
         Section::Delegation => legacy(delegation::page(state, t)),
         Section::Agents => legacy(agents::page(state, t)),
         Section::Models => legacy(models::page(state, t)),
-        Section::Updates => legacy(updates::page(state, t)),
-        Section::Desktop => legacy(desktop::page(state, t)),
-        Section::Hygiene => legacy(hygiene::page(state, t)),
+        Section::Updates => updates::page(state, t),
+        Section::Desktop => desktop::page(state, t),
+        Section::Hygiene => hygiene::page(state, t),
         Section::Plugins => legacy(plugins::page(state, t)),
         Section::Outposts => legacy(outposts::page(state, t)),
         Section::Phones => legacy(phones::page(state, t)),
@@ -324,6 +333,8 @@ fn title(t: &Tokens) -> El {
             text("local daemon")
                 .font(CAPTION)
                 .color(t.text_tertiary)
+                .truncate()
+                .shrink()
                 .pl(16.0)
                 .border_sides([0.0, 0.0, 0.0, 1.0], t.border),
         )

@@ -402,3 +402,43 @@ fn reopening_settings_shows_an_unanswered_unmute_as_muted_again() {
     assert_eq!(listed(&world, "settings.muted.repo"), ["acme/api"]);
     rest(&mut world);
 }
+
+#[test]
+fn a_refusal_lands_under_its_window_and_the_window_below_holds_its_place_on_every_frame() {
+    let (daemon, _) = super::keeping(&[], |key, _| {
+        (key == "auto_settle_arm_seconds")
+            .then(|| "auto_settle_arm_seconds must be at most 600".to_owned())
+    });
+    let mut world = World::start(daemon);
+    on_hygiene(&mut world);
+    retype(&mut world, &field("auto_settle_arm_seconds"), "9999");
+    let rec = world.record(60.0, 1.0, |_, app| {
+        app.key(rune::KeyEvent {
+            key: Key::Enter,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert!(
+        named(&world, "settings.refusal.auto_settle_arm_seconds").is_some(),
+        "the refusal shows under its window"
+    );
+    let below = format!("/{}", field("auto_settle_countdown_seconds"));
+    let from = rec.inputs[0].0;
+    let track = rec
+        .tracks
+        .iter()
+        .find(|t| t.path.ends_with(&below))
+        .expect("the countdown window is on screen");
+    let places: Vec<[f32; 4]> = track
+        .frames
+        .iter()
+        .filter(|(k, _)| *k >= from)
+        .map(|(_, s)| s.rect)
+        .collect();
+    let moves = places.windows(2).filter(|w| w[0] != w[1]).count();
+    assert!(
+        moves <= 1,
+        "the countdown window moved {moves} times on its way to its place: {places:?}"
+    );
+    rest(&mut world);
+}

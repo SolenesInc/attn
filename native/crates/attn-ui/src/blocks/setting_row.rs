@@ -12,6 +12,7 @@ pub struct SettingRow {
     key: Option<String>,
     title: String,
     copy: String,
+    note: Option<El>,
     control: El,
 }
 
@@ -21,6 +22,7 @@ impl SettingRow {
             key: None,
             title: title.into(),
             copy: copy.into(),
+            note: None,
             control: control.into(),
         }
     }
@@ -30,13 +32,20 @@ impl SettingRow {
         self
     }
 
+    /// Small print under the copy, such as what else the setting does or a shortcut.
+    pub fn note(mut self, note: Option<El>) -> Self {
+        self.note = note;
+        self
+    }
+
     pub fn build(self, t: &Tokens) -> Block {
         let said = door::gap(col().grow_from(1.0, COPY_FLOOR), Space::S4)
             .child(words(self.title, Type::Name, t.text_primary).wrap())
             .children(
                 (!self.copy.is_empty())
                     .then(|| words(self.copy, Type::Small, t.text_secondary).wrap()),
-            );
+            )
+            .children(self.note);
         let mut card = row()
             .flex_wrap()
             .w_full()

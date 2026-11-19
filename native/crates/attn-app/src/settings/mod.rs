@@ -9,8 +9,11 @@ mod bus;
 mod catalogs;
 mod delegation;
 mod desktop;
+mod experimental;
+mod github;
 
 pub(crate) use desktop::EDITOR;
+mod controls;
 mod harnesses;
 mod hygiene;
 mod models;
@@ -156,7 +159,7 @@ pub(crate) struct Dialog {
     pub(crate) section: Section,
     pub(crate) search: TextEdit,
     pub(crate) autosave: autosave::Autosave,
-    anchors: pages::Anchors,
+    anchors: controls::Anchors,
     tasks: tasks::Tasks,
     analytics: analytics::Analytics,
     updates: updates::Updates,
@@ -185,6 +188,8 @@ enum Leave {
     Show(Section),
 }
 
+/// The page's scrolling body.
+pub(crate) const BODY: &str = "settings.body";
 const FIELD_PREFIX: &str = "settings.input.";
 const FIELD_SUFFIX: &str = ".field";
 

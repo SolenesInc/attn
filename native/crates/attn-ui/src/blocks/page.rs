@@ -74,11 +74,15 @@ impl Page {
         });
         let status = self.status.map(|(key, said, parts)| {
             let shown = !parts.is_empty();
-            let line = door::gap(row().items_center(), Space::S8)
-                .key(key)
-                .role("status")
-                .label(said)
-                .children(parts);
+            let line = door::gaps(
+                row().w_full().flex_wrap().items_center(),
+                Space::S8,
+                Space::S8,
+            )
+            .key(key)
+            .role("status")
+            .label(said)
+            .children(parts);
             if shown {
                 door::below(line, Space::S16)
             } else {

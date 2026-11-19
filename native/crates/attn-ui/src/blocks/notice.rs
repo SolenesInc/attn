@@ -62,7 +62,7 @@ impl Notice {
             .items_center()
             .child(dot(tone_ink(self.tone, t)));
         let said = words(self.said.clone(), Type::Small, ink)
-            .wrap()
+            .wrap_anywhere()
             .a11y_hidden();
         let said = door::gaps(
             row().grow(1.0).min_w(0.0).flex_wrap().items_start(),
@@ -157,14 +157,17 @@ impl Refusal {
     }
 
     pub fn build(self, t: &Tokens) -> El {
+        let said = words(self.reason.clone(), Type::Small, t.error).wrap_anywhere();
         let line = row()
             .key(self.key)
             .role("alert")
-            .label(self.reason.clone())
-            .items_center()
-            .child(words(self.reason, Type::Small, t.error).wrap())
+            .label(self.reason)
+            .w_full()
+            .flex_wrap()
+            .items_start()
+            .child(door::on_band(said, Type::Small, Size::Regular).grow_from(1.0, COPY_FLOOR))
             .children(self.retry);
-        door::gap(line, Space::S8)
+        door::gaps(line, Space::S8, Space::S8)
     }
 }
 
