@@ -1299,7 +1299,7 @@ fn overlay_insts(grid: &Grid, theme: TerminalColors) -> (Vec<Inst>, Vec<Inst>) {
     (washes, lines)
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
     use crate::font::FONT_SIZE;
@@ -1319,7 +1319,6 @@ mod tests {
             .collect()
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn a_character_the_terminal_families_lack_draws_from_an_installed_font_that_has_it() {
         let metrics = Metrics::of(FONT_SIZE);
@@ -1332,7 +1331,6 @@ mod tests {
         }
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn a_text_default_symbol_draws_in_the_cell_colour_not_as_a_colour_emoji() {
         let mut raster = Raster::new(2.0, Metrics::of(FONT_SIZE));
