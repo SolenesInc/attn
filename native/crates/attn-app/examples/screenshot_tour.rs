@@ -716,8 +716,9 @@ fn tended_agent(dark: bool) -> InitialStateMessage {
 
 /// The title bar's shelf on a desktop wider than the window, as the audit's desktop: the
 /// waiting reviewer active beside a shell and a document, each marked by its state or kind, and
-/// two agents off screen as chips.
-fn shelf(dark: bool) {
+/// two agents off screen as chips; `hovered`, with the pointer on its dots, which show the
+/// width control.
+fn shelf(dark: bool, hovered: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     let named = |id: &str, label: &str, agent: &str, status: &str| Session {
         label: label.into(),
@@ -752,7 +753,24 @@ fn shelf(dark: bool) {
     }
     let mut world = start(Daemon::scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
-    snap(&mut world, "shelf", dark);
+    if hovered {
+        world.gesture(|app| {
+            let dots = app
+                .runtime
+                .find("shelf.live")
+                .expect("the shelf's dots are laid out");
+            app.move_to(dots);
+        });
+    }
+    snap(
+        &mut world,
+        if hovered {
+            "shelf-width-control"
+        } else {
+            "shelf"
+        },
+        dark,
+    );
 }
 
 fn review_stop(dark: bool) {
@@ -3370,7 +3388,8 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         tile_headers(dark, false);
         tile_headers(dark, true);
         tile_focus(dark);
-        shelf(dark);
+        shelf(dark, false);
+        shelf(dark, true);
         review_stop(dark);
         garden(dark);
         garden_dock(dark);

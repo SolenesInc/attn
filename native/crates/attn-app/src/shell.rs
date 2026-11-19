@@ -820,6 +820,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     crate::notebook::root_picker_overlay(state, t, &mut layers);
     crate::automations::form::overlay(state, t, &mut layers);
     layers.extend(crate::desktop::cap_menu(state, t));
+    layers.extend(crate::desktop::width_control_layer(state, t));
     layers.extend(crate::desktop::peek(state, t));
     layers.extend(crate::desktop::header_popover(state, t));
     layers.extend(crate::sidebar::bar_peek::view(state, t));

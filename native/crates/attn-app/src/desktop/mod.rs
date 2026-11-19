@@ -49,7 +49,7 @@ pub(crate) use fit::{Widths, text_w};
 pub(crate) use host::outpost_name;
 pub(crate) use overview::{create as create_desktop, view as overview};
 pub(crate) use peek::view as peek;
-pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
+pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_control_layer, width_label};
 pub use tile_look::FocusStyle;
 pub(crate) use view::{Room, area, session_of_leaf};
 pub use windows::{
@@ -81,8 +81,7 @@ pub struct Desk {
     /// The title bar's room for the shelf, in points.
     pub(crate) shelf_px: Option<f32>,
     pub(crate) window_w: Option<f32>,
-    /// The pointer is over the shelf's dots, which show the width control.
-    pub(crate) width_control: bool,
+    pub(crate) width_control: shelf::WidthControlHover,
     /// The shelf cap whose menu is open.
     pub(crate) cap_open: Option<layout::Edge>,
     pub(crate) width_label: Option<shelf::WidthLabel>,

@@ -29,6 +29,10 @@ const CAPS_PX: f32 = 104.0;
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
 /// How long a chip flashes when its tile arrives on the shelf.
 const FLASH_SECONDS: f64 = 0.9;
+/// The Tauri app's `top: calc(100% + 4px)` between the shelf's dots and the width control,
+/// which the control's own edge spans so the pointer crosses it without leaving both.
+const WIDTH_CONTROL_GAP_PX: f32 = 4.0;
+
 const FLASH_FADE: &[rune::Beat] = &[
     rune::Beat::new(0.0).opacity(1.0),
     rune::Beat::new(FLASH_SECONDS * 0.6).opacity(1.0),
@@ -328,16 +332,12 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
         .items_center()
         .px(LIVE_PAD_PX)
         .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
-            state.window.desk.width_control = inside
+            state.window.desk.width_control.dots = inside
         })
         .children(shelf.screen.iter().map(|chip| {
             let current = chip.leaves.contains(&shelf.active);
             dot(chip, current, id, t)
-        }))
-        .children(
-            desk.width_control
-                .then(|| width_control(shelf.screen.len(), Desk::narrowest_cols(&state.facts), t)),
-        );
+        }));
     let drop = desk.drag.as_ref().and_then(|d| d.shelf_mark());
     let peeked = super::peek::peeked(state, id);
     let menu = |side: Edge, columns: &[Chip]| {
@@ -690,6 +690,50 @@ fn menu_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
         return;
     }
     super::drag::gesture(state, d, tx, Owner::Menu);
+}
+
+/// Where the pointer is that shows the width control: over the shelf's dots or over the control.
+#[derive(Default)]
+pub(crate) struct WidthControlHover {
+    dots: bool,
+    control: bool,
+}
+
+/// The width control, as the Tauri app's `.desktop-shelf-stepper`: under the shelf's dots
+/// while the pointer is over them or over it, drawn over the tiles so the chips beside the dots
+/// never move. Under dots that lead the shelf it starts at their left edge.
+pub(crate) fn width_control_layer(state: &State, t: &Tokens) -> Option<El> {
+    let hover = &state.window.desk.width_control;
+    if !(hover.dots || hover.control) {
+        return None;
+    }
+    let shelf = Shelf::of(state)?;
+    let leading = shelf.before_cap().is_empty() && shelf.before_chips().is_empty();
+    let control = width_control(shelf.screen.len(), Desk::narrowest_cols(&state.facts), t)
+        .px(6.0)
+        .py(3.0)
+        .radius(6.0)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border);
+    Some(
+        col()
+            .key("shelf.width.anchor")
+            .pt(WIDTH_CONTROL_GAP_PX)
+            .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
+                state.window.desk.width_control.control = inside
+            })
+            .child(control)
+            .anchored(
+                "shelf.live",
+                rune::Side::Bottom,
+                if leading {
+                    rune::Align::Start
+                } else {
+                    rune::Align::Center
+                },
+                0.0,
+            ),
+    )
 }
 
 fn width_control(shown: usize, cols: u32, t: &Tokens) -> El {

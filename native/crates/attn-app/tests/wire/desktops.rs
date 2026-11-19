@@ -2802,6 +2802,44 @@ fn resting_on_a_chip_peeks_at_its_terminal_and_a_reply_reaches_it_followed_by_re
 }
 
 #[test]
+fn the_width_control_shows_over_the_tiles_so_a_chip_stays_where_the_pointer_goes() {
+    let mut world = peeking(|_| Ok(()));
+    let resting = world.runtime().presented("shelf.chip.c").unwrap().0;
+
+    rest_on(&mut world, "shelf.live");
+    assert!(world.screen().find(Target::key("shelf.width")).is_some());
+    assert_eq!(
+        world.runtime().presented("shelf.chip.c").unwrap().0,
+        resting,
+        "the control moves no chip"
+    );
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    assert_eq!(peek(&world).unwrap().name.as_deref(), Some("Agent c"));
+    assert!(world.screen().find(Target::key("shelf.width")).is_none());
+}
+
+#[test]
+fn the_width_control_stays_while_the_pointer_crosses_from_the_dots_onto_it() {
+    let mut world = peeking(|_| Ok(()));
+    let [x, y, w, h] = world.runtime().presented("shelf.live").unwrap().0;
+
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h + 2.0)));
+    assert!(world.screen().find(Target::key("shelf.width")).is_some());
+
+    click(&mut world, "shelf.width.fewer");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shelf.width.label"))
+            .is_some(),
+        "the press reaches the control"
+    );
+}
+
+#[test]
 fn a_reply_the_terminal_did_not_take_stays_with_its_tile_to_copy_or_discard() {
     let mut world = peeking(|data| match data {
         "\r" => Ok(()),
