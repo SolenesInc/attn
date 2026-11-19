@@ -123,6 +123,7 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
         .story(
             Story::new("Library/Stepper", Library::default, steppers)
                 .variant("Rest", |_| {})
+                .variant("Wide value", |s| s.number = TextEdit::new("1000000"))
                 .variant("Focus", |s| s.rings = true)
                 .variant("Disabled", |s| s.disabled = true),
         )

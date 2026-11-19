@@ -73,7 +73,7 @@ fn sheets() -> Vec<Sheet> {
             "segmented",
             &["Rest", "Second chosen", "Focus", "Disabled", "Narrow"],
         ),
-        ("stepper", &["Rest", "Focus", "Disabled"]),
+        ("stepper", &["Rest", "Wide value", "Focus", "Disabled"]),
         ("expander", &["Closed", "Open", "Focus", "Disabled"]),
         ("tag", &["Rest", "Long"]),
         ("icon-box", &["Rest"]),

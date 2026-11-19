@@ -441,3 +441,17 @@ fn a_segmented_control_beside_words_keeps_its_own_width() {
         );
     }
 }
+
+#[test]
+fn a_number_field_shows_a_seven_digit_value_whole() {
+    for dark in [true, false] {
+        let mut rt = story(dark, "Library/Stepper", "Wide value");
+        let room = element(&rt, "stepper.number.input").rect[2];
+        let body = rune::TextStyle::new(13.0, 400.0);
+        let (needed, _) = rt.text.measure("1000000", body, SCALE);
+        assert!(
+            needed <= room,
+            "dark={dark}: 1000000 needs {needed}, the field leaves {room} beside its arrows"
+        );
+    }
+}
