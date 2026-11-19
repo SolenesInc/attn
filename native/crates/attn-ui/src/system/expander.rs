@@ -1,9 +1,7 @@
 use rune::{El, Spring, Tx};
 
-use super::{Button, Control, Look, Size, kit};
+use super::{Button, Control, IconSize, Look, Size, door, kit};
 use crate::Tokens;
-
-const CHEVRON: f32 = 12.0;
 
 /// A quiet control that opens and closes something nearby: its words and the mark of a control
 /// that opens in place.
@@ -29,7 +27,7 @@ pub fn expander<S: 'static>(
 /// The mark of a control that opens what it holds below itself: a chevron pointing right while
 /// closed and down while open.
 pub fn opens_in_place(open: bool, t: &Tokens) -> El {
-    rune::icon(kit(t).glyph.chevron_down, CHEVRON)
+    door::icon(kit(t).glyph.chevron_down, IconSize::Regular)
         .color(t.text_tertiary)
         .icon_rotation(if open {
             0.0

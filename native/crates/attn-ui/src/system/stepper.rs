@@ -1,6 +1,8 @@
 use rune::{El, Tx, col, row};
 
-use super::{Button, Control, Radius, Size, Space, Type, disabled, door, kit, layers, words};
+use super::{
+    Button, Control, IconSize, Radius, Size, Space, Type, disabled, door, kit, layers, words,
+};
 use crate::Tokens;
 
 type Press<S> = Box<dyn Fn(&mut S, &mut Tx)>;
@@ -54,7 +56,6 @@ pub fn stepper<S: 'static>(
 /// Each arrow's hit area: half a regular field's height less its edges, and wide enough for a
 /// fingertip on a trackpad.
 const ARROW: (f32, f32) = (16.0, 14.0);
-const ARROW_GLYPH: f32 = 8.0;
 
 /// The up and down arrows at a number field's right edge, keyed `{key}.up` and `{key}.down`;
 /// `step` runs with `true` for up.
@@ -73,13 +74,13 @@ pub fn arrows<S: 'static>(
             .size(ARROW.0, ARROW.1)
             .center()
             .child(
-                rune::icon(
+                door::icon(
                     if up {
                         glyph.chevron_up
                     } else {
                         glyph.chevron_down
                     },
-                    ARROW_GLYPH,
+                    IconSize::Small,
                 )
                 .color(t.text_secondary)
                 .a11y_hidden(),

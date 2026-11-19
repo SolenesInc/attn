@@ -185,9 +185,14 @@ choices once for the whole app:
   set by what it is, with `words(text, Type::…, ink)`: `PageTitle`, `Heading`,
   `Name`, `Body`, `Small`, `Label`, `Tag`, `Mono` and `Control`; text between
   backticks is set in `Mono`. No text is drawn under 12 points, the size of
-  `Small`, `Label` and `Tag`. Corners are `Radius::{Tag, Control, Card, Panel,
-  Round}`. A control is `Size::Regular` (32 high, its words 12 in from its edge)
-  or `Size::Compact` (26 high, 8 in), and it carries its size in its type,
+  `Small`, `Label` and `Tag`. Icons and the marks of `glyph` come in three
+  sizes, named by what they sit beside: `IconSize::Small` (14) beside `Small`,
+  `Label` and `Tag` text, `Regular` (16) beside `Body` and `Name` text and
+  inside a control, and `Large` (18) alone in an icon-only button, which is a
+  compact control's height square. A view draws one with `icon(glyph,
+  IconSize::…, ink)`. Corners are `Radius::{Tag, Control, Card, Panel, Round}`.
+  A control is `Size::Regular` (32 high, its words 12 in from its edge) or
+  `Size::Compact` (26 high, 8 in), and it carries its size in its type,
   `Control`, so whatever holds it can line its words up.
 - **Controls.** `Button` in four looks (`Primary`, `Plain`, `Quiet`, `Danger`)
   and two sizes, `switch`, `Segmented`, the field boxes `line_box`,
@@ -238,8 +243,8 @@ choices once for the whole app:
   app background reads on it at 4.5:1, and its controls' focus ring takes that
   colour.
 - **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
-  spacing, font and corner methods (`gap`, `padding`, `px`…, `radius`, `font`,
-  `TextStyle::new` and the rest). While views move onto the system,
+  spacing, font, corner and icon methods (`gap`, `padding`, `px`…, `radius`,
+  `font`, `TextStyle::new`, `rune::icon` and the rest). While views move onto the system,
   `scripts/native-ui-budget` in `make check-native` holds each directory of
   `attn-app/src`, and `attn-ui/src`, to its line in `native/ui-budget.tsv`:
   a count above its line fails, and a count below it fails until the line is
@@ -266,7 +271,9 @@ choices once for the whole app:
   sentence, its glyph, actions and dismiss on its first line, its notes whole
   beside its actions or on a line of their own, its dismiss 12 from its edge,
   one height in every tone, and its fill, words and ring at their measured
-  contrast. It holds the page blocks' rules too: one right edge on a page,
+  contrast, a tag 18 high with its words centred in it, and an icon-only
+  button's `Large` icon 4 from each of its edges. It holds the page blocks'
+  rules too: one right edge on a page,
   blocks spaced by what they are, reading text at its measure, a control moved
   under its words starting on their edge, a page title wrapping short of its
   aside and keeping its line, a choice's name whole, no part of a block past

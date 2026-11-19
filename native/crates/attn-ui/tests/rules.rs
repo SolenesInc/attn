@@ -1476,3 +1476,71 @@ fn a_controls_box_and_ring_take_in_everything_it_draws_at_any_width() {
         }
     }
 }
+
+/// A tag's words, `Tag` text on its 14-point line, with 2 points above and below: about 4 points
+/// over a tag's capitals and 4.5 under them, the room they had at 10 points, measured on the
+/// tag sheet at 2x.
+const TAG_HEIGHT: f32 = 18.0;
+
+#[test]
+fn a_tag_is_one_height_with_its_words_centred_in_it() {
+    for variant in ["Rest", "Long"] {
+        let rt = story(true, "Library/Tag", variant);
+        for tone in ["neutral", "warn", "bad", "good"] {
+            let key = format!("tag.{tone}");
+            let tag = element(&rt, &key);
+            let all = rt.elements();
+            let said = all
+                .iter()
+                .find(|e| e.text.is_some() && e.parent.is_some_and(|p| all[p].path == tag.path))
+                .or_else(|| (tag.text.is_some()).then_some(&tag))
+                .unwrap_or_else(|| panic!("{key} holds no words"));
+            assert!(
+                (tag.rect[3] - TAG_HEIGHT).abs() < 0.5,
+                "{variant}: {key} is {} high, not {TAG_HEIGHT}",
+                tag.rect[3]
+            );
+            let above = said.rect[1] - tag.rect[1];
+            let below = (tag.rect[1] + tag.rect[3]) - (said.rect[1] + said.rect[3]);
+            assert!(
+                (above - below).abs() < 0.5,
+                "{variant}: {key}'s words sit {above} from its top and {below} from its bottom"
+            );
+        }
+    }
+}
+
+/// An icon-only button's side: a `Large` icon, 18, with 4 points on each side, the room the
+/// 14-point icon had in the 22-point button before, and the height of a compact control.
+const ICON_BUTTON: f32 = 26.0;
+const LARGE_ICON: f32 = 18.0;
+
+#[test]
+fn an_icon_only_button_gives_its_large_icon_four_points_on_every_side() {
+    let rt = story(true, "Library/Banner", "Rest");
+    let all = rt.elements();
+    for (tone, _) in BANNERS {
+        let dismiss = element(&rt, &format!("banner.{tone}.dismiss"));
+        assert!(
+            (dismiss.rect[2] - ICON_BUTTON).abs() < 0.5
+                && (dismiss.rect[3] - ICON_BUTTON).abs() < 0.5,
+            "{tone}'s dismiss is {:?}, not {ICON_BUTTON} square",
+            dismiss.rect
+        );
+        let glyph = all
+            .iter()
+            .find(|e| e.parent.is_some_and(|p| all[p].path == dismiss.path))
+            .expect("a dismiss draws its icon");
+        let room = [
+            glyph.rect[0] - dismiss.rect[0],
+            glyph.rect[1] - dismiss.rect[1],
+            (dismiss.rect[0] + dismiss.rect[2]) - (glyph.rect[0] + glyph.rect[2]),
+            (dismiss.rect[1] + dismiss.rect[3]) - (glyph.rect[1] + glyph.rect[3]),
+        ];
+        assert!(
+            (glyph.rect[2] - LARGE_ICON).abs() < 0.5 && room.iter().all(|r| (r - 4.0).abs() < 0.5),
+            "{tone}'s dismiss draws a {:?} icon with {room:?} round it",
+            glyph.rect
+        );
+    }
+}

@@ -1,9 +1,8 @@
 use rune::{Color, El, Tx, el, row};
 
-use super::{Control, Radius, Size, Space, disabled, door, focus, kit, layers};
+use super::{Control, IconSize, Radius, Size, Space, disabled, door, focus, kit, layers};
 use crate::Tokens;
 
-const CHEVRON: f32 = 12.0;
 const EDGE_TO_CONTENT: Space = Space::S6;
 
 /// How a trigger sits on its page.
@@ -95,7 +94,7 @@ impl Trigger {
             .h(size.height() - 2.0 * EDGE_TO_CONTENT.pt())
             .self_start()
             .items_center()
-            .child(rune::icon(glyph, CHEVRON).color(t.text_tertiary))
+            .child(door::icon(glyph, IconSize::Regular).color(t.text_tertiary))
             .a11y_hidden();
         let mut trigger = row()
             .key(self.key)

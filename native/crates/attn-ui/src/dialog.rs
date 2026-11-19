@@ -2,6 +2,8 @@ use rune::{Color, El, Shadow, TextStyle, Tx, col, row, text};
 use rune_kit::ButtonVariant;
 
 use crate::frame::shadow;
+use crate::glyph_button::ICON_BUTTON;
+use crate::system::{IconSize, door};
 use crate::{Backdrop, Frame, GlyphButton, Tokens};
 
 /// How a dialog is framed, as the Tauri app's CSS draws that family of dialog: the backdrop
@@ -31,7 +33,7 @@ pub struct DialogFrame {
 /// The × in a dialog's header: the glyph's size, its ink and the square it is pressed in.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Close {
-    pub size: f32,
+    pub size: IconSize,
     pub ink: Color,
     pub side: f32,
 }
@@ -56,9 +58,9 @@ impl DialogFrame {
             subtitle_ink: t.text_dimmed,
             subtitle_gap: 4.0,
             close: Some(Close {
-                size: 18.0,
+                size: IconSize::Large,
                 ink: t.text_dimmed,
-                side: 26.0,
+                side: ICON_BUTTON,
             }),
             sheen: None,
             wash: None,
@@ -99,9 +101,9 @@ impl DialogFrame {
             subtitle_ink: t.text_tertiary,
             subtitle_gap: 5.0,
             close: Some(Close {
-                size: 22.0,
+                size: IconSize::Large,
                 ink: t.text_muted,
-                side: 22.0,
+                side: ICON_BUTTON,
             }),
             sheen: None,
             wash: None,
@@ -344,7 +346,10 @@ impl Dialog {
         if let Some(close) = f.close {
             let dismiss = GlyphButton::new("×", "Close")
                 .variant(ButtonVariant::GhostMuted)
-                .font(TextStyle::new(close.size, 600.0).lh(close.size))
+                .font(TextStyle {
+                    weight: 600.0,
+                    ..door::mark(close.size)
+                })
                 .color(close.ink)
                 .side(close.side)
                 .build(k)

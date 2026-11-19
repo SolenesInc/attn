@@ -5,11 +5,13 @@
 
 use rune::TextStyle;
 
-/// A mark at the Tauri app's `--font-size-sm`, `--font-size` and `--font-size-lg`, one line
-/// high, as its buttons that draw `×` set them.
-pub const SMALL: TextStyle = TextStyle::new(12.0, 400.0).lh(11.0);
-pub const REGULAR: TextStyle = TextStyle::new(14.0, 400.0).lh(14.0);
-pub const LARGE: TextStyle = TextStyle::new(18.0, 400.0).lh(18.0);
+use crate::system::{IconSize, door};
+
+/// A mark at each [`IconSize`], one line high, so a mark drawn as text and an icon beside the
+/// same words are one size.
+pub const SMALL: TextStyle = door::mark(IconSize::Small);
+pub const REGULAR: TextStyle = door::mark(IconSize::Regular);
+pub const LARGE: TextStyle = door::mark(IconSize::Large);
 
 pub const TIMES: &str = "×";
 pub const PREVIOUS: &str = "▲";

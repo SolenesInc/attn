@@ -17,7 +17,7 @@ pub enum Type {
     Small,
     /// A field's or a column's name: 12/600 mono, upper case.
     Label,
-    /// A tag's word: 12/700 mono, upper case.
+    /// A tag's word: 12/600 mono, upper case, on a 14 line.
     Tag,
     /// A value read as data: a model, an id, a path. 12/400 mono.
     Mono,

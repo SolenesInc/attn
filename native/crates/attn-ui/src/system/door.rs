@@ -2,9 +2,9 @@
 //! other module, in this crate and in the app, names a token and comes through here.
 #![allow(clippy::disallowed_methods)]
 
-use rune::{El, Span, TextStyle};
+use rune::{El, Icon, Span, TextStyle};
 
-use super::{Radius, Space, Type};
+use super::{IconSize, Radius, Space, Type};
 
 pub(crate) const fn style(kind: Type) -> TextStyle {
     match kind {
@@ -14,10 +14,19 @@ pub(crate) const fn style(kind: Type) -> TextStyle {
         Type::Body => TextStyle::new(13.0, 400.0),
         Type::Small => TextStyle::new(12.0, 400.0),
         Type::Label => TextStyle::new(12.0, 600.0).mono().tracking(1.0),
-        Type::Tag => TextStyle::new(12.0, 700.0).mono().tracking(0.8),
+        Type::Tag => TextStyle::new(12.0, 600.0).mono().tracking(0.8).lh(14.0),
         Type::Mono => TextStyle::new(12.0, 400.0).mono(),
         Type::Control => TextStyle::new(12.0, 600.0),
     }
+}
+
+pub(crate) fn icon(glyph: &'static Icon, size: IconSize) -> El {
+    rune::icon(glyph, size.pt())
+}
+
+/// A mark of [`crate::glyph`] drawn as text `size` high, one line tall.
+pub(crate) const fn mark(size: IconSize) -> TextStyle {
+    TextStyle::new(size.pt(), 400.0).lh(size.pt())
 }
 
 pub(crate) fn font(e: El, kind: Type) -> El {

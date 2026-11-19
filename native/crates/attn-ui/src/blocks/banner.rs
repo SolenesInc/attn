@@ -1,6 +1,8 @@
 use rune::{Color, El, Tx, row};
 
-use crate::system::{Button, Look, Radius, Size, Space, Type, door, focus, layers, words};
+use crate::system::{
+    Button, IconSize, Look, Radius, Size, Space, Type, door, focus, layers, words,
+};
 use crate::{Tokens, colors, icon};
 
 /// What a banner is about, which decides its colour and its glyph.
@@ -53,8 +55,6 @@ pub struct Banner {
     hover: Option<Attach>,
 }
 
-const GLYPH: f32 = 16.0;
-const CLOSE: f32 = 14.0;
 /// How much of its tone a banner's fill takes over the app's background: the least share at
 /// which every tone stands further from the title bar than a hover step, in dark and in light.
 const TINT: f32 = 0.18;
@@ -173,7 +173,7 @@ impl Banner {
             .h(band)
             .items_center()
             .a11y_hidden()
-            .child(rune::icon(glyph(self.tone), GLYPH).color(paint.glyph));
+            .child(door::icon(glyph(self.tone), IconSize::Regular).color(paint.glyph));
         let sentence = self.sentence.map(|(key, said)| {
             let said = words(said, Type::Name, paint.ink).key(key).wrap().shrink();
             door::first_line_in(row().shrink().child(said), Type::Name, band)
@@ -342,7 +342,7 @@ impl Paint {
             .focusable(true)
             .size(side, side)
             .center()
-            .child(rune::icon(&rune_kit::glyphs::CLOSE, CLOSE).color(self.quiet));
+            .child(door::icon(&rune_kit::glyphs::CLOSE, IconSize::Large).color(self.quiet));
         let close = door::corner(close, Radius::Control);
         focus::ring(press(layers::pressable(close, self.fill, t)), t)
     }

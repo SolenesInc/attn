@@ -7,9 +7,9 @@ use rune_kit::{
 use crate::blocks::{Banner, BannerTone};
 use crate::colors::scheme_for;
 use crate::system::{
-    Button as Action, Choice, FieldState, Look, Segment, Segmented, Size, Space, Tone, Trigger,
-    TriggerLook, Type, area_box, arrows, choices, disclosure, door, expander, icon_box, line_box,
-    number_box, press_area, stepper, switch, tag, words,
+    Button as Action, Choice, FieldState, IconSize, Look, Segment, Segmented, Size, Space, Tone,
+    Trigger, TriggerLook, Type, area_box, arrows, choices, disclosure, door, expander, icon,
+    icon_box, line_box, number_box, press_area, stepper, switch, tag, words,
 };
 use crate::{Dialog, DialogFrame, Tokens, kit};
 
@@ -907,6 +907,12 @@ fn icon_boxes(_: &Library, cx: &mut Cx<Library>) -> El {
         [
             El::from(icon_box(words("B", Type::Name, t.text_primary), false, &t))
                 .key("icon.filled"),
+            El::from(icon_box(
+                icon(&crate::icon::GARDEN, IconSize::Regular, t.text_primary),
+                false,
+                &t,
+            ))
+            .key("icon.glyph"),
             El::from(icon_box(words("+", Type::Name, t.text_tertiary), true, &t))
                 .key("icon.dashed"),
         ],

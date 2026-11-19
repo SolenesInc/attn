@@ -858,19 +858,20 @@ fn recommended_tag(t: &Tokens) -> El {
 
 const TAG_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
 
-/// The system's radio and checkbox, as the Tauri app draws its choices' inputs: a 10 point
-/// ring or box with a thin gray edge, filled with the accent once picked.
+/// A choice's radio or checkbox: a ring or box with a thin gray edge, filled with the accent once
+/// picked, as wide as the small check mark it holds and centred 9 below the top of its label's
+/// first line.
 fn choice_mark(kind: Kind, picked: bool, t: &Tokens) -> El {
     let edge = attn_ui::colors::rgb(if t.dark {
         [0x9a, 0x9a, 0x9a]
     } else {
         [0x80, 0x80, 0x80]
     });
-    let radius = if kind == Kind::One { 6.0 } else { 3.0 };
+    let radius = if kind == Kind::One { 7.0 } else { 3.0 };
     let mark = el()
-        .w(12.0)
-        .h(12.0)
-        .mt(3.0)
+        .w(14.0)
+        .h(14.0)
+        .mt(2.0)
         .center()
         .radius(radius)
         .a11y_hidden();

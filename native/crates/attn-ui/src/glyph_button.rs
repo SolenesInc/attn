@@ -1,6 +1,13 @@
 use rune::{Color, El, Icon, TextStyle, Tx, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
+use crate::system::{IconSize, Size};
+
+/// An icon-only button's side: a `Large` icon with 4 points round it, today's room round a 14
+/// icon in the 22 the button had, and the height of a compact control, so the button lines up
+/// with one on a row.
+pub(crate) const ICON_BUTTON: f32 = Size::Compact.height();
+
 /// What a [`GlyphButton`] draws: an icon of [`crate::icon`], or text such as a mark of
 /// [`crate::glyph`] or `Aa`.
 pub enum Glyph {
@@ -54,21 +61,21 @@ impl GlyphButton {
         GlyphButton {
             glyph: glyph.into(),
             button: Button::new(label).variant(ButtonVariant::GhostMuted),
-            side: 22.0,
+            side: ICON_BUTTON,
             font: None,
-            icon_size: 14.0,
+            icon_size: IconSize::Large.pt(),
             color: None,
             trailing: None,
         }
     }
 
-    /// An icon's width and height; 14 points unless set.
+    /// An icon's width and height; [`IconSize::Large`] unless set.
     pub fn icon_size(mut self, size: f32) -> Self {
         self.icon_size = size;
         self
     }
 
-    /// The button's height and least width; 22 points unless set.
+    /// The button's height and least width; a compact control's height unless set.
     pub fn side(mut self, side: f32) -> Self {
         self.side = side;
         self
