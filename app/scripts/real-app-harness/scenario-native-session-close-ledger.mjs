@@ -58,10 +58,13 @@ try {
   });
 
   let runtimeId;
+  let paneId;
   await runner.step('show_a_worktree_session', async () => {
     const spawned = observer.waitForMessage((message) => message.event === 'spawn_result' && message.id === sessionId && message, 'agent spawned', 60_000);
     observer.send({ cmd: 'spawn_session', id: sessionId, agent: 'claude', cwd: worktree, profile_id: observer.profileId, placement: {}, label: `close-ledger-${runner.runId}`.slice(0, 40), cols: 100, rows: 30 });
-    runner.assert((await spawned).success, 'spawn_session starts the agent in the worktree');
+    const result = await spawned;
+    runner.assert(result.success, 'spawn_session starts the agent in the worktree');
+    paneId = result.pane_id;
     const registered = await observer.waitFor(() => {
       const session = observer.getSession(sessionId);
       return session?.is_worktree ? session : null;
@@ -79,6 +82,7 @@ try {
     await driver.run('session.close');
     await driver.waitFor({ key: `sidebar.session.${sessionId}` }, { gone: true });
     await observer.waitFor(() => !observer.getSession(sessionId), 'the session leaves the live sessions');
+    await driver.waitFor({ key: `tile.${paneId}` }, { gone: true });
     const window = await driver.state('window');
     runner.assert(window.layer === null && window.on_screen !== sessionId, 'the close opens no dialog and leaves the session off screen', window);
     runner.writeJson('window-after-close.json', window);
