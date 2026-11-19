@@ -1,5 +1,5 @@
 use attn_protocol::AttachResultMessage;
-use attn_term::{FONT_SIZE, Fonts, SNAPSHOT_FORMAT};
+use attn_term::{FONT_SIZE, Metrics, SNAPSHOT_FORMAT};
 use attn_testkit::{World, message};
 use rune::{Key, KeyEvent, Mods, PhysicalInput, WheelEvent};
 use serde_json::{Value, json};
@@ -50,7 +50,7 @@ pub(crate) fn copied(world: &mut World) -> Option<String> {
 /// Turns the wheel `rows` rows over terminal r1, positive toward the history.
 pub(crate) fn wheel(world: &mut World, rows: f32) {
     let at = cell(world, 1, 1);
-    let row = Fonts::default().metrics(FONT_SIZE).cell_h;
+    let row = Metrics::of(FONT_SIZE).cell_h;
     world.gesture(|app| {
         app.runtime
             .wheel_event(WheelEvent::new(0.0, rows * row).at(at.0, at.1))

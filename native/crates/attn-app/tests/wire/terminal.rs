@@ -5,7 +5,7 @@ use attn_protocol::{
     ProfileArrangementChangedMessage, PtyDesyncMessage, PtyResizedMessage, RuntimeRespawnedMessage,
     SessionExitedMessage,
 };
-use attn_term::{FONT_SIZE, Fonts, SNAPSHOT_FORMAT, Vt};
+use attn_term::{FONT_SIZE, Metrics, SNAPSHOT_FORMAT, Vt};
 use attn_testkit::{Answer, Daemon, World, message, tree};
 use base64::Engine;
 use rune::{Ime, Key, KeyEvent, Mods, PhysicalInput, PointerButton, WheelEvent};
@@ -388,7 +388,7 @@ fn an_input_method_composes_at_the_cursor_and_opens_its_candidates_there() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
     let starts_at = |rect: [f32; 4], (x, y): (f32, f32)| {
-        let metrics = Fonts::default().metrics(FONT_SIZE);
+        let metrics = Metrics::of(FONT_SIZE);
         (rect[0] - (x - metrics.cell_w / 2.0)).abs() < 0.5
             && (rect[1] - (y - metrics.cell_h / 2.0)).abs() < 0.5
     };
@@ -1061,7 +1061,7 @@ pub(crate) fn cell(world: &World, col: u16, row: u16) -> (f32, f32) {
         .runtime()
         .presented("terminal.r1")
         .expect("r1 is drawn");
-    let metrics = Fonts::default().metrics(FONT_SIZE);
+    let metrics = Metrics::of(FONT_SIZE);
     (
         rect[0] + (f32::from(col) + 0.5) * metrics.cell_w,
         rect[1] + (f32::from(row) + 0.5) * metrics.cell_h,
@@ -1216,7 +1216,7 @@ fn the_wheel_reports_to_a_tracking_program_and_turns_into_arrow_keys_on_the_alte
     let mut world = World::start(one_terminal());
     world.open_desktop();
     let a = cell(&world, 1, 0);
-    let row = Fonts::default().metrics(FONT_SIZE).cell_h;
+    let row = Metrics::of(FONT_SIZE).cell_h;
     let wheel = |world: &mut World, rows: f32| {
         world.gesture(|app| {
             app.runtime
@@ -1647,7 +1647,7 @@ fn a_screen_reader_reads_the_terminal_that_holds_the_keys_with_its_screen_and_cu
         "the first lines scrolled off: {heard:?}"
     );
     let (x, y) = cell(&world, 1, 0);
-    let row = Fonts::default().metrics(FONT_SIZE).cell_h;
+    let row = Metrics::of(FONT_SIZE).cell_h;
     world.gesture(|app| {
         app.runtime
             .wheel_event(WheelEvent::new(0.0, 200.0 * row).at(x, y))

@@ -1262,7 +1262,7 @@ fn an_agent_in_its_own_window_is_marked_and_sent_from_there_and_its_draft_comes_
             .runtime
             .presented("terminal.r1")
             .expect("r1 is drawn in its window");
-        let metrics = attn_term::Fonts::default().metrics(attn_term::FONT_SIZE);
+        let metrics = attn_term::Metrics::of(attn_term::FONT_SIZE);
         (
             rect[0] + (f32::from(col) + 0.5) * metrics.cell_w,
             rect[1] + (f32::from(row) + 0.5) * metrics.cell_h,

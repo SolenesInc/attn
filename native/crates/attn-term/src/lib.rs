@@ -14,7 +14,7 @@ pub mod selection;
 mod sprites;
 mod vt;
 
-pub use font::{FONT_SIZE, Fonts, Metrics};
+pub use font::{FONT_SIZE, Metrics};
 pub use grid::{
     Cell, Cursor, CursorStyle, Grapheme, Grid, Image, Overlay, OverlayKind, Rgb, Width,
 };

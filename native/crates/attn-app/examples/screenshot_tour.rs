@@ -33,7 +33,7 @@ use attn_protocol::{
     SessionMessagesGetResultMessage, SessionUsage, SessionUsageModel, SharedCodexBlocker,
     SharedCodexState, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
-use attn_term::{FONT_SIZE, Fonts};
+use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
@@ -327,7 +327,7 @@ fn cell(world: &World, col: u16, row: u16) -> (f32, f32) {
         .runtime()
         .presented("terminal.r-a")
         .expect("terminal a is drawn");
-    let metrics = Fonts::default().metrics(FONT_SIZE);
+    let metrics = Metrics::of(FONT_SIZE);
     (
         rect[0] + (f32::from(col) + 0.5) * metrics.cell_w,
         rect[1] + (f32::from(row) + 0.5) * metrics.cell_h,

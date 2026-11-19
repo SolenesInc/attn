@@ -4,7 +4,7 @@ use attn_protocol::{
     Desktop, DesktopPane, GardenSeedsUpdatedMessage, OpenSeedResultMessage, OutpostInfo, PartyView,
     ProfileArrangementChangedMessage,
 };
-use attn_term::{FONT_SIZE, Fonts};
+use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::{Request, Target, World, message, tree};
 use rune::WheelEvent;
 use serde_json::{Value, json};
@@ -124,7 +124,7 @@ fn cell(world: &World, col: u16, row: u16) -> (f32, f32) {
         .runtime()
         .presented("terminal.r-a")
         .expect("r-a is drawn");
-    let metrics = Fonts::default().metrics(FONT_SIZE);
+    let metrics = Metrics::of(FONT_SIZE);
     (
         rect[0] + (f32::from(col) + 0.5) * metrics.cell_w,
         rect[1] + (f32::from(row) + 0.5) * metrics.cell_h,
@@ -275,7 +275,7 @@ fn marks_ids_in_history_while_the_user_reads_it_and_the_terminal_keeps_writing()
     assert_eq!(marks(&mut world), []);
 
     let at = cell(&world, 1, 1);
-    let row = Fonts::default().metrics(FONT_SIZE).cell_h;
+    let row = Metrics::of(FONT_SIZE).cell_h;
     world.gesture(|app| {
         app.runtime
             .wheel_event(WheelEvent::new(0.0, (rows as f32) * row).at(at.0, at.1))

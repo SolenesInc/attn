@@ -2,17 +2,18 @@
 //! fallback, swash rasterization, sprite rects for box drawing), one 32-byte instance per cell
 //! kept in a GPU buffer and rewritten by dirty row, and a WGSL shader.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use parley::{FontFamily, FontStyle, FontWeight, PositionedLayoutItem, StyleProperty};
+use parley::PositionedLayoutItem;
 use rune::compose::DeviceKey;
 use rune::render::EffectSite;
-use rune::text::{SmoothingInk, smoothed_glyph};
+use rune::text::{Ink, SmoothingInk, smoothed_glyph};
+use rune::{Family, TextStyle};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith, image::Content};
 use swash::zeno::Format;
 
-use crate::font::{FAMILY, Fonts, Metrics, fit};
+use crate::font::{FAMILY, Metrics, fit};
 use crate::grid::{
     BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, OverlayKind, Rgb, STRIKETHROUGH, UNDERLINE, Width,
 };
@@ -130,7 +131,6 @@ struct GlyphKey {
 }
 
 struct Raster {
-    fonts: Fonts,
     scx: ScaleContext,
     scale: f32,
     metrics: Metrics,
@@ -143,7 +143,6 @@ struct Raster {
 impl Raster {
     fn new(scale: f32, metrics: Metrics) -> Raster {
         let mut r = Raster {
-            fonts: Fonts::default(),
             scx: ScaleContext::new(),
             scale,
             metrics,
@@ -164,30 +163,22 @@ impl Raster {
         self.metrics.device_cell(self.scale)
     }
 
-    fn layout(&mut self, text: &str, style: u8) -> parley::Layout<()> {
-        let (fcx, lcx) = self.fonts.contexts();
-        let mut b = lcx.ranged_builder(fcx, text, self.scale, true);
+    /// `text` shaped in device pixels through Rune's text system, which loads the system font
+    /// that has a character the terminal's families lack, as Core Text gives WebKit one.
+    fn layout(&self, text: &str, style: u8) -> Rc<parley::Layout<Ink>> {
         let family = if needs_emoji(text) {
             EMOJI_FAMILY
         } else {
             FAMILY
         };
-        b.push_default(StyleProperty::FontFamily(FontFamily::Source(
-            Cow::Borrowed(family),
-        )));
-        b.push_default(StyleProperty::FontSize(self.metrics.font_size));
-        b.push_default(StyleProperty::LineHeight(parley::LineHeight::Absolute(
-            self.metrics.cell_h,
-        )));
-        if style & BOLD != 0 {
-            b.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
-        }
+        let weight = if style & BOLD != 0 { 700.0 } else { 400.0 };
+        let mut text_style = TextStyle::new(self.metrics.font_size * self.scale, weight)
+            .family(Family::Named(family))
+            .lh(self.metrics.cell_h * self.scale);
         if style & ITALIC != 0 {
-            b.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+            text_style = text_style.italic();
         }
-        let mut l = b.build(text);
-        l.break_all_lines(None);
-        l
+        rune::text::layout(text, &[], text_style, None)
     }
 
     /// The grapheme drawn into an RGBA canvas one or two cells wide, with how far its top-left
@@ -1331,7 +1322,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn a_character_the_terminal_families_lack_draws_from_an_installed_font_that_has_it() {
-        let metrics = Fonts::default().metrics(FONT_SIZE);
+        let metrics = Metrics::of(FONT_SIZE);
         let mut raster = Raster::new(2.0, metrics);
         for text in ["\u{23f5}", "\u{23f5}\u{23f5} auto mode on"] {
             assert!(

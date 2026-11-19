@@ -12,7 +12,7 @@ use attn_protocol::{
 };
 use attn_term::attach::{self, Attached, Chunk, Output, Policy, Snapshot, Stream};
 use attn_term::mouse::{self, Action, WheelRows};
-use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Vt, responses};
+use attn_term::{FONT_SIZE, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Vt, responses};
 use attn_ui::colors::{TerminalColors, to_hex};
 use rune::{Live, Tx};
 
@@ -218,7 +218,6 @@ pub struct Terminals {
     connected: bool,
     daemon_instance: String,
     focused: Option<String>,
-    fonts: Option<Fonts>,
     metrics: Option<Metrics>,
     theme: TerminalColors,
     /// A screen changed since the renderer last took the grids.
@@ -546,11 +545,7 @@ impl Terminals {
     }
 
     pub fn metrics(&mut self) -> Metrics {
-        *self.metrics.get_or_insert_with(|| {
-            self.fonts
-                .get_or_insert_with(Fonts::default)
-                .metrics(FONT_SIZE)
-        })
+        *self.metrics.get_or_insert_with(|| Metrics::of(FONT_SIZE))
     }
 
     /// A terminal's tile was laid out `w`×`h` points at `scale`: the grid that fits is the size
