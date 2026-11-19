@@ -11,22 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
-
-func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
-	gitWorktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
-		return client.ObserveLiveWorktrees(ctx, mainRepo)
-	})
-	if err != nil {
-		return storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(mainRepo))
-	}
-	return d.listedWorktreesAsProtocol(mainRepo, gitWorktrees)
-}
 
 func storedWorktreesAsProtocol(storedWorktrees []*store.Worktree) []protocol.Worktree {
 	protoWorktrees := make([]protocol.Worktree, len(storedWorktrees))
@@ -436,12 +425,6 @@ func (e *worktreeNotFoundError) Error() string {
 	return "worktree not found in registry: " + e.path
 }
 
-func (d *Daemon) handleListWorktrees(conn net.Conn, msg *protocol.ListWorktreesMessage) {
-	protoWorktrees := d.doListWorktrees(msg.MainRepo)
-	d.publishFact(FactWorktreeListReconciled, msg.MainRepo, protoWorktrees)
-	d.sendOK(conn)
-}
-
 func (d *Daemon) handleCreateWorktree(conn net.Conn, msg *protocol.CreateWorktreeMessage) {
 	_, err := d.doCreateWorktree(msg)
 	if err != nil {
@@ -466,14 +449,6 @@ func (d *Daemon) deleteWorktree(msg *protocol.DeleteWorktreeMessage) protocol.De
 	}
 	result.RequestID = msg.RequestID
 	return result
-}
-
-func (d *Daemon) handleListWorktreesWS(client *wsClient, msg *protocol.ListWorktreesMessage) {
-	protoWorktrees := d.doListWorktrees(msg.MainRepo)
-	d.sendToClient(client, &protocol.WebSocketEvent{
-		Event:     protocol.EventWorktreesUpdated,
-		Worktrees: protoWorktrees,
-	})
 }
 
 func (d *Daemon) handleCreateWorktreeWS(client *wsClient, msg *protocol.CreateWorktreeMessage) {
@@ -525,33 +500,4 @@ func (d *Daemon) deleteWorktreeHere(_ context.Context, msg protocol.DeleteWorktr
 		result.Forceable = protocol.Ptr(deleteErr.forceable)
 	}
 	return result, nil
-}
-
-func (d *Daemon) projectWorktreeCreated(ev bus.Event) {
-	worktree, ok := decodeFact[protocol.Worktree](d, ev)
-	if !ok {
-		return
-	}
-	d.wsHub.Broadcast(&protocol.WebSocketEvent{
-		Event:     protocol.EventWorktreeCreated,
-		Worktrees: []protocol.Worktree{worktree},
-	})
-}
-
-func (d *Daemon) projectWorktreeDeleted(ev bus.Event) {
-	d.wsHub.Broadcast(&protocol.WebSocketEvent{
-		Event:     protocol.EventWorktreeDeleted,
-		Worktrees: []protocol.Worktree{{Path: ev.Subject}},
-	})
-}
-
-func (d *Daemon) projectWorktreesUpdated(ev bus.Event) {
-	worktrees, ok := decodeFact[[]protocol.Worktree](d, ev)
-	if !ok {
-		return
-	}
-	d.wsHub.Broadcast(&protocol.WebSocketEvent{
-		Event:     protocol.EventWorktreesUpdated,
-		Worktrees: worktrees,
-	})
 }

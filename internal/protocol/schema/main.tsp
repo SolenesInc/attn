@@ -598,9 +598,8 @@ model ClientHelloMessage {
   // for broadcasts, or sends it initial_state.
   client_token?: string;
   browser_host_token?: string;  // <data-dir>/browser-host-token, which the app mints and sends
-  // Stable for as long as the client process lives, new on every restart. It is
-  // what lets the daemon tell a reconnecting client why it was hung up on
-  // (client_eviction_notice); a client that omits it simply gets no notice.
+  // Stable for as long as the client process lives, new on every restart. The
+  // daemon logs it with the hello so a client's connections can be told apart.
   client_id?: string;
   // The profile this client last selected, remembered by the client alone. The
   // daemon scopes arrangement broadcasts to it; absent, deleted or unknown, the
@@ -1816,12 +1815,6 @@ model PRVisitedMessage {
   id: string;
 }
 
-@extension("x-on", #{ here: true })
-model ListWorktreesMessage {
-  cmd: "list_worktrees";
-  main_repo: string;
-}
-
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model CreateWorktreeMessage {
   cmd: "create_worktree";
@@ -2125,11 +2118,6 @@ model WorktreeCreation {
   path: string;
   branch: string;
   error?: string;
-}
-
-model FetchRemotesMessage {
-  cmd: "fetch_remotes";
-  repo: string;
 }
 
 model EnsureRepoMessage {
@@ -3527,18 +3515,6 @@ model DesktopShowLeafMessage {
   leaf_id: string;
 }
 
-// Gives a pane to an agent of the desktop's profile that has none, split beside
-// anchor_pane_id or, absent, beside the active leaf. The new pane becomes active.
-model DesktopPlaceSessionMessage {
-  cmd: "desktop_place_session";
-  request_id: string;
-  desktop_id: string;
-  session_id: SessionID;
-  anchor_pane_id?: string;
-  direction?: LayoutSplitDirection;
-  new_pane_share?: float64;     // The new pane's share of the split, in (0,1)
-}
-
 // Moves a pane or tile beside anchor_id, within one desktop or between two
 // desktops of one profile. A target shortcut slot is resolved or created; absent
 // both target fields, create a desktop in the lowest free shortcut slot.
@@ -4095,17 +4071,6 @@ model ProfileArrangementChangedMessage {
   desktops: Desktop[];
   moved_leaves?: LeafMoved[];   // Every leaf a move between desktops carried, only on the arrangement that move produced
   request_id?: string;          // Only on the copy answering the receiving client's own request (a spawn's session id), sent before its result
-}
-
-model BackgroundLaunchMessage {
- event: "background_launch";
- session_id: SessionID;
- profile_id: string;
- desktop_id: string;
- name: string;
- requested_by: string;
- desktop_label: string;
- kind: LaunchDesktopKind;
 }
 
 enum LaunchDesktopKind { automation, crew }
@@ -4810,16 +4775,6 @@ model RateLimitedMessage {
   rate_limit_reset_at: string; // ISO timestamp
 }
 
-model WorktreeCreatedEvent {
-  event: "worktree_created";
-  worktrees: Worktree[];
-}
-
-model WorktreeDeletedEvent {
-  event: "worktree_deleted";
-  worktrees: Worktree[];
-}
-
 model WorktreeListResultEvent {
   event: "worktree_list_result";
   request_id?: string;
@@ -4856,11 +4811,6 @@ model WorktreeStateChangedEvent {
 model WorktreeSweptEvent {
   event: "worktree_swept";
   sweep_entry: WorktreeSweepEntry;
-}
-
-model WorktreesUpdatedMessage {
-  event: "worktrees_updated";
-  worktrees?: Worktree[];
 }
 
 model CreateWorktreeResultMessage {
@@ -4946,12 +4896,6 @@ model InspectPathResultMessage {
   event: "inspect_path_result";
   inspection?: PathInspection;
   request_id?: string;
-  success: boolean;
-  error?: string;
-}
-
-model FetchRemotesResultMessage {
-  event: "fetch_remotes_result";
   success: boolean;
   error?: string;
 }
@@ -5424,18 +5368,6 @@ model CommandErrorMessage {
   terminal_id?: string;
 }
 
-// Sent once to a reconnecting client that the daemon had hung up on for
-// falling behind, keyed on the client_id it sent with its hello. The close
-// status that explains an eviction travels the same TCP stream as the backlog
-// that caused it, so it can arrive long after the disconnect; this is how the
-// reason reaches the client instead.
-model ClientEvictionNoticeMessage {
-  event: "client_eviction_notice";
-  evicted_at: string;          // RFC3339, when the daemon dropped the connection
-  reason: string;              // the close reason the client could not read, e.g. "client too slow"
-  undelivered_messages: int32; // messages the daemon gave up on handing over
-}
-
 model BrowserControlRequestMessage {
   event: "browser_control_request";
   request_id: string;
@@ -5705,29 +5637,11 @@ model DocumentRevision {
 // page it named a write ago. Use `limit` and let each delivery carry the current
 // window. One-shot doc_query keeps `after` exactly as it is, because a single
 // read has one instant and nothing to move under it.
-// On the WebSocket the connection is multiplexed, so the subscription needs an
-// identity of its own: `subscription_id` is client-minted, required there, and
-// refused on the unix socket where a second subscription means a second
-// connection and an id would name nothing. Deliveries then arrive as
-// DocSubscriptionDeliveryMessage rather than as responses on this connection,
-// and doc_unsubscribe is the way out.
 @extension("x-on", #{ home: true })
 model DocSubscribeMessage {
   "cmd": "doc_subscribe";
   "query": DocumentQuery;
   "have"?: DocumentRevision[];
-  "subscription_id"?: string;
-}
-
-// End one live query. The way out for doc_subscribe's way in, and the only one
-// a WebSocket client has short of dropping the socket: a tile that unmounts must
-// stop the daemon re-running its query on every write to that collection.
-//
-// Unknown ids are ignored rather than refused — an unsubscribe racing the
-// daemon's own doc_subscription_ended is the ordinary case, not an error.
-model DocUnsubscribeMessage {
-  "cmd": "doc_unsubscribe";
-  "subscription_id": string;
 }
 
 // One delivery of a live query's window, and the whole client contract is one
@@ -5761,40 +5675,6 @@ model DocSubscribeResult {
   "as_of_seq": safeint;
   "order": string[];
   "upsert": StoredDocument[];
-}
-
-// One delivery of a WebSocket subscription: DocSubscribeResult's four fields
-// verbatim, plus the id that says which subscription they belong to. The client
-// rule is unchanged — render `order`, take bodies from `upsert` or cache, forget
-// the rest — because this is the same delivery travelling over a multiplexed
-// connection rather than a dedicated one.
-model DocSubscriptionDeliveryMessage {
-  event: "doc_subscription_delivery";
-  "subscription_id": string;
-  "delivery": int32;
-  "as_of_seq": safeint;
-  "order": string[];
-  "upsert": StoredDocument[];
-}
-
-// A WebSocket subscription is over, and no further delivery carries its id.
-//
-// It is the only failure channel a subscription has: a refusal at subscribe time
-// (an invalid query, an `after` cursor, a collection never declared, or one
-// client holding too many subscriptions) and an ending after acceptance (the
-// collection was undefined, or redeclared without a field the query reads) both
-// arrive here. `code` is what a host acts on and `error` is what a person reads;
-// nothing may match on the English.
-//
-// The codes: `invalid_query`, `undeclared_collection`, `subscription_limit`
-// refuse a subscription that never started; `collection_undefined` and
-// `collection_redeclared` end one that did — which is what lets a UI host tell
-// "kill the tile" from "resubscribe".
-model DocSubscriptionEndedMessage {
-  event: "doc_subscription_ended";
-  "subscription_id": string;
-  "code": string;
-  "error": string;
 }
 
 // ============================================================================
@@ -8918,7 +8798,6 @@ alias DaemonEvent =
   | ProfilesChangedMessage
   | ProfileArrangementChangedMessage
   | DesktopTileContentMessage
-  | BackgroundLaunchMessage
   | LaunchDesktopResultMessage
   | RenameResultMessage
   | SessionContextWindowCapResultMessage
@@ -8954,8 +8833,6 @@ alias DaemonEvent =
   | RefreshPRsResultMessage
   | FetchPRDetailsResultMessage
   | RateLimitedMessage
-  | WorktreeCreatedEvent
-  | WorktreeDeletedEvent
   | WorktreeStateChangedEvent
   | WorktreeSweptEvent
   | KeptConversationListResultEvent
@@ -8966,7 +8843,6 @@ alias DaemonEvent =
   | WorktreeKeepResultEvent
   | WorktreeSweepLogResultEvent
   | WorktreeRefreshResultEvent
-  | WorktreesUpdatedMessage
   | CreateWorktreeResultMessage
   | DeleteWorktreeResultMessage
   | GitOperationStartedMessage
@@ -8982,7 +8858,6 @@ alias DaemonEvent =
   | OutpostsUpdatedMessage
   | PluginActionResultMessage
   | RecentLocationsResultMessage
-  | FetchRemotesResultMessage
   | EnsureRepoResultMessage
   | GetRepoInfoResultMessage
   | AutomationApplyResultMessage
@@ -9039,7 +8914,6 @@ alias DaemonEvent =
   | AppPerformanceRequestMessage
   | BrowserControlRequestMessage
   | CommandErrorMessage
-  | ClientEvictionNoticeMessage
   | AskAnswerResultMessage
   | AskImageResultMessage
   | AskSeedMentionsResultMessage
@@ -9071,9 +8945,7 @@ alias DaemonEvent =
   | MarkdownAnnotationsSaveResultMessage
   | MarkdownAnnotationsSubmitResultMessage
   | BusStatusResultMessage
-  | BusSetConsumerEnabledResultMessage
-  | DocSubscriptionDeliveryMessage
-  | DocSubscriptionEndedMessage;
+  | BusSetConsumerEnabledResultMessage;
 
 @extension("x-on", #{ home: true })
 model TerminalExitedMessage {

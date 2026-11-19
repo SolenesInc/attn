@@ -349,6 +349,16 @@ func (m *mergedPullRequests) list(pulls ...mergedPullRequest) {
 	m.pulls = pulls
 }
 
+func repoInfoWorktrees(app *testworld.Peer, repo string) []protocol.Worktree {
+	app.T.Helper()
+	info := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo},
+		protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
+	if !info.Success || info.Info == nil {
+		app.T.Fatalf("repository query for %s = %+v", repo, info)
+	}
+	return info.Info.Worktrees
+}
+
 func refreshWorktrees(t *testing.T, cli *client.Client) {
 	t.Helper()
 	result, err := cli.WorktreeRefresh()

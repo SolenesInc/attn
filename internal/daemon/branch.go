@@ -160,25 +160,6 @@ func (d *Daemon) readRepoInfoHere(ctx context.Context, msg protocol.GetRepoInfoM
 	}, nil
 }
 
-func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemotesMessage) {
-	d.life.Go("handleFetchRemotesWS", func() {
-		err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
-			return client.FetchRemotes(ctx, msg.Repo)
-		})
-		result := &protocol.WebSocketEvent{
-			Event:   protocol.EventFetchRemotesResult,
-			Success: protocol.Ptr(err == nil),
-		}
-		if err != nil {
-			result.Error = protocol.Ptr(err.Error())
-			d.logf("FetchRemotes failed for %s: %v", msg.Repo, err)
-		} else {
-			d.logf("FetchRemotes succeeded for %s", msg.Repo)
-		}
-		d.sendToClient(client, result)
-	})
-}
-
 func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMessage) {
 	d.life.Go("handleEnsureRepoWS", func() {
 		result := &protocol.WebSocketEvent{

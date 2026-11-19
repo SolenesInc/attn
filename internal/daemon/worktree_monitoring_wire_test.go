@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -59,12 +60,8 @@ func TestBrowsingARepositoryReadsFreshGitWithoutEnrollingIt(t *testing.T) {
 	if !info.Success || info.Info == nil || info.Info.CurrentBranch != "main" {
 		t.Fatalf("repository query = %+v", info)
 	}
-	listed := testworld.Request(app, protocol.ListWorktreesMessage{Cmd: protocol.CmdListWorktrees, MainRepo: unknown},
-		protocol.EventWorktreesUpdated, func(protocol.WebSocketEvent) bool { return true })
-	for _, rows := range [][]protocol.Worktree{info.Info.Worktrees, listed.Worktrees} {
-		if len(rows) != 1 || rows[0].Path != external || rows[0].Branch != "external" || rows[0].CreatedAt != nil {
-			t.Errorf("query = %+v, want fresh external checkout without an invented creation date", rows)
-		}
+	if rows := info.Info.Worktrees; len(rows) != 1 || rows[0].Path != external || rows[0].Branch != "external" || rows[0].CreatedAt != nil {
+		t.Errorf("query = %+v, want fresh external checkout without an invented creation date", rows)
 	}
 	if tracked, err := cli.WorktreeList(unknown, 0); err != nil || len(tracked.Worktrees) != 0 {
 		t.Fatalf("browsing registered worktrees: %+v, %v", tracked, err)
@@ -81,42 +78,39 @@ func TestBrowsingARepositoryReadsFreshGitWithoutEnrollingIt(t *testing.T) {
 }
 
 func TestRepositoryQueriesLeaveRegistryRemovalToTheSweep(t *testing.T) {
-	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	repo := newRepo(t, "shop")
-	path := createWorktree(t, app, repo, "feature")
-	createdAt := sweepCreatedAt(t, app, path)
-	runGit(t, path, "branch", "-m", "renamed")
-	info := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo},
-		protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
-	if !info.Success || info.Info == nil || len(info.Info.Worktrees) != 1 {
-		t.Fatalf("repository query = %+v", info)
-	}
-	wt := info.Info.Worktrees[0]
-	if wt.Branch != "renamed" || protocol.Deref(wt.CreatedAt) != createdAt.Format(time.RFC3339) {
-		t.Errorf("fresh Git and stored metadata = %+v", wt)
-	}
-	runGit(t, repo, "worktree", "remove", path)
-	info = testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo},
-		protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
-	if !info.Success || info.Info == nil {
-		t.Fatalf("repository query = %+v", info)
-	}
-	listed := testworld.Request(app, protocol.ListWorktreesMessage{Cmd: protocol.CmdListWorktrees, MainRepo: repo},
-		protocol.EventWorktreesUpdated, func(protocol.WebSocketEvent) bool { return true })
-	if len(info.Info.Worktrees) != 0 || len(listed.Worktrees) != 0 {
-		t.Errorf("queries still show a removed checkout: info=%+v, list=%+v", info.Info.Worktrees, listed.Worktrees)
-	}
-	if tracked, err := cli.WorktreeList(repo, 0); err != nil || !slices.Equal(worktreeCreatePaths(tracked.Worktrees), []string{path}) {
-		t.Fatalf("query changed registry: %+v, %v", tracked, err)
-	}
-	refreshWorktrees(t, cli)
-	testworld.Await(app, protocol.EventWorktreeDeleted, func(e protocol.WebSocketEvent) bool {
-		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == path
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		repo := newRepo(t, "shop")
+		path := createWorktree(t, app, repo, "feature")
+		createdAt := sweepCreatedAt(t, cli, repo, path)
+		runGit(t, path, "branch", "-m", "renamed")
+		info := testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo},
+			protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
+		if !info.Success || info.Info == nil || len(info.Info.Worktrees) != 1 {
+			t.Fatalf("repository query = %+v", info)
+		}
+		wt := info.Info.Worktrees[0]
+		if wt.Branch != "renamed" || protocol.Deref(wt.CreatedAt) != createdAt.Format(time.RFC3339) {
+			t.Errorf("fresh Git and stored metadata = %+v", wt)
+		}
+		runGit(t, repo, "worktree", "remove", path)
+		info = testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo},
+			protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
+		if !info.Success || info.Info == nil {
+			t.Fatalf("repository query = %+v", info)
+		}
+		if len(info.Info.Worktrees) != 0 {
+			t.Errorf("the repository query still shows a removed checkout: %+v", info.Info.Worktrees)
+		}
+		if tracked, err := cli.WorktreeList(repo, 0); err != nil || !slices.Equal(worktreeCreatePaths(tracked.Worktrees), []string{path}) {
+			t.Fatalf("query changed registry: %+v, %v", tracked, err)
+		}
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		if tracked, err := cli.WorktreeList(repo, 0); err != nil || len(tracked.Worktrees) != 0 {
+			t.Errorf("sweep left the removed checkout registered: %+v, %v", tracked, err)
+		}
 	})
-	if tracked, err := cli.WorktreeList(repo, 0); err != nil || len(tracked.Worktrees) != 0 {
-		t.Errorf("sweep left the removed checkout registered: %+v, %v", tracked, err)
-	}
 }
 
 func TestRepositoryQueriesLetAutomaticCleanupFinish(t *testing.T) {
@@ -129,8 +123,6 @@ func TestRepositoryQueriesLetAutomaticCleanupFinish(t *testing.T) {
 	inspection.arm(t)
 	refreshWorktrees(t, cli)
 	inspection.awaitBlocked(t)
-	testworld.Request(app, protocol.ListWorktreesMessage{Cmd: protocol.CmdListWorktrees, MainRepo: repo},
-		protocol.EventWorktreesUpdated, func(protocol.WebSocketEvent) bool { return true })
 	testworld.Request(app, protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: repo},
 		protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
 	inspection.release(t)

@@ -2,7 +2,9 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -11,12 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 type docLiveView map[string]protocol.StoredDocument
@@ -53,47 +52,19 @@ func docRevisions(docs []protocol.StoredDocument) []protocol.DocumentRevision {
 	return have
 }
 
-func docSubscribeHolding(app *testworld.Peer, q protocol.DocumentQuery, have []protocol.DocumentRevision) string {
-	id := uuid.NewString()
-	app.Send(protocol.DocSubscribeMessage{Cmd: protocol.CmdDocSubscribe, Query: q, Have: have, SubscriptionID: protocol.Ptr(id)})
-	return id
-}
-
-func docNextDelivery(app *testworld.Peer, subscription string) protocol.DocSubscriptionDeliveryMessage {
-	app.T.Helper()
-	return awaitDelivery(app, subscription, func(protocol.DocSubscriptionDeliveryMessage) bool { return true })
-}
-
-func docSubscriptionEnded(app *testworld.Peer, subscription string) protocol.DocSubscriptionEndedMessage {
-	app.T.Helper()
-	return testworld.Await(app, protocol.EventDocSubscriptionEnded, func(m protocol.DocSubscriptionEndedMessage) bool {
-		return m.SubscriptionID == subscription
-	})
-}
-
-func docSettle(app *testworld.Peer, subscription string, seq int) protocol.DocSubscriptionDeliveryMessage {
-	app.T.Helper()
-	for {
-		if delivered := docNextDelivery(app, subscription); delivered.AsOfSeq >= seq {
-			return delivered
-		}
-	}
-}
-
 type docSocketSubscription struct {
 	conn net.Conn
 	dec  *json.Decoder
 }
 
-func docSocketSubscribe(t *testing.T, w *world, msg protocol.DocSubscribeMessage) *docSocketSubscription {
+func docSubscribe(t *testing.T, w *world, q protocol.DocumentQuery, have []protocol.DocumentRevision) *docSocketSubscription {
 	t.Helper()
 	conn, err := w.DialUnix()
 	if err != nil {
 		t.Fatalf("dial the daemon's socket: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	msg.Cmd = protocol.CmdDocSubscribe
-	if err := json.NewEncoder(conn).Encode(msg); err != nil {
+	if err := json.NewEncoder(conn).Encode(protocol.DocSubscribeMessage{Cmd: protocol.CmdDocSubscribe, Query: q, Have: have}); err != nil {
 		t.Fatalf("send doc_subscribe: %v", err)
 	}
 	return &docSocketSubscription{conn: conn, dec: json.NewDecoder(conn)}
@@ -118,15 +89,50 @@ func (s *docSocketSubscription) window(t *testing.T) *protocol.DocSubscribeResul
 	return resp.DocSubscribeResult
 }
 
+func (s *docSocketSubscription) await(t *testing.T, match func(*protocol.DocSubscribeResult) bool) *protocol.DocSubscribeResult {
+	t.Helper()
+	for {
+		if window := s.window(t); match(window) {
+			return window
+		}
+	}
+}
+
+func (s *docSocketSubscription) ended(t *testing.T) protocol.Response {
+	t.Helper()
+	for {
+		if resp := s.next(t); !resp.Ok {
+			return resp
+		}
+	}
+}
+
+func (s *docSocketSubscription) hangUp(t *testing.T) {
+	t.Helper()
+	if err := s.conn.(interface{ CloseWrite() error }).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.conn.SetReadDeadline(time.Now().Add(fakeagent.HangGuard))
+	for {
+		var resp protocol.Response
+		if err := s.dec.Decode(&resp); err != nil {
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			t.Fatalf("waiting for the daemon to end the subscription: %v", err)
+		}
+	}
+}
+
 func TestALiveQueryDeliversItsWindowThenOnlyWhatChangedInIt(t *testing.T) {
 	w := newWorld(t)
-	cli, app := w.Client(), w.App()
+	cli := w.Client()
 	defineRequests(t, cli, gateNS)
 	defineRequests(t, cli, "app/other")
 	put(t, cli, gateNS, "already-here", `{"status":"pending"}`)
 
-	first := subscribeOverTheWire(app, requestsWhere(gateNS))
-	if opened := docNextDelivery(app, first); opened.Delivery != 1 || docIDs(opened.Upsert) != "already-here" || strings.Join(opened.Order, " ") != "already-here" {
+	first := docSubscribe(t, w, requestsWhere(gateNS), nil)
+	if opened := first.window(t); opened.Delivery != 1 || docIDs(opened.Upsert) != "already-here" || strings.Join(opened.Order, " ") != "already-here" {
 		t.Fatalf("the first delivery = #%d ordering %v with bodies %q, want #1 with the document already there", opened.Delivery, opened.Order, docIDs(opened.Upsert))
 	}
 
@@ -139,7 +145,7 @@ func TestALiveQueryDeliversItsWindowThenOnlyWhatChangedInIt(t *testing.T) {
 	put(t, cli, "app/other", "theirs", `{"status":"pending"}`)
 	written := put(t, cli, gateNS, "b", `{"status":"approved"}`)
 
-	woken := docNextDelivery(app, first)
+	woken := first.window(t)
 	if woken.Delivery != 2 || strings.Join(woken.Order, " ") != "already-here b" || docIDs(woken.Upsert) != "b" || woken.AsOfSeq < written.Seq {
 		t.Fatalf("after a no-op delete, a refused write, another namespace's write and one real write, the next delivery = #%d at seq %d ordering %v with bodies %q; want #2 at or after seq %d with only b's body",
 			woken.Delivery, woken.AsOfSeq, woken.Order, docIDs(woken.Upsert), written.Seq)
@@ -148,17 +154,17 @@ func TestALiveQueryDeliversItsWindowThenOnlyWhatChangedInIt(t *testing.T) {
 		t.Fatalf("b arrived as %s", body)
 	}
 
-	second := subscribeOverTheWire(app, requestsWhere(gateNS))
-	if joined := docNextDelivery(app, second); joined.Delivery != 1 || docIDs(joined.Upsert) != "already-here b" {
-		t.Fatalf("a second subscription on the same connection opened with #%d carrying %q, want every body: it holds nothing yet", joined.Delivery, docIDs(joined.Upsert))
+	second := docSubscribe(t, w, requestsWhere(gateNS), nil)
+	if joined := second.window(t); joined.Delivery != 1 || docIDs(joined.Upsert) != "already-here b" {
+		t.Fatalf("a second subscription opened with #%d carrying %q, want every body: it holds nothing yet", joined.Delivery, docIDs(joined.Upsert))
 	}
 
 	removed, err := cli.DocDelete(gateNS, requests, "already-here", nil)
 	if err != nil || !removed.Existed {
 		t.Fatalf("delete = %+v, %v", removed, err)
 	}
-	for subscription, want := range map[string]int{first: 3, second: 2} {
-		if emptied := docNextDelivery(app, subscription); emptied.Delivery != want || strings.Join(emptied.Order, " ") != "b" || len(emptied.Upsert) != 0 {
+	for subscription, want := range map[*docSocketSubscription]int{first: 3, second: 2} {
+		if emptied := subscription.window(t); emptied.Delivery != want || strings.Join(emptied.Order, " ") != "b" || len(emptied.Upsert) != 0 {
 			t.Errorf("after the removal a subscription got #%d ordering %v with bodies %q; want #%d holding only b and no bodies", emptied.Delivery, emptied.Order, docIDs(emptied.Upsert), want)
 		}
 	}
@@ -166,7 +172,7 @@ func TestALiveQueryDeliversItsWindowThenOnlyWhatChangedInIt(t *testing.T) {
 
 func TestALimitedWindowLetsTheNextDocumentInWhenOneLeaves(t *testing.T) {
 	w := newWorld(t)
-	cli, app := w.Client(), w.App()
+	cli := w.Client()
 	defineRequests(t, cli, gateNS)
 	for i, id := range []string{"a", "b", "c"} {
 		put(t, cli, gateNS, id, fmt.Sprintf(`{"status":"%d"}`, i+1))
@@ -176,15 +182,15 @@ func TestALimitedWindowLetsTheNextDocumentInWhenOneLeaves(t *testing.T) {
 	ranked.Limit = protocol.Ptr(2)
 	view := docLiveView{}
 
-	subscription := subscribeOverTheWire(app, ranked)
-	opened := docNextDelivery(app, subscription)
+	subscription := docSubscribe(t, w, ranked, nil)
+	opened := subscription.window(t)
 	view.apply(t, opened.Order, opened.Upsert)
 	if got := strings.Join(opened.Order, " "); got != "a b" {
 		t.Fatalf("the window opened on %q, want a b", got)
 	}
 
 	edited := put(t, cli, gateNS, "b", `{"status":"2 edited"}`)
-	moved := awaitDelivery(app, subscription, reached(edited.Seq))
+	moved := subscription.await(t, reached(edited.Seq))
 	bodies := view.apply(t, moved.Order, moved.Upsert)
 	if got := strings.Join(moved.Order, " "); got != "a b" || docIDs(moved.Upsert) != "b" {
 		t.Fatalf("after editing b the window is %q with bodies %q, want a b with only b's body", got, docIDs(moved.Upsert))
@@ -197,7 +203,7 @@ func TestALimitedWindowLetsTheNextDocumentInWhenOneLeaves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entered := awaitDelivery(app, subscription, reached(removed.Seq))
+	entered := subscription.await(t, reached(removed.Seq))
 	view.apply(t, entered.Order, entered.Upsert)
 	if got := strings.Join(entered.Order, " "); got != "b c" || docIDs(entered.Upsert) != "c" {
 		t.Fatalf("after a left the window is %q with bodies %q, want b c with only c's body", got, docIDs(entered.Upsert))
@@ -206,7 +212,7 @@ func TestALimitedWindowLetsTheNextDocumentInWhenOneLeaves(t *testing.T) {
 
 func TestResumingALiveQuerySendsOnlyWhatChangedWhileAway(t *testing.T) {
 	w := newWorld(t)
-	cli, app := w.Client(), w.App()
+	cli := w.Client()
 	putIn := func(collection, id, body string) int {
 		t.Helper()
 		written, err := cli.DocPut(gateNS, collection, id, body, nil)
@@ -264,13 +270,13 @@ func TestResumingALiveQuerySendsOnlyWhatChangedWhileAway(t *testing.T) {
 		window := protocol.DocumentQuery{Namespace: gateNS, Collection: collection, Sort: &protocol.DocumentSort{Field: "status"}, Limit: protocol.Ptr(2)}
 		view := docLiveView{}
 
-		first := subscribeOverTheWire(app, window)
-		opened := docNextDelivery(app, first)
+		first := docSubscribe(t, w, window, nil)
+		opened := first.window(t)
 		held := view.apply(t, opened.Order, opened.Upsert)
-		app.Send(protocol.DocUnsubscribeMessage{Cmd: protocol.CmdDocUnsubscribe, SubscriptionID: first})
+		first.hangUp(t)
 
 		have, seq := c.away(collection, docRevisions(held))
-		resumed := docNextDelivery(app, docSubscribeHolding(app, window, have))
+		resumed := docSubscribe(t, w, window, have).window(t)
 		applied := view.apply(t, resumed.Order, resumed.Upsert)
 		if got := strings.Join(resumed.Order, " "); got != c.order || docIDs(resumed.Upsert) != c.changed || resumed.AsOfSeq < seq {
 			t.Fatalf("%s: resumed at seq %d on %q with bodies %q; want %q with bodies %q at or after seq %d",
@@ -288,65 +294,22 @@ func TestResumingALiveQuerySendsOnlyWhatChangedWhileAway(t *testing.T) {
 	}
 }
 
-func TestSubscriptionRefusalsAndEndingsShareOneEnvelope(t *testing.T) {
+func TestASubscriptionIsRefusedOrEndedWithACode(t *testing.T) {
 	w := newWorld(t)
-	cli, app := w.Client(), w.App()
+	cli := w.Client()
 
-	undeclared := subscribeOverTheWire(app, requestsWhere(gateNS))
-	if refused := docSubscriptionEnded(app, undeclared); refused.Code != protocol.ErrorCodeUndeclaredCollection {
-		t.Fatalf("subscribing to an undeclared collection ended with %q: %s", refused.Code, refused.Error)
+	if refused := docSubscribe(t, w, requestsWhere(gateNS), nil).ended(t); protocol.Deref(refused.ErrorCode) != protocol.ErrorCodeUndeclaredCollection {
+		t.Fatalf("subscribing to an undeclared collection ended with %q: %s", protocol.Deref(refused.ErrorCode), protocol.Deref(refused.Error))
 	}
 
 	defineRequests(t, cli, gateNS)
-	live := subscribeOverTheWire(app, requestsWhere(gateNS))
-	docNextDelivery(app, live)
-
-	app.Send(protocol.DocSubscribeMessage{Cmd: protocol.CmdDocSubscribe, Query: requestsWhere(gateNS), SubscriptionID: protocol.Ptr(live)})
-	if duplicate := docSubscriptionEnded(app, live); duplicate.Code != protocol.ErrorCodeInvalidQuery {
-		t.Fatalf("a second subscription under a live id ended with %q: %s", duplicate.Code, duplicate.Error)
-	}
-	written := put(t, cli, gateNS, "a", `{"status":"pending"}`)
-	if still := awaitDelivery(app, live, reached(written.Seq)); still.Delivery != 2 {
-		t.Fatalf("after the duplicate was refused the live subscription delivered #%d, want #2", still.Delivery)
-	}
-
-	walking := requestsWhere(gateNS)
-	walking.After = protocol.Ptr("a")
-	cursor := subscribeOverTheWire(app, walking)
-	if refused := docSubscriptionEnded(app, cursor); refused.Code != protocol.ErrorCodeInvalidQuery || !strings.Contains(refused.Error, "after cursor") {
-		t.Fatalf("subscribing with an after cursor ended with %q: %s; want invalid_query naming the cursor", refused.Code, refused.Error)
-	}
-
-	held := []string{live}
-	for len(held) < protocol.DocSubscriptionsPerClient {
-		id := subscribeOverTheWire(app, requestsWhere(gateNS))
-		docNextDelivery(app, id)
-		held = append(held, id)
-	}
-	app.Send(protocol.DocSubscribeMessage{Cmd: protocol.CmdDocSubscribe, Query: requestsWhere(gateNS), SubscriptionID: protocol.Ptr("one-too-many")})
-	overflow := docSubscriptionEnded(app, "one-too-many")
-	if overflow.Code != protocol.ErrorCodeSubscriptionLimit || !strings.Contains(overflow.Error, fmt.Sprint(protocol.DocSubscriptionsPerClient)) || !strings.Contains(overflow.Error, "one-too-many") {
-		t.Fatalf("the subscription past the limit ended with %q: %s; want subscription_limit naming the limit and the ask", overflow.Code, overflow.Error)
-	}
-
-	freed := held[1]
-	app.Send(protocol.DocUnsubscribeMessage{Cmd: protocol.CmdDocUnsubscribe, SubscriptionID: freed})
-	app.Send(protocol.DocUnsubscribeMessage{Cmd: protocol.CmdDocUnsubscribe, SubscriptionID: freed})
-	app.Send(protocol.DocSubscribeMessage{Cmd: protocol.CmdDocSubscribe, Query: requestsWhere(gateNS), SubscriptionID: protocol.Ptr(freed)})
-	if reopened := docNextDelivery(app, freed); reopened.Delivery != 1 {
-		t.Fatalf("reusing an unsubscribed id opened with delivery #%d, want a fresh #1 under the limit", reopened.Delivery)
-	}
-
-	socket := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: requestsWhere(gateNS), SubscriptionID: protocol.Ptr("tile-1")})
-	if refused := socket.next(t); refused.Ok || protocol.Deref(refused.ErrorCode) != protocol.ErrorCodeInvalidQuery {
-		t.Fatalf("the unix socket answered a subscription_id with %+v, want invalid_query", refused)
-	}
-
+	live := docSubscribe(t, w, requestsWhere(gateNS), nil)
+	live.window(t)
 	if _, err := cli.DocUndefine(gateNS, requests); err != nil {
 		t.Fatal(err)
 	}
-	if ended := docSubscriptionEnded(app, live); ended.Code != protocol.ErrorCodeCollectionUndefined {
-		t.Fatalf("undefining the collection ended the live subscription with %q: %s", ended.Code, ended.Error)
+	if ended := live.ended(t); protocol.Deref(ended.ErrorCode) != protocol.ErrorCodeCollectionUndefined {
+		t.Fatalf("undefining the collection ended the live subscription with %q: %s", protocol.Deref(ended.ErrorCode), protocol.Deref(ended.Error))
 	}
 }
 
@@ -393,7 +356,7 @@ func TestAfterCursorsPageQueriesButNotLiveQueries(t *testing.T) {
 
 	walking := requestsWhere(gateNS)
 	walking.After = protocol.Ptr("a")
-	refused := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: walking}).next(t)
+	refused := docSubscribe(t, w, walking, nil).next(t)
 	if refused.Ok || protocol.Deref(refused.ErrorCode) != protocol.ErrorCodeInvalidQuery ||
 		!strings.Contains(protocol.Deref(refused.Error), "limit") || !strings.Contains(protocol.Deref(refused.Error), "window") {
 		t.Fatalf("a live query with an after cursor answered %+v; want invalid_query pointing at a limit and its window", refused)
@@ -404,7 +367,7 @@ func TestABurstOfWritesReachesASlowReaderInAtMostTwoDeliveries(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		defineRequests(t, cli, gateNS)
-		subscription := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: requestsWhere(gateNS)})
+		subscription := docSubscribe(t, w, requestsWhere(gateNS), nil)
 		subscription.window(t)
 
 		const writes = 40
@@ -435,7 +398,7 @@ func TestAWriterNeverWaitsOnASubscriberThatStoppedReading(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		defineRequests(t, cli, gateNS)
-		stalled := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: requestsWhere(gateNS)})
+		stalled := docSubscribe(t, w, requestsWhere(gateNS), nil)
 		stalled.window(t)
 
 		const writes = 16
@@ -451,13 +414,13 @@ func TestAWriterNeverWaitsOnASubscriberThatStoppedReading(t *testing.T) {
 
 func TestALiveQueryNeverShowsATornBodyUnderContention(t *testing.T) {
 	w := newWorld(t)
-	cli, app := w.Client(), w.App()
+	cli := w.Client()
 	defineRequests(t, cli, gateNS)
 	bodies := []string{`{"status":"pending"}`, `{"status":"approved"}`}
 	put(t, cli, gateNS, "a", bodies[0])
-	subscription := subscribeOverTheWire(app, requestsWhere(gateNS))
+	subscription := docSubscribe(t, w, requestsWhere(gateNS), nil)
 	view := docLiveView{}
-	opened := docNextDelivery(app, subscription)
+	opened := subscription.window(t)
 	view.apply(t, opened.Order, opened.Upsert)
 
 	sentinel := make(chan int, 1)
@@ -478,7 +441,7 @@ func TestALiveQueryNeverShowsATornBodyUnderContention(t *testing.T) {
 	}()
 
 	for {
-		delivered := docNextDelivery(app, subscription)
+		delivered := subscription.window(t)
 		window := view.apply(t, delivered.Order, delivered.Upsert)
 		for _, doc := range window {
 			if doc.ID == "a" && !slices.Contains(bodies, doc.Body) {
@@ -506,15 +469,15 @@ func TestALiveQueryNeverShowsATornBodyUnderContention(t *testing.T) {
 
 func TestALimitedLiveWindowAlwaysMatchesAFreshQuery(t *testing.T) {
 	w := newWorld(t)
-	cli, app := w.Client(), w.App()
+	cli := w.Client()
 	defineCollection(t, cli, gateNS, requests, protocol.DocumentFieldSpec{Name: "n", Type: "number"})
 	bodies := []string{`{"n":1}`, `{"n":1}`, `{"n":2}`, `{"n":"1"}`, `{"n":"apple"}`, `{"n":null}`, `{}`, `{"n":[1,2]}`, `{"n":{"deep":1}}`}
 	const limit = 3
 	window := requestsWhere(gateNS)
 	window.Sort = &protocol.DocumentSort{Field: "n", Desc: protocol.Ptr(true)}
 	window.Limit = protocol.Ptr(limit)
-	subscription := subscribeOverTheWire(app, window)
-	docNextDelivery(app, subscription)
+	subscription := docSubscribe(t, w, window, nil)
+	subscription.window(t)
 
 	corpus := rand.New(rand.NewPCG(20260805, 0))
 	for round := range 80 {
@@ -532,7 +495,7 @@ func TestALimitedLiveWindowAlwaysMatchesAFreshQuery(t *testing.T) {
 		if seq == 0 {
 			continue
 		}
-		settled := docSettle(app, subscription, seq)
+		settled := subscription.await(t, reached(seq))
 		if fresh := query(t, cli, window); strings.Join(settled.Order, " ") != docIDs(fresh) || len(settled.Order) > limit {
 			t.Fatalf("round %d: the live window is %v, a fresh query %q, the limit %d", round, settled.Order, docIDs(fresh), limit)
 		}
@@ -616,21 +579,22 @@ func TestDocumentsOverTheCLIClientDeliverResumeAndEnd(t *testing.T) {
 	}
 }
 
-func TestAnAppThatDisconnectsReleasesEveryLiveQueryItHeld(t *testing.T) {
+func TestASubscriberThatHangsUpReleasesItsLiveQuery(t *testing.T) {
 	w := newWorldServingDiagnostics(t, "127.0.0.1")
 	defineRequests(t, w.Client(), gateNS)
 	vars := diagVars(w.diagPort)
 
-	app, vanish := peerThatCanVanish(w, w.App)
-	for range 2 {
-		docNextDelivery(app, subscribeOverTheWire(app, requestsWhere(gateNS)))
-	}
+	first := docSubscribe(t, w, requestsWhere(gateNS), nil)
+	first.window(t)
+	second := docSubscribe(t, w, requestsWhere(gateNS), nil)
+	second.window(t)
 	if held := diagDocSubscriptions(t, vars); held != 2 {
 		t.Fatalf("with two live queries open the daemon holds %d", held)
 	}
-	vanish()
+	first.hangUp(t)
+	second.hangUp(t)
 	if held := diagDocSubscriptions(t, vars); held != 0 {
-		t.Errorf("after the app vanished the daemon still holds %d live queries", held)
+		t.Errorf("after both subscribers hung up the daemon still holds %d live queries", held)
 	}
 }
 

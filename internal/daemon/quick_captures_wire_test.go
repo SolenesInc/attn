@@ -341,10 +341,6 @@ func TestQuickCapturesStartAMemberWithoutSpendingItsMailStartLimit(t *testing.T)
 		if dayID == "" {
 			t.Fatal("a quick capture did not wake the member under crew.mail_start_limit=0")
 		}
-		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(e protocol.BackgroundLaunchMessage) bool { return e.SessionID == dayID })
-		if arrival.RequestedBy != "a quick capture" {
-			t.Fatalf("wake requested_by=%q", arrival.RequestedBy)
-		}
 		second := sendQuickCapture(t, app, mailbox, "second user request")
 		day := w.bootBubbleClaude(t, string(dayID))
 		day.reply("Ready. <!-- attn:state=idle -->")

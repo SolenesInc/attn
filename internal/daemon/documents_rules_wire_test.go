@@ -33,7 +33,7 @@ func TestBadDocumentRequestsAreRefusedUpFrontWithWhatToDo(t *testing.T) {
 	}
 	subscribed := func(q protocol.DocumentQuery) func(*testing.T) (string, string) {
 		return func(t *testing.T) (string, string) {
-			resp := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: q}).next(t)
+			resp := docSubscribe(t, w, q, nil).next(t)
 			if resp.Ok {
 				return "", ""
 			}
@@ -119,7 +119,7 @@ func TestRemovingOrRedeclaringACollectionEndsTheLiveQueriesThatNeedIt(t *testing
 	defineRequests(t, cli, gateNS)
 	put(t, cli, gateNS, "a", `{"status":"pending"}`)
 
-	everything := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: requestsWhere(gateNS)})
+	everything := docSubscribe(t, w, requestsWhere(gateNS), nil)
 	everything.window(t)
 	removed, err := cli.DocUndefine(gateNS, requests)
 	if err != nil || removed.DocumentsRemoved != 1 {
@@ -132,7 +132,7 @@ func TestRemovingOrRedeclaringACollectionEndsTheLiveQueriesThatNeedIt(t *testing
 
 	defineRequests(t, cli, gateNS)
 	put(t, cli, gateNS, "a", `{"status":"pending"}`)
-	pending := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: requestsWhere(gateNS, where("status", "eq", "pending"))})
+	pending := docSubscribe(t, w, requestsWhere(gateNS, where("status", "eq", "pending")), nil)
 	if opened := pending.window(t); strings.Join(opened.Order, " ") != "a" {
 		t.Fatalf("the filtered live query opened on %v, want a", opened.Order)
 	}

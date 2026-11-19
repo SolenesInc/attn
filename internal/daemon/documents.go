@@ -589,12 +589,6 @@ func (d *Daemon) runDocSubscription(q docstore.Query, have []protocol.DocumentRe
 }
 
 func (d *Daemon) handleDocSubscribe(conn net.Conn, msg *protocol.DocSubscribeMessage) {
-	if msg.SubscriptionID != nil {
-		d.sendDocError(conn, docstore.InvalidQuery(fmt.Errorf(
-			"docstore: doc_subscribe over the unix socket takes no subscription_id (got %q): this connection is the subscription, so an id would name nothing. Drop the field here, or subscribe over the WebSocket, where one connection carries many",
-			*msg.SubscriptionID)))
-		return
-	}
 	q, err := docSubscriptionQuery(msg)
 	if err != nil {
 		d.sendDocError(conn, err)

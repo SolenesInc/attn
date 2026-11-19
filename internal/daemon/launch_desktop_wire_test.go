@@ -84,17 +84,13 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 	if shared := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(slot5)}); protocol.Deref(shared.Setting.Label) != "5 · Review" {
 		t.Fatalf("shared choice: %+v", shared)
 	}
-	for member, name := range map[string]string{"trellis": "Trellis", "alder": "Alder"} {
+	for _, member := range []string{"trellis", "alder"} {
 		day, err := cli.CrewStart(member, "", protocol.SessionID(caller))
 		if err != nil {
 			t.Fatal(err)
 		}
 		w.Launched(string(day.SessionID))
 		assertBackgroundPlacement(t, w, profile, string(day.SessionID), slot5, current, active)
-		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(r protocol.BackgroundLaunchMessage) bool { return r.SessionID == day.SessionID })
-		if arrival.Name != name || arrival.DesktopLabel != "5 · Review" || arrival.RequestedBy == "" {
-			t.Fatalf("arrival: %+v", arrival)
-		}
 	}
 
 	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "rename", DesktopID: slot5, Name: "Renamed"}, "rename")
@@ -156,10 +152,6 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 	session := protocol.Deref(run.Run.SessionID)
 	w.Launched(string(session))
 	assertBackgroundPlacement(t, w, profile, string(session), own, current, active)
-	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(event protocol.BackgroundLaunchMessage) bool { return event.SessionID == session })
-	if arrival.Name != "Nightly check" || arrival.RequestedBy != "automation" || arrival.DesktopLabel != "Nightly check (no ⌘ number)" {
-		t.Fatalf("automation arrival: %+v", arrival)
-	}
 }
 
 func TestUpgradingAnInstallWithOnlyAutomationsGivesEachItsDesktopAndPlacesExistingAgents(t *testing.T) {

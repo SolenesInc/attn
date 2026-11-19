@@ -12,6 +12,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -132,6 +133,27 @@ func (w *profilesTestDaemon) agent(sessionID, profileID string) {
 		State:     protocol.SessionStateIdle,
 		Agent:     protocol.SessionAgentClaude,
 	})
+}
+
+func (w *profilesTestDaemon) place(desktopID, sessionID, anchorPaneID string) (protocol.Desktop, string) {
+	w.t.Helper()
+	placed, paneID, err := w.d.store.PlaceLaunchedSession(store.SessionPlacementRequest{
+		DesktopID:    desktopID,
+		SessionID:    protocol.SessionID(sessionID),
+		AnchorPaneID: anchorPaneID,
+		Direction:    layouttree.DirectionVertical,
+		Title:        sessionID,
+		Status:       profiles.PaneStatusReady,
+		Focus:        true,
+	})
+	if err != nil {
+		w.t.Fatalf("place %s on %s: %v", sessionID, desktopID, err)
+	}
+	desktop, err := protocolDesktop(placed)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return desktop, paneID
 }
 
 func eventName(t *testing.T, payload []byte) string {
@@ -283,15 +305,9 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 	other := w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"}).Profile
 	w.agent("agent-a", profileID)
 	w.agent("agent-b", profileID)
-	placedA := w.mustSend(first, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktopTwo.ID, "session_id": "agent-a",
-	})
-	placedB := w.mustSend(first, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktopTwo.ID,
-		"session_id": "agent-b", "anchor_pane_id": protocol.Deref(placedA.PaneID),
-	})
-	paneB := protocol.Deref(placedB.PaneID)
-	revisionBeforeSelection := placedB.Desktops[0].Revision
+	_, paneA := w.place(desktopTwo.ID, "agent-a", "")
+	placedB, paneB := w.place(desktopTwo.ID, "agent-b", paneA)
+	revisionBeforeSelection := placedB.Revision
 
 	w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": profileID})
 	second, _ := w.connect(profileID)
@@ -358,11 +374,7 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": profileID})
 	watcher, _ := w.connect(profileID)
 	w.agent("agent-a", profileID)
-	placed := w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": source.ID, "session_id": "agent-a",
-	})
-	paneID := protocol.Deref(placed.PaneID)
-	source = placed.Desktops[0]
+	source, paneID := w.place(source.ID, "agent-a", "")
 	target := w.mustSend(client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": profileID}).Desktops[0]
 
 	drainClientPayloads(t, watcher)
@@ -409,27 +421,14 @@ func TestLayoutCommandsNeverChangeWhichProfileAnAgentBelongsTo(t *testing.T) {
 	client, _ := w.connect("")
 	mine := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "mine"})
 	theirs := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "theirs"})
-	w.agent("their-agent", theirs.Profile.ID)
 	w.agent("my-agent", mine.Profile.ID)
 
-	foreign := w.send(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "session_id": "their-agent",
-	})
-	wantErrorCode(t, foreign, protocol.ProfileErrorCodeCrossProfile)
-
-	placed := w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "session_id": "my-agent",
-	})
+	_, placed := w.place(mine.Desktops[0].ID, "my-agent", "")
 	across := w.send(client, map[string]any{
 		"cmd": protocol.CmdDesktopMoveLeaf, "source_desktop_id": mine.Desktops[0].ID, "target_desktop_id": theirs.Desktops[0].ID,
-		"leaf_id": protocol.Deref(placed.PaneID), "edge": "left",
+		"leaf_id": placed, "edge": "left",
 	})
 	wantErrorCode(t, across, protocol.ProfileErrorCodeCrossProfile)
-
-	twice := w.send(client, map[string]any{
-		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "session_id": "my-agent",
-	})
-	wantErrorCode(t, twice, protocol.ProfileErrorCodeAlreadyPlaced)
 	if got, err := w.d.store.SessionProfileID("my-agent"); err != nil || got != mine.Profile.ID {
 		t.Fatalf("my-agent belongs to %q (err %v), want %s", got, err, mine.Profile.ID)
 	}

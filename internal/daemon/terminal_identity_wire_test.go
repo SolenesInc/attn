@@ -98,7 +98,7 @@ func TestAPluginCloseInterruptedAfterItsPaneDisappearsRecoversOnRestart(t *testi
 }
 
 func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) {
-	for _, action := range []string{"show", "move", "place"} {
+	for _, action := range []string{"show", "move"} {
 		t.Run(action, func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			s.Start()
@@ -139,10 +139,6 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 				if _, err := client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), s.Client(), "terminal move", successor.ID, map[string]any{"terminal": string(terminal), "desktop": desktop.ID}); err != nil {
 					t.Fatal(err)
 				}
-			case "place":
-
-				request := uuid.NewString()
-				mustProfileRequest(app, protocol.DesktopPlaceSessionMessage{Cmd: protocol.CmdDesktopPlaceSession, RequestID: request, DesktopID: desktop.ID, SessionID: successor.ID}, request)
 			}
 			if got := app.Terminal(session); got != string(terminal) {
 				t.Fatalf("placement changed terminal from %s to %s", terminal, got)

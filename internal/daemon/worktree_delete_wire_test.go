@@ -78,9 +78,9 @@ func TestDeletingADirtyWorktreeNeedsForceAndThenTakesItsSessionsAlong(t *testing
 			t.Errorf("the delete reported finishing as %+v; want %s with its finish time and duration", finished, want)
 		}
 	}
-	testworld.Await(app, protocol.EventWorktreeDeleted, func(e protocol.WebSocketEvent) bool {
-		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == path
-	})
+	if surface, err := cli.WorktreeList(repo, 0); err != nil || len(surface.Worktrees) != 0 {
+		t.Errorf("the registry after the forced delete = %+v, %v; want it empty", surface, err)
+	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && string(e.Session.ID) == session
 	})

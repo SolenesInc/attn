@@ -3173,8 +3173,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
 	case protocol.CmdOpenSentFiles:
 		d.handleOpenSentFiles(conn, msg.(*protocol.OpenSentFilesMessage))
-	case protocol.CmdListWorktrees:
-		d.handleListWorktrees(conn, msg.(*protocol.ListWorktreesMessage))
 	case protocol.CmdCreateWorktree:
 		d.handleCreateWorktree(conn, msg.(*protocol.CreateWorktreeMessage))
 	case protocol.CmdDeleteWorktree:

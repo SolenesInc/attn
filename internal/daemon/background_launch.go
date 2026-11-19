@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -27,6 +26,17 @@ func (d *Daemon) showCrewStart(result *protocol.CrewStartResult, client *wsClien
 	return nil
 }
 
+type backgroundLaunch struct {
+	DesktopID    string                     `json:"desktop_id"`
+	DesktopLabel string                     `json:"desktop_label"`
+	Event        string                     `json:"event"`
+	Kind         protocol.LaunchDesktopKind `json:"kind"`
+	Name         string                     `json:"name"`
+	ProfileID    string                     `json:"profile_id"`
+	RequestedBy  string                     `json:"requested_by"`
+	SessionID    protocol.SessionID         `json:"session_id"`
+}
+
 func (d *Daemon) announceBackgroundLaunch(kind string, itemID string, sessionID protocol.SessionID, requestedBy string) {
 	placement, placed, err := d.store.SessionPlacement(sessionID)
 	if err != nil || !placed {
@@ -42,14 +52,5 @@ func (d *Daemon) announceBackgroundLaunch(kind string, itemID string, sessionID 
 		d.logf("background launch placement %s: %v", sessionID, err)
 		return
 	}
-	d.publishFact(FactBackgroundLaunch, string(sessionID), protocol.BackgroundLaunchMessage{Event: protocol.EventBackgroundLaunch, SessionID: sessionID, ProfileID: placement.ProfileID, DesktopID: placement.DesktopID, Name: item.Name, RequestedBy: requestedBy, DesktopLabel: label, Kind: protocol.LaunchDesktopKind(kind)})
-}
-
-func (d *Daemon) projectBackgroundLaunch(ev bus.Event) {
-	var message protocol.BackgroundLaunchMessage
-	if err := ev.Decode(&message); err != nil {
-		d.logf("background launch projection: %v", err)
-		return
-	}
-	d.wsHub.BroadcastValue(message)
+	d.publishFact(FactBackgroundLaunch, string(sessionID), backgroundLaunch{Event: "background_launch", SessionID: sessionID, ProfileID: placement.ProfileID, DesktopID: placement.DesktopID, Name: item.Name, RequestedBy: requestedBy, DesktopLabel: label, Kind: protocol.LaunchDesktopKind(kind)})
 }

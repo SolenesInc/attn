@@ -10,11 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 const (
@@ -84,28 +81,15 @@ func docIDs(docs []protocol.StoredDocument) string {
 	return strings.Join(ids, " ")
 }
 
-func subscribeOverTheWire(app *testworld.Peer, q protocol.DocumentQuery) string {
-	id := uuid.NewString()
-	app.Send(protocol.DocSubscribeMessage{Cmd: protocol.CmdDocSubscribe, Query: q, SubscriptionID: protocol.Ptr(id)})
-	return id
-}
-
-func awaitDelivery(app *testworld.Peer, subscription string, match func(protocol.DocSubscriptionDeliveryMessage) bool) protocol.DocSubscriptionDeliveryMessage {
-	app.T.Helper()
-	return testworld.Await(app, protocol.EventDocSubscriptionDelivery, func(m protocol.DocSubscriptionDeliveryMessage) bool {
-		return m.SubscriptionID == subscription && match(m)
-	})
-}
-
 func TestEveryDocumentAnswerIsPositionedOnTheLogItsSubscribersFollow(t *testing.T) {
 	w := newWorld(t)
-	cli, app := w.Client(), w.App()
+	cli := w.Client()
 	defineRequests(t, cli, gateNS)
-	subscription := subscribeOverTheWire(app, requestsWhere(gateNS))
-	awaitDelivery(app, subscription, func(m protocol.DocSubscriptionDeliveryMessage) bool { return m.Delivery == 1 })
+	subscription := docSubscribe(t, w, requestsWhere(gateNS), nil)
+	subscription.await(t, func(m *protocol.DocSubscribeResult) bool { return m.Delivery == 1 })
 
 	written := put(t, cli, gateNS, "a", `{"status":"pending"}`)
-	if delivered := awaitDelivery(app, subscription, reached(written.Seq)); written.Seq == 0 || !slices.Contains(delivered.Order, "a") {
+	if delivered := subscription.await(t, reached(written.Seq)); written.Seq == 0 || !slices.Contains(delivered.Order, "a") {
 		t.Fatalf("the first delivery at or after the write's seq %d holds %v", written.Seq, delivered.Order)
 	}
 
@@ -123,13 +107,13 @@ func TestEveryDocumentAnswerIsPositionedOnTheLogItsSubscribersFollow(t *testing.
 	if err != nil || !removed.Existed {
 		t.Fatalf("delete = %+v, %v", removed, err)
 	}
-	if emptied := awaitDelivery(app, subscription, reached(removed.Seq)); removed.Seq <= written.Seq || len(emptied.Order) != 0 {
+	if emptied := subscription.await(t, reached(removed.Seq)); removed.Seq <= written.Seq || len(emptied.Order) != 0 {
 		t.Fatalf("the first delivery at or after the delete's seq %d (the write was at %d) holds %v", removed.Seq, written.Seq, emptied.Order)
 	}
 }
 
-func reached(seq int) func(protocol.DocSubscriptionDeliveryMessage) bool {
-	return func(m protocol.DocSubscriptionDeliveryMessage) bool { return m.AsOfSeq >= seq }
+func reached(seq int) func(*protocol.DocSubscribeResult) bool {
+	return func(m *protocol.DocSubscribeResult) bool { return m.AsOfSeq >= seq }
 }
 
 func TestAWriteThatChangedNothingAnnouncesNothing(t *testing.T) {

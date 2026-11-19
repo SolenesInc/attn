@@ -1452,32 +1452,6 @@ type AutomationsChangedMessage struct {
 	Event string `json:"event"`
 }
 
-type BackgroundLaunchMessage struct {
-	// DesktopID corresponds to the JSON schema field "desktop_id".
-	DesktopID string `json:"desktop_id"`
-
-	// DesktopLabel corresponds to the JSON schema field "desktop_label".
-	DesktopLabel string `json:"desktop_label"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind LaunchDesktopKind `json:"kind"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID string `json:"profile_id"`
-
-	// RequestedBy corresponds to the JSON schema field "requested_by".
-	RequestedBy string `json:"requested_by"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
 type BrowseDirectoryMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -2031,21 +2005,6 @@ type ClearAnalyticsRecordsResultMessage struct {
 type ClearWarningsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
-}
-
-type ClientEvictionNoticeMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// EvictedAt corresponds to the JSON schema field "evicted_at".
-	EvictedAt string `json:"evicted_at"`
-
-	// Reason corresponds to the JSON schema field "reason".
-	Reason string `json:"reason"`
-
-	// UndeliveredMessages corresponds to the JSON schema field
-	// "undelivered_messages".
-	UndeliveredMessages int `json:"undelivered_messages"`
 }
 
 type ClientHelloMessage struct {
@@ -4200,29 +4159,6 @@ type DesktopPane struct {
 	Title string `json:"title"`
 }
 
-type DesktopPlaceSessionMessage struct {
-	// AnchorPaneID corresponds to the JSON schema field "anchor_pane_id".
-	AnchorPaneID *string `json:"anchor_pane_id,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DesktopID corresponds to the JSON schema field "desktop_id".
-	DesktopID string `json:"desktop_id"`
-
-	// Direction corresponds to the JSON schema field "direction".
-	Direction *LayoutSplitDirection `json:"direction,omitempty,omitzero"`
-
-	// NewPaneShare corresponds to the JSON schema field "new_pane_share".
-	NewPaneShare *float64 `json:"new_pane_share,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
 type DesktopPopOutLeafMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -4627,9 +4563,6 @@ type DocSubscribeMessage struct {
 
 	// Query corresponds to the JSON schema field "query".
 	Query DocumentQuery `json:"query"`
-
-	// SubscriptionID corresponds to the JSON schema field "subscription_id".
-	SubscriptionID *string `json:"subscription_id,omitempty,omitzero"`
 }
 
 type DocSubscribeResult struct {
@@ -4644,40 +4577,6 @@ type DocSubscribeResult struct {
 
 	// Upsert corresponds to the JSON schema field "upsert".
 	Upsert []StoredDocument `json:"upsert"`
-}
-
-type DocSubscriptionDeliveryMessage struct {
-	// AsOfSeq corresponds to the JSON schema field "as_of_seq".
-	AsOfSeq int `json:"as_of_seq"`
-
-	// Delivery corresponds to the JSON schema field "delivery".
-	Delivery int `json:"delivery"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Order corresponds to the JSON schema field "order".
-	Order []string `json:"order"`
-
-	// SubscriptionID corresponds to the JSON schema field "subscription_id".
-	SubscriptionID string `json:"subscription_id"`
-
-	// Upsert corresponds to the JSON schema field "upsert".
-	Upsert []StoredDocument `json:"upsert"`
-}
-
-type DocSubscriptionEndedMessage struct {
-	// Code corresponds to the JSON schema field "code".
-	Code string `json:"code"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error string `json:"error"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// SubscriptionID corresponds to the JSON schema field "subscription_id".
-	SubscriptionID string `json:"subscription_id"`
 }
 
 type DocUndefineMessage struct {
@@ -4700,14 +4599,6 @@ type DocUndefineResult struct {
 
 	// Namespace corresponds to the JSON schema field "namespace".
 	Namespace string `json:"namespace"`
-}
-
-type DocUnsubscribeMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SubscriptionID corresponds to the JSON schema field "subscription_id".
-	SubscriptionID string `json:"subscription_id"`
 }
 
 type DocumentCollectionSchema struct {
@@ -4874,25 +4765,6 @@ type FetchPRDetailsResultMessage struct {
 
 	// Prs corresponds to the JSON schema field "prs".
 	Prs []PR `json:"prs,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
-type FetchRemotesMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Repo corresponds to the JSON schema field "repo".
-	Repo string `json:"repo"`
-}
-
-type FetchRemotesResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -6726,14 +6598,6 @@ type ListResult struct {
 
 	// Sessions corresponds to the JSON schema field "sessions".
 	Sessions []Session `json:"sessions"`
-}
-
-type ListWorktreesMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// MainRepo corresponds to the JSON schema field "main_repo".
-	MainRepo string `json:"main_repo"`
 }
 
 type MarkdownAnnotation struct {
@@ -15105,14 +14969,6 @@ type WorktreeCheckout struct {
 	Path string `json:"path"`
 }
 
-type WorktreeCreatedEvent struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Worktrees corresponds to the JSON schema field "worktrees".
-	Worktrees []Worktree `json:"worktrees"`
-}
-
 type WorktreeCreation struct {
 	// Branch corresponds to the JSON schema field "branch".
 	Branch string `json:"branch"`
@@ -15122,14 +14978,6 @@ type WorktreeCreation struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
-}
-
-type WorktreeDeletedEvent struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Worktrees corresponds to the JSON schema field "worktrees".
-	Worktrees []Worktree `json:"worktrees"`
 }
 
 type WorktreeKeepMessage struct {
@@ -15368,12 +15216,4 @@ type WorktreeSweptEvent struct {
 
 	// SweepEntry corresponds to the JSON schema field "sweep_entry".
 	SweepEntry WorktreeSweepEntry `json:"sweep_entry"`
-}
-
-type WorktreesUpdatedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Worktrees corresponds to the JSON schema field "worktrees".
-	Worktrees []Worktree `json:"worktrees,omitempty,omitzero"`
 }

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "97977eb0636a";
+pub const PROTOCOL_VERSION: &str = "2e432e1a9063";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1272,27 +1272,6 @@ impl AutomationsChangedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct BackgroundLaunchMessage {
-    pub desktop_id: String,
-    pub desktop_label: String,
-    pub event: String,
-    pub kind: LaunchDesktopKind,
-    pub name: String,
-    pub profile_id: String,
-    pub requested_by: String,
-    pub session_id: SessionID,
-}
-
-impl BackgroundLaunchMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "background_launch".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BrowseDirectoryMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1769,23 +1748,6 @@ impl ClearWarningsMessage {
     pub fn new() -> Self {
         Self {
             cmd: "clear_warnings".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ClientEvictionNoticeMessage {
-    pub event: String,
-    pub evicted_at: String,
-    pub reason: String,
-    pub undelivered_messages: i64,
-}
-
-impl ClientEvictionNoticeMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "client_eviction_notice".to_string(),
             ..Self::default()
         }
     }
@@ -3650,29 +3612,6 @@ pub struct DesktopPane {
     pub title: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DesktopPlaceSessionMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub anchor_pane_id: Option<String>,
-    pub cmd: String,
-    pub desktop_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub direction: Option<LayoutSplitDirection>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub new_pane_share: Option<f64>,
-    pub request_id: String,
-    pub session_id: SessionID,
-}
-
-impl DesktopPlaceSessionMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "desktop_place_session".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DesktopPopOutLeafMessage {
     pub cmd: String,
     pub desktop_id: String,
@@ -4102,8 +4041,6 @@ pub struct DocSubscribeMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub have: Option<Vec<DocumentRevision>>,
     pub query: DocumentQuery,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subscription_id: Option<String>,
 }
 
 impl DocSubscribeMessage {
@@ -4123,44 +4060,6 @@ pub struct DocSubscribeResult {
     pub order: Vec<String>,
     #[serde(deserialize_with = "null_as_default")]
     pub upsert: Vec<StoredDocument>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DocSubscriptionDeliveryMessage {
-    pub as_of_seq: i64,
-    pub delivery: i64,
-    pub event: String,
-    #[serde(deserialize_with = "null_as_default")]
-    pub order: Vec<String>,
-    pub subscription_id: String,
-    #[serde(deserialize_with = "null_as_default")]
-    pub upsert: Vec<StoredDocument>,
-}
-
-impl DocSubscriptionDeliveryMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "doc_subscription_delivery".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DocSubscriptionEndedMessage {
-    pub code: String,
-    pub error: String,
-    pub event: String,
-    pub subscription_id: String,
-}
-
-impl DocSubscriptionEndedMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "doc_subscription_ended".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DocUndefineMessage {
@@ -4183,21 +4082,6 @@ pub struct DocUndefineResult {
     pub collection: String,
     pub documents_removed: i64,
     pub namespace: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DocUnsubscribeMessage {
-    pub cmd: String,
-    pub subscription_id: String,
-}
-
-impl DocUnsubscribeMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "doc_unsubscribe".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DocumentCollectionSchema {
@@ -4347,38 +4231,6 @@ impl FetchPRDetailsResultMessage {
     pub fn new() -> Self {
         Self {
             event: "fetch_pr_details_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FetchRemotesMessage {
-    pub cmd: String,
-    pub repo: String,
-}
-
-impl FetchRemotesMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "fetch_remotes".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct FetchRemotesResultMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    pub event: String,
-    pub success: bool,
-}
-
-impl FetchRemotesResultMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "fetch_remotes_result".to_string(),
             ..Self::default()
         }
     }
@@ -6194,21 +6046,6 @@ pub struct ListResult {
     pub profiles: Vec<Profile>,
     #[serde(deserialize_with = "null_as_default")]
     pub sessions: Vec<Session>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ListWorktreesMessage {
-    pub cmd: String,
-    pub main_repo: String,
-}
-
-impl ListWorktreesMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "list_worktrees".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MarkdownAnnotation {
@@ -13366,43 +13203,11 @@ pub struct WorktreeCheckout {
     pub path: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct WorktreeCreatedEvent {
-    pub event: String,
-    #[serde(deserialize_with = "null_as_default")]
-    pub worktrees: Vec<Worktree>,
-}
-
-impl WorktreeCreatedEvent {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "worktree_created".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorktreeCreation {
     pub branch: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub path: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct WorktreeDeletedEvent {
-    pub event: String,
-    #[serde(deserialize_with = "null_as_default")]
-    pub worktrees: Vec<Worktree>,
-}
-
-impl WorktreeDeletedEvent {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "worktree_deleted".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorktreeKeepMessage {
@@ -13685,22 +13490,6 @@ impl WorktreeSweptEvent {
     pub fn new() -> Self {
         Self {
             event: "worktree_swept".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct WorktreesUpdatedMessage {
-    pub event: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub worktrees: Option<Vec<Worktree>>,
-}
-
-impl WorktreesUpdatedMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "worktrees_updated".to_string(),
             ..Self::default()
         }
     }

@@ -26,19 +26,16 @@ func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMe
 		d.appIdentity.Store(&appIdentity{Version: version, Channel: channel})
 	}
 	client.setProcessID(protocol.Deref(msg.AppPid))
-	clientID := strings.TrimSpace(protocol.Deref(msg.ClientID))
-	client.setClientID(clientID)
 	client.updateReadLimit()
 	d.scopeClientToProfile(client, protocol.Deref(msg.ProfileID))
 	d.logf(
 		"client hello: kind=%q version=%q client_id=%q capabilities=%v",
 		msg.ClientKind,
 		msg.Version,
-		clientID,
+		strings.TrimSpace(protocol.Deref(msg.ClientID)),
 		msg.Capabilities,
 	)
 	d.admitClient(client)
-	d.deliverEvictionNotice(client)
 }
 
 func (d *Daemon) admitClient(client *wsClient) {

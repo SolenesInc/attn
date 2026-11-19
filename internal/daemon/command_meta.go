@@ -98,7 +98,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdRefreshPRs:                    commandMetadata(false, true),
 	protocol.CmdClearWarnings:                 commandMetadata(false, true),
 	protocol.CmdPRVisited:                     commandMetadata(false, true),
-	protocol.CmdListWorktrees:                 commandMetadata(false, true),
 	protocol.CmdCreateWorktree:                commandMetadata(false, true),
 	protocol.CmdDeleteWorktree:                commandMetadata(false, true),
 	protocol.CmdKeptConversationList:          commandMetadata(false, true),
@@ -125,7 +124,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdBrowseDirectory:               commandMetadata(false, true),
 	protocol.CmdInspectPath:                   commandMetadata(false, true),
 	protocol.CmdCreateWorktreeFromBranch:      commandMetadata(false, true),
-	protocol.CmdFetchRemotes:                  commandMetadata(false, true),
 	protocol.CmdEnsureRepo:                    commandMetadata(false, true),
 	protocol.CmdGetRepoInfo:                   commandMetadata(false, true),
 	protocol.CmdTileAssetRead:                 commandMetadata(false, false),
@@ -185,7 +183,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopSetOrder:               commandMetadata(false, true),
 	protocol.CmdDesktopSetCurrent:             commandMetadata(false, true),
 	protocol.CmdDesktopSetActivePane:          commandMetadata(false, true),
-	protocol.CmdDesktopPlaceSession:           commandMetadata(false, true),
 	protocol.CmdDesktopShowSession:            commandMetadata(false, true),
 	protocol.CmdDesktopShowLeaf:               commandMetadata(false, true),
 	protocol.CmdDesktopMoveLeaf:               commandMetadata(false, true),
@@ -222,7 +219,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDocQuery:                      commandMetadata(false, true),
 	protocol.CmdDocCount:                      commandMetadata(false, true),
 	protocol.CmdDocSubscribe:                  commandMetadata(false, true),
-	protocol.CmdDocUnsubscribe:                commandMetadata(false, true),
 }
 
 func shouldLogWSCommand(cmd string) bool {

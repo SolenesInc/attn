@@ -18,7 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAClientThatFallsBehindIsDroppedWithoutItsBacklogAndToldWhyOnce(t *testing.T) {
+func TestAClientThatFallsBehindIsDroppedWithoutItsBacklog(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		stalled := evictionStalledClient(t, w, "fell-behind")
@@ -36,54 +36,6 @@ func TestAClientThatFallsBehindIsDroppedWithoutItsBacklogAndToldWhyOnce(t *testi
 		}
 		if backlog > 0 {
 			t.Errorf("the dropped client was fed %d settings_updated frames of the backlog it fell behind on", backlog)
-		}
-		notice := evictionNotice(t, w, "fell-behind")
-		if notice == nil || notice.Reason != "client too slow" || notice.UndeliveredMessages < 256 {
-			t.Fatalf("reconnecting after falling behind brought eviction notice %+v, want client too slow with the undelivered backlog", notice)
-		}
-		if _, err := time.Parse(time.RFC3339, notice.EvictedAt); err != nil {
-			t.Errorf("the eviction notice says it happened at %q: %v", notice.EvictedAt, err)
-		}
-		if again := evictionNotice(t, w, "fell-behind"); again != nil {
-			t.Errorf("reconnecting a second time brought eviction notice %+v again", again)
-		}
-	})
-}
-
-func TestConcurrentReconnectsDeliverOneEvictionNotice(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		const clientID = "reconnects-together"
-		stalled := evictionStalledClient(t, w, clientID)
-		w.advance(16 * time.Second)
-		evictionDrain(t, stalled)
-
-		peers := []*testworld.Peer{
-			w.Connect(transportHello(clientID), nil),
-			w.Connect(transportHello(clientID), nil),
-		}
-		for _, peer := range peers {
-			testworld.Await[protocol.InitialStateMessage](peer, protocol.EventInitialState, nil)
-		}
-		synctest.Wait()
-		delivered := 0
-		for _, peer := range peers {
-			for _, event := range peer.Received() {
-				if event.Event != protocol.EventClientEvictionNotice {
-					continue
-				}
-				delivered++
-				notice := testworld.Await[protocol.ClientEvictionNoticeMessage](peer, protocol.EventClientEvictionNotice, nil)
-				if notice.Reason != "client too slow" || notice.UndeliveredMessages < 1 {
-					t.Errorf("concurrent reconnect brought eviction notice %+v, want client too slow with its undelivered message", notice)
-				}
-			}
-			peer.Close()
-		}
-		if delivered != 1 {
-			t.Errorf("concurrent reconnects delivered %d eviction notices, want one", delivered)
-		}
-		if again := evictionNotice(t, w, clientID); again != nil {
-			t.Errorf("reconnecting after the notice was delivered brought %+v again", again)
 		}
 	})
 }
@@ -105,9 +57,6 @@ func TestGardenUpdatesKeepFlowingWhenAnotherClientFallsBehind(t *testing.T) {
 			return len(m.Seeds) == 1 && m.Seeds[0].ID == seed && m.Seeds[0].Body == finalBody
 		})
 		evictionDrain(t, stalled)
-		if notice := evictionNotice(t, w, "garden-fell-behind"); notice == nil || notice.Reason != "client too slow" {
-			t.Fatalf("reconnect after Garden backpressure: %+v", notice)
-		}
 		fresh := w.App()
 		if protocol.Deref(fresh.Initial.SelectedProfileID) != app.SelectedProfile() {
 			t.Fatal("a fresh client could not join the same profile after eviction")
@@ -115,28 +64,18 @@ func TestGardenUpdatesKeepFlowingWhenAnotherClientFallsBehind(t *testing.T) {
 	})
 }
 
-func TestAClientWhoseSocketStopsAcceptingWritesIsDroppedAndToldWhyWhileItIsRemembered(t *testing.T) {
+func TestAClientWhoseSocketStopsAcceptingWritesIsDropped(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
-		prompt := evictionStalledClient(t, w, "returns-soon")
-		late := evictionStalledClient(t, w, "returns-late")
+		stalled := evictionStalledClient(t, w, "stopped-reading")
 		w.advance(16 * time.Second)
 
-		for _, conn := range []*websocket.Conn{prompt, late} {
-			if delivered := evictionDrain(t, conn); len(delivered) > 0 {
-				t.Errorf("a client that accepted no writes read %q after being dropped", delivered)
-			}
-		}
-		if notice := evictionNotice(t, w, "returns-soon"); notice == nil || notice.Reason != "client too slow" || notice.UndeliveredMessages < 1 {
-			t.Errorf("reconnecting soon after the stall brought eviction notice %+v, want client too slow with its undelivered message", notice)
-		}
-		w.advance(10 * time.Minute)
-		if notice := evictionNotice(t, w, "returns-late"); notice != nil {
-			t.Errorf("reconnecting eleven minutes after the stall brought eviction notice %+v, want it forgotten", notice)
+		if delivered := evictionDrain(t, stalled); len(delivered) > 0 {
+			t.Errorf("a client that accepted no writes read %q after being dropped", delivered)
 		}
 	})
 }
 
-func TestAClientThatGoesQuietOwingNothingIsDroppedWithoutANotice(t *testing.T) {
+func TestAClientThatStopsAnsweringPingsIsDropped(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 		defer cancel()
@@ -159,9 +98,6 @@ func TestAClientThatGoesQuietOwingNothingIsDroppedWithoutANotice(t *testing.T) {
 		case <-link.severed:
 		default:
 			t.Error("the daemon still holds the connection of a client that stopped answering pings")
-		}
-		if notice := evictionNotice(t, w, "went-quiet"); notice != nil {
-			t.Errorf("a client dropped while owed nothing was told %+v on its return", notice)
 		}
 	})
 }
@@ -251,20 +187,4 @@ func evictionDrain(t *testing.T, conn *websocket.Conn) []string {
 		_ = json.Unmarshal(data, &frame)
 		delivered = append(delivered, frame.Event)
 	}
-}
-
-func evictionNotice(t *testing.T, w *world, clientID string) *protocol.ClientEvictionNoticeMessage {
-	t.Helper()
-	p := w.Connect(transportHello(clientID), nil)
-	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
-	synctest.Wait()
-	for _, e := range p.Received() {
-		if e.Event == protocol.EventClientEvictionNotice {
-			notice := testworld.Await[protocol.ClientEvictionNoticeMessage](p, protocol.EventClientEvictionNotice, nil)
-			p.Close()
-			return &notice
-		}
-	}
-	p.Close()
-	return nil
 }

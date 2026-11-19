@@ -69,6 +69,13 @@ func (w *desktopTilesWorld) apply(command map[string]any) protocol.ProfileAction
 	return result
 }
 
+func (w *desktopTilesWorld) placeAgent(sessionID string) string {
+	w.t.Helper()
+	desktop, paneID := w.place(w.desktop.ID, sessionID, "")
+	w.desktop = desktop
+	return paneID
+}
+
 func (w *desktopTilesWorld) tree() layouttree.Node {
 	w.t.Helper()
 	tree, err := layouttree.DecodeLayout(w.desktop.TreeJson)
@@ -121,8 +128,7 @@ func TestATileDockedOnAnEmptyDesktopBecomesItsWholeTree(t *testing.T) {
 func TestATileDocksBesideTheActiveLeafTakesFocusAndReDockingKeepsItsParams(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
-	placed := w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"})
-	paneID := protocol.Deref(placed.PaneID)
+	paneID := w.placeAgent("agent-a")
 	notes := filepath.Join(t.TempDir(), "notes.md")
 
 	w.apply(map[string]any{
@@ -150,11 +156,11 @@ func TestATileDocksBesideTheActiveLeafTakesFocusAndReDockingKeepsItsParams(t *te
 func TestDockingATileRefusesAPaneIDAndMissingSession(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
-	placed := w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"})
+	paneID := w.placeAgent("agent-a")
 
 	clash := w.send(w.client, map[string]any{
 		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID,
-		"tile_id": protocol.Deref(placed.PaneID), "tile_kind": "notebook", "edge": "right",
+		"tile_id": paneID, "tile_kind": "notebook", "edge": "right",
 	})
 	wantErrorCode(t, clash, protocol.ProfileErrorCodeInvalid)
 
@@ -529,7 +535,7 @@ func (w *desktopTilesWorld) focus(leafID string) protocol.ProfileActionResultMes
 func TestTheActiveLeafIsAnAgentPaneOrATileOfTheDesktop(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
-	paneID := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"}).PaneID)
+	paneID := w.placeAgent("agent-a")
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right"})
 	second, _ := w.connect(w.profileID)
 
@@ -551,10 +557,10 @@ func TestAnAgentPlacedWhileATileIsFocusedSplitsBesideTheTile(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
 	w.agent("agent-b", w.profileID)
-	paneA := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"}).PaneID)
+	paneA := w.placeAgent("agent-a")
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right"})
 
-	paneB := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-b"}).PaneID)
+	paneB := w.placeAgent("agent-b")
 
 	tree := w.tree()
 	if tree.Children[0].PaneID != paneA {
@@ -572,7 +578,7 @@ func TestAnAgentPlacedWhileATileIsFocusedSplitsBesideTheTile(t *testing.T) {
 func TestSendingAFocusedTileToAnotherDesktopKeepsItFocusedThere(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
-	paneA := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"}).PaneID)
+	paneA := w.placeAgent("agent-a")
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right"})
 	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": w.profileID}).Desktops[0]
 

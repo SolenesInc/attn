@@ -9,11 +9,8 @@ const (
 	ErrorCodeInvalidQuery         = "invalid_query"
 	ErrorCodeCollectionUndefined  = "collection_undefined"
 	ErrorCodeCollectionRedeclared = "collection_redeclared"
-	ErrorCodeSubscriptionLimit    = "subscription_limit"
 	ErrorCodeUnauthorizedClient   = "unauthorized_client"
 )
-
-const DocSubscriptionsPerClient = 64
 
 const AgentMessageMaxChars = 32 * 1024
 
@@ -60,7 +57,6 @@ const (
 	CmdDocQuery                      = "doc_query"
 	CmdDocCount                      = "doc_count"
 	CmdDocSubscribe                  = "doc_subscribe"
-	CmdDocUnsubscribe                = "doc_unsubscribe"
 	CmdAskOpen                       = "ask_open"
 	CmdAskAnswer                     = "ask_answer"
 	CmdAskImage                      = "ask_image"
@@ -187,7 +183,6 @@ const (
 	CmdRefreshPRs                    = "refresh_prs"
 	CmdClearWarnings                 = "clear_warnings"
 	CmdPRVisited                     = "pr_visited"
-	CmdListWorktrees                 = "list_worktrees"
 	CmdCreateWorktree                = "create_worktree"
 	CmdDeleteWorktree                = "delete_worktree"
 	CmdKeptConversationList          = "kept_conversation_list"
@@ -221,7 +216,6 @@ const (
 	CmdBrowseDirectory               = "browse_directory"
 	CmdInspectPath                   = "inspect_path"
 	CmdCreateWorktreeFromBranch      = "create_worktree_from_branch"
-	CmdFetchRemotes                  = "fetch_remotes"
 	CmdEnsureRepo                    = "ensure_repo"
 	CmdGetRepoInfo                   = "get_repo_info"
 	CmdAutomationApply               = "automation_apply"
@@ -296,7 +290,6 @@ const (
 	CmdDesktopSetOrder      = "desktop_set_order"
 	CmdDesktopSetCurrent    = "desktop_set_current"
 	CmdDesktopSetActivePane = "desktop_set_active_pane"
-	CmdDesktopPlaceSession  = "desktop_place_session"
 	CmdDesktopShowSession   = "desktop_show_session"
 	CmdTerminalStart        = "terminal_start"
 	CmdTerminalRestart      = "terminal_restart"
@@ -326,7 +319,6 @@ const (
 )
 
 const (
-	EventBackgroundLaunch          = "background_launch"
 	EventLaunchDesktopResult       = "launch_desktop_result"
 	EventProfileActionResult       = "profile_action_result"
 	EventProfilesChanged           = "profiles_changed"
@@ -364,8 +356,6 @@ const (
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
 	EventGardenSeedsChanged              = "garden_seeds_changed"
 	EventGardenReviewUpdated             = "garden_review_updated"
-	EventDocSubscriptionDelivery         = "doc_subscription_delivery"
-	EventDocSubscriptionEnded            = "doc_subscription_ended"
 	EventCrewUpdated                     = "crew_updated"
 	EventCrewCharterGetResult            = "crew_charter_get_result"
 	EventCrewCharterSetResult            = "crew_charter_set_result"
@@ -434,9 +424,6 @@ const (
 	EventPRActionResult                  = "pr_action_result"
 	EventRefreshPRsResult                = "refresh_prs_result"
 	EventFetchPRDetailsResult            = "fetch_pr_details_result"
-	EventWorktreeCreated                 = "worktree_created"
-	EventWorktreeDeleted                 = "worktree_deleted"
-	EventWorktreesUpdated                = "worktrees_updated"
 	EventWorktreeStateChanged            = "worktree_state_changed"
 	EventWorktreeSwept                   = "worktree_swept"
 	EventKeptConversationListResult      = "kept_conversation_list_result"
@@ -463,7 +450,6 @@ const (
 	EventRecentFilesResult               = "recent_files_result"
 	EventBrowseDirectoryResult           = "browse_directory_result"
 	EventInspectPathResult               = "inspect_path_result"
-	EventFetchRemotesResult              = "fetch_remotes_result"
 	EventEnsureRepoResult                = "ensure_repo_result"
 	EventGetRepoInfoResult               = "get_repo_info_result"
 	EventTileAssetReadResult             = "tile_asset_read_result"
@@ -514,7 +500,6 @@ const (
 	EventBrowserControlRequest           = "browser_control_request"
 	EventAppPerformanceRequest           = "app_performance_request"
 	EventCommandError                    = "command_error"
-	EventClientEvictionNotice            = "client_eviction_notice"
 )
 
 const (

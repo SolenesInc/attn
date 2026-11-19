@@ -50,13 +50,10 @@ type wsClient struct {
 	attachMu        sync.Mutex
 	terminalOrder   terminalOrder
 
-	docSubscriptions clientDocSubscriptions
-
 	admitted          sync.Once
 	saidHello         bool
 	clientKind        string
 	clientVersion     string
-	clientID          string
 	selectedProfileID string
 	capabilities      map[string]struct{}
 	identityMu        sync.RWMutex
@@ -158,18 +155,6 @@ func (c *wsClient) attachedTerminals() []protocol.TerminalID {
 	c.attachMu.Lock()
 	defer c.attachMu.Unlock()
 	return slices.Collect(maps.Keys(c.attachedStreams))
-}
-
-func (c *wsClient) setClientID(id string) {
-	c.identityMu.Lock()
-	defer c.identityMu.Unlock()
-	c.clientID = id
-}
-
-func (c *wsClient) ClientID() string {
-	c.identityMu.RLock()
-	defer c.identityMu.RUnlock()
-	return c.clientID
 }
 
 func (c *wsClient) owed() int {
@@ -279,11 +264,8 @@ type wsHub struct {
 	connections       map[*wsClient]struct{}
 	mu                sync.RWMutex
 	stopped           bool
-	evictions         map[string]evictionRecord
-	evictionMu        sync.Mutex
 	logf              func(format string, args ...interface{})
 	broadcastListener BroadcastListener
-	evictionListener  func(string, evictionRecord)
 }
 
 const (
@@ -607,11 +589,6 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 		code, reason := client.closeStatus()
 		if stalled {
 			code, reason = websocket.StatusPolicyViolation, slowClientCloseReason
-			d.wsHub.rememberEviction(client.ClientID(), evictionRecord{
-				at:          time.Now(),
-				reason:      reason,
-				undelivered: len(client.send) + 1,
-			})
 		}
 		client.conn.Close(code, reason)
 	}()
@@ -719,12 +696,7 @@ func (d *Daemon) wsPingLoop(client *wsClient, done <-chan struct{}) {
 			if err != nil {
 				d.logf("WebSocket ping failed: %v", err)
 				if owed := client.owed(); owed > 0 {
-					d.logf("WebSocket client stopped answering with %d messages still owed to it; filing that for its return", owed)
-					d.wsHub.rememberEviction(client.ClientID(), evictionRecord{
-						at:          time.Now(),
-						reason:      slowClientCloseReason,
-						undelivered: owed,
-					})
+					d.logf("WebSocket client stopped answering with %d messages still owed to it", owed)
 				}
 				client.hangUp(websocket.StatusGoingAway, "ping timeout", evictionCloseGrace)
 				return
@@ -737,7 +709,6 @@ func (d *Daemon) wsReadPump(client *wsClient) {
 	defer func() {
 		d.dropPendingInitialState(client)
 		d.dropFsWatchClient(client)
-		d.dropDocSubscriptions(client)
 		d.detachAllSessions(client)
 		close(client.recv)
 		d.wsHub.remove(client)
@@ -825,8 +796,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopSetCurrent(client, msg.(*protocol.DesktopSetCurrentMessage))
 	case protocol.CmdDesktopSetActivePane:
 		d.handleDesktopSetActivePane(client, msg.(*protocol.DesktopSetActivePaneMessage))
-	case protocol.CmdDesktopPlaceSession:
-		d.handleDesktopPlaceSession(client, msg.(*protocol.DesktopPlaceSessionMessage))
 	case protocol.CmdDesktopShowSession:
 		d.handleDesktopShowSession(client, msg.(*protocol.DesktopShowSessionMessage))
 	case protocol.CmdDesktopShowLeaf:
@@ -1103,8 +1072,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 
 	case protocol.CmdPRVisited:
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))
-	case protocol.CmdListWorktrees:
-		d.handleListWorktreesWS(client, msg.(*protocol.ListWorktreesMessage))
 	case protocol.CmdCreateWorktree:
 		d.handleCreateWorktreeWS(client, msg.(*protocol.CreateWorktreeMessage))
 	case protocol.CmdDeleteWorktree:
@@ -1180,8 +1147,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleInspectPathWS(client, msg.(*protocol.InspectPathMessage))
 	case protocol.CmdCreateWorktreeFromBranch:
 		d.handleCreateWorktreeFromBranchWS(client, msg.(*protocol.CreateWorktreeFromBranchMessage))
-	case protocol.CmdFetchRemotes:
-		d.handleFetchRemotesWS(client, msg.(*protocol.FetchRemotesMessage))
 	case protocol.CmdEnsureRepo:
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
 	case protocol.CmdGetRepoInfo:
@@ -1304,10 +1269,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSetTerminalTheme(client, msg.(*protocol.SetTerminalThemeMessage))
 	case protocol.CmdSetClientPresence:
 		d.handleSetClientPresence(client, msg.(*protocol.SetClientPresenceMessage))
-	case protocol.CmdDocSubscribe:
-		d.handleDocSubscribeWS(client, msg.(*protocol.DocSubscribeMessage))
-	case protocol.CmdDocUnsubscribe:
-		d.handleDocUnsubscribeWS(client, msg.(*protocol.DocUnsubscribeMessage))
 	case protocol.CmdOpenMarkdown:
 		d.handleOpenMarkdownWS(client, msg.(*protocol.OpenMarkdownMessage))
 	case protocol.CmdOpenSeed:

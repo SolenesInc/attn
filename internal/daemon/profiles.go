@@ -635,26 +635,6 @@ func layoutDirection(direction *protocol.LayoutSplitDirection) layouttree.Direct
 	return layouttree.DirectionVertical
 }
 
-func (d *Daemon) handleDesktopPlaceSession(client *wsClient, msg *protocol.DesktopPlaceSessionMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		title := ""
-		if session := d.store.Get(msg.SessionID); session != nil {
-			title = session.Label
-		}
-		desktop, paneID, err := d.store.PlaceSession(store.SessionPlacementRequest{
-			DesktopID:    msg.DesktopID,
-			SessionID:    msg.SessionID,
-			AnchorPaneID: protocol.Deref(msg.AnchorPaneID),
-			Direction:    layoutDirection(msg.Direction),
-			NewPaneShare: protocol.Deref(msg.NewPaneShare),
-			Title:        title,
-			Status:       profiles.PaneStatusReady,
-			Focus:        true,
-		})
-		return d.desktopChanged(desktop).withPaneID(paneID), err
-	})
-}
-
 func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMoveLeafMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		direction, before := layoutDockEdge(protocol.Deref(msg.Edge))

@@ -50,11 +50,10 @@ const (
 	FactPRHeatChanged    = "pr.heat.changed"
 	FactPRDetailsChanged = "pr.details.changed"
 
-	FactWorktreeCreated        = "worktree.created"
-	FactWorktreeDeleted        = "worktree.deleted"
-	FactWorktreeListReconciled = "worktree.list.reconciled"
-	FactWorktreeStateChanged   = "worktree.state.changed"
-	FactWorktreeSwept          = "worktree.swept"
+	FactWorktreeCreated      = "worktree.created"
+	FactWorktreeDeleted      = "worktree.deleted"
+	FactWorktreeStateChanged = "worktree.state.changed"
+	FactWorktreeSwept        = "worktree.swept"
 
 	FactGitOperationStarted  = "git.operation.started"
 	FactGitOperationFinished = "git.operation.finished"
@@ -304,7 +303,6 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactGardenReviewChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectGardenReview(ev.Subject) },
 		},
-		{filter: bus.Filter{FactBackgroundLaunch}, apply: func(d *Daemon, ev bus.Event) { d.projectBackgroundLaunch(ev) }},
 		{
 			filter: bus.Filter{"crew.*"},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectCrewRoster() },
@@ -324,18 +322,6 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactSessionPTYExited},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionPTYExited(ev) },
-		},
-		{
-			filter: bus.Filter{FactWorktreeCreated},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreeCreated(ev) },
-		},
-		{
-			filter: bus.Filter{FactWorktreeDeleted},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreeDeleted(ev) },
-		},
-		{
-			filter: bus.Filter{FactWorktreeListReconciled},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreesUpdated(ev) },
 		},
 		{
 			filter: bus.Filter{FactWorktreeStateChanged},

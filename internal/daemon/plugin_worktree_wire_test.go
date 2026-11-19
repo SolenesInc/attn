@@ -44,15 +44,9 @@ type pluginWorktreeAnswer struct {
 	Error  string `json:"error,omitempty"`
 }
 
-func pluginWorktreesListed(app *testworld.Peer, repo string) []protocol.Worktree {
-	app.T.Helper()
-	return testworld.Request(app, protocol.ListWorktreesMessage{Cmd: protocol.CmdListWorktrees, MainRepo: repo}, protocol.EventWorktreesUpdated,
-		func(protocol.WebSocketEvent) bool { return true }).Worktrees
-}
-
 func pluginWorktreeListedOn(app *testworld.Peer, repo, path string) (string, bool) {
 	app.T.Helper()
-	for _, worktree := range pluginWorktreesListed(app, repo) {
+	for _, worktree := range repoInfoWorktrees(app, repo) {
 		if worktree.Path == path {
 			return worktree.Branch, true
 		}
@@ -482,8 +476,8 @@ func TestTheSweepKeepsAProviderDeletedWorktreeGitCouldNotForgetSoADeleteCanFinis
 	if swept.Action != "failed" {
 		t.Errorf("the sweep recorded %s (%s), want it failed while Git cannot prune the registration", swept.Action, protocol.Deref(swept.Reason))
 	}
-	if _, listed := pluginWorktreeListedOn(app, repo, path); !listed {
-		t.Fatal("the daemon dropped a worktree whose Git registration was never pruned, so nothing can finish its removal")
+	if registered, err := cli.WorktreeList(repo, 0); err != nil || !slices.Contains(worktreeCreatePaths(registered.Worktrees), path) {
+		t.Fatalf("the daemon dropped a worktree whose Git registration was never pruned, so nothing can finish its removal: %+v, %v", registered, err)
 	}
 
 	if err := os.WriteFile(config, healthyConfig, 0o644); err != nil {

@@ -75,8 +75,7 @@ func TestStoppingTheDaemonLetsAnAdmittedWorktreeCreationFinish(t *testing.T) {
 	gate.release(t)
 	finish()
 	w.start()
-	listed := testworld.Request(w.App(), protocol.ListWorktreesMessage{Cmd: protocol.CmdListWorktrees, MainRepo: repo},
-		protocol.EventWorktreesUpdated, func(protocol.WebSocketEvent) bool { return true }).Worktrees
+	listed := repoInfoWorktrees(w.App(), repo)
 	var registered bool
 	for _, worktree := range listed {
 		if worktree.Path == path && worktree.Branch == "feat-stop" {
@@ -136,7 +135,7 @@ func TestStoppingTheDaemonLetsAnAdmittedFetchFinish(t *testing.T) {
 	}
 	defer release.Close()
 	gate.arm(t)
-	app.Send(protocol.FetchRemotesMessage{Cmd: protocol.CmdFetchRemotes, Repo: checkout})
+	app.Send(protocol.EnsureRepoMessage{Cmd: protocol.CmdEnsureRepo, TargetPath: checkout, CloneURL: origin})
 	gate.awaitBlocked(t)
 	finish := w.beginStop(t)
 	gate.release(t)
@@ -145,8 +144,8 @@ func TestStoppingTheDaemonLetsAnAdmittedFetchFinish(t *testing.T) {
 	if got := strings.TrimSpace(runGit(t, checkout, "rev-parse", "refs/remotes/origin/main")); got != head {
 		t.Errorf("the admitted fetch saved %q, want origin's new head %q", got, head)
 	}
-	fetched := testworld.Request(w.App(), protocol.FetchRemotesMessage{Cmd: protocol.CmdFetchRemotes, Repo: checkout},
-		protocol.EventFetchRemotesResult, func(protocol.WebSocketEvent) bool { return true })
+	fetched := testworld.Request(w.App(), protocol.EnsureRepoMessage{Cmd: protocol.CmdEnsureRepo, TargetPath: checkout, CloneURL: origin},
+		protocol.EventEnsureRepoResult, func(protocol.WebSocketEvent) bool { return true })
 	if !protocol.Deref(fetched.Success) {
 		t.Errorf("fetching again after restart = %+v, want a usable checkout", fetched)
 	}

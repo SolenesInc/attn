@@ -146,9 +146,6 @@ func TestTheSweepReclaimsWhatNoSessionHolds(t *testing.T) {
 	if swept.Action != "removed" || !strings.Contains(protocol.Deref(swept.Reason), "merged") {
 		t.Errorf("the sweep recorded %s (%s); want the worktree removed as merged", swept.Action, protocol.Deref(swept.Reason))
 	}
-	testworld.Await(app, protocol.EventWorktreeDeleted, func(e protocol.WebSocketEvent) bool {
-		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == reclaimed
-	})
 	if _, err := os.Stat(reclaimed); !os.IsNotExist(err) {
 		t.Errorf("the reclaimed worktree is still on disk: %v", err)
 	}
@@ -166,26 +163,25 @@ func TestTheSweepReclaimsWhatNoSessionHolds(t *testing.T) {
 }
 
 func TestTheWorktreeListFollowsGit(t *testing.T) {
-	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	shop := newRepo(t, "shop")
-	createWorktree(t, app, shop, "feat-known")
-	nested := filepath.Join(shop, ".claude", "worktrees", "agent-1")
-	runGit(t, shop, "worktree", "add", "-b", "agent/one", nested)
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		shop := newRepo(t, "shop")
+		createWorktree(t, app, shop, "feat-known")
+		nested := filepath.Join(shop, ".claude", "worktrees", "agent-1")
+		runGit(t, shop, "worktree", "add", "-b", "agent/one", nested)
 
-	refreshWorktrees(t, cli)
-	if adopted := sweepAwaitState(app, nested, func(protocol.Worktree) bool { return true }); adopted.Branch != "agent/one" || adopted.MainRepo != shop {
-		t.Errorf("the worktree git added under .claude/worktrees reads %+v; want branch agent/one of %s", adopted, shop)
-	}
+		refreshWorktrees(t, cli)
+		if adopted := sweepAwaitState(app, nested, func(protocol.Worktree) bool { return true }); adopted.Branch != "agent/one" || adopted.MainRepo != shop {
+			t.Errorf("the worktree git added under .claude/worktrees reads %+v; want branch agent/one of %s", adopted, shop)
+		}
 
-	runGit(t, shop, "worktree", "remove", nested)
-	refreshWorktrees(t, cli)
-	testworld.Await(app, protocol.EventWorktreeDeleted, func(e protocol.WebSocketEvent) bool {
-		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == nested
+		runGit(t, shop, "worktree", "remove", nested)
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		if listed, err := cli.WorktreeList(shop, 0); err != nil || slices.Contains(worktreeCreatePaths(listed.Worktrees), nested) {
+			t.Errorf("the worktree list after git removed it = %+v, %v; want it gone", listed, err)
+		}
 	})
-	if listed, err := cli.WorktreeList(shop, 0); err != nil || slices.Contains(worktreeCreatePaths(listed.Worktrees), nested) {
-		t.Errorf("the worktree list after git removed it = %+v, %v; want it gone", listed, err)
-	}
 }
 
 func TestAMergedWorktreeIsScheduledForTheEndOfItsIdleWindow(t *testing.T) {
@@ -193,7 +189,7 @@ func TestAMergedWorktreeIsScheduledForTheEndOfItsIdleWindow(t *testing.T) {
 	app := w.App()
 	shop := newRepo(t, "shop")
 	path := createWorktree(t, app, shop, "feat-done")
-	created := sweepCreatedAt(t, app, path)
+	created := sweepCreatedAt(t, w.Client(), shop, path)
 
 	for _, row := range []struct {
 		idleDays string
@@ -365,12 +361,9 @@ func sweepListed(t *testing.T, cli *client.Client, repo, path string) protocol.W
 	return protocol.Worktree{}
 }
 
-func sweepCreatedAt(t *testing.T, app *testworld.Peer, path string) time.Time {
+func sweepCreatedAt(t *testing.T, cli *client.Client, repo, path string) time.Time {
 	t.Helper()
-	created := testworld.Await(app, protocol.EventWorktreeCreated, func(e protocol.WebSocketEvent) bool {
-		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == path
-	}).Worktrees[0]
-	at, err := time.Parse(time.RFC3339, protocol.Deref(created.CreatedAt))
+	at, err := time.Parse(time.RFC3339, protocol.Deref(sweepListed(t, cli, repo, path).CreatedAt))
 	if err != nil {
 		t.Fatal(err)
 	}
