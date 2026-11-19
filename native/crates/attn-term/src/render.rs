@@ -1331,4 +1331,14 @@ mod tests {
             );
         }
     }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_text_default_symbol_draws_in_the_cell_colour_not_as_a_colour_emoji() {
+        let mut raster = Raster::new(2.0, Metrics::of(FONT_SIZE));
+        for text in ["\u{23fa}", "\u{23f8}"] {
+            let canvas = raster.raster(text, 0, false).expect("drawn");
+            assert!(!canvas.color, "{text:?} drew as a colour emoji");
+        }
+    }
 }
