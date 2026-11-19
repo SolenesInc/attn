@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<'EOF'
+scripts/windows-vm: try attn's native app on Windows 11 through WSL2, in a local QEMU VM.
+
+  scripts/windows-vm create          download Windows 11 Enterprise evaluation, install it unattended,
+                                     then WSL2 with an Ubuntu 24.04 distro; leaves the VM running
+  scripts/windows-vm start           start the VM and wait until WSL answers over SSH
+  scripts/windows-vm stop            shut Windows down
+  scripts/windows-vm delete          stop the VM and remove its disk (keeps the downloaded ISO)
+  scripts/windows-vm status          whether the VM runs, and the disk it holds
+  scripts/windows-vm ssh win|wsl [COMMAND...]
+                                     a shell or command in Windows (cmd.exe) or in WSL (bash)
+  scripts/windows-vm install [REV]   copy this checkout (or REV) into WSL, provision its tools,
+                                     build and install the native app on the instance "windows"
+  scripts/windows-vm launch          start the installed native app through WSLg
+  scripts/windows-vm shot OUT.png    screenshot the Windows desktop
+  scripts/windows-vm vnc             print the VNC socket that shows the desktop live
+
+The VM lives in $ATTN_WINDOWS_VM_DIR (default ~/.local/share/attn-windows-vm). It needs
+KVM with nested virtualization, qemu-system-x86_64, qemu-img, xorriso and OVMF.
+EOF
+    exit 2
+}
+
+die() {
+    printf 'scripts/windows-vm: %s\n' "$*" >&2
+    exit 1
+}
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+assets="$root/scripts/windows-vm.d"
+dir="${ATTN_WINDOWS_VM_DIR:-$HOME/.local/share/attn-windows-vm}"
+iso="$dir/win11-eval.iso"
+iso_url='https://go.microsoft.com/fwlink/?linkid=2289031&clcid=0x409&culture=en-us&country=us'
+ssh_port="${ATTN_WINDOWS_VM_SSH_PORT:-2522}"
+cpus="${ATTN_WINDOWS_VM_CPUS:-12}"
+memory_gib="${ATTN_WINDOWS_VM_MEMORY_GIB:-24}"
+wsl_memory_gib=$((memory_gib * 2 / 3))
+distro=attn-ubuntu
+instance=windows
+ovmf_code=/usr/share/edk2/ovmf/OVMF_CODE.fd
+ovmf_vars=/usr/share/edk2/ovmf/OVMF_VARS.fd
+install_limit_seconds=5400
+boot_limit_seconds=900
+
+ssh_config="$dir/ssh_config"
+win() { ssh -F "$ssh_config" attn-win "$@"; }
+wsl() { ssh -F "$ssh_config" attn-wsl "$@"; }
+
+running() {
+    [ -f "$dir/qemu.pid" ] && kill -0 "$(cat "$dir/qemu.pid")" 2>/dev/null
+}
+
+qmp() {
+    python3 -I - "$dir/qmp.sock" "$1" <<'PY'
+import json, socket, sys
+sock = socket.socket(socket.AF_UNIX)
+sock.connect(sys.argv[1])
+stream = sock.makefile('rw')
+def call(command):
+    stream.write(json.dumps(command) + '\n')
+    stream.flush()
+    while True:
+        reply = json.loads(stream.readline())
+        if 'return' in reply or 'error' in reply:
+            return reply
+stream.readline()
+call({'execute': 'qmp_capabilities'})
+reply = call(json.loads(sys.argv[2]))
+if 'error' in reply:
+    sys.exit(reply['error']['desc'])
+print(json.dumps(reply['return']))
+PY
+}
+
+wait_for() {
+    local what="$1" limit="$2" started
+    shift 2
+    started=$SECONDS
+    until "$@" >/dev/null 2>&1; do
+        running || die "the VM stopped while waiting for $what"
+        [ $((SECONDS - started)) -lt "$limit" ] || die "$what did not answer within ${limit}s"
+        sleep 5
+    done
+    printf '%s answered after %ss\n' "$what" $((SECONDS - started))
+}
+
+start_qemu() {
+    local media=("$@")
+    [ -e /dev/kvm ] || die "/dev/kvm is missing"
+    local drives=() unit=1
+    for m in "${media[@]}"; do
+        drives+=(-drive "file=$m,media=cdrom,if=none,id=cd$unit,readonly=on" -device "ide-cd,drive=cd$unit,bus=ahci.$unit")
+        unit=$((unit + 1))
+    done
+    rm -f "$dir/qmp.sock" "$dir/vnc.sock"
+    qemu-system-x86_64 \
+        -name attn-windows -machine q35,accel=kvm -smp "$cpus" -m "${memory_gib}G" \
+        -cpu host,hv_relaxed,hv_vapic,hv_spinlocks=0x1fff,hv_time \
+        -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code" \
+        -drive "if=pflash,format=raw,file=$dir/OVMF_VARS.fd" \
+        -device ahci,id=ahci \
+        -drive "file=$dir/disk.qcow2,if=none,id=disk0,discard=unmap,detect-zeroes=unmap" \
+        -device ide-hd,drive=disk0,bus=ahci.0,bootindex=1 \
+        "${drives[@]}" \
+        -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${ssh_port}-:22" -device e1000e,netdev=net0 \
+        -device VGA,edid=on,xres=1920,yres=1080 -device qemu-xhci -device usb-tablet \
+        -display none -vnc "unix:$dir/vnc.sock" \
+        -qmp "unix:$dir/qmp.sock,server=on,wait=off" \
+        -daemonize -pidfile "$dir/qemu.pid"
+}
+
+write_ssh_config() {
+    cat >"$ssh_config" <<EOF
+Host attn-win attn-wsl
+  User attn
+  IdentityFile $dir/id_ed25519
+  IdentitiesOnly yes
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  LogLevel ERROR
+  ServerAliveInterval 30
+  ConnectTimeout 10
+  BatchMode yes
+Host attn-win
+  HostName 127.0.0.1
+  Port $ssh_port
+Host attn-wsl
+  HostName 127.0.0.1
+  Port 2222
+  ProxyCommand ssh -F $ssh_config -W %h:%p attn-win
+EOF
+}
+
+cmd_create() {
+    for tool in qemu-system-x86_64 qemu-img xorriso python3 ssh-keygen; do
+        command -v "$tool" >/dev/null || die "$tool is missing (Fedora: sudo dnf install qemu-kvm qemu-img edk2-ovmf xorriso)"
+    done
+    [ -f "$ovmf_code" ] || die "OVMF is missing at $ovmf_code (Fedora: sudo dnf install edk2-ovmf)"
+    mkdir -p "$dir"
+    local started=$SECONDS
+    if [ ! -f "$iso" ]; then
+        echo ">>> Downloading the Windows 11 Enterprise evaluation ISO (5.4 GB)"
+        curl -fL --progress-bar -o "$iso.part" "$iso_url"
+        mv "$iso.part" "$iso"
+    fi
+    [ -f "$dir/id_ed25519" ] || ssh-keygen -q -t ed25519 -N '' -C attn-windows-vm -f "$dir/id_ed25519"
+    [ -f "$dir/password" ] || (umask 077; head -c 12 /dev/urandom | base64 | tr -d '/+=' >"$dir/password")
+    write_ssh_config
+
+    if [ ! -e "$dir/disk.qcow2" ]; then
+        install_windows
+    elif ! running; then
+        start_qemu
+    fi
+    wait_for "Windows setup (SSH into Windows)" "$install_limit_seconds" win 'if exist C:\attn-setup.done (exit 0) else (exit 1)'
+    echo ">>> Windows restarts to enable WSL's features"
+    sleep 30
+    wait_for "Windows after its restart" "$boot_limit_seconds" win 'exit 0'
+    printf 'Windows installed after %ss\n' $((SECONDS - started))
+    install_wsl
+    printf 'Created after %ss. Disk: %s\n' $((SECONDS - started)) "$(du -sh "$dir/disk.qcow2" | cut -f1)"
+}
+
+install_windows() {
+    local media="$dir/unattend"
+    rm -rf "$media"
+    mkdir -p "$media"
+    sed "s/@PASSWORD@/$(cat "$dir/password")/g" "$assets/autounattend.xml" >"$media/autounattend.xml"
+    cp "$assets/setup.ps1" "$media/setup.ps1"
+    cp "$dir/id_ed25519.pub" "$media/authorized_keys"
+    xorriso -as mkisofs -quiet -J -r -V UNATTEND -o "$dir/unattend.iso" "$media"
+    rm -rf "$media"
+
+    cp "$ovmf_vars" "$dir/OVMF_VARS.fd"
+    qemu-img create -q -f qcow2 "$dir/disk.qcow2" 160G
+
+    echo ">>> Installing Windows unattended"
+    start_qemu "$iso" "$dir/unattend.iso"
+    answer_press_any_key_to_boot_from_cd
+}
+
+answer_press_any_key_to_boot_from_cd() {
+    for _ in $(seq 1 20); do
+        qmp '{"execute":"send-key","arguments":{"keys":[{"type":"qcode","data":"ret"}]}}' >/dev/null 2>&1 || true
+        sleep 1
+    done
+}
+
+install_wsl() {
+    echo ">>> Installing WSL and the $distro distro"
+    win 'mkdir C:\attn-wsl 2>nul & exit 0'
+    scp -q -F "$ssh_config" "$assets/install-wsl.ps1" "$assets/setup-distro.sh" "$dir/id_ed25519.pub" attn-win:C:/attn-wsl/
+    win 'move /y C:\attn-wsl\id_ed25519.pub C:\attn-wsl\authorized_keys >nul'
+    win "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\attn-wsl\\install-wsl.ps1 -Distro $distro -Memory $wsl_memory_gib -Processors $cpus"
+    wait_for "WSL (SSH into $distro)" "$boot_limit_seconds" wsl true
+}
+
+wsl_started() {
+    wsl true && return
+    win 'schtasks /run /tn attn-wsl-start' >/dev/null
+    return 1
+}
+
+cmd_start() {
+    [ -e "$dir/disk.qcow2" ] || die "no VM in $dir; run scripts/windows-vm create"
+    write_ssh_config
+    running || start_qemu
+    wait_for "Windows" "$boot_limit_seconds" win 'exit 0'
+    wait_for "WSL" "$boot_limit_seconds" wsl_started
+}
+
+cmd_stop() {
+    running || { echo "The VM is not running"; return; }
+    win 'shutdown /s /t 0' || qmp '{"execute":"system_powerdown"}' >/dev/null
+    local started=$SECONDS
+    while running; do
+        [ $((SECONDS - started)) -lt 180 ] || { qmp '{"execute":"quit"}' >/dev/null || true; die "Windows did not shut down within 180s; quit QEMU"; }
+        sleep 2
+    done
+    printf 'Stopped after %ss\n' $((SECONDS - started))
+}
+
+cmd_delete() {
+    if running; then cmd_stop; fi
+    rm -f "$dir/disk.qcow2" "$dir/OVMF_VARS.fd" "$dir/unattend.iso" "$dir/qemu.pid"
+    echo "Deleted the VM's disk; the ISO stays at $iso"
+}
+
+cmd_status() {
+    if running; then echo "running (pid $(cat "$dir/qemu.pid"))"; else echo "stopped"; fi
+    [ -e "$dir/disk.qcow2" ] && printf 'disk: %s on the host\n' "$(du -sh "$dir/disk.qcow2" | cut -f1)"
+    [ -e "$iso" ] && printf 'iso: %s\n' "$(du -sh "$iso" | cut -f1)"
+    return 0
+}
+
+cmd_ssh() {
+    local target="${1:-}"
+    shift || true
+    case "$target" in
+        win) win "$@" ;;
+        wsl) wsl "$@" ;;
+        *) usage ;;
+    esac
+}
+
+cmd_install() {
+    local rev="${1:-}" src="$root"
+    if [ -n "$rev" ]; then
+        src="$dir/source"
+        [ -d "$src" ] || git -C "$root" worktree add --detach "$src" "$rev"
+        git -C "$src" checkout --quiet --detach "$rev"
+    fi
+    local runner=(node "$src/app/scripts/real-app-harness/linux-runner.mjs")
+    local target=(--provider ssh --target attn-wsl --ssh-config "$ssh_config" --checkout windows --instance "$instance")
+    local started=$SECONDS
+    local inputs
+    inputs="$(cd "$src" && cat .github/actions/setup-linux-app-deps/packages.txt go.mod .tool-versions \
+        rust-toolchain.toml native/rust-toolchain.toml app/scripts/real-app-harness/vm/provision.sh | sha256sum | cut -c1-16)"
+    if [ "$(wsl cat .attn-windows-vm-provisioned 2>/dev/null)" != "$inputs" ]; then
+        "${runner[@]}" provision "${target[@]}"
+        wsl "echo $inputs >.attn-windows-vm-provisioned"
+        printf 'Provisioned after %ss\n' $((SECONDS - started))
+    fi
+    "${runner[@]}" sync "${target[@]}"
+    "${runner[@]}" run "${target[@]}" -- make build-app "INSTANCE=$instance" APP=native
+    printf 'Built after %ss\n' $((SECONDS - started))
+    "${runner[@]}" run "${target[@]}" -- make install-staged "INSTANCE=$instance" APP=native
+    printf 'Installed after %ss\n' $((SECONDS - started))
+}
+
+cmd_launch() {
+    wsl bash -s -- "$instance" <<'EOF'
+set -euo pipefail
+instance="$1"
+source="$HOME/.local/share/attn-linux-runner/windows/source"
+exe="$("$source/attn" instance resolve --instance "$instance" --field appExecutable)"
+data="$("$source/attn" instance resolve --instance "$instance" --field dataDir)"
+mkdir -p "$data"
+DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
+    setsid "$exe" </dev/null >>"$data/app.log" 2>&1 &
+echo "Launched $exe (pid $!); log: $data/app.log"
+EOF
+}
+
+cmd_shot() {
+    local out="${1:-}"
+    [ -n "$out" ] || usage
+    running || die "the VM is not running"
+    out="$(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
+    qmp "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\"$out\",\"format\":\"png\"}}" >/dev/null
+    echo "$out"
+}
+
+command="${1:-}"
+shift || true
+case "$command" in
+    create) cmd_create "$@" ;;
+    start) cmd_start "$@" ;;
+    stop) cmd_stop "$@" ;;
+    delete) cmd_delete "$@" ;;
+    status) cmd_status "$@" ;;
+    ssh) cmd_ssh "$@" ;;
+    install) cmd_install "$@" ;;
+    launch) cmd_launch "$@" ;;
+    shot) cmd_shot "$@" ;;
+    vnc) echo "$dir/vnc.sock" ;;
+    -h | --help | help | '') usage ;;
+    *) usage ;;
+esac

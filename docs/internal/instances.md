@@ -74,7 +74,8 @@ shipping profile. Run full macOS installs outside the sandbox. Signing then find
 the machine's code-signing identity with `security find-identity` and does not
 fall back to an ad-hoc signature, so macOS privacy grants such as Screen
 Recording stay attached to the app across rebuilds. For a Linux VM, see [Local Linux runner](linux-runner.md);
-for a macOS VM, see [macOS VM](macos-vm.md).
+for a macOS VM, see [macOS VM](macos-vm.md); for Windows through WSL, see
+[Windows VM](windows-vm.md).
 
 An instance has one app. `APP=native` on `make install` and `make run` builds
 and installs the native app from `native/` instead of the Tauri app, with the
