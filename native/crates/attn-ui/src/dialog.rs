@@ -2,8 +2,7 @@ use rune::{Color, El, Shadow, TextStyle, Tx, col, row, text};
 use rune_kit::ButtonVariant;
 
 use crate::frame::shadow;
-use crate::glyph_button::ICON_BUTTON;
-use crate::system::{IconSize, door};
+use crate::system::{IconSize, Size, door};
 use crate::{Backdrop, Frame, GlyphButton, Tokens};
 
 /// How a dialog is framed, as the Tauri app's CSS draws that family of dialog: the backdrop
@@ -29,6 +28,10 @@ pub struct DialogFrame {
     /// `linear-gradient(135deg, …)`, through its stops.
     pub wash: Option<(f32, [(f32, Color); 2])>,
 }
+
+/// A dialog's × button: a `Large` mark with 4 points round it, a compact control's height
+/// square.
+const CLOSE_SIDE: f32 = Size::Compact.height();
 
 /// The × in a dialog's header: the glyph's size, its ink and the square it is pressed in.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -60,7 +63,7 @@ impl DialogFrame {
             close: Some(Close {
                 size: IconSize::Large,
                 ink: t.text_dimmed,
-                side: ICON_BUTTON,
+                side: CLOSE_SIDE,
             }),
             sheen: None,
             wash: None,
@@ -103,7 +106,7 @@ impl DialogFrame {
             close: Some(Close {
                 size: IconSize::Large,
                 ink: t.text_muted,
-                side: ICON_BUTTON,
+                side: CLOSE_SIDE,
             }),
             sheen: None,
             wash: None,
