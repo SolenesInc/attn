@@ -5,7 +5,9 @@
 
 use std::path::Path;
 
-use attn_protocol::OpenMarkdownMessage;
+use attn_protocol::{
+    OpenMarkdownMessage, SeedArtifactTargetMessage, SeedArtifactTargetResultMessage,
+};
 use percent_encoding::percent_decode_str;
 use rune::Tx;
 
@@ -128,6 +130,20 @@ impl Document {
                 follows: true,
             };
         }
+        if let Some(file) = self.seed_file(href) {
+            let name = decoded(&file);
+            return if is_safe_local(&name) {
+                Verdict {
+                    help: Some(name),
+                    follows: true,
+                }
+            } else {
+                Verdict {
+                    help: Some(format!("Blocked seed artifact target: {file}")),
+                    follows: false,
+                }
+            };
+        }
         verdict(
             resolve(&self.path, href).as_ref(),
             self.outpost.as_ref().map(|o| o.name.as_str()),
@@ -139,9 +155,17 @@ impl Document {
         let path = match resolve(&self.path, src) {
             Some(Target::Local(file)) if !self.path.is_empty() => Some(file),
             Some(_) => None,
-            None => self.seed.as_ref().and_then(|_| seed_file(src)),
+            None => self.seed_file(src),
         }?;
         is_image(&path).then_some(path)
+    }
+
+    /// The file of the document's seed that `target` names, when it names no other file.
+    fn seed_file(&self, target: &str) -> Option<String> {
+        self.seed.as_ref()?;
+        resolve(&self.path, target)
+            .is_none()
+            .then(|| seed_file(target))?
     }
 
     fn seed(&self, href: &str) -> Option<String> {
@@ -182,6 +206,39 @@ pub(crate) fn follow(state: &mut State, document: &Document, href: &str, tx: &mu
     }
     if !document.verdict(href).follows {
         return;
+    }
+    if let (Some(seed_id), Some(relative_target)) = (&document.seed, document.seed_file(href)) {
+        let seed_id = seed_id.clone();
+        return state.ask(
+            |request_id| SeedArtifactTargetMessage {
+                seed_id,
+                relative_target,
+                purpose: "link".into(),
+                request_id,
+                ..SeedArtifactTargetMessage::new()
+            },
+            |state, answer: Answer, tx| {
+                let opened = answer
+                    .outcome()
+                    .and_then(|reply| {
+                        reply
+                            .parse::<SeedArtifactTargetResultMessage>()
+                            .filter(|r| r.success)
+                            .and_then(|r| r.result?.path)
+                            .ok_or_else(|| "the daemon named no file".to_owned())
+                    })
+                    .and_then(|path| {
+                        tx.open_uri(&attn_term::links::file_url(&path))
+                            .map_err(|why| format!("{path}: {why}"))
+                    });
+                if let Err(why) = opened {
+                    state
+                        .window
+                        .notify(format!("Could not open the seed's file: {why}"), tx);
+                }
+            },
+            tx,
+        );
     }
     let target = resolve(&document.path, href);
     let outpost = document.outpost.as_ref();

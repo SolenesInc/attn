@@ -878,3 +878,64 @@ fn a_seed_tile_draws_an_image_its_body_names_from_the_seeds_own_files() {
             .is_none()
     );
 }
+
+#[test]
+fn a_seed_tile_opens_a_file_its_body_links_from_the_seeds_own_files() {
+    use attn_protocol::{SeedArtifactTargetResult, SeedArtifactTargetResultMessage};
+    let linked = || {
+        with(seed("s-link11", "Linked plan"), |s| {
+            s.body = "Read [the report](report.pdf) first.\n".into()
+        })
+    };
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        profiles: Some(vec![profile()]),
+        desktops: Some(vec![desktop(
+            row(vec![pane("a"), seed_tile("s-link11")]),
+            1,
+        )]),
+        ..initial(vec![linked()], vec![session("agent", "Agent a")])
+    });
+    daemon.on("seed_document_get", move |r| {
+        document(r, linked(), Vec::new(), &[])
+    });
+    daemon.on("seed_artifact_target", |r: &Request| {
+        let target = r["relative_target"].as_str().unwrap();
+        message(SeedArtifactTargetResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            result: Some(SeedArtifactTargetResult {
+                relative_target: target.into(),
+                path: Some(format!("/notebook/seeds/s-link11/{target}")),
+                ..SeedArtifactTargetResult::default()
+            }),
+            ..SeedArtifactTargetResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, (1600.0, 900.0));
+    world.open_desktop();
+    world.settle();
+
+    world.gesture(|app| app.click(Target::role("link").name("the report")));
+    world.settle();
+
+    let asked: Vec<_> = world
+        .daemon
+        .sent_of("seed_artifact_target")
+        .into_iter()
+        .map(|r| {
+            (
+                r["seed_id"].clone(),
+                r["relative_target"].clone(),
+                r["purpose"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        asked,
+        vec![(json!("s-link11"), json!("report.pdf"), json!("link"))]
+    );
+    assert_eq!(
+        world.opened_links(),
+        vec!["file:///notebook/seeds/s-link11/report.pdf".to_owned()]
+    );
+}
