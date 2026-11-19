@@ -100,7 +100,7 @@ const LONG_ERROR: &str = "the app server exited with status 1 before it answered
      request, after loading a configuration it could not read from \
      ~/.config/attn/outposts/build-and-release-platform-tokyo-region-primary.toml";
 
-/// Each name, label, title and host in `value` made long, and each error made a long sentence,
+/// Each name, label and title in `value` made long, and each error made a long sentence,
 /// the same way every time so the app and the scene agree on what it sent.
 fn lengthen(value: &mut Value) {
     match value {

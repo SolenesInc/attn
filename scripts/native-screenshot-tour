@@ -91,7 +91,7 @@ shoot() {
   fi
   make -C "$checkout" -s "$(vt_archive)"
   find "$out" -name '*.png' -delete
-  rm -f "$out/cost.tsv"
+  rm -f "$out/cost.tsv" "$out/clips.tsv" "$out/failed.txt"
   run_tour "$checkout" shoot "$out" ${flags[@]+"${flags[@]}"}
   echo "native-screenshot-tour: wrote $(find "$out" -name '*.png' | wc -l | tr -d ' ') screens to $out"
 }

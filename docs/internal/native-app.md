@@ -147,11 +147,13 @@ characters; it can be given more than once, and a pattern that matches no screen
 fails the run.
 
 `--window 800x600 --text 1.5 --long` shoots the worst case a person meets: the
-smallest window, the largest text size, and every name, label, title and host
-the daemon sends made long in Latin and in CJK, every error a long daemon
+smallest window, the largest text size, and every name, label and title the
+daemon sends made long in Latin and in CJK, every error a long daemon
 sentence. A scene that cannot run in that window is listed in `failed.txt`
 and the rest still draw; today twelve fail at 800 × 600 and fourteen at
-150%, and no scene yet draws a Launcher row on an outpost.
+150%. A scene that finds something by its name fails there too in a long run,
+which says nothing about layout. No scene yet draws a Launcher row on an
+outpost.
 
 `shoot`
 with a revision checks it out, with this checkout's tour, in the checkout's base
