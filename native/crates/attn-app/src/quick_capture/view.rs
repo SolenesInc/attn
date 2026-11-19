@@ -1,11 +1,11 @@
 use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
-use rune::{ClipboardContent, Cx, El, Image, SurfaceFit, Tx, col, el, row, text, text_input};
+use rune::{ClipboardContent, Cx, El, SurfaceFit, Tx, col, el, row, text, text_input};
 use rune_kit::ScrollBar;
 
 use super::attach::{self, Attachment, Source};
-use super::previews::{self, Sent};
+use super::previews::{self, Picture, Sent};
 use super::{Busy, Face, Panel, history};
 
 /// The key of the message field, which holds the keyboard while the draft shows.
@@ -201,9 +201,9 @@ fn files(panel: &Panel, t: &Tokens) -> El {
             let preview = file
                 .image()
                 .and_then(|path| panel.previews.drafted(path))
-                .filter(|image| image.error().is_none());
-            if let Some(image) = preview {
-                return thumbnail(panel, file, image, t);
+                .and_then(|picture| self::picture(&file.name, picture, 84.0, 58.0, 7.0));
+            if let Some(picture) = preview {
+                return thumbnail(panel, file, picture, t);
             }
             let id = file.id.clone();
             let ready = file.ready();
@@ -253,7 +253,7 @@ fn files(panel: &Panel, t: &Tokens) -> El {
 
 /// An image file of the draft as the picture it holds, which the Tauri panel draws 84 by 58
 /// points, cropped to fill.
-fn thumbnail(panel: &Panel, file: &Attachment, image: &Image, t: &Tokens) -> El {
+fn thumbnail(panel: &Panel, file: &Attachment, picture: El, t: &Tokens) -> El {
     let id = file.id.clone();
     el().key(format!("capture.file.{}", file.id))
         .role("listitem")
@@ -263,7 +263,7 @@ fn thumbnail(panel: &Panel, file: &Attachment, image: &Image, t: &Tokens) -> El 
         .radius(7.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
-        .child(picture(&file.name, image, 84.0, 58.0, 7.0))
+        .child(picture)
         .child(
             row()
                 .absolute(0.0, 0.0)
@@ -283,18 +283,19 @@ fn thumbnail(panel: &Panel, file: &Attachment, image: &Image, t: &Tokens) -> El 
         )
 }
 
-/// `image` cropped to fill `w` by `h` points, named `name` once it has decoded.
-fn picture(name: &str, image: &Image, w: f32, h: f32, radius: f32) -> El {
-    let label = if image.is_ready() {
-        name.to_owned()
-    } else {
-        format!("{name} (loading)")
-    };
-    el().role("image")
-        .label(label)
-        .size(w, h)
-        .radius(radius)
-        .pixels_fit(image.pixels(), SurfaceFit::Fill)
+/// `picture` cropped to fill `w` by `h` points, named `name` once it has decoded, and nothing
+/// when it could not decode.
+fn picture(name: &str, picture: &Picture, w: f32, h: f32, radius: f32) -> Option<El> {
+    let frame = el().role("image").size(w, h).radius(radius);
+    match picture {
+        Picture::Decoding(_) => Some(frame.label(format!("{name} (loading)"))),
+        Picture::Ready(image) => Some(
+            frame
+                .label(name)
+                .pixels_fit(image.pixels(), SurfaceFit::Fill),
+        ),
+        Picture::Broken => None,
+    }
 }
 
 fn alert(panel: &Panel, t: &Tokens) -> Option<El> {
@@ -691,9 +692,7 @@ fn sent_image(
         .fill(t.bg_elevated)
         .border(1.0, t.border)
         .children(match sent {
-            Some(Sent::Shown(image)) if image.error().is_none() => {
-                Some(picture(&file.name, image, 132.0, 84.0, 8.0))
-            }
+            Some(Sent::Downloaded(shown)) => picture(&file.name, shown, 132.0, 84.0, 8.0),
             _ => None,
         });
     let failed = match sent {

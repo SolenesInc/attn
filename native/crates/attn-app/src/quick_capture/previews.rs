@@ -19,16 +19,39 @@ const LARGEST: f32 = 132.0 * crate::settings::LARGEST_TEXT_SCALE;
 pub(crate) struct Previews {
     cache: Option<ImageCache>,
     /// The draft's image files by where they are stored.
-    drafted: HashMap<PathBuf, Image>,
-    /// How many held pictures had finished decoding when the panel last drew.
-    finished: usize,
+    drafted: HashMap<PathBuf, Picture>,
 }
 
 /// A sent image's picture, while it downloads, once it does, or why it could not.
 pub(crate) enum Sent {
     Loading,
-    Shown(Image),
+    Downloaded(Picture),
     Failed(String),
+}
+
+/// An image as the panel's own frames have seen it: a decode another thread finished counts
+/// once the panel's poll sees it, so what the panel draws and says changes on its own thread.
+pub(crate) enum Picture {
+    Decoding(Image),
+    Ready(Image),
+    Broken,
+}
+
+impl Picture {
+    /// Whether the decode finished since the panel last looked.
+    fn see(&mut self) -> bool {
+        let Picture::Decoding(image) = self else {
+            return false;
+        };
+        if !image.is_ready() {
+            return false;
+        }
+        *self = match image.error() {
+            None => Picture::Ready(image.clone()),
+            Some(_) => Picture::Broken,
+        };
+        true
+    }
 }
 
 impl Previews {
@@ -36,7 +59,7 @@ impl Previews {
         self.cache = Some(ImageCache::new(wake));
     }
 
-    pub(crate) fn drafted(&self, path: &std::path::Path) -> Option<&Image> {
+    pub(crate) fn drafted(&self, path: &std::path::Path) -> Option<&Picture> {
         self.drafted.get(path)
     }
 }
@@ -44,20 +67,20 @@ impl Previews {
 impl Panel {
     /// Whether a picture is still decoding, which will wake the panel when it is done.
     pub fn decoding(&self) -> bool {
-        self.pictures().any(|image| !image.is_ready())
-    }
-
-    fn pictures(&self) -> impl Iterator<Item = &Image> {
         let sent = self.history.images.values().filter_map(|s| match s {
-            Sent::Shown(image) => Some(image),
+            Sent::Downloaded(picture) => Some(picture),
             _ => None,
         });
-        self.previews.drafted.values().chain(sent)
+        self.previews
+            .drafted
+            .values()
+            .chain(sent)
+            .any(|picture| matches!(picture, Picture::Decoding(_)))
     }
 }
 
 /// Reads each image file the draft holds while the panel shows, and forgets those it no longer
-/// holds or shows. Returns whether a picture finished decoding since the panel last drew.
+/// holds or shows. Returns whether a picture finished decoding since the panel last looked.
 pub(super) fn follow(panel: &mut Panel) -> bool {
     let wanted: Vec<PathBuf> = panel
         .draft
@@ -70,14 +93,20 @@ pub(super) fn follow(panel: &mut Panel) -> bool {
     previews.drafted.retain(|path, _| wanted.contains(path));
     if let Some(cache) = &previews.cache {
         for path in wanted {
-            previews
-                .drafted
-                .entry(path)
-                .or_insert_with_key(|path| cache.file(path, LARGEST, crate::PICTURE_SCALE));
+            previews.drafted.entry(path).or_insert_with_key(|path| {
+                Picture::Decoding(cache.file(path, LARGEST, crate::PICTURE_SCALE))
+            });
         }
     }
-    let finished = panel.pictures().filter(|image| image.is_ready()).count();
-    std::mem::replace(&mut panel.previews.finished, finished) != finished
+    let sent = panel.history.images.values_mut().filter_map(|s| match s {
+        Sent::Downloaded(picture) => Some(picture),
+        _ => None,
+    });
+    previews
+        .drafted
+        .values_mut()
+        .chain(sent)
+        .fold(false, |seen, picture| picture.see() | seen)
 }
 
 /// Downloads each image the listed messages sent that the history does not hold yet.
@@ -155,12 +184,12 @@ fn download(
                         return download(panel, key, media_type, next, bytes, tx);
                     }
                     match &panel.previews.cache {
-                        Some(cache) => Sent::Shown(cache.load_mime(
+                        Some(cache) => Sent::Downloaded(Picture::Decoding(cache.load_mime(
                             bytes,
                             &media_type,
                             LARGEST,
                             crate::PICTURE_SCALE,
-                        )),
+                        ))),
                         None => Sent::Failed("Images cannot be shown here.".to_owned()),
                     }
                 }
