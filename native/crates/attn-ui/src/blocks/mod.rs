@@ -54,7 +54,7 @@ pub use pane::Pane;
 pub use place::{here, here_tint, place};
 pub use prose::Prose;
 pub use reader::{Reader, Room};
-pub use remark::Remark;
+pub use remark::{Remark, Voice};
 pub use rhythm::{Inline, Stack};
 pub use section::Section;
 pub use setting_row::SettingRow;

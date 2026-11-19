@@ -3,7 +3,7 @@
 
 use attn_protocol::{ReviewNote, ReviewRow, ReviewStop};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Bar, Inline, Note, Remark, Stack, Surface, hint};
+use attn_ui::blocks::{Bar, Inline, Note, Remark, Stack, Surface, Voice, hint};
 use attn_ui::system::{Reading, Type, read_as, words};
 use rune::{Color, El, Span, col, rich, row, text};
 use rune_kit::syntax::{Highlight, highlight, lang_for_path};
@@ -236,7 +236,7 @@ const SCRIPT_NOTE_INDENT: f32 = 7.0;
 pub(super) fn note(note: &ReviewNote, indent: f32, t: &Tokens) -> El {
     let who = if note.look { "look here" } else { "agent" };
     Remark::new(who, note_range(note), note.text.clone())
-        .flagged(note.look)
+        .voice(if note.look { Voice::Look } else { Voice::Agent })
         .indent(indent)
         .build(t)
 }

@@ -4,8 +4,10 @@
 
 use attn_protocol::{MarkdownAnnotation, MarkdownAnnotationAnchor, ReviewRow};
 use attn_ui::Tokens;
+use attn_ui::blocks::{Remark, Voice};
+use attn_ui::system::{Type, words};
 use attn_ui::type_;
-use rune::tok::{radius, space};
+use rune::tok::space;
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::TextArea;
 
@@ -153,42 +155,26 @@ pub(crate) fn mark_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
     let text_ = mark.text.clone().unwrap_or_default();
     let range = range(mark.anchor.as_ref());
     let answer = question.then(|| match mark.answer.as_deref().filter(|a| !a.is_empty()) {
-        Some(answer) => text(answer.to_owned())
+        Some(answer) => words(answer, Type::Body, t.text_primary)
             .key(format!("review.mark.{}.answer", mark.id))
             .role("note")
             .label(format!("answer: {answer}"))
-            .font(type_::BODY)
-            .color(t.text_primary)
             .wrap(),
-        None => text("Asked — waiting for the answer")
-            .font(type_::LABEL)
-            .color(t.text_tertiary),
+        None => words(
+            "Asked — waiting for the answer",
+            Type::Small,
+            t.text_tertiary,
+        ),
     });
-    col()
+    let remark = Remark::new(who, range, text_)
+        .voice(Voice::Yours)
         .key(format!("review.mark.{}", mark.id))
-        .role("note")
-        .label(format!("{who} {range}: {text_}"))
-        .w_full()
-        .padding(space::S1)
-        .gap(2.0)
-        .radius(radius::SM)
-        .fill(t.success.alpha(0.08))
-        .border_sides([0.0, 0.0, 0.0, 2.0], t.success)
-        .child(
-            row()
-                .gap(space::S2)
-                .child(text(who).font(type_::LABEL).color(t.success))
-                .child(text(range).font(type_::LABEL).color(t.text_secondary))
-                .child(
-                    text(text_)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .wrap()
-                        .grow(1.0),
-                )
-                .child(remove(&mark.id, "Remove", t)),
-        )
-        .children(answer)
+        .control(remove(&mark.id, "Remove", t));
+    match answer {
+        Some(answer) => remark.under(answer),
+        None => remark,
+    }
+    .build(t)
 }
 
 fn remove(id: &str, help: &'static str, t: &Tokens) -> El {
@@ -209,39 +195,18 @@ fn remove(id: &str, help: &'static str, t: &Tokens) -> El {
 fn edit_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
     let range = range(mark.anchor.as_ref());
     let was = mark.edit_was.clone().unwrap_or_default();
-    col()
+    Remark::new("you edited", range.clone(), "Saved to the file. It was:")
+        .voice(Voice::Edited)
         .key(format!("review.mark.{}", mark.id))
-        .role("note")
         .label(format!("you edited {range}: it was {was}"))
-        .w_full()
-        .padding(space::S1)
-        .gap(2.0)
-        .radius(radius::SM)
-        .fill(t.accent.alpha(0.08))
-        .border_sides([0.0, 0.0, 0.0, 2.0], t.accent)
-        .child(
-            row()
-                .gap(space::S2)
-                .child(text("you edited").font(type_::LABEL).color(t.accent))
-                .child(text(range).font(type_::LABEL).color(t.text_secondary))
-                .child(
-                    text("Saved to the file. It was:")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .child(text("u undo").font(type_::LABEL).color(t.text_tertiary))
-                .child(remove(
-                    &mark.id,
-                    "Drop from the review; the file stays as it is",
-                    t,
-                )),
-        )
-        .child(
-            text(was)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary)
-                .wrap(),
-        )
+        .control(words("u undo", Type::Small, t.text_tertiary))
+        .control(remove(
+            &mark.id,
+            "Drop from the review; the file stays as it is",
+            t,
+        ))
+        .under(words(was, Type::Mono, t.text_primary).wrap())
+        .build(t)
 }
 
 /// A note or question being written on `anchor`, in review tile `tile`.
