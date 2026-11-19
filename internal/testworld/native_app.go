@@ -24,6 +24,7 @@ var nativeAppBinary = sync.OnceValues(func() (string, error) {
 	workspace := filepath.Join(strings.TrimSpace(string(root)), "native")
 	build := exec.Command("cargo", "build", "--locked", "-p", "attn-app")
 	build.Dir = workspace
+	build.Env = withoutToolchainOverride(os.Environ())
 	if output, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("build attn-app: %w\n%s", err, output)
 	}
@@ -33,6 +34,16 @@ var nativeAppBinary = sync.OnceValues(func() (string, error) {
 	}
 	return filepath.Join(target, "debug", "attn-app"), nil
 })
+
+func withoutToolchainOverride(env []string) []string {
+	kept := env[:0:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "RUSTUP_TOOLCHAIN=") {
+			kept = append(kept, kv)
+		}
+	}
+	return kept
+}
 
 // NativeApp is the native app with no window, against this stack's daemon, driven over its
 // automation protocol.
