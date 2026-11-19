@@ -3821,6 +3821,49 @@ fn queue_bar_crowded(dark: bool) {
     snap(&mut world, "queue-bar-crowded", dark);
 }
 
+/// The sidebar's rows in the smallest window at 150% text with the longest real titles, a
+/// worktree's folder and a CJK title, in desktop flow and in queue flow: at rest, with the
+/// pointer on the first agent's row, and with the keyboard on it.
+fn chrome_smallest(dark: bool) {
+    for queue in [false, true] {
+        let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+        state.crew = Some(crew());
+        let sessions = state.sessions.get_or_insert_default();
+        sessions[0].label = "attn--ds-page-blocks-delegation-appearance-landing-two".into();
+        sessions[1].label = "社内プラットフォームの観測性をすべてのプロファイルで見直す".into();
+        if queue {
+            for session in sessions.iter_mut().take(2) {
+                session.state = "waiting_input".into();
+                session.turn_owed = Some(true);
+                session.turn_opened_at = Some("2026-11-12T08:55:00Z".into());
+            }
+        }
+        if let Some(desktop) = state.desktops.get_or_insert_default().get_mut(1) {
+            desktop.name = "Design system review with the Orchestrator and five Builders".into();
+        }
+        let settings = state.settings.get_or_insert_default();
+        settings.insert("uiScale".to_owned(), "1.5".to_owned());
+        if queue {
+            settings.insert("queue_mode_enabled".to_owned(), "true".to_owned());
+        }
+        let mut world = World::start_sized(scripted().state(state), (800.0, 600.0));
+        let (flow, row) = if queue {
+            ("queue", "queue-turn.s0")
+        } else {
+            world.open_desktop();
+            ("desktop", "sidebar.session.s0")
+        };
+        snap(&mut world, &format!("chrome-smallest-{flow}"), dark);
+        let [x, y, w, h] = world.rect(row).map(|v| v as f32);
+        world.gesture(|app| app.move_to((x + w / 4.0, y + h / 2.0)));
+        snap(&mut world, &format!("chrome-smallest-{flow}-hover"), dark);
+        world.gesture(|app| app.move_to((790.0, 590.0)));
+        let target = if queue { "sidebar.queue" } else { row }.to_owned();
+        world.gesture(|app| app.update(move |_, tx| tx.focus(target.clone(), true)));
+        snap(&mut world, &format!("chrome-smallest-{flow}-focus"), dark);
+    }
+}
+
 /// The desktop flow with the sidebar collapsed to its rail.
 fn rail(dark: bool) {
     let mut world =
@@ -5238,6 +5281,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("queue_bar", || queue_bar(dark));
         scene("queue_bar_crowded", || queue_bar_crowded(dark));
         scene("rail", || rail(dark));
+        scene("chrome_smallest", || chrome_smallest(dark));
         scene("session_seeds", || session_seeds(dark));
         scene("markdown_selection", || markdown_selection(dark));
         scene("annotation_selection", || annotation_selection(dark));

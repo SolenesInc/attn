@@ -690,7 +690,7 @@ fn an_agent_row_leads_with_its_harness_logo_until_the_user_turns_logos_off() {
             .unwrap();
         (node.name.unwrap_or_default(), w, h)
     };
-    assert_eq!(lead(&world), ("Claude · working".into(), 14.0, 14.0));
+    assert_eq!(lead(&world), ("Claude · working".into(), 16.0, 16.0));
     let name_x = |world: &World| {
         world
             .screen()
@@ -1305,7 +1305,7 @@ fn an_agent_row_ends_its_marks_at_its_right_edge_and_flags_priority_ahead_of_its
         "the role comes before the badges"
     );
     assert!(
-        name_x + name_w + 7.0 >= chain_x,
+        name_x + name_w + 8.0 >= chain_x,
         "a long name runs up to the marks: {name_x}+{name_w} against {chain_x}"
     );
     assert!(flag_x + flag_w <= name_x, "the flag leads the name");
@@ -1389,7 +1389,7 @@ fn a_launching_agent_leads_with_the_emoji_the_tauri_app_picks_for_it_until_logos
         .screen()
         .bounds(Target::key(format!("sidebar.session.{}.state", ids[0])))
         .unwrap();
-    assert_eq!((lead[2], lead[3]), (14.0, 14.0));
+    assert_eq!((lead[2], lead[3]), (16.0, 16.0));
 
     world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
         settings: Some(BTreeMap::from([(

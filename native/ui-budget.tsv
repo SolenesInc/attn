@@ -23,7 +23,7 @@ budget	attn-app/src/picker	0
 budget	attn-app/src/quick_capture	88
 budget	attn-app/src/review	231
 budget	attn-app/src/settings	230
-budget	attn-app/src/sidebar	206
+budget	attn-app/src/sidebar	53
 budget	attn-app/src/terminal	0
 budget	attn-app/src/whats_new	7
 allow	native/crates/attn-ui/src/colors/mod.rs

@@ -19,9 +19,9 @@ use std::rc::Rc;
 
 use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
+use attn_ui::blocks::Inline;
+use attn_ui::system::{self, GroupHead, IconSize, ListRow, Tone, Type, words};
+use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row};
 use rune_kit::ScrollBar;
 
 pub(crate) use model::{AgentRow, Line, display_name, tile_title};
@@ -33,15 +33,6 @@ use crate::action::Action;
 use crate::desktop::DesktopMark;
 use crate::shell::View;
 
-pub(crate) const ROW_HEIGHT: f32 = 28.0;
-/// An agent's or a tile's row, and a row that goes somewhere, as the Tauri app's
-/// `.sidebar-leaf-row` and `.sidebar-nav-row`.
-pub(crate) const LEAF_HEIGHT: f32 = 32.0;
-/// A desktop's heading, as the Tauri app's `.desktop-rule`.
-const RULE_HEIGHT: f32 = 20.0;
-/// How far the sidebar's rows sit from its edges, as the Tauri app's `.session-list` and
-/// `.sidebar-home-row` margins.
-pub(crate) const INSET: f32 = 6.0;
 pub(crate) const HARNESS_LOGOS: &str = "sidebar_harness_logos_enabled";
 
 thread_local! {
@@ -259,14 +250,10 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             ))
             .child(home_row(home, home_keys.clone(), &t))
             .child(
-                col()
+                ListRow::column()
                     .key("sidebar.scroll")
-                    .w_full()
                     .grow(1.0)
                     .min_h(0.0)
-                    .px(INSET)
-                    .pt(space::S2)
-                    .pb(space::S2)
                     .scroll(ScrollSpec {
                         stick_bottom: false,
                     })
@@ -290,10 +277,9 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                             .label("Desktops")
                             .w_full()
                             .growth(GrowthSpec::default())
-                            .pt(space::S2)
                             .virtual_rows(
                                 lines.len(),
-                                LEAF_HEIGHT,
+                                ListRow::height(),
                                 move |_: &State, i| keys[i].key().into(),
                                 move |state: &State, i| line(state, &lines, i, &t),
                             ),
@@ -305,10 +291,9 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     })
 }
 
-/// The Home row, as the Tauri app's `.sidebar-home-row`: inset from the sidebar's edges and 4
-/// points under the title bar.
+/// The Home row, under the title bar.
 pub(crate) fn home_row(home: bool, keys: Option<String>, t: &Tokens) -> El {
-    row().w_full().px(INSET).pt(4.0).child(
+    ListRow::column().child(
         nav_row("sidebar.home", &attn_ui::icon::HOME, "Home", keys, home, t)
             .a11y_value(if home { "current" } else { "" })
             .on_press(|state: &mut State| state.window.go_home()),
@@ -329,8 +314,8 @@ fn overview_row(keys: Option<String>, t: &Tokens) -> El {
     })
 }
 
-/// A row that goes somewhere rather than to an agent, with the keys that go there too, as the
-/// Tauri app's `sidebar-nav-row`: secondary until it is where the window is.
+/// A row that goes somewhere rather than to an agent, with the keys that go there too:
+/// secondary until it is where the window is.
 fn nav_row(
     key: &str,
     glyph: impl Into<attn_ui::Glyph>,
@@ -344,66 +329,16 @@ fn nav_row(
     } else {
         t.text_secondary
     };
-    let row = leaf_row(key.to_owned(), false, t)
-        .fill(if selected {
-            t.bg_elevated
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .role("button")
-        .focusable(true)
-        .label(label)
-        .child(
-            row()
-                .w(14.0)
-                .justify_center()
-                .child(glyph.into().draw(14.0, type_::BODY, ink)),
-        )
-        .child(
-            text(label)
-                .font(type_::BODY)
-                .color(ink)
-                .grow(1.0)
-                .single_line()
-                .truncate(),
-        );
+    let row = ListRow::new(key, label)
+        .lead(system::glyph(glyph, IconSize::Regular, ink))
+        .quiet_title(label)
+        .keys(keys.clone(), t)
+        .current(selected)
+        .build(t);
     match keys {
-        Some(keys) => row
-            .description(keys.clone())
-            .child(text(keys).font(type_::MONO_CAPTION).color(t.text_dimmed)),
+        Some(keys) => row.description(keys),
         None => row,
     }
-}
-
-/// The frame every agent, tile and nav row of both sidebars shares, as the Tauri app's
-/// `.sidebar-leaf-row`: 32 points high, its lead in a 14-point column. The row in view is
-/// filled with the elevated tone and carries the brand bar at its left edge.
-pub(crate) fn leaf_row(key: String, selected: bool, t: &Tokens) -> El {
-    let bar = format!("{key}.in-view");
-    row()
-        .key(key)
-        .w_full()
-        .h(LEAF_HEIGHT)
-        .items_center()
-        .gap(7.0)
-        .pl(6.0)
-        .pr(8.0)
-        .radius(5.0)
-        .fill(if selected {
-            t.bg_elevated
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .hover(t.bg_elevated)
-        .children(selected.then(|| {
-            el().key(bar)
-                .absolute(0.0, 8.0)
-                .w(2.0)
-                .h(LEAF_HEIGHT - 16.0)
-                .radius(1.0)
-                .fill(t.brand)
-                .inert()
-        }))
 }
 
 fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
@@ -432,29 +367,15 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             let row = match line {
-                Line::Desktop(desktop) => {
-                    let right = if keys.is_some() { 28.0 } else { 4.0 };
-                    let close = overlaid_controls(&key, rule_gap(desktop), right, t)
-                        .child(rename_desktop_button(&key, desktop, t))
-                        .child(close_desktop_button(&key, desktop, t));
-                    desktop_row(key.clone(), desktop, keys.clone(), t)
-                        .hover_group()
-                        .child(close)
-                }
+                Line::Desktop(desktop) => desktop_row(key.clone(), desktop, keys.clone(), t),
                 Line::Agent { row, .. } => {
                     let bar = settling_bar(state, &key, row, t);
-                    let right = if row.chain.is_some() { 0.0 } else { 4.0 };
-                    let controls = overlaid_controls(&key, 0.0, right, t)
-                        .children(
-                            row.pr
-                                .as_ref()
-                                .map(|pr| crate::desktop::provenance::badge_view(&key, pr, t)),
-                        )
-                        .children(row.settle_run.then(|| settle_button(&key, row, t)))
-                        .child(actions_button(&key, row, t));
-                    agent_row(key.clone(), row, logos, controls, t)
-                        .hover_group()
-                        .children(bar)
+                    let controls = row
+                        .settle_run
+                        .then(|| settle_button(&key, row))
+                        .into_iter()
+                        .chain([actions_button(&key, row)]);
+                    agent_row(key.clone(), row, logos, controls.collect(), t).children(bar)
                 }
                 Line::Tile(tile) => tile_row(key.clone(), tile, t),
             };
@@ -485,7 +406,6 @@ fn drop_mark(line: El, mark: Option<DesktopMark>, heading: bool, t: &Tokens) -> 
             .border(1.0, t.accent.alpha(0.32)),
         Some(DesktopMark::Accepts) => line,
         Some(DesktopMark::Target) => line
-            .radius(0.0)
             .fill(t.accent.alpha(0.14))
             .border_sides([0.0, 0.0, 0.0, 3.0], t.accent),
     }
@@ -494,120 +414,56 @@ fn drop_mark(line: El, mark: Option<DesktopMark>, heading: bool, t: &Tokens) -> 
 /// Where a dragged tile drops to make a new desktop for it, shown only while a tile is
 /// dragged.
 fn new_desktop_drop(over: bool, t: &Tokens) -> El {
-    row()
-        .key("sidebar.new_desktop")
-        .role("button")
-        .focusable(true)
-        .label("New desktop")
-        .a11y_value(if over { "drop here" } else { "" })
-        .w_full()
-        .center()
-        .gap(6.0)
-        .px(10.0)
-        .py(12.0)
-        .radius(8.0)
-        .fill(t.accent.alpha(if over { 0.14 } else { 0.04 }))
-        .border(1.5, t.accent.alpha(if over { 1.0 } else { 0.5 }))
-        .child(text("+").font(type_::MONO_CAPTION).color(t.accent))
-        .child(
-            text("New desktop")
-                .font(type_::MONO_CAPTION)
-                .color(t.accent),
-        )
+    system::drop_zone("sidebar.new_desktop", "New desktop", over, t)
 }
 
-/// How tall line `line` stands in the desktop sidebar: a heading takes the gap above it, as
-/// the Tauri app's `.desktop-group` margin, inside itself, since a virtual list stacks its
-/// rows by their height.
+/// How tall line `line` stands in the desktop sidebar, since a virtual list stacks its rows by
+/// their height.
 pub(super) fn line_height(line: &Line) -> f32 {
     match line {
-        Line::Desktop(d) if d.first => RULE_HEIGHT,
-        Line::Desktop(_) => RULE_HEIGHT + space::S2,
-        _ => LEAF_HEIGHT,
+        Line::Desktop(_) => GroupHead::height(),
+        _ => ListRow::height(),
     }
 }
 
-/// A desktop's heading, as the Tauri app's `.desktop-rule`: its number, its name when it has
-/// one, and a rule out to its keys, so the desktops read as the dividers of the list.
+/// A desktop's heading: its number, its name when it has one, a hairline, and the keys that go
+/// to it, with its rename and close controls on hover.
 fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &Tokens) -> El {
     let id = desktop.id.clone();
     let dragged = desktop.id.clone();
-    let row = match &keys {
-        Some(keys) => row().description(keys.clone()),
-        None => row(),
+    let head = GroupHead::new(key.clone(), format!("Open {}", desktop.title))
+        .mark(system::number_chip(
+            desktop.number,
+            desktop.current,
+            desktop.empty,
+            t,
+        ))
+        .keys(keys.clone())
+        .controls([
+            rename_desktop_button(&key, desktop),
+            close_desktop_button(&key, desktop),
+        ]);
+    let head = if desktop.named {
+        head.name(desktop.title.clone())
+    } else {
+        head
     };
-    row.key(key.clone())
-        .role("button")
-        .focusable(true)
-        .label(format!("Open {}", desktop.title))
+    let head = head
+        .build(t)
         .a11y_value(match (desktop.current, desktop.empty) {
             (true, true) => "current, Empty desktop",
             (true, false) => "current",
             (false, true) => "Empty desktop",
             (false, false) => "",
         })
-        .w_full()
-        .h(line_height(&Line::Desktop(desktop.clone())))
-        .pt(rule_gap(desktop))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &id, tx))
         .on_drag(move |state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
             reorder::drag(state, &dragged, d, tx)
-        })
-        .child(rule_face(desktop, keys, &key, t))
-}
-
-/// The gap a desktop's heading leaves above itself.
-fn rule_gap(desktop: &DesktopHeader) -> f32 {
-    line_height(&Line::Desktop(desktop.clone())) - RULE_HEIGHT
-}
-
-/// What a desktop's heading shows, under the gap above it.
-fn rule_face(desktop: &DesktopHeader, keys: Option<String>, key: &str, t: &Tokens) -> El {
-    row()
-        .w_full()
-        .h(RULE_HEIGHT)
-        .items_center()
-        .gap(6.0)
-        .pl(4.0)
-        .pr(6.0)
-        .radius(4.0)
-        .hover(hairline(t))
-        .child(desktop_number(
-            desktop.number,
-            desktop.current,
-            desktop.empty,
-            t,
-        ))
-        .children(desktop.named.then(|| {
-            text(desktop.title.clone())
-                .font(DESKTOP_NAME)
-                .color(t.text_muted)
-                .single_line()
-                .truncate()
-                .shrink()
-        }))
-        .child(el().grow(1.0).h(1.0).fill(hairline(t)))
-        .children(keys.map(|keys| {
-            text(keys)
-                .key(format!("{key}.keys"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_dimmed)
-        }))
-}
-
-/// The Tauri app's `.desktop-label`: a desktop's name at medium weight.
-const DESKTOP_NAME: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
-
-/// The digits of a desktop's number chip, as the Tauri app's `.desktop-number`.
-/// A desktop number's chip: `NUMBER_TYPE`'s 15-point line with the 0.75 above and below it had
-/// at 10 points.
-const NUMBER_H: f32 = 16.5;
-
-pub(crate) const NUMBER_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0).mono();
-
-/// The Tauri app's faint white line, `rgba(255, 255, 255, .07)`.
-pub(crate) fn hairline(t: &Tokens) -> rune::Color {
-    wash(t, 0.07)
+        });
+    match keys {
+        Some(keys) => head.description(keys),
+        None => head,
+    }
 }
 
 /// The Tauri app's white washes, `rgba(255, 255, 255, alpha)`, which its light theme does not
@@ -620,145 +476,102 @@ pub(crate) fn wash(t: &Tokens, alpha: f32) -> rune::Color {
     }
 }
 
-/// A desktop's number, as the Tauri app's `.desktop-number`: framed by a hairline, filled with
-/// the brand while it is the current desktop, and dashed while it holds nothing.
-pub(crate) fn desktop_number(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
-    let chip = row()
-        .min_w(16.0)
-        .h(NUMBER_H)
-        .px(3.0)
-        .center()
-        .radius(3.0)
-        .child(
-            text(number.to_string())
-                .font(NUMBER_TYPE)
-                .color(if current {
-                    attn_ui::brand_ink(t)
-                } else {
-                    t.text_dimmed
-                }),
-        );
-    match (current, empty) {
-        (true, _) => chip.fill(t.brand).border(1.0, t.brand),
-        (false, true) => chip
-            .border(
-                1.0,
-                attn_ui::colors::mix_srgb(t.border_hover, t.border_focus, 0.4),
-            )
-            .border_dash(2.0, 2.0),
-        (false, false) => chip.border(1.0, hairline(t)),
-    }
-}
-
+/// How much of an agent's name stays before the marks after it give way: about six
+/// characters of body text, enough to tell agents apart.
 const NAME_MIN_W: f32 = 64.0;
 
-/// An agent's row. Its hover controls lie over its right end, or beside its role chip when it
-/// has one, so the chip and the controls both stay pressable, as the Tauri app's crew rows move
-/// theirs beside their trailing control.
-fn agent_row(key: String, agent: &AgentRow, logos: bool, controls: El, t: &Tokens) -> El {
+/// An agent's row, its hover controls laid over its end.
+fn agent_row(
+    key: String,
+    agent: &AgentRow,
+    logos: bool,
+    controls: Vec<system::IconButton>,
+    t: &Tokens,
+) -> El {
     let id = agent.id.clone();
-    let (beside_marks, at_end) = match agent.chain {
-        Some(_) => (Some(controls), None),
-        None => (None, Some(controls)),
-    };
-    let row = leaf_row(key.clone(), agent.selected, t)
-        .role("button")
-        .focusable(true)
-        .label(format!("Open {}", agent.name))
+    let name = flagged(&key, agent, t).shrink().min_w(NAME_MIN_W).child(
+        words(agent.name.clone(), Type::Body, t.text_primary)
+            .key(format!("{key}.name"))
+            .single_line()
+            .truncate()
+            .shrink(),
+    );
+    let mut row = ListRow::new(key.clone(), format!("Open {}", agent.name))
+        .lead(lead(&key, agent, logos, t))
+        .title_el(name)
+        .in_view(agent.selected)
+        .tint(agent.offline.then_some(t.error))
+        .hover_controls(controls);
+    if let Some(pr) = &agent.pr {
+        row = row.badge(crate::desktop::provenance::badge_view(&key, pr, t));
+    }
+    if let Some(chain) = &agent.chain {
+        row = row.badge(crate::desktop::chain::chip(&key, &agent.id, chain, t));
+    }
+    if let Some(run) = &agent.run {
+        row = row.badge(crate::desktop::provenance::run_view(&key, run, t));
+    }
+    if let Some(asks) = crate::asks::marker(&key, agent.asks, t) {
+        row = row.badge(asks);
+    }
+    if agent.state == AgentState::Recoverable {
+        row = row.badge(
+            words("recoverable", Type::Mono, t.text_tertiary).key(format!("{key}.recoverable")),
+        );
+    }
+    if agent.chief {
+        row = row.badge(mark(
+            &key,
+            "chief",
+            &attn_ui::icon::CHIEF,
+            "Chief of staff",
+            t,
+        ));
+    }
+    if agent.delegated {
+        row = row.badge(mark(
+            &key,
+            "delegated",
+            "↳",
+            "Delegated from chief of staff",
+            t,
+        ));
+    }
+    let row = row
+        .build(t)
         .a11y_value(agent.state.wire())
         .help(agent.hover())
-        .fill(row_fill(agent, t))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
         .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
             crate::desktop::drag::gesture(state, d, tx, crate::desktop::drag::Owner::Sidebar)
-        })
-        .child(lead(&key, agent, logos, t))
-        .child(
-            flagged(&key, agent, t)
-                .grow(1.0)
-                .shrink()
-                .min_w(NAME_MIN_W)
-                .h(LEAF_HEIGHT)
-                .child(
-                    text(agent.name.clone())
-                        .key(format!("{key}.name"))
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .single_line()
-                        .truncate()
-                        .shrink(),
-                )
-                .children(beside_marks),
-        )
-        .children(
-            agent
-                .run
-                .as_ref()
-                .map(|run| crate::desktop::provenance::run_view(&key, run, t)),
-        )
-        .child(
-            rune::row()
-                .key(format!("{key}.trailing"))
-                .items_center()
-                .gap(6.0)
-                .children(
-                    agent
-                        .chain
-                        .as_ref()
-                        .map(|c| crate::desktop::chain::chip(&key, &agent.id, c, t)),
-                )
-                .children(crate::asks::marker(&key, agent.asks, t))
-                .children((agent.state == AgentState::Recoverable).then(|| {
-                    text("recoverable")
-                        .key(format!("{key}.recoverable"))
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_tertiary)
-                }))
-                .children(
-                    agent
-                        .chief
-                        .then(|| mark(&key, "chief", &attn_ui::icon::CHIEF, "Chief of staff", t)),
-                )
-                .children(
-                    agent
-                        .delegated
-                        .then(|| mark(&key, "delegated", "↳", "Delegated from chief of staff", t)),
-                ),
-        )
-        .children(at_end);
+        });
     match &agent.chain {
         Some(_) => crate::desktop::chain::row_hovers(row, &key, &agent.id),
         None => row,
     }
 }
 
-/// The row an agent's name sits in, led by the priority flag when the agent has priority, as the
-/// Tauri app's `SessionPriority`: the `⚑` mark in the brand colour, 0.3 em before the name.
+/// The line an agent's name sits on, led by the brand's flag when the agent has priority.
 pub(crate) fn flagged(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
-    rune::row()
+    Inline::joined()
         .key(format!("{row_key}.identity"))
-        .items_center()
-        .gap(4.0)
-        .min_w(0.0)
         .children(agent.priority.then(|| priority_flag(row_key, t)))
 }
 
 pub(crate) fn priority_flag(row_key: &str, t: &Tokens) -> El {
-    rune::icon(&attn_ui::icon::FLAG, type_::BODY.size)
+    system::icon(&attn_ui::icon::FLAG, IconSize::Regular, t.brand)
         .key(format!("{row_key}.priority"))
         .role("img")
         .label("Priority")
-        .color(t.brand)
 }
 
-fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> El {
+fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader) -> system::IconButton {
     let (id, under) = (desktop.id.clone(), format!("{row_key}.rename"));
     queue_view::control(
         row_key,
         "rename",
         format!("Rename {}", desktop.title),
         attn_ui::glyph::PENCIL,
-        t,
         move |state, tx| rename::desktop(state, &id, rename::Opener::Control(under.clone()), tx),
     )
 }
@@ -770,42 +583,31 @@ fn mark(
     label: &str,
     t: &Tokens,
 ) -> El {
-    rune::row()
+    system::glyph(glyph, IconSize::Small, t.accent)
         .key(format!("{row_key}.{name}"))
         .role("img")
         .label(label)
-        .items_center()
-        .child(
-            glyph
-                .into()
-                .draw(type_::MONO_CAPTION.size, type_::MONO_CAPTION, t.accent),
-        )
-        .px(5.0)
-        .radius(9.0)
-        .fill(t.accent.alpha(0.14))
 }
 
-fn settle_button(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
+fn settle_button(row_key: &str, agent: &AgentRow) -> system::IconButton {
     let id = agent.id.clone();
     queue_view::control(
         row_key,
         "settle",
         format!("Settle {}", agent.name),
         "✓",
-        t,
         move |state, _| actions::settle(state, &id),
     )
 }
 
 /// The × button that closes a desktop, asking first when it holds tiles.
-fn close_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> El {
+fn close_desktop_button(row_key: &str, desktop: &DesktopHeader) -> system::IconButton {
     let id = desktop.id.clone();
     queue_view::control(
         row_key,
         "close",
         format!("Close {}", desktop.title),
         "×",
-        t,
         move |state, tx| {
             crate::dispatch::dispatch(
                 state,
@@ -819,7 +621,7 @@ fn close_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> E
 }
 
 /// The ••• button that opens an agent's actions menu under itself.
-pub(crate) fn actions_button(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
+pub(crate) fn actions_button(row_key: &str, agent: &AgentRow) -> system::IconButton {
     let (id, name, under) = (
         agent.id.clone(),
         agent.name.clone(),
@@ -830,7 +632,6 @@ pub(crate) fn actions_button(row_key: &str, agent: &AgentRow, t: &Tokens) -> El 
         "actions",
         format!("Actions for {}", agent.name),
         "•••",
-        t,
         move |state, tx| session_menu::open(state, &id, name.clone(), under.clone(), tx),
     )
 }
@@ -931,16 +732,6 @@ pub(crate) fn logos(state: &State) -> bool {
     crate::setting::on(&state.facts.settings, HARNESS_LOGOS)
 }
 
-/// An agent row's ground, tinted while its machine is unreachable.
-pub(crate) fn row_fill(agent: &AgentRow, t: &Tokens) -> rune::Color {
-    match (agent.offline, agent.selected) {
-        (true, false) => t.error.alpha(0.07),
-        (true, true) => t.error.alpha(0.12),
-        (false, true) => t.bg_elevated,
-        (false, false) => rune::Color::TRANSPARENT,
-    }
-}
-
 pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
     if logos && agent.state == AgentState::Launching && !agent.offline {
         return rune::row()
@@ -948,43 +739,42 @@ pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> 
             .role("img")
             .label(agent.lead())
             .a11y_value(agent.state.wire())
-            .w(LEAD)
-            .h(LEAD)
             .center()
             .child(
-                text(model::session_emoji(&agent.id))
-                    .key(format!("{row_key}.emoji"))
-                    .font(LAUNCHING_EMOJI),
+                system::glyph(
+                    model::session_emoji(&agent.id),
+                    IconSize::Regular,
+                    t.text_primary,
+                )
+                .key(format!("{row_key}.emoji")),
             );
     }
     if !logos {
         return rune::row()
             .key(format!("{row_key}.lead"))
-            .w(LEAD)
-            .h(LEAD)
             .center()
             .child(state_mark(row_key, agent, MARK, t));
     }
-    rune::icon(harness_icon::of(&agent.harness), LEAD)
-        .key(format!("{row_key}.state"))
-        .role("img")
-        .label(agent.lead())
-        .a11y_value(agent.state.wire())
-        .color(state_color(agent.state, t))
+    system::icon(
+        harness_icon::of(&agent.harness),
+        IconSize::Regular,
+        state_color(agent.state, t),
+    )
+    .key(format!("{row_key}.state"))
+    .role("img")
+    .label(agent.lead())
+    .a11y_value(agent.state.wire())
 }
 
-/// The dot in each agent's colour of state, as the Tauri app's `StateIndicator`: `side` across,
-/// or the 8 pt ring of an offline agent at any size.
+/// The dot in each agent's colour of state, `side` across, or the ring of an offline agent at
+/// any size.
 pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, side: f32, t: &Tokens) -> El {
     let side = if agent.offline { OFFLINE_MARK } else { side };
-    let mark = el()
+    let mark = system::dot(side)
         .key(format!("{row_key}.state"))
         .role("img")
         .label(agent.lead())
-        .a11y_value(agent.state.wire())
-        .w(side)
-        .h(side)
-        .radius(side / 2.0);
+        .a11y_value(agent.state.wire());
     if !agent.offline {
         return mark.fill(state_color(agent.state, t));
     }
@@ -997,12 +787,6 @@ pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, side: f32, t: &Tokens)
             .inert(),
     )
 }
-
-/// The Tauri app's `.sidebar-leaf-row` lead column.
-const LEAD: f32 = 14.0;
-/// Draws the emoji as large as the Tauri app's `.session-lead-emoji` shows it: WebKit draws a
-/// 13 px colour emoji about 16 pt across, overflowing the 14 pt column.
-const LAUNCHING_EMOJI: rune::TextStyle = rune::TextStyle::new(17.0, 400.0).lh(LEAD);
 
 /// `StateIndicator`'s sizes: `sm` in a tile header, `md` in lists.
 pub(crate) const MARK_SMALL: f32 = 6.0;
@@ -1023,79 +807,50 @@ pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
 
 fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
     let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
-    leaf_row(key.clone(), tile.selected, t)
-        .role("button")
-        .focusable(true)
-        .label(format!("Open {}", tile.title))
+    let reload = (tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile));
+    ListRow::new(key.clone(), format!("Open {}", tile.title))
+        .lead(system::icon(
+            tile.icon(),
+            IconSize::Regular,
+            t.text_tertiary,
+        ))
+        .title(tile.title.clone())
+        .aside(system::tag(
+            format!("{key}.kind"),
+            tile.word(),
+            Tone::Neutral,
+            t,
+        ))
+        .hover_controls(reload.into_iter().chain([close_tile_button(&key, tile)]))
+        .in_view(tile.selected)
+        .build(t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_tile(state, &desktop, &leaf, tx))
-        .child(rune::icon(tile.icon(), 14.0).color(t.text_tertiary))
-        .child(
-            text(tile.title.clone())
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .single_line()
-                .truncate()
-                .grow(1.0),
-        )
-        .child(
-            text(tile.word())
-                .font(type_::BADGE)
-                .color(t.text_dimmed)
-                .border(1.0, t.border)
-                .radius(3.0)
-                .px(3.0),
-        )
-        .hover_group()
-        .child(
-            overlaid_controls(&key, 0.0, 4.0, t)
-                .children(
-                    (tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile, t)),
-                )
-                .child(close_tile_button(&key, tile, t)),
-        )
 }
 
-/// A row's hover controls, laid over its right end, `right` points from it and under the
-/// first `top` points, as the Tauri app's `.session-actions` and `.desktop-actions` are, so the
-/// row keeps its trailing hint or tag where it would be without them, and only hides what they
-/// cover.
-pub(crate) fn overlaid_controls(row_key: &str, top: f32, right: f32, t: &Tokens) -> El {
-    rune::row()
-        .key(format!("{row_key}.controls"))
-        .group_opacity(0.0, 1.0)
-        .pin(None, Some(top), Some(right), Some(0.0))
-        .items_center()
-        .gap(2.0)
-        .pl(6.0)
-        .fill(t.bg_elevated)
-}
-
-fn close_tile_button(row_key: &str, tile: &TileRow, t: &Tokens) -> El {
+fn close_tile_button(row_key: &str, tile: &TileRow) -> system::IconButton {
     let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
     queue_view::control(
         row_key,
         "close",
         format!("Close {}", tile.title),
         "×",
-        t,
         move |state, tx| crate::desktop::remove_tile(state, desktop.clone(), leaf.clone(), tx),
     )
 }
 
 /// The browser row's button that loads its page again, as the tile header's does.
-fn reload_tile_button(row: &str, tile: &TileRow, t: &Tokens) -> El {
+fn reload_tile_button(row: &str, tile: &TileRow) -> system::IconButton {
     let page = attn_client::TileKey {
         desktop: tile.desktop.clone(),
         tile: tile.id.clone(),
     };
-    attn_ui::GlyphButton::new("↻", format!("Reload {}", tile.title))
-        .variant(rune_kit::ButtonVariant::GhostFaint)
-        .font(type_::LABEL)
-        .side(type_::LABEL.line_px())
-        .on_press_tx(move |_: &mut State, _: &mut Tx| crate::browser::reload(&page))
-        .build(attn_ui::kit(t))
-        .key(format!("{row}.reload"))
-        .radius(4.0)
+    system::icon_button(
+        format!("{row}.reload"),
+        format!("Reload {}", tile.title),
+        attn_ui::glyph::RELOAD,
+        IconSize::Small,
+    )
+    .on_press_tx(move |_: &mut State, _: &mut Tx| crate::browser::reload(&page))
 }
 
 /// The header of the tile showing `session` on the current desktop.

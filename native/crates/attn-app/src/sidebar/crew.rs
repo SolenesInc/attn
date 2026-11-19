@@ -2,10 +2,11 @@
 //! it wakes the member, and the member's menu.
 
 use attn_protocol::CrewMember;
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::{El, Tx, el, row, text};
-use rune_kit::{ButtonVariant, MenuItem, Placement};
+use attn_ui::Tokens;
+use attn_ui::blocks::Inline;
+use attn_ui::system::{self, IconSize, ListRow, Reveal, Type, words};
+use rune::{El, Tx};
+use rune_kit::{MenuItem, Placement};
 
 use crate::State;
 
@@ -88,17 +89,15 @@ pub(crate) fn resting(state: &State, member: &str) -> Resting {
     }
 }
 
-/// The lead of a crew row with no session: its harness's logo, or the dot when the sidebar
-/// shows no logos, in the idle colour, as the Tauri app's `SessionLead` in state idle.
 fn idle_lead(harness: Option<&str>, t: &Tokens) -> El {
-    let lead = match harness {
-        Some(harness) => rune::icon(super::harness_icon::of(harness), 14.0),
-        None => el().size(8.0, 8.0).radius(4.0).fill(t.state_idle),
-    };
-    row()
-        .w(14.0)
-        .justify_center()
-        .child(lead.color(t.state_idle))
+    match harness {
+        Some(harness) => system::icon(
+            super::harness_icon::of(harness),
+            IconSize::Regular,
+            t.state_idle,
+        ),
+        None => system::dot(super::MARK).fill(t.state_idle),
+    }
 }
 
 /// The members of the selected profile with no session, in key order.
@@ -191,8 +190,6 @@ pub(crate) fn row_prefixes() -> [String; 2] {
     [format!("{QUEUE_ROW}."), format!("{CLASSIC_ROW}.")]
 }
 
-const SUN_SIDE: f32 = 20.0;
-
 pub(crate) const QUEUE_ROW: &str = "queue-crew.member";
 pub(crate) const CLASSIC_ROW: &str = "sidebar.crew";
 
@@ -204,26 +201,25 @@ pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
     } else {
         format!("Start {}", m.name)
     };
-    let sun_variant = match m.phase {
-        None => ButtonVariant::GhostMuted,
-        Some(_) => ButtonVariant::Warning,
-    };
     let (member, pressed, outside) = (m.member.clone(), key.clone(), m.member.clone());
     let sun = {
         let (member, row_key) = (m.member.clone(), key.clone());
-        let sun = GlyphButton::new(&attn_ui::icon::CREW_SUN, start_label.clone())
-            .icon_size(14.0)
-            .side(SUN_SIDE)
-            .variant(sun_variant);
+        let sun = system::icon_button(
+            format!("{key}.start"),
+            start_label.clone(),
+            &attn_ui::icon::CREW_SUN,
+            IconSize::Small,
+        );
         let sun = match m.phase {
-            None => sun.color(t.text_dimmed),
-            Some(_) => sun,
+            None => sun.ink(t.text_dimmed),
+            Some(_) => sun.ink(t.warning).expanded(true),
         };
-        sun.on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &row_key, &member, tx))
-            .build(attn_ui::kit(t))
-            .key(format!("{key}.start"))
-            .radius(4.0)
-            .hover(t.bg_button)
+        El::from(
+            sun.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                trigger(state, &row_key, &member, tx)
+            })
+            .build(t),
+        )
     };
     let actions = {
         let (member, under) = (m.member.clone(), format!("{key}.actions"));
@@ -232,72 +228,59 @@ pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
             "actions",
             format!("Actions for {}", m.name),
             "•••",
-            t,
             move |state, tx| open_menu(state, &member, &under, tx),
         )
     };
-    let mut row = super::leaf_row(key.clone(), false, t)
-        .role("listitem")
-        .label(start_label)
-        .a11y_value(if armed { "armed" } else { "between sessions" })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &pressed, &member, tx))
-        .child(idle_lead(m.harness.as_deref(), t))
-        .child(
-            text(m.name.clone())
-                .key(format!("{key}.name"))
-                .font(type_::BODY)
-                .color(if m.chief {
-                    t.text_primary
-                } else {
-                    t.text_tertiary
-                })
-                .single_line()
-                .truncate(),
-        )
-        .child(
-            row()
-                .grow(1.0)
-                .min_w(0.0)
-                .justify_end()
-                .items_center()
-                .gap(7.0)
-                .children(m.chief.then(|| {
-                    rune::icon(&attn_ui::icon::CHIEF, 12.0)
-                        .key(format!("{key}.chief"))
-                        .color(t.text_tertiary)
-                        .help(m.name.clone())
-                }))
-                .children(m.chief.then(|| {
-                    text("between sessions")
-                        .key(format!("{key}.age"))
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_tertiary)
-                        .single_line()
-                        .truncate()
-                })),
-        )
-        .child(sun)
-        .hover_group();
-    let controls = rune::row()
-        .key(format!("{key}.controls"))
-        .pin(None, Some(0.0), Some(SUN_SIDE + 14.0), Some(0.0))
-        .items_center()
-        .gap(2.0)
-        .pl(6.0)
-        .fill(t.bg_elevated)
-        .radius(4.0)
-        .children(armed.then(|| {
-            text("confirm")
-                .key(format!("{key}.confirm"))
-                .font(type_::LABEL)
-                .color(t.warning)
-        }))
-        .child(actions);
-    row = row.child(if armed {
-        controls
+    let ink = if m.chief {
+        t.text_primary
     } else {
-        controls.group_opacity(0.0, 1.0)
+        t.text_tertiary
+    };
+    let name = words(m.name.clone(), Type::Body, ink)
+        .key(format!("{key}.name"))
+        .single_line();
+    let between = m.chief.then(|| {
+        Inline::joined()
+            .grow(1.0)
+            .justify_end()
+            .child(
+                system::icon(&attn_ui::icon::CHIEF, IconSize::Small, t.text_tertiary)
+                    .key(format!("{key}.chief"))
+                    .help(m.name.clone()),
+            )
+            .child(
+                words("between sessions", Type::Mono, t.text_tertiary)
+                    .key(format!("{key}.age"))
+                    .single_line()
+                    .truncate()
+                    .shrink(),
+            )
     });
+    let row = ListRow::new(key.clone(), start_label)
+        .role("listitem")
+        .unfocusable()
+        .lead(idle_lead(m.harness.as_deref(), t))
+        .title_el(
+            Inline::joined()
+                .grow(1.0)
+                .child(if m.chief {
+                    name.truncate()
+                } else {
+                    name.truncate().shrink()
+                })
+                .children(between),
+        );
+    let row = if armed {
+        let confirm = words("confirm", Type::Label, t.warning).key(format!("{key}.confirm"));
+        row.controls([confirm, actions.build(t).into(), sun], Reveal::Always)
+    } else {
+        row.hover_controls([actions])
+            .controls([sun], Reveal::Always)
+    };
+    let mut row = row
+        .build(t)
+        .a11y_value(if armed { "armed" } else { "between sessions" })
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| trigger(state, &pressed, &member, tx));
     if armed {
         row = row.on_press_outside(move |state: &mut State, _: &mut Tx| {
             if state
@@ -333,52 +316,28 @@ pub(crate) fn chief_setup_row(
         Phase::Configuring => "configuring",
         _ => "starting",
     };
-    let mut row = super::leaf_row(key.clone(), false, t)
-        .role("button")
-        .label(format!("Set up {}", chief.name))
-        .a11y_value(phase)
-        .hover(rune::Color::TRANSPARENT)
-        .child(idle_lead(
+    let row = ListRow::new(key.clone(), format!("Set up {}", chief.name))
+        .lead(idle_lead(
             logos.then_some(chief.agent.as_deref().unwrap_or_default()),
             t,
         ))
-        .child(
-            text(chief.name.clone())
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .single_line()
-                .truncate()
-                .grow(1.0),
-        )
-        .child(
-            text(pill)
-                .key(format!("{key}.pill"))
-                .font(rune::TextStyle {
-                    weight: 600.0,
-                    ..type_::LABEL
-                })
-                .color(t.brand)
-                .fill(t.brand.alpha(0.14))
-                .radius(999.0)
-                .px(7.0)
-                .py(1.0),
-        );
+        .title(chief.name.clone())
+        .aside(words(pill, Type::Label, t.brand).key(format!("{key}.pill")))
+        .disabled(chief.busy)
+        .build(t)
+        .a11y_value(phase);
     if chief.busy {
-        row = row.disabled(true);
-    } else {
-        row = row
-            .focusable(true)
-            .hover(t.bg_elevated)
-            .on_press_tx(crate::chief::edit)
-            .on_key(|state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
-                if ev.key == rune::Key::Enter {
-                    crate::chief::edit(state, tx);
-                    return true;
-                }
-                false
-            });
+        return row;
     }
-    row
+    row.on_press_tx(crate::chief::edit).on_key(
+        |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+            if ev.key == rune::Key::Enter {
+                crate::chief::edit(state, tx);
+                return true;
+            }
+            false
+        },
+    )
 }
 
 fn open_menu(state: &mut State, member: &str, under: &str, tx: &mut Tx) {
@@ -455,12 +414,11 @@ pub(crate) fn menu_view(state: &State, t: &Tokens) -> Vec<El> {
             "Member details"
         })
         .key(format!("{MENU}.details"))
-        .lead(
-            row()
-                .w(14.0)
-                .justify_center()
-                .child(rune::icon(&attn_ui::icon::CHIEF, 12.0).color(t.text_tertiary)),
-        )
+        .lead(system::icon(
+            &attn_ui::icon::CHIEF,
+            IconSize::Small,
+            t.text_tertiary,
+        ))
         .on_select_tx(move |state: &mut State, tx: &mut Tx| {
             let opener = state.window.crew_rows.menu.take().map(|m| m.under);
             if is_chief {

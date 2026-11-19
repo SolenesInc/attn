@@ -528,7 +528,7 @@ fn an_unreachable_agent_leads_with_its_harness_logo_and_with_the_struck_ring_onc
         (w, h)
     };
     assert!(offline(&world, "queue-turn.remote"));
-    assert_eq!(lead(&world), (14.0, 14.0), "its harness logo");
+    assert_eq!(lead(&world), (16.0, 16.0), "its harness logo");
 
     world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
         settings: Some(std::collections::BTreeMap::from([

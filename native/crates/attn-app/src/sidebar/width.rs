@@ -248,13 +248,13 @@ pub(crate) fn handle(t: &attn_ui::Tokens) -> rune::El {
 pub(crate) fn label_view(state: &crate::State, t: &attn_ui::Tokens) -> Option<rune::El> {
     let w = &state.window.width;
     (w.dragging || w.label_until.is_some()).then(|| {
-        let label = rune::text(label(of(state), w.window))
-            .key("sidebar.width-label")
-            .font(attn_ui::type_::MONO_CAPTION)
-            .color(t.text_secondary)
-            .absolute(rune::tok::space::S2, rune::tok::space::S2)
-            .px(rune::tok::space::S2)
-            .py(2.0);
+        let label = rune::El::from(attn_ui::system::tag(
+            "sidebar.width-label",
+            &label(of(state), w.window),
+            attn_ui::system::Tone::Neutral,
+            t,
+        ))
+        .absolute(rune::tok::space::S2, rune::tok::space::S2);
         rune_kit::popover::raised(attn_ui::kit(t), label, 4.0)
     })
 }

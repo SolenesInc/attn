@@ -3,24 +3,13 @@
 //! The PRs chip also opens its drawer.
 
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, row, text};
+use attn_ui::blocks::Inline;
+use attn_ui::system::{self, GroupHead, IconSize, ListRow, Type, words};
+use rune::{El, Tx};
 use serde_json::{Value, json};
 
 use crate::State;
 use crate::action::Action;
-
-const KEYS: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    ..type_::MONO_CAPTION
-};
-
-const HEADING: rune::TextStyle = rune::TextStyle {
-    weight: 700.0,
-    tracking: 1.8,
-    ..type_::CAPS
-};
 
 const DEFAULT_ITEMS: &[&str] = &[
     "terminal.splitVertical",
@@ -200,45 +189,33 @@ pub(crate) fn view(dock: &Dock, t: &Tokens) -> El {
         true => ("+", "Show dock"),
         false => ("−", "Hide dock"),
     };
-    let head = row()
-        .key("sidebar.dock.head")
-        .w_full()
-        .items_center()
-        .child(text("DOCK").font(HEADING).color(t.text_tertiary).grow(1.0))
-        .child(
-            text(toggle)
-                .key("sidebar.dock.toggle")
-                .role("button")
-                .focusable(true)
-                .label(toggle_said)
-                .a11y_value(if dock.collapsed {
-                    "collapsed"
-                } else {
-                    "expanded"
-                })
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .w(18.0)
-                .h(18.0)
-                .radius(6.0)
-                .hover(t.bg_elevated)
-                .on_press_tx(toggle_collapsed),
-        );
-    let chips = (!dock.collapsed).then(|| {
-        row()
-            .key("sidebar.dock.chips")
-            .role("list")
-            .label("Dock")
-            .w_full()
-            .flex_wrap()
-            .gaps(space::S2, space::S3)
-            .children(dock.chips.iter().map(|chip| chip_view(chip, t)))
+    let toggle = El::from(
+        system::icon_button("sidebar.dock.toggle", toggle_said, toggle, IconSize::Small)
+            .on_press_tx(toggle_collapsed)
+            .build(t),
+    )
+    .a11y_value(if dock.collapsed {
+        "collapsed"
+    } else {
+        "expanded"
     });
-    col()
+    let head = GroupHead::new("sidebar.dock.head", "Dock")
+        .heading()
+        .section("Dock")
+        .trailing(toggle)
+        .build(t);
+    let chips = (!dock.collapsed).then(|| {
+        ListRow::column().child(
+            Inline::loose()
+                .key("sidebar.dock.chips")
+                .role("list")
+                .label("Dock")
+                .w_full()
+                .children(dock.chips.iter().map(|chip| chip_view(chip, t))),
+        )
+    });
+    ListRow::column()
         .key("sidebar.dock")
-        .w_full()
-        .gap(space::S2)
-        .padding(space::S3)
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
         .child(head)
         .children(chips)
@@ -246,30 +223,20 @@ pub(crate) fn view(dock: &Dock, t: &Tokens) -> El {
 
 fn chip_view(chip: &Chip, t: &Tokens) -> El {
     let said = format!("{} {}", chip.keys, chip.label);
-    let face = row()
-        .key(format!("sidebar.dock.chip.{}", chip.action.id()))
-        .label(said)
-        .items_center()
-        .gap(4.0)
-        .radius(999.0)
-        .child(text(chip.keys.clone()).font(KEYS).color(t.text_muted))
-        .child(
-            text(chip.label)
-                .font(type_::MONO_CAPTION)
-                .color(if chip.active {
-                    t.text_primary
-                } else {
-                    t.text_tertiary
-                }),
-        );
-    let face = match chip.active {
-        true => face
-            .px(8.0)
-            .py(2.0)
-            .a11y_value("active")
-            .fill(t.brand.alpha(0.12))
-            .border(1.0, t.brand.alpha(0.35)),
-        false => face,
+    let (keys, label) = if chip.active {
+        (t.brand, t.text_primary)
+    } else {
+        (t.text_dimmed, t.text_tertiary)
     };
-    face.role("listitem")
+    let face = Inline::joined()
+        .key(format!("sidebar.dock.chip.{}", chip.action.id()))
+        .role("listitem")
+        .label(said)
+        .child(words(chip.keys.clone(), Type::Mono, keys))
+        .child(words(chip.label, Type::Small, label));
+    if chip.active {
+        face.a11y_value("active")
+    } else {
+        face
+    }
 }

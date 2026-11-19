@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row, text};
+use attn_ui::Tokens;
+use attn_ui::blocks::Inline;
+use attn_ui::system::{self, GroupHead, IconSize, ListRow, Look, Size, Type, words};
+use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, TextInput};
+use rune_kit::TextInput;
 
 use super::model::{AgentRow, display_name, ordered_desktops};
 use super::queue::{self, Bands, QueueRow};
-use super::{INSET, LEAF_HEIGHT, ROW_HEIGHT, ROWS_BUILT, home_row, lead, open_agent};
+use super::{ROWS_BUILT, home_row, lead, open_agent};
 use crate::State;
 use crate::action::Action;
 
@@ -523,7 +523,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .growth(GrowthSpec::default())
             .virtual_rows(
                 lines.len(),
-                LEAF_HEIGHT,
+                ListRow::height(),
                 move |_: &State, i| keys[i].key().into(),
                 move |state: &State, i| {
                     let line_key = lines[i].key();
@@ -555,13 +555,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                 &t,
             ))
             .child(
-                col()
+                ListRow::column()
                     .key("sidebar.scroll")
-                    .w_full()
                     .grow(1.0)
                     .min_h(0.0)
-                    .px(INSET)
-                    .pb(space::S2)
                     .scroll(ScrollSpec {
                         stick_bottom: false,
                     })
@@ -594,22 +591,21 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
         || {
             ROWS_BUILT.with(|n| n.set(n.get() + 1));
             match line {
-                QLine::Gap(_) => rune::el().key(key).w_full().h(SECTION_GAP).a11y_hidden(),
+                QLine::Gap(_) => rune::el()
+                    .key(key)
+                    .w_full()
+                    .h(ListRow::section_gap())
+                    .a11y_hidden(),
                 QLine::Rule { text: label, .. } => rule(key, label, t),
                 QLine::WaitingHead {
                     waiting,
                     unreachable,
                 } => waiting_head(key, (*waiting, *unreachable), keys, t),
                 QLine::AgentsToggle { open, more } => agents_toggle(key, *open, *more, keys, t),
-                QLine::Counts(counts) => text(counts.clone())
-                    .key(key)
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_tertiary)
-                    .px(6.0),
-                QLine::Empty(_) => text("Nobody else.")
-                    .key(key)
-                    .font(type_::LABEL)
-                    .color(t.text_muted),
+                QLine::Counts(counts) => {
+                    ListRow::note(key, counts.clone(), Type::Mono, t.text_tertiary)
+                }
+                QLine::Empty(_) => ListRow::note(key, "Nobody else.", Type::Small, t.text_muted),
                 QLine::Agent(agent) => {
                     let bar = super::settling_bar(state, &key, &agent.agent, t);
                     queue_row(key, agent, cursor, logos, t).children(bar)
@@ -626,49 +622,24 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
 }
 
 pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
-    let tertiary = t.text_tertiary;
-    section_rule(key.clone())
-        .role("heading")
-        .label("Crew")
-        .child(type_::caps("Crew").color(t.text_tertiary))
-        .child(rune::el().grow(1.0).h(1.0).fill(t.border_subtle))
-        .child(
-            Button::new("manage")
-                .variant(ButtonVariant::GhostMuted)
-                .label_with(move |_, _| text("manage").font(type_::CAPS).color(tertiary))
-                .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::open(state, None, tx))
-                .build(attn_ui::kit(t))
-                .key(format!("{key}.manage"))
-                .label("Manage crew")
-                .px(0.0),
-        )
+    let manage = El::from(
+        system::Button::new("manage")
+            .look(Look::Quiet)
+            .size(Size::Compact)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::open(state, None, tx))
+            .build(t),
+    )
+    .key(format!("{key}.manage"))
+    .label("Manage crew");
+    GroupHead::new(key, "Crew")
+        .heading()
+        .section("Crew")
+        .trailing(manage)
+        .build(t)
 }
 
 fn rule(key: String, label: &str, t: &Tokens) -> El {
-    section_rule(key)
-        .role("heading")
-        .label(label.to_owned())
-        .child(type_::caps(label).color(t.text_tertiary))
-        .child(rune::el().grow(1.0).h(1.0).fill(t.border_subtle))
-}
-
-/// The gap that sets a section of the queue sidebar apart from the one above it, as the
-/// Tauri app's `margin-top: 16px` on the crew block, the waiting card, the agents toggle, the
-/// agent list's bands and the automation runs.
-const SECTION_GAP: f32 = 16.0;
-
-/// A section's heading line, as the Tauri app's `.queue-section-rule`: 20 points high and 4
-/// over its rows.
-fn section_rule(key: String) -> El {
-    row()
-        .key(key)
-        .w_full()
-        .h(24.0)
-        .pb(4.0)
-        .items_center()
-        .gap(6.0)
-        .pl(4.0)
-        .pr(6.0)
+    GroupHead::new(key, label).heading().section(label).build(t)
 }
 
 fn keys_of(state: &State, action: &Action) -> Option<String> {
@@ -685,26 +656,6 @@ fn says(does: &str, keys: Option<&String>) -> String {
         None => does.to_owned(),
     }
 }
-
-/// A section rule's line out to its key. The key gives way first, so the words before it stay
-/// whole.
-fn rule_tail(keys: Option<String>, t: &Tokens) -> [El; 2] {
-    [
-        rune::el().grow(1.0).h(1.0).fill(t.border_subtle),
-        match keys {
-            Some(keys) => text(keys)
-                .font(KEYS_TYPE)
-                .color(t.text_tertiary)
-                .single_line()
-                .truncate()
-                .shrink()
-                .min_w(0.0),
-            None => rune::el(),
-        },
-    ]
-}
-
-const KEYS_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).mono();
 
 /// What the queue owes, as the head and the collapsed bar say it: "2 waiting · 1 unreachable".
 pub(crate) fn owed_label((waiting, unreachable): (usize, usize)) -> Option<String> {
@@ -724,58 +675,37 @@ fn waiting_head(
 ) -> El {
     let label = owed_label((waiting, unreachable)).unwrap_or_else(|| "Nothing owed".into());
     let description = says("Open the oldest turn", keys.as_ref());
-    let tokens = *t;
-    Button::new(label.clone())
+    GroupHead::new(key, label)
+        .name_el(owed_words((waiting, unreachable), t))
+        .keys(keys)
         .disabled(waiting == 0)
-        .variant(ButtonVariant::Ghost)
-        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::jump_to_waiting(state, tx))
-        .label_with(move |_, _| {
-            row()
-                .w_full()
-                .items_center()
-                .gap(6.0)
-                .child(owed_words((waiting, unreachable), &tokens))
-                .children(rule_tail(keys, &tokens))
-        })
-        .build(attn_ui::kit(t))
-        .key(key)
+        .build(t)
         .description(description)
-        .w_full()
-        .h(28.0)
-        .pl(4.0)
-        .pr(6.0)
-        .justify_start()
-        .radius(4.0)
-        .hover(super::hairline(t))
+        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::jump_to_waiting(state, tx))
 }
 
-/// What the queue owes in the Tauri app's `.queue-waiting-count`: the number of waiting turns
-/// in bold warning, the words in primary, and an unreachable count in tertiary.
+/// What the queue owes: the number of waiting turns in bold warning, the words in primary, and
+/// an unreachable count in tertiary.
 fn owed_words((waiting, unreachable): (usize, usize), t: &Tokens) -> El {
-    let words = rune::TextStyle::new(13.0, 500.0);
-    let number = rune::TextStyle {
-        weight: 700.0,
-        ..words
-    };
     if waiting == 0 && unreachable == 0 {
-        return text("Nothing owed").font(words).color(t.text_tertiary);
+        return words("Nothing owed", Type::Name, t.text_tertiary);
     }
     let mut parts = Vec::new();
     if waiting > 0 {
-        parts.push(text(waiting.to_string()).font(number).color(t.warning));
-        parts.push(text("waiting").font(words).color(t.text_primary));
+        parts.push(words(waiting.to_string(), Type::Heading, t.warning));
+        parts.push(words("waiting", Type::Name, t.text_primary));
     }
     if unreachable > 0 {
         if waiting > 0 {
-            parts.push(text("·").font(words).color(t.text_tertiary));
+            parts.push(words("·", Type::Name, t.text_tertiary));
         }
-        parts.push(
-            text(format!("{unreachable} unreachable"))
-                .font(words)
-                .color(t.text_tertiary),
-        );
+        parts.push(words(
+            format!("{unreachable} unreachable"),
+            Type::Name,
+            t.text_tertiary,
+        ));
     }
-    row().items_center().gap(4.0).children(parts)
+    Inline::joined().children(parts)
 }
 
 fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: &Tokens) -> El {
@@ -784,40 +714,14 @@ fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: 
         1 => "1 more agent".to_owned(),
         n => format!("{n} more agents"),
     };
-    let tokens = *t;
     let description = says("Show every agent in this profile", keys.as_ref());
-    Button::new(label.clone())
-        .variant(ButtonVariant::Ghost)
-        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
-        .label_with(move |_, _| {
-            row()
-                .w_full()
-                .items_center()
-                .gap(space::S1)
-                .child(
-                    text(if open {
-                        attn_ui::glyph::CARET_DOWN
-                    } else {
-                        attn_ui::glyph::CARET_RIGHT
-                    })
-                    .font(type_::LABEL)
-                    .color(tokens.text_tertiary),
-                )
-                .child(type_::caps(&label).color(tokens.text_tertiary))
-                .children(rule_tail(keys, &tokens))
-        })
-        .build(attn_ui::kit(t))
-        .expanded(open)
-        .key(key)
+    GroupHead::new(key, label.clone())
+        .open(open)
+        .section(label)
+        .keys(keys)
+        .build(t)
         .description(description)
-        .w_full()
-        .h(24.0)
-        .pb(4.0)
-        .pl(4.0)
-        .pr(6.0)
-        .justify_start()
-        .radius(4.0)
-        .hover(super::hairline(t))
+        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
 }
 
 fn plural(n: usize, noun: &str) -> String {
@@ -828,7 +732,7 @@ fn plural(n: usize, noun: &str) -> String {
     }
 }
 
-/// The automations' heading, and while runs stopped with a question, the button that walks them.
+/// The automations' heading, and while runs stopped with a question, the row that walks them.
 fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: &Tokens) -> El {
     let walk = (needing > 0).then(|| {
         let label = format!(
@@ -836,168 +740,82 @@ fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: 
             plural(needing, "run"),
             if needing == 1 { "needs" } else { "need" }
         );
-        let tokens = *t;
-        let shown = label.clone();
-        Button::new(label)
-            .variant(ButtonVariant::Ghost)
+        ListRow::new(format!("{key}.needing"), label.clone())
+            .title_el(
+                words(label, Type::Body, t.warning)
+                    .single_line()
+                    .truncate()
+                    .shrink(),
+            )
+            .keys(keys, t)
+            .tint(Some(t.warning))
+            .build(t)
+            .description("Open the next run needing you; press again for the one after")
             .on_press_tx(|state: &mut State, tx: &mut Tx| {
                 crate::automations::runs::next_run(state, tx)
             })
-            .label_with(move |_, _| {
-                row()
-                    .w_full()
-                    .items_center()
-                    .gap(space::S1)
-                    .child(
-                        text(shown)
-                            .font(type_::LABEL)
-                            .color(tokens.warning)
-                            .single_line()
-                            .truncate()
-                            .shrink(),
-                    )
-                    .child(row().grow(1.0))
-                    .children(keys.map(|k| {
-                        text(k)
-                            .font(KEYS_TYPE)
-                            .color(tokens.text_tertiary)
-                            .single_line()
-                    }))
-            })
-            .build(attn_ui::kit(t))
-            .key(format!("{key}.needing"))
-            .description("Open the next run needing you; press again for the one after")
-            .w_full()
-            .h(ROW_HEIGHT - 4.0)
-            .pl(6.0)
-            .pr(4.0)
-            .justify_start()
-            .radius(6.0)
-            .hover(t.warning.alpha(0.1))
     });
     col()
-        .key(key)
-        .role("heading")
-        .label("Automations")
-        .a11y_value(plural(runs, "run"))
-        .help("Automation runs never join the queue")
         .w_full()
         .child(
-            row()
-                .w_full()
-                .h(ROW_HEIGHT)
-                .items_center()
-                .gap(space::S1)
-                .child(type_::caps("Automations").color(t.text_tertiary))
-                .child(
-                    text(plural(runs, "run"))
-                        .font(type_::LABEL)
-                        .color(t.text_muted)
-                        .grow(1.0),
-                ),
+            GroupHead::new(key, "Automations")
+                .heading()
+                .section("Automations")
+                .aside(words(plural(runs, "run"), Type::Small, t.text_muted))
+                .build(t)
+                .a11y_value(plural(runs, "run"))
+                .help("Automation runs never join the queue"),
         )
         .children(walk)
 }
 
-/// An automation's group header, which lists or hides its runs.
+/// An automation's group row, which lists or hides its runs.
 fn run_group(key: String, group: &RunGroup, t: &Tokens) -> El {
     let id = group.id;
-    let (name, runs, asking, open) = (group.name.clone(), group.runs, group.asking, group.open);
+    let (runs, asking, open) = (group.runs, group.asking, group.open);
     let mut says = vec![group.name.clone(), plural(runs, "run")];
     if asking > 0 {
         says.push(format!("{asking} stopped with a question"));
     }
     says.push("runs stay out of the queue".into());
-    let tokens = *t;
-    Button::new(name.clone())
-        .variant(ButtonVariant::Ghost)
+    let caret = if open {
+        attn_ui::glyph::CARET_DOWN
+    } else {
+        attn_ui::glyph::CARET_RIGHT
+    };
+    let mut row = ListRow::new(key, group.name.clone())
+        .lead(system::glyph(caret, IconSize::Small, t.text_tertiary))
+        .title(group.name.clone());
+    if asking > 0 {
+        row = row.aside(words(asking.to_string(), Type::Mono, t.warning));
+    }
+    row.aside(words(runs.to_string(), Type::Mono, t.text_tertiary))
+        .build(t)
+        .expanded(open)
+        .a11y_value(runs.to_string())
+        .description(says.join(" · "))
         .on_press(move |state: &mut State| {
             let open = &mut state.window.run_groups_open;
             if !open.remove(&id) {
                 open.insert(id);
             }
         })
-        .label_with(move |_, _| {
-            row()
-                .w_full()
-                .items_center()
-                .gap(space::S1)
-                .child(
-                    text(if open {
-                        attn_ui::glyph::CARET_DOWN
-                    } else {
-                        attn_ui::glyph::CARET_RIGHT
-                    })
-                    .font(type_::LABEL)
-                    .color(tokens.text_tertiary),
-                )
-                .child(
-                    text(name)
-                        .font(type_::BODY)
-                        .color(tokens.text_primary)
-                        .single_line()
-                        .truncate()
-                        .grow(1.0),
-                )
-                .children((asking > 0).then(|| {
-                    text(asking.to_string())
-                        .font(type_::MONO_CAPTION)
-                        .color(tokens.warning)
-                }))
-                .child(
-                    text(runs.to_string())
-                        .font(type_::MONO_CAPTION)
-                        .color(tokens.text_tertiary),
-                )
-        })
-        .build(attn_ui::kit(t))
-        .expanded(open)
-        .key(key)
-        .a11y_value(runs.to_string())
-        .description(says.join(" · "))
-        .w_full()
-        .h(ROW_HEIGHT)
-        .px(0.0)
-        .justify_start()
-        .radius(4.0)
-        .hover(t.bg_elevated)
 }
 
-/// The Tauri app's `.queue-agent-filter`: a framed field 25 points tall, inset 8 points from
-/// the sidebar's edges, its edge `brand` while it has the focus.
+/// The field that narrows the agent list as it is typed into.
 fn filter(state: &State, key: String, t: &Tokens) -> El {
-    let filter = &state.window.agent_filter;
-    let edge = if filter.focused { t.brand } else { t.border };
-    let frame = row()
-        .w_full()
-        .h(25.0)
-        .px(6.0)
-        .items_center()
-        .gap(6.0)
-        .radius(5.0)
-        .border(1.0, edge)
-        .child(rune::icon(&attn_ui::icon::SEARCH, 11.0).color(t.text_dimmed))
-        .child(
-            TextInput::new(filter)
-                .key(FILTER_FIELD)
-                .plain()
-                .text_style(type_::BODY)
-                .height(type_::BODY.line_px())
-                .width(None)
-                .label("Filter agents")
-                .placeholder("filter agents")
-                .on_edit(|state: &mut State| &mut state.window.agent_filter)
-                .on_key(super::actions::filter_key)
-                .build(attn_ui::kit(t))
-                .grow(1.0),
-        );
+    let input = TextInput::new(&state.window.agent_filter)
+        .key(FILTER_FIELD)
+        .label("Filter agents")
+        .placeholder("filter agents")
+        .on_edit(|state: &mut State| &mut state.window.agent_filter)
+        .on_key(super::actions::filter_key);
     row()
         .key(key)
         .w_full()
-        .h(ROW_HEIGHT)
-        .px(8.0)
+        .h(ListRow::height())
         .items_center()
-        .child(frame)
+        .child(El::from(system::search_box(input, t)))
 }
 
 fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens) -> El {
@@ -1009,91 +827,67 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
     } else {
         a.snoozed_until.clone()
     };
-    let row = super::leaf_row(key.clone(), a.agent.selected, t)
+    let name = super::flagged(&key, &a.agent, t).shrink().child(
+        words(a.agent.name.clone(), Type::Body, t.text_primary)
+            .single_line()
+            .truncate()
+            .shrink(),
+    );
+    let mut row = ListRow::new(key.clone(), format!("Open {}", a.agent.name))
         .role("listitem")
-        .label(format!("Open {}", a.agent.name))
+        .unfocusable()
+        .cursor(cursor)
+        .lead(badged_lead(&key, a, logos, t))
+        .title_el(name)
+        .in_view(a.agent.selected)
+        .tint(a.agent.offline.then_some(t.error))
+        .hover_controls(row_controls(&key, a));
+    if let Some(chain) = &a.agent.chain {
+        row = row.aside(crate::desktop::chain::chip(&key, &a.agent.id, chain, t));
+    }
+    if let Some(asks) = crate::asks::marker(&key, a.agent.asks, t) {
+        row = row.aside(asks);
+    }
+    if !trailing.is_empty() {
+        row = row.aside(words(trailing, Type::Mono, t.text_dimmed).key(format!("{key}.age")));
+    }
+    let row = row
+        .build(t)
         .a11y_value(a.agent.state.wire())
         .help(a.agent.hover())
-        .focus_selected(cursor)
-        .fill(super::row_fill(&a.agent, t))
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
-        .child(badged_lead(&key, a, logos, t))
-        .child(
-            super::flagged(&key, &a.agent, t).grow(1.0).shrink().child(
-                text(a.agent.name.clone())
-                    .font(type_::BODY)
-                    .color(t.text_primary)
-                    .single_line()
-                    .truncate()
-                    .shrink(),
-            ),
-        )
-        .children(
-            a.agent
-                .chain
-                .as_ref()
-                .map(|c| crate::desktop::chain::chip(&key, &a.agent.id, c, t)),
-        )
-        .children(crate::asks::marker(&key, a.agent.asks, t))
-        .children((!trailing.is_empty()).then(|| {
-            text(trailing)
-                .key(format!("{key}.age"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_dimmed)
-        }))
-        .hover_group()
-        .children(row_controls(&key, a, t));
-    let row = match &a.agent.chain {
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx));
+    match &a.agent.chain {
         Some(_) => crate::desktop::chain::row_hovers(row, &key, &a.agent.id),
         None => row,
-    };
-    if cursor {
-        row.focus_ring(2.0, 0.0, t.border_focus)
-    } else {
-        row
     }
 }
 
-/// A queue row's lead with its desktop's slot tucked under its lower right corner, as the
-/// Tauri app's `.queue-lead-badge`: it takes no room in the row.
+/// A queue row's lead with its desktop's slot tucked under its lower right corner: it takes no
+/// room in the row.
 fn badged_lead(key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
+    let ground = if a.agent.selected {
+        t.bg_elevated
+    } else {
+        t.bg_panel
+    };
     row()
-        .w(14.0)
-        .h(14.0)
         .center()
         .child(lead(key, &a.agent, logos, t))
         .children((!a.slot.is_empty()).then(|| {
-            row()
-                .pin(None, None, Some(-4.0), Some(-4.0))
-                .min_w(8.0)
-                .pl(2.0)
-                .pr(1.0)
-                .pt(1.0)
-                .justify_center()
-                .radius(3.0)
-                .fill(if a.agent.selected {
-                    t.bg_elevated
-                } else {
-                    t.bg_panel
-                })
-                .child(
-                    text(a.slot.clone())
-                        .key(format!("{key}.slot"))
-                        .font(SLOT_TYPE)
-                        .color(t.text_dimmed),
-                )
+            system::slot_badge(format!("{key}.slot"), a.slot.clone(), ground, t).pin(
+                None,
+                None,
+                Some(-SLOT_OVERHANG),
+                Some(-SLOT_OVERHANG),
+            )
         }))
 }
 
-/// A slot's digit one line high: digits have no descenders, so the badge holds only the digit and
-/// its insets.
-const SLOT_TYPE: rune::TextStyle = rune::TextStyle {
-    line_height: 12.0,
-    ..rune::TextStyle::new(12.0, 400.0).mono()
-};
+/// How far the desktop's slot hangs past its lead's corner.
+const SLOT_OVERHANG: f32 = 4.0;
 
 /// The buttons a queue row shows while it is hovered or holds focus.
-fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
+fn row_controls(key: &str, a: &QueueAgent) -> Vec<system::IconButton> {
     let id = &a.agent.id;
     let name = &a.agent.name;
     let settle = a.settle.then(|| {
@@ -1103,7 +897,6 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             "settle",
             format!("Settle {name}"),
             "✓",
-            t,
             move |state, _| super::actions::settle(state, &id),
         )
     });
@@ -1114,7 +907,6 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             "unsnooze",
             format!("Unsnooze {name}"),
             "↩",
-            t,
             move |state, _| super::actions::wake(state, &id),
         )
     });
@@ -1125,7 +917,6 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             "snooze",
             format!("Snooze {name}"),
             attn_ui::glyph::MOON,
-            t,
             move |state, tx| super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx),
         )
     });
@@ -1137,7 +928,6 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             "ask-close",
             format!("Ask {name} to close"),
             attn_ui::glyph::MOON,
-            t,
             move |state, tx| {
                 if chief {
                     crate::chief::close(state, tx);
@@ -1147,30 +937,22 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             },
         )
     });
-    Some(
-        super::overlaid_controls(key, 0.0, 4.0, t)
-            .children(ask_close)
-            .children(unsnooze)
-            .children(snooze)
-            .child(super::actions_button(key, &a.agent, t))
-            .children(settle),
-    )
+    ask_close
+        .into_iter()
+        .chain(unsnooze)
+        .chain(snooze)
+        .chain([super::actions_button(key, &a.agent)])
+        .chain(settle)
+        .collect()
 }
 
 pub(super) fn control(
     row_key: &str,
     name: &str,
     label: String,
-    glyph: &str,
-    t: &Tokens,
+    glyph: &'static str,
     press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    GlyphButton::new(glyph, label)
-        .font(type_::LABEL)
-        .side(20.0)
+) -> system::IconButton {
+    system::icon_button(format!("{row_key}.{name}"), label, glyph, IconSize::Small)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(format!("{row_key}.{name}"))
-        .radius(4.0)
-        .hover(t.bg_button)
 }
