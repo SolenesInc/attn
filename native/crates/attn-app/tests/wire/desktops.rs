@@ -2840,6 +2840,24 @@ fn the_width_control_stays_while_the_pointer_crosses_from_the_dots_onto_it() {
 }
 
 #[test]
+fn news_from_the_daemon_while_the_pointer_rests_on_a_chip_does_not_stop_its_peek() {
+    let mut world = peeking(|_| Ok(()));
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(100));
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            state: "working".into(),
+            ..session("a")
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+    world.advance(Duration::from_millis(100));
+    assert_eq!(peek(&world).unwrap().name.as_deref(), Some("Agent c"));
+}
+
+#[test]
 fn a_reply_the_terminal_did_not_take_stays_with_its_tile_to_copy_or_discard() {
     let mut world = peeking(|data| match data {
         "\r" => Ok(()),

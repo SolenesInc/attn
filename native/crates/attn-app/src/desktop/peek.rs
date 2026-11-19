@@ -360,17 +360,23 @@ fn start_read(state: &mut State, runtime: String, tx: &mut Tx) {
     );
 }
 
-/// Keeps the peek to a tile still off screen on the current desktop, and moves a reply typed
-/// to an agent that stopped back to unsent, for its tile to keep.
+/// Keeps the peek, open or about to open, to a tile still off screen on the current desktop,
+/// and moves a reply typed to an agent that stopped back to unsent, for its tile to keep.
 pub(crate) fn settle(state: &mut State) {
-    let off_screen = state.window.desk.peeks.open.as_ref().is_some_and(|open| {
-        state
+    let peeks = &state.window.desk.peeks;
+    let peeked = match (&peeks.open, &peeks.timer) {
+        (Some(open), _) => Some((&open.desktop, &open.leaf)),
+        (None, Some(Timer::Open { desktop, leaf, .. })) => Some((desktop, leaf)),
+        (None, _) => None,
+    };
+    let gone = peeked.is_some_and(|(desktop, leaf)| {
+        !(state
             .facts
             .current_desktop()
-            .is_some_and(|d| d.id == open.desktop)
-            && Shelf::of(state).is_some_and(|s| s.holds(&open.leaf))
+            .is_some_and(|d| &d.id == desktop)
+            && Shelf::of(state).is_some_and(|s| s.holds(leaf)))
     });
-    if !off_screen {
+    if gone {
         dismiss(state);
     }
     let stopped: Vec<String> = state
