@@ -332,8 +332,35 @@ fn find(term: &mut Term, known: &HashSet<String>) -> Vec<SeedMark> {
             ..Line::default()
         };
         let width = usize::from(cols);
+        let mut starts = Vec::new();
+        for row in start..=end {
+            let offset = (row - start) as usize * width;
+            match row.checked_sub(top).filter(|r| *r < rows) {
+                Some(r) => starts.extend(
+                    grid.row(r as usize)
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, cell)| cell.grapheme.is('s'))
+                        .map(|(col, _)| offset + col),
+                ),
+                None => starts.extend(
+                    outside
+                        .iter()
+                        .filter(|(r, _)| *r == row)
+                        .flat_map(|(_, cells)| cells.iter().enumerate())
+                        .filter(|(_, ends)| **ends == Some(('s', 's')))
+                        .map(|(col, _)| offset + col),
+                ),
+            }
+        }
         let cell = |i: usize| at(start + (i / width) as u32, (i % width) as u16);
-        marks.extend(ids_in(&line, line.row_count as usize * width, cell, known));
+        marks.extend(ids_in(
+            &line,
+            line.row_count as usize * width,
+            &starts,
+            cell,
+            known,
+        ));
         start = end + 1;
     }
     marks
@@ -354,21 +381,21 @@ fn screen_row(vt: &mut attn_term::Vt, row: u32) -> Vec<Ends> {
         .collect()
 }
 
-/// The seed ids among the `len` cells of `line` that `known` holds, as whole words: no
-/// letter, digit or underscore right before or after.
+/// The seed ids among the `len` cells of `line` that `known` holds, each starting at one of
+/// the cells `starts` names as holding an `s`, as whole words: no letter, digit or underscore
+/// right before or after.
 fn ids_in(
     line: &Line,
     len: usize,
+    starts: &[usize],
     cell: impl Fn(usize) -> Ends,
     known: &HashSet<String>,
 ) -> Vec<SeedMark> {
     let word = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
     let one = |i: usize| cell(i).filter(|(a, b)| a == b).map(|(c, _)| c);
     let mut found = Vec::new();
-    let mut i = 0;
-    while i + ID_CELLS <= len {
-        if one(i) != Some('s') || one(i + 1) != Some('-') {
-            i += 1;
+    for &i in starts {
+        if i + ID_CELLS > len || one(i + 1) != Some('-') {
             continue;
         }
         let id = (i + 2..i + ID_CELLS)
@@ -379,18 +406,14 @@ fn ids_in(
             .then(|| cell(i + ID_CELLS))
             .flatten()
             .map(|(first, _)| first);
-        match id {
-            Some(id) if !word(before) && !word(after) && known.contains(&id) => {
-                found.push(SeedMark {
-                    rows: line.rows(Span {
-                        start: i,
-                        end: i + ID_CELLS,
-                    }),
-                    id,
-                });
-                i += ID_CELLS;
-            }
-            _ => i += 1,
+        if let Some(id) = id.filter(|id| !word(before) && !word(after) && known.contains(id)) {
+            found.push(SeedMark {
+                rows: line.rows(Span {
+                    start: i,
+                    end: i + ID_CELLS,
+                }),
+                id,
+            });
         }
     }
     found
