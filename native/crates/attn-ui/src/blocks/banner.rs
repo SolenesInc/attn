@@ -32,7 +32,7 @@ enum Note {
     Button {
         key: String,
         label: String,
-        button: Button,
+        button: Box<Button>,
     },
 }
 
@@ -127,7 +127,7 @@ impl Banner {
         self.notes.push(Note::Button {
             key: key.into(),
             label: label.into(),
-            button,
+            button: Box::new(button),
         });
         self
     }
