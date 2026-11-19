@@ -9,8 +9,8 @@
 #
 # shoot REV checks REV out in this checkout's base worktree, native/target/screenshot-tour-base,
 # with this checkout's tour, so a revision from before the tour existed can be shot too. The
-# base worktree stays between runs and builds in this checkout's build directory, so only what
-# REV changed compiles. diff writes one image per changed screen to DIFF, each changed pixel
+# base worktree stays between runs with its own build directory, so a run compiles only what
+# changed since the last. diff writes one image per changed screen to DIFF, each changed pixel
 # in red, and exits 1 when any pixel differs. Both build in release.
 set -euo pipefail
 
@@ -39,7 +39,7 @@ vt_archive() {
 }
 
 build_dir() {
-  echo "${CARGO_HOME:-$HOME/.cargo}/attn-native-build$(cd "$root/native" && pwd -P)"
+  echo "${CARGO_HOME:-$HOME/.cargo}/attn-native-build$(cd "$1/native" && pwd -P)"
 }
 
 check_out_base() {
@@ -62,7 +62,7 @@ check_out_base() {
 run_tour() {
   local checkout="$1"
   shift
-  (cd "$checkout/native" && CARGO_BUILD_BUILD_DIR="$(build_dir)" cargo run --release --locked -q -p attn-app --example screenshot_tour -- "$@")
+  (cd "$checkout/native" && CARGO_BUILD_BUILD_DIR="$(build_dir "$checkout")" cargo run --release --locked -q -p attn-app --example screenshot_tour -- "$@")
 }
 
 shoot() {

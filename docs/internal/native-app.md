@@ -143,8 +143,8 @@ characters; it can be given more than once, and a pattern that matches no screen
 fails the run. `shoot`
 with a revision checks it out, with this checkout's tour, in the checkout's base
 worktree, `native/target/screenshot-tour-base`. The base worktree stays between
-runs and builds in the checkout's own build directory, so a pair compiles only
-what the revision changes. `diff` writes an image of each changed screen, with
+runs with its own build directory, so each run compiles only what changed since
+the last. `diff` writes an image of each changed screen, with
 the changed pixels in red, and fails when any pixel differs. Both build in
 release; a debug tour draws the same pixels several times slower.
 
