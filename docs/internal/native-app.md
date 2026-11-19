@@ -169,9 +169,11 @@ app:
   and two sizes, `switch`, `Segmented`, the field boxes `line_box`,
   `number_box` and `area_box`, `stepper` and the number field's `arrows`,
   `expander`, `tag`, `icon_box`, `Choice`, `press_area` and `disclosure`. Each
-  wraps rune-kit's control where one exists. Hover and pressed lay the
-  control's own ink over it at 8% and 12%; the keyboard draws a 2-point warm
-  ring outside its edge, and a field turns its own edge warm.
+  wraps rune-kit's control where one exists. Hover and pressed lighten a dark
+  surface and darken a light one, each by the step a list row takes (1.20:1
+  and 1.66:1 from rest in dark, 1.17:1 and 1.50:1 in light). Focus draws a
+  2-point warm ring outside the edge, on a field as on a button, and no state
+  moves a control's edge.
 - **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
   spacing, font and corner methods (`gap`, `padding`, `px`…, `radius`, `font`,
   `TextStyle::new` and the rest). While views move onto the system,
