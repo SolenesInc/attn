@@ -2123,3 +2123,78 @@ fn a_screen_reader_does_not_hear_a_terminal_home_or_the_garden_hides() {
         "the full Garden covers the terminal, whose pending output is dropped"
     );
 }
+
+#[test]
+fn a_screen_reader_does_not_hear_a_command_line_cancelled_with_ctrl_c() {
+    let mut world = World::start(one_terminal());
+    listening_shell(&mut world);
+    world.gesture(|app| app.type_text("echo cancelled"));
+    world.gesture(|app| app.press("ctrl+c"));
+    output(
+        &world,
+        2,
+        b"echo cancelled^C\r\r\n\x1b]133;A\x07$ \x1b]133;B\x07",
+    );
+    world.settle();
+    assert!(drew(&mut world, "$ echo cancelled^C"));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced(), None);
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_answers_typed_into_a_program() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, b"\x1b]133;A\x07$ ./ask\r\n\x1b]133;C\x07Name: ");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+    let said = |world: &World| world.screen().announced();
+
+    world.gesture(|app| app.type_text("y"));
+    let sent = world.daemon.sent_of("pty_input");
+    let answer = sent.iter().rfind(|input| input["data"] == "y").unwrap();
+    assert!(
+        answer["probe_id"].is_string(),
+        "the answer carries a latency probe"
+    );
+    output(&world, 2, b"y");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(said(&world), None, "an answer that carried a probe");
+
+    world.gesture(|app| app.type_text("X"));
+    world.gesture(|app| app.press("Backspace"));
+    world.gesture(|app| app.press("Enter"));
+    output(&world, 3, b"X\x08 \x08\r\nCity: ");
+    world.settle();
+    world.gesture(|app| app.type_text("paris"));
+    world.gesture(|app| app.press("Enter"));
+    output(&world, 4, b"paris\r\nSaved\r\n");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        said(&world).as_deref(),
+        Some("Saved"),
+        "an answer edited with Backspace and a second answer, within one quiet period"
+    );
+}
+
+#[test]
+fn a_screen_reader_hears_a_question_a_full_screen_program_draws_at_the_top() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, b"\x1b]133;A\x07$ ./fullscreen\r\n\x1b]133;C\x07");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+
+    output(&world, 2, b"\x1b[?1049h\x1b[HConfirm?\r\nPress y or n\r\n");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        world.screen().announced().as_deref(),
+        Some("Confirm?\nPress y or n"),
+        "the shell's marks belong to the primary screen"
+    );
+}

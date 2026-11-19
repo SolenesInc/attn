@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use attn_term::Mark;
+use attn_term::{Mark, Vt};
 use rune::{LiveRegion, Tx};
 
 use super::{Term, Terminals};
@@ -20,6 +20,50 @@ pub(super) struct Heard {
     speaks: bool,
 }
 
+/// A run of keys the user typed at one place, for a screen reader to tell its echo from
+/// output.
+pub(super) struct Typing {
+    /// The cell the cursor was on when the run began, which moves with its text.
+    at: Option<Mark>,
+    /// The line's text up to that cell.
+    before: String,
+    /// What the keys leave after it, with Backspace applied.
+    text: String,
+    /// A key changed the line some other way: an arrow, Tab, Ctrl+C, or Backspace past the
+    /// run's start.
+    edited: bool,
+    /// Enter ended the run.
+    entered: bool,
+}
+
+impl Typing {
+    fn at_cursor(vt: &mut Vt) -> Typing {
+        let (cols, _) = vt.size();
+        let (col, row) = vt.cursor();
+        let row = vt.history() + u32::from(row);
+        let first = (0..=row).rev().find(|&r| !vt.row_continues(r)).unwrap_or(0);
+        let mut before: String = (first..row).map(|r| vt.row_text(r, 0..cols)).collect();
+        before.push_str(&vt.row_text(row, 0..col));
+        Typing {
+            at: vt.mark(row, col),
+            before,
+            text: String::new(),
+            edited: false,
+            entered: false,
+        }
+    }
+
+    /// The line on `screen` this run's keys went to, when what it shows there is their echo:
+    /// the text the line had before them, then what they typed.
+    fn echo_on(&self, screen: &Screen) -> Option<RangeInclusive<usize>> {
+        let row = screen.view_row(self.at.as_ref()?.row()?)?;
+        let line = screen.line_at(row)?;
+        let text = screen.line_text(line.clone());
+        let after = text.strip_prefix(&self.before)?;
+        (self.edited || after.trim_end() == self.text.trim_end()).then_some(line)
+    }
+}
+
 /// A terminal's screen as a screen reader hears it.
 struct Screen {
     cols: usize,
@@ -28,19 +72,15 @@ struct Screen {
     rows: Vec<String>,
     /// Each row continues the one above it, which wrapped into it.
     continues: Vec<bool>,
-    /// The screen row and column of the cursor.
-    cursor: (u32, usize),
+    /// The screen row of the cursor.
+    cursor: u32,
     /// A mark on the cursor's cell, which moves with the text as output scrolls it.
     anchor: Option<Mark>,
-    /// The cursor's line, up to the cursor.
-    before_cursor: String,
     /// The view's rows that hold the shell's prompts and command lines, or None in a terminal
     /// whose shell does not mark them.
     shell: Option<Vec<bool>>,
-    /// The shell marked a command as running, so the cursor sits in that program's output.
-    in_program: bool,
     /// What the user typed into the terminal since the screen before.
-    typed: String,
+    typed: Vec<Typing>,
 }
 
 impl Screen {
@@ -55,29 +95,17 @@ impl Screen {
             .map(|r| vt.row_continues(top + r))
             .collect();
         let (col, row) = vt.cursor();
-        let cursor = (vt.history() + u32::from(row), usize::from(col));
+        let cursor = vt.history() + u32::from(row);
         let mut screen = Screen {
             cols: usize::from(cols),
             top,
             rows,
             continues,
             cursor,
-            anchor: vt.mark(cursor.0, col),
-            before_cursor: String::new(),
+            anchor: vt.mark(cursor, col),
             shell: None,
-            in_program: false,
             typed: std::mem::take(&mut term.typed),
         };
-        if let Some(line) = screen.cursor_line() {
-            let first = screen.top + *line.start() as u32;
-            let mut text: String = (first..cursor.0).map(|r| vt.row_text(r, 0..cols)).collect();
-            text.push_str(&vt.row_text(cursor.0, 0..col));
-            screen.before_cursor = text;
-        }
-        screen.in_program = term
-            .blocks
-            .pending()
-            .is_some_and(|command| command.output.is_some());
         screen.shell = screen.shell_rows(term);
         screen
     }
@@ -102,7 +130,7 @@ impl Screen {
     }
 
     fn cursor_line(&self) -> Option<RangeInclusive<usize>> {
-        self.line_at(self.view_row(self.cursor.0)?)
+        self.line_at(self.view_row(self.cursor)?)
     }
 
     /// The text of the line on view rows `line`, its wrapped rows joined.
@@ -117,11 +145,16 @@ impl Screen {
 
     /// The view's rows that hold a prompt and the command typed at it, from the shell's marks:
     /// a command's rows end where its output starts, and the command being typed ends with the
-    /// cursor's line.
-    fn shell_rows(&self, term: &Term) -> Option<Vec<bool>> {
+    /// cursor's line. The marks are the primary screen's, so a program on the alternate screen
+    /// has none.
+    fn shell_rows(&self, term: &mut Term) -> Option<Vec<bool>> {
         let blocks = &term.blocks;
         if blocks.pending().is_none() && blocks.blocks().is_empty() {
             return None;
+        }
+        let mut shell = vec![false; self.rows.len()];
+        if term.vt.mouse_modes().alternate_screen {
+            return Some(shell);
         }
         let mut commands: Vec<(u32, Option<u32>)> = Vec::new();
         for block in blocks.blocks().iter().rev() {
@@ -140,7 +173,6 @@ impl Screen {
             };
             commands.push((prompt, end));
         }
-        let mut shell = vec![false; self.rows.len()];
         for (prompt, end) in commands {
             for row in prompt..=end.unwrap_or(prompt).max(prompt) {
                 if let Some(view) = self.view_row(row) {
@@ -208,8 +240,38 @@ impl Terminals {
         let text = String::from_utf8_lossy(data)
             .replace("\x1b[200~", "")
             .replace("\x1b[201~", "");
-        if !text.contains('\x1b') {
-            term.typed.extend(text.chars().filter(|c| !c.is_control()));
+        let run = |term: &mut Term| -> usize {
+            if term.typed.last().is_none_or(|run| run.entered) {
+                term.typed.push(Typing::at_cursor(&mut term.vt));
+            }
+            term.typed.len() - 1
+        };
+        if text.contains('\x1b') {
+            let open = run(term);
+            term.typed[open].edited = true;
+            return;
+        }
+        for c in text.chars() {
+            match c {
+                '\r' | '\n' => {
+                    if let Some(open) = term.typed.last_mut() {
+                        open.entered = true;
+                    }
+                }
+                '\x7f' | '\x08' => {
+                    let open = run(term);
+                    let typing = &mut term.typed[open];
+                    typing.edited |= typing.text.pop().is_none();
+                }
+                c if c.is_control() => {
+                    let open = run(term);
+                    term.typed[open].edited = true;
+                }
+                c => {
+                    let open = run(term);
+                    term.typed[open].text.push(c);
+                }
+            }
         }
     }
 
@@ -247,16 +309,15 @@ impl Terminals {
 }
 
 /// The rows of `after` that `before` did not show, following the cursor's text however far
-/// output scrolled it. Blank rows are left out, and so are the shell's prompts and command
-/// lines, and what the user typed: in a program's output, the line the cursor was on when it
-/// holds just what it showed up to the cursor and what the user typed since; without shell
-/// marks, the lines the cursor was and is on.
+/// output scrolled it. Blank rows are left out, and so are the echo of what the user typed and
+/// the shell's prompts and command lines; without shell marks, so are the lines the cursor was
+/// and is on.
 fn new_rows<'a>(before: &Screen, after: &'a Screen) -> Vec<&'a str> {
     let moved = before
         .anchor
         .as_ref()
         .and_then(Mark::row)
-        .map(|now| i64::from(now) - i64::from(before.cursor.0));
+        .map(|now| i64::from(now) - i64::from(before.cursor));
     let to_after = |row: usize| -> Option<usize> {
         let screen_row = i64::from(before.top) + row as i64 + moved?;
         after.view_row(u32::try_from(screen_row).ok()?)
@@ -267,40 +328,29 @@ fn new_rows<'a>(before: &Screen, after: &'a Screen) -> Vec<&'a str> {
             shown[now] = Some(text.as_str());
         }
     }
-    let line_typed_on = before
-        .view_row(before.cursor.0)
-        .and_then(to_after)
-        .and_then(|row| after.line_at(row));
-    let mut typed = vec![false; after.rows.len()];
-    match &after.shell {
-        Some(shell) => {
-            typed.clone_from(shell);
-            let echoed = line_typed_on.filter(|line| {
-                before.in_program
-                    && !after.typed.is_empty()
-                    && after.line_text(line.clone()).trim_end()
-                        == format!("{}{}", before.before_cursor, after.typed).trim_end()
-            });
-            echoed
-                .into_iter()
-                .flatten()
-                .for_each(|row| typed[row] = true);
-        }
-        None => {
-            let was_on = before
-                .cursor_line()
-                .into_iter()
-                .flatten()
-                .filter_map(to_after);
-            let is_on = after.cursor_line().into_iter().flatten();
-            was_on
-                .chain(line_typed_on.into_iter().flatten())
-                .chain(is_on)
-                .for_each(|row| typed[row] = true);
-        }
+    let mut quiet = after
+        .shell
+        .clone()
+        .unwrap_or_else(|| vec![false; after.rows.len()]);
+    let echoes = after.typed.iter().filter_map(|run| run.echo_on(after));
+    echoes.flatten().for_each(|row| quiet[row] = true);
+    if after.shell.is_none() {
+        let was_on = before
+            .cursor_line()
+            .into_iter()
+            .flatten()
+            .filter_map(to_after);
+        let grown = before
+            .view_row(before.cursor)
+            .and_then(to_after)
+            .and_then(|row| after.line_at(row));
+        was_on
+            .chain(grown.into_iter().flatten())
+            .chain(after.cursor_line().into_iter().flatten())
+            .for_each(|row| quiet[row] = true);
     }
     (0..after.rows.len())
-        .filter(|&row| !after.rows[row].is_empty() && !typed[row])
+        .filter(|&row| !after.rows[row].is_empty() && !quiet[row])
         .filter(|&row| shown[row] != Some(after.rows[row].as_str()))
         .map(|row| after.rows[row].as_str())
         .collect()

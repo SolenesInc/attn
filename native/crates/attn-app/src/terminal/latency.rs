@@ -252,6 +252,7 @@ pub(crate) fn type_into(
     tx: &mut Tx,
 ) -> Typed {
     let at = At::of(state, tx);
+    state.terminals.heard_typed(terminal, bytes);
     if let Some(arrived) = tx.input_time() {
         state
             .terminals

@@ -290,7 +290,7 @@ struct Term {
     /// the tile has shown.
     reached: bool,
     /// What the user typed into the terminal since a screen reader last looked.
-    typed: String,
+    typed: Vec<spoken::Typing>,
 }
 
 #[derive(Debug)]
@@ -378,7 +378,7 @@ impl Term {
             synchronizing_since: None,
             marking: None,
             reached: false,
-            typed: String::new(),
+            typed: Vec::new(),
         }
     }
 }
@@ -1018,7 +1018,6 @@ impl Terminals {
         now: f64,
         daemon: &Commands,
     ) -> Typed {
-        self.heard_typed(id, data);
         let Some(term) = self.panes.get_mut(id) else {
             self.trace
                 .lock()
