@@ -107,6 +107,8 @@ pub(crate) struct Document {
     pub(crate) outpost: Option<Outpost>,
     pub(crate) view: String,
     pub(crate) opens_seed: Option<fn(&mut State, &str, &mut Tx)>,
+    /// The seed whose files the document's bare file names name, as a seed's body names them.
+    pub(crate) seed: Option<String>,
     /// The byte of the source a reading of one part of the document starts at.
     pub(crate) part: Option<usize>,
 }
@@ -132,11 +134,33 @@ impl Document {
         )
     }
 
+    /// The picture an image's `src` shows, by the path the document's pictures are read by.
+    pub(crate) fn picture(&self, src: &str) -> Option<String> {
+        let path = match resolve(&self.path, src) {
+            Some(Target::Local(file)) if !self.path.is_empty() => Some(file),
+            Some(_) => None,
+            None => self.seed.as_ref().and_then(|_| seed_file(src)),
+        }?;
+        is_image(&path).then_some(path)
+    }
+
     fn seed(&self, href: &str) -> Option<String> {
         self.opens_seed?;
         let id = decoded(href.trim());
         is_seed_id(&id).then_some(id)
     }
+}
+
+/// The file of a seed that `target` names, as the Tauri reader reads it
+/// (resolveSeedMarkdownTarget): a bare file name, never a path, a scheme or a hidden file.
+pub(crate) fn seed_file(target: &str) -> Option<String> {
+    let target = target.trim();
+    if target.is_empty() || scheme(target).is_some() || target.contains(['/', '\\', '?', '#']) {
+        return None;
+    }
+    let name = percent_decode_str(target).decode_utf8().ok()?;
+    (!name.is_empty() && !name.starts_with('.') && !name.contains(['/', '\\']))
+        .then(|| target.to_owned())
 }
 
 fn is_seed_id(text: &str) -> bool {

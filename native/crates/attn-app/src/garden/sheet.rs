@@ -21,6 +21,7 @@ pub(super) struct Sheet<'a> {
     pub(super) seeds: &'a [Arc<Seed>],
     pub(super) chief: bool,
     pub(super) readings: &'a crate::markdown::Readings,
+    pub(super) pictures: &'a crate::markdown::Pictures,
     /// The marks people make on the seed's body, in a tile that takes them.
     pub(super) drafts: Option<&'a crate::markdown::Drafts>,
     pub(super) now_ms: i64,
@@ -258,6 +259,7 @@ impl Sheet<'_> {
                         outpost: None,
                         view,
                         opens_seed: None,
+                        seed: None,
                         part: None,
                     },
                     std::rc::Rc::default(),
@@ -295,8 +297,11 @@ impl Sheet<'_> {
                 None => look,
             }
         };
+        let pictures = self.pictures.of_seed(&here.id);
+        let pictured = self.pictures.revision;
         let read = {
-            let (body, view, kept) = (body.clone(), view.clone(), kept.clone());
+            let (body, view, kept, seed) =
+                (body.clone(), view.clone(), kept.clone(), here.id.clone());
             move |marking| {
                 crate::markdown::reader(
                     &body,
@@ -306,9 +311,10 @@ impl Sheet<'_> {
                         outpost: None,
                         view,
                         opens_seed: None,
+                        seed: Some(seed.clone()),
                         part: None,
                     },
-                    std::rc::Rc::default(),
+                    pictures.clone(),
                     kept,
                     marking,
                     style,
@@ -347,7 +353,7 @@ impl Sheet<'_> {
         }
         memo(
             self.key(&format!("plan.{}", here.id)),
-            (body.clone(), view.clone(), kept.clone(), t),
+            (body.clone(), view.clone(), kept.clone(), pictured, t),
             move || plan(read(None)),
         )
     }

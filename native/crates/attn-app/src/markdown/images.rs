@@ -5,7 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use attn_protocol::{
-    Ask, AskImageMessage, AskImageResultMessage, TileAssetReadMessage, TileAssetReadResultMessage,
+    Ask, AskImageMessage, AskImageResultMessage, SeedArtifactTargetMessage,
+    SeedArtifactTargetResultMessage, TileAssetReadMessage, TileAssetReadResultMessage,
 };
 use base64::Engine;
 use pulldown_cmark::{Event, Parser, Tag};
@@ -32,6 +33,8 @@ enum Reader {
     Tile { host: Option<String> },
     /// An ask, from the copy of its images the home keeps.
     Ask(String),
+    /// A seed's body, from the seed's own files.
+    Seed(String),
     /// A note in the notebook or an editor tile's folder: `root` is the folder, `None` the
     /// notebook, and the path is from that folder.
     Notebook { root: Option<String> },
@@ -153,6 +156,11 @@ impl Pictures {
         )
     }
 
+    /// The pictures seed `seed`'s body shows, by the file names it gives them.
+    pub(crate) fn of_seed(&self, seed: &str) -> Rc<HashMap<String, Option<Image>>> {
+        Rc::new(self.read_by(&Reader::Seed(seed.to_owned())))
+    }
+
     /// The pictures notes under `root` show, by their paths from it; `None` is the notebook.
     pub(crate) fn of_notebook(&self, root: Option<&str>) -> HashMap<String, Option<Image>> {
         self.read_by(&Reader::Notebook {
@@ -191,6 +199,17 @@ fn images_of_ask(ask: &Ask) -> Vec<String> {
         .collect()
 }
 
+/// The files of its seed that a seed's `body` shows as images.
+fn images_of_seed(body: &str) -> Vec<String> {
+    Parser::new_ext(body, super::anchors::OPTIONS)
+        .filter_map(|event| match event {
+            Event::Start(Tag::Image { dest_url, .. }) => links::seed_file(&dest_url),
+            _ => None,
+        })
+        .filter(|file| links::is_image(file))
+        .collect()
+}
+
 /// The local image files `source`, a document at `document`, shows.
 fn images_in(document: &str, source: &str) -> Vec<String> {
     Parser::new_ext(source, super::anchors::OPTIONS)
@@ -216,7 +235,9 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         .then(|| state.window.asks.selected.clone())
         .flatten();
     let notebook = crate::notebook::images(state);
+    let seeds = crate::garden::read_bodies(state);
     let followed = hash(&(
+        &seeds,
         contents.revision,
         state.readings.reviews.widenings(),
         std::sync::Arc::as_ptr(&state.facts.asks) as usize,
@@ -261,6 +282,14 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
             for path in images_of_ask(ask) {
                 wanted.insert(Source {
                     reader: Reader::Ask(ask.id.clone()),
+                    path,
+                });
+            }
+        }
+        for (seed, body) in &seeds {
+            for path in images_of_seed(body) {
+                wanted.insert(Source {
+                    reader: Reader::Seed(seed.clone()),
                     path,
                 });
             }
@@ -345,7 +374,7 @@ fn widest(
 ) -> f32 {
     let column = match &source.reader {
         Reader::Notebook { root } => notes.get(root).copied(),
-        Reader::Tile { .. } => tiles,
+        Reader::Tile { .. } | Reader::Seed(_) => tiles,
         Reader::Ask(_) => None,
     };
     column.unwrap_or(super::PROSE_MEASURE) * zoom
@@ -417,6 +446,26 @@ fn fetch(
                             .decode(r.data_base64)
                             .ok()
                     });
+                then(state, source, bytes);
+            },
+            tx,
+        ),
+        Reader::Seed(seed_id) => state.ask(
+            |id| SeedArtifactTargetMessage {
+                seed_id,
+                relative_target: path,
+                purpose: "image".into(),
+                request_id: id,
+                ..SeedArtifactTargetMessage::new()
+            },
+            move |state, answer: Answer, _| {
+                let bytes = answer
+                    .outcome()
+                    .ok()
+                    .and_then(|reply| reply.parse::<SeedArtifactTargetResultMessage>())
+                    .filter(|result| result.success)
+                    .and_then(|result| result.result?.data_base64)
+                    .and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok());
                 then(state, source, bytes);
             },
             tx,

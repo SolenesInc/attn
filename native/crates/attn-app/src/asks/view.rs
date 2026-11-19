@@ -360,6 +360,7 @@ impl<'a> Prose<'a> {
             outpost: None,
             view: "asks.ask".into(),
             opens_seed: None,
+            seed: None,
             part: None,
         };
         let path = self.document.clone();

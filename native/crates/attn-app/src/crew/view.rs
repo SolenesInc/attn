@@ -1265,6 +1265,7 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
                     outpost: None,
                     view: view.clone(),
                     opens_seed: Some(super::open_seed),
+                    seed: None,
                     part: None,
                 },
                 std::rc::Rc::default(),

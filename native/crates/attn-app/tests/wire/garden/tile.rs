@@ -810,3 +810,71 @@ fn a_seed_tile_centers_its_plans_prose_at_the_reading_measure_and_a_wide_table_i
         cx + cw
     );
 }
+
+#[test]
+fn a_seed_tile_draws_an_image_its_body_names_from_the_seeds_own_files() {
+    use attn_protocol::{SeedArtifactTargetResult, SeedArtifactTargetResultMessage};
+    use base64::Engine;
+    let chart = || {
+        with(seed("s-chart1", "Charted plan"), |s| {
+            s.body = "The numbers:\n\n![chart](chart.png)\n".into()
+        })
+    };
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        profiles: Some(vec![profile()]),
+        desktops: Some(vec![desktop(
+            row(vec![pane("a"), seed_tile("s-chart1")]),
+            1,
+        )]),
+        ..initial(vec![chart()], vec![session("agent", "Agent a")])
+    });
+    daemon.on("seed_document_get", move |r| {
+        document(r, chart(), Vec::new(), &[])
+    });
+    daemon.on("seed_artifact_target", |r: &Request| {
+        message(SeedArtifactTargetResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            result: Some(SeedArtifactTargetResult {
+                relative_target: r["relative_target"].as_str().unwrap().into(),
+                mime_type: Some("image/png".into()),
+                data_base64: Some(
+                    base64::engine::general_purpose::STANDARD
+                        .encode(include_bytes!("../../fixtures/wide-strip.png")),
+                ),
+                ..SeedArtifactTargetResult::default()
+            }),
+            ..SeedArtifactTargetResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, (1600.0, 900.0));
+    world.open_desktop();
+    world.settle();
+
+    let asked: Vec<_> = world
+        .daemon
+        .sent_of("seed_artifact_target")
+        .into_iter()
+        .map(|r| {
+            (
+                r["seed_id"].clone(),
+                r["relative_target"].clone(),
+                r["purpose"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        asked,
+        vec![(json!("s-chart1"), json!("chart.png"), json!("image"))]
+    );
+    let screen = world.screen();
+    assert!(
+        screen.find(Target::role("image").name("chart")).is_some(),
+        "the seed's chart is drawn, not named as blocked"
+    );
+    assert!(
+        screen
+            .find(Target::role("label").name("[blocked image: chart]"))
+            .is_none()
+    );
+}

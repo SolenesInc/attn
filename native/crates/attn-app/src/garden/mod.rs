@@ -461,6 +461,19 @@ pub(crate) fn reading<'a>(
     )
 }
 
+/// The body of each seed whose document the window has read, by seed.
+pub(crate) fn read_bodies(state: &State) -> Vec<(String, String)> {
+    let mut bodies: Vec<_> = state
+        .window
+        .garden
+        .readings
+        .iter()
+        .filter_map(|(id, r)| Some((id.clone(), r.document.as_ref()?.seed.body.clone())))
+        .collect();
+    bodies.sort();
+    bodies
+}
+
 /// Drops the walk into a plot or seed, and reads it.
 pub(crate) fn drill(state: &mut State, id: &str, tx: &mut Tx) {
     let mut trail = living_trail(state);

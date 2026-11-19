@@ -164,6 +164,7 @@ pub(crate) fn body(
         outpost: outpost.clone(),
         view: view.clone(),
         opens_seed: None,
+        seed: None,
         part: None,
     };
     let read_source = |source: &str, part: Option<usize>, marking: Marking| {
@@ -389,8 +390,8 @@ pub(crate) fn linked(
     pictures: Rc<HashMap<String, Option<Image>>>,
     t: &Tokens,
 ) -> Markdown {
-    let path = document.path.clone();
-    let named_path = path.clone();
+    let shows = document.clone();
+    let named = document.clone();
     let help = document.clone();
     let plain = document.clone();
     let text_color = t.text_primary;
@@ -400,23 +401,15 @@ pub(crate) fn linked(
         })
         .link_help(move |href| help.verdict(href).help)
         .missing_image_frame({
-            let (path, pictures, t) = (named_path, pictures.clone(), *t);
+            let (pictures, t) = (pictures.clone(), *t);
             move |_, image| {
-                let failed = match links::resolve(&path, image.src) {
-                    Some(links::Target::Local(file))
-                        if !path.is_empty() && links::is_image(&file) =>
-                    {
-                        Some(matches!(pictures.get(&file), Some(None)))
-                    }
-                    _ => None,
-                };
+                let failed = named
+                    .picture(image.src)
+                    .map(|file| matches!(pictures.get(&file), Some(None)));
                 missing(image, failed, &t)
             }
         })
-        .images(move |src| match links::resolve(&path, src) {
-            Some(links::Target::Local(file)) => pictures.get(&file).cloned().flatten(),
-            _ => None,
-        })
+        .images(move |src| pictures.get(&shows.picture(src)?).cloned().flatten())
         .image_frame(|shown: El, frame: &ImageFrame<'_>| {
             let (image, alt) = (frame.image.clone(), frame.alt.to_owned());
             shown.on_press_tx(move |state: &mut State, tx: &mut Tx| {
