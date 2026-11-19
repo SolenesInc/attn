@@ -1658,7 +1658,7 @@ fn raise_tint(rest: f32, raised: f32) -> f32 {
     1.0 - (1.0 - raised) / (1.0 - rest)
 }
 
-/// The Tauri app's Focus pill, semibold, at attn's least text size.
+/// The Focus pill's words: semibold, at attn's least text size.
 const FOCUS_PILL_TYPE: rune::TextStyle = rune::TextStyle {
     size: 12.0,
     weight: 600.0,

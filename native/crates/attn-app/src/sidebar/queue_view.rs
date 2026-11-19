@@ -686,8 +686,8 @@ fn says(does: &str, keys: Option<&String>) -> String {
     }
 }
 
-/// A section rule's line out to its key, as the Tauri app's `queue-rule-line` and `kbd`. The key
-/// gives way first, so the words before it stay whole.
+/// A section rule's line out to its key. The key gives way first, so the words before it stay
+/// whole.
 fn rule_tail(keys: Option<String>, t: &Tokens) -> [El; 2] {
     [
         rune::el().grow(1.0).h(1.0).fill(t.border_subtle),
