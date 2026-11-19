@@ -142,6 +142,34 @@ impl Editor {
         (view::spans(shown, None), style)
     }
 
+    /// What text row `i` draws: its text, spans in `t`'s colours when given, and type. Code,
+    /// fences and front matter show their source in mono; other lines show their markdown.
+    pub(crate) fn row_text(
+        &self,
+        i: usize,
+        t: Option<&attn_ui::Tokens>,
+    ) -> (Shown, Vec<Span>, TextStyle) {
+        match self.kinds()[i] {
+            LineKind::Fence | LineKind::Code | LineKind::FrontMatter { .. } => {
+                let line = self.doc.line(i);
+                (
+                    Shown::raw(line),
+                    vec![Span::new(0, line.len()).mono()],
+                    BODY,
+                )
+            }
+            _ => {
+                let shown = self.shown(i);
+                let (_, style) = self.styled(&shown);
+                let spans = match t {
+                    Some(t) => view::with_theme(&shown, t),
+                    None => view::spans(&shown, None),
+                };
+                (shown, spans, style)
+            }
+        }
+    }
+
     /// The caret's line laid out as its row draws it.
     fn layout(&self, line: usize) -> (std::rc::Rc<rune::parley::Layout<rune::text::Ink>>, Shown) {
         let shown = markdown::shown(self.doc.line(line), true);
@@ -177,6 +205,20 @@ impl Editor {
             (r.x1 - r.x0) as f32,
             (r.y1 - r.y0) as f32,
         ]
+    }
+
+    /// The document offsets where the caret's row wraps, as it is drawn: a screen reader then
+    /// reads the drawn line the caret is on.
+    pub(crate) fn caret_row_wraps(&self) -> Vec<usize> {
+        let line = self.doc.caret.line;
+        let (shown, spans, style) = self.row_text(line, None);
+        let layout = rune::text::layout(&shown.text, &spans, style, Some(self.width));
+        let start = self.doc.offset(Pos::new(line, 0));
+        layout
+            .lines()
+            .skip(1)
+            .map(|l| start + shown.to_source(l.text_range().start))
+            .collect()
     }
 
     /// Moves the caret a visual line up or down, into the next row at the same x.
@@ -245,8 +287,7 @@ impl Editor {
 
     /// Where a press at `(x, y)` in row `line` lands, in the source.
     pub(crate) fn hit(&self, line: usize, x: f32, y: f32) -> Pos {
-        let shown = self.shown(line);
-        let (spans, style) = self.styled(&shown);
+        let (shown, spans, style) = self.row_text(line, None);
         let layout = rune::text::layout(&shown.text, &spans, style, Some(self.width));
         let found = Selection::from_point(&layout, x, y);
         Pos::new(line, shown.to_source(found.focus().index()))
@@ -314,8 +355,7 @@ impl Editor {
 
     /// The link under `(x, y)` in row `line`, as it shows.
     pub(crate) fn link_at(&self, line: usize, x: f32, y: f32) -> Option<String> {
-        let shown = self.shown(line);
-        let (spans, style) = self.styled(&shown);
+        let (shown, spans, style) = self.row_text(line, None);
         let layout = rune::text::layout(&shown.text, &spans, style, Some(self.width));
         let at = Selection::from_point(&layout, x, y).focus().index();
         shown

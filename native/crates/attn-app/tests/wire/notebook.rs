@@ -704,6 +704,115 @@ fn a_screen_reader_reads_the_note_as_an_editable_text_area_that_follows_the_care
     assert_eq!(editor.selection, Some([(2, 12), (2, 12)]));
 }
 
+#[test]
+fn a_screen_reader_reads_the_drawn_line_the_caret_is_on_and_any_word_of_a_long_paragraph() {
+    let paragraph = concat!(
+        "The first draft is ready for the planning meeting. ",
+        "Please read the outline and flag any decisions that need a second look. ",
+        "The editor will keep this paragraph as one source line even when it wraps across the window. ",
+        "Bring the revised agenda to the meeting so we can confirm the dates for the remaining work. ",
+        "Leave a short note with the next step before you close the notebook."
+    );
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        &format!("{paragraph}\nA separate source line."),
+    )]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor"));
+        d.press("mod+up");
+    });
+    let tree =
+        |world: &World| accesskit_consumer::Tree::new(world.runtime().accessibility_tree(), true);
+
+    let read = tree(&world);
+    let editor = read.state().focus().expect("the editor has focus");
+    let remaining = paragraph.find("remaining").unwrap();
+    assert!(remaining > 255);
+    let inside = editor
+        .text_position_from_global_usv_index(remaining + 1)
+        .unwrap();
+    let mut word = editor.document_range();
+    word.set_end(inside.forward_to_word_end());
+    word.set_start(inside.backward_to_word_start());
+    assert_eq!(word.text(), "remaining ");
+
+    let caret_line = |world: &World| {
+        let read = tree(world);
+        let editor = read.state().focus().expect("the editor has focus");
+        let caret = editor.text_selection_focus().expect("a caret");
+        let line = editor.line_range_from_index(caret.to_line_index()).unwrap();
+        (
+            line.start().to_global_usv_index(),
+            line.text(),
+            caret.to_global_usv_index(),
+        )
+    };
+    let (start, first, _) = caret_line(&world);
+    assert_eq!(start, 0);
+    assert!(
+        first.len() < paragraph.len() && paragraph.starts_with(&first),
+        "the first drawn line of the wrapped paragraph: {first:?}"
+    );
+
+    world.gesture(|d| d.press("down"));
+    let (start, line, caret) = caret_line(&world);
+    assert_eq!(
+        start,
+        first.len(),
+        "the second drawn line follows the first"
+    );
+    assert!(
+        paragraph[start..].starts_with(&line) && line.len() < paragraph.len() - start,
+        "the second drawn line alone: {line:?}"
+    );
+    assert!((start..start + line.len()).contains(&caret));
+}
+
+#[test]
+fn a_screen_reader_reads_a_wrapped_code_line_as_the_lines_its_row_draws() {
+    let code = "# a shell comment that runs on long enough to wrap across the editor several times over, \
+                as a code line drawn in the mono face and never as a heading, so its lines are the row's";
+    let disk = Disk::with(&[("knowledge/index.md", &format!("```\n{code}\n```"))]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor"));
+        d.press("mod+up");
+        d.press("down");
+    });
+
+    let elements = world.runtime().elements();
+    let caret = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some("notebook.editor.caret"))
+        .expect("the visible caret")
+        .rect;
+    let row = elements
+        .iter()
+        .find(|e| {
+            e.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("notebook.editor.line."))
+                && e.rect[1] <= caret[1]
+                && caret[1] < e.rect[1] + e.rect[3]
+        })
+        .expect("the caret's row")
+        .rect;
+    let drawn_lines = (row[3] / 23.0).round() as usize;
+    assert!(drawn_lines > 1, "the code line wraps: {row:?}");
+
+    let tree = accesskit_consumer::Tree::new(world.runtime().accessibility_tree(), true);
+    let editor = tree.state().focus().expect("the editor has focus");
+    let code_bytes = 4..4 + code.len();
+    let read_lines = (0..)
+        .map_while(|k| editor.line_range_from_index(k))
+        .filter(|l| code_bytes.contains(&l.start().to_global_usv_index()))
+        .count();
+    assert_eq!(read_lines, drawn_lines);
+}
+
 fn root_trigger(tile: &str) -> String {
     format!("notebook.tile.{tile}.root-trigger")
 }

@@ -77,6 +77,7 @@ pub(crate) fn view(
             editor.text(),
             editor.doc.offset(editor.doc.anchor),
             editor.doc.offset(editor.doc.caret),
+            editor.caret_row_wraps(),
         )
         .focusable(true)
         .w_full()
@@ -156,30 +157,16 @@ fn line_row(
                 .with_press(key, i, access)
         }
         LineKind::Fence | LineKind::Code | LineKind::FrontMatter { .. } => {
-            let line = editor.doc.line(i);
-            let shown = Shown::raw(line);
+            let (shown, spans, style) = editor.row_text(i, Some(t));
             let color = if matches!(editor.kinds()[i], LineKind::Fence) {
                 t.text_tertiary
             } else {
                 t.text_primary
             };
-            text_row(
-                editor,
-                key,
-                i,
-                &shown,
-                vec![Span::new(0, line.len()).mono()],
-                super::BODY,
-                color,
-                access,
-                t,
-            )
-            .key(row_key)
+            text_row(editor, key, i, &shown, spans, style, color, access, t).key(row_key)
         }
         _ => {
-            let shown = editor.shown(i);
-            let (_, style) = editor.styled(&shown);
-            let spans = with_theme(&shown, t);
+            let (shown, spans, style) = editor.row_text(i, Some(t));
             text_row(
                 editor,
                 key,
@@ -240,7 +227,7 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
 
 /// The line's spans in the window's colours: its bullet in the brand colour, and a link to a
 /// missing note in it too, underlined in dashes of the error colour and followed by its warning.
-fn with_theme(shown: &Shown, t: &Tokens) -> Vec<Span> {
+pub(crate) fn with_theme(shown: &Shown, t: &Tokens) -> Vec<Span> {
     let mut out = spans(shown, Some(t));
     if let Some(bullet) = &shown.bullet {
         out.push(Span::new(bullet.start, bullet.end).color(t.brand));

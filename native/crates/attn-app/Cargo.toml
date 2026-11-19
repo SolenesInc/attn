@@ -44,6 +44,8 @@ tempfile = "3"
 blocking = ">=1.6.2, <1.7"
 
 [dev-dependencies]
+# Reads the accessibility tree as a screen reader's adapter does: lines and words.
+accesskit_consumer = "0.39.2"
 attn-testkit = { path = "../attn-testkit" }
 sha2 = "0.10"
 skrifa = "0.44"
