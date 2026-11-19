@@ -481,6 +481,109 @@ fn a_long_value_ends_at_the_inset() {
     }
 }
 
+/// The glyphs a field draws: its value, or its placeholder when empty.
+fn glyphs_in<'a>(rt: &'a Runtime<()>, field: &ElementInfo) -> Vec<(usize, &'a Instance)> {
+    let [x, y, w, h] = device(field.rect);
+    rt.instances
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| i.params[1] == rune::render::KIND_GLYPH)
+        .filter(|(_, i)| {
+            i.rect[0] >= x && i.rect[1] >= y && i.rect[1] + i.rect[3] <= y + h && i.rect[0] < x + w
+        })
+        .collect()
+}
+
+/// The widest fade the value of the field keyed `key` draws at its start and at its end, after
+/// checking that every glyph of it is visible from inset to inset, `visible` in device px.
+fn fades(rt: &Runtime<()>, key: &str, visible: [f32; 4], dark: bool, when: &str) -> [f32; 2] {
+    let glyphs = glyphs_in(rt, &element(rt, key));
+    assert!(
+        !glyphs.is_empty(),
+        "{key}, dark={dark}, {when}: no value drawn"
+    );
+    let mut faded = [0.0f32; 2];
+    for (_, g) in glyphs {
+        assert!(
+            (g.clip[0] - visible[0]).abs() <= 1.0 && (g.clip[2] - visible[1]).abs() <= 1.0,
+            "{key}, dark={dark}, {when}: the value is visible over {:?}, not from inset to inset {:?}",
+            [g.clip[0], g.clip[2]],
+            [visible[0], visible[1]]
+        );
+        let widths = rune::render::unpack_fade(g.fade).0;
+        faded = [faded[0].max(widths[0]), faded[1].max(widths[2])];
+    }
+    faded
+}
+
+#[test]
+fn a_long_value_fades_out_at_the_inset_on_both_sides() {
+    for dark in [true, false] {
+        for key in ["field.line", "field.number"] {
+            let mut rt = story(dark, "Library/Field box", "Long text");
+            let field = element(&rt, key);
+            let visible = device([
+                field.rect[0] + REGULAR_INSET,
+                field.rect[0] + field.rect[2] - REGULAR_INSET,
+                0.0,
+                0.0,
+            ]);
+            let [start, end] = fades(&rt, key, visible, dark, "at rest");
+            assert!(
+                start == 0.0 && end > 0.0,
+                "{key}, dark={dark}: at rest a long value fades at its end alone, not {start} at its start and {end} at its end"
+            );
+            tab_into(&mut rt, key);
+            rt.key(KeyEvent {
+                key: Key::End,
+                mods: Mods::default(),
+            });
+            rt.frame(1.0);
+            let [start, _] = fades(&rt, key, visible, dark, "scrolled to its end");
+            assert!(
+                start > 0.0,
+                "{key}, dark={dark}: scrolled to its end, a long value fades at its start"
+            );
+        }
+    }
+}
+
+#[test]
+fn placeholder_value_and_disabled_value_are_inks_a_person_tells_apart() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let step = if dark {
+            ROW_STEPS_DARK.0
+        } else {
+            ROW_STEPS_LIGHT.0
+        };
+        let ink = |variant: &'static str| {
+            let rt = story(dark, "Library/Field box", variant);
+            let field = element(&rt, "field.line");
+            let (n, _) = glyphs_in(&rt, &field)
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| panic!("{variant}, dark={dark}: the field draws no words"));
+            (variant, shown(&rt, Part::Fill(n), t.bg_panel))
+        };
+        let inks = [
+            ink("Empty"),
+            ink("Filled"),
+            ink("Disabled"),
+            ink("Disabled empty"),
+        ];
+        for (i, (a, ink_a)) in inks.iter().enumerate() {
+            for (b, ink_b) in &inks[i + 1..] {
+                let apart = contrast(*ink_a, *ink_b);
+                assert!(
+                    apart >= step - ROUNDING,
+                    "dark={dark}: {a}'s ink {ink_a:?} and {b}'s {ink_b:?} stand {apart:.2}:1 apart, under the {step}:1 a row's hover takes"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn a_segmented_control_beside_words_keeps_its_own_width() {
     for dark in [true, false] {

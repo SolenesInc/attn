@@ -1,7 +1,7 @@
 use rune::El;
 use rune_kit::{TextArea, TextInput};
 
-use super::{Control, Size, Space, Type, door, focus, layers};
+use super::{Control, Size, Space, Type, disabled, door, focus, layers};
 use crate::Tokens;
 
 /// The width every number field takes. It holds eight digits beside the arrows: a context cap of 1,000,000 measures 54.5pt in body
@@ -53,6 +53,7 @@ pub fn area_box(area: TextArea, state: FieldState, t: &Tokens) -> Control {
     let size = Size::Regular;
     let area = door::area(area, Type::Body, size.inset(), Space::S8)
         .placeholder_ink(t.text_dimmed)
+        .disabled_ink(t.text_primary)
         .width(None)
         .disabled(state == FieldState::Disabled)
         .invalid(state == FieldState::Failed)
@@ -64,6 +65,8 @@ fn single_line(input: TextInput, state: FieldState, t: &Tokens) -> Control {
     let size = Size::Regular;
     let field = door::line(input, Type::Body)
         .height(size.height())
+        .fade_overflow()
+        .disabled_ink(t.text_primary)
         .disabled(state == FieldState::Disabled)
         .invalid(state == FieldState::Failed)
         .build(super::kit(t));
@@ -71,10 +74,10 @@ fn single_line(input: TextInput, state: FieldState, t: &Tokens) -> Control {
     Control::new(boxed(field, state, t), size)
 }
 
-/// The kit draws an unavailable field at half strength itself, so an unavailable field
-/// keeps its rest look and only loses its hover and ring. A refused field's red edge is its
-/// border, inside its box: the kit's own red edge is an outline, which the focus ring takes the
-/// place of.
+/// An unavailable field is its rest look dimmed as every unavailable control is, with no hover
+/// and no ring; the kit, given the value's own ink for it, leaves the dimming to that one rule.
+/// A refused field's red edge is its border, inside its box: the kit's own red edge is an
+/// outline, which the focus ring takes the place of.
 fn boxed(field: El, state: FieldState, t: &Tokens) -> El {
     let field = match state {
         FieldState::Failed => field.border(REFUSED_EDGE, super::kit(t).c.danger.fg),
@@ -82,7 +85,7 @@ fn boxed(field: El, state: FieldState, t: &Tokens) -> El {
     };
     let field = field.fill(t.bg_input);
     if state == FieldState::Disabled {
-        return field;
+        return disabled::dim(field);
     }
     focus::ring_within(field.hover(layers::hover_layer(t.bg_input, t)), t)
 }

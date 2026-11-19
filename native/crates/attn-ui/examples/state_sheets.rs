@@ -31,6 +31,8 @@ enum Gesture {
     Press,
     Click,
     Tab,
+    /// Tab in, then End: a long value scrolled to its end.
+    TabEnd,
 }
 
 struct Column {
@@ -184,6 +186,7 @@ fn sheets() -> Vec<Sheet> {
                 column("Disabled empty", "Disabled empty", Gesture::None),
                 column("Selected text", "Selected text", Gesture::None),
                 column("Long text", "Long text", Gesture::None),
+                column("Long text, at its end", "Long text", Gesture::TabEnd),
                 column("Narrow", "Narrow", Gesture::None),
             ],
         },
@@ -312,8 +315,16 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
             rt.pointer_up(cx, cy);
             rt.pointer_leave();
         }
-        Gesture::Tab if holds_tab_stop(&rt, &target.path) => tab_to(&mut rt, &target.path),
-        Gesture::Tab => {}
+        Gesture::Tab | Gesture::TabEnd if holds_tab_stop(&rt, &target.path) => {
+            tab_to(&mut rt, &target.path);
+            if matches!(column.gesture, Gesture::TabEnd) {
+                rt.key(KeyEvent {
+                    key: Key::End,
+                    mods: Mods::default(),
+                });
+            }
+        }
+        Gesture::Tab | Gesture::TabEnd => {}
     }
     for _ in 0..3 {
         rt.frame(1.0);
