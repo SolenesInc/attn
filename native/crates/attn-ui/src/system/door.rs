@@ -123,3 +123,25 @@ pub(crate) fn line_height(kind: Type) -> f32 {
 pub(crate) fn inside_edge(e: El) -> El {
     e.padding(1.0)
 }
+
+pub(crate) fn mark_text(said: String, size: super::IconSize) -> El {
+    rune::text(said).font(mark(size))
+}
+
+/// `e`'s words `inset` from its start, `depth` levels of `step` further in.
+pub(crate) fn indented(e: El, inset: Space, step: Space, depth: u8) -> El {
+    e.pl(inset.pt() + step.pt() * f32::from(depth))
+}
+
+/// `e` whole at rest, and while its hover group is hovered ending `reach` points before its end
+/// in a fade `fade` wide, for what the hover shows over its end.
+pub(crate) fn fade_before_hover(e: El, fade: Space, reach: f32) -> El {
+    let fade = fade.pt();
+    e.clip_fade(0.0, 0.0, fade, 0.0)
+        .clip_outset(0.0, 0.0, fade, 0.0)
+        .group_clip([0.0; 4], [0.0, 0.0, fade + reach, 0.0])
+}
+
+pub(crate) fn rows(e: El, top: Space, bottom: Space) -> El {
+    e.pt(top.pt()).pb(bottom.pt())
+}

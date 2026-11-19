@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use attn_ui::block_gallery::BLOCK_SUBJECTS;
+use attn_ui::chrome_gallery::CHROME_SHEETS;
 use attn_ui::colors::scheme_for;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use attn_ui::settings_gallery::{SETTINGS_SUBJECTS, SETTINGS_VARIANTS};
@@ -201,6 +202,7 @@ fn sheets() -> Vec<Sheet> {
         },
     ];
     all.extend(controls);
+    all.extend(chrome_sheets());
     let banner_rows: Vec<(String, String)> = BANNERS
         .iter()
         .map(|&(tone, _)| (tone.to_owned(), format!("banner.{tone}")))
@@ -607,4 +609,32 @@ fn main() {
             shoot_block(story, keys[0], extra, dark, &out);
         }
     }
+}
+
+/// The sheets of the chrome's controls, as `attn_ui::chrome_gallery` lists them.
+fn chrome_sheets() -> impl Iterator<Item = Sheet> {
+    CHROME_SHEETS.iter().map(|sheet| Sheet {
+        name: sheet.name,
+        story: sheet.story,
+        rows: sheet
+            .keys
+            .iter()
+            .map(|k| ((*k).to_owned(), (*k).to_owned()))
+            .collect(),
+        columns: sheet
+            .columns
+            .iter()
+            .map(|&(label, variant, gesture, aim)| Column {
+                label,
+                variant,
+                gesture: match gesture {
+                    "hover" => Gesture::Hover,
+                    "press" => Gesture::Press,
+                    "tab" => Gesture::Tab,
+                    _ => Gesture::None,
+                },
+                aim: (!aim.is_empty()).then_some(aim),
+            })
+            .collect(),
+    })
 }

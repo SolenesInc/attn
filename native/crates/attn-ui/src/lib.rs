@@ -4,6 +4,7 @@ use rune::{Color, Shadow};
 
 pub mod block_gallery;
 pub mod blocks;
+pub mod chrome_gallery;
 pub mod colors;
 mod scroll_bar;
 pub mod settings_gallery;
