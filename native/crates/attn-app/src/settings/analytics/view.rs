@@ -7,10 +7,7 @@ use attn_ui::system::{self, Look};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, el, row, text};
-use rune_kit::{
-    Badge, BadgeVariant, Button, ButtonVariant, ControlSize, Kit, List, ListItem, Toast,
-    ToastRegion,
-};
+use rune_kit::{Badge, BadgeVariant, Kit, List, ListItem, Toast, ToastRegion};
 
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
 use super::{Analytics, Confirm, Records, SEND_VENTS, TOOL_VENTS};
@@ -49,7 +46,7 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
         .on_key(super::key)
         .w_full()
         .gap(space::S3)
-        .child(strip(state, page, sharing, unreachable.len(), t, k))
+        .child(strip(state, page, sharing, unreachable.len(), t))
         .children(warning.map(|w| {
             text(w.to_owned())
                 .key("settings.analytics.refusal")
@@ -86,7 +83,7 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
                         .min_w(300.0)
                         .gap(6.0)
                         .child(list(state, page, &items, index, t, k))
-                        .children((page.view != VENTS).then(|| footer(page, &items, t, k))),
+                        .children((page.view != VENTS).then(|| footer(page, &items, t))),
                 )
                 .child(
                     col()
@@ -143,14 +140,7 @@ fn stat(id: &str, label: &str, value: String, tone: Option<rune::Color>, t: &Tok
     .w(0.0)
 }
 
-fn strip(
-    state: &State,
-    page: &Analytics,
-    sharing: bool,
-    unreachable: usize,
-    t: &Tokens,
-    k: &Kit,
-) -> El {
+fn strip(state: &State, page: &Analytics, sharing: bool, unreachable: usize, t: &Tokens) -> El {
     let status = page.status.as_ref();
     let vents = &state.facts.vents;
     let sent = vents
@@ -211,23 +201,18 @@ fn strip(
             } else {
                 "Machine settings"
             };
-            let t = *t;
-            let button = Button::new(word)
-                .expanded(page.machine)
-                .shortcut("m")
-                .on_press(super::toggle_machine)
-                .label_with(move |font, ink| {
-                    row()
-                        .gap(4.0)
-                        .items_center()
-                        .child(text(word).font(font).color(ink))
-                        .child(keycap::Keys::ledged(&["m"]).build(&t).a11y_hidden())
-                })
-                .build(k)
-                .key("settings.analytics.machine-toggle")
-                .self_stretch()
-                .min_h(38.0)
-                .border(1.0, t.border_hover);
+            let button = El::from(
+                system::Button::new(word)
+                    .expanded(page.machine)
+                    .trailing(keycap::Keys::ledged(&["m"]).build(t).a11y_hidden())
+                    .on_press(super::toggle_machine)
+                    .build(t)
+                    .key("settings.analytics.machine-toggle"),
+            )
+            .help(shortcut_tip(word, "m"))
+            .shortcut_hint("M")
+            .self_stretch()
+            .min_h(38.0);
             if outposts > 0 {
                 button
             } else {
@@ -378,7 +363,7 @@ fn list(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
     list.build(k).key(LIST).role("group").label(name)
 }
 
-fn footer(page: &Analytics, items: &[Item], t: &Tokens, k: &Kit) -> El {
+fn footer(page: &Analytics, items: &[Item], t: &Tokens) -> El {
     let records = page.records.as_ref();
     let loading = records.is_none_or(|r| r.loading);
     let summary = match records {
@@ -400,23 +385,28 @@ fn footer(page: &Analytics, items: &[Item], t: &Tokens, k: &Kit) -> El {
         .items_center()
         .child(summary.grow(1.0).min_w(0.0))
         .children(records.filter(|r| r.more).map(|_| {
-            Button::new("Older")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .disabled(loading)
-                .on_press_tx(super::older)
-                .build(k)
-                .key("settings.analytics.older")
+            El::from(
+                system::Button::new("Older")
+                    .look(Look::Quiet)
+                    .size(system::Size::Compact)
+                    .disabled(loading)
+                    .on_press_tx(super::older)
+                    .build(t)
+                    .key("settings.analytics.older"),
+            )
         }))
         .child(
-            Button::new("Refresh")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .disabled(loading)
-                .shortcut("r")
-                .on_press_tx(super::refresh)
-                .build(k)
-                .key("settings.analytics.refresh"),
+            El::from(
+                system::Button::new("Refresh")
+                    .look(Look::Quiet)
+                    .size(system::Size::Compact)
+                    .disabled(loading)
+                    .on_press_tx(super::refresh)
+                    .build(t)
+                    .key("settings.analytics.refresh"),
+            )
+            .help(shortcut_tip("Refresh", "r"))
+            .shortcut_hint("R"),
         )
 }
 
@@ -562,17 +552,19 @@ fn vent_detail(
         .wrap();
     let more = clamped.then(|| {
         let id = vent.id.clone();
-        Button::new(format!(
-            "Show all {} characters",
-            items::count(chars as i64)
-        ))
-        .variant(ButtonVariant::Ghost)
-        .control_size(ControlSize::Small)
-        .on_press(move |state: &mut State| {
-            state.window.settings.analytics.expanded.insert(id.clone());
-        })
-        .build(k)
-        .key("settings.analytics.vent.more")
+        El::from(
+            system::Button::new(format!(
+                "Show all {} characters",
+                items::count(chars as i64)
+            ))
+            .look(Look::Quiet)
+            .size(system::Size::Compact)
+            .on_press(move |state: &mut State| {
+                state.window.settings.analytics.expanded.insert(id.clone());
+            })
+            .build(t)
+            .key("settings.analytics.vent.more"),
+        )
     });
     let context = &vent.context;
     let model = items::model_label(context.model.as_deref(), context.model_requested.as_deref());
@@ -620,42 +612,49 @@ fn vent_detail(
         context_row("vent.experimental", "Experimental", experimental, t),
     ]);
     if !withdrawn {
-        detail.push(vent_actions(state, vent, k));
+        detail.push(vent_actions(state, vent, t));
     }
-    detail.push(vent_where(vent, sharing, t, k));
+    detail.push(vent_where(vent, sharing, t));
     detail
 }
 
-fn action(label: &str, key: &'static str, k: &Kit) -> El {
-    Button::new(label)
-        .control_size(ControlSize::Small)
-        .shortcut(key)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::act_on_selected(state, key, tx);
-        })
-        .build(k)
-        .key(format!("settings.analytics.vent.action.{key}"))
+fn action(label: &str, key: &'static str, t: &Tokens) -> El {
+    El::from(
+        system::Button::new(label)
+            .size(system::Size::Compact)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                super::act_on_selected(state, key, tx);
+            })
+            .build(t)
+            .key(format!("settings.analytics.vent.action.{key}")),
+    )
+    .help(shortcut_tip(label, key))
+    .shortcut_hint(key.to_uppercase())
 }
 
-fn vent_actions(state: &State, vent: &Vent, k: &Kit) -> El {
+fn shortcut_tip(label: &str, key: &str) -> String {
+    format!("{label}  {}", key.to_uppercase())
+}
+
+fn vent_actions(state: &State, vent: &Vent, t: &Tokens) -> El {
     let file = if vent.kind == VENT_TOOLS {
         "File under attn"
     } else {
         "File under tools"
     };
     let actions = [
-        super::is_live(state, vent).then(|| action("Open session", "o", k)),
+        super::is_live(state, vent).then(|| action("Open session", "o", t)),
         vent.context
             .transcript
             .is_some()
-            .then(|| action("Transcript", "t", k)),
+            .then(|| action("Transcript", "t", t)),
         vent.context
             .seed_id
             .is_some()
-            .then(|| action("Stake seed", "g", k)),
+            .then(|| action("Stake seed", "g", t)),
         vent.planted_seed_id
             .is_none()
-            .then(|| action("Plant seed", "p", k)),
+            .then(|| action("Plant seed", "p", t)),
         Some(action(
             if vent.dismissed_at.is_some() {
                 "Restore"
@@ -663,9 +662,9 @@ fn vent_actions(state: &State, vent: &Vent, k: &Kit) -> El {
                 "Dismiss"
             },
             "d",
-            k,
+            t,
         )),
-        (vent.send.as_deref() != Some(SEND_SENT)).then(|| action(file, "s", k)),
+        (vent.send.as_deref() != Some(SEND_SENT)).then(|| action(file, "s", t)),
     ];
     row()
         .key("settings.analytics.vent.actions")
@@ -674,7 +673,7 @@ fn vent_actions(state: &State, vent: &Vent, k: &Kit) -> El {
         .children(actions.into_iter().flatten())
 }
 
-fn vent_where(vent: &Vent, sharing: bool, t: &Tokens, k: &Kit) -> El {
+fn vent_where(vent: &Vent, sharing: bool, t: &Tokens) -> El {
     let to = items::destination(vent, sharing);
     row()
         .key("settings.analytics.vent.where")
@@ -706,7 +705,7 @@ fn vent_where(vent: &Vent, sharing: bool, t: &Tokens, k: &Kit) -> El {
                     "Send"
                 },
                 "x",
-                k,
+                t,
             )
         }))
 }

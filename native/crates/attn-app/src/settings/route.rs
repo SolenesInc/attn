@@ -4,12 +4,13 @@
 
 use attn_protocol::HarnessModel;
 use attn_ui::Tokens;
+use attn_ui::system::{self, Look, Size, Trigger, TriggerLook, Type, words};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{Color, El, Key, KeyEvent, TextEdit, Tx, col, row, text};
 use rune_kit::ScrollBar;
 use rune_kit::popover::{anchored, raised};
-use rune_kit::{Button, ButtonVariant, ControlSize, Placement, TextInput};
+use rune_kit::{Button, ButtonVariant, Placement, TextInput};
 use serde::{Deserialize, Serialize};
 
 use super::catalogs::{self, Catalog, Discovered, TIER_OVERRIDES};
@@ -592,20 +593,17 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
                 .font(CAPTION)
                 .color(t.warning)
         });
+    let press = move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx);
     if field {
+        let trigger = Trigger::new(key, label, route_field(parts, tier, warning, t))
+            .look(TriggerLook::Field)
+            .value(summary)
+            .open(open)
+            .build(t, press);
         return col()
             .w_full()
             .gap(6.0)
-            .child(
-                route_field(parts, tier, warning, t)
-                    .key(key)
-                    .label(label.to_owned())
-                    .a11y_value(summary)
-                    .expanded(open)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        toggle(state, opener.clone(), tx)
-                    }),
-            )
+            .child(El::from(trigger).w_full())
             .children(recommended);
     }
     let unset = view.effective.is_empty();
@@ -614,56 +612,43 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
     } else {
         t.accent
     };
-    let font = crate::settings::pages::kit(t).ty.ui;
-    let mut chip = row()
-        .key(key)
-        .role("button")
-        .label(label.to_owned())
-        .a11y_value(summary)
-        .expanded(open)
-        .focusable(true)
-        .focus_ring(2.0, -2.0, t.accent)
+    let content = row()
         .min_w(0.0)
         .gap(8.0)
         .items_center()
-        .px(10.0)
-        .py(6.0)
-        .radius(6.0);
-    chip = if open {
-        chip.fill(t.bg_input).border(1.0, t.border_hover)
-    } else if unset {
-        chip.border(1.0, t.warning.alpha(0.45))
-            .border_dash(4.0, 3.0)
-            .hover(t.bg_input)
-    } else {
-        chip.border(1.0, Color::TRANSPARENT).hover(t.bg_input)
-    };
-    for (name, v) in parts {
-        let part = match name {
-            "Harness" => text(v).font(CAPTION).color(if unset {
-                t.text_tertiary
-            } else {
-                t.text_secondary
-            }),
-            "Model" => text(v)
-                .font(font)
-                .color(if unset || view.missing {
-                    t.warning
-                } else {
-                    t.text_primary
-                })
+        .children(parts.into_iter().map(|(name, v)| {
+            let part = match name {
+                "Harness" => words(
+                    v,
+                    Type::Small,
+                    if unset {
+                        t.text_tertiary
+                    } else {
+                        t.text_secondary
+                    },
+                ),
+                "Model" => words(
+                    v,
+                    Type::Body,
+                    if unset || view.missing {
+                        t.warning
+                    } else {
+                        t.text_primary
+                    },
+                )
                 .min_w(0.0)
                 .shrink(),
-            _ => text(v).font(font).color(effort_ink),
-        };
-        chip = chip.child(part.a11y_hidden());
-    }
-    chip.child(
-        rune::icon(crate::settings::pages::kit(t).glyph.chevron_down, 12.0)
-            .color(t.text_tertiary)
-            .a11y_hidden(),
-    )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx))
+                _ => words(v, Type::Body, effort_ink),
+            };
+            part.a11y_hidden()
+        }));
+    Trigger::new(key, label, content)
+        .look(TriggerLook::Quiet)
+        .value(summary)
+        .open(open)
+        .unset(unset)
+        .build(t, press)
+        .into()
 }
 
 /// What a route runs, as the Tauri app's `.route-badge`: a pill of the harness, the model with
@@ -726,7 +711,6 @@ fn route_field(
     warning: Option<Color>,
     t: &Tokens,
 ) -> El {
-    let k = crate::settings::pages::kit(t);
     let part = |name: &str, value: String| {
         let ink = match (name, warning) {
             ("Model", Some(warning)) => warning,
@@ -734,36 +718,31 @@ fn route_field(
             ("Effort", _) => t.accent,
             _ => t.text_primary,
         };
-        let font = if name == "Harness" { CAPTION } else { k.ty.ui };
+        let kind = if name == "Harness" {
+            Type::Small
+        } else {
+            Type::Body
+        };
         let mut shown = row()
             .min_w(0.0)
             .gap(4.0)
             .items_end()
             .flex_wrap()
-            .child(text(value).font(font).color(ink).wrap_anywhere().shrink());
+            .child(words(value, kind, ink).wrap_anywhere().shrink());
         if let ("Model", Some((mark, mark_ink))) = (name, &tier) {
-            shown = shown.child(text(mark.clone()).font(CAPTION).color(*mark_ink));
+            shown = shown.child(words(mark.clone(), Type::Small, *mark_ink));
         }
         col()
             .gap(4.0)
             .min_w(0.0)
-            .child(type_::upper(name, type_::BOLD_CAPS).color(t.text_tertiary))
+            .child(words(name, Type::Label, t.text_tertiary))
             .child(shown)
     };
     let (effort, line): (Vec<_>, Vec<_>) =
         parts.into_iter().partition(|(name, _)| *name == "Effort");
     col()
-        .role("button")
-        .focusable(true)
-        .focus_ring(2.0, -2.0, t.accent)
         .w_full()
         .gap(10.0)
-        .px(13.0)
-        .py(11.0)
-        .radius(7.0)
-        .fill(t.bg_elevated)
-        .hover(t.bg_button)
-        .border(1.0, t.border)
         .child(
             row()
                 .w_full()
@@ -772,12 +751,7 @@ fn route_field(
                 .children(line.into_iter().map(|(name, v)| {
                     let grow = if name == "Model" { 2.0 } else { 1.0 };
                     part(name, v).grow(grow)
-                }))
-                .child(
-                    rune::icon(k.glyph.chevron_down, 12.0)
-                        .color(t.text_tertiary)
-                        .a11y_hidden(),
-                ),
+                })),
         )
         .children(effort.into_iter().map(|(name, v)| {
             part(name, v)
@@ -1179,15 +1153,17 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
     let k = crate::settings::pages::kit(t);
     let refresh = view.harness.filter(|h| h.discovery).map(|h| {
         let id = h.id.clone();
-        Button::new("Refresh")
-            .variant(ButtonVariant::Ghost)
-            .control_size(ControlSize::Small)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                catalogs::discover(state, &id, true, tx);
-            })
-            .build(k)
-            .key("settings.route-picker.refresh")
-            .busy(view.discovered.loading)
+        El::from(
+            system::Button::new("Refresh")
+                .look(Look::Quiet)
+                .size(Size::Compact)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    catalogs::discover(state, &id, true, tx);
+                })
+                .build(t)
+                .key("settings.route-picker.refresh"),
+        )
+        .busy(view.discovered.loading)
     });
     let mut main = col().grow(1.0).min_w(0.0).min_h(0.0).gap(space::S2).child(
         row()
@@ -1493,19 +1469,18 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
                     effort: level.clone(),
                     ..value.clone()
                 };
-                let mut button = Button::new(shown)
-                    .control_size(ControlSize::Small)
-                    .disabled(view.pins_unavailable)
-                    .build(crate::settings::pages::kit(t))
-                    .key(format!("{EFFORT}.{i}"))
-                    .checked(value.effort == level);
-                if !view.pins_unavailable {
-                    button = button.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        change(state, next.clone(), tx);
-                        finish(state, tx);
-                    });
-                }
-                button
+                El::from(
+                    system::Button::new(shown)
+                        .size(Size::Compact)
+                        .disabled(view.pins_unavailable)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            change(state, next.clone(), tx);
+                            finish(state, tx);
+                        })
+                        .build(t)
+                        .key(format!("{EFFORT}.{i}")),
+                )
+                .checked(value.effort == level)
             }));
         return Some(head(group));
     }

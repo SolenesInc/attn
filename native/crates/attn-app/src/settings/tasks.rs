@@ -5,10 +5,11 @@ use std::collections::HashSet;
 
 use attn_protocol::{Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage};
 use attn_ui::Tokens;
+use attn_ui::system::Button;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
-use rune_kit::{Badge, BadgeVariant, Button, Collapsible};
+use rune_kit::{Badge, BadgeVariant, Collapsible};
 
 use super::Section;
 use super::pages::CAPTION;
@@ -105,12 +106,12 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 .label(error.clone())
                 .gap(space::S2)
                 .child(text(error.clone()).font(CAPTION).color(t.text_muted))
-                .child(
+                .child(El::from(
                     Button::new("Try again")
                         .on_press_tx(read)
-                        .build(k)
+                        .build(t)
                         .key("settings.tasks.try-again"),
-                ),
+                )),
         ];
     }
     if tasks.list.is_empty() {
@@ -170,12 +171,14 @@ fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens, k: &rune_kit::Kit
         )
         .children(can_retry.then(|| {
             let id = id.clone();
-            Button::new(if retrying { "Retrying…" } else { "Retry" })
-                .disabled(retrying)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| retry(state, id.clone(), tx))
-                .build(k)
-                .key(format!("settings.task.{}.retry", task.id))
-                .label("Retry")
+            El::from(
+                Button::new(if retrying { "Retrying…" } else { "Retry" })
+                    .disabled(retrying)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| retry(state, id.clone(), tx))
+                    .build(t)
+                    .key(format!("settings.task.{}.retry", task.id))
+                    .label("Retry"),
+            )
         }));
     let next = (!matches!(task.state.as_str(), "done" | "dead"))
         .then(|| next_attempt(&task.next_attempt_at, now_ms))

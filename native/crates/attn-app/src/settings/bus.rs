@@ -9,7 +9,6 @@ use attn_ui::Tokens;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{Align, El, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Kit};
 
 use super::Section;
 use attn_ui::system::{self, Look, Tone, tag};
@@ -116,7 +115,6 @@ fn switch(state: &mut State, consumer: String, enabled: bool, tx: &mut Tx) {
 }
 
 pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
-    let k = crate::settings::pages::kit(t);
     let bus = &state.window.settings.bus;
     let Some(status) = &bus.status else {
         return vec![match &bus.error {
@@ -187,7 +185,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
         );
     }
     page.push(summary(status, now_ms, t));
-    page.extend(producers(bus, status, t, k));
+    page.extend(producers(bus, status, t));
     page.extend(consumers(bus, status, now_ms, t));
     page.push(
         row()
@@ -353,7 +351,7 @@ fn table(key: &str, label: &str, rows: Vec<El>, t: &Tokens) -> El {
         }))
 }
 
-fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) -> Vec<El> {
+fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Vec<El> {
     let recent = span(status.recent_window_seconds).unwrap_or_default();
     let baseline = span(status.baseline_window_seconds).unwrap_or_default();
     let head = section_head(
@@ -453,16 +451,16 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens, k: &Kit) ->
             )
         };
         out.push(
-            row().child(
-                Button::new(label)
-                    .variant(ButtonVariant::Ghost)
+            row().child(El::from(
+                system::Button::new(label)
+                    .look(Look::Quiet)
                     .on_press(|state: &mut State| {
                         let bus = &mut state.window.settings.bus;
                         bus.show_quiet = !bus.show_quiet;
                     })
-                    .build(k)
+                    .build(t)
                     .key("settings.bus.toggle-quiet"),
-            ),
+            )),
         );
     }
     out

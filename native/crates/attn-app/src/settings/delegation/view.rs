@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use attn_protocol::{DelegationChoice, DelegationPreferences, DelegationRole};
 use attn_ui::Tokens;
-use attn_ui::system::{self, Look, Size};
+use attn_ui::system::{self, Look, Size, Type};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Icon, TextEdit, Tx, col, icon, row, text};
@@ -25,8 +25,6 @@ const MORE_COLUMN: f32 = 40.0;
 const COLUMN_GAP: f32 = 14.0;
 /// The empty table's copy, 52 characters of the caption face wide, as the Tauri app's `52ch`.
 const EMPTY_COPY_W: f32 = 52.0 * 7.3;
-/// The row's details button's dots, bold and spaced .1em, as the Tauri app's `.delegation-more`.
-const MORE_DOTS: rune::TextStyle = rune::TextStyle::new(13.0, 700.0).tracking(1.3);
 const NOT_SAID: &str = "No condition yet. The agent cannot pick this.";
 const DESCRIPTION_HINT: &str =
     "Prose, as long as it needs to be. The first line is what the table shows.";
@@ -420,55 +418,38 @@ fn who(
         .map(|s| (*s).to_owned())
         .chain((!description.is_empty()).then(|| description.clone()))
         .collect();
-    let (primary, secondary, warning, muted) =
-        (t.text_primary, t.text_secondary, t.warning, t.text_muted);
-    let shown = name.to_owned();
-    let tag_key = key.clone();
-    Button::new(name)
-        .variant(ButtonVariant::Ghost)
-        .expanded(open)
-        .label_with(move |font, _| {
-            col()
-                .w_full()
-                .min_w(0.0)
-                .gap(2.0)
-                .items_start()
-                .opacity(if dim { 0.45 } else { 1.0 })
-                .child(
-                    row()
-                        .gap(space::S2)
-                        .items_center()
-                        .child(text(shown).font(font).color(primary))
-                        .children(tags.into_iter().map(|tag| {
-                            let ink = if tag == "Needs a model" {
-                                warning
-                            } else {
-                                muted
-                            };
-                            text(tag)
-                                .key(format!("{tag_key}.tag.{tag}"))
-                                .font(CAPTION)
-                                .color(ink)
-                        })),
-                )
-                .children((!description.is_empty()).then(|| {
-                    text(description)
-                        .font(CAPTION)
-                        .color(secondary)
-                        .w_full()
-                        .min_w(0.0)
-                        .wrap()
-                }))
-        })
-        .on_press_tx(press)
-        .build(crate::settings::pages::kit(t))
-        .key(key)
-        .description(said.join(" · "))
-        .min_h(48.0)
-        .px(0.0)
+    let content = col()
         .w_full()
         .min_w(0.0)
-        .justify_start()
+        .gap(2.0)
+        .items_start()
+        .opacity(if dim { 0.45 } else { 1.0 })
+        .child(
+            row()
+                .gap(space::S2)
+                .items_center()
+                .child(system::words(name, Type::Name, t.text_primary))
+                .children(tags.into_iter().map(|tag| {
+                    let ink = if tag == "Needs a model" {
+                        t.warning
+                    } else {
+                        t.text_muted
+                    };
+                    system::words(tag, Type::Small, ink).key(format!("{key}.tag.{tag}"))
+                })),
+        )
+        .children((!description.is_empty()).then(|| {
+            system::words(description, Type::Small, t.text_secondary)
+                .w_full()
+                .min_w(0.0)
+                .wrap()
+        }))
+        .a11y_hidden();
+    El::from(system::press_area(
+        key, name, open, false, content, t, press,
+    ))
+    .description(said.join(" · "))
+    .min_h(48.0)
 }
 
 fn more(
@@ -478,23 +459,15 @@ fn more(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    let ink = if open {
-        t.text_primary
-    } else {
-        t.text_tertiary
-    };
-    Button::new("···")
-        .variant(ButtonVariant::Ghost)
+    system::Button::new("···")
+        .look(Look::Quiet)
+        .size(Size::Compact)
         .expanded(open)
-        .label_with(move |_, _| text("···").font(MORE_DOTS).color(ink))
         .on_press_tx(press)
-        .build(crate::settings::pages::kit(t))
+        .build(t)
         .key(key)
         .label(format!("{name} details"))
-        .w(32.0)
-        .h(32.0)
-        .px(0.0)
-        .justify_center()
+        .into()
 }
 
 fn toggle(key: String) -> impl Fn(&mut State, &mut Tx) + 'static {
@@ -549,14 +522,14 @@ fn role_row(
     }
     if !alts.is_empty() && !open {
         let n = alts.len();
-        cell = cell.child(
-            Button::new(format!("+{n} alternative{}", if n == 1 { "" } else { "s" }))
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
+        cell = cell.child(El::from(
+            system::Button::new(format!("+{n} alternative{}", if n == 1 { "" } else { "s" }))
+                .look(Look::Quiet)
+                .size(Size::Compact)
                 .on_press_tx(toggle(id.clone()))
-                .build(crate::settings::pages::kit(t))
+                .build(t)
                 .key(format!("{key}.alternatives")),
-        );
+        ));
     }
     let mut out = col()
         .key(format!("{key}.row"))
@@ -890,42 +863,44 @@ fn alternative_row(
             };
         }
     };
-    let (primary, secondary, tertiary) = (t.text_primary, t.text_secondary, t.text_tertiary);
     let said = if when.is_empty() {
         NOT_SAID.to_owned()
     } else {
         when.clone()
     };
-    let blank = when.is_empty();
-    let label_name = shown.clone();
-    let shown_when = said.clone();
-    let who_button = Button::new(shown.clone())
-        .variant(ButtonVariant::Ghost)
-        .expanded(open)
-        .label_with(move |font, _| {
-            col()
-                .gap(2.0)
-                .items_start()
-                .child(text(label_name).font(font).color(primary))
+    let content = col()
+        .gap(2.0)
+        .items_start()
+        .child(system::words(shown.clone(), Type::Name, t.text_primary))
+        .child(
+            row()
+                .gap(space::S1)
+                .child(system::words("when", Type::Small, t.text_tertiary))
                 .child(
-                    row()
-                        .gap(space::S1)
-                        .child(text("when").font(CAPTION).color(tertiary))
-                        .child(
-                            text(shown_when)
-                                .font(CAPTION)
-                                .color(if blank { tertiary } else { secondary })
-                                .truncate(),
-                        ),
-                )
-        })
-        .on_press_tx(toggle)
-        .build(crate::settings::pages::kit(t))
-        .key(key.clone())
-        .description(said)
-        .h(44.0)
-        .w_full()
-        .justify_start();
+                    system::words(
+                        said.clone(),
+                        Type::Small,
+                        if when.is_empty() {
+                            t.text_tertiary
+                        } else {
+                            t.text_secondary
+                        },
+                    )
+                    .truncate(),
+                ),
+        )
+        .a11y_hidden();
+    let who_button = El::from(system::press_area(
+        key.clone(),
+        &shown,
+        open,
+        false,
+        content,
+        t,
+        toggle,
+    ))
+    .description(said)
+    .h(44.0);
     let remove = {
         let (role_id, alt_id, name, role_name) = (
             role_id.clone(),
@@ -946,14 +921,16 @@ fn alternative_row(
             close_alt(state, &alt_id);
         }
     };
-    let remove_button = Button::new("×")
-        .variant(ButtonVariant::Ghost)
-        .control_size(ControlSize::Small)
-        .help(format!("Remove {name}"))
-        .on_press_tx(remove)
-        .build(crate::settings::pages::kit(t))
-        .key(format!("{key}.remove"))
-        .label(format!("Remove {name}"));
+    let remove_button = El::from(
+        system::Button::new("×")
+            .look(Look::Quiet)
+            .size(Size::Compact)
+            .help(format!("Remove {name}"))
+            .on_press_tx(remove)
+            .build(t)
+            .key(format!("{key}.remove"))
+            .label(format!("Remove {name}")),
+    );
     let mut out = col().w_full().child(
         columns(
             row(),
