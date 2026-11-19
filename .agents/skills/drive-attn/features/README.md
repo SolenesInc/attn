@@ -98,11 +98,12 @@ In the index, "both" means people and agents.
 - `wsctl add-session --cwd <dir> --agent <harness> --label <label> --id
   <session>` starts a session on the profile's current desktop beside the
   active tile, with or without `--place`.
-- `<terminal>` is a session's terminal id: the `runtime_id` of the entry in
-  `wsctl list`'s `desktops[].panes[]` whose `session_id` is the session.
-  `wsctl input --id <terminal>` takes the terminal id, though wsctl's help
-  calls it a session id. Read the terminal id again after a reload, a resume
-  or a crew start, which can start a new terminal.
+- `wsctl input`, `screen` and `attach` take a session id and reach the
+  session's terminal, so `--id <session>` works wherever a feature file writes
+  `--id <terminal>`. `<terminal>` is a session's terminal id: the
+  `terminal_id` of the entry in `wsctl list`'s `terminal_bindings` whose
+  `session_id` is the session. A reload, a resume or a crew start can start a
+  new terminal, so read a terminal id again after one.
 - A shell's id, which `bridge` actions take as `sessionId`, is the `id` of
   its entry with `"agent": "shell"` in `wsctl list`. Files call the id
   `<shell-id>`.
