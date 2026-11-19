@@ -638,3 +638,23 @@ fn agent_line(
         },
     }
 }
+
+pub const SESSION_EMOJIS: [&str; 70] = [
+    "🛠️", "🚀", "🧪", "🔭", "🧠", "🛰️", "🧩", "🧵", "🔧", "🗺️", "📡", "🧭", "⚙️", "📦", "🧬", "🪄",
+    "🦾", "🧱", "🧯", "🪛", "🪜", "🪐", "🌈", "🔥", "🌊", "🌪️", "☄️", "🌟", "🍀", "🌻", "🦊", "🦉",
+    "🦄", "🐙", "🐝", "🦖", "🐢", "🦜", "🦩", "🐬", "🎯", "🎲", "🎨", "🎸", "🎹", "🎮", "🎬", "📚",
+    "📝", "🗞️", "🧶", "🪡", "🪢", "💡", "🔮", "🧿", "🗿", "🪁", "🏁", "📍", "🕹️", "⌛", "⏱️", "🌋",
+    "🗻", "🏝️", "🏔️", "🛶", "🚲", "🛼",
+];
+
+/// The emoji a launching agent leads with: the Tauri app's `pickSessionEmoji`, FNV-1a over the
+/// id's UTF-16 units.
+pub fn session_emoji(id: &str) -> &'static str {
+    if id.is_empty() {
+        return SESSION_EMOJIS[0];
+    }
+    let hash = id.encode_utf16().fold(0x811c_9dc5_u32, |hash, unit| {
+        (hash ^ u32::from(unit)).wrapping_mul(0x0100_0193)
+    });
+    SESSION_EMOJIS[hash as usize % SESSION_EMOJIS.len()]
+}

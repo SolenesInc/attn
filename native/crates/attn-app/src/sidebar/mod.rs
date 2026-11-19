@@ -24,8 +24,8 @@ use rune::tok::space;
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
 use rune_kit::ScrollBar;
 
-pub use model::AgentState;
 pub(crate) use model::{AgentRow, Line, display_name, tile_title};
+pub use model::{AgentState, SESSION_EMOJIS};
 use model::{DesktopHeader, TileRow};
 
 use crate::State;
@@ -938,7 +938,22 @@ pub(crate) fn row_fill(agent: &AgentRow, t: &Tokens) -> rune::Color {
 }
 
 pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
-    if !logos || agent.state == AgentState::Launching || agent.offline {
+    if logos && agent.state == AgentState::Launching && !agent.offline {
+        return rune::row()
+            .key(format!("{row_key}.state"))
+            .role("img")
+            .label(agent.lead())
+            .a11y_value(agent.state.wire())
+            .w(LEAD)
+            .h(LEAD)
+            .center()
+            .child(
+                text(model::session_emoji(&agent.id))
+                    .key(format!("{row_key}.emoji"))
+                    .font(LAUNCHING_EMOJI),
+            );
+    }
+    if !logos || agent.offline {
         return rune::row()
             .key(format!("{row_key}.lead"))
             .w(LEAD)
@@ -981,6 +996,9 @@ pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, side: f32, t: &Tokens)
 
 /// The Tauri app's `.sidebar-leaf-row` lead column.
 const LEAD: f32 = 14.0;
+/// Draws the emoji as large as the Tauri app's `.session-lead-emoji` shows it: WebKit draws a
+/// 13 px colour emoji about 16 pt across, overflowing the 14 pt column.
+const LAUNCHING_EMOJI: rune::TextStyle = rune::TextStyle::new(17.0, 400.0).lh(LEAD);
 
 /// `StateIndicator`'s sizes: `sm` in a tile header, `md` in lists.
 pub(crate) const MARK_SMALL: f32 = 6.0;
