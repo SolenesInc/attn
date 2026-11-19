@@ -689,7 +689,7 @@ fn a_screen_reader_reads_the_note_as_an_editable_text_area_that_follows_the_care
     assert_eq!(caret(&world), Some([(1, 0), (1, 0)]));
     world.gesture(|d| d.press("down"));
     assert_eq!(caret(&world), Some([(2, 0), (2, 0)]));
-    world.gesture(|d| d.press("shift+alt+right"));
+    world.gesture(|d| d.press(&word("shift+right")));
     assert_eq!(caret(&world), Some([(2, 0), (2, 6)]));
 
     world.gesture(|d| {
