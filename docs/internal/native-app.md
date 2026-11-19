@@ -205,9 +205,11 @@ app:
   that outpost updates, an update run and shared Codex draw. A view gives its
   tone (`Warn`, `Calm`, `Good` or `Bad`), its sentence, its notes, its actions,
   a countdown and dismiss, and the block draws the rest: the tone's glyph, the
-  sentence in `Name`, the notes after it, the actions right after the notes and
-  dismiss alone at the far edge. Its fill is 18% of the tone over the app
-  background. A failure fills the bar with the error colour, darkened until the
+  sentence in `Name`, the actions right beside it, the notes after them or,
+  when they do not fit there, together on a line of their own under the
+  sentence, and dismiss alone at the far edge. The glyph, the actions and
+  dismiss sit on the sentence's first line. Its fill is 18% of the tone over
+  the app background. A failure fills the bar with the error colour, darkened until the
   app background reads on it at 4.5:1, and its controls' focus ring takes that
   colour.
 - **The gallery.** `attn_ui::gallery` has a playground story for every
