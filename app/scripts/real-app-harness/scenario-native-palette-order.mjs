@@ -95,8 +95,7 @@ try {
     await driver.screenshot(path.join(runner.runDir, 'native-agent-palette.png'));
     await driver.pressKey('Enter');
     await driver.waitFor({ key: 'palette' }, { gone: true });
-    const window = await driver.state('window', { includes: id, timeoutMs: 15_000 });
-    runner.assert(window.on_screen === id, 'Enter shows the agent', window);
+    await driver.state('window', { expect: { on_screen: id }, timeoutMs: 15_000 });
   });
 
   await runner.step('a_picked_command_rises_above_unused_ones', async () => {

@@ -99,7 +99,7 @@ try {
     await driver.pressKey(process.platform === 'darwin' ? 'mod+f' : 'ctrl+shift+f');
     await driver.waitFor({ key: `terminal.${runtimeId}.find.field` });
     await driver.typeInto(null, 'NATIVE');
-    const found = await driver.state(`terminal-view:${runtimeId}`, { includes: attn.dark.terminal.find, timeoutMs: 5_000 });
+    const found = await driver.state(`terminal-view:${runtimeId}`, { expect: { overlays: { $some: { color: attn.dark.terminal.find } } }, timeoutMs: 5_000 });
     const matches = found.overlays.filter((o) => o.color === attn.dark.terminal.find);
     const rows = await screen('find-3-native');
     const outputs = rows.filter((text) => /^find-\d-native$/.test(text.trim())).length;

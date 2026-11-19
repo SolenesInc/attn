@@ -74,8 +74,7 @@ try {
     runtimeId = observer.terminalOf(sessionId);
     await driver.click({ key: `sidebar.session.${sessionId}` });
     await driver.state(`terminal:${runtimeId}`, { includes: '❯', timeoutMs: 15_000 });
-    const window = await driver.state('window', { includes: sessionId, timeoutMs: 15_000 });
-    runner.assert(window.on_screen === sessionId, 'the worktree session is on screen', window);
+    await driver.state('window', { expect: { on_screen: sessionId }, timeoutMs: 15_000 });
   });
 
   await runner.step('close_asks_nothing', async () => {

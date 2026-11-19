@@ -93,11 +93,11 @@ struct Named {
 #[derive(Deserialize)]
 struct Of {
     of: String,
-    /// Waits until a string in the slice contains this text.
+    /// Waits until a row of a text slice, such as a terminal's, contains this text.
     #[serde(default)]
     includes: Option<String>,
     /// Waits until each of these fields of the slice has its value here, nested objects
-    /// field by field.
+    /// field by field, `{"$some": …}` an item of a list, and `{"$includes": "…"}` a text.
     #[serde(default)]
     expect: Option<Value>,
 }
@@ -283,11 +283,19 @@ pub fn act<S: 'static>(
                 Err(why) => Attempt::Fail(format!("state {of:?}: {why}")),
                 Ok(None) if waits => Attempt::Wait(format!("state {of:?} to be there")),
                 Ok(None) => Attempt::Fail(format!("state {of:?} is not there yet")),
+                Ok(Some(value)) if includes.is_some() && rows(&value).is_none() => {
+                    Attempt::Fail(format!(
+                        "state {of:?} is not text, so `includes` would match its words in any field; wait with `expect` on the fields the step asserts, `{{\"$some\": {{…}}}}` for an item of a list and `{{\"$includes\": \"…\"}}` for a text"
+                    ))
+                }
                 Ok(Some(value)) if includes.as_ref().is_some_and(|text| !holds(&value, text)) => {
                     Attempt::Wait(format!("state {of:?} to include {:?}", includes.unwrap()))
                 }
                 Ok(Some(value)) if expect.as_ref().is_some_and(|e| !agrees(&value, e)) => {
-                    Attempt::Wait(format!("state {of:?} to agree with {}", expect.unwrap()))
+                    Attempt::Wait(format!(
+                        "state {of:?} to agree with {}; it reads {value}",
+                        expect.unwrap()
+                    ))
                 }
                 Ok(Some(value)) => Attempt::Done(value),
             }
@@ -299,8 +307,18 @@ pub fn act<S: 'static>(
 }
 
 /// Whether each field `expect` names has its value in `value`, objects field by field, arrays
-/// item by item, and numbers by value, as a JSON client that writes `1` for `1.0` means them.
+/// item by item, `{"$some": item}` by any item of an array, `{"$includes": text}` by a string
+/// that contains the text, and numbers by value, as a JSON client that writes `1` for `1.0`
+/// means them.
 fn agrees(value: &Value, expect: &Value) -> bool {
+    match (value, operator(expect)) {
+        (Value::Array(have), Some(("$some", item))) => return have.iter().any(|h| agrees(h, item)),
+        (Value::String(have), Some(("$includes", Value::String(text)))) => {
+            return have.contains(text.as_str());
+        }
+        (_, Some(_)) => return false,
+        (_, None) => {}
+    }
     match (value, expect) {
         (Value::Object(have), Value::Object(want)) => want
             .iter()
@@ -313,14 +331,28 @@ fn agrees(value: &Value, expect: &Value) -> bool {
     }
 }
 
-/// Whether a string anywhere in `value` contains `text`.
-fn holds(value: &Value, text: &str) -> bool {
-    match value {
-        Value::String(s) => s.contains(text),
-        Value::Array(items) => items.iter().any(|v| holds(v, text)),
-        Value::Object(fields) => fields.values().any(|v| holds(v, text)),
-        _ => false,
+fn operator(expect: &Value) -> Option<(&str, &Value)> {
+    match expect {
+        Value::Object(fields) if fields.len() == 1 => fields
+            .iter()
+            .next()
+            .filter(|(name, _)| name.starts_with('$'))
+            .map(|(name, operand)| (name.as_str(), operand)),
+        _ => None,
     }
+}
+
+/// The rows of a text slice: one string, or a list of strings.
+fn rows(value: &Value) -> Option<Vec<&str>> {
+    match value {
+        Value::String(s) => Some(vec![s.as_str()]),
+        Value::Array(items) => items.iter().map(Value::as_str).collect(),
+        _ => None,
+    }
+}
+
+fn holds(value: &Value, text: &str) -> bool {
+    rows(value).is_some_and(|rows| rows.iter().any(|row| row.contains(text)))
 }
 
 /// Aims at the element once it shows and stops moving, scrolling it into view first when
@@ -423,6 +455,35 @@ mod tests {
                     .offset(if *cleared { 120.0 } else { 0.0 }, 0.0)
                     .offset_motion(Spring::new(0.4, 0.0)),
             )
+    }
+
+    #[test]
+    fn an_expectation_agrees_with_the_fields_it_names_and_its_operators() {
+        let window = json!({
+            "on_screen": "s1",
+            "keyboard": {"pane": "p1"},
+            "notice": "This tile has 400px, so it moved beside instead.",
+            "panes": [{"id": "p1", "size": [80, 24]}, {"id": "p2", "size": [40, 12]}],
+        });
+        for (expect, agreed) in [
+            (json!({"on_screen": "s1", "keyboard": {"pane": "p1"}}), true),
+            (json!({"keyboard": {"pane": "p2"}}), false),
+            (json!({"notice": {"$includes": "moved beside"}}), true),
+            (json!({"notice": {"$includes": "stacked"}}), false),
+            (json!({"on_screen": {"$some": "s1"}}), false),
+            (
+                json!({"panes": {"$some": {"id": "p2", "size": [40, 12]}}}),
+                true,
+            ),
+            (
+                json!({"panes": {"$some": {"id": "p2", "size": [12, 40]}}}),
+                false,
+            ),
+            (json!({"panes": [{"id": "p1"}]}), false),
+            (json!({"notice": {"$unknown": "x"}}), false),
+        ] {
+            assert_eq!(agrees(&window, &expect), agreed, "{expect}");
+        }
     }
 
     #[test]

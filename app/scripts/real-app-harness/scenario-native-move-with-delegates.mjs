@@ -84,8 +84,7 @@ try {
     const placed = await observer.waitForDesktopOf(root, (desktop) => created.every((id) => desktop.panes.some((pane) => pane.session_id === id)), 'all four agents on the source desktop');
     runner.assert(placed.id === source.id, 'the group starts on the source desktop', placed);
     await driver.click({ key: `tile.${result.pane_id}.header` });
-    const window = await driver.state('window', { includes: root, timeoutMs: 15_000 });
-    runner.assert(window.on_screen === root, 'the dispatcher is the agent on screen', window);
+    await driver.state('window', { expect: { on_screen: root }, timeoutMs: 15_000 });
     await driver.screenshot(path.join(runner.runDir, 'before-move.png'));
   });
 

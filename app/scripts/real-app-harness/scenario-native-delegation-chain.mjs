@@ -118,7 +118,7 @@ try {
 
   await runner.step('the_row_and_the_header_open_the_chain', async () => {
     await driver.click({ key: `sidebar.session.${builder}` });
-    await driver.state('window', { includes: builder, timeoutMs: 15_000 });
+    await driver.state('window', { expect: { on_screen: builder }, timeoutMs: 15_000 });
     const pane = paneOf(builder);
     await driver.waitFor({ key: `tile.${pane}.role.name`, name: 'Builder' });
     const rowChip = `sidebar.session.${builder}.chain`;
@@ -164,22 +164,21 @@ try {
     await picked(card, 'Check keyboard flow');
     await driver.pressKey('Enter');
     await driver.waitFor({ key: card }, { gone: true });
-    const window = await driver.state('window', { includes: child, timeoutMs: 15_000 });
-    runner.assert(window.on_screen === child, 'Enter opens the picked agent', window);
+    await driver.state('window', { expect: { on_screen: child }, timeoutMs: 15_000 });
   });
 
   await runner.step('a_deleted_role_keeps_the_agents_launched_with_it', async () => {
     const current = (await preferences('delegation_preferences_get')).preferences;
     await preferences('delegation_preferences_save', { ...current, enabled: false, roles: [] });
     await driver.click({ key: `sidebar.session.${root}` });
-    await driver.state('window', { includes: root, timeoutMs: 15_000 });
+    await driver.state('window', { expect: { on_screen: root }, timeoutMs: 15_000 });
     await driver.waitFor({ key: `tile.${paneOf(root)}.role.name`, name: 'Orchestrator' });
     runner.assert(observer.getSession(root)?.delegation_role?.name === 'Orchestrator', 'the launch identity outlives its role');
   });
 
   await runner.step('a_delegate_to_a_missing_numbered_desktop_leaves_the_caller_on_screen', async () => {
     await driver.click({ key: `sidebar.session.${builder}` });
-    await driver.state('window', { includes: builder, timeoutMs: 15_000 });
+    await driver.state('window', { expect: { on_screen: builder }, timeoutMs: 15_000 });
     await observer.closeLeftoverNumberedDesktops();
     const held = new Set(observer.desktops.map((d) => d.shortcut_slot).filter(Boolean));
     const slot = [7, 1, 2, 3, 4, 5, 6, 8, 9].find((candidate) => !held.has(candidate));
@@ -205,8 +204,7 @@ try {
       'the caller stays on screen with the keyboard', { before, after });
     await shot('missing-numbered-desktop-caller');
     await driver.run(`desktop.select${slot}`);
-    const opened = await driver.state('window', { includes: result.session_id, timeoutMs: 15_000 });
-    runner.assert(opened.on_screen === result.session_id, 'the numbered shortcut shows the delegate', opened);
+    await driver.state('window', { expect: { on_screen: result.session_id }, timeoutMs: 15_000 });
     await shot('missing-numbered-desktop-delegate');
   });
 

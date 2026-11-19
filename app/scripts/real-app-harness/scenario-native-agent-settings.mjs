@@ -50,7 +50,7 @@ const replaceText = async (key, text) => {
 };
 const section = async (id) => {
   await driver.click({ key: `settings.nav.${id}` });
-  await driver.state('settings', { includes: id });
+  await driver.state('settings', { expect: { activeSection: id } });
 };
 const expanded = async (key) => (await node(key))?.states?.includes('expanded');
 const openAdvanced = async (agent) => {

@@ -42,9 +42,8 @@ async function end() {
   await driver.pressKey('Escape');
   await driver.waitFor({ key: 'callout' }, { gone: true });
 }
-async function shown(agent, description) {
-  const window = await driver.state('window', { includes: agent.id, timeoutMs: 15_000 });
-  runner.assert(window.on_screen === agent.id && window.keyboard?.pane === agent.pane, description, window);
+async function shown(agent) {
+  await driver.state('window', { expect: { on_screen: agent.id, keyboard: { pane: agent.pane } }, timeoutMs: 15_000 });
 }
 async function select(agent) {
   await driver.run('ui.actionMenu');
@@ -53,7 +52,7 @@ async function select(agent) {
   await driver.waitFor({ key: `palette.row.agent:${agent.id}` });
   await driver.pressKey('Enter');
   await driver.waitFor({ key: 'palette' }, { gone: true });
-  await shown(agent, `${agent.label} is on screen with the keyboard`);
+  await shown(agent);
 }
 const queueRowOf = async (agent) => {
   const found = [];
@@ -101,7 +100,7 @@ try {
     await driver.pressKey('Right');
     await reads('Each desktop holds your tiles');
     await end();
-    await shown(agents[0], 'the pointing shell keeps the keyboard after the callout ends');
+    await shown(agents[0]);
   });
 
   await runner.step('reveal_an_agent_and_go_there', async () => {
@@ -115,7 +114,7 @@ try {
     await shot('agent-revealed');
     await driver.pressKey('Enter');
     await driver.waitFor({ key: 'callout' }, { gone: true });
-    await shown(agents[1], 'Enter goes to the agent the callout pointed at');
+    await shown(agents[1]);
     await select(agents[0]);
   });
 
@@ -129,7 +128,7 @@ try {
     await show(`agent:${agents[1].id}`, 'Enter still goes to this agent');
     await driver.waitFor({ key: 'callout.unanchored' });
     await driver.pressKey('Enter');
-    await shown(agents[1], 'Enter goes to an agent whose anchor is off screen');
+    await shown(agents[1]);
     await driver.run('session.toggleSidebar');
     await driver.waitFor({ key: 'sidebar.queue' });
     await select(agents[0]);
@@ -172,7 +171,7 @@ try {
     await select(agents[0]);
     await show('sidebar', 'The terminal keeps the keyboard');
     await end();
-    await shown(agents[0], 'the pointing shell has the keyboard once the callout ends');
+    await shown(agents[0]);
     const renamed = observer.waitForMessage((message) => message.event === 'session_state_changed'
       && message.session?.id === agents[0].id && message.session.label === 'Terminal keeps focus' && message,
     'typing reaches the pointing shell');

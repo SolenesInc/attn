@@ -53,7 +53,7 @@ try {
     await driver.waitFor({ key: `terminal.${runtimeId}` });
   });
   const terminal = { key: `terminal.${runtimeId}` };
-  const annotations = async (includes) => (await driver.state(`terminal-view:${runtimeId}`, includes ? { includes, timeoutMs: 15_000 } : {})).annotations;
+  const annotations = async (expect) => (await driver.state(`terminal-view:${runtimeId}`, { expect: { annotations: expect }, timeoutMs: 15_000 })).annotations;
   const stored = () => observer.requestResult({ cmd: 'session_annotations_get', session_id: id }, 'session_annotations_get_result');
 
   let at;
@@ -74,7 +74,7 @@ try {
       }
       await changed;
     }
-    await driver.state(`terminal-view:${runtimeId}`, { includes: message.key, timeoutMs: 15_000 });
+    await driver.state(`terminal-view:${runtimeId}`, { expect: { annotations: { messages: { $some: message.key } } }, timeoutMs: 15_000 });
     const slot = await driver.waitFor(terminal);
     const { cursor, caret: [cx, cy, cw, ch] } = await driver.state(`terminal-view:${runtimeId}`);
     const row = rows.findIndex((text) => text.includes(PHRASE));
@@ -89,8 +89,8 @@ try {
     await driver.holdKeys('alt');
     await driver.drag(terminal, { by: [(PHRASE.length - 1) * at.cell, 0] }, { at: at.at });
     await driver.holdKeys('');
-    const state = await annotations(PHRASE);
-    runner.assert(state.marks.length === 1 && state.marks[0].quote === PHRASE && state.popup, 'the drag marks the phrase and opens its popup', state);
+    const state = await annotations({ marks: [{ quote: PHRASE }] });
+    runner.assert(state.popup, 'the drag opens the mark\'s popup', state);
   });
 
   await runner.step('label_and_comment_save_the_draft', async () => {
@@ -101,7 +101,7 @@ try {
     await driver.click({ key: `terminal.${runtimeId}.annotation.write` });
     await driver.typeInto(null, COMMENT);
     await driver.pressKey(`${MOD}+Enter`);
-    await annotations(COMMENT);
+    await annotations({ marks: [{ comment: COMMENT }] });
     const draft = await stored();
     const mark = draft.annotations?.[0];
     runner.assert(mark?.quick_label_id === 'clarify-this' && mark?.comment === COMMENT, 'the daemon keeps the mark with its label and comment', draft);
@@ -110,7 +110,7 @@ try {
   await runner.step('note_and_send', async () => {
     await driver.click({ key: `terminal.${runtimeId}.annotation.note.field` });
     await driver.typeInto(null, NOTE);
-    await annotations(NOTE);
+    await annotations({ note: NOTE });
     const screenshot = path.join(runner.runDir, 'native-annotations-panel.png');
     await driver.screenshot(screenshot);
     await driver.pressKey(`${MOD}+Enter`);

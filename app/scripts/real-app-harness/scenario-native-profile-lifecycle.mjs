@@ -28,7 +28,7 @@ const tag = runner.runId.replace(/\D/g, '').slice(-6);
 const WORK = `harness-work-${tag}`;
 const STUDIO = `harness-studio-${tag}`;
 
-const profiles = (includes) => driver.state('profiles', includes ? { includes, timeoutMs: 15_000 } : {});
+const profiles = (name) => driver.state('profiles', name ? { expect: { all: { $some: { name } } }, timeoutMs: 15_000 } : {});
 const named = (state, name) => state.all.find((p) => p.name === name) ?? null;
 const selectedIs = async (id) => {
   const state = await driver.state('profiles', { expect: { selected: id }, timeoutMs: 15_000 });
@@ -87,8 +87,7 @@ try {
     runner.assert((await spawned).success, 'the shell starts in the new profile');
     runner.registerCleanup('unregister_shell', () => observer.unregisterSession(sessionId));
     await driver.waitFor({ key: `sidebar.session.${sessionId}` });
-    const sessions = await driver.state('sessions', { includes: sessionId });
-    runner.assert(sessions.find((s) => s.id === sessionId)?.profile_id === work.id, 'the agent belongs to the profile it started in', sessions);
+    await driver.state('sessions', { expect: { $some: { id: sessionId, profile_id: work.id } } });
   });
 
   await runner.step('the_pill_and_the_palette_switch_profiles', async () => {

@@ -56,8 +56,7 @@ async function shown() {
 
 async function keyboardOn(leaf) {
   await observer.waitFor(() => current().active_pane_id === leaf, `${leaf} active`, 20_000);
-  const window = await driver.state('window', { includes: leaf, timeoutMs: 5000 }).catch(() => driver.state('window'));
-  runner.assert(window.keyboard?.pane === leaf, `typing goes to ${leaf}`, { window, active: current().active_pane_id });
+  await driver.state('window', { expect: { keyboard: { pane: leaf } }, timeoutMs: 5000 });
 }
 
 const sessions = new Set();

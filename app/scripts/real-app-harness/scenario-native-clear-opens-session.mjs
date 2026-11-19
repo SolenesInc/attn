@@ -30,10 +30,7 @@ runner.registerCleanup('unregister_sessions', async () => {
 });
 
 const screen = (includes) => driver.state(`terminal:${run.runtimeId}`, { includes, timeoutMs: 15_000 });
-const shown = (id, description) => driver.state('window', { includes: id, timeoutMs: 15_000 }).then((window) => {
-  runner.assert(window.on_screen === id && window.keyboard?.pane === run.paneId, description, window);
-  return window;
-});
+const shown = (id) => driver.state('window', { expect: { on_screen: id, keyboard: { pane: run.paneId } }, timeoutMs: 15_000 });
 const offsetInDesktop = async (sessionId, desktopId) => {
   const row = await driver.waitFor({ key: `sidebar.session.${sessionId}` });
   const group = await driver.find({ key: `sidebar.desktop.${desktopId}` });
@@ -63,7 +60,7 @@ try {
     await driver.click({ key: `sidebar.session.${run.first}` });
     await driver.waitFor({ key: `terminal.${run.runtimeId}` });
     await screen('❯');
-    await shown(run.first, 'the agent is on screen with the keyboard in its tile');
+    await shown(run.first);
     await driver.typeInto(null, 'PRICE_THE_CART');
     await driver.pressKey('Enter');
     await screen('Priced the cart');
@@ -88,7 +85,7 @@ try {
     await driver.waitFor({ key: `sidebar.session.${run.first}` }, { gone: true });
     const after = await offsetInDesktop(run.next, desktopId);
     runner.assert(!after.row.name?.includes(label) && Math.abs(after.offset - before.offset) <= 1, 'the new session takes the cleared one\'s sidebar row', { before, after });
-    await shown(run.next, 'the new session stays on screen with the keyboard in the same tile');
+    await shown(run.next);
   });
 
   await runner.step('typing_continues_into_the_new_session', async () => {

@@ -52,11 +52,11 @@ async function showOutposts() {
   await driver.click({ key: 'settings.nav.outposts' });
   await driver.state('settings', { expect: { activeSection: 'outposts' } });
 }
-/** Reads the row's Notebook line `part` once the app holds `held`: a string in its outposts,
- * or, with none, once the line shows. */
-async function shows(part, says, held) {
+/** Reads the row's Notebook line `part` once Studio's Notebook agrees with `notebook`, or,
+ * with none, once the line shows. */
+async function shows(part, says, notebook) {
   const key = `${row}.notebook.${part}`;
-  if (held) await driver.state('outposts', { includes: held });
+  if (notebook) await driver.state('outposts', { expect: { $some: { name: 'Studio', notebook } } });
   else await driver.waitFor({ key });
   const shown = await driver.find({ key });
   runner.assert(shown?.name?.includes(says), `the row's Notebook ${part} says ${says}`, shown);
@@ -128,14 +128,14 @@ try {
     observer.send({ cmd: 'add_outpost', name: 'Studio', destination });
     const studio = await first;
     row = `settings.outpost.${studio.id}`;
-    await shows('state', 'Notebook: first sync', 'first_sync');
+    await shows('state', 'Notebook: first sync', { state: 'first_sync' });
     runner.assert(studio.notebook.need_bytes > 0, 'first sync names what is left', studio);
     await shows('previous', 'Previous folder saved at');
     await shot('01-first-sync');
     const synced = receive(notebook => notebook?.state === 'in_sync');
     outpost.kill('SIGCONT');
     await synced;
-    await shows('state', 'Notebook: in sync', 'in_sync');
+    await shows('state', 'Notebook: in sync', { state: 'in_sync' });
     runner.assert(fs.readFileSync(path.join(outpostCopy, 'conflict.md'), 'utf8') === 'baseline', 'first sync reached outpost disk');
     await shot('02-in-sync');
   });
@@ -162,7 +162,7 @@ try {
     fs.unlinkSync(path.join(homeRoot, copy));
     await cleared;
     await driver.waitFor({ key: `${row}.notebook.conflicts` }, { gone: true });
-    await shows('state', 'Notebook: in sync', 'in_sync');
+    await shows('state', 'Notebook: in sync', { state: 'in_sync' });
 
     await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
     await off(false);
@@ -173,7 +173,7 @@ try {
     await showOutposts();
     const studio = await failed;
     runner.assert(studio.notebook.error.includes('folder marker missing'), 'sync error names the cause', studio);
-    await shows('state', 'folder marker missing', 'folder marker missing');
+    await shows('state', 'folder marker missing', { state: 'error', error: { $includes: 'folder marker missing' } });
     await shot('04-error');
   });
   runner.writeJson('daemon-notebook-events.json', rows);

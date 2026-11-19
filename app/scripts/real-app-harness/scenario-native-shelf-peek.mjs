@@ -104,9 +104,7 @@ try {
     }
     await driver.waitFor({ key: `tile.${leaf}` });
   };
-  const waitKeyboard = (pane) => driver.state('window', { includes: pane, timeoutMs: 5_000 }).then((window) => {
-    runner.assert(window.keyboard?.pane === pane, `the keyboard is on ${pane}`, window);
-  });
+  const waitKeyboard = (pane) => driver.state('window', { expect: { keyboard: { pane } }, timeoutMs: 5_000 });
   const hoverAway = async () => {
     await driver.hover({ key: `tile.${(await shownLeaves())[0]}` });
     await driver.waitFor(PEEK, { gone: true });

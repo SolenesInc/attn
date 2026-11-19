@@ -67,7 +67,7 @@ Preconditions:
 
 - Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`, and press `mod+alt+k` for the palette where macOS has `mod+shift+k`.
 - Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`. Make `P` and `U` and start `usage-agent` as above, then `bridge press '{"target":{"key":"sidebar.session.usage-agent"}}'`.
-- `<pane>` is the `pane_id` of the agent's pane in `bridge state '{"of":"desktops","includes":"usage-agent"}'`, and `<terminal>` its `runtime_id`.
+- `<pane>` is the `pane_id` of the pane whose `session_id` is `usage-agent` in `bridge state '{"of":"desktops"}'`, and `<terminal>` its `runtime_id`.
 
 Steps:
 

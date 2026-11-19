@@ -98,7 +98,7 @@ try {
 
   await runner.step('vents_listed_new_then_done', async () => {
     await driver.click({ key: 'settings.nav.analytics' });
-    await driver.state('settings', { includes: 'analytics' });
+    await driver.state('settings', { expect: { activeSection: 'analytics' } });
     await driver.click({ key: 'settings.analytics.views.vents' });
     await driver.waitFor({ key: 'settings.analytics.vent.text', name: VENT });
     const listed = await rows();

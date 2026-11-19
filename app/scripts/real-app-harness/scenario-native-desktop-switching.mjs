@@ -75,8 +75,7 @@ try {
   });
 
   const takesKeyboard = async (pane) => {
-    const window = await driver.state('window', { includes: pane });
-    runner.assert(window.keyboard?.pane === pane, `tile ${pane} holds the keyboard`, window);
+    await driver.state('window', { expect: { keyboard: { pane } } });
   };
   const keyboardLeft = async (pane) => {
     const window = await driver.state('window');
@@ -181,7 +180,7 @@ try {
     const notes = path.join(runner.sessionDir, 'shells', 'notes.md');
     fs.writeFileSync(notes, `# ${docTitle}\n\nDocked content.\n`);
     await observer.profileCommand('desktop_dock_tile', { desktop_id: desktopB.id, anchor_id: split.pane, edge: 'right', tile_id: doc, tile_kind: 'markdown', tile_params: notes });
-    await driver.state('desktops', { includes: doc });
+    await driver.state('desktops', { expect: { $some: { id: desktopB.id, tree_json: { $includes: doc } } } });
     runner.assert(!(await driver.find({ key: `tile.${doc}` })), 'a document arriving beside the shell shown alone leaves it alone', await driver.state('window'));
     await driver.waitFor({ key: `tile.${split.pane}.return` });
 

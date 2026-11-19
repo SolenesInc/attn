@@ -42,9 +42,9 @@ const shot = (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`)
 let remoteEnv, target, outpostId;
 const phases = [];
 const row = (part) => ({ key: `settings.outpost.${outpostId}.${part}` });
-/** What the element `key` reads once the app holds `held` among its outposts. */
-async function reads(key, held) {
-  await driver.state('outposts', { includes: held });
+/** What the element `key` reads once the app's outpost agrees with `outpost`. */
+async function reads(key, outpost) {
+  await driver.state('outposts', { expect: { $some: { id: outpostId, ...outpost } } });
   return (await driver.find({ key }))?.name ?? '';
 }
 async function update(press, name) {
@@ -118,7 +118,7 @@ try {
     await driver.click({ role: 'button', name: 'Close' });
     await driver.waitFor({ key: 'settings-dialog' }, { gone: true });
     await driver.waitFor(BANNER);
-    const said = await reads('outpost-updates.text', 'failed');
+    const said = await reads('outpost-updates.text', { state: 'refused', update: { phase: 'failed' } });
     runner.assert(said.startsWith('Couldn’t update Update studio.'), 'the band offers the update after a failed Add', said);
     await shot('00-offer');
     await update({ key: 'outpost-updates.update' }, '01-banner-updated');
@@ -132,9 +132,9 @@ try {
     await run(binary, ['settings', 'set', 'outposts_enabled', 'true'], homeEnv);
     await refused;
     await openOutposts();
-    const offered = await reads(`settings.outpost.${outpostId}.update-build`, 'nothing installed');
+    const offered = await reads(`settings.outpost.${outpostId}.update-build`, { state: 'refused', build: 'nothing installed' });
     runner.assert(offered === 'Update to home build', 'the row offers the home build', offered);
-    const said = await reads('outpost-updates.text', 'nothing installed');
+    const said = await reads('outpost-updates.text', { state: 'refused', build: 'nothing installed' });
     runner.assert(said === 'Update studio runs a different build than home.', 'the band names the outpost on another build', said);
     await shot('02-missing-build');
     await update(row('update-build'), '03-row-updated');

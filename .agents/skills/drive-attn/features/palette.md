@@ -68,7 +68,7 @@ Preconditions:
 Steps:
 
 - **Open the agent palette.** Run `bridge key '{"chord":"mod+k"}'`: `bridge find '{"target":{"key":"palette.dialog"}}'` is named `Agents`, `palette.count` reads `3 of 3`, and the tree holds `palette.row.agent:pal-a`, `palette.row.agent:pal-b` and one `palette.row.tile:` row.
-- **Search and go to an agent.** Run `bridge type '{"text":"pal-b"}'`: the count reads `1 of 3`. Press `enter`: `bridge wait '{"target":{"key":"palette"},"gone":true}'` answers and `bridge state '{"of":"window","includes":"pal-b"}'` shows `on_screen: "pal-b"`.
+- **Search and go to an agent.** Run `bridge type '{"text":"pal-b"}'`: the count reads `1 of 3`. Press `enter`: `bridge wait '{"target":{"key":"palette"},"gone":true}'` answers and `bridge state '{"of":"window","expect":{"on_screen":"pal-b"}}'` answers.
 - **Go to a tile.** Press `mod+k`, type `<seed>` and press `enter`; the native seed tile is named by the seed's id, not its title. `wsctl list` shows the tile as its desktop's `active_pane_id`.
 - **Commands by typing `>`.** Press `mod+k` and type `>keyboard shortcuts`: `palette.dialog` is named `Commands` and the tree marks `palette.row.command:keyboard-shortcuts` `selected`. Press `enter`: `bridge wait '{"target":{"key":"shortcuts-dialog"}}'` answers. Press `escape`.
 - **The command palette from its key and the button.** Press `mod+shift+k`: `palette.dialog` is named `Commands`. Press `escape`. Run `bridge press '{"target":{"key":"titlebar.commands"}}'`: the same palette opens. Press `escape`.

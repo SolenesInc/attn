@@ -62,8 +62,7 @@ async function chips() {
 
 async function keyboardOn(leaf) {
   await observer.waitForDesktopOf(sessionOf(leaf), (entry) => entry.active_pane_id === leaf, `${leaf} active`);
-  const window = await driver.state('window', { includes: leaf, timeoutMs: 5000 }).catch(() => driver.state('window'));
-  runner.assert(window.keyboard?.pane === leaf, `typing goes to ${leaf}`, { window, active: current().active_pane_id });
+  await driver.state('window', { expect: { keyboard: { pane: leaf } }, timeoutMs: 5000 });
 }
 
 async function waitForRow(predicate, description) {
@@ -359,7 +358,7 @@ try {
       const columns = columnsOf(treeOf(current())).map(leavesOf);
       return sameList(columns[columns.findIndex((leaves) => leaves.includes(short.anchor)) + 1] ?? [], short.column);
     }, 'the stack beside the short tile');
-    await driver.state('window', { includes: 'so it moved beside instead' });
+    await driver.state('window', { expect: { notice: { $includes: 'so it moved beside instead' } } });
     await shot('stack-beside-a-short-tile');
 
     await driver.setWindowBounds({ ...WINDOW, height: 1040 });

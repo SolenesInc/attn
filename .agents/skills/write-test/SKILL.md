@@ -57,6 +57,14 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
   `testworld.AwaitSessionFromConnect` for a session, `p.Initial` before an
   `Await` for anything else. A refresh that finds no change publishes nothing,
   so it cannot stand in for the lost event.
+- Waiting for one signal and then asserting a state that comes after it.
+  The wait passes on a precursor and the read races: the first
+  `settings_updated` with `theme=dark` before the frame carrying
+  `default_model_claude`, `session_unregistered` before the arrangement
+  without the pane, an earlier toast still showing, half a terminal row.
+  Make the wait the assertion: await every value the test then reads, in
+  `testworld.Await`'s predicate, in the native driver's `state` `expect`,
+  or in a scenario's `waitForPaneState` predicate.
 - Waiting for a timer to fire. Move the clock: `w.advance(d)` in a world,
   `s.Advance(d)` in a stack. When the timer is armed asynchronously, wait
   for the timer first, by the name its package gives it: `w.awaitTimer(name)`

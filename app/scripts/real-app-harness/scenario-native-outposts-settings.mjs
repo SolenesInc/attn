@@ -242,7 +242,7 @@ try {
     created.splice(created.indexOf(terminal.id), 1);
     runner.assert(Boolean(studioRow.host_key_fingerprint && studioRow.build && studioRow.daemon_id), 'first contact pins identity and build', studioRow);
     await openOutposts();
-    await driver.state('outposts', { includes: 'connected' });
+    await driver.state('outposts', { expect: { $some: { id: studioId, state: 'connected' } } });
     runner.assert((await named(row('state'))) === 'connected', 'the row reads connected');
     runner.assert((await named(row('host-key'))).includes(studioRow.host_key_fingerprint), 'the row shows the pinned host key');
     await shot('01-connected');
@@ -346,7 +346,7 @@ try {
     outpost.kill('SIGSTOP');
     await homeClock.advance('3s');
     await stalled;
-    await driver.state('outposts', { includes: 'stalled' });
+    await driver.state('outposts', { expect: { $some: { name: 'Studio', state: 'stalled' } } });
     runner.assert((await strip(agent)) === 'Studio not responding', 'a stalled agent says its outpost is not responding');
     runner.assert(!(await offline(agent)), 'a stalled agent is not offline');
     await shot('03-stalled-agent');
@@ -369,7 +369,7 @@ try {
     outpost.kill('SIGSTOP');
     await homeClock.advance('3s');
     await stalled;
-    await driver.state('outposts', { includes: 'stalled' });
+    await driver.state('outposts', { expect: { $some: { name: 'Studio', state: 'stalled' } } });
     runner.assert(!(await offline(split)), 'a stalled shell is not offline');
     runner.assert((await strip(split)) === 'Studio not responding', 'a stalled shell says its outpost is not responding');
     await shot('03-stalled-shell');
@@ -378,7 +378,7 @@ try {
     await homeClock.awaitTimer('bridge-answer');
     await homeClock.advance('10s');
     await homeClock.awaitTimer('bridge-retry');
-    await driver.state('outposts', { includes: 'unreachable' });
+    await driver.state('outposts', { expect: { $some: { name: 'Studio', reach: 'unreachable' } } });
     runner.assert((await strip(split)) === 'Studio unreachable · typing is not sent', 'an unreachable shell says typing is not sent');
     runner.assert(await offline(split), 'an unreachable shell reads offline');
     runner.assert((await text(split)) === before, 'going offline keeps the screen', { before });
@@ -439,7 +439,7 @@ try {
     await closeSettings();
     for (const [name, tile] of [['shell', split], ['agent', agent]]) {
       await focusTile(tile);
-      await driver.state('outposts', { includes: 'connecting' });
+      await driver.state('outposts', { expect: { $some: { name: 'Studio', state: 'connecting' } } });
       runner.assert((await strip(tile)) === 'Connecting to Studio · typing is not sent', `the connecting ${name} says typing is not sent`);
       runner.assert(!(await offline(tile)), `the connecting ${name} is not offline`);
       await refusesTyping(tile, 'C13_CONNECTING_REFUSED', `a connecting ${name}`);
@@ -462,7 +462,7 @@ try {
     const refusal = receive((rows) => rows.some((item) => item.name === 'Studio alias' && item.state === 'refused'));
     await add('Studio alias', 'scenario-outpost-alias');
     const refused = (await refusal).find((item) => item.name === 'Studio alias');
-    await driver.state('outposts', { includes: 'Studio alias' });
+    await driver.state('outposts', { expect: { $some: { id: refused.id, state: 'refused' } } });
     runner.assert((await named(row('state', refused.id))) === 'refused', 'the alias reads refused');
     runner.assert(flat(await named(row('error.text', refused.id))) === flat(refused.last_error), 'the refusal is shown whole', refused);
     await shot('05-refused');

@@ -86,7 +86,6 @@ const mailbox = `cap-${crypto.randomUUID()}`;
 const home = path.join(dataDirForInstance(instance), 'crew', mailbox);
 
 const state = (expect, timeoutMs) => panel.request('state', { of: 'capture', ...(expect ? { expect } : {}), ...(timeoutMs ? { timeout_ms: timeoutMs } : {}) }, timeoutMs ? { timeoutMs: timeoutMs + 5_000 } : {});
-const stateIncluding = text => panel.request('state', { of: 'capture', includes: text });
 const hidden = () => state({ visible: false });
 const binding = async () => (await client.request('state', { of: 'capture-shortcut' })).binding;
 const bind = value => client.request('run', { name: `capture.shortcut=${value}` });
@@ -518,7 +517,7 @@ try {
     await openCapture();
     await clickPanel({ key: 'capture.recent' });
     await state({ view: 'recent' });
-    const actual = await stateIncluding(mailbox);
+    const actual = await state({ recentRows: { $some: { mailbox, read: true } } });
     const sent = actual.recentRows.find(row => row.mailbox === mailbox && row.files.includes(path.basename(pdfPath)));
     assert.ok(sent, `Recent lists the message sent to ${mailbox}: ${JSON.stringify(actual.recentRows)}`);
     assert.equal(sent.files.length, 2);
@@ -542,9 +541,7 @@ try {
     await openCapture();
     await clickPanel({ key: 'capture.recent' });
     await state({ view: 'recent' });
-    const recent = await stateIncluding(captureId);
-    const imageOnly = recent.recentRows.find(row => row.captureId === captureId);
-    assert.deepEqual([imageOnly.text, imageOnly.files], ['', ['Pasted screenshot']], `Recent lists the image-only message: ${JSON.stringify(imageOnly)}`);
+    await state({ recentRows: { $some: { captureId, text: '', files: ['Pasted screenshot'] } } });
     await key('escape'); await key('escape'); await hidden();
   });
   await runner.step('restart_restores_draft_image_and_binding', async () => {

@@ -111,13 +111,19 @@ Preconditions:
 
 - Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'` so the display outlives each step.
 - Launch as [../SKILL.md](../SKILL.md) says for a native instance: `bridge --launch ping`, then `bridge wait '{"target":{"key":"sidebar"}}'`. `bridge state '{"of":"connection"}'` reads `"Connected"`.
-- Make the proof folder `P` as above, and save this reader as `$P/mouse-reader.sh`. It turns on SGR mouse tracking and prints each byte it reads, ESC as `ESC`, until `q`:
+- Make the proof folder `P` as above, and save this reader as `$P/mouse-reader.sh`. It turns on SGR mouse tracking and prints each byte it reads, ESC as `ESC`, until `q`, and numbers each report after its last byte:
 
 ```bash
 stty raw -echo
 printf '\033[?1000h\033[?1006hREADY\r\n'
+reports=0
 while IFS= read -rs -n1 c; do
-  case "$c" in $'\e') printf 'ESC' ;; q) break ;; *) printf '%s' "$c" ;; esac
+  case "$c" in
+    $'\e') printf 'ESC' ;;
+    q) break ;;
+    M|m) reports=$((reports + 1)); printf '%s #%d\r\n' "$c" "$reports" ;;
+    *) printf '%s' "$c" ;;
+  esac
 done
 printf '\033[?1000l\033[?1006l'
 stty sane
@@ -136,7 +142,7 @@ Steps:
 - **Images.** Save a script `$P/kitty-image.py` that writes a 96x48 RGB gradient as kitty escapes, `\033_Ga=T,q=2,f=24,s=96,v=48,i=7,m=1;<base64>\033\\`, 4096 base64 bytes per escape with `m=0` on the last, then `after image`. Press the terminal, type `clear; python3 <P>/kitty-image.py` and press Enter, then wait for `after image` with `state` and `includes`. `terminal-view` lists one `images` entry with `image` 7 at `row` 0, `col` 0, `pixels` `[96, 48]`, and `bridge shot` shows the gradient above `after image`: blue to magenta across, cyan to yellow down. Type `clear; python3 <P>/kitty-image.py; seq 101 160` and press Enter: the entry's `row` goes negative and the shot shows no image. `bridge scroll` with `dy` `-3000` brings it back at `row` 0. Scroll down, then have the script place the same image with `z=-1` and `C=1`, so the cursor stays on the image's first row, and print `text over the image`: the entry reads `z` -1, and the shot shows the text drawn over the gradient. `includes` matches only text, so read `images` from the full state.
 - **A program writes the clipboard.** Press the terminal, type `printf "\033]52;c;$(printf osc52-live | base64)\a"` and press Enter. On Linux, `bridge key '{"chord":"ctrl+shift+v"}'` pastes, and the prompt row ends in `osc52-live`.
 - **Links.** Put a stub `xdg-open` that appends its argument to `$P/opened.txt` first on the `PATH` the app launches with, so a click records the link instead of opening a browser; on macOS, click only paths. Make `$P/src/main.go`, press the terminal, type `clear; printf "see https://example.test/live and src/main.go:3\n"` and press Enter. `bridge hover` over the URL with `at` on its row: `terminal-view` lists an `Underline` overlay over the URL's columns, and none once the pointer moves off. Run `bridge hold '{"mods":"mod"}'`, `bridge press` on the URL, then `bridge hold '{"mods":""}'`: `opened.txt` holds `https://example.test/live`. Do the same on `src/main.go:3`: it holds `file://$P/src/main.go`. A plain press opens nothing.
-- **A program that tracks the mouse.** Type `bash <P>/mouse-reader.sh`, `<P>` written out, press Enter, and wait for `READY` with `state` and `includes`. Press the terminal again: wait for `ESC[<3;`, and one row holds `ESC[<0;<col>;<row>M` followed by `ESC[<3;<col>;<row>m`, the press and its release. Run `bridge scroll '{"target":{"key":"terminal.<shell>"},"dy":60}'`: wait for `ESC[<65;`, the wheel turning down. Type `q` and wait for `DONE`.
+- **A program that tracks the mouse.** Type `bash <P>/mouse-reader.sh`, `<P>` written out, press Enter, and wait for `READY` with `state` and `includes`. Press the terminal again: wait for `#2`, which the reader prints only once the release is whole, and the rows hold `ESC[<0;<col>;<row>M #1` and `ESC[<3;<col>;<row>m #2`, the press and its release. Run `bridge scroll '{"target":{"key":"terminal.<shell>"},"dy":60}'`: wait for `#3`, and a row holds `ESC[<65;<col>;<row>M #3`, the wheel turning down. Type `q` and wait for `DONE`.
 - **An older terminal build.** Run this step last, on its own instance, because it replaces the instance's daemon. Run `./attn settings set pty_shared_host_enabled false` before starting a session `older`, then `./attn instance stop-app` and `./attn daemon stop`. Build a daemon whose snapshot format differs into the instance: `B=$HOME/.local/share/attn-<name>/bin`, then `eval "$(make -n build SNAPSHOT_FORMAT=next-format | grep '^go build.*\./cmd/attnd' | sed "s|-o \"./attnd\"|-o \"$B/attnd.next\"|")"` and `mv "$B/attnd.next" "$B/attnd"`, renamed into place because the session's worker still runs the old file. Start it with in-place upgrades off: `ATTN_WORKER_INPLACE_UPGRADE=0 "$B/attn" daemon ensure`. Once PTY recovery has run, `wsctl list` shows `"terminal_build_stale": true` for `older`. Launch the app and press the session: `bridge wait '{"target":{"key":"session.older.stale-build"}}'` answers, and the notice points at Reload session in the row's menu. Press `session.older.stale-build.dismiss`: the notice goes and stays away for the rest of the run.
 - **Restart keeps it.** Run `./attn instance stop-app`, then launch as above. `bridge wait` finds `terminal.<shell>` again, and `state` with `includes` `native-42` shows the earlier output.
 - **Proof.** Keep each `bridge state` answer, `wsctl screen` after typing, and `bridge shot '{"path":"<P>/native-terminal.png"}'` after the mouse step. Unlike the Tauri app's capture, the native shot shows the terminal's text. The `native-terminal-core` scenario runs the shell, type and read, and mouse steps and takes the same shot. `native-terminal-features` runs scroll, select and copy, blocks, find and images.

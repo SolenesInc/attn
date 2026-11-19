@@ -42,9 +42,8 @@ async function waitForTurns(expected, description, { gone = [] } = {}) {
   runner.assert(JSON.stringify(shown) === JSON.stringify(expected), `${description}: the queue lists turns ${JSON.stringify(expected)}`, shown);
 }
 
-async function waitForShown(expected, description) {
-  const window = await driver.state('window', { includes: expected ?? 'Home' });
-  runner.assert((window.on_screen ?? null) === expected, `${description}: the window shows ${expected ?? 'home'}`, window);
+async function waitForShown(expected) {
+  await driver.state('window', { expect: { on_screen: expected } });
 }
 
 async function pressRowControl(row, control, description) {
@@ -89,13 +88,13 @@ try {
   await runner.step('a_row_opens_its_agent', async () => {
     const receipt = await driver.click({ key: `queue-turn.${beta}` });
     runner.assert(receipt.matched, 'the press lands on beta\'s row', receipt);
-    await waitForShown(beta, 'the row opens beta');
+    await waitForShown(beta);
   });
 
   await runner.step('settling_hands_over_the_next_turn', async () => {
     await pressRowControl(`queue-turn.${beta}`, 'settle', 'the press lands on beta\'s settle control');
     await waitForTurns([alpha], 'beta settled', { gone: [beta] });
-    await waitForShown(alpha, 'the queue moves on to alpha');
+    await waitForShown(alpha);
   });
 
   await runner.step('the_bar_carries_the_queue_when_collapsed', async () => {
@@ -110,7 +109,7 @@ try {
     await pressRowControl(`queue-turn.${alpha}`, 'snooze', 'the press lands on alpha\'s snooze control');
     await driver.click({ key: 'snooze.menu.snooze.30m' });
     await waitForTurns([], 'alpha snoozed', { gone: [alpha] });
-    await waitForShown(null, 'no turn is left, so the window goes home');
+    await waitForShown(null);
     await driver.waitFor({ key: 'home.all-settled' });
   });
 

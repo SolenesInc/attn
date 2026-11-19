@@ -38,9 +38,7 @@ const nodes = async () => {
 const node = async (key) => (await nodes()).find((n) => n.key === key) ?? null;
 const section = async (id) => {
   await driver.click({ key: `settings.nav.${id}` });
-  await driver.state('settings', { includes: id });
-  const { activeSection } = await driver.state('settings');
-  runner.assert(activeSection === id, `the nav selects ${id}`, { activeSection });
+  await driver.state('settings', { expect: { activeSection: id } });
 };
 const replaceText = async (key, text) => {
   await driver.click({ key });
@@ -101,7 +99,7 @@ try {
 
   await runner.step('search_leaves_the_sections_whose_words_match', async () => {
     await driver.typeInto({ key: 'settings.search.field' }, 'sweep');
-    await driver.state('settings', { includes: 'sweep' });
+    await driver.state('settings', { expect: { search: 'sweep' } });
     const nav = (await nodes()).filter((n) => n.key?.startsWith('settings.nav.')).map((n) => n.name);
     runner.assert(nav.length === 1 && nav[0] === 'Files and locations', 'only Files and locations holds the sweep', nav);
     await replaceText('settings.search.field', '');

@@ -1449,6 +1449,18 @@ fn automation_reads_the_terminal_screen_the_window_drew_and_waits_for_text_in_it
         "a slice that cannot exist fails at once: {mistyped}"
     );
     assert!(mistyped.contains("terminal:<runtime id>"), "{mistyped}");
+
+    let structured = world
+        .automate(
+            "state",
+            serde_json::json!({"of": "window", "includes": "r1"}),
+        )
+        .unwrap_err();
+    assert!(
+        !structured.contains("waits"),
+        "includes on a slice that is not text fails at once: {structured}"
+    );
+    assert!(structured.contains("`expect`"), "{structured}");
 }
 
 #[test]

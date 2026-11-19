@@ -114,10 +114,10 @@ try {
     await driver.waitFor({ key: `queue-chief.${started}` }, { timeoutMs: 30_000 });
     await driver.waitFor({ key: SETUP }, { gone: true });
     const configured = chiefOfRoster();
-    const window = await driver.state('window', { includes: configured?.binding_session ?? '', timeoutMs: 15_000 });
-    runner.writeJson('first-start.json', { configured, window });
+    runner.writeJson('first-start.json', { configured });
     runner.assert(configured?.agent === 'claude' && configured?.model === MOCK_AGENT_MODEL, 'setup saved the preselected harness and model', { configured });
-    runner.assert(Boolean(configured?.binding_session) && window.on_screen === configured.binding_session, 'the Chief woke and is shown', { configured, window });
+    runner.assert(Boolean(configured?.binding_session), 'the Chief woke', { configured });
+    await driver.state('window', { expect: { on_screen: configured.binding_session }, timeoutMs: 15_000 });
     runner.assert(path.dirname(configured.home_dir) === path.join(notebookRoot, 'crew'), "the Chief's home is in the Notebook", { home: configured.home_dir });
     runner.assert(fs.existsSync(path.join(configured.home_dir, 'CHARTER.md')), "the Chief's charter is in the Notebook");
     await screenshot('03-chief-in-session');

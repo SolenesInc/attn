@@ -55,9 +55,9 @@ try {
     const order = observer.desktops.map((desktop) => desktop.id);
     runner.assert(order.indexOf(empty.id) === order.indexOf(keeper.id) + 1, 'the empty desktop sits right below the keeper', order);
     await observer.setCurrentDesktop(keeper.id);
-    await driver.state('profiles', { includes: keeper.id });
+    await driver.state('window', { expect: { current_desktop: keeper.id } });
     await driver.pressKey(keys.select(empty.shortcut_slot));
-    await driver.state('profiles', { includes: empty.id });
+    await driver.state('window', { expect: { current_desktop: empty.id } });
     await driver.waitFor({ key: 'launcher.path.field' });
   });
 
@@ -65,7 +65,7 @@ try {
     await driver.pressKey(keys.close);
     await observer.waitFor(() => !observer.desktop(empty.id), 'the empty desktop closed');
     await driver.waitFor({ key: `sidebar.desktop.${empty.id}` }, { gone: true });
-    await driver.state('profiles', { includes: keeper.id });
+    await driver.state('window', { expect: { current_desktop: keeper.id } });
     runner.assert(observer.currentDesktopId() === keeper.id, 'closing shows the desktop above', observer.describeArrangement());
     await driver.waitFor({ key: 'launcher.path.field' });
   });

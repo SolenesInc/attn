@@ -47,7 +47,7 @@ function buildWorktree(root, branch) {
 const verb = `ledger.row.${sessionId}.verb`;
 async function closeFromTheApp() {
   await driver.click({ key: `sidebar.session.${sessionId}` });
-  await driver.state('window', { includes: sessionId, timeoutMs: 15_000 });
+  await driver.state('window', { expect: { on_screen: sessionId }, timeoutMs: 15_000 });
   await driver.run('session.close');
   await driver.waitFor({ key: `sidebar.session.${sessionId}` }, { gone: true });
   await observer.waitFor(() => !observer.getSession(sessionId), 'the session leaves the live sessions', 15_000);

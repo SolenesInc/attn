@@ -180,7 +180,10 @@ fn a_wait_on_a_covered_window_returns_when_the_daemon_s_change_arrives() {
         ..InitialStateMessage::new()
     });
     let app = App::start(&daemon);
-    let connected = app.ask("state", json!({"of": "desktops", "includes": "Agent t1"}));
+    let connected = app.ask(
+        "state",
+        json!({"of": "desktops", "expect": {"$some": {"panes": {"$some": {"title": "Agent t1"}}}}}),
+    );
     assert_eq!(connected["ok"], true, "{connected}");
 
     let attempts = app.host.inspected.count();
@@ -189,7 +192,7 @@ fn a_wait_on_a_covered_window_returns_when_the_daemon_s_change_arrives() {
     let waiting = std::thread::spawn(move || {
         asker.ask(
             "state",
-            json!({"of": "desktops", "includes": "Agent t9", "timeout_ms": 20_000}),
+            json!({"of": "desktops", "expect": {"$some": {"panes": {"$some": {"title": "Agent t9"}}}}, "timeout_ms": 20_000}),
         )
     });
     assert!(
