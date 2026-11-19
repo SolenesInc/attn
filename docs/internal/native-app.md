@@ -175,13 +175,14 @@ app:
   darken a light one, each by the step a list row takes (1.20:1 and 1.66:1
   from rest in dark, 1.17:1 and 1.50:1 in light). Focus draws a 2-point warm
   ring outside the edge, on a field as on a button, and no state moves a
-  control's edge. Open fills a control with the selected surface. Disabled
-  draws the rest look at half strength, every part alike, the strength
-  rune-kit draws a disabled field at; a warm part first turns neutral, so no
-  disabled control reads as the page's one warm action. It draws no layer and
-  no ring and takes no press. A control that opens in place, `expander`,
-  `disclosure` and a group's head, marks it with `opens_in_place`: a chevron
-  that points at its words closed and down open.
+  control's edge. Open fills a control with the selected surface. A control
+  that opens what it holds below itself, `expander`, `disclosure` and the head
+  of an agent group in Settings, carries `opens_in_place`: a chevron that
+  points right while closed and down while open. Disabled draws a control's
+  rest look at half strength, every part alike, the strength rune-kit draws a
+  disabled field at. A warm part first turns neutral, so no disabled control
+  reads as the page's one warm action. A disabled control draws no layer and
+  no ring and takes no press.
 - **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
   spacing, font and corner methods (`gap`, `padding`, `px`…, `radius`, `font`,
   `TextStyle::new` and the rest). While views move onto the system,
@@ -205,7 +206,7 @@ app:
   keeping to its own width beside words and inside its column, a field's edge
   where every other control's is, a focus ring never cut or dimmed, hover and
   pressed at their measured contrast, and every part of a disabled control at
-  half strength.
+  half strength, a warm one neutral.
 
 A control a view needs that the system lacks is added to `attn-ui` with its
 story and, when it keeps a rule, its test.

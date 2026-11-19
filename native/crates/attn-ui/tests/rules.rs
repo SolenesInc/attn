@@ -457,10 +457,28 @@ fn a_number_field_shows_a_seven_digit_value_whole() {
 }
 
 #[test]
-fn a_segmented_control_stays_inside_its_column_and_truncates_its_labels() {
+fn a_segmented_control_stays_inside_its_column() {
     for dark in [true, false] {
         let rt = story(dark, "Library/Segmented", "Narrow");
         let column = element(&rt, "segmented.column");
+        let track = device(element(&rt, "segmented.long").rect);
+        let segments =
+            ["segment0", "segment1"].map(|k| device(inside(&rt, "segmented.long", k).rect));
+        for glyph in rt.instances.iter().filter(|i| {
+            i.params[1] == rune::render::KIND_GLYPH
+                && i.rect[1] >= track[1]
+                && i.rect[1] + i.rect[3] <= track[1] + track[3]
+                && i.rect[0] + i.rect[2] > track[0]
+        }) {
+            assert!(
+                segments
+                    .iter()
+                    .any(|&[x, _, w, _]| glyph.rect[0] >= x
+                        && glyph.rect[0] + glyph.rect[2] <= x + w),
+                "dark={dark}: a label's glyph at {:?} is drawn outside every segment",
+                glyph.rect.map(|v| v / SCALE)
+            );
+        }
         for key in ["segmented.theme", "segmented.agent", "segmented.long"] {
             let control = element(&rt, key);
             assert!(
@@ -576,7 +594,7 @@ fn shown(rt: &Runtime<()>, part: Part, ground: rune::Color) -> [f32; 3] {
 
 fn same_part(a: &Instance, b: &Instance, edge: bool) -> bool {
     a.params[1] == b.params[1]
-        && a.rect.iter().zip(b.rect).all(|(a, b)| (a - b).abs() <= 0.5)
+        && a.rect.iter().zip(b.rect).all(|(a, b)| (a - b).abs() <= 1.0)
         && (!edge || b.border[3] > 0.0)
         && (edge || b.fill[3] > 0.0)
 }
@@ -620,6 +638,10 @@ fn disabled_draws_every_part_of_every_control_at_half_strength() {
             let disabled = story(dark, name, "Disabled");
             let keys = subjects(name);
             let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+            let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
+            let text = [t.text_primary.r, t.text_primary.g, t.text_primary.b]
+                .map(rune::theme::srgb_encode);
+            let strongest = [0, 1, 2].map(|c| text[c] * STRENGTH + ground[c] * (1.0 - STRENGTH));
             let mut checked = 0;
             for part in parts(&disabled) {
                 let (n, _, _) = point_of(&disabled, part);
@@ -635,22 +657,27 @@ fn disabled_draws_every_part_of_every_control_at_half_strength() {
                         r.max(g).max(b) - r.min(g).min(b) <= 0.06,
                         "{name}, dark={dark}: a disabled warm part still reads warm, {seen:?}"
                     );
+                    assert!(
+                        contrast(seen, ground) <= contrast(strongest, ground) + ROUNDING,
+                        "{name}, dark={dark}: a disabled warm part, {seen:?}, stands out more than text at half strength"
+                    );
                     continue;
                 }
-                let Some(m) = rest
+                let m = rest
                     .instances
                     .iter()
                     .position(|r| same_part(instance, r, edge))
-                else {
-                    continue;
-                };
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "{name}, dark={dark}: a disabled part at {:?} has no part at rest to dim",
+                            instance.rect.map(|v| v / SCALE)
+                        )
+                    });
                 let at_rest = shown(
                     &rest,
                     if edge { Part::Edge(m) } else { Part::Fill(m) },
                     t.bg_panel,
                 );
-                let ground =
-                    [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
                 let expected =
                     [0, 1, 2].map(|c| at_rest[c] * STRENGTH + ground[c] * (1.0 - STRENGTH));
                 if seen == ground && at_rest == ground {
