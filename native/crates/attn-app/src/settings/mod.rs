@@ -51,7 +51,7 @@ pub(crate) fn route_chip(
     target: RouteTarget,
     label: &str,
 ) -> rune::El {
-    route::chip(state, t, target, label, true)
+    route::field_chip(state, t, target, label)
 }
 
 /// The model picker a route chip outside the dialog opened.

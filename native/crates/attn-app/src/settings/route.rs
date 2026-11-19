@@ -4,7 +4,7 @@
 
 use attn_protocol::HarnessModel;
 use attn_ui::Tokens;
-use attn_ui::system::{self, Look, Size, Trigger, TriggerLook, Type, words};
+use attn_ui::system::{self, Control, Look, Size, Trigger, TriggerLook, Type, words};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{Color, El, Key, KeyEvent, TextEdit, Tx, col, row, text};
@@ -533,12 +533,32 @@ fn picker(state: &State) -> Option<&Picker> {
     state.window.settings.route_picker.as_ref()
 }
 
-/// A route chip: the harness, model and effort it runs, opening the picker. A field also
-/// labels each part and discovers its harness's models as it shows.
-pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field: bool) -> El {
-    let Some((value, rules)) = (target.read)(state, &target.id) else {
+/// A route chip inside a row: the harness, model and effort it runs, opening the picker.
+pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str) -> Option<Control> {
+    trigger(state, t, target, label, false).map(|(chip, _)| chip)
+}
+
+/// A route chip in a form: each part labelled, and the tier it recommends when the model is
+/// above it. It discovers its harness's models as it shows.
+pub(crate) fn field_chip(state: &State, t: &Tokens, target: Target, label: &str) -> El {
+    let Some((chip, recommended)) = trigger(state, t, target, label, true) else {
         return row();
     };
+    col()
+        .w_full()
+        .gap(6.0)
+        .child(El::from(chip).w_full())
+        .children(recommended)
+}
+
+fn trigger(
+    state: &State,
+    t: &Tokens,
+    target: Target,
+    label: &str,
+    field: bool,
+) -> Option<(Control, Option<El>)> {
+    let (value, rules) = (target.read)(state, &target.id)?;
     let view = view(state, &value, &rules);
     let key = target.chip_key();
     let open = picker(state).is_some_and(|p| p.target.id == target.id);
@@ -600,11 +620,7 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
             .value(summary)
             .open(open)
             .build(t, press);
-        return col()
-            .w_full()
-            .gap(6.0)
-            .child(El::from(trigger).w_full())
-            .children(recommended);
+        return Some((trigger, recommended));
     }
     let unset = view.effective.is_empty();
     let effort_ink = if view.effort_missing {
@@ -616,6 +632,7 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
         .min_w(0.0)
         .gap(8.0)
         .items_center()
+        .flex_wrap()
         .children(parts.into_iter().map(|(name, v)| {
             let part = match name {
                 "Harness" => words(
@@ -642,13 +659,13 @@ pub(crate) fn chip(state: &State, t: &Tokens, target: Target, label: &str, field
             };
             part.a11y_hidden()
         }));
-    Trigger::new(key, label, content)
+    let trigger = Trigger::new(key, label, content)
         .look(TriggerLook::Quiet)
         .value(summary)
         .open(open)
         .unset(unset)
-        .build(t, press)
-        .into()
+        .build(t, press);
+    Some((trigger, None))
 }
 
 /// What a route runs, as the Tauri app's `.route-badge`: a pill of the harness, the model with

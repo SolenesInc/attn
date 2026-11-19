@@ -7,11 +7,14 @@ use rune_kit::ScrollBarStyle;
 
 use crate::Tokens;
 
+/// How much width the bar of [`scroll_bar`] takes from the box it scrolls.
+pub(crate) const BAR: f32 = 8.0;
+
 /// `App.css`'s `::-webkit-scrollbar`, every scrolling box's bar unless it styles its own: an 8
 /// point `scrollbar_thumb` thumb with round ends, `scrollbar_hover` under the pointer.
 pub fn scroll_bar(t: &Tokens) -> ScrollBarStyle {
     ScrollBarStyle::native(t.scrollbar_thumb, t.scrollbar_hover)
-        .webkit_parts(8.0, 0.0, 0.0)
+        .webkit_parts(BAR, 0.0, 0.0)
         .always()
         .room()
 }

@@ -2,7 +2,7 @@ use rune::{El, col, row};
 use rune_kit::ScrollBar;
 
 use super::block::{Block, Kind, page_gap, spaced};
-use super::measure::{COPY_FLOOR, READING};
+use super::measure::{COPY_FLOOR, MEASURE, READING};
 use crate::Tokens;
 use crate::system::{Said, Space, Type, door, words};
 
@@ -18,6 +18,9 @@ pub struct Page {
 }
 
 impl Page {
+    /// The widest a page draws: its measure between its sides, and its scroll bar.
+    pub const WIDEST: f32 = MEASURE + 2.0 * SIDE.pt() + crate::scroll_bar::BAR;
+
     pub fn new() -> Page {
         Page::default()
     }
@@ -92,13 +95,17 @@ impl Page {
             .min_w(0.0)
             .h_full()
             .fill(t.bg_panel);
-        door::frame(page, Space::S24, Space::S32, Space::S32)
+        let measured = col()
+            .w_full()
+            .max_w(MEASURE)
+            .children(head)
+            .children(status)
+            .child(body);
+        door::frame(page, Space::S24, SIDE, Space::S32)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
-            .children(head)
-            .children(status)
-            .child(body)
+            .child(measured)
             .scroll_bar_styled(crate::scroll_bar(t))
     }
 }
@@ -111,6 +118,7 @@ pub(super) fn head_gap(first: Option<Kind>) -> Space {
         Space::S24
     }
 }
+const SIDE: Space = Space::S32;
 
 /// How strongly the blocks of a page whose feature is off are drawn.
 const DIMMED: f32 = 0.45;

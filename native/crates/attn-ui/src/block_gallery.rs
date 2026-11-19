@@ -5,13 +5,14 @@ use rune_kit::TextInput;
 
 use crate::Tokens;
 use crate::blocks::{
-    Actions, Block, Choices, Disclosure, Field, Head, Inline, Notice, Page, Prose, Refusal,
-    Section, SettingRow, Stack, Status, saved, swatches,
+    Actions, Block, Choices, Disclosure, Empty, Field, Head, Inline, Notice, Page, Prose, Refusal,
+    Section, SettingRow, Stack, Status, SubRow, Table, TableColumns, TableRow, saved, swatches,
 };
 use crate::colors::scheme_for;
 use crate::system::{
-    Beside, Button, Choice, FieldState, Look, Segment, Segmented, Size, Space, Tone, Type, arrows,
-    line_box, number_box, stepper, switch, tag, words,
+    Beside, Button, Choice, Control, FieldState, IconSize, Look, Segment, Segmented, Size, Space,
+    Tone, Trigger, TriggerLook, Type, arrows, expander, icon_box, line_box, number_box, stepper,
+    switch, tag, words,
 };
 
 /// What a block story shows: the state its variant sets.
@@ -26,6 +27,7 @@ pub struct Blocks {
     pub disabled: bool,
     pub saving: bool,
     pub chosen: usize,
+    pub empty: bool,
     pub line: TextEdit,
     pub number: TextEdit,
 }
@@ -41,14 +43,17 @@ pub enum Width {
     /// In the smallest window at 150% text: 800 by 600 shows 533 points, and the Settings page
     /// keeps 163.3 of them for its content.
     Smallest,
+    /// As wide as the window, for a check that sweeps the window's width.
+    Window,
 }
 
 impl Width {
-    fn content(self) -> f32 {
+    fn content(self) -> Option<f32> {
         match self {
-            Width::Wide => 760.0,
-            Width::Narrow => 430.0,
-            Width::Smallest => 163.3,
+            Width::Wide => Some(760.0),
+            Width::Narrow => Some(430.0),
+            Width::Smallest => Some(163.3),
+            Width::Window => None,
         }
     }
 }
@@ -78,6 +83,7 @@ pub const BLOCK_SUBJECTS: &[(&str, &[&str])] = &[
     ("Blocks/Choices", &["choices"]),
     ("Blocks/Disclosure", &["disclosure.block.part"]),
     ("Blocks/Actions", &["actions"]),
+    ("Blocks/Table", &["table"]),
 ];
 
 const LONG_COPY: &str = "Every agent attn starts on this machine, including the ones that run on a schedule and the ones another agent delegates to, reads this before its first turn, so a long value here reaches all of them.";
@@ -132,6 +138,53 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
             Blocks::default,
             actions,
         )))
+        .story(
+            common(Story::new("Blocks/Table", Blocks::default, table))
+                .variant("Open", |s| s.open = true)
+                .variant("Sub-row open", |s| {
+                    s.open = true;
+                    s.chosen = 1;
+                })
+                .variant("Off", |s| s.disabled = true)
+                .variant("Open, focus", |s| {
+                    s.open = true;
+                    s.rings = true;
+                })
+                .variant("Off, focus", |s| {
+                    s.disabled = true;
+                    s.rings = true;
+                })
+                .variant("Off, open, focus", |s| {
+                    s.disabled = true;
+                    s.open = true;
+                    s.rings = true;
+                })
+                .variant("Empty", |s| s.empty = true)
+                .variant("Empty off", |s| {
+                    s.empty = true;
+                    s.disabled = true;
+                })
+                .variant("Empty smallest long", |s| {
+                    s.empty = true;
+                    s.width = Width::Smallest;
+                    s.long = true;
+                })
+                .variant("Empty off smallest long", |s| {
+                    s.empty = true;
+                    s.disabled = true;
+                    s.width = Width::Smallest;
+                    s.long = true;
+                })
+                .variant("Open, window wide", |s| {
+                    s.open = true;
+                    s.width = Width::Window;
+                })
+                .variant("Open narrow", |s| {
+                    s.open = true;
+                    s.chosen = 1;
+                    s.width = Width::Narrow;
+                }),
+        )
 }
 
 pub(crate) fn common(story: Story<Blocks>) -> Story<Blocks> {
@@ -154,9 +207,12 @@ pub(crate) fn tokens(cx: &Cx<Blocks>) -> Tokens {
     scheme_for(None).colors(cx.system_dark()).ui
 }
 
-/// The page's width: the story's content width and the page's inset on both sides.
-fn width(s: &Blocks) -> f32 {
-    s.width.content() + 2.0 * Space::S32.pt()
+/// `page` at the story's width: its content and the page's inset on both sides.
+fn sized(s: &Blocks, page: El) -> El {
+    match s.width.content() {
+        Some(content) => page.w(content + 2.0 * Space::S32.pt()),
+        None => page.w_full(),
+    }
 }
 
 /// The story's blocks on a page of the story's width, as Settings lays them.
@@ -166,7 +222,7 @@ pub(crate) fn stage(s: &Blocks, cx: &mut Cx<Blocks>, t: &Tokens, blocks: Vec<Blo
     }
     el().w_full().h_full().fill(t.bg_panel).child(
         col().w_full().h_full().items_center().child(
-            col().w(width(s)).h_full().child(
+            sized(s, col()).h_full().child(
                 Page::new()
                     .push_all(blocks)
                     .group("stage", "Stage")
@@ -212,7 +268,7 @@ fn number_field(s: &Blocks, key: &str, t: &Tokens) -> El {
         .child(
             Inline::loose()
                 .child(
-                    number_box(input, FieldState::Ready, t)
+                    number_box(input, FieldState::failed_if(s.failed), t)
                         .key(key.to_owned())
                         .into(),
                 )
@@ -424,7 +480,7 @@ fn page(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .w_full()
             .h_full()
             .items_center()
-            .child(col().w(width(s)).h_full().child(page)),
+            .child(sized(s, col()).h_full().child(page)),
     )
 }
 
@@ -442,12 +498,13 @@ fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
         .on_edit(|s: &mut Blocks| &mut s.number);
     let fields = vec![
         Field::new("field.name", title(s, "Name"))
-            .note("required")
+            .note(copy(s, "required"))
             .control(line_box(name, field_state(s), &t).key("field.name.box"))
             .hint(copy(s, "Shown in the sidebar and the ledger."))
             .error(s.failed.then(|| "A name can't hold a space.".to_owned()))
             .build(&t),
         Field::new("field.path", title(s, "Folder"))
+            .note(copy(s, "optional"))
             .mark(s.saving.then(|| saved("field.path.saved", &t)))
             .control(line_box(path, path_state(s), &t).key("field.path.box"))
             .action(
@@ -615,4 +672,239 @@ fn field_state(s: &Blocks) -> FieldState {
     } else {
         FieldState::failed_if(s.failed)
     }
+}
+
+/// The fixed column of the table story: a model chip as Delegation shows one.
+const RUNS_ON: f32 = 280.0;
+
+fn model(key: &str, said: &str, unset: bool, t: &Tokens) -> Control {
+    let ink = if unset { t.warning } else { t.text_primary };
+    Trigger::new(
+        key,
+        format!("Model for {key}"),
+        words(said.to_owned(), Type::Body, ink).wrap(),
+    )
+    .look(TriggerLook::Quiet)
+    .value(said)
+    .unset(unset)
+    .build(t, noop)
+}
+
+fn mark(initial: &str, t: &Tokens) -> Control {
+    icon_box(
+        words(initial.to_owned(), Type::Label, t.text_secondary),
+        false,
+        t,
+    )
+}
+
+fn table(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
+    let t = tokens(cx);
+    let mut columns = TableColumns::new("Role");
+    let runs_on = columns.fixed("Runs on", RUNS_ON);
+    let toggle = |s: &mut Blocks, _: &mut Tx| s.open = !s.open;
+    let fallback = TableRow::new("table.fallback", "Anything else", noop)
+        .leading(icon_box(
+            words("→", Type::Label, t.text_secondary),
+            true,
+            &t,
+        ))
+        .subtitle("When no role fits the work.")
+        .control(
+            runs_on,
+            model("table.fallback.model", "Claude · Sonnet", false, &t),
+        )
+        .more("Anything else details");
+    if s.empty {
+        let empty = Empty::new(
+            "table.empty",
+            "No roles yet",
+            "Start with Attn's maintained roles, then pick a model for each.",
+            [
+                El::from(
+                    Button::new("Add Attn roles")
+                        .look(Look::Primary)
+                        .on_press_tx(noop)
+                        .build(&t),
+                )
+                .key("table.adopt"),
+                El::from(
+                    Button::new("+ Custom role")
+                        .look(Look::Plain)
+                        .on_press_tx(noop)
+                        .build(&t),
+                )
+                .key("table.add"),
+            ],
+        );
+        let block = Table::new("table", columns)
+            .empty(empty)
+            .row(fallback)
+            .dimmed(s.disabled)
+            .build(&t);
+        return stage(s, cx, &t, vec![block]);
+    }
+    let name = if s.long { LONG_TITLE } else { "Builder" };
+    let alternative = |key: &str, title: &'static str, when: &'static str, open: bool| {
+        let sub = SubRow::new(
+            format!("table.alt.{key}"),
+            title,
+            |s: &mut Blocks, _: &mut Tx| {
+                s.chosen = if s.chosen == 1 { 0 } else { 1 };
+            },
+        )
+        .note("when", when, when.is_empty())
+        .control(
+            runs_on,
+            model(
+                &format!("table.alt.{key}.model"),
+                "Codex · gpt-5",
+                false,
+                &t,
+            ),
+        )
+        .trailing(
+            Button::mark("×", IconSize::Large)
+                .look(Look::Quiet)
+                .size(Size::Compact)
+                .on_press_tx(noop)
+                .build(&t)
+                .key(format!("table.alt.{key}.remove"))
+                .label(format!("Remove {title}")),
+        )
+        .open(open);
+        if !open {
+            return sub;
+        }
+        sub.details(
+            Field::new(format!("table.alt.{key}.name"), "Name")
+                .value(title.to_owned())
+                .build(&t),
+        )
+        .details(
+            Actions::new(format!("table.alt.{key}.actions"))
+                .push(
+                    Button::new("Make default")
+                        .look(Look::Plain)
+                        .on_press_tx(noop)
+                        .build(&t)
+                        .key(format!("table.alt.{key}.default")),
+                )
+                .build(),
+        )
+    };
+    let mut builder = TableRow::new("table.builder", name, toggle)
+        .leading(mark("B", &t))
+        .tag("Attn", Tone::Neutral)
+        .subtitle(copy(s, "Builds an agreed brief or plan."))
+        .control(
+            runs_on,
+            model("table.builder.model", "Claude · Opus · high", false, &t),
+        )
+        .more("Builder details")
+        .open(s.open);
+    if s.open {
+        builder = builder
+            .details(
+                Field::new("table.builder.instructions", "Instructions")
+                    .note("maintained by Attn")
+                    .value(copy(s, "Implement the brief. Report what you verified.").to_owned())
+                    .build(&t),
+            )
+            .sub_row(alternative(
+                "fast",
+                "Fast",
+                "Small edits with a clear answer",
+                s.chosen == 1,
+            ))
+            .sub_row(alternative("unnamed", "Unnamed alternative", "", false))
+            .sub_footer(
+                runs_on,
+                Button::new("+ Alternative model")
+                    .look(Look::Quiet)
+                    .size(Size::Compact)
+                    .on_press_tx(noop)
+                    .build(&t)
+                    .key("table.builder.add-alternative"),
+            )
+            .actions(
+                Actions::new("table.builder.actions")
+                    .push(
+                        Button::new("Make an editable copy")
+                            .look(Look::Plain)
+                            .on_press_tx(noop)
+                            .build(&t)
+                            .key("table.builder.copy"),
+                    )
+                    .then_end()
+                    .push(
+                        Button::new("Turn off")
+                            .look(Look::Quiet)
+                            .on_press_tx(noop)
+                            .build(&t)
+                            .key("table.builder.turn"),
+                    )
+                    .push(
+                        Button::new("Delete")
+                            .look(Look::Danger)
+                            .on_press_tx(noop)
+                            .build(&t)
+                            .key("table.builder.delete"),
+                    ),
+            );
+    } else {
+        builder = builder.control(
+            runs_on,
+            expander(
+                "table.builder.alternatives",
+                "2 alternatives",
+                false,
+                false,
+                &t,
+                toggle,
+            ),
+        );
+    }
+    let orchestrator = TableRow::new("table.orchestrator", "Orchestrator", noop)
+        .leading(mark("O", &t))
+        .tag("Needs a model", Tone::Warn)
+        .subtitle("Runs an agreed plan through Builders.")
+        .control(
+            runs_on,
+            model("table.orchestrator.model", "Choose a model", true, &t),
+        )
+        .more("Orchestrator details");
+    let reviewer = TableRow::new("table.reviewer", "Reviewer", noop)
+        .leading(mark("R", &t))
+        .tag("Off", Tone::Neutral)
+        .subtitle("Reviews a change against its plan.")
+        .control(
+            runs_on,
+            model("table.reviewer.model", "Claude · Opus", false, &t),
+        )
+        .more("Reviewer details")
+        .off(true);
+    let block = Table::new("table", columns)
+        .rows([builder, orchestrator, reviewer, fallback])
+        .footer(
+            "table.footer",
+            Actions::new("table.footer.actions")
+                .push(
+                    Button::new("+ Custom role")
+                        .look(Look::Quiet)
+                        .on_press_tx(noop)
+                        .build(&t)
+                        .key("table.add"),
+                )
+                .push(
+                    Button::new("+ Scout")
+                        .look(Look::Quiet)
+                        .on_press_tx(noop)
+                        .build(&t)
+                        .key("table.adopt"),
+                ),
+        )
+        .dimmed(s.disabled)
+        .build(&t);
+    stage(s, cx, &t, vec![block])
 }

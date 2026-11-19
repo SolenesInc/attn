@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use attn_app::desktop::FocusStyle;
 use attn_app::screen::Screens;
@@ -17,11 +18,11 @@ use attn_protocol::{
     AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
     BrowseDirectoryResultMessage, BusConsumerStatus, BusStatusResultMessage,
     CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
-    CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
-    DelegationPreferencesResultMessage, DelegationRole, Desktop, DesktopPane,
-    DesktopTileContentMessage, DirectoryEntry, FileActivity, FsIndexResultMessage, GardenReview,
-    GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun,
-    GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
+    CrewHandoffsGetResultMessage, CrewMember, DelegationChoice, DelegationFallback,
+    DelegationPreferences, DelegationPreferencesResultMessage, DelegationRole, DelegationSelection,
+    Desktop, DesktopPane, DesktopTileContentMessage, DirectoryEntry, FileActivity,
+    FsIndexResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe,
+    GardenReviewRun, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
     HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
     InstallCodexUpdateResultMessage, LaunchDesktopResultMessage, LaunchDesktopSetting,
     NotificationListResultMessage, OutpostInfo, OutpostUpdate, PR, PartyView, PathInspection,
@@ -647,7 +648,7 @@ fn pixels<S: 'static>(
     rt: &mut Runtime<S>,
     compositor: &mut impl Compositor<S>,
 ) -> (u32, u32, Vec<u8>) {
-    GPU.with(|gpu| draw(gpu, rt, compositor))
+    draw(&GPU, rt, compositor)
 }
 
 fn draw<S: 'static>(
@@ -688,13 +689,16 @@ fn draw<S: 'static>(
     (size.0, size.1, target.read(&gpu.device))
 }
 
-thread_local! {
-    static GPU: Gpu = Gpu::try_with_features(
+static GPU: LazyLock<Gpu> = LazyLock::new(|| {
+    Gpu::try_with_features(
         Gpu::instance(),
         None,
         Compositor::<attn_app::State>::features(&Screens::default()),
     )
-    .unwrap_or_else(|error| panic!("{error}"));
+    .unwrap_or_else(|error| panic!("{error}"))
+});
+
+thread_local! {
     static OUT: std::cell::RefCell<PathBuf> = std::cell::RefCell::default();
     static SCHEME: std::cell::RefCell<Option<String>> = std::cell::RefCell::default();
     static ONLY: std::cell::RefCell<Vec<(String, bool)>> = std::cell::RefCell::default();
@@ -2451,26 +2455,295 @@ fn notebook_finder(dark: bool) {
 }
 
 /// Delegation with no roles yet and Attn's Builder to add: its Add Attn roles and + Custom
-/// role.
+/// role, and the same in the smallest window at 150% text.
 fn settings_delegation(dark: bool) {
-    settings_section(dark, "delegation", "delegation", &[], |daemon| {
-        daemon.on("delegation_preferences_get", |r: &Request| {
-            message(DelegationPreferencesResultMessage {
-                request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                success: true,
-                preferences: Some(DelegationPreferences::default()),
-                templates: Some(vec![DelegationRole {
-                    id: "builder".into(),
-                    builtin: Some("builder".into()),
-                    ..DelegationRole::default()
-                }]),
-                expanded_roles: Some(Vec::new()),
-                harnesses: Some(Vec::new()),
-                workflow_skill_paths: Some(Vec::new()),
-                ..DelegationPreferencesResultMessage::new()
-            })
-        });
+    let mut world = empty_delegation_world(dark, &[]);
+    snap(&mut world, "settings-delegation", dark);
+    let mut world = empty_delegation_world(dark, &[("uiScale", "1.5")]);
+    world.resize((800.0, 600.0));
+    world.gesture(|app| {
+        app.update(|_, tx| {
+            tx.scroll_center_in_instant("settings.body", "settings.delegation.adopt")
+        })
     });
+    snap(&mut world, "settings-delegation-empty-smallest", dark);
+}
+
+fn empty_delegation_world(dark: bool, settings: &[(&str, &str)]) -> World {
+    settings_world(
+        dark,
+        "delegation",
+        "delegation",
+        settings,
+        |_| {},
+        |daemon| {
+            daemon.on("delegation_preferences_get", |r: &Request| {
+                message(DelegationPreferencesResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    preferences: Some(DelegationPreferences::default()),
+                    templates: Some(vec![DelegationRole {
+                        id: "builder".into(),
+                        builtin: Some("builder".into()),
+                        ..DelegationRole::default()
+                    }]),
+                    expanded_roles: Some(Vec::new()),
+                    harnesses: Some(Vec::new()),
+                    workflow_skill_paths: Some(Vec::new()),
+                    ..DelegationPreferencesResultMessage::new()
+                })
+            });
+        },
+    )
+}
+
+fn route(harness: &str, model: &str, effort: &str) -> DelegationSelection {
+    DelegationSelection {
+        harness: harness.into(),
+        provider: String::new(),
+        model: model.into(),
+        effort: effort.into(),
+    }
+}
+
+fn delegation_role(
+    id: &str,
+    name: &str,
+    icon: &str,
+    description: &str,
+    choices: Vec<(&str, &str, &str, DelegationSelection)>,
+) -> DelegationRole {
+    DelegationRole {
+        id: id.into(),
+        name: name.into(),
+        icon: icon.into(),
+        enabled: true,
+        description: description.into(),
+        instructions:
+            "Implement the agreed brief. Report what you verified and what you could not.".into(),
+        default_choice_id: choices.first().map_or_else(String::new, |c| c.0.into()),
+        choices: choices
+            .into_iter()
+            .map(|(id, name, when, selection)| DelegationChoice {
+                id: id.into(),
+                name: name.into(),
+                when: when.into(),
+                selection,
+            })
+            .collect(),
+        builtin: None,
+    }
+}
+
+/// A delegation table as people keep one: a maintained Builder with two alternatives, a role
+/// that still needs a model, one turned off, and the fallback.
+fn delegation_roles() -> Vec<DelegationRole> {
+    let builder = DelegationRole {
+        builtin: Some("builder".into()),
+        ..delegation_role(
+            "builder",
+            "Builder",
+            "code",
+            "Implements an agreed brief or plan, and reports what it verified.",
+            vec![
+                ("default", "", "", route("claude", "opus", "high")),
+                (
+                    "fast",
+                    "Fast",
+                    "Small edits with one clear answer, such as a rename or a copy change.",
+                    route("claude", "sonnet", "medium"),
+                ),
+                ("unnamed", "", "", route("codex", "", "")),
+            ],
+        )
+    };
+    let orchestrator = delegation_role(
+        "orchestrator",
+        "Orchestrator",
+        "layers",
+        "Runs an agreed plan through Builders and reviews their work.",
+        vec![("default", "", "", DelegationSelection::default())],
+    );
+    let reviewer = DelegationRole {
+        enabled: false,
+        ..delegation_role(
+            "reviewer",
+            "Reviewer",
+            "search",
+            "Reviews a change against its plan before it lands.",
+            vec![
+                ("default", "", "", route("claude", "opus", "high")),
+                (
+                    "second",
+                    "Second opinion",
+                    "A change that is costly to reverse.",
+                    route("codex", "", ""),
+                ),
+            ],
+        )
+    };
+    vec![builder, orchestrator, reviewer]
+}
+
+/// Settings on Delegation, its table read as `preferences` say, or refused with `failure`,
+/// then `then` done to it, shot as `name`.
+fn delegation_scene(
+    dark: bool,
+    name: &str,
+    enabled: bool,
+    failure: Option<&'static str>,
+    settings: &[(&str, &str)],
+    then: impl FnOnce(&mut World),
+) {
+    let mut world = settings_world(
+        dark,
+        "delegation",
+        "delegation",
+        settings,
+        |_| {},
+        move |daemon| {
+            daemon.on("delegation_preferences_get", move |r: &Request| {
+                let harness = |id: &str, name: &str| Harness {
+                    id: id.into(),
+                    name: name.into(),
+                    available: true,
+                    model_pin: true,
+                    effort_pin: true,
+                    discovery: true,
+                };
+                let roles = delegation_roles();
+                message(DelegationPreferencesResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: failure.is_none(),
+                    error: failure.map(String::from),
+                    preferences: failure.is_none().then(|| DelegationPreferences {
+                        enabled,
+                        revision: 3,
+                        workflow_skill_enabled: true,
+                        roles: roles.clone(),
+                        fallback: DelegationFallback {
+                            instructions: String::new(),
+                            selection: route("claude", "sonnet", "medium"),
+                        },
+                    }),
+                    harnesses: Some(vec![
+                        harness("claude", "Claude Code"),
+                        harness("codex", "Codex"),
+                    ]),
+                    templates: Some(vec![roles[0].clone()]),
+                    expanded_roles: Some(roles),
+                    workflow_skill_paths: Some(Vec::new()),
+                    ..DelegationPreferencesResultMessage::new()
+                })
+            });
+            daemon.on("harness_models", |r: &Request| {
+                let model = |id: &str, name: &str, tier: &str| HarnessModel {
+                    harness: "claude".into(),
+                    id: id.into(),
+                    name: name.into(),
+                    access: "unknown".into(),
+                    effort_support: "supported".into(),
+                    effort_levels: ["low", "medium", "high"].map(String::from).to_vec(),
+                    tier: Some(tier.into()),
+                    shipped_tier: Some(tier.into()),
+                    tier_source: "shipped".into(),
+                    ..HarnessModel::default()
+                };
+                message(HarnessModelsResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    models: vec![
+                        model("opus", "Opus 5.5", "deep"),
+                        model("sonnet", "Sonnet 5.5", "standard"),
+                    ],
+                    ..HarnessModelsResultMessage::new()
+                })
+            });
+        },
+    );
+    then(&mut world);
+    snap(&mut world, name, dark);
+}
+
+fn open_builder(world: &mut World) {
+    world.gesture(|app| app.click(Target::key("settings.delegation.role.builder")));
+}
+
+/// Delegation's table in each state a person meets it in: rows at rest, a row open, an
+/// alternative open, the narrowest window, the smallest window with the largest text and the
+/// open row focused, the table switched off, and a load that failed.
+fn settings_delegation_table(dark: bool) {
+    delegation_scene(dark, "settings-delegation-roles", true, None, &[], |_| {});
+    delegation_scene(
+        dark,
+        "settings-delegation-open",
+        true,
+        None,
+        &[],
+        open_builder,
+    );
+    delegation_scene(
+        dark,
+        "settings-delegation-alternative",
+        true,
+        None,
+        &[],
+        |world| {
+            open_builder(world);
+            world.gesture(|app| {
+                app.click(Target::key("settings.delegation.alternative.builder/fast"))
+            });
+        },
+    );
+    delegation_scene(
+        dark,
+        "settings-delegation-narrow",
+        true,
+        None,
+        &[],
+        |world| {
+            world.resize((800.0, SIZE.1));
+            open_builder(world);
+        },
+    );
+    delegation_scene(
+        dark,
+        "settings-delegation-smallest-open",
+        true,
+        None,
+        &[("uiScale", "1.5")],
+        |world| {
+            world.resize((800.0, 600.0));
+            open_builder(world);
+            world.gesture(|app| {
+                app.update(|_, tx| {
+                    tx.scroll_center_in_instant(
+                        "settings.body",
+                        "settings.delegation.role.builder",
+                    );
+                    tx.focus("settings.delegation.role.builder", true);
+                })
+            });
+            snap(world, "settings-delegation-smallest-focused", dark);
+            world.gesture(|app| {
+                app.update(|_, tx| {
+                    tx.scroll_center_in_instant(
+                        "settings.body",
+                        "settings.delegation.alternative.builder/fast",
+                    )
+                })
+            });
+        },
+    );
+    delegation_scene(dark, "settings-delegation-off", false, None, &[], |_| {});
+    delegation_scene(
+        dark,
+        "settings-delegation-failed",
+        true,
+        Some("Couldn't read the delegation table: the daemon is restarting."),
+        &[],
+        |_| {},
+    );
 }
 
 /// Phones on, with the profile's Pair a phone.
@@ -5673,6 +5946,12 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("notifications_failed", || notifications_failed(dark));
         scene("desktop_overview", || desktop_overview(dark));
         scene("settings_delegation", || settings_delegation(dark));
+        scene("settings_delegation_table", || {
+            settings_delegation_table(dark)
+        });
+        scene("settings_bottom", || {
+            settings_bottom(dark, "general", "appearance", &[])
+        });
         scene("settings_section", || {
             settings_section(dark, "outposts", "outposts", SWITCHED_ON, |_| {})
         });

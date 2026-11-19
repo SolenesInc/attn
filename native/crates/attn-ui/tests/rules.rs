@@ -5,6 +5,8 @@ use attn_ui::Tokens;
 use attn_ui::blocks::BannerTone;
 use attn_ui::colors::scheme_for;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
+use rune::motion_gate::check::paint::{C_FILL, C_TEXT, Paint};
+use rune::motion_gate::{Recording, Sampler};
 use rune::render::Instance;
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Key, KeyEvent, Mods, Runtime, el};
 
@@ -173,7 +175,9 @@ fn every_focus_ring_is_drawn_whole_and_undimmed() {
     for name in stories {
         for dark in [true, false] {
             let t = tokens(dark);
-            let rt = story(dark, name, "Focus");
+            let mut rt = story(dark, name, "Focus");
+            let painted = paint_one_frame(&mut rt);
+            let shown = rt.elements();
             let focusable: Vec<ElementInfo> = rt
                 .elements()
                 .into_iter()
@@ -193,14 +197,51 @@ fn every_focus_ring_is_drawn_whole_and_undimmed() {
                     ring.rect,
                     ring.clip
                 );
+                let shown_at = least_fade_within(&painted, &shown, &e);
                 assert!(
-                    ring.border[3] >= 0.999 && e.opacity >= 0.999,
-                    "{name}, dark={dark}: {:?}'s ring is dimmed",
+                    ring.border[3] >= 0.999 && e.opacity >= 0.999 && shown_at >= 0.999,
+                    "{name}, dark={dark}: {:?}'s ring is dimmed (it shows at {shown_at})",
                     e.key
                 );
             }
         }
     }
+}
+
+/// What every element paints on one frame, with the fades of the layers it sits in.
+fn paint_one_frame(rt: &mut Runtime<()>) -> Recording {
+    let mut sampler = Sampler::new(rt, 60.0);
+    sampler.before(rt);
+    let awake = rt.frame(1.0);
+    sampler.frame(rt, awake);
+    sampler.rec
+}
+
+fn painted<'a>(rec: &'a Recording, e: &ElementInfo) -> Option<&'a Paint> {
+    rec.tracks
+        .iter()
+        .find(|track| track.path == e.path)
+        .and_then(|track| track.paint_at(0))
+}
+
+/// How much of its own colour the least faded part of `control` shows: a fade on `control`
+/// reaches all it holds, so nothing inside shows more than the ring does.
+fn least_fade_within(rec: &Recording, shown: &[ElementInfo], control: &ElementInfo) -> f32 {
+    let inside = format!("{}/", control.path);
+    shown
+        .iter()
+        .filter(|e| e.path == control.path || e.path.starts_with(&inside))
+        .filter_map(|e| {
+            let paint = painted(rec, e)?;
+            let fill = (e.fill.a > 0.01).then(|| paint.colors[C_FILL].a / e.fill.a);
+            let ink = e
+                .text_color
+                .filter(|c| c.a > 0.01)
+                .map(|c| paint.colors[C_TEXT].a / c.a);
+            fill.into_iter().chain(ink).reduce(f32::max)
+        })
+        .reduce(f32::max)
+        .unwrap_or(0.0)
 }
 
 /// Each control a pointer can press, by story and the key of its pressed surface (`a/b` is `b`
@@ -1439,6 +1480,15 @@ const PAGE_VARIANTS: [&str; 6] = [
 ];
 const WIDTHS: [&str; 5] = ["Rest", "Long", "Narrow", "Narrow long", "Smallest long"];
 
+/// Each width every block story draws at, and the states a story draws only at its smallest.
+fn widths(story: &str) -> Vec<&'static str> {
+    let smallest_states: &[&str] = match story {
+        "Blocks/Table" => &["Empty smallest long", "Empty off smallest long"],
+        _ => &[],
+    };
+    WIDTHS.iter().chain(smallest_states).copied().collect()
+}
+
 fn right(e: &ElementInfo) -> f32 {
     e.rect[0] + e.rect[2]
 }
@@ -1614,7 +1664,7 @@ fn no_part_of_a_block_runs_past_its_sides_at_any_width() {
         .iter()
         .chain(attn_ui::settings_gallery::SETTINGS_SUBJECTS)
     {
-        for variant in WIDTHS {
+        for variant in widths(story) {
             let rt = block_story(true, story, variant);
             for key in subjects {
                 let block = element(&rt, key);
@@ -1687,7 +1737,7 @@ fn a_controls_box_and_ring_take_in_everything_it_draws_at_any_width() {
         .iter()
         .chain(attn_ui::settings_gallery::SETTINGS_SUBJECTS)
     {
-        for variant in WIDTHS {
+        for variant in widths(story) {
             let rt = block_story(true, story, variant);
             let elements = rt.elements();
             for control in elements.iter().filter(|e| e.focusable) {
@@ -1927,6 +1977,471 @@ fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it()
             assert!(
                 apart >= CONTROL_EDGE - ROUNDING,
                 "{key}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {CONTROL_EDGE}:1"
+            );
+        }
+    }
+}
+
+const TABLE_ROWS: [&str; 4] = [
+    "table.builder",
+    "table.orchestrator",
+    "table.reviewer",
+    "table.fallback",
+];
+const RAIL: f32 = 2.0;
+const FIELD: f32 = 504.0;
+const GLYPH_SLACK: f32 = 1.5;
+
+/// The glyphs drawn in `within` that some part of shows: past the clip each glyph carries and the
+/// clip of every layer it is drawn in.
+fn shown_glyphs(rt: &Runtime<()>, within: [f32; 4]) -> Vec<[f32; 4]> {
+    use rune::render::{KIND_GLYPH, KIND_LAYER, KIND_LAYER_END};
+    let area = device(within);
+    let mut layers: Vec<[f32; 4]> = Vec::new();
+    let mut shown = Vec::new();
+    for i in &rt.instances {
+        let kind = i.params[1];
+        if kind == KIND_LAYER {
+            layers.push(i.clip);
+        } else if kind == KIND_LAYER_END {
+            layers.pop();
+        } else if kind == KIND_GLYPH {
+            let [x, y, w, h] = i.rect;
+            let seen = layers
+                .iter()
+                .chain([&i.clip])
+                .fold([x, y, x + w, y + h], |r, c| {
+                    [
+                        r[0].max(c[0]),
+                        r[1].max(c[1]),
+                        r[2].min(c[2]),
+                        r[3].min(c[3]),
+                    ]
+                });
+            let (cx, cy) = (x + w / 2.0, y + h / 2.0);
+            let within = cx >= area[0]
+                && cx <= area[0] + area[2]
+                && cy >= area[1]
+                && cy <= area[1] + area[3];
+            if seen[0] < seen[2] && seen[1] < seen[3] && within {
+                shown.push(i.rect.map(|v| v / SCALE));
+            }
+        }
+    }
+    shown
+}
+
+fn words_left(rt: &Runtime<()>, e: &ElementInfo) -> f32 {
+    shown_glyphs(rt, e.rect)
+        .iter()
+        .map(|g| g[0])
+        .fold(f32::INFINITY, f32::min)
+}
+
+fn middle(e: &ElementInfo) -> f32 {
+    e.rect[1] + e.rect[3] / 2.0
+}
+
+#[test]
+fn a_table_rows_parts_share_its_first_line() {
+    for variant in ["Rest", "Long", "Narrow", "Narrow long", "Open"] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        for row in TABLE_ROWS {
+            let who = element(&rt, row);
+            let band = who.rect[1] + 16.0;
+            let more = element(&rt, &format!("{row}.more"));
+            assert!(
+                (middle(&more) - band).abs() < 0.5,
+                "{variant} {row}: its more button centres at {} off its first line at {band}",
+                middle(&more)
+            );
+            let model = element(&rt, &format!("{row}.model"));
+            if model.rect[0] > right(&who) {
+                assert!(
+                    (middle(&model) - band).abs() < 0.5,
+                    "{variant} {row}: its control centres at {} off its first line at {band}",
+                    middle(&model)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_tables_control_column_has_one_left_edge() {
+    for (variant, keys) in [
+        (
+            "Rest",
+            &[
+                "table.builder.model",
+                "table.builder.alternatives",
+                "table.orchestrator.model",
+                "table.reviewer.model",
+                "table.fallback.model",
+            ][..],
+        ),
+        (
+            "Open",
+            &[
+                "table.builder.model",
+                "table.alt.fast.model",
+                "table.alt.unnamed.model",
+                "table.builder.add-alternative",
+                "table.orchestrator.model",
+            ][..],
+        ),
+    ] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        let edges: Vec<(&str, f32)> = keys
+            .iter()
+            .map(|k| (*k, words_left(&rt, &element(&rt, k))))
+            .collect();
+        let first = edges[0].1;
+        for (key, edge) in &edges {
+            assert!(
+                (edge - first).abs() <= GLYPH_SLACK,
+                "{variant}: {key}'s words start at {edge}, off the column's edge at {first}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_sub_row_starts_twelve_from_its_rail() {
+    for variant in ["Open", "Sub-row open", "Open narrow"] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        let column = words_left(&rt, &element(&rt, "table.builder.instructions.label"));
+        for sub in ["table.alt.fast", "table.alt.unnamed"] {
+            let at = words_left(&rt, &element(&rt, sub));
+            let want = column + RAIL + 12.0;
+            assert!(
+                (at - want).abs() <= GLYPH_SLACK,
+                "{variant} {sub}: its words start at {at}, not 12 past the rail at {}",
+                column + RAIL
+            );
+        }
+    }
+}
+
+#[test]
+fn an_open_rows_details_end_with_the_name_column() {
+    for variant in ["Open", "Sub-row open", "Open narrow"] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        let who = element(&rt, "table.builder");
+        let model = element(&rt, "table.builder.model");
+        let names_end = if model.rect[0] > right(&who) {
+            model.rect[0]
+        } else {
+            right(&element(&rt, "table.builder.more"))
+        };
+        for key in [
+            "table.builder.instructions.field",
+            "table.alt.fast.name.field",
+        ] {
+            let Some(details) = rt
+                .elements()
+                .iter()
+                .find(|e| e.key.as_deref() == Some(key))
+                .cloned()
+            else {
+                continue;
+            };
+            assert!(
+                details.rect[2] <= FIELD + 0.5,
+                "{variant} {key}: {} wide, past the field measure {FIELD}",
+                details.rect[2]
+            );
+            assert!(
+                right(&details) <= names_end + 0.5,
+                "{variant} {key}: ends at {}, past the name column's end at {names_end}",
+                right(&details)
+            );
+        }
+    }
+}
+
+#[test]
+fn a_narrow_tables_head_names_only_the_columns_on_its_line() {
+    for (variant, letters) in [("Rest", "ROLERUNSON".len()), ("Narrow", "ROLE".len())] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        let head = element(&rt, "table.head");
+        let shown = shown_glyphs(&rt, head.rect);
+        assert_eq!(
+            shown.len(),
+            letters,
+            "{variant}: the head shows {} letters, not the {letters} of the columns on its line",
+            shown.len()
+        );
+        let cut = shown.iter().find(|g| g[1] + g[3] > bottom(&head) + 0.5);
+        assert!(
+            cut.is_none(),
+            "{variant}: a head label at {cut:?} runs past the head's edge"
+        );
+    }
+}
+
+#[test]
+fn a_tables_footer_starts_on_the_name_column() {
+    for variant in ["Rest", "Narrow", "Open"] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        let names = words_left(&rt, &element(&rt, "table.head"));
+        let footer = words_left(&rt, &element(&rt, "table.add"));
+        assert!(
+            (footer - names).abs() <= GLYPH_SLACK,
+            "{variant}: the footer's words start at {footer}, off the name column at {names}"
+        );
+    }
+}
+
+/// How far two neighbouring glyphs' boxes reach into each other in a word, as kerning sets them.
+const KERN: f32 = 2.0;
+
+#[test]
+fn a_fields_label_and_note_never_overlap() {
+    for variant in ["Rest", "Long", "Narrow", "Narrow long"] {
+        let rt = block_story(true, "Blocks/Field", variant);
+        for key in ["field.name.label", "field.path.label"] {
+            let glyphs = shown_glyphs(&rt, element(&rt, key).rect);
+            for (i, a) in glyphs.iter().enumerate() {
+                for b in &glyphs[i + 1..] {
+                    let across = (a[0] + a[2]).min(b[0] + b[2]) - a[0].max(b[0]);
+                    let down = (a[1] + a[3]).min(b[1] + b[3]) - a[1].max(b[1]);
+                    let apart = across <= KERN || down <= KERN;
+                    assert!(apart, "{variant} {key}: glyphs at {a:?} and {b:?} overlap");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_switched_off_empty_table_draws_what_it_offers_as_switched_on() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let off = block_story(dark, "Blocks/Table", "Empty off");
+        let on = block_story(dark, "Blocks/Table", "Empty");
+        let empty = device(element(&off, "table.empty").rect);
+        let mut checked = 0;
+        for part in parts(&off) {
+            let (n, _, _) = point_of(&off, part);
+            if !holds_all(empty, off.instances[n].rect) {
+                continue;
+            }
+            let edge = matches!(part, Part::Edge(_));
+            let m = on
+                .instances
+                .iter()
+                .position(|r| same_part(&off.instances[n], r, edge))
+                .expect("the empty state draws the same parts switched on");
+            let seen = shown(&off, part, t.bg_panel);
+            let lit = shown(
+                &on,
+                if edge { Part::Edge(m) } else { Part::Fill(m) },
+                t.bg_panel,
+            );
+            checked += 1;
+            assert!(
+                (0..3).all(|c| (seen[c] - lit[c]).abs() <= BLEND),
+                "dark={dark}: the off table's empty state shows {seen:?} at {:?}, and {lit:?} switched on",
+                off.instances[n].rect.map(|v| v / SCALE)
+            );
+        }
+        assert!(checked > 0, "dark={dark}: the empty state draws nothing");
+    }
+}
+
+/// Rows of the Table story that carry a tag, by the key of the name that opens the row and the
+/// key of the tag.
+const TAGGED_ROWS: [(&str, &str); 2] = [
+    ("table.builder", "table.builder.tag.Attn"),
+    ("table.orchestrator", "table.orchestrator.tag.Needs a model"),
+];
+
+/// How far the tag keyed `key` draws its edge from what the frame paints under the tag.
+fn tag_edge_step(rt: &Runtime<()>, key: &str, ground: rune::Color) -> f32 {
+    let tag = device(element(rt, key).rect);
+    let (at, edge) = rt
+        .instances
+        .iter()
+        .enumerate()
+        .find(|(_, i)| near(i.rect, tag) && i.border[3] > 0.0 && i.params[0] > 0.0)
+        .unwrap_or_else(|| panic!("{key} draws no edge"));
+    let ground = [ground.r, ground.g, ground.b].map(rune::theme::srgb_encode);
+    let under = rt.instances[..at]
+        .iter()
+        .filter(|i| holds_all(i.rect, tag))
+        .fold(ground, |below, i| over(i.fill, below));
+    contrast(over(edge.border, under), under)
+}
+
+#[test]
+fn a_tags_edge_stands_a_hover_step_from_every_fill_it_sits_on() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let step = if dark {
+            ROW_STEPS_DARK.0
+        } else {
+            ROW_STEPS_LIGHT.0
+        } - ROUNDING;
+        for (name, tag) in TAGGED_ROWS {
+            for variant in ["Rest", "Open"] {
+                let mut rt = block_story(dark, "Blocks/Table", variant);
+                let mut seen = vec![(variant, tag_edge_step(&rt, tag, t.bg_app))];
+                let at = element(&rt, name).rect;
+                let (x, y) = (at[0] + at[2] / 2.0, at[1] + at[3] / 2.0);
+                rt.pointer_move(x, y);
+                rt.frame(1.0);
+                rt.frame(1.0);
+                seen.push(("hovered", tag_edge_step(&rt, tag, t.bg_app)));
+                rt.pointer_down(x, y);
+                rt.frame(1.0);
+                rt.frame(1.0);
+                seen.push(("pressed", tag_edge_step(&rt, tag, t.bg_app)));
+                for (on, measured) in seen {
+                    assert!(
+                        measured >= step,
+                        "dark={dark}: {tag}'s edge on its {variant} row {on} stands {measured:.2}:1 from what it sits on, under the hover step {step:.2}:1"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The table's widths a window from the smallest to the widest Settings page gives it.
+const TABLE_SWEEP: std::ops::RangeInclusive<u32> = 160..=800;
+
+#[test]
+fn a_tables_head_names_and_details_start_on_one_edge_at_every_width() {
+    let mut rt = block_story(true, "Blocks/Table", "Open, window wide");
+    let page_sides = 2.0 * 32.0;
+    for content in TABLE_SWEEP {
+        let width = content as f32 + page_sides;
+        rt.set_viewport((width, BLOCK_WINDOW.1), SCALE);
+        rt.frame(1.0);
+        rt.frame(1.0);
+        let elements = rt.elements();
+        let within = |key: &str, text: &str| {
+            let at = element(&rt, key);
+            elements
+                .iter()
+                .find(|e| {
+                    e.path.starts_with(&format!("{}/", at.path)) && e.text.as_deref() == Some(text)
+                })
+                .unwrap_or_else(|| panic!("at {content}: no {text:?} in {key}"))
+                .rect[0]
+        };
+        let head = within("table.head", "ROLE");
+        let title = within("table.builder", "Builder");
+        let details = element(&rt, "table.builder.instructions.value").rect[0];
+        assert!(
+            (title - head).abs() < 0.5 && (details - head).abs() < 0.5,
+            "at {content} wide: the head starts at {head}, the title at {title}, the details at {details}"
+        );
+    }
+}
+
+/// Each switched-off state of the Table story beside the same state switched on, with every
+/// control's focus ring showing.
+const OFF_BESIDE_ON: [(&str, &str); 2] =
+    [("Off, focus", "Focus"), ("Off, open, focus", "Open, focus")];
+
+#[test]
+fn a_switched_off_table_fades_what_its_rows_say_and_draws_its_controls_whole() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        for (off_variant, on_variant) in OFF_BESIDE_ON {
+            let off = block_story(dark, "Blocks/Table", off_variant);
+            let on = block_story(dark, "Blocks/Table", on_variant);
+            let table = format!("{}/", element(&off, "table").path);
+            let elements: Vec<ElementInfo> = off
+                .elements()
+                .into_iter()
+                .filter(|e| e.path.starts_with(&table))
+                .collect();
+            let names: Vec<&ElementInfo> = elements
+                .iter()
+                .filter(|e| {
+                    e.key.as_ref().is_some_and(|k| {
+                        elements
+                            .iter()
+                            .any(|r| r.key.as_deref() == Some(&format!("{k}.row")))
+                    })
+                })
+                .collect();
+            let controls: Vec<[f32; 4]> = elements
+                .iter()
+                .filter(|e| e.focusable && !names.iter().any(|n| n.path == e.path))
+                .map(|e| device(e.rect))
+                .collect();
+            assert!(!controls.is_empty(), "{off_variant} draws no control");
+            let same_as_on = |part: Part, what: &str| {
+                let (n, _, _) = point_of(&off, part);
+                let edge = matches!(part, Part::Edge(_));
+                let m = on
+                    .instances
+                    .iter()
+                    .position(|r| same_part(&off.instances[n], r, edge))
+                    .unwrap_or_else(|| panic!("{off_variant}: {what} has no part switched on"));
+                let seen = shown(&off, part, t.bg_panel);
+                let lit = shown(
+                    &on,
+                    if edge { Part::Edge(m) } else { Part::Fill(m) },
+                    t.bg_panel,
+                );
+                assert!(
+                    (0..3).all(|c| (seen[c] - lit[c]).abs() <= BLEND),
+                    "dark={dark}, {off_variant}: {what} at {:?} shows {seen:?}, and {lit:?} switched on",
+                    off.instances[n].rect.map(|v| v / SCALE)
+                );
+            };
+            for part in parts(&off) {
+                let (n, _, _) = point_of(&off, part);
+                if controls
+                    .iter()
+                    .any(|&c| holds_all(c, off.instances[n].rect))
+                {
+                    same_as_on(part, "a control's part");
+                }
+            }
+            for e in elements.iter().filter(|e| e.focusable) {
+                let ring = ring_of(&off, e, &t)
+                    .unwrap_or_else(|| panic!("{off_variant}: {:?} draws no ring", e.key));
+                let n = off
+                    .instances
+                    .iter()
+                    .position(|i| std::ptr::eq(i, ring))
+                    .expect("the ring is one of the frame's instances");
+                same_as_on(Part::Edge(n), "a focus ring");
+            }
+            let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
+            let orchestrator = element(&off, "table.orchestrator");
+            let name = device(orchestrator.rect);
+            let mut words = 0;
+            for part in parts(&off) {
+                let (n, _, _) = point_of(&off, part);
+                let i = &off.instances[n];
+                if i.params[1] != rune::render::KIND_GLYPH || !holds_all(name, i.rect) {
+                    continue;
+                }
+                let m = on
+                    .instances
+                    .iter()
+                    .position(|r| same_part(i, r, false))
+                    .expect("a name's glyph is drawn switched on");
+                let lit = shown(&on, Part::Fill(m), t.bg_panel);
+                let half = [0, 1, 2].map(|c| lit[c] * STRENGTH + ground[c] * (1.0 - STRENGTH));
+                let seen = shown(&off, part, t.bg_panel);
+                words += 1;
+                assert!(
+                    (0..3).all(|c| (seen[c] - half[c]).abs() <= BLEND),
+                    "dark={dark}, {off_variant}: a glyph of {:?} shows {seen:?}, not half of {lit:?}",
+                    orchestrator.key
+                );
+            }
+            assert!(
+                words > 0,
+                "{off_variant}: the Orchestrator's name draws no glyph"
             );
         }
     }

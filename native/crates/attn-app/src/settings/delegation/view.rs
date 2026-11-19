@@ -5,26 +5,24 @@ use std::collections::BTreeMap;
 
 use attn_protocol::{DelegationChoice, DelegationPreferences, DelegationRole};
 use attn_ui::Tokens;
-use attn_ui::system::{self, Look, Size, Type};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Icon, TextEdit, Tx, col, icon, row, text};
+use attn_ui::blocks::{
+    Actions, Block, Column, Empty, Field, Inline, Notice, Prose, Section, SettingRow, Status,
+    SubRow, Table, TableColumns, TableRow,
+};
+use attn_ui::system::{self, Control, Look, Size, Tone, Type};
+use rune::{El, Icon, TextEdit, Tx, icon};
 use rune_kit::{Button, ButtonVariant, ControlSize, Select, TextArea, TextInput};
 
-use super::table::{self, Field, NEW, Slot};
+use super::table::{self, NEW, Slot};
 use super::{Delegation, commit, commit_undoable, page_state, page_state_mut, persist};
 use crate::State;
 use crate::settings::harnesses;
-use crate::settings::pages::{CAPTION, warning};
 use crate::settings::route::{self, Route, RouteHarness, Rules, Target};
-use crate::settings::sections::Section;
+use crate::settings::sections::Section as Page;
 
-const ICON_COLUMN: f32 = 36.0;
-const CELL_COLUMN: f32 = 280.0;
-const MORE_COLUMN: f32 = 40.0;
-const COLUMN_GAP: f32 = 14.0;
-/// The empty table's copy, 52 characters of the caption face wide, as the Tauri app's `52ch`.
-const EMPTY_COPY_W: f32 = 52.0 * 7.3;
+/// The "Runs on" column: as wide as the widest route chip. "Claude Code · Opus 4.5 · xhigh"
+/// measures 273.5 drawn, and "Codex · gpt-5.1-codex-max · xhigh" 247.5.
+const RUNS_ON: f32 = 280.0;
 const NOT_SAID: &str = "No condition yet. The agent cannot pick this.";
 const DESCRIPTION_HINT: &str =
     "Prose, as long as it needs to be. The first line is what the table shows.";
@@ -123,31 +121,6 @@ const ICONS: [(&str, &Icon); 9] = [
     ("layers", &LAYERS),
 ];
 
-/// A role's icon, or its name's initial when it has none, in its box as the Tauri app's
-/// `.delegation-icon`.
-fn role_icon(name: &str, which: &str, t: &Tokens) -> El {
-    icon_box(role_glyph(name, which, t))
-        .fill(t.bg_elevated)
-        .border(1.0, t.border_subtle)
-}
-
-/// The fallback row's icon, in a dashed empty box, as the Tauri app's `.delegation-icon.fallback`.
-fn fallback_icon(t: &Tokens) -> El {
-    icon_box(role_glyph("Anything else", "arrow", t))
-        .border(1.0, t.border_subtle)
-        .border_dash(3.0, 3.0)
-}
-
-fn icon_box(glyph: El) -> El {
-    row()
-        .w(ICON_COLUMN)
-        .h(ICON_COLUMN)
-        .radius(8.0)
-        .items_center()
-        .justify_center()
-        .child(glyph)
-}
-
 fn role_glyph(name: &str, which: &str, t: &Tokens) -> El {
     match ICONS.iter().find(|(id, _)| *id == which) {
         Some((_, glyph)) => icon(glyph, 16.0).color(t.text_secondary).a11y_hidden(),
@@ -157,10 +130,7 @@ fn role_glyph(name: &str, which: &str, t: &Tokens) -> El {
                 .chars()
                 .next()
                 .map_or_else(|| "○".to_owned(), |c| c.to_uppercase().collect());
-            text(initial)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .a11y_hidden()
+            system::words(initial, Type::Label, t.text_secondary).a11y_hidden()
         }
     }
 }
@@ -179,7 +149,7 @@ fn lead_text(enabled: bool) -> &'static str {
 
 /// The Delegation switch in the page head, once the table is read.
 pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
-    if state.window.settings.section != Section::Delegation {
+    if state.window.settings.section != Page::Delegation {
         return None;
     }
     let on = page_state(state).preferences.as_ref()?.enabled;
@@ -198,19 +168,6 @@ pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
             commit(state, next, tx);
         },
     )))
-}
-
-fn button(
-    label: impl Into<attn_ui::system::Said>,
-    look: Look,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    system::Button::new(label)
-        .look(look)
-        .on_press_tx(press)
-        .build(t)
-        .into()
 }
 
 fn harness_rules(state: &State) -> Rules {
@@ -239,7 +196,32 @@ fn write_route(state: &mut State, id: &str, route: Route, tx: &mut Tx) {
     }
 }
 
-fn model_chip(state: &State, slot: Slot, label: &str, t: &Tokens) -> El {
+/// The table's columns, and the one a row's model goes in.
+fn columns() -> (TableColumns, Column) {
+    let mut columns = TableColumns::new("Role");
+    let runs_on = columns.fixed("Runs on", RUNS_ON);
+    (columns, runs_on)
+}
+const OFF: &str = "Off";
+const NEEDS_A_MODEL: &str = "Needs a model";
+
+fn role_mark(name: &str, which: &str, t: &Tokens) -> Control {
+    system::icon_box(role_glyph(name, which, t), false, t)
+}
+
+fn button(
+    label: impl Into<attn_ui::system::Said>,
+    look: Look,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> Control {
+    system::Button::new(label)
+        .look(look)
+        .on_press_tx(press)
+        .build(t)
+}
+
+fn model_chip(state: &State, slot: Slot, label: &str, t: &Tokens) -> Option<Control> {
     route::chip(
         state,
         t,
@@ -249,12 +231,11 @@ fn model_chip(state: &State, slot: Slot, label: &str, t: &Tokens) -> El {
             write: write_route,
         },
         label,
-        false,
     )
 }
 
 /// The page while the table is read, and after.
-pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
+pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let d = page_state(state);
     let Some(preferences) = &d.preferences else {
         return vec![loading(d, t)];
@@ -268,44 +249,33 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
         .map(|t| table::label(table::view(expanded, t)))
         .collect();
     let mut out = vec![
-        text(lead_text(preferences.enabled))
-            .key("settings.delegation.lead")
-            .font(type_::BODY)
-            .color(if preferences.enabled {
-                t.text_secondary
-            } else {
-                t.text_tertiary
-            })
-            .wrap(),
+        Prose::lead("settings.delegation.lead", lead_text(preferences.enabled))
+            .quiet(!preferences.enabled)
+            .build(t),
     ];
     if !d.error.is_empty() {
-        out.push(warning(
-            "settings.delegation.error".into(),
-            d.error.clone(),
-            t,
-        ));
+        out.push(Notice::error("settings.delegation.error", d.error.clone()).build(t));
     }
-    let mut rows = col()
-        .key("settings.delegation.table")
-        .w_full()
-        .radius(10.0)
-        .border(1.0, t.border)
-        .fill(t.bg_panel)
-        .child(head(t));
+    let (columns, runs_on) = columns();
+    let mut roles = Table::new("settings.delegation.table", columns)
+        .rows(
+            preferences
+                .roles
+                .iter()
+                .map(|role| role_row(state, d, role, table::view(expanded, role), runs_on, t)),
+        )
+        .row(fallback_row(state, d, runs_on, t))
+        .dimmed(!preferences.enabled);
     if preferences.roles.is_empty() && d.adoption.is_none() {
-        rows = rows.child(empty_panel(!missing.is_empty(), t));
+        roles = roles.empty(empty(!missing.is_empty(), t));
     }
-    for role in &preferences.roles {
-        rows = rows.child(role_row(state, d, role, table::view(expanded, role), t));
-    }
-    rows = rows.child(fallback_row(state, d, t));
     if !preferences.roles.is_empty() {
-        rows = rows.child(add_row(preferences, &missing_names, t));
+        roles = roles.footer(
+            "settings.delegation.add-row",
+            add_row(preferences, &missing_names, t),
+        );
     }
-    if !preferences.enabled {
-        rows = rows.opacity(0.5);
-    }
-    out.push(rows);
+    out.push(roles.build(t));
     if let Some(adoption) = &d.adoption {
         out.push(adoption_panel(
             state,
@@ -317,29 +287,17 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
         ));
     }
     if let Some(undo) = d.live_undo() {
-        let said = format!("{}.", undo.label);
         out.push(
-            row()
-                .key("settings.delegation.undo")
-                .role("status")
-                .label(said.clone())
-                .gap(space::S2)
-                .items_center()
-                .child(
-                    text(said)
-                        .font(CAPTION)
-                        .color(t.text_secondary)
-                        .a11y_hidden(),
-                )
-                .child(
+            Notice::info("settings.delegation.undo", format!("{}.", undo.label))
+                .action(
                     system::Button::new("Undo")
                         .look(Look::Quiet)
                         .size(Size::Compact)
                         .on_press_tx(super::undo)
                         .build(t)
-                        .key("settings.delegation.undo.button")
-                        .into(),
-                ),
+                        .key("settings.delegation.undo.button"),
+                )
+                .build(t),
         );
     }
     if !preferences.roles.is_empty() {
@@ -348,144 +306,18 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
     out
 }
 
-fn loading(d: &Delegation, t: &Tokens) -> El {
-    let said = if d.error.is_empty() {
-        "Loading delegation preferences…".to_owned()
-    } else {
-        d.error.clone()
-    };
-    row()
-        .key("settings.delegation.loading")
-        .role("status")
-        .label(said.clone())
-        .gap(space::S2)
-        .items_center()
-        .child(
-            text(said)
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .a11y_hidden(),
+fn loading(d: &Delegation, t: &Tokens) -> Block {
+    if d.error.is_empty() {
+        return Status::new(
+            "settings.delegation.loading",
+            "Loading delegation preferences…",
+            false,
         )
-        .children((!d.error.is_empty()).then(|| {
-            button("Retry", Look::Plain, t, super::reload).key("settings.delegation.retry")
-        }))
-}
-
-fn columns(icon_el: El, who: El, cell: El, more: El) -> El {
-    row()
-        .w_full()
-        .gap(COLUMN_GAP)
-        .items_center()
-        .px(16.0)
-        .child(row().w(ICON_COLUMN).items_center().child(icon_el))
-        .child(row().grow(1.0).min_w(0.0).child(who))
-        .child(
-            row()
-                .w(CELL_COLUMN)
-                .gap(space::S2)
-                .items_center()
-                .child(cell),
-        )
-        .child(row().w(MORE_COLUMN).items_center().child(more))
-}
-
-fn head(t: &Tokens) -> El {
-    let label = |s: &str| type_::upper(s, type_::BOLD_CAPS).color(t.text_tertiary);
-    columns(row(), label("Role"), label("Runs on"), row())
-        .key("settings.delegation.head")
-        .py(space::S2)
-        .fill(t.bg_elevated)
-        .corners([9.0, 9.0, 0.0, 0.0])
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-}
-
-const OFF: &str = "Off";
-
-/// The button that names a row and opens its details, with what the row is for under its name;
-/// dimmed while the row is off.
-fn who(
-    key: String,
-    name: &str,
-    tags: Vec<&'static str>,
-    description: String,
-    open: bool,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let dim = tags.contains(&OFF);
-    let said: Vec<String> = tags
-        .iter()
-        .map(|s| (*s).to_owned())
-        .chain((!description.is_empty()).then(|| description.clone()))
-        .collect();
-    let content = col()
-        .w_full()
-        .min_w(0.0)
-        .gap(2.0)
-        .items_start()
-        .opacity(if dim { 0.45 } else { 1.0 })
-        .child(
-            row()
-                .gap(space::S2)
-                .items_center()
-                .child(system::words(name.to_owned(), Type::Name, t.text_primary))
-                .children(tags.into_iter().map(|tag| {
-                    let ink = if tag == "Needs a model" {
-                        t.warning
-                    } else {
-                        t.text_muted
-                    };
-                    system::words(tag, Type::Small, ink).key(format!("{key}.tag.{tag}"))
-                })),
-        )
-        .children((!description.is_empty()).then(|| {
-            system::words(description, Type::Small, t.text_secondary)
-                .w_full()
-                .min_w(0.0)
-                .wrap()
-        }))
-        .a11y_hidden();
-    El::from(system::press_area(
-        key, name, open, false, content, t, press,
-    ))
-    .description(said.join(" · "))
-    .min_h(48.0)
-}
-
-fn more(
-    key: String,
-    name: &str,
-    open: bool,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    system::Button::new("···")
-        .look(Look::Quiet)
-        .size(Size::Compact)
-        .expanded(open)
-        .on_press_tx(press)
-        .build(t)
-        .key(key)
-        .label(format!("{name} details"))
-        .into()
-}
-
-fn toggle(key: String) -> impl Fn(&mut State, &mut Tx) + 'static {
-    move |state: &mut State, _: &mut Tx| {
-        let d = page_state_mut(state);
-        d.expanded = if d.expanded.as_deref() == Some(key.as_str()) {
-            None
-        } else {
-            Some(key.clone())
-        };
-        d.expanded_alt = None;
+        .build(t);
     }
-}
-
-fn expand(state: &mut State, key: String) {
-    let d = page_state_mut(state);
-    d.expanded = Some(key);
-    d.expanded_alt = None;
+    Notice::error("settings.delegation.loading", d.error.clone())
+        .action(button("Retry", Look::Plain, t, super::reload).key("settings.delegation.retry"))
+        .build(t)
 }
 
 fn role_row(
@@ -493,88 +325,69 @@ fn role_row(
     d: &Delegation,
     role: &DelegationRole,
     view: &DelegationRole,
+    runs_on: Column,
     t: &Tokens,
-) -> El {
+) -> TableRow<State> {
     let id = role.id.clone();
     let open = d.expanded.as_deref() == Some(id.as_str());
     let alts = table::alternatives(role);
     let read_only = role.builtin.is_some();
-    let mut tags = Vec::new();
+    let key = format!("settings.delegation.role.{id}");
+    let mut row = TableRow::new(key.clone(), view.name.clone(), toggle(id.clone()))
+        .leading(role_mark(&view.name, &view.icon, t))
+        .subtitle(table::first_line(&view.description))
+        .more(format!("{} details", view.name))
+        .off(!role.enabled)
+        .open(open);
     if read_only {
-        tags.push("Attn");
+        row = row.tag("Attn", Tone::Neutral);
     }
     if !role.enabled {
-        tags.push(OFF);
+        row = row.tag(OFF, Tone::Neutral);
     }
     if table::needs_model(role) {
-        tags.push("Needs a model");
+        row = row.tag(NEEDS_A_MODEL, Tone::Warn);
     }
-    let key = format!("settings.delegation.role.{id}");
-    let main = table::default_choice(role);
-    let mut cell = row().gap(space::S2).items_center();
-    if let Some(main) = main {
-        cell = cell.child(model_chip(
+    if let Some(chip) = table::default_choice(role).and_then(|main| {
+        model_chip(
             state,
             Slot::Choice(id.clone(), main.id.clone()),
             &format!("Model for {}", view.name),
             t,
-        ));
+        )
+    }) {
+        row = row.control(runs_on, chip);
     }
     if !alts.is_empty() && !open {
-        let n = alts.len();
-        cell = cell.child(El::from(
-            system::Button::new(format!("+{n} alternative{}", if n == 1 { "" } else { "s" }))
-                .look(Look::Quiet)
-                .size(Size::Compact)
-                .on_press_tx(toggle(id.clone()))
-                .build(t)
-                .key(format!("{key}.alternatives")),
-        ));
-    }
-    let mut out = col()
-        .key(format!("{key}.row"))
-        .w_full()
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            columns(
-                role_icon(&view.name, &view.icon, t).opacity(if role.enabled { 1.0 } else { 0.45 }),
-                who(
-                    key.clone(),
-                    &view.name,
-                    tags,
-                    table::first_line(&view.description),
-                    open,
-                    t,
-                    toggle(id.clone()),
-                ),
-                cell,
-                more(
-                    format!("{key}.more"),
-                    &view.name,
-                    open,
-                    t,
-                    toggle(id.clone()),
-                ),
-            )
-            .py(space::S3),
+        row = row.control(
+            runs_on,
+            system::expander(
+                format!("{key}.alternatives"),
+                format!("+{}", plural(alts.len(), "alternative")),
+                false,
+                false,
+                t,
+                toggle(id.clone()),
+            ),
         );
-    if !open {
-        return out;
     }
-    let details = if read_only {
-        read_only_field(
-            "Instructions",
-            &view.instructions,
-            "maintained by Attn, updates with releases",
-            format!("{key}.instructions"),
-            t,
+    if !open {
+        return row;
+    }
+    row = if read_only {
+        row.details(
+            Field::new(format!("{key}.instructions"), "Instructions")
+                .note("maintained by Attn, updates with releases")
+                .value(view.instructions.clone())
+                .build(t),
         )
     } else {
         role_editor(state, role, t)
+            .into_iter()
+            .fold(row, TableRow::details)
     };
-    out = out.child(details_block(details));
     for alt in alts {
-        out = out.child(alternative_row(state, d, role, view, alt, t));
+        row = row.sub_row(alternative_row(state, d, role, view, alt, runs_on, t));
     }
     let add = {
         let id = id.clone();
@@ -588,20 +401,24 @@ fn role_row(
             }
         }
     };
-    out = out.child(
-        columns(
-            row(),
-            button("+ Alternative model", Look::Quiet, t, add)
-                .key(format!("{key}.add-alternative")),
-            row(),
-            row(),
-        )
-        .pb(space::S2),
+    row = row.sub_footer(
+        runs_on,
+        system::Button::new("+ Alternative model")
+            .look(Look::Quiet)
+            .size(Size::Compact)
+            .on_press_tx(add)
+            .build(t)
+            .key(format!("{key}.add-alternative")),
     );
-    let mut actions = row().w_full().gap(space::S2).items_center();
-    if read_only {
+    row.actions(role_actions(role, view, &key, t))
+}
+
+fn role_actions(role: &DelegationRole, view: &DelegationRole, key: &str, t: &Tokens) -> Actions {
+    let id = role.id.clone();
+    let mut actions = Actions::new(format!("{key}.actions"));
+    if role.builtin.is_some() {
         let id = id.clone();
-        actions = actions.child(
+        actions = actions.push(
             button(
                 "Make an editable copy",
                 Look::Plain,
@@ -620,11 +437,12 @@ fn role_row(
             .key(format!("{key}.copy")),
         );
     }
-    actions = actions.child(row().grow(1.0));
     let turn = if role.enabled { "Turn off" } else { "Turn on" };
-    {
-        let id = id.clone();
-        actions = actions.child(
+    let turned = id.clone();
+    let name = view.name.clone();
+    actions
+        .then_end()
+        .push(
             button(
                 turn,
                 Look::Quiet,
@@ -633,97 +451,45 @@ fn role_row(
                     let Some(preferences) = page_state(state).preferences.clone() else {
                         return;
                     };
-                    commit(state, table::toggled(&preferences, &id), tx);
+                    commit(state, table::toggled(&preferences, &turned), tx);
                 },
             )
             .key(format!("{key}.turn")),
-        );
-    }
-    let name = view.name.clone();
-    actions = actions.child(
-        button(
-            "Delete",
-            Look::Danger,
-            t,
-            move |state: &mut State, tx: &mut Tx| {
-                let Some(preferences) = page_state(state).preferences.clone() else {
-                    return;
-                };
-                commit_undoable(
-                    state,
-                    table::deleted(&preferences, &id),
-                    format!("Deleted {name}"),
-                    tx,
-                );
-                page_state_mut(state).expanded = None;
-            },
         )
-        .key(format!("{key}.delete")),
-    );
-    out.child(details_block(actions))
-}
-
-fn expanded_roles(state: &State) -> Vec<DelegationRole> {
-    state
-        .window
-        .settings
-        .harnesses
-        .read
-        .as_ref()
-        .map(|r| r.expanded_roles.clone())
-        .unwrap_or_default()
-}
-
-fn details_block(body: El) -> El {
-    col()
-        .w_full()
-        .gap(space::S3)
-        .pl(16.0 + ICON_COLUMN + COLUMN_GAP)
-        .pr(16.0 + MORE_COLUMN + COLUMN_GAP)
-        .pb(space::S3)
-        .child(body)
-}
-
-fn read_only_field(label: &str, value: &str, note: &str, key: String, t: &Tokens) -> El {
-    col()
-        .w_full()
-        .gap(space::S1)
-        .child(field_label(label, Some(note), t))
-        .child(
-            text(value.to_owned())
-                .key(key)
-                .label(value.to_owned())
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap(),
+        .push(
+            button(
+                "Delete",
+                Look::Danger,
+                t,
+                move |state: &mut State, tx: &mut Tx| {
+                    let Some(preferences) = page_state(state).preferences.clone() else {
+                        return;
+                    };
+                    commit_undoable(
+                        state,
+                        table::deleted(&preferences, &id),
+                        format!("Deleted {name}"),
+                        tx,
+                    );
+                    page_state_mut(state).expanded = None;
+                },
+            )
+            .key(format!("{key}.delete")),
         )
-}
-
-fn field_label(label: &str, note: Option<&str>, t: &Tokens) -> El {
-    row()
-        .gap(space::S2)
-        .items_center()
-        .child(
-            text(label.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
-        .children(note.map(|n| text(n.to_owned()).font(CAPTION).color(t.text_tertiary)))
 }
 
 /// A text the table keeps: it shows the table's text until the first edit, and saves the draft
 /// when the focus leaves it, or on Enter in a single line.
 fn text_field(
     state: &State,
-    field: Field,
-    label: &str,
+    field: table::Field,
+    label: &'static str,
     placeholder: &str,
-    hint: Option<&str>,
+    hint: Option<&'static str>,
     t: &Tokens,
-) -> El {
+) -> Block {
     let d = page_state(state);
     let key = field.key();
-    let label_key = format!("{key}.label");
     let mut shown = TextEdit::new(
         d.preferences
             .as_ref()
@@ -735,51 +501,51 @@ fn text_field(
     let edit = draft
         .filter(|draft| draft.edit.focused)
         .map_or(&shown, |draft| &draft.edit);
-    let k = crate::settings::pages::kit(t);
+    let left = key.clone();
+    let editing = field.clone();
     let control = if field.single_line() {
-        let editing = field.clone();
         let submitted = key.clone();
-        let left = key.clone();
-        TextInput::new(edit)
-            .key(key)
-            .label(label.to_owned())
-            .placeholder(placeholder.to_owned())
-            .on_edit(move |state: &mut State| super::draft_mut(state, &editing))
-            .on_submit(move |state: &mut State, tx: &mut Tx| {
-                super::commit_draft(state, &submitted, tx);
-                tx.blur();
-            })
-            .on_blur(move |state: &mut State, tx: &mut Tx| super::commit_draft(state, &left, tx))
-            .width(None)
-            .build(k)
+        system::line_box(
+            TextInput::new(edit)
+                .key(key.clone())
+                .label(label.to_owned())
+                .placeholder(placeholder.to_owned())
+                .on_edit(move |state: &mut State| super::draft_mut(state, &editing))
+                .on_submit(move |state: &mut State, tx: &mut Tx| {
+                    super::commit_draft(state, &submitted, tx);
+                    tx.blur();
+                })
+                .on_blur(move |state: &mut State, tx: &mut Tx| {
+                    super::commit_draft(state, &left, tx)
+                }),
+            system::FieldState::Ready,
+            t,
+        )
     } else {
-        let editing = field.clone();
-        let left = key.clone();
-        TextArea::new(edit)
-            .key(key)
-            .label(label.to_owned())
-            .placeholder(placeholder.to_owned())
-            .on_edit(move |state: &mut State| super::draft_mut(state, &editing))
-            .on_blur(move |state: &mut State, tx: &mut Tx| super::commit_draft(state, &left, tx))
-            .auto_grow(3, 12)
-            .resizable()
-            .width(None)
-            .build(k)
+        system::area_box(
+            TextArea::new(edit)
+                .key(key.clone())
+                .label(label.to_owned())
+                .placeholder(placeholder.to_owned())
+                .on_edit(move |state: &mut State| super::draft_mut(state, &editing))
+                .on_blur(move |state: &mut State, tx: &mut Tx| {
+                    super::commit_draft(state, &left, tx)
+                })
+                .auto_grow(3, 12)
+                .resizable(),
+            system::FieldState::Ready,
+            t,
+        )
     };
-    col()
-        .w_full()
-        .gap(space::S1)
-        .child(field_label(label, None, t).key(label_key))
-        .child(control)
-        .children(hint.map(|h| {
-            text(h.to_owned())
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .wrap()
-        }))
+    let field = Field::new(key, label).control(control);
+    match hint {
+        Some(hint) => field.hint(hint),
+        None => field,
+    }
+    .build(t)
 }
 
-fn role_editor(state: &State, role: &DelegationRole, t: &Tokens) -> El {
+fn role_editor(state: &State, role: &DelegationRole, t: &Tokens) -> Vec<Block> {
     let id = role.id.clone();
     let icon_button = |which: &'static str, label: String| {
         let id = id.clone();
@@ -802,31 +568,39 @@ fn role_editor(state: &State, role: &DelegationRole, t: &Tokens) -> El {
             ))
             .checked(role.icon == which)
     };
-    let icons = row()
+    let icons = Inline::tight()
         .key(format!("settings.delegation.role.{}.icons", role.id))
         .role("group")
         .label("Role icon")
-        .gap(space::S1)
         .child(icon_button("", "Initial as icon".into()))
         .children(
             ICONS
                 .iter()
                 .map(|(which, _)| icon_button(which, format!("{which} icon"))),
         );
-    col()
-        .w_full()
-        .gap(space::S3)
-        .child(text_field(state, Field::Name(id.clone()), "Name", "", None, t))
-        .child(icons)
-        .child(text_field(
+    vec![
+        text_field(state, table::Field::Name(id.clone()), "Name", "", None, t),
+        Block::custom(
+            format!("settings.delegation.role.{}.icons.block", role.id),
+            icons,
+        ),
+        text_field(
             state,
-            Field::Description(id.clone()),
+            table::Field::Description(id.clone()),
             "When to choose this role",
             "Describe the work this role fits. The agent reads this to pick a role, so say what it looks like and what it is not for.",
             Some(DESCRIPTION_HINT),
             t,
-        ))
-        .child(text_field(state, Field::Instructions(id), "Instructions", "", None, t))
+        ),
+        text_field(
+            state,
+            table::Field::Instructions(id),
+            "Instructions",
+            "",
+            None,
+            t,
+        ),
+    ]
 }
 
 fn alternative_row(
@@ -835,8 +609,9 @@ fn alternative_row(
     role: &DelegationRole,
     view: &DelegationRole,
     alt: &DelegationChoice,
+    runs_on: Column,
     t: &Tokens,
-) -> El {
+) -> SubRow<State> {
     let role_id = role.id.clone();
     let alt_id = alt.id.clone();
     let open = d.expanded_alt.as_deref() == Some(alt_id.as_str());
@@ -868,39 +643,6 @@ fn alternative_row(
     } else {
         when.clone()
     };
-    let content = col()
-        .gap(2.0)
-        .items_start()
-        .child(system::words(shown.clone(), Type::Name, t.text_primary))
-        .child(
-            row()
-                .gap(space::S1)
-                .child(system::words("when", Type::Small, t.text_tertiary))
-                .child(
-                    system::words(
-                        said.clone(),
-                        Type::Small,
-                        if when.is_empty() {
-                            t.text_tertiary
-                        } else {
-                            t.text_secondary
-                        },
-                    )
-                    .truncate(),
-                ),
-        )
-        .a11y_hidden();
-    let who_button = El::from(system::press_area(
-        key.clone(),
-        &shown,
-        open,
-        false,
-        content,
-        t,
-        toggle,
-    ))
-    .description(said)
-    .h(44.0);
     let remove = {
         let (role_id, alt_id, name, role_name) = (
             role_id.clone(),
@@ -921,71 +663,96 @@ fn alternative_row(
             close_alt(state, &alt_id);
         }
     };
-    let remove_button = El::from(
-        system::Button::new("×")
-            .look(Look::Quiet)
-            .size(Size::Compact)
-            .help(format!("Remove {name}"))
-            .on_press_tx(remove)
-            .build(t)
-            .key(format!("{key}.remove"))
-            .label(format!("Remove {name}")),
-    );
-    let mut out = col().w_full().child(
-        columns(
-            row(),
-            who_button,
-            model_chip(
-                state,
-                Slot::Choice(role_id.clone(), alt_id.clone()),
-                &format!("Model for {name}"),
-                t,
-            ),
-            remove_button,
+    let mut sub = SubRow::new(key.clone(), shown, toggle)
+        .note("when", said, when.is_empty())
+        .trailing(
+            system::Button::mark("×", system::IconSize::Large)
+                .look(Look::Quiet)
+                .size(Size::Compact)
+                .help(format!("Remove {name}"))
+                .on_press_tx(remove)
+                .build(t)
+                .key(format!("{key}.remove"))
+                .label(format!("Remove {name}")),
         )
-        .pb(space::S2),
-    );
-    if open {
-        let make_default = {
-            let (role_id, alt_id, role_name) = (role_id.clone(), alt_id.clone(), view.name.clone());
-            let name = name.clone();
-            move |state: &mut State, tx: &mut Tx| {
-                let Some(preferences) = page_state(state).preferences.clone() else {
-                    return;
-                };
-                commit_undoable(
-                    state,
-                    table::made_default(&preferences, &role_id, &alt_id),
-                    format!("Made {name} the default for {role_name}"),
-                    tx,
-                );
-                close_alt(state, &alt_id);
-            }
-        };
-        out = out.child(details_block(
-            col()
-                .w_full()
-                .gap(space::S3)
-                .child(text_field(
-                    state,
-                    Field::AlternativeName(role_id.clone(), alt_id.clone()),
-                    "Name",
-                    "Short label, shown to the agent with the condition",
-                    None,
-                    t,
-                ))
-                .child(text_field(
-                    state,
-                    Field::When(role_id, alt_id),
-                    "When to use this instead of the default",
-                    "Describe the work this alternative fits. The agent reads this to decide, so say what it looks like and what it is not for.",
-                    Some(DESCRIPTION_HINT),
-                    t,
-                ))
-                .child(row().child(button("Make default", Look::Quiet, t, make_default).key(format!("{key}.make-default")))),
-        ));
+        .open(open);
+    if let Some(chip) = model_chip(
+        state,
+        Slot::Choice(role_id.clone(), alt_id.clone()),
+        &format!("Model for {name}"),
+        t,
+    ) {
+        sub = sub.control(runs_on, chip);
     }
-    out
+    if !open {
+        return sub;
+    }
+    let make_default = {
+        let (role_id, alt_id, role_name) = (role_id.clone(), alt_id.clone(), view.name.clone());
+        let name = name.clone();
+        move |state: &mut State, tx: &mut Tx| {
+            let Some(preferences) = page_state(state).preferences.clone() else {
+                return;
+            };
+            commit_undoable(
+                state,
+                table::made_default(&preferences, &role_id, &alt_id),
+                format!("Made {name} the default for {role_name}"),
+                tx,
+            );
+            close_alt(state, &alt_id);
+        }
+    };
+    sub.details(text_field(
+        state,
+        table::Field::AlternativeName(role_id.clone(), alt_id.clone()),
+        "Name",
+        "Short label, shown to the agent with the condition",
+        None,
+        t,
+    ))
+    .details(text_field(
+        state,
+        table::Field::When(role_id, alt_id),
+        "When to use this instead of the default",
+        "Describe the work this alternative fits. The agent reads this to decide, so say what it looks like and what it is not for.",
+        Some(DESCRIPTION_HINT),
+        t,
+    ))
+    .details(
+        Actions::new(format!("{key}.actions"))
+            .push(button("Make default", Look::Plain, t, make_default).key(format!("{key}.make-default")))
+            .build(),
+    )
+}
+
+fn toggle(key: String) -> impl Fn(&mut State, &mut Tx) + 'static {
+    move |state: &mut State, _: &mut Tx| {
+        let d = page_state_mut(state);
+        d.expanded = if d.expanded.as_deref() == Some(key.as_str()) {
+            None
+        } else {
+            Some(key.clone())
+        };
+        d.expanded_alt = None;
+    }
+}
+
+fn expand(state: &mut State, key: String) {
+    let d = page_state_mut(state);
+    d.expanded = Some(key);
+    d.expanded_alt = None;
+}
+
+fn expanded_roles(state: &State) -> Vec<DelegationRole> {
+    state
+        .window
+        .settings
+        .harnesses
+        .read
+        .as_ref()
+        .map(|r| r.expanded_roles.clone())
+        .unwrap_or_default()
 }
 
 fn close_alt(state: &mut State, alt: &str) {
@@ -997,37 +764,35 @@ fn close_alt(state: &mut State, alt: &str) {
 
 const FALLBACK: &str = "__fallback";
 
-fn fallback_row(state: &State, d: &Delegation, t: &Tokens) -> El {
+fn fallback_row(state: &State, d: &Delegation, runs_on: Column, t: &Tokens) -> TableRow<State> {
     let open = d.expanded.as_deref() == Some(FALLBACK);
-    let key = "settings.delegation.fallback".to_owned();
-    let mut out = col().key(format!("{key}.row")).w_full().child(
-        columns(
-            fallback_icon(t),
-            who(
-                key.clone(),
-                "Anything else",
-                Vec::new(),
-                "When no role fits the work. Agents use this instead of choosing a model themselves.".into(),
-                open,
-                t,
-                toggle(FALLBACK.into()),
-            ),
-            model_chip(state, Slot::Fallback, "Model for anything else", t),
-            more(format!("{key}.more"), "Anything else", open, t, toggle(FALLBACK.into())),
-        )
-        .py(space::S3),
-    );
-    if open {
-        out = out.child(details_block(text_field(
-            state,
-            Field::FallbackInstructions,
-            "Instructions (optional)",
-            "Anything every unmatched delegation should hear.",
-            None,
-            t,
-        )));
+    let mut row = TableRow::new(
+        "settings.delegation.fallback",
+        "Anything else",
+        toggle(FALLBACK.into()),
+    )
+    .leading(system::icon_box(
+        role_glyph("Anything else", "arrow", t),
+        true,
+        t,
+    ))
+    .subtitle("When no role fits the work. Agents use this instead of choosing a model themselves.")
+    .more("Anything else details")
+    .open(open);
+    if let Some(chip) = model_chip(state, Slot::Fallback, "Model for anything else", t) {
+        row = row.control(runs_on, chip);
     }
-    out
+    if !open {
+        return row;
+    }
+    row.details(text_field(
+        state,
+        table::Field::FallbackInstructions,
+        "Instructions (optional)",
+        "Anything every unmatched delegation should hear.",
+        None,
+        t,
+    ))
 }
 
 fn add_role(state: &mut State, tx: &mut Tx) {
@@ -1085,47 +850,27 @@ fn confirm_adoption(state: &mut State, tx: &mut Tx) {
     persist(state, next, true, tx);
 }
 
-fn empty_panel(can_adopt: bool, t: &Tokens) -> El {
-    col()
-        .key("settings.delegation.empty")
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .padding(space::S6)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            text("No roles yet")
-                .key("settings.delegation.empty.heading")
-                .role("heading")
-                .label("No roles yet")
-                .font(type_::TITLE)
-                .color(t.text_primary),
-        )
-        .child(
-            text("Start with Attn's maintained roles, then pick a model for each. Attn keeps their instructions current; the model choices stay yours.")
-                .font(CAPTION)
-                .color(t.text_secondary)
-                .wrap()
-                .max_w(EMPTY_COPY_W)
-                .align(rune::Align::Center),
-        )
-        .child(
-            row()
-                .gap(space::S2)
-                .child(
-                    system::Button::new("Add Attn roles")
-                        .look(Look::Primary)
-                        .disabled(!can_adopt)
-                        .on_press_tx(adopt)
-                        .build(t)
-                        .key("settings.delegation.adopt")
-                        .into(),
-                )
-                .child(button("+ Custom role", Look::Plain, t, add_role).key("settings.delegation.add")),
-        )
+fn empty(can_adopt: bool, t: &Tokens) -> Empty {
+    Empty::new(
+        "settings.delegation.empty",
+        "No roles yet",
+        "Start with Attn's maintained roles, then pick a model for each. Attn keeps their instructions current; the model choices stay yours.",
+        [
+            El::from(
+                system::Button::new("Add Attn roles")
+                    .look(Look::Primary)
+                    .disabled(!can_adopt)
+                    .on_press_tx(adopt)
+                    .build(t),
+            )
+            .key("settings.delegation.adopt"),
+            El::from(button("+ Custom role", Look::Plain, t, add_role))
+                .key("settings.delegation.add"),
+        ],
+    )
 }
 
-fn add_row(preferences: &DelegationPreferences, missing: &[String], t: &Tokens) -> El {
+fn add_row(preferences: &DelegationPreferences, missing: &[String], t: &Tokens) -> Actions {
     let some = preferences.roles.iter().any(|r| r.builtin.is_some());
     let adopt_label = if !some {
         "Add Attn roles".to_owned()
@@ -1134,20 +879,15 @@ fn add_row(preferences: &DelegationPreferences, missing: &[String], t: &Tokens) 
     } else {
         format!("Add Attn roles: {}", missing.join(", "))
     };
-    row()
-        .key("settings.delegation.add-row")
-        .gap(space::S2)
-        .px(16.0)
-        .py(space::S2)
-        .child(button("+ Custom role", Look::Quiet, t, add_role).key("settings.delegation.add"))
-        .children(
-            (!missing.is_empty()).then(|| {
-                button(adopt_label, Look::Quiet, t, adopt).key("settings.delegation.adopt")
-            }),
-        )
+    let actions = Actions::new("settings.delegation.footer.actions")
+        .push(button("+ Custom role", Look::Quiet, t, add_role).key("settings.delegation.add"));
+    if missing.is_empty() {
+        return actions;
+    }
+    actions.push(button(adopt_label, Look::Quiet, t, adopt).key("settings.delegation.adopt"))
 }
 
-fn foot(preferences: &DelegationPreferences, t: &Tokens) -> El {
+fn foot(preferences: &DelegationPreferences, t: &Tokens) -> Block {
     let live = table::live_roles(preferences);
     let needs = preferences
         .roles
@@ -1178,37 +918,9 @@ fn foot(preferences: &DelegationPreferences, t: &Tokens) -> El {
         }
         s
     };
-    let dot = if preferences.enabled {
-        t.success
-    } else {
-        t.text_tertiary
-    };
-    row()
-        .key("settings.delegation.foot")
-        .w_full()
-        .gap(space::S2)
-        .items_center()
-        .child(
-            row()
-                .key("settings.delegation.live")
-                .role("status")
-                .label(said.clone())
-                .gap(space::S2)
-                .items_center()
-                .child(row().size(6.0, 6.0).radius(3.0).fill(dot))
-                .child(
-                    text(said)
-                        .font(CAPTION)
-                        .color(t.text_secondary)
-                        .a11y_hidden(),
-                ),
-        )
-        .child(row().grow(1.0))
-        .child(
-            text("Agents read this with attn delegate roles.")
-                .font(CAPTION)
-                .color(t.text_tertiary),
-        )
+    Status::new("settings.delegation.live", said, preferences.enabled)
+        .aside("Agents read this with attn delegate roles.")
+        .build(t)
 }
 
 const ADD_AS_NEW: &str = "Add as a new role";
@@ -1281,37 +993,20 @@ fn adoption_panel(
     names: &[String],
     adoption: &BTreeMap<String, String>,
     t: &Tokens,
-) -> El {
+) -> Block {
     let open = page_state(state).adoption_open.as_deref();
     let k = crate::settings::pages::kit(t);
-    col()
-        .key("settings.delegation.adoption")
-        .role("group")
-        .label("Adopt maintained roles")
-        .w_full()
-        .gap(space::S2)
-        .padding(space::S3)
-        .radius(8.0)
-        .border(1.0, t.border)
-        .child(text("Some Attn roles look like roles you already have").font(type_::TITLE).color(t.text_primary))
-        .child(
-            text("Choose whether to add them beside your custom rows or replace one. Replacing keeps that row's model choices and on/off state.")
-                .font(CAPTION)
-                .color(t.text_secondary)
-                .wrap(),
-        )
-        .children(missing.iter().zip(names).map(|(template, name)| {
+    Section::new("settings.delegation.adoption", "Adopt maintained roles")
+        .description("Some Attn roles look like roles you already have. Choose whether to add them beside your custom rows or replace one. Replacing keeps that row's model choices and on/off state.")
+        .push_all(missing.iter().zip(names).map(|(template, name)| {
             let template = table::template_key(template);
-            row()
-                .gap(space::S3)
-                .items_center()
-                .child(text(name.clone()).font(type_::LABEL).color(t.text_primary).grow(1.0))
-                .child(adoption_select(preferences, adoption, &template, name, open == Some(template.as_str())).trigger(k))
+            let select = adoption_select(preferences, adoption, &template, name, open == Some(template.as_str()))
+                .trigger(k);
+            SettingRow::new(format!("settings.delegation.adoption.{template}"), name.clone(), "", select).build(t)
         }))
-        .child(
-            row()
-                .gap(space::S2)
-                .child(
+        .push(
+            Actions::new("settings.delegation.adoption.actions")
+                .push(
                     button("Cancel", Look::Plain, t, |state: &mut State, _: &mut Tx| {
                         let d = page_state_mut(state);
                         d.adoption = None;
@@ -1319,20 +1014,21 @@ fn adoption_panel(
                     })
                     .key("settings.delegation.adoption.cancel"),
                 )
-                .child(
+                .push(
                     system::Button::new("Add Attn roles")
                         .look(Look::Primary)
                         .on_press_tx(confirm_adoption)
                         .build(t)
-                        .key("settings.delegation.adoption.confirm")
-                        .into(),
-                ),
+                        .key("settings.delegation.adoption.confirm"),
+                )
+                .build(),
         )
+        .build(t)
 }
 
 /// The open adoption choice's list, over the page.
 pub(in crate::settings) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
-    if state.window.settings.section != Section::Delegation {
+    if state.window.settings.section != Page::Delegation {
         return;
     }
     let d = page_state(state);

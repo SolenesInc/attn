@@ -26,14 +26,3 @@ pub(super) fn empty(said: impl Into<String>, t: &Tokens) -> El {
 pub(super) fn hint(said: impl Into<String>, t: &Tokens) -> El {
     text(said.into()).font(CAPTION).color(t.text_muted)
 }
-
-/// A warning line, as the Tauri pages show a plugin's trouble.
-pub(super) fn warning(key: String, message: String, t: &Tokens) -> El {
-    text(message.clone())
-        .key(key)
-        .role("alert")
-        .label(message)
-        .font(CAPTION)
-        .color(t.warning)
-        .wrap()
-}

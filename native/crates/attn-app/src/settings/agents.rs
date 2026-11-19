@@ -602,13 +602,7 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
     group = if overrides {
         group.push(Block::custom(
             format!("settings.agent.{agent}.route.block"),
-            route::chip(
-                state,
-                t,
-                target(agent),
-                &format!("{label} default model"),
-                true,
-            ),
+            route::field_chip(state, t, target(agent), &format!("{label} default model")),
         ))
     } else {
         group.push(

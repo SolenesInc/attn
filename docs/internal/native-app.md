@@ -258,17 +258,21 @@ choices once for the whole app:
 - **Blocks.** A page is a `Page`: its `Head` (the title, its lead and an
   aside), the line that says it is saving, then its `Block`s in order. A
   `Block` knows what it is, and each of these builds one: `Section`,
-  `SettingRow`, `Field`, `Notice`, `Status`, `Choices`, `Disclosure`, `Actions`
-  and `Prose`. `Block::control` puts a control on a line of its own at its own
-  width, and `Block::custom` takes a piece no block fits, built from controls
-  inside the rhythms `Inline` and `Stack`. A section that is a form says so
-  with `Section::form`, and assistive tools then find a form named by its
-  heading, not a group. A `Refusal`, why a control's value was refused, is not
-  a block: it goes beside that control. The parent spaces
-  its blocks by what they are: 32 and a rule between sections, 12 around a
+  `SettingRow`, `Field`, `Notice`, `Status`, `Choices`, `Disclosure`,
+  `Actions`, `Table` and `Prose`. `Block::control` puts a control on a line of
+  its own at its own width, and `Block::custom` takes a piece no block fits,
+  built from controls inside the rhythms `Inline` and `Stack`. A section that
+  is a form says so with `Section::form`, and assistive tools then find a form
+  named by its heading, not a group. A `Refusal`, why a control's value was
+  refused, is not a block: it goes beside that control. The parent spaces its
+  blocks by what they are: 32 and a rule between sections, 12 around a
   notice and above a status, 16 otherwise; inside a section or a disclosure, 8
-  between setting rows, 16 between fields, 12 otherwise. Reading text wraps
-  at 480 points and a field at 504. Words beside a control, in a setting row or
+  between setting rows, 16 between fields, 12 otherwise. A page runs to 800
+  points between its sides, room for a setting row with a full reading line
+  beside its widest control, and every block ends on that one edge. The
+  Settings dialog grows to its navigation beside the widest page, with its
+  sides and scroll bar, and no wider. Reading text wraps at 480 points inside
+  the page and a field at 504. Words beside a control, in a setting row or
   a page's head, keep 288 before the control moves under them, and then wrap to
   whatever line is left; a notice's action moves under its words at the same
   288. A choice's name keeps 80, the longest word of a scheme's name, before it
@@ -276,6 +280,23 @@ choices once for the whole app:
   onto further lines before they cut a label short. Nothing a block draws runs
   past its sides, down to the smallest window at 150% text, where the Settings
   page keeps 163 points.
+- **Tables.** A `Table` lays its rows on `TableColumns`: the name, which takes
+  what the others leave, and fixed columns at widths the caller measured, each
+  a `Column` a row places its controls in. A mark column stands first when a
+  row has a mark, and a column for the row's own button stands last when a row
+  has one, so no control a row gives goes undrawn. Every line of a table, its
+  head, rows, sub-rows and details, lays the mark and the name the same way,
+  so they wrap at one width and start on one edge. The name keeps 200 before
+  the fixed columns wrap under it. Past that, the button follows the row onto
+  a line of its own, and below the mark and those 200 the name takes a line of
+  its own under the mark. A row's name opens it, and an open row shows its
+  details, its sub-rows on a rail and its actions on the name column. Opening
+  a row springs the rows below it into place, as Rune springs any layout
+  change a press makes; the Delegation page's rows moved this way before they
+  were a `Table`. A table that is switched off fades its head and what its
+  rows say, and keeps every control's colour, since each control still works;
+  its empty state and its footer keep their colour too. An empty table's
+  actions wrap one under the other when they do not fit side by side.
 - **The banner.** `attn_ui::blocks::Banner` is the bar under the title bar
   that outpost updates, an update run and shared Codex draw. A view gives its
   tone (`Warn`, `Calm`, `Good` or `Bad`), its sentence, its notes, its actions,
@@ -315,11 +336,13 @@ choices once for the whole app:
   whole workspace, as it does Rune's colour constructors.
 - **The gallery.** `attn_ui::gallery` has a playground story for every
   control and block, with a variant for each state it can be in. `cargo run -p
-  attn-ui --example state_sheets -- OUT` draws each state sheet, every state
-  side by side with a real pointer for hover and pressed and the Tab key for
-  focus, in dark and in light, with no window and no VM. `-- OUT NAME` draws
-  only the sheets whose name starts with `NAME`, such as `banner`, or `block`
-  for every page block.
+  attn-ui --example state_sheets -- OUT` draws each state sheet, with no window
+  and no VM, in dark and in light. A control's sheet puts every state side by
+  side, with a real pointer for hover and pressed and the Tab key for focus. A
+  block's sheet draws each state on a row of its own, and each state that takes
+  the keyboard again with the keyboard on its first control, or on the part the
+  state is about. `-- OUT NAME` draws only the sheets whose name starts with
+  `NAME`, such as `banner`, or `block` for every page block.
   `attn-ui/tests/rules.rs` reads the stories' rectangles and what the frame
   draws, and holds the rules the controls keep: one text inset in every field
   box and a long value ending at it, one width for number fields that holds a
@@ -342,15 +365,21 @@ choices once for the whole app:
   under its words starting on their edge, a page title wrapping short of its
   aside and keeping its line, a choice's name whole, no part of a block past
   its sides, and a control's box and ring taking in everything it draws, at
-  any width the stories draw, the smallest included. `attn-ui/tests/chrome_rules.rs`
-  holds the chrome's: one height for every list row of one line and one
-  start for every title, nothing past a row's sides, a row's hover controls
-  whole on the first frame on the row's own ground with its words ending
-  before them, a two-line row's lead and
-  controls on its title's line, an icon-only button square with its icon
-  centred and its count beside it, and every chrome control's hover, pressed
-  and ring as the other controls'.
-
+  any width the stories draw, the smallest included. A table's rules: a row's
+  parts on its first line, its controls on one left edge, a sub-row 12 from
+  its rail, the head, a row's name and its details on one edge at every width
+  from 160 to 800, an open row's details ending with the name column, a narrow
+  table's head naming only the columns on its line, the footer on the name
+  column, a tag's edge a hover step from its row at rest, hovered, pressed and
+  open, and a switched-off table's words at half strength while its controls,
+  its rings and what its empty state offers draw as when it is on.
+  `attn-ui/tests/chrome_rules.rs` holds the chrome's: one height for every list
+  row of one line and one start for every title, nothing past a row's sides, a
+  row's hover controls whole on the first frame on the row's own ground with
+  its words ending before them, a two-line row's lead and controls on its
+  title's line, an icon-only button square with its icon centred and its count
+  beside it, and every chrome control's hover, pressed and ring as the other
+  controls'.
 A control or a block a view needs that `attn-ui` lacks is added there with its
 story and, when it keeps a rule, its test.
 

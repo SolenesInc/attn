@@ -35,6 +35,7 @@ mod section;
 mod setting_row;
 mod sheet;
 mod surface;
+mod table;
 mod trail;
 
 pub use actions::Actions;
@@ -77,3 +78,4 @@ pub use surface::Surface;
 pub use trail::Trail;
 
 pub use measure::{DOCUMENT, DOCUMENT_EDGE, DOCUMENT_GUTTER, document_inset, document_inside};
+pub use table::{Column, Empty, SubRow, Table, TableColumns, TableRow};

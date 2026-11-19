@@ -87,11 +87,13 @@ impl Field {
     }
 
     pub fn build(self, t: &Tokens) -> Block {
-        let label = door::gap(
+        let label = door::gaps(
             row()
                 .key(format!("{}.label", self.key))
                 .w_full()
-                .items_start(),
+                .items_start()
+                .flex_wrap(),
+            Space::S2,
             Space::S8,
         )
         .child(
@@ -99,7 +101,12 @@ impl Field {
                 .wrap()
                 .grow_from(1.0, 0.0),
         )
-        .children(self.note.map(|n| words(n, Type::Small, t.text_muted)))
+        .children(self.note.map(|n| {
+            words(n, Type::Small, t.text_muted)
+                .wrap()
+                .shrink()
+                .min_w(0.0)
+        }))
         .children(self.mark);
         let value = self.value.map(|v| {
             let shown = words(v.clone(), Type::Body, t.text_secondary)

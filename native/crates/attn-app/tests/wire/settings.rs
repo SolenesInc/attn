@@ -1147,6 +1147,40 @@ fn apart(a: [f32; 4], b: [f32; 4]) -> bool {
 }
 
 #[test]
+fn on_a_wide_window_a_page_runs_its_800_point_measure_and_the_dialog_ends_with_it() {
+    let (daemon, _) = accepting(&[]);
+    let mut world = World::start_sized(daemon, (2400.0, 1200.0));
+    open(&mut world);
+    click(&mut world, "settings.nav.general");
+    let body = rect_of(&world, "settings.body");
+    let theme = rect_of(&world, "settings.block.theme");
+    let edge = theme[0] + theme[2];
+    assert!(
+        (theme[2] - 800.0).abs() < 0.5,
+        "the page is {} wide, not its 800-point measure",
+        theme[2]
+    );
+    for key in [
+        "settings.color-schemes",
+        "settings.block.font-size",
+        "settings.block.layout",
+    ] {
+        let [x, _, w, _] = rect_of(&world, key);
+        assert!(
+            (x + w - edge).abs() < 0.5,
+            "{key} ends at {}, off the page's edge at {edge}",
+            x + w
+        );
+    }
+    assert!(
+        (body[0] + body[2] - edge - (32.0 + 8.0)).abs() < 0.5,
+        "the dialog's page ends at {}, {} past the blocks' edge at {edge}, not its side and bar",
+        body[0] + body[2],
+        body[0] + body[2] - edge
+    );
+}
+
+#[test]
 fn the_smallest_window_at_150_percent_text_keeps_a_pages_title_and_its_cards_whole() {
     let (daemon, _) = accepting(&[
         ("uiScale", "1.5"),

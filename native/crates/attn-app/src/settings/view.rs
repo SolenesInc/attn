@@ -16,9 +16,9 @@ use crate::setting;
 
 const SEARCH_FIELD: &str = "settings.search.field";
 
-/// The Tauri app's `.settings-modal`: as large as the window allows up to 1380 by 880 points,
-/// 20 points in from its edges.
-const MAX_WIDTH: f32 = 1380.0;
+/// The settings dialog: as large as the window allows, up to its navigation beside the widest
+/// page across and 880 points down, 20 points in from its edges.
+const MAX_WIDTH: f32 = NAV_WIDTH + Page::WIDEST;
 const MAX_HEIGHT: f32 = 880.0;
 const INSET: f32 = 20.0;
 const HEADER_HEIGHT: f32 = 58.0;
@@ -308,7 +308,7 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
         Section::EventBus => bus::page(state, state.window.now_ms, t),
         Section::Analytics => legacy(analytics::page(state, t)),
         Section::BackgroundAgents => background::page(state, t),
-        Section::Delegation => legacy(delegation::page(state, t)),
+        Section::Delegation => delegation::page(state, t),
         Section::Agents => agents::page(state, t),
         Section::Models => models::page(state, t),
         Section::Updates => updates::page(state, t),

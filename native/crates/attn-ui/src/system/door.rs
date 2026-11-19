@@ -244,3 +244,21 @@ pub(crate) const fn legacy(size: f32, weight: f32) -> TextStyle {
 pub(crate) fn text_input(edit: &rune::TextEdit, kind: Type) -> El {
     rune::text_input(edit, style(kind))
 }
+
+/// `e` faded as something turned off: at the strength an unavailable control draws, with its
+/// presses kept.
+pub(crate) fn faded(e: El) -> El {
+    e.layer_opacity(super::disabled::STRENGTH)
+}
+
+/// `e`, growing on its line, `points` wider than the room the line gives it.
+pub(crate) fn grown_past_end(e: El, points: f32) -> El {
+    e.mr(-points)
+}
+
+/// `e` on a rail of `ink` down its left edge, what it holds starting 12 from the rail.
+pub(crate) fn on_rail(e: El, ink: rune::Color) -> El {
+    const RAIL: f32 = 2.0;
+    e.pl(RAIL + Space::S12.pt())
+        .border_sides([0.0, 0.0, 0.0, RAIL], ink)
+}

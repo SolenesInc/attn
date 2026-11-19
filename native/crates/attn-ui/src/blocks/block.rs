@@ -15,6 +15,7 @@ pub(crate) enum Kind {
     Disclosure,
     List,
     Facts,
+    Table,
     Control,
     Custom,
 }

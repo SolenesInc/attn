@@ -8,6 +8,7 @@
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use attn_ui::block_gallery::BLOCK_SUBJECTS;
 use attn_ui::chrome_gallery::CHROME_SHEETS;
@@ -45,9 +46,17 @@ struct Column {
     label: &'static str,
     variant: &'static str,
     gesture: Gesture,
-    /// What the gesture lands on, by the suffix it adds to the row's key; the row itself when
-    /// `None`.
-    aim: Option<&'static str>,
+    aim: Aim,
+}
+
+/// What a column's gesture lands on.
+#[derive(Clone, Copy)]
+enum Aim {
+    Row,
+    /// The part whose key is the row's key with this suffix.
+    Suffix(&'static str),
+    /// The part with this key, anywhere in the story.
+    Key(&'static str),
 }
 
 struct Sheet {
@@ -62,7 +71,7 @@ const fn column(label: &'static str, variant: &'static str, gesture: Gesture) ->
         label,
         variant,
         gesture,
-        aim: None,
+        aim: Aim::Row,
     }
 }
 
@@ -76,7 +85,7 @@ const fn aimed(
         label,
         variant,
         gesture,
-        aim: Some(aim),
+        aim: Aim::Suffix(aim),
     }
 }
 
@@ -341,8 +350,9 @@ fn gallery(dark: bool, story: &str) -> Runtime<()> {
 
 thread_local! {
     static LABEL: RefCell<String> = RefCell::default();
-    static GPU: Gpu = Gpu::headless();
 }
+
+static GPU: LazyLock<Gpu> = LazyLock::new(Gpu::headless);
 
 struct Label(String);
 
@@ -377,7 +387,9 @@ fn label(said: &str, size: (f32, f32), dark: bool) -> Image {
 
 /// A control in one state: its rectangle on the stage with a margin round it, so its ring and
 /// any layer outside its edge show.
-fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
+/// The block or control `key` in `column`'s variant after its gesture, and whether the
+/// keyboard reached it when the gesture is Tab.
+fn cell(dark: bool, story: &str, column: &Column, key: &str) -> (Image, bool) {
     let mut rt = gallery(dark, story);
     rt.frame(0.0);
     rt.open_playground(story, Some(column.variant));
@@ -385,14 +397,20 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
         .playground_element(key)
         .unwrap_or_else(|| panic!("{story} {} has no {key}", column.variant));
     let [x, y, w, h] = found.rect;
-    let target = match column.aim {
-        Some(aim) => rt
-            .playground_element(&format!("{key}{aim}"))
-            .unwrap_or_else(|| panic!("{story} {} has no {key}{aim}", column.variant)),
+    let aimed_at = match column.aim {
+        Aim::Row => None,
+        Aim::Suffix(suffix) => Some(format!("{key}{suffix}")),
+        Aim::Key(key) => Some(key.to_owned()),
+    };
+    let target = match aimed_at {
+        Some(aimed_at) => rt
+            .playground_element(&aimed_at)
+            .unwrap_or_else(|| panic!("{story} {} has no {aimed_at}", column.variant)),
         None => found.clone(),
     };
     let [tx, ty, tw, th] = target.rect;
     let (cx, cy) = (tx + tw / 2.0, ty + th / 2.0);
+    let mut focused = false;
     match column.gesture {
         Gesture::None => {}
         Gesture::Hover => rt.pointer_move(cx, cy),
@@ -413,13 +431,15 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
                     mods: Mods::default(),
                 });
             }
+            focused = true;
         }
         Gesture::Tab | Gesture::TabEnd => {}
     }
     for _ in 0..3 {
         rt.frame(1.0);
     }
-    pixels(&mut rt).crop([x - MARGIN, y - MARGIN, w + 2.0 * MARGIN, h + 2.0 * MARGIN])
+    let image = pixels(&mut rt).crop([x - MARGIN, y - MARGIN, w + 2.0 * MARGIN, h + 2.0 * MARGIN]);
+    (image, focused)
 }
 
 fn holds_tab_stop(rt: &Runtime<()>, path: &str) -> bool {
@@ -518,42 +538,41 @@ impl<S: 'static> Compositor<S> for Interface {
 }
 
 fn pixels<S: 'static>(rt: &mut Runtime<S>) -> Image {
-    GPU.with(|gpu| {
-        let (w, h) = rt.window_viewport();
-        let size = ((w * SCALE).round() as u32, (h * SCALE).round() as u32);
-        let format = if rt.srgb_blend() {
-            OFFSCREEN_FORMAT.remove_srgb_suffix()
-        } else {
-            OFFSCREEN_FORMAT
-        };
-        let mut renderer = Renderer::new(&gpu.device, format);
-        renderer.set_srgb_blend(rt.srgb_blend());
-        renderer.attach_text(&mut rt.text.atlas);
-        rt.text.atlas.invalidate();
-        let target = Offscreen::with_format(&gpu.device, size.0, size.1, format);
-        renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
-        renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, size);
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        Interface.render(&mut Frame {
-            device: &gpu.device,
-            queue: &gpu.queue,
-            encoder: &mut encoder,
-            target: &target.view,
-            format,
-            size,
-            dt: 0.0,
-            update_ms: 0.0,
-            rt,
-            ui: &mut renderer,
-        });
-        target.copy(&mut encoder);
-        renderer.submit(&gpu.queue, encoder);
-        Image {
-            width: size.0,
-            height: size.1,
-            rgba: target.read(&gpu.device),
-        }
-    })
+    let gpu = &*GPU;
+    let (w, h) = rt.window_viewport();
+    let size = ((w * SCALE).round() as u32, (h * SCALE).round() as u32);
+    let format = if rt.srgb_blend() {
+        OFFSCREEN_FORMAT.remove_srgb_suffix()
+    } else {
+        OFFSCREEN_FORMAT
+    };
+    let mut renderer = Renderer::new(&gpu.device, format);
+    renderer.set_srgb_blend(rt.srgb_blend());
+    renderer.attach_text(&mut rt.text.atlas);
+    rt.text.atlas.invalidate();
+    let target = Offscreen::with_format(&gpu.device, size.0, size.1, format);
+    renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
+    renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, size);
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    Interface.render(&mut Frame {
+        device: &gpu.device,
+        queue: &gpu.queue,
+        encoder: &mut encoder,
+        target: &target.view,
+        format,
+        size,
+        dt: 0.0,
+        update_ms: 0.0,
+        rt,
+        ui: &mut renderer,
+    });
+    target.copy(&mut encoder);
+    renderer.submit(&gpu.queue, encoder);
+    Image {
+        width: size.0,
+        height: size.1,
+        rgba: target.read(&gpu.device),
+    }
 }
 
 fn background(dark: bool) -> [u8; 4] {
@@ -570,7 +589,7 @@ fn shoot(sheet: &Sheet, dark: bool, out: &Path) {
             sheet
                 .columns
                 .iter()
-                .map(|column| cell(dark, sheet.story, column, key))
+                .map(|column| cell(dark, sheet.story, column, key).0)
                 .collect()
         })
         .collect();
@@ -610,17 +629,56 @@ fn shoot(sheet: &Sheet, dark: bool, out: &Path) {
     println!("{}", path.display());
 }
 
+/// A state a block's sheet draws, and the part its focused twin puts the keyboard on: the
+/// block's first control unless the state is about another.
+#[derive(Clone, Copy)]
+struct State(&'static str, Aim);
+
+const fn state(variant: &'static str) -> State {
+    State(variant, Aim::Row)
+}
+
 /// The variants a block's sheet draws, one under another, after the block at rest with the
-/// keyboard on its first control.
-const BLOCK_VARIANTS: &[(&str, &[&str])] = &[
-    ("Blocks/Page", &["Saving", "Refused", "Off"]),
+/// keyboard on its first control, each again with the keyboard on it where it takes the
+/// keyboard.
+const BLOCK_VARIANTS: &[(&str, &[State])] = &[
+    (
+        "Blocks/Page",
+        &[
+            state("Saving"),
+            State("Refused", Aim::Key("row.number.control")),
+            state("Off"),
+        ],
+    ),
     ("Blocks/Section", &[]),
     ("Blocks/Setting row", &[]),
-    ("Blocks/Field", &["Saved", "Failed", "Disabled"]),
+    (
+        "Blocks/Field",
+        &[state("Saved"), state("Failed"), state("Disabled")],
+    ),
     ("Blocks/Notice and status", &[]),
-    ("Blocks/Choices", &["Second chosen", "Disabled"]),
-    ("Blocks/Disclosure", &["Open", "Failed", "Disabled"]),
+    (
+        "Blocks/Choices",
+        &[state("Second chosen"), state("Disabled")],
+    ),
+    (
+        "Blocks/Disclosure",
+        &[state("Open"), state("Failed"), state("Disabled")],
+    ),
     ("Blocks/Actions", &[]),
+    (
+        "Blocks/Table",
+        &[
+            state("Open"),
+            state("Sub-row open"),
+            state("Off"),
+            state("Empty"),
+            state("Empty off"),
+            state("Empty smallest long"),
+            state("Empty off smallest long"),
+            state("Open narrow"),
+        ],
+    ),
 ];
 
 /// A block's sheet: each state on a row of its own, since a block is as wide as a page.
@@ -633,21 +691,35 @@ fn block_sheet(story: &str) -> String {
     format!("block-{name}")
 }
 
-fn shoot_block(story: &str, key: &str, extra: &[&'static str], dark: bool, out: &Path) {
+fn shoot_block(story: &str, key: &str, extra: &[State], dark: bool, out: &Path) {
     let mut rows: Vec<(String, Column)> = vec![
         ("Rest".into(), column("", "Rest", Gesture::None)),
         ("Focus (Tab)".into(), column("", "Rest", Gesture::Tab)),
     ];
+    rows.extend(extra.iter().flat_map(|&State(v, aim)| {
+        [
+            (v.to_owned(), column("", v, Gesture::None)),
+            (
+                format!("{v}, focus (Tab)"),
+                Column {
+                    aim,
+                    ..column("", v, Gesture::Tab)
+                },
+            ),
+        ]
+    }));
     rows.extend(
-        extra
-            .iter()
-            .chain(&["Long", "Narrow", "Narrow long", "Smallest long"])
-            .map(|&v| (v.to_owned(), column("", v, Gesture::None))),
+        ["Long", "Narrow", "Narrow long", "Smallest long"]
+            .map(|v| (v.to_owned(), column("", v, Gesture::None))),
     );
-    let cells: Vec<Image> = rows
-        .iter()
-        .map(|(_, column)| cell(dark, story, column, key))
-        .collect();
+    let (rows, cells): (Vec<(String, Column)>, Vec<Image>) = rows
+        .into_iter()
+        .filter_map(|(name, column)| {
+            let (image, focused) = cell(dark, story, &column, key);
+            (focused || !matches!(column.gesture, Gesture::Tab | Gesture::TabEnd))
+                .then_some(((name, column), image))
+        })
+        .unzip();
     let px = |v: f32| (v * SCALE).round() as u32;
     let label_w = px(ROW_LABEL_WIDTH);
     let total_w = label_w + cells.iter().map(|c| c.width).max().unwrap_or(0);
@@ -680,19 +752,29 @@ fn main() {
             shoot(&sheet, dark, &out);
         }
     }
+    let at_rest = |extra: &[&'static str]| extra.iter().map(|&v| state(v)).collect::<Vec<_>>();
     let blocks = BLOCK_SUBJECTS
         .iter()
         .zip(BLOCK_VARIANTS)
-        .chain(SETTINGS_SUBJECTS.iter().zip(SETTINGS_VARIANTS))
-        .chain(PANEL_SUBJECTS.iter().zip(PANEL_VARIANTS))
-        .map(|(&(story, keys), &(_, extra))| (story, keys, extra))
-        .chain(READING_SUBJECTS.iter().copied());
+        .map(|(&(story, keys), &(_, extra))| (story, keys, extra.to_vec()))
+        .chain(
+            SETTINGS_SUBJECTS
+                .iter()
+                .zip(SETTINGS_VARIANTS)
+                .chain(PANEL_SUBJECTS.iter().zip(PANEL_VARIANTS))
+                .map(|(&(story, keys), &(_, extra))| (story, keys, at_rest(extra))),
+        )
+        .chain(
+            READING_SUBJECTS
+                .iter()
+                .map(|&(story, keys, extra)| (story, keys, at_rest(extra))),
+        );
     for (story, keys, extra) in blocks {
         if !wanted(&block_sheet(story)) {
             continue;
         }
         for dark in [true, false] {
-            shoot_block(story, keys[0], extra, dark, &out);
+            shoot_block(story, keys[0], &extra, dark, &out);
         }
     }
 }
@@ -719,7 +801,11 @@ fn chrome_sheets() -> impl Iterator<Item = Sheet> {
                     "tab" => Gesture::Tab,
                     _ => Gesture::None,
                 },
-                aim: (!aim.is_empty()).then_some(aim),
+                aim: if aim.is_empty() {
+                    Aim::Row
+                } else {
+                    Aim::Suffix(aim)
+                },
             })
             .collect(),
     })

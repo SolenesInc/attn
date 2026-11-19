@@ -774,7 +774,10 @@ fn the_empty_table_adopts_the_maintained_roles_with_the_install_and_shows_their_
     assert!(row.contains("Needs a model"), "{row}");
     button(&mut world, "Builder");
     assert_eq!(
-        status(&world, "settings.delegation.role.builder.instructions"),
+        status(
+            &world,
+            "settings.delegation.role.builder.instructions.value"
+        ),
         "Run relevant tests"
     );
     assert!(!shown(

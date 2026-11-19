@@ -4,6 +4,11 @@ use crate::system::Size;
 /// Sentences of 74 and 75 characters from Settings measure 457.5 and 476 in `Body`.
 pub(crate) const READING: f32 = 480.0;
 
+/// The widest a page runs, so every block on it ends on one right edge. Its widest line, a
+/// setting row with a full reading line beside the widest control ("Resume for", 250), needs
+/// 780; the Delegation table on one line needs 614.
+pub(crate) const MEASURE: f32 = 800.0;
+
 /// The longest a field runs: text in it wraps at the reading measure, inside its insets.
 pub(crate) const FIELD: f32 = READING + 2.0 * Size::Regular.inset().pt();
 
@@ -60,3 +65,6 @@ pub fn document_inside(width: f32) -> (f32, f32) {
 /// The narrowest a fact's tile gets before the tiles wrap: an event bus's sequence range,
 /// "1,048,576–1,049,000", measures 137 in `Mono`, 161 inside the tile's insets.
 pub(crate) const FACT_TILE_FLOOR: f32 = 164.0;
+/// The narrowest a table's name column gets before the fixed columns wrap under it: the widest
+/// name with its tag, "Orchestrator" with "NEEDS A MODEL", measures 184.
+pub(crate) const FLEX_FLOOR: f32 = 200.0;

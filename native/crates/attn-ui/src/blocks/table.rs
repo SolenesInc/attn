@@ -1,0 +1,644 @@
+use std::rc::Rc;
+
+use rune::{El, Tx, col, row};
+
+use super::actions::Actions;
+use super::block::{Block, Kind, Press, inner_gap, spaced};
+use super::measure::{FIELD, FLEX_FLOOR, READING};
+use crate::Tokens;
+use crate::system::{
+    Button, Control, IconSize, Look, Radius, Said, Size, Space, Tone, Type, door, hover_layer,
+    press_area, tag, words,
+};
+
+/// The columns of a [`Table`]: the name column, which takes the width the others leave, and
+/// fixed columns after it at widths the caller measured. A table also has a column for the
+/// rows' marks when a row has one, and one for their end buttons when a row has one.
+pub struct TableColumns {
+    name: &'static str,
+    fixed: Vec<(&'static str, f32)>,
+}
+
+/// A fixed column of the [`TableColumns`] that made it, where a row places its controls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Column(usize);
+
+impl TableColumns {
+    pub fn new(name: &'static str) -> TableColumns {
+        TableColumns {
+            name,
+            fixed: Vec::new(),
+        }
+    }
+
+    /// A column `width` wide after the ones before it, titled `title`.
+    pub fn fixed(&mut self, title: &'static str, width: f32) -> Column {
+        self.fixed.push((title, width));
+        Column(self.fixed.len() - 1)
+    }
+}
+
+const ROW_INSET: Space = Space::S16;
+const COLUMN_GAP: Space = Space::S12;
+
+/// A table of rows that open: each row's name opens it, and an open row shows its details, its
+/// sub-rows and its actions on the table's columns. A narrow table wraps its fixed columns under
+/// the name, and its head then names only the columns still on its line.
+pub struct Table<S> {
+    key: String,
+    columns: TableColumns,
+    rows: Vec<TableRow<S>>,
+    empty: Option<Empty>,
+    footer: Option<(String, Actions)>,
+    dimmed: bool,
+}
+
+impl<S: 'static> Table<S> {
+    pub fn new(key: impl Into<String>, columns: TableColumns) -> Table<S> {
+        Table {
+            key: key.into(),
+            columns,
+            rows: Vec::new(),
+            empty: None,
+            footer: None,
+            dimmed: false,
+        }
+    }
+
+    pub fn row(mut self, row: TableRow<S>) -> Self {
+        self.rows.push(row);
+        self
+    }
+
+    pub fn rows(mut self, rows: impl IntoIterator<Item = TableRow<S>>) -> Self {
+        self.rows.extend(rows);
+        self
+    }
+
+    /// What the table says in place of rows it does not have yet.
+    pub fn empty(mut self, empty: Empty) -> Self {
+        self.empty = Some(empty);
+        self
+    }
+
+    /// The quiet buttons under the last row that add to it, on a line keyed `key`, their words
+    /// on the name column.
+    pub fn footer(mut self, key: impl Into<String>, actions: Actions) -> Self {
+        self.footer = Some((key.into(), actions));
+        self
+    }
+
+    /// While what the table configures is off, its head and what its rows say fade. Every control
+    /// keeps its colour, since each still works.
+    pub fn dimmed(mut self, dimmed: bool) -> Self {
+        self.dimmed = dimmed;
+        self
+    }
+
+    pub fn build(self, t: &Tokens) -> Block {
+        let grid = Grid {
+            name: self.columns.name,
+            fixed: self.columns.fixed,
+            lead: self.rows.iter().any(|r| r.leading.is_some()),
+            action: self.rows.iter().any(TableRow::has_end),
+            dimmed: self.dimmed,
+        };
+        let head = grid.dim(grid.head(t).key(format!("{}.head", self.key)));
+        let n = self.rows.len();
+        let footed = self.footer.is_some();
+        let rows = self
+            .rows
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| r.build(&grid, i + 1 < n || footed, t));
+        let footer = self.footer.map(|(key, actions)| {
+            let quiet = door::hang_left(actions.build().el, Size::Regular.inset());
+            grid.padded(grid.name_column(quiet), Space::S8).key(key)
+        });
+        let table = col()
+            .key(self.key)
+            .w_full()
+            .fill(t.bg_panel)
+            .border(1.0, t.border)
+            .child(head)
+            .children(self.empty.map(|e| e.build(t)))
+            .children(rows)
+            .children(footer);
+        Block::new(
+            Kind::Table,
+            door::clip_corner(door::corner(table, Radius::Card), Radius::Card),
+        )
+    }
+}
+
+struct Grid {
+    name: &'static str,
+    fixed: Vec<(&'static str, f32)>,
+    lead: bool,
+    action: bool,
+    dimmed: bool,
+}
+
+impl Grid {
+    fn dim(&self, e: El) -> El {
+        if self.dimmed { door::faded(e) } else { e }
+    }
+
+    /// The mark and the name, as every line lays them: below the mark and the name's floor, the
+    /// name takes a line of its own under the mark. `between` stands between those lines.
+    fn who(&self, lead: Option<El>, name: El, between: Space) -> El {
+        let name = name.min_w(0.0);
+        if !self.lead {
+            return name.w_full();
+        }
+        let side = Size::Regular.height();
+        door::gaps(
+            row().items_start().w_full().min_w(0.0).flex_wrap(),
+            between,
+            COLUMN_GAP,
+        )
+        .child(row().w(side).min_w(side).children(lead.map(band)))
+        .child(name.grow_from(1.0, FLEX_FLOOR))
+    }
+
+    /// One line on the columns: `who` over the mark and name columns, `fixed` giving each fixed
+    /// column its content, and `end` in the action column. Below the name's floor the fixed
+    /// columns wrap under the name, and the end follows the line.
+    fn line(&self, who: El, mut fixed: impl FnMut(Column) -> El, end: Option<El>) -> El {
+        let who = row().grow_from(1.0, self.name_floor()).child(who.grow(1.0));
+        let fixed = self.fixed.iter().enumerate().map(|(i, &(_, w))| {
+            row()
+                .grow_from(0.0, w)
+                .child(fixed(Column(i)).shrink().max_w(w))
+        });
+        let middle = door::gaps(
+            row()
+                .items_start()
+                .flex_wrap()
+                .grow_from(1.0, self.name_floor()),
+            Space::S0,
+            COLUMN_GAP,
+        )
+        .child(who)
+        .children(fixed);
+        let side = Size::Regular.height();
+        let end = self.action.then(|| row().w(side).min_w(side).children(end));
+        let line = door::gaps(
+            row().items_start().flex_wrap().w_full(),
+            Space::S4,
+            COLUMN_GAP,
+        )
+        .child(middle)
+        .children(end);
+        door::sides(line, ROW_INSET, ROW_INSET)
+    }
+
+    /// The width the mark and the name column need on one line.
+    fn name_floor(&self) -> f32 {
+        let lead = if self.lead {
+            Size::Regular.height() + COLUMN_GAP.pt()
+        } else {
+            0.0
+        };
+        lead + FLEX_FLOOR
+    }
+
+    /// The head on the columns, one line high, so a narrow table names only the columns on it.
+    fn head(&self, t: &Tokens) -> El {
+        let label = |title: &'static str| words(title, Type::Label, t.text_tertiary);
+        let line = self.line(
+            self.who(None, label(self.name), Space::S0),
+            |column| label(self.fixed[column.0].0),
+            None,
+        );
+        let line = door::clip(line.max_h(door::line_height(Type::Label)));
+        self.padded(line, Space::S8)
+            .fill(t.bg_elevated)
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+    }
+
+    /// Each fixed column's content, in the order it was placed.
+    fn place(&self, content: impl IntoIterator<Item = (Column, El)>) -> Vec<Vec<El>> {
+        let mut placed: Vec<Vec<El>> = self.fixed.iter().map(|_| Vec::new()).collect();
+        for (column, e) in content {
+            placed[column.0].push(e);
+        }
+        placed
+    }
+
+    /// `line` with `space` above and below it.
+    fn padded(&self, line: El, space: Space) -> El {
+        door::inset(col().w_full().child(line), Space::S0, space)
+    }
+
+    /// `content` in the name column of a line of its own, so it ends where the names end.
+    fn name_column(&self, content: El) -> El {
+        self.line(self.who(None, content, Space::S0), |_| row(), None)
+    }
+}
+
+/// A row's part centred on its first line, a band one Regular control high.
+fn band(content: El) -> El {
+    row()
+        .min_h(Size::Regular.height())
+        .items_center()
+        .child(content)
+}
+
+/// A fixed column's content: the first on the row's first line, the rest under it.
+fn stacked(content: Vec<El>) -> El {
+    let mut content = content.into_iter();
+    door::gap(col().items_start(), Space::S4)
+        .children(content.next().map(|c| band(c).w_full()))
+        .children(content)
+}
+
+/// `area` widened by the press area's inset on both sides, so what it holds is as wide as the
+/// column it stands in.
+fn whole_width(area: El) -> El {
+    door::grown_past_end(row().grow(1.0).min_w(0.0), 2.0 * Size::Compact.inset().pt()).child(area)
+}
+
+/// A control in a column, its box out to the left by its own inset, so its words sit on the
+/// column line.
+fn hung(control: Control) -> El {
+    let size = control.size();
+    door::hang_left(El::from(control).shrink(), size.inset())
+}
+
+/// What a table with no rows says, and what to do about it.
+pub struct Empty {
+    key: String,
+    heading: Said,
+    copy: Said,
+    actions: Vec<El>,
+}
+
+impl Empty {
+    pub fn new(
+        key: impl Into<String>,
+        heading: impl Into<Said>,
+        copy: impl Into<Said>,
+        actions: impl IntoIterator<Item = El>,
+    ) -> Empty {
+        Empty {
+            key: key.into(),
+            heading: heading.into(),
+            copy: copy.into(),
+            actions: actions.into_iter().collect(),
+        }
+    }
+
+    fn build(self, t: &Tokens) -> El {
+        let said = door::gap(col().items_center(), Space::S4)
+            .child(
+                words(self.heading.clone(), Type::Name, t.text_primary)
+                    .key(format!("{}.heading", self.key))
+                    .role("heading")
+                    .label(self.heading.text()),
+            )
+            .child(
+                words(self.copy, Type::Small, t.text_secondary)
+                    .wrap()
+                    .max_w(READING)
+                    .align(rune::Align::Center),
+            );
+        let actions = door::gaps(
+            row().w_full().items_center().justify_center().flex_wrap(),
+            Space::S8,
+            Space::S8,
+        )
+        .children(self.actions);
+        let empty = door::gap(col().key(self.key).w_full().items_center(), Space::S12)
+            .child(said)
+            .child(actions);
+        door::inset(empty, Space::S24, Space::S32)
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+    }
+}
+
+/// One row of a [`Table`]: a mark, a name that opens the row, words or controls in the fixed
+/// columns, and a button at its end.
+pub struct TableRow<S> {
+    key: String,
+    leading: Option<Control>,
+    title: Said,
+    tags: Vec<(Said, Tone)>,
+    subtitle: Said,
+    controls: Vec<(Column, El)>,
+    more: Option<String>,
+    off: bool,
+    open: bool,
+    toggle: Press<S>,
+    details: Vec<Block>,
+    sub_rows: Vec<SubRow<S>>,
+    sub_footer: Option<(Column, Control)>,
+    actions: Option<Actions>,
+}
+
+impl<S: 'static> TableRow<S> {
+    pub fn new(
+        key: impl Into<String>,
+        title: impl Into<Said>,
+        toggle: impl Fn(&mut S, &mut Tx) + 'static,
+    ) -> TableRow<S> {
+        TableRow {
+            key: key.into(),
+            leading: None,
+            title: title.into(),
+            tags: Vec::new(),
+            subtitle: Said::default(),
+            controls: Vec::new(),
+            more: None,
+            off: false,
+            open: false,
+            toggle: Rc::new(toggle),
+            details: Vec::new(),
+            sub_rows: Vec::new(),
+            sub_footer: None,
+            actions: None,
+        }
+    }
+
+    /// The row's mark in the icon column.
+    pub fn leading(mut self, mark: Control) -> Self {
+        self.leading = Some(mark);
+        self
+    }
+
+    pub fn tag(mut self, said: impl Into<Said>, tone: Tone) -> Self {
+        self.tags.push((said.into(), tone));
+        self
+    }
+
+    pub fn subtitle(mut self, said: impl Into<Said>) -> Self {
+        self.subtitle = said.into();
+        self
+    }
+
+    /// A control in the fixed column `column`; several in one column stack one under another.
+    pub fn control(mut self, column: Column, control: Control) -> Self {
+        self.controls.push((column, hung(control)));
+        self
+    }
+
+    /// The button at the row's end that opens it too, named `label`.
+    pub fn more(mut self, label: impl Into<String>) -> Self {
+        self.more = Some(label.into());
+        self
+    }
+
+    pub fn off(mut self, off: bool) -> Self {
+        self.off = off;
+        self
+    }
+
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+
+    pub fn details(mut self, block: Block) -> Self {
+        self.details.push(block);
+        self
+    }
+
+    pub fn sub_row(mut self, sub: SubRow<S>) -> Self {
+        self.sub_rows.push(sub);
+        self
+    }
+
+    /// A control under the sub-rows in the fixed column `column`, such as one that adds another.
+    pub fn sub_footer(mut self, column: Column, control: Control) -> Self {
+        self.sub_footer = Some((column, control));
+        self
+    }
+
+    /// What can be done to the row, last in its open state.
+    pub fn actions(mut self, actions: Actions) -> Self {
+        self.actions = Some(actions);
+        self
+    }
+
+    fn has_end(&self) -> bool {
+        self.more.is_some() || self.sub_rows.iter().any(|s| s.trailing.is_some())
+    }
+
+    fn build(self, grid: &Grid, ruled: bool, t: &Tokens) -> El {
+        let toggle = self.toggle.clone();
+        let quiet = self.off || grid.dimmed;
+        let fade = |e: El| if quiet { door::faded(e) } else { e };
+        let title_line = door::gaps(
+            row().items_center().w_full().min_w(0.0).flex_wrap(),
+            Space::S4,
+            Space::S8,
+        )
+        .child(
+            words(&self.title, Type::Name, t.text_primary)
+                .wrap()
+                .shrink(),
+        )
+        .children(self.tags.iter().map(|(said, tone)| {
+            El::from(tag(
+                format!("{}.tag.{}", self.key, said.text()),
+                said,
+                *tone,
+                t,
+            ))
+        }));
+        let description: Vec<String> = self
+            .tags
+            .iter()
+            .map(|(said, _)| said.text())
+            .chain((!self.subtitle.text().is_empty()).then(|| self.subtitle.text()))
+            .collect();
+        let said = door::gap(col().w_full().min_w(0.0).items_start(), Space::S2)
+            .child(title_line)
+            .children((!self.subtitle.text().is_empty()).then(|| {
+                words(self.subtitle.clone(), Type::Small, t.text_secondary)
+                    .w_full()
+                    .min_w(0.0)
+                    .wrap()
+            }))
+            .a11y_hidden();
+        let said = door::on_band(said, Type::Name, Size::Regular);
+        let said = fade(grid.who(self.leading.map(El::from), said, Space::S4));
+        let who = press_area(
+            self.key.clone(),
+            &self.title.text(),
+            self.open,
+            false,
+            said,
+            t,
+            move |s: &mut S, tx: &mut Tx| toggle(s, tx),
+        );
+        let who = whole_width(El::from(who).description(description.join(" · ")));
+        let mut placed = grid.place(self.controls);
+        let fixed = |column: Column| stacked(std::mem::take(&mut placed[column.0]));
+        let more = self.more.map(|label| {
+            let toggle = self.toggle.clone();
+            band(
+                Button::mark("···", IconSize::Large)
+                    .look(Look::Quiet)
+                    .size(Size::Compact)
+                    .expanded(self.open)
+                    .on_press_tx(move |s: &mut S, tx: &mut Tx| toggle(s, tx))
+                    .build(t)
+                    .key(format!("{}.more", self.key))
+                    .label(label)
+                    .into(),
+            )
+        });
+        let main = grid.padded(grid.line(who, fixed, more), Space::S8);
+        let mut out = col().key(format!("{}.row", self.key)).w_full().child(main);
+        if self.open {
+            out = out.fill(t.bg_elevated);
+            if !self.details.is_empty() {
+                out = out.child(door::below(
+                    grid.name_column(spaced(self.details, inner_gap, None).max_w(FIELD)),
+                    Space::S16,
+                ));
+            }
+            out = out.children(self.sub_rows.into_iter().map(|s| s.build(grid, t)));
+            if let Some((at, footer)) = self.sub_footer {
+                let mut placed = grid.place([(at, hung(footer))]);
+                let line = grid.line(
+                    grid.who(None, row(), Space::S0),
+                    |column| stacked(std::mem::take(&mut placed[column.0])),
+                    None,
+                );
+                out = out.child(door::below(line, Space::S12));
+            }
+            if let Some(actions) = self.actions {
+                out = out.child(door::below(
+                    grid.name_column(actions.build().el.max_w(FIELD)),
+                    Space::S16,
+                ));
+            }
+        } else {
+            out = out.hover(hover_layer(t.bg_panel, t));
+        }
+        if ruled {
+            out = out.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle);
+        }
+        out
+    }
+}
+
+/// A row inside an open row, on a rail in the name column: an alternative to the row's own
+/// choice, with its control in the fixed column.
+pub struct SubRow<S> {
+    key: String,
+    title: Said,
+    note_label: Said,
+    note: Said,
+    note_missing: bool,
+    controls: Vec<(Column, El)>,
+    trailing: Option<Control>,
+    open: bool,
+    toggle: Press<S>,
+    details: Vec<Block>,
+}
+
+impl<S: 'static> SubRow<S> {
+    pub fn new(
+        key: impl Into<String>,
+        title: impl Into<Said>,
+        toggle: impl Fn(&mut S, &mut Tx) + 'static,
+    ) -> SubRow<S> {
+        SubRow {
+            key: key.into(),
+            title: title.into(),
+            note_label: Said::default(),
+            note: Said::default(),
+            note_missing: false,
+            controls: Vec::new(),
+            trailing: None,
+            open: false,
+            toggle: Rc::new(toggle),
+            details: Vec::new(),
+        }
+    }
+
+    /// The line under the title: `label` then `said`, quiet when `missing`.
+    pub fn note(mut self, label: impl Into<Said>, said: impl Into<Said>, missing: bool) -> Self {
+        self.note_label = label.into();
+        self.note = said.into();
+        self.note_missing = missing;
+        self
+    }
+
+    /// A control in the fixed column `column`, as its row's are.
+    pub fn control(mut self, column: Column, control: Control) -> Self {
+        self.controls.push((column, hung(control)));
+        self
+    }
+
+    /// A button at the sub-row's end, in the action column.
+    pub fn trailing(mut self, control: Control) -> Self {
+        self.trailing = Some(control);
+        self
+    }
+
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+
+    pub fn details(mut self, block: Block) -> Self {
+        self.details.push(block);
+        self
+    }
+
+    fn build(self, grid: &Grid, t: &Tokens) -> El {
+        let toggle = self.toggle.clone();
+        let note_ink = if self.note_missing {
+            t.text_tertiary
+        } else {
+            t.text_secondary
+        };
+        let note = door::gap(row().w_full().min_w(0.0), Space::S4)
+            .child(words(self.note_label, Type::Small, t.text_tertiary))
+            .child(
+                words(self.note.clone(), Type::Small, note_ink)
+                    .truncate()
+                    .min_w(0.0),
+            );
+        let said = door::gap(col().w_full().min_w(0.0).items_start(), Space::S2)
+            .child(
+                words(self.title.clone(), Type::Name, t.text_primary)
+                    .truncate()
+                    .min_w(0.0),
+            )
+            .child(note)
+            .a11y_hidden();
+        let who = El::from(press_area(
+            self.key.clone(),
+            &self.title.text(),
+            self.open,
+            false,
+            grid.dim(door::on_band(said, Type::Name, Size::Regular)),
+            t,
+            move |s: &mut S, tx: &mut Tx| toggle(s, tx),
+        ))
+        .description(self.note.text());
+        let rail = door::on_rail(row().w_full().min_w(0.0), t.border_hover).child(who);
+        let mut placed = grid.place(self.controls);
+        let mut out = col()
+            .key(format!("{}.row", self.key))
+            .w_full()
+            .child(grid.line(
+                grid.who(None, rail, Space::S0),
+                |column| stacked(std::mem::take(&mut placed[column.0])),
+                self.trailing.map(|c| band(c.into())),
+            ));
+        if self.open && !self.details.is_empty() {
+            let details = spaced(self.details, inner_gap, None).max_w(FIELD);
+            out = out.child(door::below(
+                grid.name_column(door::on_rail(row().w_full(), t.border_hover).child(details)),
+                Space::S16,
+            ));
+        }
+        door::below(out, Space::S4)
+    }
+}

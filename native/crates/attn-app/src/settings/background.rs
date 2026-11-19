@@ -435,13 +435,11 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
         .push_all(harnesses::failure_notice(state, "activity", t))
         .push(Block::custom(
             "settings.route.activity.block",
-            route::chip(
+            route::field_chip(
             state,
             t,
             target(ACTIVITY_ROUTE),
-            "Session activity model",
-            true,
-        )))
+            "Session activity model")))
         .push(interval_field(state, "watching", "Refresh on home (seconds)", t))
         .push(interval_field(
             state,
@@ -485,13 +483,7 @@ fn garden_advisor(state: &State, t: &Tokens) -> Block {
         .push_all(harnesses::failure_notice(state, "garden-advisor", t))
         .push(Block::custom(
             "settings.route.garden-advisor.block",
-            route::chip(
-                state,
-                t,
-                target(ADVISOR_ROUTE),
-                "Garden advisor model",
-                true,
-            ),
+            route::field_chip(state, t, target(ADVISOR_ROUTE), "Garden advisor model"),
         ))
         .build(t)
 }

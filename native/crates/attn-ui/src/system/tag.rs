@@ -49,17 +49,17 @@ pub fn mark_chip(mark: impl Into<crate::Glyph>, ink: Color, t: &Tokens) -> El {
 const PILL_WASH: f32 = 0.14;
 
 pub fn tag(key: impl Into<String>, said: impl Into<Said>, tone: Tone, t: &Tokens) -> Control {
-    let (ink, edge, fill) = match tone {
-        Tone::Neutral => (t.text_secondary, t.border_hover, Color::TRANSPARENT),
-        Tone::Warn => (t.warning, t.warning.alpha(EDGE), t.warning.alpha(WASH)),
-        Tone::Bad => (t.error, t.error.alpha(EDGE), t.error.alpha(WASH)),
-        Tone::Good => (t.success, t.success.alpha(EDGE), t.success.alpha(WASH)),
-        Tone::Accent => (t.accent, t.accent.alpha(EDGE), t.accent.alpha(WASH)),
+    let (ink, fill) = match tone {
+        Tone::Neutral => (t.text_secondary, Color::TRANSPARENT),
+        Tone::Warn => (t.warning, t.warning.alpha(WASH)),
+        Tone::Bad => (t.error, t.error.alpha(WASH)),
+        Tone::Good => (t.success, t.success.alpha(WASH)),
+        Tone::Accent => (t.accent, t.accent.alpha(WASH)),
     };
     let tag = words(said, Type::Tag, ink)
         .key(key.into())
         .fill(fill)
-        .border(1.0, edge);
+        .border(1.0, ink.alpha(EDGE));
     let tag = door::corner(door::inset(tag, Space::S6, Space::S2), Radius::Tag);
     Control::new(tag, Size::Compact)
 }
