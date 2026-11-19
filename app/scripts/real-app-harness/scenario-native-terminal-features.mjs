@@ -110,9 +110,7 @@ try {
 
   await runner.step('draw_a_kitty_image', async () => {
     await run(`clear; python3 ${kitty}`, 'after image');
-    const drawn = await view();
-    const image = drawn.images?.find((entry) => entry.image === 7);
-    runner.assert(image && image.pixels[0] === 96 && image.pixels[1] === 48, 'the image the program placed draws with its pixels', drawn.images);
+    await driver.state(`terminal-view:${runtimeId}`, { expect: { images: [{ image: 7, pixels: [96, 48] }] } });
   });
 
   const screenshot = path.join(runner.runDir, 'native-terminal-features.png');

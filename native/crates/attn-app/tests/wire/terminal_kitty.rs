@@ -122,6 +122,23 @@ fn a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive() {
 }
 
 #[test]
+fn a_client_waits_for_a_placed_image_by_the_fields_it_names() {
+    let mut world = started();
+    let image_drawn =
+        json!({"of": "terminal-view:r1", "expect": {"images": [{"image": 7, "pixels": [2, 1]}]}});
+
+    describe(&world, 2, vec![placement(1, 7, 1, 1)]);
+    world.settle();
+    let waiting = world.automate("state", image_drawn.clone()).unwrap_err();
+    assert!(waiting.contains("still waits"), "{waiting}");
+
+    send_pixels(&world, 7, 1, (2, 1), &[255, 0, 0, 255, 0, 0, 255, 255]);
+    world.settle();
+    let view = world.automate("state", image_drawn).unwrap();
+    assert_eq!(view["images"][0]["placement"], json!(1));
+}
+
+#[test]
 fn an_image_the_daemon_cannot_give_is_asked_for_again_only_once_it_is_sent_anew() {
     let mut world = started();
     describe(&world, 2, vec![placement(1, 7, 1, 0)]);
