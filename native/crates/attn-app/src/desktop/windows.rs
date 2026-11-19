@@ -444,6 +444,7 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
         .w_full()
         .h_full()
         .fill(t.bg_app)
+        .on_window_focus(crate::terminal::window_focused)
         .on_layout(|state: &mut State, [_, _, w, _]: [f32; 4]| {
             if state.notebook.window_w != w {
                 state.notebook.window_w = w;

@@ -378,6 +378,13 @@ impl Term {
     }
 }
 
+/// A window's root hears its window come to the front or go.
+pub(crate) fn window_focused(state: &mut crate::State, focused: bool, _: &mut Tx) {
+    if focused {
+        state.terminals.window_activated(&state.daemon);
+    }
+}
+
 /// The mark a terminal's slot carries, so the renderer finds the terminal it draws.
 pub fn mark(runtime_id: &str) -> u32 {
     BuildHasherDefault::<DefaultHasher>::default().hash_one(runtime_id) as u32
@@ -542,6 +549,13 @@ impl Terminals {
             let at = term.sent_at;
             send_resize(&id, term, at, Pixels::Sent, daemon);
         }
+    }
+
+    /// The window came to the front: claims the PTY of the terminal with its keyboard again, as
+    /// the Tauri terminal does each time its window takes the focus.
+    pub(crate) fn window_activated(&mut self, daemon: &Commands) {
+        let keyboard = self.focused.take();
+        self.focus(keyboard, daemon);
     }
 
     pub fn metrics(&mut self) -> Metrics {
