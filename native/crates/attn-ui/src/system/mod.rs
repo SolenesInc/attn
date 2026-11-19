@@ -40,6 +40,7 @@ pub use dot::{DotShape, DotSize, dot};
 pub use drop_zone::drop_zone;
 pub use expander::{expander, opens_in_place};
 pub use field_box::{FieldState, area_box, line_box, number_box};
+pub use focus::RING_REACH;
 pub use group_head::GroupHead;
 pub use icon_box::icon_box;
 pub use icon_button::{IconButton, icon_button};
@@ -58,6 +59,7 @@ pub use tag::{Tone, pill, tag};
 pub use trigger::{Trigger, TriggerLook};
 pub(crate) use type_role::words_and_code;
 pub use type_role::{Type, words};
+pub(crate) use type_role::{lines_at, width_of};
 
 use crate::Tokens;
 

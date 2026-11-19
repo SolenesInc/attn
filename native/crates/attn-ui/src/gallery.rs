@@ -201,6 +201,18 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Focus", |s| {
                     s.rings = true;
                     s.banner = BannerCase::Notes;
+                })
+                .variant("Long link, smallest window", |s| {
+                    s.banner = BannerCase::LongLink;
+                    s.narrow = true;
+                })
+                .variant("Long failure, smallest window", |s| {
+                    s.banner = BannerCase::LongFailure;
+                    s.narrow = true;
+                })
+                .variant("Many failures, smallest window", |s| {
+                    s.banner = BannerCase::ManyFailures;
+                    s.narrow = true;
                 }),
         )
         .story(
@@ -563,6 +575,13 @@ pub enum BannerCase {
     TwoActions,
     InlineControls,
     Long,
+    /// A restart waiting on two agents named by a worktree's basename and by a 40-character
+    /// rename in kanji and kana.
+    LongLink,
+    /// A self-update that failed to stage one outpost with a long host name.
+    LongFailure,
+    /// A self-update that failed to stage three outposts.
+    ManyFailures,
 }
 
 /// The tones a banner story draws, each keyed `banner.{tone}`, with its sentence at
@@ -578,9 +597,46 @@ pub const BANNERS: [(&str, BannerTone); 4] = [
 /// The smallest main window's width, which a top banner spans.
 const BANNER_WIDTH: f32 = 800.0;
 
+/// The largest text size the app offers, at which the smallest window lays out
+/// `BANNER_WIDTH / LARGEST_TEXT` points across.
+const LARGEST_TEXT: f32 = 1.5;
+
+const CODEX_WAITING: &str = "Codex 0.163.0 installed. Restarts when agents are idle.";
+const WORKTREE_BASENAME: &str =
+    "attn--fix-native-terminal-focus-when-reopening-an-old-codex-session-in-another-desktop";
+const LONG_RENAME: &str =
+    "Überprüfung-der-Freigabeanfragen-nach-dem-Neustart-des-gemeinsamen-Codex-Agenten";
+const LONG_HOST: &str = "build-linux-primary.us-east-1.example.dev";
+const NO_SPACE: &str = "cat: write error: No space left on device";
+const UPDATE_LOG: &str = "Log: /Users/sam/.attn/update/run-20261119.log";
+const MANY_FAILURES: [(&str, &str); 3] = [
+    (LONG_HOST, NO_SPACE),
+    (
+        "ci-runner-07.build-and-validation.platform.example.org",
+        "ssh: connect to host ci-runner-07.build-and-validation.platform.example.org port 22: \
+         Connection timed out",
+    ),
+    (
+        "studio",
+        "attn --version exited with status 127: zsh:1: command not found: attn",
+    ),
+];
+
 const LONG_SENTENCE: &str = "Codex 0.163.0 didn’t start: the app server exited with status 1 \
     before it answered its first request, after loading a configuration it could not read. Still \
     on 0.162.1, nothing was interrupted.";
+
+/// A self-update's failure to stage `outposts`, each with why, as the daemon words it.
+fn failed(outposts: &[(&str, &str)]) -> String {
+    let each: Vec<String> = outposts
+        .iter()
+        .map(|(host, why)| format!("{host}: {why}"))
+        .collect();
+    format!(
+        "could not stage {}. attn did not restart. {UPDATE_LOG}",
+        each.join("; ")
+    )
+}
 
 fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
     if s.rings {
@@ -615,13 +671,16 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
         };
         let case = s.banner;
         let key = format!("banner.{name}");
-        let sentence = if case == BannerCase::Long {
-            LONG_SENTENCE
-        } else {
-            sentence
+        let (sentence, action) = match case {
+            BannerCase::Long => (LONG_SENTENCE.to_owned(), action),
+            BannerCase::LongLink => (CODEX_WAITING.to_owned(), "Restart now"),
+            BannerCase::LongFailure => (failed(&[(LONG_HOST, NO_SPACE)]), "Retry"),
+            BannerCase::ManyFailures => (failed(&MANY_FAILURES), "Retry"),
+            _ => (sentence.to_owned(), action),
         };
         let mut banner = Banner::new(key.clone(), format!("Banner {name}"), tone)
-            .says(format!("{key}.text"), sentence);
+            .says(format!("{key}.text"), sentence)
+            .details(|_: &mut Library, _: &mut rune::Tx| {});
         if matches!(
             case,
             BannerCase::Notes | BannerCase::TwoActions | BannerCase::Long
@@ -663,6 +722,32 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                     Action::new("Relaunch").on_press_tx(noop),
                 );
         }
+        if case == BannerCase::LongLink {
+            banner = banner
+                .note(format!("{key}.waiting"), "Waiting on")
+                .link(
+                    format!("{key}.go.a"),
+                    WORKTREE_BASENAME,
+                    format!("Go to {WORKTREE_BASENAME}"),
+                    noop,
+                )
+                .note(
+                    format!("{key}.reason.a"),
+                    "(still starting or asking whether to trust its folder),",
+                )
+                .note_button(
+                    format!("{key}.relaunch"),
+                    format!("Relaunch {WORKTREE_BASENAME}"),
+                    Action::new("Relaunch").on_press_tx(noop),
+                )
+                .link(
+                    format!("{key}.go.b"),
+                    LONG_RENAME,
+                    format!("Go to {LONG_RENAME}"),
+                    noop,
+                )
+                .note(format!("{key}.reason.b"), "(working).");
+        }
         let acts = !matches!(
             case,
             BannerCase::NoAction | BannerCase::SentenceOnly | BannerCase::Countdown
@@ -675,10 +760,18 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                     .on_press_tx(noop),
             );
         }
-        if case == BannerCase::TwoActions {
+        let second = match case {
+            BannerCase::TwoActions => Some("Update without ai-sandbox".to_owned()),
+            BannerCase::LongFailure => Some(format!("Update without {LONG_HOST}")),
+            BannerCase::ManyFailures => {
+                Some(format!("Update without {} outposts", MANY_FAILURES.len()))
+            }
+            _ => None,
+        };
+        if let Some(second) = second {
             banner = banner.action(
                 format!("{key}.second"),
-                Action::new("Update without ai-sandbox").on_press_tx(noop),
+                Action::new(second).on_press_tx(noop),
             );
         }
         if case == BannerCase::Countdown {
@@ -691,12 +784,14 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                 |_: &mut Library| {},
             );
         }
-        banner.build(&t)
+        banner.build(&t, cx)
     });
-    library_stage(
-        &t,
-        door::gap(col().w(BANNER_WIDTH), Space::S16).children(drawn),
-    )
+    let width = if s.narrow {
+        BANNER_WIDTH / LARGEST_TEXT
+    } else {
+        BANNER_WIDTH
+    };
+    library_stage(&t, door::gap(col().w(width), Space::S16).children(drawn))
 }
 
 fn stack(t: &Tokens, children: impl IntoIterator<Item = El>) -> El {

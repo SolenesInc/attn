@@ -869,7 +869,7 @@ fn disabled_draws_every_part_of_every_control_at_half_strength() {
         }
     }
 }
-const BANNER_VARIANTS: [&str; 8] = [
+const BANNER_VARIANTS: [&str; 11] = [
     "Rest",
     "No action",
     "Sentence only",
@@ -878,7 +878,16 @@ const BANNER_VARIANTS: [&str; 8] = [
     "Two actions",
     "Inline controls",
     "Long",
+    LONG_LINK,
+    LONG_FAILURE,
+    MANY_FAILURES,
 ];
+
+/// The stories of the banners' longest real content at the smallest window, 800 x 600, at the
+/// largest text size, 150%.
+const LONG_LINK: &str = "Long link, smallest window";
+const LONG_FAILURE: &str = "Long failure, smallest window";
+const MANY_FAILURES: &str = "Many failures, smallest window";
 
 fn banner_parts(rt: &Runtime<()>, tone: &str) -> (ElementInfo, ElementInfo) {
     let key = format!("banner.{tone}");
@@ -905,7 +914,8 @@ fn a_banners_first_action_starts_one_rhythm_after_its_sentence_at_any_width() {
 const BAND: f32 = 26.0;
 
 #[test]
-fn a_banners_glyph_actions_and_dismiss_sit_on_its_first_line() {
+fn a_banners_glyph_and_dismiss_sit_on_its_first_line_and_its_actions_beside_or_under_its_sentence()
+{
     let line = |rt: &Runtime<()>, tone: &str| banner_parts(rt, tone).1.rect[3];
     let rest = story(true, "Library/Banner", "Rest");
     for variant in BANNER_VARIANTS {
@@ -916,8 +926,35 @@ fn a_banners_glyph_actions_and_dismiss_sit_on_its_first_line() {
             let centre = |e: &ElementInfo| e.rect[1] + e.rect[3] / 2.0;
             let first_line = sentence.rect[1] + line(&rest, tone) / 2.0;
             let mut parts = vec![("sentence's first line".to_owned(), first_line)];
-            for part in ["action", "second", "dismiss", "countdown"] {
-                if let Some(e) = rt.playground_element(&format!("banner.{tone}.{part}")) {
+            if let Some(e) = rt.playground_element(&format!("banner.{tone}.dismiss")) {
+                parts.push(("dismiss".to_owned(), centre(&e)));
+            }
+            let first = rt.playground_element(&format!("banner.{tone}.action"));
+            let moved = first
+                .as_ref()
+                .is_some_and(|a| (centre(a) - band).abs() >= 0.5);
+            let below = sentence.visible[1] + sentence.visible[3];
+            if let Some(a) = first.as_ref().filter(|_| moved) {
+                assert!(
+                    (a.rect[0] - sentence.rect[0]).abs() < 0.5 && a.rect[1] >= below,
+                    "{variant}: {tone}'s actions left the first line for {:?}, not a line of \
+                     their own under the sentence at {:?}",
+                    a.rect,
+                    sentence.rect
+                );
+            }
+            for part in ["action", "second", "countdown"] {
+                let Some(e) = rt.playground_element(&format!("banner.{tone}.{part}")) else {
+                    continue;
+                };
+                if moved {
+                    assert!(
+                        e.rect[1] >= below,
+                        "{variant}: {tone}'s {part} at {:?} stays beside the sentence its \
+                         actions moved under",
+                        e.rect
+                    );
+                } else {
                     parts.push((part.to_owned(), centre(&e)));
                 }
             }
@@ -1067,6 +1104,184 @@ fn every_control_of_a_banner_lies_inside_it_clear_of_the_others() {
                 }
             }
         }
+    }
+}
+
+/// The element keyed `key`, focused by pressing Tab as a person does: Shift-Tab from the
+/// story list onto the stage, then Tab along it.
+fn tab_to(rt: &mut Runtime<()>, key: &str) -> ElementInfo {
+    rt.set_full_keyboard_access(true);
+    rt.key(KeyEvent {
+        key: Key::Tab,
+        mods: Mods {
+            shift: true,
+            ..Mods::default()
+        },
+    });
+    rt.frame(0.1);
+    for _ in 0..80 {
+        let focused = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.focused && e.key.as_deref() == Some(key));
+        if let Some(e) = focused {
+            return e;
+        }
+        rt.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods::default(),
+        });
+        rt.frame(0.1);
+    }
+    panic!("Tab never reaches {key}")
+}
+
+/// How the library sets a link in a note: `Type::Name`, 13/600.
+const NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
+
+#[test]
+fn a_long_link_elides_inside_its_bar_with_its_ring_whole_and_its_name_whole() {
+    for dark in [true, false] {
+        for (tone, _) in BANNERS {
+            for link in ["go.a", "go.b"] {
+                let mut rt = story(dark, "Library/Banner", LONG_LINK);
+                let key = format!("banner.{tone}.{link}");
+                let focused = tab_to(&mut rt, &key);
+                let (bar, _) = banner_parts(&rt, tone);
+                let ring = ring_around(&rt, &focused)
+                    .unwrap_or_else(|| panic!("dark={dark}: {key} draws no focus ring"));
+                let [x, y, w, h] = ring.rect;
+                let [bx, by, bw, bh] = device(bar.rect);
+                assert!(
+                    x >= bx && y >= by && x + w <= bx + bw && y + h <= by + bh,
+                    "dark={dark}: {key}'s ring {:?} leaves its bar {:?}",
+                    ring.rect.map(|v| v / SCALE),
+                    bar.rect
+                );
+                let [x0, y0, x1, y1] = ring.clip;
+                assert!(
+                    x0 <= x && y0 <= y && x + w <= x1 && y + h <= y1,
+                    "dark={dark}: {key}'s ring {:?} is cut by {:?}",
+                    ring.rect,
+                    ring.clip
+                );
+                let all = rt.elements();
+                let around = ring.rect.map(|v| v / SCALE);
+                let inside_link = |e: &ElementInfo| {
+                    std::iter::successors(Some(e), |e| e.parent.map(|p| &all[p]))
+                        .any(|a| a.path == focused.path)
+                };
+                for words in all.iter().filter(|e| {
+                    e.text.is_some()
+                        && !inside_link(e)
+                        && std::iter::successors(e.parent, |&p| all[p].parent)
+                            .any(|p| all[p].path == bar.path)
+                }) {
+                    let [x, y, w, h] = words.rect;
+                    let apart = x + w <= around[0] + 0.5
+                        || around[0] + around[2] <= x + 0.5
+                        || y + h <= around[1] + 0.5
+                        || around[1] + around[3] <= y + 0.5;
+                    assert!(
+                        apart,
+                        "dark={dark}: {key}'s ring {around:?} crosses {:?} at {:?}",
+                        words.text, words.rect
+                    );
+                }
+                let name = focused.label.clone().unwrap_or_default();
+                let shown = name.trim_start_matches("Go to ");
+                assert!(
+                    name.starts_with("Go to ") && shown.chars().count() >= 40,
+                    "dark={dark}: {key} is announced as {name:?}, not by its whole name"
+                );
+                let (whole, _) = rune::text::measure(shown, &[], NAME, None);
+                assert!(
+                    focused.rect[2] + 0.5 < whole,
+                    "dark={dark}: {key} at {} wide draws its name whole at {whole}, which the \
+                     bar cannot hold",
+                    focused.rect[2]
+                );
+            }
+        }
+    }
+}
+
+/// The least width a banner's sentence keeps beside its actions: a line of 40 characters, the
+/// shortest that still reads as a line, which the real sentences set in Name (6.24 to 6.63 a
+/// character) measure 250 across.
+const READABLE: f32 = 250.0;
+
+/// The smallest window's height under its title bar at the largest text size, in the points it
+/// lays out in: 600 / 1.5 - 32.
+const SMALLEST_WORK_AREA: f32 = 368.0;
+
+#[test]
+fn a_long_failure_keeps_its_sentence_readable_and_leaves_most_of_the_smallest_window() {
+    for variant in [LONG_FAILURE, MANY_FAILURES] {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            let (bar, sentence) = banner_parts(&rt, tone);
+            assert!(
+                sentence.rect[2] + 0.5 >= READABLE,
+                "{variant}: {tone}'s sentence is left {} wide, under a readable {READABLE}",
+                sentence.rect[2]
+            );
+            let left = SMALLEST_WORK_AREA - bar.rect[3];
+            assert!(
+                left >= SMALLEST_WORK_AREA * 2.0 / 3.0,
+                "{variant}: {tone}'s banner is {} tall and leaves the work area {left} of \
+                 {SMALLEST_WORK_AREA}",
+                bar.rect[3]
+            );
+        }
+    }
+}
+
+/// How the library sets a banner's sentence: `Type::Name`, 13/600, 16.25 a line.
+const SENTENCE_LINE: f32 = 16.25;
+/// The most lines a closed sentence shows.
+const SENTENCE_LINES: f32 = 4.0;
+
+#[test]
+fn a_sentence_longer_than_its_lines_ends_in_an_ellipsis_and_offers_details() {
+    let rt = story(true, "Library/Banner", LONG_FAILURE);
+    for (tone, _) in BANNERS {
+        assert!(
+            rt.playground_element(&format!("banner.{tone}.details"))
+                .is_none(),
+            "{tone}'s sentence fits its lines, yet the banner offers Details"
+        );
+    }
+    for (tone, _) in BANNERS {
+        let mut rt = story(true, "Library/Banner", MANY_FAILURES);
+        let (_, sentence) = banner_parts(&rt, tone);
+        let said = sentence.label.clone().unwrap_or_default();
+        let (_, whole) = rune::text::measure(&said, &[], NAME, Some(sentence.rect[2]));
+        assert!(
+            (sentence.rect[3] - SENTENCE_LINES * SENTENCE_LINE).abs() < 1.0
+                && whole > sentence.rect[3],
+            "{tone}'s closed sentence is {} tall; its {whole} of text should show {SENTENCE_LINES} lines",
+            sentence.rect[3]
+        );
+        let key = format!("banner.{tone}.details");
+        let (bar, _) = banner_parts(&rt, tone);
+        let fill = surface(&rt, &bar, tokens(true).bg_panel);
+        let all = rt.elements();
+        let word = all
+            .iter()
+            .find(|e| {
+                e.text.as_deref() == Some("Details")
+                    && std::iter::successors(e.parent, |&p| all[p].parent)
+                        .any(|p| all[p].key.as_deref() == Some(key.as_str()))
+            })
+            .unwrap_or_else(|| panic!("{tone}'s Details draws no words"));
+        let reads = contrast(drawn_over(word.text_color.expect("words"), fill), fill);
+        assert!(
+            reads >= TEXT_READS,
+            "{tone}'s Details reads {reads:.2}:1 on its fill"
+        );
+        let control = tab_to(&mut rt, &key);
+        assert_eq!(control.label.as_deref(), Some("Details"), "{tone}");
     }
 }
 

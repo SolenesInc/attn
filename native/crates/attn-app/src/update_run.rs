@@ -7,7 +7,7 @@ use attn_protocol::{StartUpdateMessage, UpdateOutpostProgress, UpdateRun};
 use attn_ui::Tokens;
 use attn_ui::blocks::{self, BannerTone};
 use attn_ui::system::Button;
-use rune::{El, Tx};
+use rune::{Cx, El, Tx};
 
 use crate::State;
 use crate::closing::{Closing, Tick};
@@ -167,7 +167,12 @@ fn tone(run: &UpdateRun) -> BannerTone {
     }
 }
 
-pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
+pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
+    let banner = said(state)?.details(crate::shell::opens_details(crate::shell::Band::UpdateRun));
+    Some(banner.build(t, cx))
+}
+
+pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
     let run = shown(state)?;
     let connected = state.facts.connection == Connection::Connected;
     let open = is_open(run);
@@ -213,5 +218,5 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
     if !open {
         banner = banner.dismiss("update-run.dismiss", "Dismiss update", close);
     }
-    Some(banner.build(t))
+    Some(banner)
 }

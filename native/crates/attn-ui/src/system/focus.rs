@@ -4,6 +4,8 @@ use crate::Tokens;
 
 const WIDTH: f32 = 2.0;
 const OFFSET: f32 = 2.0;
+/// How far a focus ring reaches outside its control.
+pub const RING_REACH: f32 = WIDTH + OFFSET;
 
 /// The ring a focusable control draws while the keyboard is on it, outside its edge.
 pub(crate) fn ring(e: El, t: &Tokens) -> El {

@@ -8,7 +8,7 @@ use attn_protocol::OutpostInfo;
 use attn_ui::Tokens;
 use attn_ui::blocks::{self, BannerTone};
 use attn_ui::system::Button;
-use rune::{El, Tx};
+use rune::{Cx, El, Tx};
 
 use crate::State;
 use crate::closing::{Closing, Tick};
@@ -233,7 +233,14 @@ fn tone(updates: &Updates) -> BannerTone {
     }
 }
 
-pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
+pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
+    let banner = said(state)?.details(crate::shell::opens_details(
+        crate::shell::Band::OutpostUpdates,
+    ));
+    Some(banner.build(t, cx))
+}
+
+pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
     let updates = shown(state)?;
     let connected = state.facts.connection == Connection::Connected;
     let mut banner = blocks::Banner::new("outpost-updates", "Outpost updates", tone(&updates))
@@ -272,9 +279,5 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
     if let Some(seconds) = countdown {
         banner = banner.countdown("outpost-updates.countdown", seconds);
     }
-    Some(
-        banner
-            .dismiss("outpost-updates.dismiss", "Dismiss outpost updates", close)
-            .build(t),
-    )
+    Some(banner.dismiss("outpost-updates.dismiss", "Dismiss outpost updates", close))
 }

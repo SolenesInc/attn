@@ -397,6 +397,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let updating = update_run::poll(state, now, tx)
         | outpost_updates::poll(state, now, tx)
         | shared_codex::poll(state, tx)
+        | shell::follow_details(state)
         | home::pull_requests::poll(state, now);
     let automated = automations::poll(state, now, tx);
     let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);

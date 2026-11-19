@@ -7,12 +7,15 @@ use std::sync::Arc;
 use attn_protocol::{ClearWarningsMessage, DaemonWarning};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Banner, BannerTone};
-use rune::{El, Tx};
+use rune::{Cx, El, Tx};
 
 use crate::State;
 
 /// The warnings the window shows: those the last handshake brought, until dismissed.
-pub(crate) type Shown = Arc<Vec<DaemonWarning>>;
+#[derive(Clone, Default)]
+pub(crate) struct Warnings {
+    shown: Arc<Vec<DaemonWarning>>,
+}
 
 /// A handshake completed: the main window shows what it brought and tells the daemon they were
 /// seen. A tile window shows no banner, so it acknowledges nothing.
@@ -20,14 +23,19 @@ pub(crate) fn connected(state: &mut State) {
     if state.window.tile.is_some() {
         return;
     }
-    state.window.warnings = state.facts.warnings.clone();
-    if !state.window.warnings.is_empty() {
+    state.window.warnings.shown = state.facts.warnings.clone();
+    if !state.window.warnings.shown.is_empty() {
         let _ = state.daemon.send(&ClearWarningsMessage::new());
     }
 }
 
-pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
-    let warnings = &state.window.warnings;
+pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
+    let banner = said(state)?.details(crate::shell::opens_details(crate::shell::Band::Warnings));
+    Some(banner.build(t, cx))
+}
+
+pub(crate) fn said(state: &State) -> Option<Banner> {
+    let warnings = &state.window.warnings.shown;
     if warnings.is_empty() {
         return None;
     }
@@ -60,17 +68,13 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
             }
         };
     }
-    Some(
-        banner
-            .dismiss(
-                "daemon-warnings.dismiss",
-                "Dismiss warnings",
-                |state: &mut State| {
-                    state.window.warnings = Shown::default();
-                },
-            )
-            .build(t),
-    )
+    Some(banner.dismiss(
+        "daemon-warnings.dismiss",
+        "Dismiss warnings",
+        |state: &mut State| {
+            state.window.warnings = Warnings::default();
+        },
+    ))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

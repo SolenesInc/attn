@@ -30,6 +30,36 @@ pub(super) fn unreached_by_tab(world: &mut World) -> Vec<String> {
     buttons.difference(&reached).cloned().collect()
 }
 
+/// The keys Tab reaches going once round from where focus is, each checked shown with its whole
+/// focus ring inside the element `within` names for it.
+pub(super) fn tab_round_in_view(world: &mut World, within: impl Fn(&str) -> String) -> Vec<String> {
+    const RING_REACH: f64 = 4.0;
+    let mut reached: Vec<String> = Vec::new();
+    for _ in 0..200 {
+        world.gesture(|app| app.press("tab"));
+        let Some(key) = world.screen().focused().and_then(|n| n.key) else {
+            continue;
+        };
+        if reached.first() == Some(&key) {
+            break;
+        }
+        let region = within(&key);
+        let [x, y, w, h] = world.rect(&key);
+        let [rx, ry, rw, rh] = world.rect(&region);
+        assert!(
+            x - RING_REACH >= rx
+                && y - RING_REACH >= ry
+                && x + w + RING_REACH <= rx + rw
+                && y + h + RING_REACH <= ry + rh,
+            "{key}'s ring around {:?} is cut by {region} at {:?}",
+            [x, y, w, h],
+            [rx, ry, rw, rh]
+        );
+        reached.push(key);
+    }
+    reached
+}
+
 fn two_desktops_with_agents() -> attn_protocol::InitialStateMessage {
     let mut desktops = vec![
         desktop("d1", "a", "API", vec![pane("d1", "p1", "api")]),

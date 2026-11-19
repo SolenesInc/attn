@@ -261,8 +261,17 @@ choices once for the whole app:
   a countdown and dismiss, and the block draws the rest: the tone's glyph, the
   sentence in `Name`, the actions right beside it, the notes after them or,
   when they do not fit there, together on a line of their own under the
-  sentence, and dismiss alone at the far edge. The glyph, the actions and
-  dismiss sit on the sentence's first line. Its fill is 18% of the tone over
+  sentence, and dismiss alone at the far edge. The glyph and dismiss sit on
+  the sentence's first line, and so do the actions unless they would leave
+  the sentence narrower than 250 points or longer than four lines; then they
+  take a line of their own under it. The bar never grows past that: a sentence
+  longer than four lines ends in an ellipsis, and Details, last among the
+  actions, opens the banner whole in a dialog, its sentence, every note and its
+  actions, built by `Banner::build_details` from the same banner. A view that
+  names less in the bar than in the dialog, as shared Codex does its blockers,
+  keeps Details with `holds_more`. Only the dialog scrolls. A link
+  or button in the notes longer than its line ends in an ellipsis and keeps its
+  whole name for a screen reader. Its fill is 18% of the tone over
   the app background. A failure fills the bar with the error colour, darkened until the
   app background reads on it at 4.5:1, and its controls' focus ring takes that
   colour.
@@ -292,12 +301,15 @@ choices once for the whole app:
   where every other control's is, a focus ring never cut or dimmed, hover and
   pressed at their measured contrast, every part of a disabled control at
   half strength, a warm one neutral, and a banner's first action 8 after its
-  sentence, its glyph, actions and dismiss on its first line, its notes whole
-  beside its actions or on a line of their own, its dismiss 12 from its edge,
-  one height in every tone, and its fill, words and ring at their measured
-  contrast, a tag 18 high with its words centred in it, and an icon-only
-  button's `Large` icon 4 from each of its edges. It holds the page blocks'
-  rules too: one right edge on a page,
+  sentence, its glyph and dismiss on its first line, its actions beside its
+  sentence or under it, its sentence readable at the smallest window with
+  the largest text, a long link elided inside the bar with its ring whole,
+  Details offered for a sentence past four lines, its notes beside its actions
+  or on a line of their own, its dismiss 12 from its edge, one height in
+  every tone, and its fill, words and ring at their measured contrast, a tag
+  18 high with its words centred in it, and an icon-only button's `Large` icon
+  4 from each of its edges. It holds the page blocks' rules too: one right
+  edge on a page,
   blocks spaced by what they are, reading text at its measure, a control moved
   under its words starting on their edge, a page title wrapping short of its
   aside and keeping its line, a choice's name whole, no part of a block past

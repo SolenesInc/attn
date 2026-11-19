@@ -58,6 +58,30 @@ pub(crate) fn words_and_code(said: &str, code: &str, kind: Type, ink: Color) -> 
     door::font(rich(shown.clone(), vec![span]).label(shown), kind).color(ink)
 }
 
+/// How wide `words` set as `kind` stand on one line, as [`words`] draws them.
+pub(crate) fn width_of(words: &str, kind: Type) -> f32 {
+    measured(words, kind, None).0
+}
+
+/// How many lines `words` set as `kind` take wrapped at `width`, as [`words`] draws them.
+pub(crate) fn lines_at(words: &str, kind: Type, width: f32) -> f32 {
+    (measured(words, kind, Some(width)).1 / door::style(kind).line_px()).round()
+}
+
+fn measured(words: &str, kind: Type, width: Option<f32>) -> (f32, f32) {
+    let (shown, commands) = commands_in(words);
+    let shown = if kind.upper() {
+        shown.to_uppercase()
+    } else {
+        shown
+    };
+    let spans: Vec<Span> = commands
+        .into_iter()
+        .map(|(start, end)| door::mono_span(Span::new(start, end)))
+        .collect();
+    rune::text::measure(&shown, &spans, door::style(kind), width)
+}
+
 fn commands_in(words: &str) -> (String, Vec<(usize, usize)>) {
     let mut shown = String::with_capacity(words.len());
     let mut commands = Vec::new();

@@ -4024,6 +4024,190 @@ fn update_banners(dark: bool) {
     );
 }
 
+/// The smallest window, 800 x 600, at the largest text size, 150%.
+fn at_the_smallest_window(state: &mut InitialStateMessage) {
+    state
+        .settings
+        .get_or_insert_default()
+        .insert("uiScale".into(), "1.5".into());
+}
+
+const NO_SPACE: &str = "cat: write error: No space left on device";
+
+/// A run that could not stage `hosts`, worded as the daemon words it.
+fn could_not_stage(hosts: &[&str]) -> UpdateRun {
+    let each: Vec<String> = hosts.iter().map(|h| format!("{h}: {NO_SPACE}")).collect();
+    UpdateRun {
+        id: "u1".into(),
+        install_kind: "release_app".into(),
+        log_path: "/tmp/u1.log".into(),
+        phase: "failed".into(),
+        outcome: Some(format!(
+            "could not stage {}. attn did not restart. Log: /Users/sam/.attn/update/run-20261119.log",
+            each.join("; ")
+        )),
+        outposts: hosts
+            .iter()
+            .map(|h| UpdateOutpostProgress {
+                id: (*h).into(),
+                name: (*h).into(),
+                state: "failed".into(),
+                detail: Some(NO_SPACE.into()),
+            })
+            .collect(),
+        ..UpdateRun::default()
+    }
+}
+
+fn smallest_update_banner(dark: bool, name: &str, hosts: &[&str], open: bool) {
+    let run = could_not_stage(hosts);
+    let mut world = popover_world(
+        dark,
+        |state| {
+            at_the_smallest_window(state);
+            state.update_run = Some(run);
+        },
+        |_| {},
+    );
+    world.resize((800.0, 600.0));
+    if open
+        && world
+            .screen()
+            .find(Target::key("update-run.details"))
+            .is_some()
+    {
+        world.gesture(|app| app.click(Target::key("update-run.details")));
+    }
+    snap(&mut world, name, dark);
+}
+
+fn smallest_banners(dark: bool) {
+    let many = [
+        "build-linux-primary.us-east-1.example.dev",
+        "ci-runner-07.build-and-validation.platform.example.org",
+        "studio",
+    ];
+    smallest_update_banner(dark, "banner-update-failed-smallest", &many[..1], false);
+    smallest_update_banner(dark, "banner-update-many-failed-smallest", &many, false);
+    smallest_update_banner(dark, "banner-update-many-failed-open-smallest", &many, true);
+    let twelve: Vec<String> = (1..=12)
+        .map(|n| format!("ci-runner-{n:02}.build-and-validation.platform.example.org"))
+        .collect();
+    let twelve: Vec<&str> = twelve.iter().map(String::as_str).collect();
+    smallest_update_banner(dark, "banner-update-twelve-failed-smallest", &twelve, false);
+    smallest_update_banner(
+        dark,
+        "banner-update-twelve-failed-open-smallest",
+        &twelve,
+        true,
+    );
+    let mut world = popover_world(
+        dark,
+        |state| {
+            at_the_smallest_window(state);
+            let mut blockers = Vec::new();
+            for (n, session) in state.sessions.iter_mut().flatten().enumerate() {
+                session.label = format!(
+                    "attn--fix-native-terminal-focus-when-reopening-an-old-codex-session-{}",
+                    n + 1
+                );
+                blockers.push(SharedCodexBlocker {
+                    session_id: session.id.clone(),
+                    reason: "starting".into(),
+                });
+            }
+            state.shared_codex = Some(SharedCodexState {
+                blockers: Some(blockers),
+                ..codex("pending")
+            });
+        },
+        |_| {},
+    );
+    world.resize((800.0, 600.0));
+    snap(&mut world, "banner-codex-many-smallest", dark);
+    world.gesture(|app| app.click(Target::key("codex-updates.details")));
+    for _ in 0..40 {
+        let focused = world.screen().focused().and_then(|n| n.key);
+        if focused.is_some_and(|k| k.ends_with(".go") && k.contains("-4.")) {
+            break;
+        }
+        world.gesture(|app| app.press("tab"));
+    }
+    snap(&mut world, "banner-codex-many-open-smallest", dark);
+    let names = [
+        "attn--fix-native-terminal-focus-when-reopening-an-old-codex-session-in-another-desktop",
+        "共有エージェントの更新で保留中の承認要求を再起動後も保持するための回帰テスト追加",
+    ];
+    let mut world = popover_world(
+        dark,
+        |state| {
+            at_the_smallest_window(state);
+            for (session, name) in state.sessions.iter_mut().flatten().zip(names) {
+                session.label = name.into();
+            }
+            let ids: Vec<String> = state
+                .sessions
+                .iter()
+                .flatten()
+                .take(2)
+                .map(|s| s.id.clone())
+                .collect();
+            state.shared_codex = Some(SharedCodexState {
+                blockers: Some(
+                    ids.iter()
+                        .zip(["starting", "turn"])
+                        .map(|(id, reason)| SharedCodexBlocker {
+                            session_id: id.clone(),
+                            reason: reason.into(),
+                        })
+                        .collect(),
+                ),
+                ..codex("pending")
+            });
+        },
+        |_| {},
+    );
+    world.resize((800.0, 600.0));
+    snap(&mut world, "banner-codex-waiting-smallest", dark);
+    for (name, open) in [
+        ("banner-daemon-warnings-smallest", false),
+        ("banner-daemon-warnings-open-smallest", true),
+    ] {
+        let mut world = popover_world(
+            dark,
+            |state| {
+                at_the_smallest_window(state);
+                state.warnings = Some(
+                    START_WARNINGS
+                        .iter()
+                        .map(|message| attn_protocol::DaemonWarning {
+                            code: "worker_recovery_partial".into(),
+                            message: (*message).into(),
+                        })
+                        .collect(),
+                );
+            },
+            |_| {},
+        );
+        world.resize((800.0, 600.0));
+        if open {
+            world.gesture(|app| app.click(Target::key("daemon-warnings.details")));
+        }
+        snap(&mut world, name, dark);
+    }
+}
+
+/// Every start warning the daemon can send at once, worded as it words them.
+const START_WARNINGS: [&str; 7] = [
+    "Shared PTY host is unavailable (dial unix /Users/sam/.attn/pty-hosts/daemon-1/host.sock: connect: no such file or directory). New terminals will keep using dedicated workers.",
+    "PTY recovery skipped 3 workers due to transient unavailability.",
+    "Deferred marking 4 tracked sessions idle because PTY recovery was incomplete.",
+    "2 sessions can be recovered from a previous daemon run.",
+    "Removed 5 non-recoverable sessions from a previous daemon run.",
+    "6 tracked sessions were expected to be running but no worker was recovered; they were marked idle.",
+    "Recovered workers were missing metadata for 1 sessions.",
+];
+
 fn codex(restart: &str) -> SharedCodexState {
     SharedCodexState {
         running_version: Some("0.162.1".into()),
@@ -4392,6 +4576,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("outposts_banners", || outposts_banners(dark));
         scene("update_banners", || update_banners(dark));
         scene("codex_banners", || codex_banners(dark));
+        scene("smallest_banners", || smallest_banners(dark));
     }
     let unmatched: Vec<String> = ONLY.with_borrow(|only| {
         only.iter()

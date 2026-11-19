@@ -14,6 +14,8 @@ use rune::prefs::Prefs;
 use rune::{Key, KeyEvent, Mods};
 use serde_json::Value;
 
+use super::reach::tab_round_in_view;
+
 const BAND: &str = "codex-updates";
 const CONFIRM: &str = "shared-codex-confirm";
 const FAILURE: &str = "approval_policy = \"untrusted\" is no longer supported";
@@ -130,7 +132,11 @@ fn initial(shared_codex: Option<SharedCodexState>) -> InitialStateMessage {
 }
 
 fn scripted(shared_codex: Option<SharedCodexState>) -> Daemon {
-    let daemon = Daemon::scripted().state(initial(shared_codex));
+    scripted_from(initial(shared_codex))
+}
+
+fn scripted_from(state: InitialStateMessage) -> Daemon {
+    let daemon = Daemon::scripted().state(state);
     daemon.on("restart_shared_codex", |r| {
         message(RestartSharedCodexResultMessage {
             request_id: r["request_id"].as_str().map(str::to_owned),
@@ -205,13 +211,17 @@ fn click(world: &mut World, key: &str) {
 }
 
 fn click_button(world: &mut World, name: &str) {
+    click_button_in(world, BAND, name);
+}
+
+fn click_button_in(world: &mut World, within: &str, name: &str) {
     let key = world
         .screen()
-        .descendants(Target::key(BAND))
+        .descendants(Target::key(within))
         .into_iter()
         .find(|n| n.role == "button" && n.name.as_deref() == Some(name))
         .and_then(|n| n.key)
-        .unwrap_or_else(|| panic!("no {name} in the band:\n{}", world.screen()));
+        .unwrap_or_else(|| panic!("no {name} in {within}:\n{}", world.screen()));
     click(world, &key);
 }
 
@@ -407,19 +417,80 @@ fn the_band_says_why_each_blocker_holds_the_restart_opens_its_tile_and_relaunche
     let (mut world, _prefs) = start(Some(every_blocker()));
     assert_eq!(
         banner(&world).unwrap(),
-        "Codex 0.163.0 installed. Restarts when agents are idle. [Restart now] Waiting on \
-         [Go to fix-auth] (working), \
-         [Go to docs-sweep] (waiting on an approval), \
-         [Go to nightly-triage] (asking a question), \
-         [Go to plan-cache] (still starting or asking whether to trust its folder). [Relaunch plan-cache]"
+        "Codex 0.163.0 installed. Restarts when agents are idle. [Restart now] [Details] Waiting on \
+         [Go to fix-auth] (working), and 3 more."
     );
-    click_button(&mut world, "Go to docs-sweep");
+    let details = |world: &mut World| {
+        click(world, &format!("{BAND}.details"));
+        assert!(
+            world
+                .screen()
+                .find(Target::key(format!("{BAND}.whole-dialog")))
+                .is_some()
+        );
+    };
+    details(&mut world);
+    let named: Vec<String> = world
+        .screen()
+        .descendants(Target::key(format!("{BAND}.whole-dialog")))
+        .into_iter()
+        .filter(|n| n.key.as_deref().is_some_and(|k| k.contains(".blocker.")))
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(
+        named,
+        [
+            "Go to fix-auth",
+            "(working),",
+            "Go to docs-sweep",
+            "(waiting on an approval),",
+            "Go to nightly-triage",
+            "(asking a question),",
+            "Go to plan-cache",
+            "(still starting or asking whether to trust its folder).",
+            "Relaunch plan-cache",
+        ]
+    );
+    click_button_in(
+        &mut world,
+        &format!("{BAND}.whole-dialog"),
+        "Go to docs-sweep",
+    );
     let shown = sent(&world, "desktop_show_session");
     assert_eq!(shown.last().unwrap()["session_id"], "docs-sweep");
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("{BAND}.whole-dialog")))
+            .is_none(),
+        "going to a blocker leaves its details open over it"
+    );
 
-    click_button(&mut world, "Relaunch plan-cache");
+    details(&mut world);
+    click_button_in(
+        &mut world,
+        &format!("{BAND}.whole-dialog"),
+        "Relaunch plan-cache",
+    );
     assert_eq!(reloads(&world), ["plan-cache"]);
     assert_eq!(restarts(&world), Vec::<bool>::new());
+}
+
+#[test]
+fn details_open_when_its_banner_goes_away_leave_the_next_banner_closed() {
+    let (mut world, _prefs) = start(Some(every_blocker()));
+    let dialog = format!("{BAND}.whole-dialog");
+    click(&mut world, &format!("{BAND}.details"));
+    assert!(world.screen().find(Target::key(&dialog)).is_some());
+
+    change(&mut world, "work", None);
+    assert_eq!(banner(&world), None);
+    change(&mut world, "work", Some(every_blocker()));
+    assert!(banner(&world).is_some());
+    assert!(
+        world.screen().find(Target::key(&dialog)).is_none(),
+        "the next banner opened with the last one's details"
+    );
 }
 
 #[test]
@@ -788,4 +859,129 @@ fn the_palette_retries_a_restart_while_the_installed_codex_refuses_to_start() {
     }));
     run_command(&mut world, "Retry shared Codex restart");
     assert_eq!(restarts(&world), [false]);
+}
+
+/// A worktree's basename, the name a Codex session started there goes by.
+const WORKTREE_BASENAME: &str =
+    "attn--fix-native-terminal-focus-when-reopening-an-old-codex-session-in-another-desktop";
+const SMALLEST_WORK_AREA: f64 = 368.0;
+/// How far a control's focus ring reaches past its edge.
+const RING_REACH: f64 = 4.0;
+
+fn long_blockers(count: usize) -> (World, Vec<String>, tempfile::TempDir) {
+    let names: Vec<String> = (1..=count)
+        .map(|n| format!("{WORKTREE_BASENAME}-{n}"))
+        .collect();
+    let blockers: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), "starting")).collect();
+    let mut state = initial(Some(blocked(installed("0.163.0", "pending"), &blockers)));
+    for name in &names {
+        state
+            .sessions
+            .get_or_insert_default()
+            .push(session(name, false));
+    }
+    state.settings = Some([("uiScale".to_owned(), "1.5".to_owned())].into());
+    let dir = tempfile::tempdir().unwrap();
+    let mut prefs = Prefs::at(dir.path().join("prefs.json"));
+    prefs.set(SEEN_PREF, &RELEASE.to_owned()).unwrap();
+    let world = World::start_sized_with_prefs(scripted_from(state), (800.0, 600.0), prefs);
+    (world, names, dir)
+}
+
+#[test]
+fn eight_long_blockers_leave_two_thirds_of_the_smallest_window_and_details_reaches_each_with_its_ring()
+ {
+    let (mut world, names, _dir) = long_blockers(8);
+    let go = |name: &str| format!("{BAND}.blocker.{name}.go");
+    let named = names
+        .iter()
+        .filter(|n| world.screen().find(Target::key(go(n))).is_some())
+        .count();
+    assert_eq!(named, 1);
+    let work = world.rect("regions");
+    assert!(
+        work[3] >= SMALLEST_WORK_AREA * 2.0 / 3.0,
+        "the band leaves the work area {} of {SMALLEST_WORK_AREA}",
+        work[3]
+    );
+
+    world.gesture(|app| app.runtime.set_full_keyboard_access(true));
+    let details = format!("{BAND}.details");
+    for _ in 0..40 {
+        if world.screen().focused().and_then(|n| n.key) == Some(details.clone()) {
+            break;
+        }
+        press(&mut world, Key::Tab);
+    }
+    press(&mut world, Key::Text(" ".into()));
+    let reached = tab_round_in_view(&mut world, |key| {
+        if key.contains(".blocker.") {
+            format!("{BAND}.whole.said")
+        } else {
+            format!("{BAND}.whole-dialog")
+        }
+    });
+    for name in &names {
+        let go = format!("whole.{}", go(name));
+        assert!(reached.contains(&go), "Tab never reached {go}: {reached:?}");
+        let relaunch = format!("whole.{BAND}.blocker.{name}.relaunch");
+        assert!(reached.contains(&relaunch), "Tab never reached {relaunch}");
+    }
+    let [_, _, _, h] = world.rect(&format!("whole.{}", go(&names[0])));
+    assert!(
+        h > 16.25 + 0.5,
+        "Details cuts {} short to one line, {h} tall",
+        names[0]
+    );
+}
+
+#[test]
+fn a_long_blocker_name_stays_inside_the_band_with_its_ring_whole_at_the_smallest_window_with_large_text()
+ {
+    let mut state = initial(Some(blocked(
+        installed("0.163.0", "pending"),
+        &[(WORKTREE_BASENAME, "starting")],
+    )));
+    state
+        .sessions
+        .get_or_insert_default()
+        .push(session(WORKTREE_BASENAME, false));
+    state.settings = Some([("uiScale".to_owned(), "1.5".to_owned())].into());
+    let dir = tempfile::tempdir().unwrap();
+    let mut opened = Prefs::at(dir.path().join("prefs.json"));
+    opened.set(SEEN_PREF, &RELEASE.to_owned()).unwrap();
+    let mut world = World::start_sized_with_prefs(scripted_from(state), (800.0, 600.0), opened);
+    let go = format!("{BAND}.blocker.{WORKTREE_BASENAME}.go");
+    assert_eq!(
+        world.screen().find(Target::key(&go)).and_then(|n| n.name),
+        Some(format!("Go to {WORKTREE_BASENAME}"))
+    );
+
+    world.gesture(|app| app.runtime.set_full_keyboard_access(true));
+    for _ in 0..40 {
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some(go.as_str()) {
+            break;
+        }
+        press(&mut world, Key::Tab);
+    }
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(go.as_str()),
+        "Tab never reaches Go to"
+    );
+    let [bx, by, bw, bh] = world.rect(BAND);
+    let [x, y, w, h] = world.rect(&go);
+    assert!(
+        x - RING_REACH >= bx
+            && y - RING_REACH >= by
+            && x + w + RING_REACH <= bx + bw
+            && y + h + RING_REACH <= by + bh,
+        "Go to at {:?} rings past the band at {:?}",
+        [x, y, w, h],
+        [bx, by, bw, bh]
+    );
+
+    press(&mut world, Key::Text(" ".into()));
+    let shown = sent(&world, "desktop_show_session");
+    assert_eq!(shown.last().unwrap()["session_id"], WORKTREE_BASENAME);
 }

@@ -13,7 +13,7 @@ use attn_ui::blocks::{Banner, BannerTone};
 use attn_ui::system::Button;
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, Tokens};
-use rune::{El, TextStyle, Tx, col, text};
+use rune::{Cx, El, TextStyle, Tx, col, text};
 use serde::{Deserialize, Serialize};
 
 use crate::State;
@@ -422,11 +422,27 @@ pub(crate) fn commands(state: &State) -> Vec<crate::palette::commands::Command> 
     commands
 }
 
+/// The blockers the bar names. At the smallest window, 800 x 600 at 150%, one blocker
+/// named by an 86-character worktree, still starting, leaves 252 of the 368 points under the
+/// title bar to work in; a second leaves 202, under the two thirds a banner may take.
+const NAMED_CLOSED: usize = 1;
+
 /// The blockers the restart waits on, each opening its tile, and a Relaunch for one still
-/// starting.
-fn waiting_on(state: &State, blockers: &[SharedCodexBlocker], banner: Banner) -> Banner {
+/// starting. The bar names the first few and counts the rest; its details name them all.
+fn waiting_on(
+    state: &State,
+    blockers: &[SharedCodexBlocker],
+    whole: bool,
+    banner: Banner,
+) -> Banner {
     let mut banner = banner.note(format!("{BAND}.waiting"), "Waiting on");
-    for (i, blocker) in blockers.iter().enumerate() {
+    let named = if whole {
+        blockers.len()
+    } else {
+        blockers.len().min(NAMED_CLOSED)
+    };
+    let more = blockers.len() - named;
+    for (i, blocker) in blockers[..named].iter().enumerate() {
         let (name, _) = name_of(state, &blocker.session_id);
         let id = blocker.session_id.clone();
         let key = format!("{BAND}.blocker.{id}");
@@ -434,9 +450,12 @@ fn waiting_on(state: &State, blockers: &[SharedCodexBlocker], banner: Banner) ->
             format!("{key}.go"),
             name.clone(),
             format!("Go to {name}"),
-            move |state: &mut State, tx: &mut Tx| crate::sidebar::open_agent(state, &id, tx),
+            move |state: &mut State, tx: &mut Tx| {
+                crate::shell::close_details(state);
+                crate::sidebar::open_agent(state, &id, tx)
+            },
         );
-        let end = if i + 1 < blockers.len() { "," } else { "." };
+        let end = if i + 1 < named || more > 0 { "," } else { "." };
         banner = banner.note(
             format!("{key}.reason"),
             format!("({}){end}", blocker_reason(blocker)),
@@ -452,10 +471,24 @@ fn waiting_on(state: &State, blockers: &[SharedCodexBlocker], banner: Banner) ->
             );
         }
     }
-    banner
+    if more > 0 {
+        banner = banner.note(format!("{BAND}.more"), format!("and {more} more."));
+    }
+    if blockers.len() > NAMED_CLOSED {
+        banner.holds_more()
+    } else {
+        banner
+    }
 }
 
-pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
+pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
+    let banner =
+        said(state, false)?.details(crate::shell::opens_details(crate::shell::Band::SharedCodex));
+    Some(banner.build(t, cx))
+}
+
+/// The banner, naming every blocker when `whole`.
+pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
     let codex = current(state)?;
     let stage = stage(state, codex)?;
     let version = |v: &Option<String>| v.clone().unwrap_or_default();
@@ -507,13 +540,12 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
             "Restarting Codex on {installed}. Tiles reconnect on their own."
         )),
         Stage::Pending => {
-            let banner = says(format!(
-                "Codex {installed} installed. Restarts when agents are idle."
-            ));
+            let said = format!("Codex {installed} installed. Restarts when agents are idle.");
+            let banner = says(said);
             if blockers.is_empty() {
                 banner
             } else {
-                waiting_on(state, &blockers, banner).action(
+                waiting_on(state, &blockers, whole, banner).action(
                     format!("{BAND}.restart"),
                     Button::new("Restart now")
                         .on_press(|state: &mut State| open_confirm(state, Confirm::Restart)),
@@ -563,7 +595,7 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
             )
         }
     };
-    Some(banner.build(t))
+    Some(banner)
 }
 
 /// The confirm before restarting now or reloading the old tiles.

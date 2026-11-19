@@ -93,7 +93,7 @@ pub struct Window {
     pub(crate) ledger: crate::ledger::Ledger,
     pub(crate) notifications: crate::notifications::Panel,
     pub(crate) update_run: crate::update_run::Banner,
-    pub(crate) warnings: crate::warnings::Shown,
+    pub(crate) warnings: crate::warnings::Warnings,
     pub(crate) outpost_updates: crate::outpost_updates::Banner,
     pub(crate) shared_codex: crate::shared_codex::SharedCodex,
     pub(crate) settings: crate::settings::Dialog,
@@ -166,6 +166,59 @@ pub enum Layer {
     /// The confirm before restarting the shared Codex now or reloading its old tiles;
     /// `Window::shared_codex` holds it.
     SharedCodex,
+    /// A banner's details: everything it says, whole.
+    BannerDetails(Band),
+}
+
+/// The banners over the window's work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Band {
+    UpdateRun,
+    OutpostUpdates,
+    SharedCodex,
+    Warnings,
+}
+
+pub(crate) fn opens_details(band: Band) -> impl Fn(&mut State, &mut Tx) + 'static {
+    move |state: &mut State, _: &mut Tx| state.window.layer = Some(Layer::BannerDetails(band))
+}
+
+pub(crate) fn close_details(state: &mut State) {
+    if matches!(state.window.layer, Some(Layer::BannerDetails(_))) {
+        state.window.layer = None;
+    }
+}
+
+fn said(state: &State, band: Band) -> Option<attn_ui::blocks::Banner> {
+    match band {
+        Band::UpdateRun => crate::update_run::said(state),
+        Band::OutpostUpdates => crate::outpost_updates::said(state),
+        Band::SharedCodex => crate::shared_codex::said(state, true),
+        Band::Warnings => crate::warnings::said(state),
+    }
+}
+
+/// Closes a banner's details once its banner is gone, so the next banner of its band starts
+/// closed.
+pub(crate) fn follow_details(state: &mut State) -> bool {
+    let Some(Layer::BannerDetails(band)) = state.window.layer else {
+        return false;
+    };
+    let gone = said(state, band).is_none();
+    if gone {
+        state.window.layer = None;
+    }
+    gone
+}
+
+fn banner_details(state: &State, band: Band, t: &Tokens, layers: &mut Vec<El>) {
+    if let Some(banner) = said(state, band) {
+        banner.build_details(
+            t,
+            |state: &mut State, _: &mut Tx| close_details(state),
+            layers,
+        );
+    }
 }
 
 impl Layer {
@@ -486,15 +539,17 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         connection,
         Connection::Connected | Connection::Reconnecting { .. }
     );
-    let warnings = bands.then(|| crate::warnings::banner(state, &t)).flatten();
+    let warnings = bands
+        .then(|| crate::warnings::banner(state, &t, cx))
+        .flatten();
     let update_run = bands
-        .then(|| crate::update_run::banner(state, &t))
+        .then(|| crate::update_run::banner(state, &t, cx))
         .flatten();
     let outpost_updates = bands
-        .then(|| crate::outpost_updates::banner(state, &t))
+        .then(|| crate::outpost_updates::banner(state, &t, cx))
         .flatten();
     let shared_codex = bands
-        .then(|| crate::shared_codex::banner(state, &t))
+        .then(|| crate::shared_codex::banner(state, &t, cx))
         .flatten();
     let root = col()
         .key("window")
@@ -504,18 +559,23 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .on_window_focus(crate::terminal::window_focused)
         .on_paste_content(crate::keys::on_paste)
         .child(title_bar(state, cx, &t))
-        .children(banner)
-        .children(warnings)
-        .children(outpost_updates)
-        .children(update_run)
-        .children(shared_codex)
-        .child(body);
+        .children(
+            [banner, warnings, outpost_updates, update_run, shared_codex]
+                .into_iter()
+                .flatten(),
+        )
+        .child(body.min_h(WORK_AREA_FLOOR));
     crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
         .children(layers(state, &t))
         .children(crate::markdown::annotating::layers(state, cx, &t))
         .children(crate::markdown::sending::layers(state, cx, &t))
         .children(crate::callouts::layers(state, cx, &t))
 }
+
+/// The least height the bands leave the work under them: a tile's header, 41, and four
+/// terminal rows of 21 at 14 points, an agent's composer box and the line above it. The bands
+/// never reach it closed: their worst real case at the smallest window leaves 245.
+const WORK_AREA_FLOOR: f32 = 125.0;
 
 /// The band the window drags by, over which the window's own controls sit; what it holds
 /// comes with the queue bar and the title bar controls.
@@ -817,6 +877,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         Some(Layer::Crew) => crate::crew::overlays(state, t, &mut layers),
         Some(Layer::SharedCodex) => crate::shared_codex::confirm(state, t, &mut layers),
+        Some(Layer::BannerDetails(band)) => banner_details(state, band, t, &mut layers),
         None => {}
     }
     layers.extend(crate::home::pull_requests::merge_confirmation(state, t));

@@ -223,6 +223,54 @@ fn sheets() -> Vec<Sheet> {
         ],
     });
     all.push(Sheet {
+        name: "banner-smallest",
+        story: "Library/Banner",
+        rows: banner_rows.clone(),
+        columns: vec![
+            column("Long link", "Long link, smallest window", Gesture::None),
+            aimed(
+                "Focus long link",
+                "Long link, smallest window",
+                Gesture::Tab,
+                ".go.a",
+            ),
+            aimed(
+                "Hover long link",
+                "Long link, smallest window",
+                Gesture::Hover,
+                ".go.a",
+            ),
+            aimed(
+                "Focus kanji link",
+                "Long link, smallest window",
+                Gesture::Tab,
+                ".go.b",
+            ),
+            column(
+                "Long failure",
+                "Long failure, smallest window",
+                Gesture::None,
+            ),
+            aimed(
+                "Focus Update without",
+                "Long failure, smallest window",
+                Gesture::Tab,
+                ".second",
+            ),
+            column(
+                "Many failures",
+                "Many failures, smallest window",
+                Gesture::None,
+            ),
+            aimed(
+                "Focus Details",
+                "Many failures, smallest window",
+                Gesture::Tab,
+                ".details",
+            ),
+        ],
+    });
+    all.push(Sheet {
         name: "banner-content",
         story: "Library/Banner",
         rows: banner_rows,
