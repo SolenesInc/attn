@@ -132,8 +132,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		}
 		if serverBound {
 			l := d.serverLinkFor(opts.Agent)
-			declaration := l.b.declaration.Load()
-			env = append(env, declaration.HomeEnv+"="+l.home())
+			env = append(env, l.homeEnv())
 		}
 		opts.LifecycleID, opts.AgentArgv, opts.AgentEnv, opts.ExternalCWD = p.Params.RunID, append([]string(nil), result.Argv...), env, externalCWD
 		if reload && !serverBound {
@@ -159,6 +158,9 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 	}
 	if err := d.prepareAgentLaunch(opts, launch); err != nil {
 		return nil, fmt.Errorf("prepare %s launch: %w", opts.Agent, err)
+	}
+	if l, server := d.linkNamed(launch.Link).(*serverLink); server {
+		opts.AgentEnv = append(opts.AgentEnv, l.homeEnv())
 	}
 	return nil, nil
 }
@@ -269,7 +271,7 @@ func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, pr
 }
 
 func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.ConversationReadinessMessage) (protocol.ConversationReadinessResult, error) {
-	if l := d.serverLinkFor(msg.Agent); l != nil && l.b.plugin != "" {
+	if l := d.serverLinkFor(msg.Agent); l != nil {
 		if msg.Restore {
 			if err := l.restore(msg.Profile, msg.Conversation); err != nil {
 				return protocol.ConversationReadinessResult{}, err

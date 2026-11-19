@@ -27,7 +27,7 @@ func (d *Daemon) delegationHarnesses() []protocol.Harness {
 		if !caps.HasInitialPrompt || !d.agentOffered(name) {
 			continue
 		}
-		result = append(result, protocol.Harness{ID: name, Name: driver.DisplayName(), Available: d.harnessAvailability(driver) != harnessMissing, ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver)})
+		result = append(result, protocol.Harness{ID: name, Name: driver.DisplayName(), Available: d.harnessAvailability(driver) != harnessMissing, ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver) || d.serverLinkFor(name) != nil})
 	}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
 		if !driver.Capabilities["initial_prompt"] {
@@ -250,7 +250,7 @@ func supportsModelDiscovery(driver agentdriver.Driver) bool {
 
 func (d *Daemon) selectsProviders(harness string) bool {
 	_, plugin := d.ensurePluginRegistry().driver(harness)
-	return plugin
+	return plugin || d.serverLinkFor(harness) != nil
 }
 
 func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {

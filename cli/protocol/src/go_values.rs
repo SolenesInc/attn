@@ -112,6 +112,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "self_update_enabled", machine: false, default_on: false },
     Setting { key: "direct_agent_launch_enabled", machine: false, default_on: true },
     Setting { key: "code_review_enabled", machine: false, default_on: false },
+    Setting { key: "sigma_enabled", machine: false, default_on: false },
     Setting { key: "pty_shared_host_enabled", machine: false, default_on: true },
     Setting { key: "notebook_sync_state", machine: true, default_on: false },
     Setting { key: "notebook_sync_last_error", machine: true, default_on: false },
@@ -207,6 +208,7 @@ pub const FEATURES: &[Feature] = &[
     Feature { key: "self_update_enabled", name: "Self-update", summary: "See how attn was installed and whether an update is available.", note: "", group: "Under the hood", timing: "", stage: "experimental", applies: "Now", search: "update upgrade version release install" },
     Feature { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", note: "", group: "Under the hood", timing: "Starts with the next agent you open.", stage: "on by default", applies: "New agents", search: "memory launcher" },
     Feature { key: "code_review_enabled", name: "Code review", summary: "Agents present a change as a review document that resolves against its repository.", note: "", group: "Agents", timing: "", stage: "experimental", applies: "Now", search: "review diff change walkthrough attn review" },
+    Feature { key: "sigma_enabled", name: "Sigma", summary: "Offer Sigma as a harness for new agents and delegations.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", applies: "New agents", search: "harness sigma pi server" },
     Feature { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", note: "", group: "Under the hood", timing: "Starts with the next terminal you open.", stage: "on by default", applies: "New terminals", search: "terminal hosting pty backend rust workers memory" },
 ];
 

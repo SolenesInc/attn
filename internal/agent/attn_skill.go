@@ -245,7 +245,11 @@ func HarnessSkillsDir(harness, homeDir string) string {
 	return ""
 }
 
-func EnsureWorkflowSkillsInstalled(skillsDirs func(homeDir string) []string) ([]string, bool, error) {
+type SkillDirsResolver interface {
+	SkillDirs(lookupEnv func(string) string, homeDir string) ([]string, error)
+}
+
+func EnsureWorkflowSkillsInstalled(skillsDirs func(homeDir string) ([]string, error)) ([]string, bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return nil, false, nil
 	}
@@ -253,8 +257,12 @@ func EnsureWorkflowSkillsInstalled(skillsDirs func(homeDir string) []string) ([]
 	if err != nil {
 		return nil, true, fmt.Errorf("resolve home directory for workflow skills: %w", err)
 	}
+	dirs, err := skillsDirs(homeDir)
+	if err != nil {
+		return nil, true, err
+	}
 	wanted := map[string]bool{}
-	for _, dir := range skillsDirs(homeDir) {
+	for _, dir := range dirs {
 		wanted[filepath.Join(dir, "attn-workflow")] = true
 	}
 	paths := make([]string, 0, len(wanted))

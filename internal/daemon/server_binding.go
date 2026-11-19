@@ -9,20 +9,46 @@ import (
 	"strings"
 	"sync/atomic"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 type serverBinding struct {
 	plugin         string
-	declaration    atomic.Pointer[pluginServerDeclaration]
+	declaration    atomic.Pointer[agentdriver.ServerDeclaration]
 	agent          string
 	name           string
 	kind           string
 	terminal       harness.TerminalID
 	conversationOf func(harness.TerminalID) (string, bool)
+}
+
+func newServerBinding(agent, plugin string, declaration *agentdriver.ServerDeclaration) *serverBinding {
+	b := &serverBinding{agent: agent, name: agent, kind: agent + "-server", terminal: harness.TerminalID(agent + "-server"), plugin: plugin,
+		conversationOf: func(t harness.TerminalID) (string, bool) {
+			conversation, ok := strings.CutPrefix(string(t), "server:"+agent+":")
+			return conversation, ok && conversation != ""
+		},
+	}
+	b.declaration.Store(declaration)
+	return b
+}
+
+func (d *Daemon) linkBuiltInServers() {
+	d.serverLinksMu.Lock()
+	defer d.serverLinksMu.Unlock()
+	if d.serverLinks == nil {
+		d.serverLinks = make(map[string]*serverLink)
+	}
+	for _, name := range agentdriver.List() {
+		if declaration, ok := agentdriver.DeclaredServer(agentdriver.Get(name)); ok {
+			d.serverLinks[name] = newServerLink(d, newServerBinding(name, "", &declaration))
+		}
+	}
 }
 
 var serverEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID=", "BUN_GC_TIMER_DISABLE=1"}
@@ -42,6 +68,13 @@ func (d *Daemon) appServerLinks() []*serverLink {
 	}
 	sort.Slice(links, func(i, j int) bool { return links[i].b.agent < links[j].b.agent })
 	return links
+}
+
+var builtInFeatures = map[string]*setting.Setting{"sigma": setting.SigmaEnabled}
+
+func (d *Daemon) builtInOffered(agent string) bool {
+	feature, gated := builtInFeatures[agent]
+	return !gated || d.on(feature)
 }
 
 func (d *Daemon) agentOffered(agent string) bool {
@@ -67,6 +100,10 @@ func (l *serverLink) home() string {
 		return home
 	}
 	return filepath.Join(lookup("HOME"), dir)
+}
+
+func (l *serverLink) homeEnv() string {
+	return l.b.declaration.Load().HomeEnv + "=" + l.home()
 }
 
 func (l *serverLink) executable(opts *ptybackend.SpawnOptions) string {
@@ -112,7 +149,20 @@ func (l *serverLink) connect(ctx context.Context, socket, client, version string
 	if p == nil {
 		return nil, effectrpc.ServerInfo{}, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
 	}
-	return p.connect(ctx, socket, client, version)
+	c, err := effectrpc.Dial(ctx, socket, p.Initialize.Server)
+	if err != nil {
+		return nil, effectrpc.ServerInfo{}, err
+	}
+	var hello effectrpc.ServerInfo
+	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": p.Initialize.Protocol.Requested()}, &hello)
+	if err == nil {
+		err = l.validateServerInfo(hello, socket)
+	}
+	if err != nil {
+		c.Close()
+		return nil, hello, err
+	}
+	return c, hello, nil
 }
 
 func (l *serverLink) callerConversationEnv() string {
@@ -123,8 +173,13 @@ func (l *serverLink) callerConversationEnv() string {
 }
 
 func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string) error {
-	if p := l.b.declaration.Load(); p != nil {
-		return p.validateServerInfo(hello, socket)
+	p := l.b.declaration.Load()
+	if p == nil {
+		return fmt.Errorf("server binding unavailable until plugin %s registers", l.b.plugin)
 	}
-	return fmt.Errorf("server binding unavailable until plugin %s registers", l.b.plugin)
+	want := p.Initialize
+	if (want.Server != "" && hello.Server != want.Server) || (want.Protocol.Exact > 0 && hello.Protocol != want.Protocol.Exact) || hello.Protocol < want.Protocol.Requested() {
+		return &effectrpc.Error{Server: want.Server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires identity %q and protocol %+v", socket, hello.Server, hello.Version, hello.Protocol, want.Server, want.Protocol)}
+	}
+	return nil
 }

@@ -122,7 +122,7 @@ func (n *serverView) begin(*terminal) error {
 }
 
 func (n *serverView) submit(prompt string) error {
-	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": "you", "text": prompt})
+	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": ServerAuthor{ID: "you", Name: "you"}, "text": prompt})
 }
 
 func (n *serverView) reply(text string, _ bool) error {
@@ -141,11 +141,17 @@ type serverFrame struct {
 	Params json.RawMessage `json:"params"`
 }
 
+type ServerAuthor struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type ServerSubmission struct {
-	Conversation string `json:"conversation"`
-	RequestID    string `json:"requestId"`
-	Author       string `json:"author"`
-	Text         string `json:"text"`
+	Conversation string
+	RequestID    string
+	Author       string
+	AuthorID     string
+	Text         string
 }
 
 type ServerProviderModels struct {
@@ -342,11 +348,14 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		Conversation string           `json:"conversation"`
 		Text         string           `json:"text"`
 		RequestID    string           `json:"requestId"`
-		Author       string           `json:"author"`
+		Author       ServerAuthor     `json:"author"`
 		Client       string           `json:"client"`
 		After        map[string]int64 `json:"after"`
 	}
 	_ = json.Unmarshal(raw, &p)
+	if (method == "conversation/submit" || method == "conversation/interrupt") && (p.Author.ID == "" || p.Author.Name == "") {
+		return nil, "InvalidParams: author {id, name} is required"
+	}
 	switch method {
 	case "initialize":
 		s.mu.Lock()
@@ -417,7 +426,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		}
 		s.mu.Unlock()
 		if fresh {
-			s.submissionsOf(p.Conversation) <- ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: p.Author, Text: p.Text}
+			s.submissionsOf(p.Conversation) <- ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: p.Author.Name, AuthorID: p.Author.ID, Text: p.Text}
 		}
 		if lost {
 			return nil, replyLost

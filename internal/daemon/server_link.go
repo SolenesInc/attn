@@ -56,6 +56,9 @@ func (l *serverLink) canRun(req *spawnRequest) bool {
 }
 
 func (l *serverLink) enabledForNewLaunches() bool {
+	if l.b.plugin == "" {
+		return l.d.builtInOffered(l.b.agent)
+	}
 	reg, conn := l.d.ensurePluginRegistry().driverConnection(l.b.agent, l.b.plugin)
 	return l.b.declaration.Load() != nil && conn != nil && reg.Capabilities["server_binding"]
 }
@@ -354,10 +357,7 @@ func (l *serverLink) Deliver(ctx context.Context, in harness.Input) harness.Cust
 	if conversation == "" {
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", in.Session, l.b.name)}
 	}
-	author := "attn"
-	if in.Voice == harness.VoiceUser {
-		author = userName()
-	}
+	author := serverAuthor(in.Voice)
 	c, err := l.ensureServer(ctx, nil)
 	if err == nil {
 		callCtx, cancel := context.WithTimeout(ctx, serverCallLimit)
@@ -368,6 +368,19 @@ func (l *serverLink) Deliver(ctx context.Context, in harness.Input) harness.Cust
 		return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name, conversation, err)}
 	}
 	return harness.Custody{Taken: true, At: time.Now()}
+}
+
+type serverAuthorRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func serverAuthor(voice harness.Voice) serverAuthorRef {
+	if voice == harness.VoiceUser {
+		name := userName()
+		return serverAuthorRef{ID: name, Name: name}
+	}
+	return serverAuthorRef{ID: "attn", Name: "attn"}
 }
 
 func userName() string {
@@ -393,7 +406,7 @@ func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, relea
 		return
 	}
 	defer release()
-	if err := c.Call(ctx, "conversation/interrupt", map[string]any{"conversation": released}, nil); err != nil {
+	if err := c.Call(ctx, "conversation/interrupt", map[string]any{"conversation": released, "author": serverAuthor(harness.VoiceAttn)}, nil); err != nil {
 		l.logf("interrupting conversation %s of closed session %s: %v", released, sessionID, err)
 	}
 }

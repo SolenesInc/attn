@@ -169,9 +169,8 @@ func (d *Daemon) sessionHasLiveWorker(sessionID protocol.SessionID) bool {
 }
 
 func (d *Daemon) agentSupportsChiefGuidance(agent string) bool {
-	switch strings.TrimSpace(strings.ToLower(agent)) {
-	case string(protocol.SessionAgentClaude), string(protocol.SessionAgentCodex):
-		return true
+	if driver := agentdriver.Get(strings.TrimSpace(strings.ToLower(agent))); driver != nil {
+		return agentdriver.EffectiveCapabilities(driver).HasLaunchInstructions
 	}
 	driver, ok := d.ensurePluginRegistry().driver(agent)
 	return ok && driver.Capabilities["launch_instructions"]
@@ -467,7 +466,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		return ptybackend.SpawnOptions{}, fmt.Errorf("agent %q is not available", session.Agent)
 	}
 	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
-	if isPlugin && pluginDriver.Capabilities["server_binding"] {
+	if d.serverLinkFor(agent) != nil {
 		resumeSessionID = d.store.GetSessionConversation(sessionID).NativeID
 	}
 	if resumeSessionID != "" {

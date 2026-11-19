@@ -16,10 +16,10 @@ type pluginSkillDir struct {
 }
 
 func (s pluginSkillDir) validate() error {
-	if s.HomeEnv != "" && !validEnvironmentName(s.HomeEnv) {
+	if s.HomeEnv != "" && !agentdriver.ValidEnvironmentName(s.HomeEnv) {
 		return fmt.Errorf("skill_dirs home_env %q must be a valid variable name", s.HomeEnv)
 	}
-	if s.DefaultHome == "" || !filepath.IsAbs(s.DefaultHome) && !staysInside(s.DefaultHome) {
+	if s.DefaultHome == "" || !filepath.IsAbs(s.DefaultHome) && !agentdriver.StaysInside(s.DefaultHome) {
 		return fmt.Errorf("skill_dirs default_home %q must be absolute or relative to the user's home", s.DefaultHome)
 	}
 	return nil
@@ -38,13 +38,25 @@ func (s pluginSkillDir) resolve(env []string, homeDir string) string {
 	return filepath.Join(home, "skills")
 }
 
-func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) []string {
-	return func(homeDir string) []string {
+func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) ([]string, error) {
+	return func(homeDir string) ([]string, error) {
 		env := pty.MergeEnvironment(os.Environ(), d.latestLoginEnv())
+		lookup := func(key string) string {
+			value, _ := pty.LookupEnv(env, key)
+			return value
+		}
 		var dirs []string
 		for _, harness := range harnesses {
 			if dir := agentdriver.HarnessSkillsDir(harness, homeDir); dir != "" {
 				dirs = append(dirs, dir)
+				continue
+			}
+			if resolver, ok := agentdriver.Get(harness).(agentdriver.SkillDirsResolver); ok {
+				resolved, err := resolver.SkillDirs(lookup, homeDir)
+				if err != nil {
+					return nil, err
+				}
+				dirs = append(dirs, resolved...)
 				continue
 			}
 			driver, _ := d.ensurePluginRegistry().driver(harness)
@@ -52,6 +64,6 @@ func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) []s
 				dirs = append(dirs, dir.resolve(env, homeDir))
 			}
 		}
-		return dirs
+		return dirs, nil
 	}
 }

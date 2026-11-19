@@ -213,7 +213,7 @@ func runAgentDirectly(requestedAgent string) {
 
 	err = cmd.Wait()
 
-	if !hasHooks {
+	if _, serverReportsState := agentdriver.DeclaredServer(driver); !hasHooks && !serverReportsState {
 		transcriptPath := ""
 		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok && opts.ResumeSessionID != "" {
 			transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)

@@ -271,13 +271,17 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		hasHeadlessTask, _ := agentdriver.HeadlessTaskAvailability(driver)
 		settings[capabilitySettingKey(name, "headless_task")] = strconv.FormatBool(hasHeadlessTask)
 		settings[capabilitySettingKey(name, "launch_instructions")] = strconv.FormatBool(d.agentSupportsChiefGuidance(name))
+		if l := d.serverLinkFor(name); l != nil {
+			settings[capabilitySettingKey(name, "execution_target")] = strconv.FormatBool(l.hasTargets())
+			settings[capabilitySettingKey(name, "model_discovery")] = "true"
+		}
 	}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
 		settings[availabilitySettingKey(driver.Agent)] = "true"
 		if driver.DisplayName != "" {
 			settings[driver.Agent+"_display_name"] = driver.DisplayName
 		}
-		if l := d.serverLinkFor(driver.Agent); l != nil && l.b.plugin != "" {
+		if l := d.serverLinkFor(driver.Agent); l != nil {
 			settings[capabilitySettingKey(driver.Agent, "execution_target")] = strconv.FormatBool(l.hasTargets())
 			settings[capabilitySettingKey(driver.Agent, "model_discovery")] = "true"
 		}

@@ -9,6 +9,7 @@ export const BoolSetting = {
   selfUpdateEnabled: "self_update_enabled",
   directAgentLaunchEnabled: "direct_agent_launch_enabled",
   codeReviewEnabled: "code_review_enabled",
+  sigmaEnabled: "sigma_enabled",
   ptySharedHostEnabled: "pty_shared_host_enabled",
   queueShowHiddenSessions: "queue_show_hidden_sessions",
   queueQuietNotifications: "queue_quiet_notifications",
@@ -66,5 +67,6 @@ export const FEATURES: readonly Feature[] = [
   { key: "self_update_enabled", name: "Self-update", summary: "See how attn was installed and whether an update is available.", note: "", group: "Under the hood", timing: "", stage: "experimental", since: "2026-11-08", search: "update upgrade version release install" },
   { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", note: "", group: "Under the hood", timing: "Starts with the next agent you open.", stage: "on by default", since: "2026-10-15", search: "memory launcher" },
   { key: "code_review_enabled", name: "Code review", summary: "Agents present a change as a review document that resolves against its repository.", note: "", group: "Agents", timing: "", stage: "experimental", since: "2026-11-10", search: "review diff change walkthrough attn review" },
+  { key: "sigma_enabled", name: "Sigma", summary: "Offer Sigma as a harness for new agents and delegations.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-11-19", search: "harness sigma pi server" },
   { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", note: "", group: "Under the hood", timing: "Starts with the next terminal you open.", stage: "on by default", since: "2026-09-04", search: "terminal hosting pty backend rust workers memory" },
 ];

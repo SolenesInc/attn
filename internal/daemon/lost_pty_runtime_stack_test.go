@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -137,11 +136,11 @@ func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testwor
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.SharedHostPTY))
 	s.Start()
 	app := s.App()
-	startLastRunTestDriver(t, s, app)
+	setSetting(t, app, "sigma_enabled", "true")
 	setSetting(t, app, "pty_shared_host_enabled", "false")
-	s.Spawn(app, fakeagent.Harness(serverPluginAgent), s.Path("server-on-a-worker"))
+	s.Spawn(app, fakeagent.Sigma, s.Path("server-on-a-worker"))
 	s.EnableSharedHost(app)
-	session := s.Spawn(app, fakeagent.Harness(serverPluginAgent), s.Path("shop"))
+	session := s.Spawn(app, fakeagent.Sigma, s.Path("shop"))
 	tui := s.Launched(session)
 	server := s.AppServer(fakeagent.Sigma)
 	conversation := tui.ConversationID
@@ -153,25 +152,7 @@ func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testwor
 	return s, app, session, server, conversation
 }
 
-func startLastRunTestDriver(t *testing.T, s *testworld.Stack, app *testworld.Peer) {
-	t.Helper()
-	w := &world{World: s.World}
-	declaration := map[string]any{
-		"protocol": "attn-app-server-v1", "executable": filepath.Join(s.Dir, "bin", "sigma"),
-		"serve_args": []string{"serve"}, "home_env": "SIGMA_HOME", "default_home": ".sigma", "socket_name": "sigma.sock",
-		"initialize": map[string]any{"protocol": map[string]int{"min": 1}}, "caller_conversation_env": "SIGMA_ROOT_CONVERSATION",
-	}
-	declaration["recovery"] = "last-run"
-	declaration["on_close"] = "interrupt"
-	driver := registerServerDriver(t, w, "last-run-server", declaration)
-	driver.mu.Lock()
-	driver.holdLaunch = false
-	driver.serverExecutable = filepath.Join(s.Dir, "bin", "sigma")
-	driver.mu.Unlock()
-	awaitDriverAvailable(app, serverPluginAgent)
-}
-
-func TestAnAppServerSessionSurvivesAStartupWithoutItsPluginOrViewRuntime(t *testing.T) {
+func TestASigmaSessionComesBackFromAStartupWithoutItsViewRuntimeStillWaitingOnItsApproval(t *testing.T) {
 	s, app, session, server, conversation := appServerAtWorkApartFromItsServer(t)
 	profile := app.SelectedProfile()
 	terminal := app.Terminal(session)
@@ -180,16 +161,14 @@ func TestAnAppServerSessionSurvivesAStartupWithoutItsPluginOrViewRuntime(t *test
 	server.AskApproval(conversation)
 	s.Start()
 	app = s.App()
-	kept := testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	kept := testworld.AwaitSessionFromConnect(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
 	if kept.ProfileID != profile {
 		t.Fatal("startup moved the session to another profile")
 	}
-	startLastRunTestDriver(t, s, app)
 	if view := s.Launched(session); view.ConversationID != conversation {
-		t.Fatalf("registration opened conversation %s, want %s", view.ConversationID, conversation)
+		t.Fatalf("the startup opened conversation %s, want %s", view.ConversationID, conversation)
 	}
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
 	if servers := s.AppServers(fakeagent.Sigma); servers != 1 {
-		t.Fatalf("registration started %d servers, want the existing one", servers)
+		t.Fatalf("the startup started %d servers, want the existing one", servers)
 	}
 }

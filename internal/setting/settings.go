@@ -77,6 +77,15 @@ var (
 		Since:   "2026-11-10",
 		Search:  "review diff change walkthrough attn review",
 	})
+	SigmaEnabled = feature("sigma_enabled", "Offer Sigma as a harness: true or false. Experimental; off by default; open Sigma sessions keep working when it is turned off.", Info{
+		Name:    "Sigma",
+		Summary: "Offer Sigma as a harness for new agents and delegations.",
+		Group:   Agents,
+		Applies: NewAgents,
+		Stage:   Experimental,
+		Since:   "2026-11-19",
+		Search:  "harness sigma pi server",
+	})
 	SharedPTYHostEnabled = feature("pty_shared_host_enabled", "Use the shared terminal host, and stream output only to terminals the window draws: true or false. On by default; applies to new and reloaded terminals.", Info{
 		Name:    "Shared terminal host",
 		Summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.",

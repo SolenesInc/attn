@@ -13,7 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-var appServerHarnesses = []fakeagent.Harness{fakeagent.SampleServer}
+var appServerHarnesses = []fakeagent.Harness{fakeagent.SampleServer, fakeagent.Sigma}
 
 func eachAppServer(t *testing.T, test func(t *testing.T, h fakeagent.Harness)) {
 	for _, h := range appServerHarnesses {
@@ -23,7 +23,7 @@ func eachAppServer(t *testing.T, test func(t *testing.T, h fakeagent.Harness)) {
 
 func appServerSession(t *testing.T, w *world, app *testworld.Peer, h fakeagent.Harness, opts ...func(*protocol.SpawnSessionMessage)) (string, *fakeagent.Run, *fakeagent.AppServer) {
 	t.Helper()
-	registerSampleServerDriver(t, w, app)
+	offerAppServer(t, w, app, h)
 	session := w.Spawn(app, h, w.Path("shop"), opts...)
 	return session, w.Launched(session), w.AppServer(h)
 }
@@ -213,7 +213,7 @@ func TestAnAppServerSessionWorkingThroughADaemonRestartSettlesFromTheServerAfter
 		promptUntilWorking(app, session, view, server, "migrate the orders table")
 
 		w.restart()
-		registerSampleServerDriver(t, w, w.App())
+		rejoinAppServer(t, w, h)
 		app = w.App()
 		testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 		server.Reply(conversation, "Migrated. <!-- attn:state=idle -->")
@@ -244,7 +244,7 @@ func TestAppServerSessionsKeepTheirAnswersAndLearnRunsThatEndedWhileTheDaemonWas
 		w.stop()
 		server.Reply(workingTUI.ConversationID, "Migrated, but two rows failed. Retry them? <!-- attn:state=waiting_input -->")
 		w.start()
-		registerSampleServerDriver(t, w, w.App())
+		rejoinAppServer(t, w, h)
 		app = w.App()
 		testworld.AwaitSessionFromConnect(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 		if got := restartedSession(w.App(), asked); got.State != protocol.SessionStateWaitingInput {
@@ -257,7 +257,7 @@ func TestAnAppServerConversationOpenInAnotherProfileIsRefusedThere(t *testing.T)
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
 		app := w.App()
-		registerSampleServerDriver(t, w, app)
+		offerAppServer(t, w, app, h)
 		side := createProfile(app, "Side")
 		sideApp := w.AppOn(side.ID)
 		sideTUI := w.Launched(w.Spawn(sideApp, h, w.Path("shop")))
@@ -313,7 +313,7 @@ func TestAppServerOffersItsProvidersModelsWithoutKeepingItsServer(t *testing.T) 
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
 		app := w.App()
-		registerSampleServerDriver(t, w, app)
+		offerAppServer(t, w, app, h)
 		found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: string(h), RequestID: "server-models"},
 			protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "server-models" })
 		var offered []string
@@ -332,7 +332,7 @@ func TestADelegationRoleRunsTheAppServerModelThePickerOffered(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
 		app, cli := w.App(), w.Client()
-		registerSampleServerDriver(t, w, app)
+		offerAppServer(t, w, app, h)
 		roles := buildRole()
 		roles.Roles[0].Choices[0].Selection = protocol.DelegationSelection{Harness: string(h), Provider: "openai", Model: "gpt-5.5", Effort: "high"}
 		if saved := savePreferences(app, roles); !saved.Success {
@@ -353,6 +353,22 @@ func TestADelegationRoleRunsTheAppServerModelThePickerOffered(t *testing.T) {
 			t.Fatalf("the delegated conversation started as %+v, want openai's gpt-5.5", started)
 		}
 	})
+}
+
+func offerAppServer(t *testing.T, w *world, app *testworld.Peer, h fakeagent.Harness) {
+	t.Helper()
+	if h == fakeagent.Sigma {
+		setSetting(t, app, "sigma_enabled", "true")
+		return
+	}
+	registerSampleServerDriver(t, w, app)
+}
+
+func rejoinAppServer(t *testing.T, w *world, h fakeagent.Harness) {
+	t.Helper()
+	if h != fakeagent.Sigma {
+		registerSampleServerDriver(t, w, w.App())
+	}
 }
 
 func registerSampleServerDriver(t *testing.T, w *world, app *testworld.Peer) {

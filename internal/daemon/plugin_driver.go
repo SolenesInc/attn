@@ -32,11 +32,11 @@ type pluginDriverRegistration struct {
 }
 
 type pluginDriverRegisterParams struct {
-	Agent        string                   `json:"agent"`
-	DisplayName  string                   `json:"display_name,omitempty"`
-	Capabilities map[string]bool          `json:"capabilities,omitempty"`
-	Server       *pluginServerDeclaration `json:"server,omitempty"`
-	SkillDirs    []pluginSkillDir         `json:"skill_dirs,omitempty"`
+	Agent        string                         `json:"agent"`
+	DisplayName  string                         `json:"display_name,omitempty"`
+	Capabilities map[string]bool                `json:"capabilities,omitempty"`
+	Server       *agentdriver.ServerDeclaration `json:"server,omitempty"`
+	SkillDirs    []pluginSkillDir               `json:"skill_dirs,omitempty"`
 }
 
 type pluginDriverRegisterResult struct {

@@ -44,8 +44,8 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		}
 		terminal = view
 	}
-	link, linkedServer := d.linkOf(d.sessionInTerminal(terminal)).(*serverLink)
-	if observation.TranscriptPath == "" && (!linkedServer || link.b.plugin == "") {
+	_, linkedServer := d.linkOf(d.sessionInTerminal(terminal)).(*serverLink)
+	if observation.TranscriptPath == "" && !linkedServer {
 		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
 		d.sendOK(conn)
 		return
