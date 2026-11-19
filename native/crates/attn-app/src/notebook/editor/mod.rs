@@ -108,10 +108,9 @@ impl Editor {
         self.focused && a.line <= i && i <= b.line
     }
 
-    /// How line `i` shows, a link to a missing note marked broken unless the line shows its
-    /// source.
-    pub(crate) fn shown(&self, i: usize) -> Shown {
-        let active = self.active(i);
+    /// How line `i` shows, its source when `active`, else its markdown with a link to a
+    /// missing note marked broken.
+    fn shown(&self, i: usize, active: bool) -> Shown {
         let mut shown = markdown::shown(self.doc.line(i), active);
         if !active {
             for link in 0..shown.links.len() {
@@ -124,9 +123,9 @@ impl Editor {
         shown
     }
 
-    /// The line's text, spans and type, as its row draws it.
-    pub(crate) fn styled(&self, shown: &Shown) -> (Vec<Span>, TextStyle) {
-        let style = match shown.heading {
+    /// The type a markdown line draws in: a heading's size and weight, or the body's.
+    fn style(shown: &Shown) -> TextStyle {
+        match shown.heading {
             Some(level) => {
                 let at = (level as usize).clamp(1, 6) - 1;
                 let size = BODY.size * HEADING_SCALE[at];
@@ -138,8 +137,7 @@ impl Editor {
                 }
             }
             None => BODY,
-        };
-        (view::spans(shown, None), style)
+        }
     }
 
     /// What text row `i` draws: its text, spans in `t`'s colours when given, and type. Code,
@@ -147,6 +145,15 @@ impl Editor {
     pub(crate) fn row_text(
         &self,
         i: usize,
+        t: Option<&attn_ui::Tokens>,
+    ) -> (Shown, Vec<Span>, TextStyle) {
+        self.text_as(i, self.active(i), t)
+    }
+
+    fn text_as(
+        &self,
+        i: usize,
+        active: bool,
         t: Option<&attn_ui::Tokens>,
     ) -> (Shown, Vec<Span>, TextStyle) {
         match self.kinds()[i] {
@@ -159,8 +166,8 @@ impl Editor {
                 )
             }
             _ => {
-                let shown = self.shown(i);
-                let (_, style) = self.styled(&shown);
+                let shown = self.shown(i, active);
+                let style = Editor::style(&shown);
                 let spans = match t {
                     Some(t) => view::with_theme(&shown, t),
                     None => view::spans(&shown, None),
@@ -170,10 +177,13 @@ impl Editor {
         }
     }
 
-    /// The caret's line laid out as its row draws it.
-    fn layout(&self, line: usize) -> (std::rc::Rc<rune::parley::Layout<rune::text::Ink>>, Shown) {
-        let shown = markdown::shown(self.doc.line(line), true);
-        let (spans, style) = self.styled(&shown);
+    /// Line `line` laid out as its row draws it, showing its source when `active`.
+    fn laid_out(
+        &self,
+        line: usize,
+        active: bool,
+    ) -> (std::rc::Rc<rune::parley::Layout<rune::text::Ink>>, Shown) {
+        let (shown, spans, style) = self.text_as(line, active, None);
         (
             rune::text::layout(&shown.text, &spans, style, Some(self.width)),
             shown,
@@ -187,7 +197,7 @@ impl Editor {
         Selection,
         std::rc::Rc<rune::parley::Layout<rune::text::Ink>>,
     ) {
-        let (layout, shown) = self.layout(p.line);
+        let (layout, shown) = self.laid_out(p.line, true);
         let at = shown.to_display(p.col);
         (
             Selection::from(Cursor::from_byte_index(&layout, at, Affinity::Downstream)),
@@ -211,8 +221,7 @@ impl Editor {
     /// reads the drawn line the caret is on.
     pub(crate) fn caret_row_wraps(&self) -> Vec<usize> {
         let line = self.doc.caret.line;
-        let (shown, spans, style) = self.row_text(line, None);
-        let layout = rune::text::layout(&shown.text, &spans, style, Some(self.width));
+        let (layout, shown) = self.laid_out(line, self.active(line));
         let start = self.doc.offset(Pos::new(line, 0));
         layout
             .lines()
@@ -231,7 +240,7 @@ impl Editor {
         let moved = selection.move_lines(&layout, lines, false);
         let same_row = line_of(&layout, moved.focus()) != line_of(&layout, selection.focus());
         let target = if same_row {
-            let (_, shown) = self.layout(caret.line);
+            let (_, shown) = self.laid_out(caret.line, true);
             Pos::new(caret.line, shown.to_source(moved.focus().index()))
         } else {
             let next = caret.line as isize + lines.signum();
@@ -241,7 +250,7 @@ impl Editor {
                 self.doc.end()
             } else {
                 let line = next as usize;
-                let (layout, shown) = self.layout(line);
+                let (layout, shown) = self.laid_out(line, true);
                 let y = if lines > 0 {
                     1.0
                 } else {
@@ -272,7 +281,7 @@ impl Editor {
         let caret = self.doc.caret;
         let (selection, layout) = self.cursor(caret);
         let moved = step(&selection, &layout);
-        let (_, shown) = self.layout(caret.line);
+        let (_, shown) = self.laid_out(caret.line, true);
         Pos::new(caret.line, shown.to_source(moved.focus().index()))
     }
 
@@ -287,8 +296,7 @@ impl Editor {
 
     /// Where a press at `(x, y)` in row `line` lands, in the source.
     pub(crate) fn hit(&self, line: usize, x: f32, y: f32) -> Pos {
-        let (shown, spans, style) = self.row_text(line, None);
-        let layout = rune::text::layout(&shown.text, &spans, style, Some(self.width));
+        let (layout, shown) = self.laid_out(line, self.active(line));
         let found = Selection::from_point(&layout, x, y);
         Pos::new(line, shown.to_source(found.focus().index()))
     }
@@ -316,12 +324,10 @@ impl Editor {
         if self.active(line) {
             return false;
         }
-        let shown = self.shown(line);
+        let (layout, shown) = self.laid_out(line, false);
         let Some((range, checked)) = shown.task.clone() else {
             return false;
         };
-        let (spans, style) = self.styled(&shown);
-        let layout = rune::text::layout(&shown.text, &spans, style, Some(self.width));
         let at = Selection::from_point(&layout, x, y).focus().index();
         let Some(glyph) = shown.task_glyph.clone() else {
             return false;
@@ -355,8 +361,7 @@ impl Editor {
 
     /// The link under `(x, y)` in row `line`, as it shows.
     pub(crate) fn link_at(&self, line: usize, x: f32, y: f32) -> Option<String> {
-        let (shown, spans, style) = self.row_text(line, None);
-        let layout = rune::text::layout(&shown.text, &spans, style, Some(self.width));
+        let (layout, shown) = self.laid_out(line, self.active(line));
         let at = Selection::from_point(&layout, x, y).focus().index();
         shown
             .links

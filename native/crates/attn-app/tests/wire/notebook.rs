@@ -813,6 +813,87 @@ fn a_screen_reader_reads_a_wrapped_code_line_as_the_lines_its_row_draws() {
     assert_eq!(read_lines, drawn_lines);
 }
 
+#[test]
+fn the_caret_and_up_and_down_follow_the_drawn_lines_of_a_wrapped_code_line() {
+    let code = "# a shell comment that runs on long enough to wrap across the editor several times over, \
+                as a code line drawn in the mono face and never as a heading, so its lines are the row's";
+    let disk = Disk::with(&[("knowledge/index.md", &format!("```\n{code}\n```"))]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor"));
+        d.press("mod+up");
+        d.press("down");
+    });
+    let rect = |world: &World, key: &str| {
+        world
+            .runtime()
+            .elements()
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("{key} is drawn"))
+            .rect
+    };
+    let row = world
+        .runtime()
+        .elements()
+        .iter()
+        .find(|e| {
+            e.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("notebook.editor.line."))
+                && e.rect[1] <= rect(&world, "notebook.editor.caret")[1]
+                && rect(&world, "notebook.editor.caret")[1] < e.rect[1] + e.rect[3]
+        })
+        .expect("the code line's row")
+        .rect;
+    let drawn_line = |world: &World| {
+        let tree = accesskit_consumer::Tree::new(world.runtime().accessibility_tree(), true);
+        let editor = tree.state().focus().expect("the editor has focus");
+        let caret = editor.text_selection_focus().expect("a caret");
+        let line = editor.line_range_from_index(caret.to_line_index()).unwrap();
+        let start = line.start().to_global_usv_index();
+        (start, caret.to_global_usv_index() - start)
+    };
+    let (first, column) = drawn_line(&world);
+    assert_eq!((first, column), (4, 0));
+
+    world.gesture(|d| {
+        for _ in 0..10 {
+            d.press("right");
+        }
+    });
+    let ten = rect(&world, "notebook.editor.caret");
+    world.gesture(|d| d.press("down"));
+    let (second, column) = drawn_line(&world);
+    assert!(
+        second > first,
+        "Down moves to the code line's second drawn line"
+    );
+    assert_eq!(column, 10, "Down keeps the caret's column in the mono face");
+    let below = rect(&world, "notebook.editor.caret");
+    assert!(
+        (below[0] - ten[0]).abs() < 0.5,
+        "the caret stays at the same x: {ten:?} then {below:?}"
+    );
+    let line_height = below[1] - ten[1];
+    assert!(
+        line_height > 0.0 && (row[3] / line_height).round() > 1.0,
+        "the caret moves down one drawn line: {ten:?} then {below:?} in {row:?}"
+    );
+
+    world.gesture(|d| d.press("home"));
+    assert_eq!(drawn_line(&world), (second, 0));
+    let home = rect(&world, "notebook.editor.caret");
+    assert!(
+        (home[0] - row[0]).abs() < 0.5 && (home[1] - below[1]).abs() < 0.5,
+        "Home puts the caret at the start of its drawn line: {home:?} in {row:?}"
+    );
+
+    world.gesture(|d| d.press("up"));
+    assert_eq!(drawn_line(&world), (first, 0));
+}
+
 fn root_trigger(tile: &str) -> String {
     format!("notebook.tile.{tile}.root-trigger")
 }
