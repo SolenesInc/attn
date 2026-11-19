@@ -76,6 +76,26 @@ describe("AttnPluginClient driver", () => {
     });
   });
 
+  test("registers the folders where its harness finds user skills", async () => {
+    const daemon = await startDaemon();
+    const client = connectable(daemon);
+    client.driver({
+      ...baseDriver,
+      skillDirs: [
+        { homeEnv: "SAMPLE_HOME", defaultHome: ".sample" },
+        { defaultHome: ".claude" },
+      ],
+    });
+    await client.connect();
+    const registered = daemon.requests.find(request => request.method === "driver.register");
+    expect(registered?.params).toMatchObject({
+      skill_dirs: [
+        { home_env: "SAMPLE_HOME", default_home: ".sample" },
+        { default_home: ".claude" },
+      ],
+    });
+  });
+
   test("registers a shared server binding without terminal delivery handlers", async () => {
     const daemon = await startDaemon();
     const client = connectable(daemon);

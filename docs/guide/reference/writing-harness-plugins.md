@@ -92,6 +92,31 @@ refuses an invalid declaration when you call `client.driver`.
 `client.handle(...)` for worktree hooks stays separate. A plugin can declare
 both, and a driver adds nothing to the `hello` surfaces.
 
+### Where your harness finds skills
+
+Attn's own delegation roles tell the agent to load the attn-workflow skill.
+Attn installs that skill only where your harness finds user skills, so it
+refuses those roles on a harness whose driver doesn't say where that is. Your
+users' own roles and the fallback start either way. Declare each home whose
+`skills` folder your harness reads with `skillDirs`, from SDK 0.5.0:
+
+```ts
+client.driver({
+  id: "my-agent",
+  spawn,
+  skillDirs: [{ homeEnv: "MY_AGENT_HOME", defaultHome: ".my-agent" }],
+});
+```
+
+The folder is `$homeEnv/skills`, or `~/defaultHome/skills` when `homeEnv` is
+unset or empty. Attn reads the variable from its own environment and your
+login shell's, as it does for a server home. `defaultHome` is relative to your
+home. When a harness reads skills from several homes, such as one per model
+provider, list each one. Attn keeps attn-workflow in each folder matching its
+own copy: when your driver registers, when roles are added, and before each
+launch of one of its roles. A daemon released before `skillDirs` ignores it
+and keeps refusing those roles.
+
 ## What happens at launch
 
 A **launch** is one start of the harness in one terminal. The SDK and the wire
@@ -293,6 +318,9 @@ recover the runs from `driver.register`, then register again to resume delivery.
 `session_id` is the terminal ID throughout the plugin wire. It is not the ID of
 an Attn session or of a native conversation. A capability name Attn does not
 know, or one that needs `message_delivery` without it, is refused.
+
+`skillDirs` is `skill_dirs` on the wire, a list of objects with
+`default_home` and optional `home_env`.
 
 A shared-server registration adds `capabilities: {"server_binding": true}` and
 `server` to `driver.register`. Its keys are `protocol`, `executable`, optional

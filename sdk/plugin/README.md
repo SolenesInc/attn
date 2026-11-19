@@ -94,6 +94,14 @@ in-memory state from durable sources in `recover` before it returns. A harness
 started by a driver keeps running while its plugin restarts, and attn holds
 direct input until recovery finishes.
 
+## Say where the harness finds skills
+
+From SDK 0.5.0, `client.driver({ ..., skillDirs })` names the homes whose
+`skills` folder the harness reads user skills from, such as
+`[{ homeEnv: "MY_AGENT_HOME", defaultHome: ".my-agent" }]`.
+Attn installs the attn-workflow skill there for its own delegation roles, and
+refuses those roles on a harness that declares none.
+
 ## Bind a shared app-server
 
 With SDK 0.3.0, `client.driver({ id, spawn, resume, server })` can bind a harness

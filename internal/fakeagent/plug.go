@@ -321,6 +321,7 @@ func (p *plugDriver) connect() error {
 			"state_reporting":     true,
 			"message_delivery":    false,
 		}),
+		"skill_dirs": plugSkillDirs(),
 	}, &registered)
 	if err != nil || !registered.OK {
 		return fmt.Errorf("attn refused driver.register: %v", err)

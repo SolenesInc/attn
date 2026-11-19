@@ -235,7 +235,17 @@ func replaceSkillWithPointerIfAttnInstalledAllOfIt(skillDir string, pointer []by
 	return true, nil
 }
 
-func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {
+func HarnessSkillsDir(harness, homeDir string) string {
+	switch strings.TrimSpace(harness) {
+	case "claude":
+		return filepath.Join(homeDir, ".claude", "skills")
+	case "codex":
+		return filepath.Join(homeDir, ".agents", "skills")
+	}
+	return ""
+}
+
+func EnsureWorkflowSkillsInstalled(skillsDirs func(homeDir string) []string) ([]string, bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return nil, false, nil
 	}
@@ -244,12 +254,8 @@ func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {
 		return nil, true, fmt.Errorf("resolve home directory for workflow skills: %w", err)
 	}
 	wanted := map[string]bool{}
-	for _, harness := range harnesses {
-		skillRoot := ".agents"
-		if strings.TrimSpace(harness) == "claude" {
-			skillRoot = ".claude"
-		}
-		wanted[filepath.Join(homeDir, skillRoot, "skills", "attn-workflow")] = true
+	for _, dir := range skillsDirs(homeDir) {
+		wanted[filepath.Join(dir, "attn-workflow")] = true
 	}
 	paths := make([]string, 0, len(wanted))
 	for target := range wanted {

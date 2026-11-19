@@ -11,6 +11,7 @@ const (
 	PlugCapabilitiesEnv = "ATTN_FAKE_PLUG_CAPABILITIES"
 	PlugAgentEnv        = "ATTN_FAKE_PLUG_AGENT"
 	PlugModelsEnv       = "ATTN_FAKE_PLUG_MODELS"
+	PlugSkillDirsEnv    = "ATTN_FAKE_PLUG_SKILL_DIRS"
 	plugRefusalFile     = "refuse-launch"
 )
 
@@ -29,6 +30,13 @@ func withPlugCapabilityOverrides(capabilities map[string]bool) map[string]bool {
 		}
 	}
 	return capabilities
+}
+
+func plugSkillDirs() json.RawMessage {
+	if declared := strings.TrimSpace(os.Getenv(PlugSkillDirsEnv)); declared != "" {
+		return json.RawMessage(declared)
+	}
+	return nil
 }
 
 type plugLaunchChoices struct {

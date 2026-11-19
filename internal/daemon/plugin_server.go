@@ -45,6 +45,11 @@ func validEnvironmentName(name string) bool {
 	return true
 }
 
+func staysInside(relative string) bool {
+	clean := filepath.Clean(relative)
+	return !filepath.IsAbs(clean) && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator))
+}
+
 func (p *pluginServerDeclaration) validate() error {
 	if p.Protocol != "attn-app-server-v1" {
 		return fmt.Errorf("unsupported server binding protocol %q; need attn-app-server-v1", p.Protocol)
@@ -58,8 +63,7 @@ func (p *pluginServerDeclaration) validate() error {
 	if !strings.HasSuffix(p.CallerConversationEnv, "_ROOT_CONVERSATION") || len(p.CallerConversationEnv) == len("_ROOT_CONVERSATION") {
 		return fmt.Errorf("server caller_conversation_env must be named <NAME>_ROOT_CONVERSATION")
 	}
-	home := filepath.Clean(p.DefaultHome)
-	if p.DefaultHome == "" || filepath.IsAbs(home) || home == ".." || strings.HasPrefix(home, ".."+string(filepath.Separator)) {
+	if p.DefaultHome == "" || !staysInside(p.DefaultHome) {
 		return fmt.Errorf("server default_home must be relative to the user's home")
 	}
 	if p.SocketName == "" || filepath.Base(p.SocketName) != p.SocketName || p.SocketName == "." || p.SocketName == ".." {

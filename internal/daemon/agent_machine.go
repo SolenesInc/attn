@@ -30,6 +30,7 @@ type AgentLaunch struct {
 	Plugin               *AgentPluginLaunch
 	Monitor              sessionmonitor.Launch
 	InstallWorkflowSkill bool
+	RequireWorkflowSkill bool
 	AddedTerminal        bool
 	FreshCost            bool
 	StartedAt            time.Time
@@ -86,7 +87,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		return nil, nil
 	}
 	if launch.InstallWorkflowSkill {
-		if err := d.ensureDelegationWorkflowSkill(opts.Agent); err != nil {
+		if err := d.ensureDelegationWorkflowSkill(opts.Agent, launch.RequireWorkflowSkill); err != nil {
 			return nil, err
 		}
 	}

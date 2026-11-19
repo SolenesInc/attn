@@ -27,6 +27,7 @@ import (
 type internalSpawnPolicy struct {
 	command                *store.TerminalCommand
 	installWorkflowSkill   bool
+	requireWorkflowSkill   bool
 	recordsRepositoryTrust bool
 	parentSessionID        protocol.SessionID
 	launchPlacement        *launchPlacement
@@ -716,7 +717,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 	}
 	launch.InitialPrompt, launch.Link, launch.Profile = req.initialPrompt, linkKind(req.link), req.profile.ID
 	launch.Monitor, launch.StartedAt = d.monitorLaunch(msg.ID), req.spawnStartedAt
-	launch.InstallWorkflowSkill = req.policy.installWorkflowSkill
+	launch.InstallWorkflowSkill, launch.RequireWorkflowSkill = req.policy.installWorkflowSkill, req.policy.requireWorkflowSkill
 	launch.AddedTerminal = req.addsTerminal
 	launch.FreshCost = req.existingSession == nil && req.resumeSessionID == ""
 	if req.policy.recordsRepositoryTrust {

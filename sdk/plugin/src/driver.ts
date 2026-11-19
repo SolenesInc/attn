@@ -27,6 +27,16 @@ export type ServerBinding = {
  targets?: boolean;
 };
 
+/** A home whose `skills` folder the harness reads user skills from: `$homeEnv`, or `~/defaultHome` when `homeEnv` is unset. */
+export type SkillDir = {
+ homeEnv?: string;
+ defaultHome: string;
+};
+
+export function skillDirsRegistration(dirs: SkillDir[] | undefined): Record<string, unknown>[] | undefined {
+ return dirs?.map((dir) => ({ home_env: dir.homeEnv, default_home: dir.defaultHome }));
+}
+
 export function serverRegistration(server: ServerBinding | undefined): Record<string, unknown> | undefined {
  if (!server) return undefined;
  return {
@@ -188,6 +198,8 @@ export type DriverDefinition = DriverHandlers & DriverPromises & {
   id: string;
   displayName?: string;
   server?: ServerBinding;
+  /** Where the harness finds user skills. attn installs the skills its Attn roles need there, and refuses those roles without it. */
+  skillDirs?: SkillDir[];
 };
 
 export function accepted(): DriverDeliverResult {

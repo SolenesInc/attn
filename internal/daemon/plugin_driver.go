@@ -28,6 +28,7 @@ type pluginDriverRegistration struct {
 	Agent        string
 	DisplayName  string
 	Capabilities map[string]bool
+	SkillDirs    []pluginSkillDir
 }
 
 type pluginDriverRegisterParams struct {
@@ -35,6 +36,7 @@ type pluginDriverRegisterParams struct {
 	DisplayName  string                   `json:"display_name,omitempty"`
 	Capabilities map[string]bool          `json:"capabilities,omitempty"`
 	Server       *pluginServerDeclaration `json:"server,omitempty"`
+	SkillDirs    []pluginSkillDir         `json:"skill_dirs,omitempty"`
 }
 
 type pluginDriverRegisterResult struct {
@@ -216,6 +218,11 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 	if err != nil {
 		return err
 	}
+	for _, dir := range params.SkillDirs {
+		if err := dir.validate(); err != nil {
+			return err
+		}
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -230,6 +237,7 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 		Agent:        agent,
 		Capabilities: capabilities,
 		DisplayName:  strings.TrimSpace(params.DisplayName),
+		SkillDirs:    params.SkillDirs,
 	}
 	close(r.driverRegistered)
 	r.driverRegistered = make(chan struct{})
@@ -362,6 +370,9 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		}
 		d.logf("plugin driver registered plugin=%s agent=%s", plugin.name, normalizePluginAgent(params.Agent))
 		d.resolvePluginDriverRoutes(plugin.name, normalizePluginAgent(params.Agent))
+		if len(params.SkillDirs) > 0 {
+			d.ensureEnabledWorkflowSkillsFor([]string{normalizePluginAgent(params.Agent)})
+		}
 		if l := d.serverLinkFor(normalizePluginAgent(params.Agent)); l != nil && l.b.plugin == plugin.name {
 			l.recoverProcesses(d.life.Context())
 			l.recoverViews(d.life.Context())
