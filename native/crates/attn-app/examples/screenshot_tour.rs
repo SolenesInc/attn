@@ -892,11 +892,17 @@ fn garden_world(dark: bool, seeds: Vec<Seed>) -> World {
 
 /// [`garden_world`], its daemon also answering what `answers` registers.
 fn garden_world_and(dark: bool, seeds: Vec<Seed>, answers: impl FnOnce(&Daemon)) -> World {
-    let daemon = Daemon::scripted().state(initial(
-        dark,
-        document_tile("m", "/repo/plan.md"),
-        seeds.clone(),
-    ));
+    garden_world_beside(dark, document_tile("m", "/repo/plan.md"), seeds, answers)
+}
+
+/// [`garden_world_and`] with `tile` beside terminal `a` in place of the document.
+fn garden_world_beside(
+    dark: bool,
+    tile: Value,
+    seeds: Vec<Seed>,
+    answers: impl FnOnce(&Daemon),
+) -> World {
+    let daemon = Daemon::scripted().state(initial(dark, tile, seeds.clone()));
     answers(&daemon);
     let known = seeds;
     daemon.on("seed_document_get", move |r: &Request| {
@@ -1014,13 +1020,16 @@ fn garden_dock_search(dark: bool) {
     snap(&mut world, "garden-dock-search-filter", dark);
 }
 
-/// A seed's page opened as a tile.
+/// A seed's page as a tile beside the agent.
 fn garden_seed_tile(dark: bool) {
-    let mut world = with_document(dark);
-    press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
-    world.gesture(|app| app.click(Target::key("garden.row.s-one")));
-    world.gesture(|app| app.click(Target::key("garden.open-tile")));
+    let tile = json!({
+        "type": "tile",
+        "tile_id": "seed",
+        "tile_kind": "seed",
+        "tile_params": "s-one",
+        "tile_session_id": "s0",
+    });
+    let mut world = garden_world_beside(dark, tile, seeds(), |_| {});
     snap(&mut world, "garden-seed-tile", dark);
 }
 
