@@ -4190,3 +4190,75 @@ fn a_column_a_divider_drag_sends_to_the_shelf_leaves_without_sliding_with_the_ro
         "a leaves where it was, as the Tauri app never animates a divider drag: {leaving:?}"
     );
 }
+
+/// What the renderer confines terminal `runtime`'s grid to: its effect slot's clip, in points.
+fn terminal_drawn_within(world: &World, runtime: &str) -> [f32; 4] {
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key(format!("terminal.{runtime}")))
+        .unwrap_or_else(|| panic!("{runtime} is laid out"));
+    let scale = world.runtime().env.scale;
+    let near = |a: f32, b: f32| (a - b * scale).abs() <= scale;
+    let slot = world
+        .runtime()
+        .instances
+        .iter()
+        .find(|i| {
+            i.params[1] == rune::render::KIND_EFFECT
+                && near(i.rect[0], x)
+                && near(i.rect[1], y)
+                && near(i.rect[2], w)
+                && near(i.rect[3], h)
+        })
+        .unwrap_or_else(|| panic!("{runtime}'s grid has an effect slot"));
+    slot.clip.map(|v| v / scale)
+}
+
+fn corner(world: &World, key: &str) -> (f32, f32) {
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key(key))
+        .unwrap_or_else(|| panic!("{key} is laid out"));
+    (x + w, y + h)
+}
+
+#[test]
+fn a_spotlit_terminal_whose_grid_outgrows_its_tile_draws_nothing_over_its_neighbour() {
+    let off_cells = (1603.5, 900.0);
+    for tree in [row([pane("a"), pane("b")]), below(pane("a"), pane("b"))] {
+        let daemon = daemon(vec![desktop(1, "a", Some(tree.clone()))]);
+        let held_by_a_larger_client = |r: &Value| serde_json::json!({"event": "pty_resized", "id": r["id"], "cols": 200, "rows": 80});
+        daemon
+            .on("pty_resize", held_by_a_larger_client)
+            .on("attach_session", |r| {
+                serde_json::json!({"event": "attach_result", "id": r["id"], "success": true,
+                    "running": true, "cols": 200, "rows": 80})
+            });
+        let mut world = World::start_sized(daemon, off_cells);
+        world.open_desktop();
+        world.advance(Duration::from_secs(1));
+        assert_eq!(spotlit(&world), vec!["a".to_owned()]);
+
+        let tile = world.screen().bounds(Target::key("tile.a")).unwrap();
+        let scale = world.runtime().env.scale;
+        let pixel_out = |v: f32, up: bool| {
+            if up {
+                (v * scale).ceil() / scale
+            } else {
+                (v * scale).floor() / scale
+            }
+        };
+        let [x0, y0, x1, y1] = terminal_drawn_within(&world, "r-a");
+        assert!(
+            x0 >= pixel_out(tile[0], false)
+                && y0 >= pixel_out(tile[1], false)
+                && x1 <= pixel_out(tile[0] + tile[2], true)
+                && y1 <= pixel_out(tile[1] + tile[3], true),
+            "in {tree}, a's grid may draw over [{x0}, {y0}, {x1}, {y1}], past its tile {tile:?}"
+        );
+        let tile_corner = (tile[0] + tile[2], tile[1] + tile[3]);
+        assert_eq!(corner(&world, "tile.a.spotlight.bottom"), tile_corner);
+        assert_eq!(corner(&world, "tile.a.spotlight.right"), tile_corner);
+        assert_eq!(corner(&world, "terminal.r-a"), tile_corner, "in {tree}");
+    }
+}
