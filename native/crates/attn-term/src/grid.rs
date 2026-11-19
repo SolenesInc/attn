@@ -208,6 +208,34 @@ impl Grid {
         line
     }
 
+    /// The screen as text, a line per row, and where the cursor sits in it as a byte offset:
+    /// at the end of the text while the cursor is hidden.
+    pub fn text_and_cursor(&self) -> (String, usize) {
+        let mut text = String::new();
+        let mut cursor = None;
+        for y in 0..usize::from(self.rows) {
+            if y > 0 {
+                text.push('\n');
+            }
+            let line = self.row_text(y);
+            if let Some(c) = self.cursor.as_ref().filter(|c| usize::from(c.row) == y) {
+                cursor = Some(text.len() + self.byte_of_col(y, c.col).min(line.len()));
+            }
+            text.push_str(&line);
+        }
+        let end = text.len();
+        (text, cursor.unwrap_or(end))
+    }
+
+    fn byte_of_col(&self, y: usize, col: u16) -> usize {
+        self.row(y)
+            .iter()
+            .take(usize::from(col))
+            .filter(|cell| cell.width != Width::Spacer)
+            .map(|cell| self.text(cell.grapheme).len().max(1))
+            .sum()
+    }
+
     /// Every row as text, one per line.
     pub fn text_lines(&self) -> Vec<String> {
         (0..usize::from(self.rows))

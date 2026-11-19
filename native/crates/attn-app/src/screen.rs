@@ -18,8 +18,11 @@ fn theme_terminals(rt: &mut Runtime<State>) -> TerminalColors {
     theme
 }
 
-fn echoes_drawn(rt: &mut Runtime<State>) {
+fn screens_drawn(rt: &mut Runtime<State>, redrawn: bool) {
     rt.state().terminals.echoes_drawn();
+    if redrawn {
+        rt.a11y_text_changed();
+    }
 }
 
 impl Screens {
@@ -27,8 +30,9 @@ impl Screens {
     /// terminals' screens as `render` does and uploads nothing.
     pub fn draw_without_gpu(&mut self, rt: &mut Runtime<State>) {
         theme_terminals(rt);
+        let redrawn = rt.state().terminals.undrawn();
         rt.state_mut().terminals.grids().for_each(drop);
-        echoes_drawn(rt);
+        screens_drawn(rt, redrawn);
     }
 }
 
@@ -45,6 +49,7 @@ impl Compositor<State> for Screens {
         let (device, queue, key) = (f.device, f.queue, f.device_key());
         let scale = f.rt.env.scale;
         let theme = theme_terminals(f.rt);
+        let redrawn = f.rt.state().terminals.undrawn();
         let terminals = &mut f.rt.state_mut().terminals;
         let metrics = terminals.metrics();
         self.cells
@@ -56,6 +61,6 @@ impl Compositor<State> for Screens {
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
             cells.draw(device, pass, site);
         });
-        echoes_drawn(f.rt);
+        screens_drawn(f.rt, redrawn);
     }
 }

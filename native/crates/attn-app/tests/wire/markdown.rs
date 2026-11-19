@@ -1324,7 +1324,7 @@ fn a_screen_reader_is_on_the_terminal_or_document_that_holds_the_keyboard() {
     world.gesture(|app| app.click(Target::key("terminal.r-a")));
     assert_eq!(
         focused(&world),
-        Some(("terminal.r-a".to_owned(), "Agent a".to_owned()))
+        Some(("terminal.r-a".to_owned(), "Agent a · unknown".to_owned()))
     );
     world.gesture(|app| app.click(Target::key("tile.m.document")));
     assert_eq!(

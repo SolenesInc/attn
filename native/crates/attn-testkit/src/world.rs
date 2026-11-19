@@ -1054,6 +1054,24 @@ impl World {
         &self.runtime
     }
 
+    /// Listens to the window as a screen reader does, from its whole tree now on to the changes
+    /// [`Self::screen_reader_heard`] reads.
+    pub fn listen_as_screen_reader(&mut self) {
+        self.runtime.a11y_activate("attn");
+        self.runtime.a11y_update();
+    }
+
+    /// The value the window sent a screen reader for the element keyed `key` since the last
+    /// call: `None` when it sent nothing new for it.
+    pub fn screen_reader_heard(&mut self, key: &str) -> Option<String> {
+        let update = self.runtime.a11y_update()?;
+        update
+            .nodes
+            .iter()
+            .find(|(_, node)| node.author_id() == Some(key))
+            .and_then(|(_, node)| node.value().map(str::to_owned))
+    }
+
     /// Terminal `id`'s `terminal-view` slice as the automation server reads it: what its screen
     /// holds now, whether or not a frame drew it.
     pub fn terminal_view(&mut self, id: &str) -> Option<serde_json::Value> {

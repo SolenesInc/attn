@@ -1580,3 +1580,88 @@ fn showing_desktop(current: &str) -> ProfileArrangementChangedMessage {
         ..ProfileArrangementChangedMessage::new()
     }
 }
+
+#[test]
+fn a_screen_reader_reads_the_terminal_that_holds_the_keys_with_its_screen_and_cursor() {
+    let shell = DesktopPane {
+        session_id: "s1".into(),
+        ..pane("t1", "r1")
+    };
+    let mut world = World::start(Daemon::scripted().state(InitialStateMessage {
+        sessions: Some(vec![attn_protocol::Session {
+            id: "s1".into(),
+            label: "Shell".into(),
+            state: "idle".into(),
+            profile_id: "work".into(),
+            ..attn_protocol::Session::default()
+        }]),
+        ..showing(vec![shell], "daemon-1")
+    }));
+    world.open_desktop();
+    output(&world, 1, b"$ echo hello\r\nhello\r\n$ ");
+    world.settle();
+
+    let terminal = world
+        .screen()
+        .focused()
+        .expect("the terminal holding the keys has focus");
+    assert_eq!(terminal.key.as_deref(), Some("terminal.r1"));
+    assert_eq!(terminal.role, "terminal");
+    assert_eq!(terminal.name.as_deref(), Some("Shell · idle"));
+    let value = terminal.value.expect("the screen's text");
+    assert!(value.starts_with("$ echo hello\nhello\n$\n"), "{value:?}");
+    assert_eq!(
+        terminal.selection,
+        Some([(2, 1), (2, 1)]),
+        "the caret at the cursor, after the trimmed prompt"
+    );
+
+    world.listen_as_screen_reader();
+    let commits = world.runtime().stats.commits;
+    output(&world, 2, b"ls\r\nnotes.md\r\n$ ");
+    world.settle();
+    assert_eq!(
+        world.runtime().stats.commits,
+        commits,
+        "output does not run the view"
+    );
+    let heard = world
+        .screen_reader_heard("terminal.r1")
+        .expect("the new output is sent");
+    assert!(
+        heard.starts_with("$ echo hello\nhello\n$ ls\nnotes.md\n$\n"),
+        "{heard:?}"
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(attn_testkit::Target::key("terminal.r1"))
+            .selection,
+        Some([(4, 1), (4, 1)])
+    );
+
+    let lines: String = (1..=80).map(|n| format!("line {n}\r\n")).collect();
+    output(&world, 3, lines.as_bytes());
+    world.settle();
+    let heard = world
+        .screen_reader_heard("terminal.r1")
+        .expect("the screen scrolled");
+    assert!(
+        !heard.contains("line 1\n"),
+        "the first lines scrolled off: {heard:?}"
+    );
+    let (x, y) = cell(&world, 1, 0);
+    let row = Fonts::default().metrics(FONT_SIZE).cell_h;
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(WheelEvent::new(0.0, 200.0 * row).at(x, y))
+    });
+    world.advance(Duration::from_secs(1));
+    let heard = world
+        .screen_reader_heard("terminal.r1")
+        .expect("scrolling back is sent");
+    assert!(
+        heard.contains("hello\n"),
+        "the history scrolled back into view: {heard:?}"
+    );
+}

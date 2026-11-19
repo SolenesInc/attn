@@ -1243,6 +1243,18 @@ impl Terminals {
         Some(lines.join("\n"))
     }
 
+    /// What a screen reader reads of terminal `id`: its screen as the window last drew it, with
+    /// the caret at the cursor.
+    pub(crate) fn reader_text(&self, id: &str) -> Option<rune::DrawnText> {
+        let (text, cursor) = self.panes.get(id)?.grid.text_and_cursor();
+        Some(rune::DrawnText {
+            text,
+            anchor: cursor,
+            focus: cursor,
+            wraps: Vec::new(),
+        })
+    }
+
     /// The text of a terminal's screen as the window last drew it, row by row.
     pub fn drawn_text(&self, id: &str) -> Option<Vec<String>> {
         Some(self.panes.get(id)?.grid.text_lines())

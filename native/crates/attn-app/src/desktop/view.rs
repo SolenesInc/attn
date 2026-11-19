@@ -909,6 +909,17 @@ pub(crate) fn leaf_title(
     }
 }
 
+/// What a screen reader calls a terminal: its title and its agent's state, "Shell · idle".
+fn terminal_name(title: &str, session: Option<&Session>) -> String {
+    match session {
+        Some(session) => format!(
+            "{title} · {}",
+            crate::sidebar::AgentState::parse(&session.state).spoken()
+        ),
+        None => title.to_owned(),
+    }
+}
+
 pub(crate) fn tile_kind_label(kind: &str) -> &str {
     match kind {
         "markdown" => "Markdown",
@@ -955,9 +966,10 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 .flatten();
             let pointing_link = cx.terminals.pointing_link() == Some(pane.runtime_id.as_str())
                 || cx.terminals.pointing_mark(&pane.runtime_id);
+            let session = cx.sessions.iter().find(|s| s.id == pane.session_id);
             let slot = terminal_slot(
                 (&pane.runtime_id, &pane.session_id),
-                (&title, held),
+                (&terminal_name(&title, session), held),
                 holder.clone(),
                 caret,
                 pointing_link,
@@ -1966,11 +1978,13 @@ fn terminal_slot(
     let id = runtime_id.to_owned();
     let (pointing, pressing, wheeling, leaving) = (id.clone(), id.clone(), id.clone(), id.clone());
     let (moved_over, left) = (session.to_owned(), session.to_owned());
+    let reading = id.clone();
     let slot = el()
         .key(format!("terminal.{runtime_id}"))
-        .role("group")
+        .role("terminal")
         .label(title.to_owned())
         .holds_keys(held)
+        .a11y_text_from(move |state: &State| state.terminals.reader_text(&reading))
         .w_full()
         .grow(1.0)
         .min_h(0.0)
