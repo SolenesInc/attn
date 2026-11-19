@@ -4,6 +4,7 @@ use rune::{Color, Shadow};
 
 pub mod colors;
 mod scroll_bar;
+pub mod system;
 pub mod type_;
 
 pub use scroll_bar::{
@@ -241,5 +242,5 @@ mod glyph_button;
 pub mod icon;
 pub mod keycap;
 pub use glyph_button::{Glyph, GlyphButton};
-mod stories;
-pub use stories::{STORIES, Showcase, playground};
+pub mod gallery;
+pub use gallery::{Library, STORIES, Showcase, playground};
