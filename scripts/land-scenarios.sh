@@ -99,26 +99,43 @@ gave_up_on_runner() {
   sed -n 's/^Gave up after \([0-9]*\)s waiting for the guest checkout .*/\1/p' "$runner_log" | grep .
 }
 
-run_on_ssh() {
-  local scenario seconds outcome failed="" started waited
-  # The median landing's scenarios took 654s on CI's Linux in c4-replay.md on seed s-yg6h46 (2026-11-17).
-  local turn_limit="${ATTN_LAND_RUNNER_TURN_LIMIT:-654}"
+soaked_on_runner() {
+  local turn_limit="$2"
   runner_target="$1"
-  if ! pnpm --silent --dir app real-app:linux status --provider ssh --target "$runner_target" >/dev/null 2>&1; then
-    echo "land: the landing runner $runner_target cannot be reached, so the scenarios run on CI's Linux instead" >&2
-    run_on_github "$scenarios"
-    return
-  fi
   runner_log="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-runner.XXXXXX")/runner.log"
   echo "land: running scenarios $scenarios on $runner_target, before the push: $runner_log"
-  started=$SECONDS
   perl -e 'setpgrp; exec @ARGV' pnpm --silent --dir app real-app:linux soak --provider ssh --target "$runner_target" \
     --checkout land --turn-limit "$turn_limit" --scenario "$scenarios" --out "$(dirname "$runner_log")/artifacts" >"$runner_log" 2>&1 &
   runner_pid=$!
   wait "$runner_pid" || true
   runner_pid=""
-  if waited="$(gave_up_on_runner)"; then
-    echo "land: waited ${waited}s for a turn on the landing runner $runner_target, past its ${turn_limit}s limit, so the scenarios run on CI's Linux instead"
+  ! gave_up_on_runner >/dev/null
+}
+
+run_on_ssh() {
+  local target scenario seconds outcome failed="" started=$SECONDS took="" reachable=()
+  # The median landing's scenarios took 654s on CI's Linux in c4-replay.md on seed s-yg6h46 (2026-11-17).
+  local turn_limit="${ATTN_LAND_RUNNER_TURN_LIMIT:-654}"
+  for target in "$@"; do
+    if pnpm --silent --dir app real-app:linux status --provider ssh --target "$target" >/dev/null 2>&1; then
+      reachable+=("$target")
+    else
+      echo "land: the landing runner $target cannot be reached" >&2
+    fi
+  done
+  if [ "${#reachable[@]}" = 0 ]; then
+    echo "land: no landing runner can be reached, so the scenarios run on CI's Linux instead" >&2
+    run_on_github "$scenarios"
+    return
+  fi
+  if [ "${#reachable[@]}" -gt 1 ]; then
+    for target in "${reachable[@]}"; do
+      if soaked_on_runner "$target" 0; then took=1; break; fi
+      echo "land: the landing runner $target is busy with another landing"
+    done
+  fi
+  if [ -z "$took" ] && ! soaked_on_runner "${reachable[0]}" "$turn_limit"; then
+    echo "land: waited $(gave_up_on_runner)s for a turn on the landing runner $runner_target, past its ${turn_limit}s limit, so the scenarios run on CI's Linux instead"
     run_on_github "$scenarios"
     return
   fi
@@ -155,12 +172,15 @@ run_landing_scenarios() {
   trap cleanup EXIT
   trap 'exit 130' INT TERM
 
-  runner="$(git config attn.landRunner || echo github)"
-  case "$runner" in
-    github) run_on_github "$scenarios" ;;
-    ssh:?*) run_on_ssh "${runner#ssh:}" ;;
-    *) echo "land: git config attn.landRunner is $runner; set it to github or ssh:<target>" >&2; exit 2 ;;
-  esac
+  runners=()
+  while IFS= read -r runner; do
+    case "$runner" in
+      github) ;;
+      ssh:?*) runners+=("${runner#ssh:}") ;;
+      *) echo "land: git config attn.landRunner is $runner; set it to github or ssh:<target>, once for each landing runner" >&2; exit 2 ;;
+    esac
+  done < <(git config --get-all attn.landRunner || true)
+  if [ "${#runners[@]}" = 0 ]; then run_on_github "$scenarios"; else run_on_ssh "${runners[@]}"; fi
 }
 
 run_landing_scenarios "$@"

@@ -58,7 +58,7 @@ A lock prevents sync and commands from changing the same checkout concurrently.
 it says so and waits, from any host, until that run ends. With
 `--turn-limit <seconds>`, it waits at most that long, then prints
 `Gave up after <n>s waiting for the guest checkout <checkout>` and exits 75,
-leaving no waiter on the guest.
+leaving no waiter on the guest. `--turn-limit 0` does not wait at all.
 
 `run` uses the last synced source, so run `sync` after you edit. `build` syncs
 and installs the packaged app. The app's existing build fingerprint check
@@ -128,8 +128,9 @@ cold one on a fresh GitHub runner.
    pnpm, bun and Rust. A machine that already has Node keeps it; the runner
    uses its own.
 3. In the clone you land from, run `git config attn.landRunner ssh:<target>`.
-   Every worktree of the clone uses it. `git config --unset attn.landRunner`
-   goes back to GitHub.
+   Every worktree of the clone uses it. For each further machine, run
+   `git config --add attn.landRunner ssh:<target>`.
+   `git config --unset-all attn.landRunner` goes back to GitHub.
 
 A landing's scenarios then run as one `real-app:linux soak --checkout land` on
 that machine, so the landing syncs once and builds each app once, and each
@@ -139,14 +140,19 @@ build of each app however many worktrees land. Landings take turns on it, and
 the landing prints its time on the machine, how much of it went to waiting for
 other landings, and each scenario's time.
 
+With several machines, a landing runs on the first one, in the order
+configured, that no other landing is using, so landings wait only when every
+machine is busy. Then the landing waits for the first machine. A machine that
+also does other work belongs last, so landings reach it least.
+
 A landing waits at most 654 s for its turn, the median time a landing's
 scenarios took on CI's Linux when 20 real landings were replayed on both
 (`c4-replay.md` on seed `s-yg6h46`). Past that, waiting costs more than CI, so
 the landing prints how long it waited and runs its scenarios on CI's Linux.
 `ATTN_LAND_RUNNER_TURN_LIMIT=<seconds>` sets another limit for one landing.
 
-The landing runner is for landings. Anything else that runs there slows the
-landings queued behind it. Send diagnostic work, such as repeat runs, soaks and
+The first landing runner is for landings. Anything else that runs there slows
+the landings queued behind it. Send diagnostic work, such as repeat runs, soaks and
 reproductions, to `attn-linux` instead, with
 `--provider ssh --target attn-linux`. On 2026-11-18, after `provision` there,
 `soak --checkout diag --scenario shelf-moves,native-sidebar-session` passed

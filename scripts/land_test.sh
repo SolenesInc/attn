@@ -91,9 +91,14 @@ cat >"$work/bin/pnpm" <<'EOF'
 set -euo pipefail
 args="$*"
 case "$args" in
-  *"real-app:linux status --provider ssh --target runner.invalid") exit "${LAND_RUNNER_REACH_EXIT:-0}" ;;
+  *"real-app:linux status --provider ssh --target "*) exit "${LAND_RUNNER_REACH_EXIT:-0}" ;;
   *"real-app:linux soak "*)
     printf 'runner %s\n' "${args#*real-app:linux }" >>"$LAND_CHECK_LOG"
+    case "$args" in
+      *"--target ${LAND_RUNNER_BUSY:-none} "*"--turn-limit 0 "*|*"--target ${LAND_RUNNER_ALSO_BUSY:-none} "*"--turn-limit 0 "*)
+        echo "Gave up after 0s waiting for the guest checkout land" >&2
+        exit 75 ;;
+    esac
     if [ -n "${LAND_RUNNER_GAVE_UP:-}" ]; then
       echo "Gave up after ${LAND_RUNNER_GAVE_UP}s waiting for the guest checkout land" >&2
       exit 75
@@ -545,6 +550,22 @@ land 'Change a scenario while the landing runner is down' LAND_RUNNER_REACH_EXIT
 if grep -qF runner "$LAND_CHECK_LOG"; then echo 'a scenario ran on an unreachable landing runner' >&2; exit 1; fi
 grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'an unreachable landing runner did not fall back to CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'the landing runner runner.invalid cannot be reached'
+
+git config --add attn.landRunner ssh:second.invalid
+printf '// two runners\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+land 'Change a scenario while the first of two landing runners is busy' LAND_RUNNER_BUSY=runner.invalid
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 0 ' "$LAND_CHECK_LOG" || { echo 'a landing with two runners waited on the first one' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'the landing runner runner.invalid is busy with another landing'
+expect_output 'scenario shelf-moves passed on second.invalid in 2s'
+if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed on the second landing runner ran on CI' >&2; exit 1; fi
+grep -rqE '^shelf-moves ssh:second.invalid ' "$records" || { echo 'a scenario that passed on the second landing runner left no pass record' >&2; exit 1; }
+
+printf '// both busy\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+land 'Change a scenario while both landing runners are busy' LAND_RUNNER_BUSY=runner.invalid LAND_RUNNER_ALSO_BUSY=second.invalid
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 ' "$LAND_CHECK_LOG" || { echo 'a landing that found every runner busy did not wait for the first' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'scenario shelf-moves passed on runner.invalid in 2s'
+git config --unset-all attn.landRunner
+git config attn.landRunner ssh:runner.invalid
 
 printf '\n' >>internal/example/example.go
 printf '\n' >>.agents/skills/drive-attn/features/example.md

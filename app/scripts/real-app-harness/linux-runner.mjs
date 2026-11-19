@@ -33,7 +33,7 @@ export function parseArgs(argv, env = process.env) {
   if (positional.length > 1) throw new Error('Put guest command arguments after --');
   options.action = positional[0] || 'status';
   if (!/^[a-z0-9][a-z0-9-]{0,9}$/.test(options.checkout)) throw new Error('--checkout must be at most 10 lowercase letters, digits and dashes');
-  if (options.turnLimit !== undefined && !/^[1-9][0-9]*$/.test(options.turnLimit)) throw new Error('--turn-limit must be a whole number of seconds');
+  if (options.turnLimit !== undefined && !/^(0|[1-9][0-9]*)$/.test(options.turnLimit)) throw new Error('--turn-limit must be a whole number of seconds');
   options.instance ??= `linux-${options.checkout}`;
   if (!/^[a-z][a-z0-9-]{0,39}$/.test(options.instance) || ['default', 'prod', 'production'].includes(options.instance)) {
     throw new Error('--instance must name a non-production instance');
