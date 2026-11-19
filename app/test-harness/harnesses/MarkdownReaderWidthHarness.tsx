@@ -3,6 +3,8 @@ import { MarkdownReader } from '../../src/components/MarkdownReader';
 import { fileMarkdownSource } from '../../src/components/MarkdownReader/documentSource';
 import type { HarnessProps } from '../types';
 
+const CHART = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120"><rect width="320" height="120" fill="#888"/></svg>')}`;
+
 const DOCUMENT_SOURCE = fileMarkdownSource('/tmp/markdown-reader-width-harness.md');
 
 const DOCUMENT = `---
@@ -24,6 +26,13 @@ This note gives the main aggregates in each bounded context, how they relate, an
 | --- | --- | --- | --- | --- | --- |
 | Payables | bill | draft, approved, paid | overdue, partially paid, scheduled for payment | accounts-payable | The legacy state machine still drives approvals for older bills |
 
+\`\`\`mermaid
+flowchart LR
+  bill --> payment
+\`\`\`
+
+![A small chart](chart.png)
+
 \`\`\`ts
 export const billStatus = (bill: Bill, payments: readonly Payment[]): BillStatus => deriveStatus(bill.storedStatus, payments.filter((payment) => payment.billId === bill.id));
 \`\`\`
@@ -38,7 +47,7 @@ export function MarkdownReaderWidthHarness({ onReady }: HarnessProps) {
 
   return (
     <div role="region" aria-label="Markdown tile" style={{ width, padding: 12, boxSizing: 'border-box' }}>
-      <MarkdownReader content={DOCUMENT} source={DOCUMENT_SOURCE} />
+      <MarkdownReader content={DOCUMENT} source={DOCUMENT_SOURCE} loadLocalImage={async () => CHART} />
     </div>
   );
 }

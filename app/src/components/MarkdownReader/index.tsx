@@ -1,6 +1,6 @@
 import { Children, createContext, isValidElement, memo, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { HTMLAttributes, ReactNode, Ref, RefObject } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
@@ -100,6 +100,15 @@ function splitAnchorProps<T extends object>(props: T): {
     }
   }
   return { anchorProps, rest: rest as T };
+}
+
+type HastElement = NonNullable<ExtraProps['node']>;
+
+function holdsOnlyImages(paragraph: HastElement | undefined): boolean {
+  const drawn = (paragraph?.children ?? []).filter((child) => !(child.type === 'text' && child.value.trim() === ''));
+  const isImage = (child: HastElement['children'][number]): boolean =>
+    child.type === 'element' && (child.tagName === 'img' || (child.tagName === 'a' && child.children.length > 0 && child.children.every(isImage)));
+  return drawn.length > 0 && drawn.every(isImage);
 }
 
 function textOf(node: ReactNode): string {
@@ -366,6 +375,10 @@ function readerComponents(
         return <div {...(preProps as HTMLAttributes<HTMLDivElement>)}>{children}</div>;
       }
       return <CodeBlock code={text} language={language} preProps={preProps} />;
+    },
+    p({ node, children, ...props }) {
+      if (!holdsOnlyImages(node)) return <p {...props}>{children}</p>;
+      return <p {...props} className="md-figure">{children}</p>;
     },
     blockquote({ node: _node, children, ...props }) {
       const { 'data-alert-kind': alertKind, ...rest } = props as Record<string, unknown> &

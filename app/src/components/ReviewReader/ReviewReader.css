@@ -336,6 +336,7 @@
 
 .md-reader--review .md-reader-wrap {
   max-width: 1180px;
+  margin-inline: auto;
 }
 
 .md-reader--review {

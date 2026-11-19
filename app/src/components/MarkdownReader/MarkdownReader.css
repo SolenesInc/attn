@@ -58,8 +58,19 @@
   }
 }
 
-.md-reader-card > :is(p, ul, ol, dl, blockquote, .md-alert, h1, h2, h3, h4, h5, h6) {
+.md-reader .md-reader-card > :is(p, ul, ol, dl, blockquote, .md-alert, h1, h2, h3, h4, h5, h6) {
   max-width: var(--md-prose-measure);
+  margin-inline: auto;
+}
+
+.md-reader .md-reader-card > p.md-figure {
+  max-width: none;
+  text-align: center;
+}
+
+.md-figure > .md-reader-image-button {
+  display: inline-block;
+  max-width: 100%;
 }
 
 .md-reader-card > :first-child,
