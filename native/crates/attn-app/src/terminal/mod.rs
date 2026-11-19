@@ -246,6 +246,8 @@ pub struct Terminals {
     pub(crate) trace: Arc<Mutex<InputTrace>>,
     /// What a screen reader last heard of the terminal holding the keys, while one listens.
     heard: Option<spoken::Heard>,
+    /// Another window is in front of this one.
+    in_background: bool,
 }
 
 struct Term {
@@ -287,8 +289,8 @@ struct Term {
     /// Its machine has streamed to this tile since the tile was drawn, so its screen is one
     /// the tile has shown.
     reached: bool,
-    /// How many times the user typed or pasted into the terminal.
-    typed: u32,
+    /// What the user typed into the terminal since a screen reader last looked.
+    typed: String,
 }
 
 #[derive(Debug)]
@@ -376,13 +378,14 @@ impl Term {
             synchronizing_since: None,
             marking: None,
             reached: false,
-            typed: 0,
+            typed: String::new(),
         }
     }
 }
 
 /// A window's root hears its window come to the front or go.
 pub(crate) fn window_focused(state: &mut crate::State, focused: bool, _: &mut Tx) {
+    state.terminals.window_in_front(focused);
     if focused {
         state.terminals.window_activated(&state.daemon);
     }
@@ -1015,6 +1018,7 @@ impl Terminals {
         now: f64,
         daemon: &Commands,
     ) -> Typed {
+        self.heard_typed(id, data);
         let Some(term) = self.panes.get_mut(id) else {
             self.trace
                 .lock()
@@ -1022,7 +1026,6 @@ impl Terminals {
                 .decide(trace, id, Decision::NoTarget, now);
             return Typed::Nowhere;
         };
-        term.typed = term.typed.wrapping_add(1);
         let outcome = match term.phase {
             Phase::Live => Decision::Sent,
             Phase::Waiting | Phase::Attaching(_) | Phase::Retrying { .. } => {

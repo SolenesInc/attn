@@ -1871,6 +1871,115 @@ fn a_screen_reader_hears_the_question_a_program_waits_on_and_not_the_answer_type
 }
 
 #[test]
+fn a_screen_reader_hears_a_question_redrawn_longer_after_an_answer_not_echoed() {
+    let mut world = World::start(one_terminal());
+    listening_shell(&mut world);
+    world.gesture(|app| app.type_text("./confirm"));
+    world.gesture(|app| app.press("Enter"));
+    output(
+        &world,
+        2,
+        b"./confirm\r\n\x1b]133;C\x07Delete report? [y/N] ",
+    );
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        world.screen().announced().as_deref(),
+        Some("Delete report? [y/N]")
+    );
+
+    world.gesture(|app| app.type_text("y"));
+    output(
+        &world,
+        3,
+        b"\r\x1b[2KDelete report? [y/N] Enter to confirm.",
+    );
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        world.screen().announced().as_deref(),
+        Some("Delete report? [y/N] Enter to confirm.")
+    );
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_a_command_that_scrolled_the_screen_as_it_wrapped() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    world.daemon.emit(PtyResizedMessage {
+        id: "r1".into(),
+        cols: 40,
+        rows: 12,
+        ..PtyResizedMessage::new()
+    });
+    output(&world, 1, b"\x1b[12;1H\x1b]133;A\x07$ \x1b]133;B\x07");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+
+    let command = format!("echo {}PRIVATE-INPUT{}", "x".repeat(140), "z".repeat(115));
+    world.gesture(|app| app.type_text(&command));
+    world.gesture(|app| app.press("Enter"));
+    let mut frame = command.into_bytes();
+    frame.extend_from_slice(
+        b"\r\n\x1b]133;C\x07finished\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ \x1b]133;B\x07",
+    );
+    output(&world, 2, &frame);
+    world.settle();
+    assert!(drew(&mut world, "PRIVATE-INPUT"));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced().as_deref(), Some("finished"));
+}
+
+#[test]
+fn a_screen_reader_hears_a_synchronized_update_once_it_draws() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, b"\x1b]133;A\x07$ watch\r\n\x1b]133;C\x07");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+
+    output(&world, 2, b"\x1b[?2026h\x1b7counter 1\x1b8");
+    world.settle();
+    world.advance(Duration::from_millis(500));
+    assert!(!drew(&mut world, "counter 1"));
+    assert_eq!(world.screen().announced(), None, "the update has not drawn");
+
+    output(&world, 3, b"\x1b[?2026l");
+    world.settle();
+    assert!(drew(&mut world, "counter 1"));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced().as_deref(), Some("counter 1"));
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_a_terminal_in_a_window_behind_another() {
+    let mut world = World::start(one_terminal());
+    world.gesture(|app| app.runtime.window_focus(true));
+    world.open_desktop();
+    output(&world, 1, b"$ ");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+
+    output(&world, 2, b"go\r\nbehind-output\r\n$ ");
+    world.settle();
+    world.gesture(|app| app.runtime.window_focus(false));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced(), None);
+
+    world.gesture(|app| app.runtime.window_focus(true));
+    output(&world, 3, b"go\r\nin-front-output\r\n$ ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        world.screen().announced().as_deref(),
+        Some("in-front-output")
+    );
+}
+
+#[test]
 fn a_screen_reader_does_not_hear_a_wrapped_command_line_before_enter() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
