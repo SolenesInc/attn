@@ -80,7 +80,7 @@ Commands:
   add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
-  screen --id I
+  screen --id I                       (I: a session id, or a terminal id from list's terminal_bindings)
   input --id I --text T [--enter]
   attach --id I --cols C --rows R [--text T] [--enter]   (a second client, such as a phone: asks for that size, types, and stays attached until interrupted)
   list
@@ -163,7 +163,19 @@ func addSession(args []string) error {
 		msg["yolo_mode"] = true
 	}
 
-	resp, err := sendAndWait(msg, "spawn_result", sessID, 30*time.Second)
+	resp, err := sendAndWaitMatch(func(initial []byte) (map[string]any, error) {
+		if *profile != "" {
+			return msg, nil
+		}
+		var state struct {
+			SelectedProfileID string `json:"selected_profile_id"`
+		}
+		if err := json.Unmarshal(initial, &state); err != nil {
+			return nil, fmt.Errorf("decode initial_state: %w", err)
+		}
+		msg["profile_id"] = state.SelectedProfileID
+		return msg, nil
+	}, "spawn_result", func(ev map[string]any) bool { return ev["id"] == sessID }, 30*time.Second)
 	if err != nil {
 		return err
 	}
@@ -220,37 +232,47 @@ func killSession(args []string) error {
 
 func screen(args []string) error {
 	fs := flag.NewFlagSet("screen", flag.ExitOnError)
-	id := fs.String("id", "", "session id (required)")
+	id := fs.String("id", "", "session or terminal id (required)")
 	fs.Parse(args)
 	if *id == "" {
 		return errors.New("--id is required")
 	}
-	resp, err := sendAndWait(map[string]any{
-		"cmd": "get_screen_snapshot",
-		"id":  *id,
-	}, "get_screen_snapshot_result", *id, 5*time.Second)
+	content, err := screenSnapshot(*id)
 	if err != nil {
 		return err
-	}
-	if success, _ := resp["success"].(bool); !success {
-		errMsg, _ := resp["error"].(string)
-		return fmt.Errorf("snapshot failed: %s", errMsg)
-	}
-	encoded, _ := resp["screen_snapshot"].(string)
-	if encoded == "" {
-		return errors.New("snapshot contained no screen")
-	}
-	content, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return fmt.Errorf("decode screen snapshot: %w", err)
 	}
 	_, err = os.Stdout.Write(content)
 	return err
 }
 
+func screenSnapshot(id string) ([]byte, error) {
+	var terminal string
+	resp, err := sendAndWaitMatch(func(initial []byte) (map[string]any, error) {
+		var err error
+		terminal, err = terminalOf(initial, id)
+		return map[string]any{"cmd": protocol.CmdGetScreenSnapshot, "id": terminal}, err
+	}, protocol.EventGetScreenSnapshotResult, func(ev map[string]any) bool { return ev["id"] == terminal }, 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	if success, _ := resp["success"].(bool); !success {
+		errMsg, _ := resp["error"].(string)
+		return nil, fmt.Errorf("snapshot failed: %s", errMsg)
+	}
+	encoded, _ := resp["screen_snapshot"].(string)
+	if encoded == "" {
+		return nil, errors.New("snapshot contained no screen")
+	}
+	content, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("decode screen snapshot: %w", err)
+	}
+	return content, nil
+}
+
 func input(args []string) error {
 	fs := flag.NewFlagSet("input", flag.ExitOnError)
-	id := fs.String("id", "", "session id (required)")
+	id := fs.String("id", "", "session or terminal id (required)")
 	text := fs.String("text", "", "text to send")
 	enter := fs.Bool("enter", false, "append carriage return")
 	fs.Parse(args)
@@ -264,17 +286,41 @@ func input(args []string) error {
 	if data == "" {
 		return errors.New("--text or --enter is required")
 	}
-	return send(map[string]any{
-		"cmd":    "pty_input",
-		"id":     *id,
-		"data":   data,
-		"source": "wsctl",
+	return sendResolved(func(initial []byte) (map[string]any, error) {
+		terminal, err := terminalOf(initial, *id)
+		return map[string]any{"cmd": protocol.CmdPtyInput, "id": terminal, "data": data, "source": "wsctl"}, err
 	})
+}
+
+func terminalOf(initial []byte, id string) (string, error) {
+	var state struct {
+		TerminalBindings []protocol.TerminalBinding `json:"terminal_bindings"`
+	}
+	if err := json.Unmarshal(initial, &state); err != nil {
+		return "", fmt.Errorf("decode initial_state: %w", err)
+	}
+	var shown []string
+	for _, binding := range state.TerminalBindings {
+		if string(binding.TerminalID) == id {
+			return id, nil
+		}
+		if string(binding.SessionID) == id {
+			shown = append(shown, string(binding.TerminalID))
+		}
+	}
+	switch len(shown) {
+	case 0:
+		return "", fmt.Errorf("%s is neither a session nor a terminal of this daemon; list shows terminal_bindings", id)
+	case 1:
+		return shown[0], nil
+	default:
+		return "", fmt.Errorf("session %s shows in terminals %s; pass one of them as --id", id, strings.Join(shown, ", "))
+	}
 }
 
 func attach(args []string) error {
 	fs := flag.NewFlagSet("attach", flag.ExitOnError)
-	id := fs.String("id", "", "terminal id (required)")
+	id := fs.String("id", "", "session or terminal id (required)")
 	cols := fs.Int("cols", 0, "requested columns (required)")
 	rows := fs.Int("rows", 0, "requested rows (required)")
 	text := fs.String("text", "", "text to type once attached")
@@ -291,19 +337,24 @@ func attach(args []string) error {
 	}
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
-	if _, err := hello(ctx, conn); err != nil {
+	initial, err := hello(ctx, conn)
+	if err != nil {
+		return err
+	}
+	terminal, err := terminalOf(initial, *id)
+	if err != nil {
 		return err
 	}
 	commands := []map[string]any{
-		{"cmd": protocol.CmdAttachSession, "id": *id},
-		{"cmd": protocol.CmdPtyResize, "id": *id, "cols": *cols, "rows": *rows},
+		{"cmd": protocol.CmdAttachSession, "id": terminal},
+		{"cmd": protocol.CmdPtyResize, "id": terminal, "cols": *cols, "rows": *rows},
 	}
 	data := *text
 	if *enter {
 		data += "\r"
 	}
 	if data != "" {
-		commands = append(commands, map[string]any{"cmd": protocol.CmdPtyInput, "id": *id, "data": data, "source": "wsctl"})
+		commands = append(commands, map[string]any{"cmd": protocol.CmdPtyInput, "id": terminal, "data": data, "source": "wsctl"})
 	}
 	for _, command := range commands {
 		body, err := json.Marshal(command)
@@ -314,7 +365,7 @@ func attach(args []string) error {
 			return fmt.Errorf("write %s: %w", command["cmd"], err)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "attached to %s at %dx%d; interrupt to detach\n", *id, *cols, *rows)
+	fmt.Fprintf(os.Stderr, "attached to terminal %s at %dx%d; interrupt to detach\n", terminal, *cols, *rows)
 	for {
 		if _, _, err := conn.Read(ctx); err != nil {
 			if ctx.Err() != nil {
@@ -344,8 +395,9 @@ func list(_ []string) error {
 		return fmt.Errorf("decode: %w", err)
 	}
 	pretty, _ := json.MarshalIndent(map[string]any{
-		"sessions": event["sessions"],
-		"desktops": event["desktops"],
+		"sessions":          event["sessions"],
+		"terminal_bindings": event["terminal_bindings"],
+		"desktops":          event["desktops"],
 	}, "", "  ")
 	fmt.Println(string(pretty))
 	return nil
@@ -357,7 +409,7 @@ func seedContinuation(args []string) error {
 		return err
 	}
 	requestID := newID("seed-doc")
-	response, err := sendAndWaitMatch(map[string]any{"cmd": protocol.CmdSeedDocumentGet, "seed_id": seed, "request_id": requestID},
+	response, err := sendAndWaitMatch(fixed(map[string]any{"cmd": protocol.CmdSeedDocumentGet, "seed_id": seed, "request_id": requestID}),
 		protocol.EventSeedDocumentGetResult, func(ev map[string]any) bool { return ev["request_id"] == requestID }, 10*time.Second)
 	if err != nil {
 		return err
@@ -382,7 +434,7 @@ func seedResume(args []string) error {
 		return err
 	}
 	requestID := newID("seed-resume")
-	response, err := sendAndWaitMatch(map[string]any{"cmd": protocol.CmdSeedResume, "seed_id": seed, "request_id": requestID},
+	response, err := sendAndWaitMatch(fixed(map[string]any{"cmd": protocol.CmdSeedResume, "seed_id": seed, "request_id": requestID}),
 		protocol.EventSeedResumeResult, func(ev map[string]any) bool { return ev["request_id"] == requestID }, 30*time.Second)
 	if err != nil {
 		return err
@@ -409,7 +461,7 @@ func refreshPRs(args []string) error {
 	if len(args) != 0 {
 		return errors.New("refresh-prs takes no arguments")
 	}
-	response, err := sendAndWait(map[string]any{"cmd": "refresh_prs"}, "refresh_prs_result", "", 60*time.Second)
+	response, err := sendAndWaitMatch(fixed(map[string]any{"cmd": "refresh_prs"}), "refresh_prs_result", func(map[string]any) bool { return true }, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -435,7 +487,7 @@ func request(args []string) error {
 	if id == "" || *event == "" {
 		return errors.New("--json needs a request_id, and --event is required")
 	}
-	response, err := sendAndWaitMatch(payload, *event, func(ev map[string]any) bool { return ev["request_id"] == id }, *timeout)
+	response, err := sendAndWaitMatch(fixed(payload), *event, func(ev map[string]any) bool { return ev["request_id"] == id }, *timeout)
 	if err != nil {
 		return err
 	}
@@ -447,7 +499,17 @@ func request(args []string) error {
 	return nil
 }
 
+type command func(initial []byte) (map[string]any, error)
+
+func fixed(payload map[string]any) command {
+	return func([]byte) (map[string]any, error) { return payload, nil }
+}
+
 func send(payload map[string]any) error {
+	return sendResolved(fixed(payload))
+}
+
+func sendResolved(build command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, wsURL(), nil)
@@ -457,10 +519,14 @@ func send(payload map[string]any) error {
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	if _, err := hello(ctx, conn); err != nil {
+	initial, err := hello(ctx, conn)
+	if err != nil {
 		return err
 	}
-
+	payload, err := build(initial)
+	if err != nil {
+		return err
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -472,17 +538,7 @@ func send(payload map[string]any) error {
 	return nil
 }
 
-func sendAndWait(payload map[string]any, expectedEvent, expectedID string, timeout time.Duration) (map[string]any, error) {
-	return sendAndWaitMatch(payload, expectedEvent, func(ev map[string]any) bool {
-		if expectedID == "" {
-			return true
-		}
-		id, _ := ev["id"].(string)
-		return id == expectedID
-	}, timeout)
-}
-
-func sendAndWaitMatch(payload map[string]any, expectedEvent string, match func(map[string]any) bool, timeout time.Duration) (map[string]any, error) {
+func sendAndWaitMatch(build command, expectedEvent string, match func(map[string]any) bool, timeout time.Duration) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout+3*time.Second)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, wsURL(), nil)
@@ -496,16 +552,10 @@ func sendAndWaitMatch(payload map[string]any, expectedEvent string, match func(m
 	if err != nil {
 		return nil, err
 	}
-	if profileID, ok := payload["profile_id"].(string); ok && profileID == "" {
-		var state struct {
-			SelectedProfileID string `json:"selected_profile_id"`
-		}
-		if err := json.Unmarshal(initial, &state); err != nil {
-			return nil, fmt.Errorf("decode initial_state: %w", err)
-		}
-		payload["profile_id"] = state.SelectedProfileID
+	payload, err := build(initial)
+	if err != nil {
+		return nil, err
 	}
-
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
