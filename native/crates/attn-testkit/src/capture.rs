@@ -3,7 +3,8 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
 
 use attn_app::quick_capture::{self, Panel, Update};
 use attn_client::{Commands, Pulse, Store, Subscription};
@@ -19,10 +20,59 @@ pub(crate) struct HeadlessPanel {
     /// How often the panel asked for the keyboard back while it showed.
     took_keys: std::sync::atomic::AtomicUsize,
     inbox: Mutex<Vec<Update>>,
+    decoders: Decoders,
     pulse: Pulse,
     /// The shortcut the system would open the panel on.
     pub(crate) bound: Mutex<Option<rune::Shortcut>>,
 }
+
+/// The thread Rune decodes pictures on, which wakes the panel once a picture has decoded.
+const DECODER: &str = "rune-images";
+
+/// The decoder threads as the slowest schedule runs them: a picture finishes decoding before
+/// the world next asks whether the panel is idle, and its wake reaches the panel only after.
+#[derive(Default)]
+struct Decoders {
+    state: Mutex<Held>,
+    changed: Condvar,
+}
+
+#[derive(Default)]
+struct Held {
+    /// Wakes of decoded pictures not yet handed the panel.
+    wakes: usize,
+    /// How often the world has asked whether the panel is idle.
+    looks: u64,
+}
+
+impl Decoders {
+    fn hold_until_looked(&self) {
+        let mut held = self.state.lock().unwrap();
+        held.wakes += 1;
+        let looks = held.looks;
+        self.changed.notify_all();
+        let mut held = self
+            .changed
+            .wait_timeout_while(held, STUCK, |h| h.looks == looks)
+            .unwrap()
+            .0;
+        held.wakes -= 1;
+    }
+
+    /// Waits while `decoding` and no wake is held or handed the panel yet, then counts a look.
+    fn look(&self, decoding: bool, handed: impl Fn() -> bool) {
+        let held = self.state.lock().unwrap();
+        let mut held = self
+            .changed
+            .wait_timeout_while(held, STUCK, |h| decoding && h.wakes == 0 && !handed())
+            .unwrap()
+            .0;
+        held.looks += 1;
+        self.changed.notify_all();
+    }
+}
+
+const STUCK: Duration = Duration::from_secs(10);
 
 impl quick_capture::Window for HeadlessPanel {
     fn show(&self) {
@@ -86,6 +136,7 @@ impl CaptureRuntime {
             handed_back: Mutex::default(),
             took_keys: Default::default(),
             inbox: Mutex::default(),
+            decoders: Decoders::default(),
             pulse: pulse.clone(),
             bound: Mutex::default(),
         });
@@ -98,7 +149,14 @@ impl CaptureRuntime {
                 data_dir.to_owned(),
                 wall,
                 move |u| {
+                    let decoded = std::thread::current().name() == Some(DECODER);
+                    if decoded {
+                        window.decoders.hold_until_looked();
+                    }
                     quick_capture::Window::update(&*window, u);
+                    if decoded {
+                        window.decoders.changed.notify_all();
+                    }
                 },
             )
         };
@@ -153,7 +211,13 @@ impl CaptureRuntime {
     }
 
     pub(crate) fn idle(&self) -> bool {
-        self.window.inbox.lock().unwrap().is_empty()
+        let inbox = &self.window.inbox;
+        self.window
+            .decoders
+            .look(self.runtime.state().decoding(), || {
+                !inbox.lock().unwrap().is_empty()
+            });
+        inbox.lock().unwrap().is_empty()
             && (self.copies_held || !self.runtime.state().copying())
             && !self.runtime.state().decoding()
     }
