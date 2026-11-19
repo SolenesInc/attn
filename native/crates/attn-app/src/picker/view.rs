@@ -11,9 +11,12 @@ use super::repo::{self, Chooser, Delete, Start, Zone};
 use super::{Catalog, Choice, Offer, Opened, Picker, Which, agents, listed, numbered, paths};
 use crate::State;
 
-/// The New Session dialog over the app.
-pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
-    let frame = match state.window.launching.dialog.as_ref()? {
+/// The New Session dialog over the app: its backdrop and the dialog, each a layer of its own.
+pub(crate) fn dialog(state: &State, t: &Tokens) -> Vec<El> {
+    let Some(opened) = state.window.launching.dialog.as_ref() else {
+        return Vec::new();
+    };
+    let frame = match opened {
         Opened::Classic(picker) => {
             let frame = frame(state, picker, t)
                 .key("new-session")
@@ -48,24 +51,25 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
                 crate::launcher::escape(state, tx)
             }),
     };
-    Some(
-        el().key("new-session.layer")
+    vec![
+        attn_ui::Backdrop::launcher(t)
+            .draw("new-session.scrim")
+            .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                if state.window.launching.launcher(Which::Dialog).is_some() {
+                    crate::launcher::dismiss(state, tx)
+                } else {
+                    super::close(state, tx)
+                }
+            }),
+        col()
+            .key("new-session.layer")
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
-            .child(
-                attn_ui::Backdrop::launcher(t)
-                    .draw("new-session.scrim")
-                    .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                        if state.window.launching.launcher(Which::Dialog).is_some() {
-                            crate::launcher::dismiss(state, tx)
-                        } else {
-                            super::close(state, tx)
-                        }
-                    }),
-            )
-            .child(col().w_full().h_full().pt(80.0).items_center().child(frame)),
-    )
+            .pt(80.0)
+            .items_center()
+            .child(frame),
+    ]
 }
 
 /// The launcher an empty desktop shows in place of its tiles.

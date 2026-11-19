@@ -67,6 +67,7 @@ pub struct World {
     /// The tile window that has the keyboard, by key; none while the main window has it.
     keyboard: Option<String>,
     focus_trail: Option<Vec<Option<String>>>,
+    backdrop_trail: Option<Vec<Vec<bool>>>,
 }
 
 type OnKey = fn(&mut State, &KeyEvent, &mut Tx) -> bool;
@@ -393,6 +394,7 @@ impl World {
             capture,
             keyboard: None,
             focus_trail: None,
+            backdrop_trail: None,
         };
         world.settle();
         world
@@ -567,6 +569,10 @@ impl World {
             trail.push(self.screen().focused().and_then(|n| n.key));
             self.focus_trail = Some(trail);
         }
+        if let Some(mut trail) = self.backdrop_trail.take() {
+            trail.push(backdrops_over_the_window(&self.runtime.instances));
+            self.backdrop_trail = Some(trail);
+        }
         awake
     }
 
@@ -581,6 +587,23 @@ impl World {
     /// The focus after each frame since [`World::trail_focus`] or the last call, and keeps noting.
     pub fn focus_trail(&mut self) -> Vec<Option<String>> {
         self.focus_trail
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+
+    /// Starts noting, after each frame the main window draws, each backdrop blur it paints and
+    /// whether that blur samples the window behind it, which [`World::backdrop_trail`] hands
+    /// back. A blur inside an ancestor drawn as one layer, such as a fading group, samples only
+    /// what that layer has drawn, and shows no blur over the window.
+    pub fn trail_backdrops(&mut self) {
+        self.backdrop_trail = Some(Vec::new());
+    }
+
+    /// Each frame's backdrop blurs since [`World::trail_backdrops`] or the last call, in paint
+    /// order, true for one that blurs the window; it keeps noting.
+    pub fn backdrop_trail(&mut self) -> Vec<Vec<bool>> {
+        self.backdrop_trail
             .as_mut()
             .map(std::mem::take)
             .unwrap_or_default()
@@ -1218,4 +1241,20 @@ impl Drop for World {
             );
         }
     }
+}
+
+fn backdrops_over_the_window(instances: &[rune::render::Instance]) -> Vec<bool> {
+    use rune::render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END};
+    let mut depth = 0usize;
+    let mut blurs = Vec::new();
+    for kind in instances.iter().map(|i| i.params[1]) {
+        if kind == KIND_LAYER {
+            depth += 1;
+        } else if kind == KIND_LAYER_END {
+            depth -= 1;
+        } else if kind == KIND_BACKDROP_BLUR {
+            blurs.push(depth == 0);
+        }
+    }
+    blurs
 }
