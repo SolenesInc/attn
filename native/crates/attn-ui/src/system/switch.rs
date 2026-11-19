@@ -13,13 +13,14 @@ pub fn switch<S: 'static>(
     label: &str,
     on: bool,
     show_state: bool,
+    disabled: bool,
     t: &Tokens,
     toggle: impl Fn(&mut S, &mut Tx) + 'static,
 ) -> Control {
-    let (track_fill, edge, knob_ink) = if on {
-        (t.warning, t.warning, crate::warning_ink(t))
-    } else {
-        (t.bg_button, t.border_hover, t.text_tertiary)
+    let (track_fill, edge, knob_ink) = match (disabled, on) {
+        (true, _) => (rune::Color::TRANSPARENT, t.border, t.text_dimmed),
+        (false, true) => (t.warning, t.warning, crate::warning_ink(t)),
+        (false, false) => (t.bg_button, t.border_hover, t.text_tertiary),
     };
     let knob = door::corner(el().key("thumb").size(KNOB, KNOB), Radius::Round)
         .absolute(
@@ -28,32 +29,46 @@ pub fn switch<S: 'static>(
         )
         .fill(knob_ink)
         .token_motion(kit(t).motion.control);
-    let toggle = std::rc::Rc::new(toggle);
-    let on_track = toggle.clone();
     let track = door::corner(el().key("control").size(TRACK.0, TRACK.1), Radius::Round)
         .fill(track_fill)
         .border(1.0, edge)
         .child(knob)
-        .a11y_hidden()
-        .on_press_tx(move |s: &mut S, tx: &mut Tx| on_track(s, tx));
-    let track = layers::pressable(track, track_fill, t);
+        .a11y_hidden();
     let switch = row()
         .key(key.into())
         .role("switch")
         .label(label.to_owned())
         .checked(on)
         .focusable(true)
+        .disabled(disabled)
         .self_start()
-        .items_center()
+        .items_center();
+    let state_word = show_state.then(|| {
+        words(
+            if on { "On" } else { "Off" },
+            Type::Control,
+            if disabled {
+                t.text_dimmed
+            } else {
+                t.text_secondary
+            },
+        )
+        .a11y_hidden()
+    });
+    if disabled {
+        let switch = switch.child(track).children(state_word);
+        return Control::new(
+            door::corner(door::gap(switch, Space::S8), Radius::Round),
+            Size::Compact,
+        );
+    }
+    let toggle = std::rc::Rc::new(toggle);
+    let on_track = toggle.clone();
+    let track = layers::pressable(track, track_fill, t)
+        .on_press_tx(move |s: &mut S, tx: &mut Tx| on_track(s, tx));
+    let switch = switch
         .child(track)
-        .children(show_state.then(|| {
-            words(
-                if on { "On" } else { "Off" },
-                Type::Control,
-                t.text_secondary,
-            )
-            .a11y_hidden()
-        }))
+        .children(state_word)
         .on_press_tx(move |s: &mut S, tx: &mut Tx| toggle(s, tx));
     let switch = door::corner(door::gap(switch, Space::S8), Radius::Round);
     Control::new(focus::ring(switch, t), Size::Compact)

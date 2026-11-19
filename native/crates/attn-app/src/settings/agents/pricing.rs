@@ -514,6 +514,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> El {
                 pricing.open,
                 &[],
                 false,
+                false,
                 t,
                 |state: &mut State, _: &mut Tx| {
                     let pricing = &mut state.window.settings.agents.pricing;

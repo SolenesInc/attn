@@ -8,6 +8,7 @@ pub struct Segmented {
     key: String,
     label: String,
     options: Vec<Segment>,
+    disabled: bool,
 }
 
 /// One option of a [`Segmented`].
@@ -63,10 +64,11 @@ impl Segment {
     }
 
     fn build(self, (i, n): (usize, usize), t: &Tokens) -> El {
-        let (fill, ink) = if self.chosen {
-            (t.bg_selected, t.text_primary)
-        } else {
-            (Color::TRANSPARENT, t.text_secondary)
+        let (fill, ink) = match (self.chosen, self.disabled) {
+            (true, false) => (t.bg_selected, t.text_primary),
+            (true, true) => (Color::TRANSPARENT, t.text_secondary),
+            (false, _) if self.disabled => (Color::TRANSPARENT, t.text_dimmed),
+            (false, _) => (Color::TRANSPARENT, t.text_secondary),
         };
         let option = row()
             .key(self.key)
@@ -84,8 +86,7 @@ impl Segment {
             .fill(fill)
             .child(
                 words(self.name, Type::Control, ink)
-                    .wrap()
-                    .align(rune::Align::Center)
+                    .truncate()
                     .a11y_hidden(),
             )
             .children(self.trailing);
@@ -93,7 +94,14 @@ impl Segment {
         let option = door::gap(door::corner(option, Radius::Control), Space::S4);
         let option = focus::ring(option, t);
         let option = if self.chosen {
-            option.border(1.0, t.border_hover)
+            option.border(
+                1.0,
+                if self.disabled {
+                    t.border
+                } else {
+                    t.border_hover
+                },
+            )
         } else {
             option
         };
@@ -102,7 +110,7 @@ impl Segment {
             None => option,
         };
         if self.disabled {
-            return option.layer_opacity(DISABLED);
+            return option;
         }
         let option = layers::pressable(option, if self.chosen { fill } else { t.bg_input }, t);
         match self.press {
@@ -112,15 +120,20 @@ impl Segment {
     }
 }
 
-const DISABLED: f32 = 0.45;
-
 impl Segmented {
     pub fn new(key: impl Into<String>, label: impl Into<String>) -> Segmented {
         Segmented {
             key: key.into(),
             label: label.into(),
             options: Vec::new(),
+            disabled: false,
         }
+    }
+
+    /// The whole control can't be changed now: every option is drawn and read as unavailable.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
 
     pub fn option(mut self, option: Segment) -> Self {
@@ -145,17 +158,11 @@ impl Segmented {
             .items_center()
             .fill(t.bg_input)
             .border(1.0, t.border)
-            .children(
-                self.options
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, option)| option.build((i, n), t)),
-            );
+            .children(self.options.into_iter().enumerate().map(|(i, option)| {
+                let disabled = option.disabled || self.disabled;
+                option.disabled(disabled).build((i, n), t)
+            }));
         let track = door::inset(door::gap(track, Space::S2), Space::S2, Space::S2);
-        let line = row()
-            .w_full()
-            .min_w(0.0)
-            .child(door::corner(track, Radius::Card));
-        Control::new(line, Size::Regular)
+        Control::new(door::corner(track, Radius::Card), Size::Regular)
     }
 }

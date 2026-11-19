@@ -231,9 +231,13 @@ pub(super) fn wide_setting_field(
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(key))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx));
-    if let Some(step) = step {
-        draft = draft.trailing(setting_arrows(key, step, t));
-    }
+    let boxed = match step {
+        Some(step) => {
+            draft = draft.trailing(setting_arrows(key, step, t));
+            El::from(number_box(draft, false, t))
+        }
+        None => El::from(line_box(draft, false, t)),
+    };
     col()
         .w_full()
         .gap(7.0)
@@ -242,12 +246,7 @@ pub(super) fn wide_setting_field(
                 .w_full()
                 .gap(8.0)
                 .items_center()
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .child(El::from(line_box(draft, false, t))),
-                )
+                .child(col().grow(1.0).min_w(0.0).child(boxed))
                 .children(saved_mark(state, key, t))
                 .children(beside),
         )
@@ -368,6 +367,7 @@ pub(super) fn feature_switch(state: &State, key: &'static str, show_state: bool,
         feature.name,
         on,
         show_state,
+        false,
         t,
         move |state: &mut State, tx: &mut Tx| {
             autosave::apply(state, key, if on { "false" } else { "true" }, tx)

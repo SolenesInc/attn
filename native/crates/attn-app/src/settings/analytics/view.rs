@@ -781,6 +781,7 @@ fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> 
         label,
         on,
         false,
+        false,
         t,
         move |state: &mut State, tx: &mut Tx| super::set(state, key, !on, tx),
     )
@@ -831,6 +832,7 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> El {
             "settings.analytics.switch.sharing",
             "Share with attn's maintainers",
             sharing,
+            false,
             false,
             t,
             super::toggle_sharing,

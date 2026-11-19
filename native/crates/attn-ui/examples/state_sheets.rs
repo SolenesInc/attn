@@ -11,7 +11,7 @@ use attn_ui::colors::scheme_for;
 use attn_ui::gallery::{BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use attn_ui::system::{Type, words};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
-use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Runtime, col, el};
+use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Key, KeyEvent, Mods, Runtime, col, el};
 
 const WINDOW: (f32, f32) = (1100.0, 800.0);
 const SCALE: f32 = 2.0;
@@ -25,6 +25,7 @@ enum Gesture {
     Hover,
     Press,
     Click,
+    Tab,
 }
 
 struct Column {
@@ -67,18 +68,33 @@ fn sheets() -> Vec<Sheet> {
         })
         .collect();
     let pressable: &[(&str, &[&str])] = &[
-        ("switch", &["Rest", "Focus"]),
-        ("segmented", &["Rest", "Second chosen", "Focus", "Narrow"]),
-        ("stepper", &["Rest", "Focus"]),
-        ("expander", &["Closed", "Open", "Focus"]),
+        ("switch", &["Rest", "Focus", "Disabled"]),
+        (
+            "segmented",
+            &["Rest", "Second chosen", "Focus", "Disabled", "Narrow"],
+        ),
+        ("stepper", &["Rest", "Focus", "Disabled"]),
+        ("expander", &["Closed", "Open", "Focus", "Disabled"]),
         ("tag", &["Rest", "Long"]),
         ("icon-box", &["Rest"]),
         (
             "choice",
-            &["First chosen", "Second chosen", "Focus", "Narrow"],
+            &[
+                "First chosen",
+                "Second chosen",
+                "Focus",
+                "Disabled",
+                "Narrow",
+            ],
         ),
-        ("press-area", &["Closed", "Open", "Focus", "Long"]),
-        ("disclosure", &["Closed", "Open", "Failed", "Focus"]),
+        (
+            "press-area",
+            &["Closed", "Open", "Focus", "Disabled", "Long"],
+        ),
+        (
+            "disclosure",
+            &["Closed", "Open", "Failed", "Focus", "Disabled"],
+        ),
     ];
     let still = ["tag", "icon-box"];
     let controls = SUBJECTS
@@ -91,7 +107,10 @@ fn sheets() -> Vec<Sheet> {
                 columns.push(column("Hover", variants[0], Gesture::Hover));
                 columns.push(column("Pressed", variants[0], Gesture::Press));
             }
-            columns.extend(variants[1..].iter().map(|&v| column(v, v, Gesture::None)));
+            columns.extend(variants[1..].iter().map(|&v| match v {
+                "Focus" => column("Focus", variants[0], Gesture::Tab),
+                v => column(v, v, Gesture::None),
+            }));
             Sheet {
                 name,
                 story,
@@ -111,7 +130,7 @@ fn sheets() -> Vec<Sheet> {
                 column("Rest", "Rest", Gesture::None),
                 column("Hover", "Rest", Gesture::Hover),
                 column("Pressed", "Rest", Gesture::Press),
-                column("Focus", "Focus", Gesture::None),
+                column("Focus", "Rest", Gesture::Tab),
                 column("Disabled", "Disabled", Gesture::None),
                 column("Long label", "Long label", Gesture::None),
                 column("Narrow", "Narrow", Gesture::None),
@@ -218,11 +237,31 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
             rt.pointer_up(cx, cy);
             rt.pointer_leave();
         }
+        Gesture::Tab => tab_to(&mut rt, &found.path),
     }
     for _ in 0..3 {
         rt.frame(1.0);
     }
     pixels(&mut rt).crop([x - MARGIN, y - MARGIN, w + 2.0 * MARGIN, h + 2.0 * MARGIN])
+}
+
+/// Tab, as a person does, until the keyboard is on `path` or inside it.
+fn tab_to(rt: &mut Runtime<()>, path: &str) {
+    for _ in 0..80 {
+        rt.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0);
+        if rt
+            .elements()
+            .iter()
+            .any(|e| e.focus_visible && e.path.starts_with(path))
+        {
+            return;
+        }
+    }
+    panic!("Tab never reached {path}");
 }
 
 struct Image {

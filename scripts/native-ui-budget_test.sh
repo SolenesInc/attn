@@ -23,7 +23,7 @@ fail() {
 }
 
 budget() {
-  printf 'budget\tattn-ui/src\t1\nbudget\tattn-app/src/*.rs\t0\nbudget\tattn-app/src/settings\t%s\n' "$1" >"$work/native/ui-budget.tsv"
+  printf 'budget\tattn-ui/src\t0\nbudget\tattn-app/src/*.rs\t0\nbudget\tattn-app/src/settings\t%s\n' "$1" >"$work/native/ui-budget.tsv"
   printf 'allow\tnative/crates/attn-ui/src/system/door.rs\n' >>"$work/native/ui-budget.tsv"
 }
 

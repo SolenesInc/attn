@@ -15,6 +15,7 @@ pub fn stepper<S: 'static>(
     key: &str,
     what: &str,
     value: String,
+    disabled: bool,
     t: &Tokens,
     down: impl Fn(&mut S, &mut Tx) + 'static,
     up: impl Fn(&mut S, &mut Tx) + 'static,
@@ -22,13 +23,19 @@ pub fn stepper<S: 'static>(
     let step = |dir: &str, said: &str, mark: &str, press: Press<S>| {
         El::from(
             Button::new(mark)
+                .disabled(disabled)
                 .on_press_tx(move |s: &mut S, tx: &mut Tx| press(s, tx))
                 .build(t)
                 .key(format!("{key}.{dir}"))
                 .label(format!("{said} {what}")),
         )
     };
-    let shown = words(value.clone(), Type::Name, t.text_primary)
+    let ink = if disabled {
+        t.text_dimmed
+    } else {
+        t.text_primary
+    };
+    let shown = words(value.clone(), Type::Name, ink)
         .key(format!("{key}.value"))
         .role("status")
         .label(value)
@@ -41,7 +48,9 @@ pub fn stepper<S: 'static>(
     Control::new(line, Size::Regular)
 }
 
-const ARROW: (f32, f32) = (14.0, 9.0);
+/// Each arrow's hit area: half a regular field's height less its edges, and wide enough for a
+/// fingertip on a trackpad.
+const ARROW: (f32, f32) = (16.0, 14.0);
 const ARROW_GLYPH: f32 = 8.0;
 
 /// The up and down arrows at a number field's right edge, keyed `{key}.up` and `{key}.down`;

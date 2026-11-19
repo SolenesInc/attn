@@ -387,3 +387,55 @@ fn a_field_beside_a_regular_button_shares_its_top_and_bottom() {
         }
     }
 }
+
+#[test]
+fn a_long_value_ends_at_the_inset() {
+    for dark in [true, false] {
+        for variant in ["Long text", "Narrow"] {
+            let rt = story(dark, "Library/Field box", variant);
+            for key in ["field.line", "field.number"] {
+                let field = element(&rt, key);
+                let value = inside(&rt, key, "value");
+                let gap = field.rect[0] + field.rect[2] - (value.rect[0] + value.rect[2]);
+                let trailing = rt.elements().iter().any(|e| {
+                    e.key.as_deref() == Some("trailing")
+                        && std::iter::successors(e.parent, |&p| rt.elements()[p].parent)
+                            .any(|p| rt.elements()[p].path == field.path)
+                });
+                assert!(
+                    trailing || (gap - REGULAR_INSET).abs() < 0.5,
+                    "{variant}, dark={dark}: {key}'s value ends {gap} from its edge, not {REGULAR_INSET}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_segmented_control_beside_words_keeps_its_own_width() {
+    for dark in [true, false] {
+        let rt = story(dark, "Library/Segmented", "Rest");
+        let alone = element(&rt, "segmented.theme");
+        let row = element(&rt, "segmented.row");
+        let words = element(&rt, "segmented.description");
+        let control = element(&rt, "segmented.beside");
+        let ends = |e: &ElementInfo| e.rect[0] + e.rect[2];
+        assert!(
+            (ends(&control) - ends(&row)).abs() < 0.5 && words.rect[2] >= row.rect[2] / 2.0,
+            "dark={dark}: the words take {} of the row's {}, the control {:?}",
+            words.rect[2],
+            row.rect[2],
+            control.rect
+        );
+        assert!(
+            ends(&words) <= control.rect[0],
+            "dark={dark}: the control at {:?} covers the words ending at {}",
+            control.rect,
+            ends(&words)
+        );
+        assert!(
+            alone.rect[2] < row.rect[2],
+            "the control alone fills its column"
+        );
+    }
+}

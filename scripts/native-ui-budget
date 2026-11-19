@@ -6,7 +6,8 @@
 #   scripts/native-ui-budget          check native/ui-budget.tsv against the tree
 #   scripts/native-ui-budget count    print each directory's count today
 #
-# A directory above its line fails, naming the calls added. A directory below its line fails
+# The files the allow rows name, such as the door, are where raw calls belong, so they count for
+# nothing. A directory above its line fails, naming the calls added. A directory below its line fails
 # too, saying to lower the line, so the count only goes down. A file of native/crates outside the
 # allow rows that carries allow(clippy::disallowed_methods) fails.
 set -euo pipefail
@@ -16,11 +17,16 @@ budget="$root/native/ui-budget.tsv"
 crates="$root/native/crates"
 raw='\.(gap|gaps|padding|px|py|pt|pb|pl|pr|mx|my|mt|mb|ml|mr|radius|corners|clip_rounded|font|set_font)\(|TextStyle::new\('
 
+allowed_files() {
+  [ -f "$budget" ] && awk -F'\t' -v root="$root/" '$1 == "allow" { print root $2 }' "$budget" | paste -sd, -
+}
+
 calls_in() {
   local dir="$1"
   shift
   { grep -rnE --include='*.rs' "$raw" "$dir" "$@" 2>/dev/null || true; } |
-    grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' || true
+    grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' |
+    awk -F: -v allowed="$(allowed_files)" 'BEGIN { n = split(allowed, a, ","); for (i = 1; i <= n; i++) skip[a[i]] = 1 } !($1 in skip)' || true
 }
 
 count_of() {

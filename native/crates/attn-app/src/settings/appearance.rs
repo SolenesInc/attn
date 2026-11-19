@@ -230,6 +230,7 @@ fn scale_control(
         &format!("settings.scale.{key}"),
         &format!("{what} font size"),
         value,
+        false,
         t,
         down,
         up,

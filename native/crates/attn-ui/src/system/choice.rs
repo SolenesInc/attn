@@ -12,6 +12,7 @@ pub struct Choice {
     note: Option<String>,
     leading: Option<El>,
     chosen: bool,
+    disabled: bool,
 }
 
 impl Choice {
@@ -22,6 +23,7 @@ impl Choice {
             note: None,
             leading: None,
             chosen: false,
+            disabled: false,
         }
     }
 
@@ -41,6 +43,11 @@ impl Choice {
         self
     }
 
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
     /// Its row, the `i`th of `n`, chosen with `press`.
     pub fn build<S: 'static>(
         self,
@@ -48,10 +55,10 @@ impl Choice {
         t: &Tokens,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Control {
-        let (edge, ink) = if self.chosen {
-            (t.warning, t.text_primary)
-        } else {
-            (t.border, t.text_secondary)
+        let (edge, ink) = match (self.disabled, self.chosen) {
+            (true, _) => (t.border, t.text_dimmed),
+            (false, true) => (t.warning, t.text_primary),
+            (false, false) => (t.border, t.text_secondary),
         };
         let fill = if self.chosen {
             t.bg_elevated
@@ -61,10 +68,10 @@ impl Choice {
         let dot = door::corner(el().size(DOT, DOT), Radius::Round)
             .border(
                 if self.chosen { 4.0 } else { 1.0 },
-                if self.chosen {
-                    t.warning
-                } else {
-                    t.border_hover
+                match (self.disabled, self.chosen) {
+                    (true, _) => t.border,
+                    (false, true) => t.warning,
+                    (false, false) => t.border_hover,
                 },
             )
             .a11y_hidden();
@@ -90,7 +97,8 @@ impl Choice {
             .w_full()
             .min_h(Size::Regular.height())
             .items_center()
-            .fill(if self.chosen {
+            .disabled(self.disabled)
+            .fill(if self.chosen && !self.disabled {
                 fill
             } else {
                 Color::TRANSPARENT
@@ -98,10 +106,13 @@ impl Choice {
             .border(1.0, edge)
             .child(dot)
             .children(self.leading)
-            .child(named)
-            .on_press_tx(press);
+            .child(named);
         let row = door::inset(door::gap(row, Space::S12), Space::S12, Space::S8);
-        let row = layers::pressable(door::corner(row, Radius::Card), fill, t);
+        let row = door::corner(row, Radius::Card);
+        if self.disabled {
+            return Control::new(row, Size::Regular);
+        }
+        let row = layers::pressable(row, fill, t).on_press_tx(press);
         Control::new(focus::ring_on_edge(row, t), Size::Regular)
     }
 }

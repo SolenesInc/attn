@@ -11,6 +11,7 @@ pub fn expander<S: 'static>(
     key: impl Into<String>,
     said: impl Into<String>,
     open: bool,
+    disabled: bool,
     t: &Tokens,
     press: impl Fn(&mut S, &mut Tx) + 'static,
 ) -> Control {
@@ -24,10 +25,15 @@ pub fn expander<S: 'static>(
         .size(Size::Compact)
         .trailing(
             rune::icon(glyph, CHEVRON)
-                .color(t.text_tertiary)
+                .color(if disabled {
+                    t.text_dimmed
+                } else {
+                    t.text_tertiary
+                })
                 .a11y_hidden(),
         )
         .expanded(open)
+        .disabled(disabled)
         .on_press_tx(press)
         .build(t)
         .key(key)

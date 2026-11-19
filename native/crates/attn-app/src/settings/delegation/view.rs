@@ -190,6 +190,7 @@ pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
         "Delegation preferences",
         on,
         true,
+        false,
         t,
         |state: &mut State, tx: &mut Tx| {
             let Some(mut next) = page_state(state).preferences.clone() else {

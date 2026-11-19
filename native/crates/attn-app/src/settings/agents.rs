@@ -7,7 +7,7 @@ mod pricing;
 use std::collections::{BTreeMap, BTreeSet};
 
 use attn_ui::Tokens;
-use attn_ui::system::{Segment, Segmented, disclosure, line_box};
+use attn_ui::system::{Segment, Segmented, disclosure, line_box, number_box};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Tx, col, row, text};
@@ -250,9 +250,13 @@ fn field(
         .on_edit(move |state: &mut State| state.window.settings.autosave.draft_mut(&edit))
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, &left, tx));
-    if let Some(step) = step {
-        input = input.trailing(super::pages::setting_arrows(&key, step, t));
-    }
+    let boxed = match step {
+        Some(step) => {
+            input = input.trailing(super::pages::setting_arrows(&key, step, t));
+            El::from(number_box(input, false, t))
+        }
+        None => El::from(line_box(input, false, t)),
+    };
     let saved = drafts.shows_saved_mark(&key).then(|| {
         text("Saved")
             .key(format!("settings.saved.{key}"))
@@ -270,12 +274,7 @@ fn field(
                 .w_full()
                 .gap(space::S2)
                 .items_center()
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .child(El::from(line_box(input, false, t))),
-                )
+                .child(col().grow(1.0).min_w(0.0).child(boxed))
                 .children(saved),
         )
         .child(super::pages::hint(hint_text, t))
@@ -654,6 +653,7 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> El {
             "Advanced",
             advanced_open,
             &[],
+            false,
             false,
             t,
             move |state: &mut State, _: &mut Tx| {

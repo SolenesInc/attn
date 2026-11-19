@@ -180,7 +180,8 @@ app:
   `scripts/native-ui-budget` in `make check-native` holds each directory of
   `attn-app/src`, and `attn-ui/src`, to its line in `native/ui-budget.tsv`:
   a count above its line fails, and a count below it fails until the line is
-  lowered, so the count only goes down. It also fails when a file of `native/crates`
+  lowered, so the count only goes down. The files its `allow` rows name, such as
+  the door, count for nothing. It also fails when a file of `native/crates`
   outside the file's `allow` rows carries `allow(clippy::disallowed_methods)`.
   Once every line is 0, `native/clippy.toml` rejects the raw methods for the
   whole workspace, as it does Rune's colour constructors.

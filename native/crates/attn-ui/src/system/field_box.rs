@@ -8,8 +8,8 @@ use crate::Tokens;
 /// the field's insets and its arrows measures 62.
 const NUMBER_WIDTH: f32 = 88.0;
 
-/// What the kit's single-line box, which sets its words 8 in from each edge, needs on each side
-/// to bring them to a regular control's inset.
+/// What the kit's single-line box, which sets its words 8 in from its leading edge, needs to
+/// bring them to a regular control's inset.
 const KIT_LINE_TO_REGULAR: Space = Space::S4;
 
 /// A one-line text field filling its column.
@@ -39,7 +39,7 @@ fn single_line(input: TextInput, disabled: bool, t: &Tokens) -> Control {
         .height(size.height())
         .disabled(disabled)
         .build(kit(disabled, t));
-    let field = door::inset(field, KIT_LINE_TO_REGULAR, Space::S0);
+    let field = door::sides(field, KIT_LINE_TO_REGULAR, size.inset());
     Control::new(boxed(field, disabled, t), size)
 }
 

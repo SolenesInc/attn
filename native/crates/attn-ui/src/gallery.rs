@@ -96,7 +96,7 @@ pub const SUBJECTS: &[(&str, &[&str])] = &[
         &["tag.neutral", "tag.warn", "tag.bad", "tag.good"],
     ),
     ("Library/Icon box", &["icon.filled", "icon.dashed"]),
-    ("Library/Choice", &["choice.0", "choice.1", "choice.2"]),
+    ("Library/Choice", &["choices"]),
     ("Library/Press area", &["press-area"]),
     ("Library/Disclosure", &["disclosure"]),
 ];
@@ -108,25 +108,29 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
         .story(
             Story::new("Library/Switch", Library::default, switches)
                 .variant("Rest", |_| {})
-                .variant("Focus", |s| s.rings = true),
+                .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true),
         )
         .story(
             Story::new("Library/Segmented", Library::default, segmented)
                 .variant("Rest", |_| {})
                 .variant("Second chosen", |s| s.chosen = 1)
                 .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true)
                 .variant("Narrow", |s| s.narrow = true),
         )
         .story(
             Story::new("Library/Stepper", Library::default, steppers)
                 .variant("Rest", |_| {})
-                .variant("Focus", |s| s.rings = true),
+                .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true),
         )
         .story(
             Story::new("Library/Expander", Library::default, expanders)
                 .variant("Closed", |_| {})
                 .variant("Open", |s| s.open = true)
-                .variant("Focus", |s| s.rings = true),
+                .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true),
         )
         .story(
             Story::new("Library/Tag", Library::default, tags)
@@ -139,6 +143,7 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("First chosen", |_| {})
                 .variant("Second chosen", |s| s.chosen = 1)
                 .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true)
                 .variant("Narrow", |s| s.narrow = true),
         )
         .story(
@@ -146,6 +151,7 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Closed", |_| {})
                 .variant("Open", |s| s.open = true)
                 .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true)
                 .variant("Long", |s| s.long = true),
         )
         .story(
@@ -153,7 +159,8 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Closed", |_| {})
                 .variant("Open", |s| s.open = true)
                 .variant("Failed", |s| s.failed = true)
-                .variant("Focus", |s| s.rings = true),
+                .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true),
         )
         .story(
             Story::new("Library/Button", Library::default, buttons)
@@ -491,13 +498,23 @@ fn switches(s: &Library, cx: &mut Cx<Library>) -> El {
     stack(
         &t,
         [
-            switch("switch.off", "Delegation", false, false, &t, noop).into(),
-            switch("switch.on", "Delegation", true, false, &t, noop).into(),
+            switch(
+                "switch.off",
+                "Delegation",
+                false,
+                false,
+                s.disabled,
+                &t,
+                noop,
+            )
+            .into(),
+            switch("switch.on", "Delegation", true, false, s.disabled, &t, noop).into(),
             switch(
                 "switch.word",
                 "Telemetry",
                 s.on,
                 true,
+                s.disabled,
                 &t,
                 |s: &mut Library, _: &mut Tx| s.on = !s.on,
             )
@@ -519,6 +536,7 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
                     .chosen(i == s.chosen)
                     .on_press_tx(pick(i))
             }))
+            .disabled(s.disabled)
             .build(&t)
             .into()
     };
@@ -543,6 +561,7 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
                 .trailing(words("…", Type::Control, t.text_tertiary))
                 .help("Checking for Copilot on this machine"),
         )
+        .disabled(s.disabled)
         .build(&t)
         .into();
     let column = door::gap(col().items_start(), Space::S24)
@@ -557,7 +576,29 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
             "segmented.long",
             "Agent",
             &["New each run", LONG_NAME],
-        ));
+        ))
+        .child(
+            door::gap(
+                row().key("segmented.row").w_full().items_center(),
+                Space::S16,
+            )
+            .child(
+                words(
+                    "Used for new sessions and opening PRs.",
+                    Type::Small,
+                    t.text_tertiary,
+                )
+                .key("segmented.description")
+                .wrap()
+                .grow(1.0)
+                .min_w(0.0),
+            )
+            .child(track(
+                "segmented.beside",
+                "Default agent",
+                &["Claude", "Codex"],
+            )),
+        );
     library_stage(&t, column)
 }
 
@@ -583,6 +624,7 @@ fn steppers(s: &Library, cx: &mut Cx<Library>) -> El {
                 "stepper.scale",
                 "app font size",
                 "100%".into(),
+                s.disabled,
                 &t,
                 noop,
                 noop,
@@ -592,6 +634,7 @@ fn steppers(s: &Library, cx: &mut Cx<Library>) -> El {
                 "stepper.match",
                 "terminal font size",
                 "Match app".into(),
+                s.disabled,
                 &t,
                 noop,
                 noop,
@@ -613,6 +656,7 @@ fn expanders(s: &Library, cx: &mut Cx<Library>) -> El {
             "expander",
             "+2 alternatives",
             s.open,
+            s.disabled,
             &t,
             |s: &mut Library, _: &mut Tx| s.open = !s.open,
         )
@@ -673,6 +717,7 @@ fn choice_list(s: &Library, cx: &mut Cx<Library>) -> El {
             Choice::new(format!("choice.{i}"), *name)
                 .note(*note)
                 .chosen(i == s.chosen)
+                .disabled(s.disabled)
                 .build((i, n), &t, move |s: &mut Library, _: &mut Tx| s.chosen = i)
                 .into()
         }));
@@ -699,6 +744,7 @@ fn press_areas(s: &Library, cx: &mut Cx<Library>) -> El {
         "press-area",
         name,
         s.open,
+        s.disabled,
         content,
         &t,
         |s: &mut Library, _: &mut Tx| s.open = !s.open,
@@ -724,6 +770,7 @@ fn disclosures(s: &Library, cx: &mut Cx<Library>) -> El {
             s.open,
             &chips,
             s.failed,
+            s.disabled,
             &t,
             |s: &mut Library, _: &mut Tx| s.open = !s.open,
         )

@@ -36,6 +36,10 @@ pub(crate) fn inset(e: El, x: Space, y: Space) -> El {
     e.px(x.pt()).py(y.pt())
 }
 
+pub(crate) fn sides(e: El, left: Space, right: Space) -> El {
+    e.pl(left.pt()).pr(right.pt())
+}
+
 pub(crate) fn hang_left(e: El, by: Space) -> El {
     e.ml(-by.pt())
 }

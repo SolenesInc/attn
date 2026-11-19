@@ -23,6 +23,7 @@ pub struct Button {
     look: Look,
     size: Size,
     disabled: bool,
+    open: bool,
     trailing: Option<El>,
     press: Option<Press>,
     button: KitButton,
@@ -39,6 +40,7 @@ impl Button {
             look: Look::Plain,
             size: Size::Regular,
             disabled: false,
+            open: false,
             trailing: None,
             press: None,
         }
@@ -65,7 +67,10 @@ impl Button {
         self
     }
 
+    /// The button opens something, open now or not. Open, a Plain or Quiet button takes the
+    /// selected fill, so it reads apart from hover.
     pub fn expanded(mut self, open: bool) -> Self {
+        self.open = open;
         self.button = self.button.expanded(open);
         self
     }
@@ -89,6 +94,8 @@ impl Button {
         let (fill, edge, ink) = match self.look {
             Look::Quiet if self.disabled => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_dimmed),
             _ if self.disabled => (Color::TRANSPARENT, t.border, t.text_dimmed),
+            Look::Plain if self.open => (t.bg_selected, t.border_hover, t.text_primary),
+            Look::Quiet if self.open => (t.bg_selected, Color::TRANSPARENT, t.text_primary),
             Look::Primary => (t.warning, t.warning, crate::warning_ink(t)),
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
             Look::Quiet => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_secondary),
