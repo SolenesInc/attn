@@ -4112,33 +4112,6 @@ model ProfileArrangementChangedMessage {
   request_id?: string;          // Only on the copy answering the receiving client's own request (a spawn's session id), sent before its result
 }
 
-// ============================================================================
-// Migration from legacy workspaces to desktops
-// ============================================================================
-
-enum MigrationPhase {
-  placement_required,
-  launch_required,
-  complete,
-}
-
-model MigrationGroup {
-  group_id: string;             // The legacy workspace id
-  title: string;
-  directory: string;
-  source_desktop_id: string;
-  confirmed: boolean;
-  tree_json: string;            // Surviving panes and tiles as arranged on the source desktop
-  panes: DesktopPane[];
-}
-
-model MigrationDraftDesktop {
-  key: string;                  // The desktop id, or slot-N for a free shortcut slot
-  desktop_id?: string;
-  shortcut_slot?: int32;        // 1-9; absent for an extra desktop
-  tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
-}
-
 model BackgroundLaunchMessage {
  event: "background_launch";
  session_id: SessionID;
@@ -4152,7 +4125,7 @@ model BackgroundLaunchMessage {
 
 enum LaunchDesktopKind { automation, crew }
 // desktop_id is where the item starts; desktop_name chooses a new desktop (on ⌘N when desktop_id is
-// <profile_id>/desktop_N). Neither chooses nothing: an item the launch review has yet to give a desktop.
+// <profile_id>/desktop_N). Neither chooses nothing.
 model LaunchDesktopSetting {
   desktop_id?: string;
   desktop_name?: string;
@@ -4194,74 +4167,6 @@ model LaunchDesktopResultMessage {
   item?: LaunchDesktopItem;
   desktops?: Desktop[];
   items?: LaunchDesktopItem[];
-}
-
-model MigrationState {
-  phase: MigrationPhase;
-  revision: safeint;
-  profile_id: string;
-  groups: MigrationGroup[];
-  desktops: MigrationDraftDesktop[];
-  can_undo: boolean;
-  suggestion_available: boolean;
-  launch_items?: LaunchDesktopItem[];
-  launch_desktops?: Desktop[];
-}
-
-model MigrationGetMessage {
-  cmd: "migration_get";
-  request_id: string;
-}
-
-model MigrationKeepMessage {
-  cmd: "migration_keep";
-  request_id: string;
-  expected_revision: safeint;
-  group_ids: string[];
-}
-
-model MigrationMoveMessage {
-  cmd: "migration_move";
-  request_id: string;
-  expected_revision: safeint;
-  group_id: string;
-  target_key: string;
-  anchor_group_id?: string;     // Absent places the group beside the whole desktop
-  edge: LayoutDockEdge;
-  share?: float64;              // The moved group's share of the new split, in (0,1); absent means half
-}
-
-model MigrationSuggestMessage {
-  cmd: "migration_suggest";
-  request_id: string;
-  expected_revision: safeint;
-}
-
-model MigrationUndoMessage {
-  cmd: "migration_undo";
-  request_id: string;
-  expected_revision: safeint;
-}
-
-model MigrationFinishMessage {
-  cmd: "migration_finish";
-  request_id: string;
-  expected_revision: safeint;
-}
-
-model MigrationResultMessage {
-  event: "migration_result";
-  request_id: string;
-  action: string;               // Echo of the command name
-  success: boolean;
-  error?: string;
-  error_code?: ProfileErrorCode;
-  state?: MigrationState;
-}
-
-model MigrationChangedMessage {
-  event: "migration_changed";
-  state: MigrationState;
 }
 
 // Rename a session's display label. The stored label is authoritative once set:
@@ -4309,7 +4214,6 @@ model InitialStateMessage {
   sessions?: Session[];
   terminal_bindings?: TerminalBinding[];
   profiles?: Profile[];
-  migration_phase?: MigrationPhase;
   // The profile this connection is scoped to, and its desktops.
   selected_profile_id?: string;
   desktops?: Desktop[];
@@ -9056,8 +8960,6 @@ alias DaemonEvent =
   | DesktopTileContentMessage
   | BackgroundLaunchMessage
   | LaunchDesktopResultMessage
-  | MigrationResultMessage
-  | MigrationChangedMessage
   | RenameResultMessage
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage

@@ -3,6 +3,7 @@ package profilemigration
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"testing"
 
@@ -66,14 +67,21 @@ func (w *world) closePane(desktopID, paneID string) {
 	d.Panes = kept
 }
 
-func must(t *testing.T) func(Plan, error) Plan {
-	return func(plan Plan, err error) Plan {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
+func draft(plan Plan, trees map[string]*Node) Plan {
+	out := plan.clone()
+	for i := range out.Desktops {
+		if tree, ok := trees[out.Desktops[i].Key]; ok {
+			out.Desktops[i].Tree = tree
 		}
-		return plan
 	}
+	out.Desktops = slices.DeleteFunc(out.Desktops, func(desktop Desktop) bool {
+		return desktop.ShortcutSlot == 0 && desktop.Tree == nil
+	})
+	return out
+}
+
+func beside(first, second string, direction layouttree.Direction, ratio float64) *Node {
+	return &Node{Direction: direction, Ratio: ratio, Children: []Node{{Group: first}, {Group: second}}}
 }
 
 func counter() func() string {
@@ -116,116 +124,16 @@ func TestInitialPlanOffersEveryShortcutSlotThenTheExtras(t *testing.T) {
 	}
 }
 
-func TestMovingTheOnlyGroupOfAnExtraRemovesItButAnEmptiedSlotStays(t *testing.T) {
+func TestClosedGroupsRetireFromTheDraft(t *testing.T) {
 	w := newWorld(11)
-	live := w.live()
-	plan := InitialPlan(w.manifest)
-	plan = must(t)(plan.Move(live, "group-10", "desktop-3", "", EdgeRight, 0.25))
-	plan = must(t)(plan.Move(live, "group-2", "desktop-3", "group-3", EdgeTop, 0))
-	if got := keys(plan); !reflect.DeepEqual(got, []string{"desktop-1", "desktop-2", "desktop-3", "desktop-4", "desktop-5", "desktop-6", "desktop-7", "desktop-8", "desktop-9", "desktop-11"}) {
-		t.Fatalf("keys = %v, want desktop-10 gone and desktop-2 kept empty", got)
-	}
-	if plan.Desktops[1].Tree != nil {
-		t.Fatalf("slot 2 = %+v, want it empty", plan.Desktops[1].Tree)
-	}
-	want := &Node{Direction: layouttree.DirectionVertical, Ratio: 0.75, Children: []Node{
-		{Direction: layouttree.DirectionHorizontal, Ratio: 0.5, Children: []Node{{Group: "group-2"}, {Group: "group-3"}}},
-		{Group: "group-10"},
-	}}
-	if !reflect.DeepEqual(plan.Desktops[2].Tree, want) {
-		t.Fatalf("desktop 3 = %+v, want %+v", plan.Desktops[2].Tree, want)
-	}
-	if len(plan.Confirmed) != 0 {
-		t.Fatalf("confirmed = %v, want a move to confirm nothing", plan.Confirmed)
-	}
-	if _, err := plan.Move(live, "group-11", "desktop-11", "", EdgeRight, 0); err == nil {
-		t.Fatal("moving a lone extra into itself succeeded")
-	}
-	if _, err := plan.Move(live, "group-1", "desktop-3", "group-9", EdgeRight, 0); err == nil {
-		t.Fatal("anchoring beside a group on another desktop succeeded")
-	}
-}
-
-func TestSwappingTwoGroupsLeavesBothForTheUserToConfirm(t *testing.T) {
-	w := newWorld(5)
-	live := w.live()
-	plan := must(t)(InitialPlan(w.manifest).Keep(live, []string{"group-1"}))
-	plan = must(t)(plan.Move(live, "group-5", "desktop-1", "", EdgeRight, 0))
-	plan = must(t)(plan.Move(live, "group-1", "desktop-5", "", EdgeRight, 0))
-	if len(plan.Confirmed) != 0 {
-		t.Fatalf("confirmed after the swap = %v, want neither group confirmed", plan.Confirmed)
-	}
-	plan = must(t)(plan.Undo())
-	if !reflect.DeepEqual(plan.Confirmed, []string{"group-1"}) {
-		t.Fatalf("confirmed after undoing the second move = %v, want group-1's earlier keep back", plan.Confirmed)
-	}
-}
-
-func TestSuggestionMovesUnconfirmedExtrasIntoTheLightestSlotsOnce(t *testing.T) {
-	w := newWorld(12)
-	w.splitBeside("desktop-1", "pane-1", "pane-1b")
-	w.manifest.Groups[0].LeafIDs = append(w.manifest.Groups[0].LeafIDs, "pane-1b")
-	live := w.live()
-	plan := InitialPlan(w.manifest)
-	plan = must(t)(plan.Keep(live, []string{"group-12"}))
-	if !plan.SuggestionAvailable() {
-		t.Fatal("suggestion unavailable with two unconfirmed extras")
-	}
-	suggested := must(t)(plan.Suggest(live))
-	for _, d := range suggested.Desktops {
-		if d.ShortcutSlot == 0 && d.Key != "desktop-12" {
-			t.Fatalf("extra %s survived the suggestion", d.Key)
-		}
-	}
-	if got := suggested.Desktops[1].Tree.groups(); !reflect.DeepEqual(got, []string{"group-2", "group-10"}) {
-		t.Fatalf("slot 2 holds %v, want group-10 beside group-2 (slot 1 is heavier)", got)
-	}
-	if got := suggested.Desktops[2].Tree.groups(); !reflect.DeepEqual(got, []string{"group-3", "group-11"}) {
-		t.Fatalf("slot 3 holds %v, want group-11 beside group-3", got)
-	}
-	if _, err := suggested.Suggest(live); err == nil {
-		t.Fatal("a second suggestion was accepted")
-	}
-	undone := must(t)(suggested.Undo())
-	if !reflect.DeepEqual(undone.Arrangement, plan.Arrangement) || !undone.SuggestionAvailable() {
-		t.Fatalf("undo restored %+v, want the pre-suggestion draft with the suggestion available again", undone.Arrangement)
-	}
-}
-
-func TestClosedGroupsRetireFromTheDraftItsConfirmationsAndItsHistory(t *testing.T) {
-	w := newWorld(11)
-	plan := InitialPlan(w.manifest)
-	plan = must(t)(plan.Keep(w.live(), []string{"group-10"}))
-	plan = must(t)(plan.Move(w.live(), "group-11", "desktop-10", "", EdgeRight, 0))
+	plan := draft(InitialPlan(w.manifest), map[string]*Node{"desktop-11": nil, "desktop-10": beside("group-10", "group-11", layouttree.DirectionVertical, 0.5)})
 	w.closePane("desktop-10", "pane-10")
 	retired := plan.Retire(w.live())
-	if got := keys(retired); !reflect.DeepEqual(got[len(got)-1], "desktop-10") || len(got) != 10 {
+	if got := keys(retired); got[len(got)-1] != "desktop-10" || len(got) != 10 {
 		t.Fatalf("keys = %v, want desktop-10 kept for group-11 and nothing else", got)
 	}
-	if retired.Desktops[9].Tree.groups()[0] != "group-11" || len(retired.Desktops[9].Tree.groups()) != 1 {
-		t.Fatalf("desktop-10 holds %v, want only group-11", retired.Desktops[9].Tree.groups())
-	}
-	for _, snapshot := range append(retired.History, retired.Arrangement) {
-		for _, id := range snapshot.Confirmed {
-			if id == "group-10" {
-				t.Fatalf("a retired group kept its confirmation in %+v", snapshot)
-			}
-		}
-		for _, d := range snapshot.Desktops {
-			for _, id := range d.Tree.groups() {
-				if id == "group-10" {
-					t.Fatal("undo could resurrect a retired group")
-				}
-			}
-		}
-	}
-}
-
-func TestFinishRefusesUntilEveryLiveGroupIsConfirmed(t *testing.T) {
-	w := newWorld(3)
-	plan := must(t)(InitialPlan(w.manifest).Keep(w.live(), []string{"group-1", "group-2"}))
-	if _, err := Materialize(plan, w.live(), w.desktops, nil, counter()); err == nil {
-		t.Fatal("finish succeeded with group-3 unconfirmed")
+	if got := retired.Desktops[9].Tree.groups(); !reflect.DeepEqual(got, []string{"group-11"}) {
+		t.Fatalf("desktop-10 holds %v, want only group-11", got)
 	}
 }
 
@@ -235,8 +143,7 @@ func TestFinishKeepsConcurrentAgentsWhereTheyWereLaunched(t *testing.T) {
 	w.splitBeside("desktop-2", "pane-2", "pane-child-of-2")
 	live := w.live()
 	plan := InitialPlan(w.manifest)
-	plan = must(t)(plan.Move(live, "group-2", "desktop-3", "", EdgeLeft, 0.4))
-	plan = must(t)(plan.Keep(live, []string{"group-1", "group-2", "group-3"}))
+	plan = draft(plan, map[string]*Node{"desktop-2": nil, "desktop-3": beside("group-2", "group-3", layouttree.DirectionVertical, 0.4)})
 	outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
@@ -276,8 +183,7 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 	w.manifest.Groups[2].LeafIDs = []string{"pane-10", "tile-doc"}
 	live := w.live()
 	plan := InitialPlan(w.manifest)
-	plan = must(t)(plan.Move(live, "group-10", "slot-5", "", EdgeRight, 0))
-	plan = must(t)(plan.Keep(live, []string{"group-1", "group-2", "group-10"}))
+	plan = draft(plan, map[string]*Node{"desktop-10": nil, "slot-5": {Group: "group-10"}})
 	outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
@@ -290,8 +196,7 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 		t.Fatalf("new desktop = %+v, want pane-10 on a new desktop in slot 5", last)
 	}
 
-	plan = must(t)(plan.Move(live, "group-10", "desktop-2", "group-2", EdgeBottom, 0))
-	plan = must(t)(plan.Keep(live, []string{"group-10"}))
+	plan = draft(plan, map[string]*Node{"slot-5": nil, "desktop-2": beside("group-2", "group-10", layouttree.DirectionHorizontal, 0.5)})
 	outcome, err = Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)
@@ -307,8 +212,7 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 func TestAFreeSlotTakenDuringTheDraftReceivesTheGroupsMovedThere(t *testing.T) {
 	w := newWorld(8)
 	live := w.live()
-	plan := must(t)(InitialPlan(w.manifest).Move(live, "group-8", "slot-9", "", EdgeRight, 0))
-	plan = must(t)(plan.Keep(live, plan.Unconfirmed(live)))
+	plan := draft(InitialPlan(w.manifest), map[string]*Node{"desktop-8": nil, "slot-9": {Group: "group-8"}})
 
 	w.desktops = append(w.desktops, profiles.Desktop{ID: "desktop-new", ProfileID: "profile", ShortcutSlot: 9, Tree: layouttree.DefaultLayout("pane-launched"), ActivePaneID: "pane-launched", Panes: []profiles.Pane{agentPane("pane-launched")}})
 	live = w.live()
@@ -343,8 +247,7 @@ func TestASlotFreedDuringTheDraftBecomesATargetAgain(t *testing.T) {
 	if got := keys(plan); !reflect.DeepEqual(got, []string{"desktop-1", "desktop-2", "slot-3", "desktop-4", "slot-5", "slot-6", "slot-7", "slot-8", "slot-9", "desktop-3"}) {
 		t.Fatalf("keys = %v, want slot 3 free again and desktop-3 among the extras", got)
 	}
-	plan = must(t)(plan.Move(live, "group-4", "slot-3", "", EdgeRight, 0))
-	plan = must(t)(plan.Keep(live, plan.Unconfirmed(live)))
+	plan = draft(plan, map[string]*Node{"desktop-4": nil, "slot-3": {Group: "group-4"}})
 	outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)

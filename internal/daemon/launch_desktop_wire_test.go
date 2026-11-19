@@ -189,9 +189,6 @@ func TestUpgradingAnInstallWithOnlyAutomationsGivesEachItsDesktopAndPlacesExisti
 	}
 	w.start()
 	app := w.App()
-	if phase := protocol.Deref(app.Initial.MigrationPhase); phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("the upgraded install opened in migration phase %q, want complete", phase)
-	}
 	placedPane(t, w, "existing")
 	got := readLaunchSetting(app, "automation", "1")
 	if !got.Confirmed || protocol.Deref(got.Setting.Label) != "Local check (no ⌘ number)" {
@@ -343,26 +340,25 @@ func TestACompletedMigrationDoesNotReopenForALaterAutomation(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.start()
-	read := func(app *testworld.Peer) protocol.MigrationPhase {
-		return protocol.Deref(app.Initial.MigrationPhase)
+	finished := readLaunchSetting(w.App(), "automation", "1")
+	if !finished.Confirmed || protocol.Deref(finished.Setting.DesktopID) == "" {
+		t.Fatalf("a home waiting for placement opened without the automation on its own desktop: %+v", finished)
 	}
-	if got := read(w.App()); got != protocol.MigrationPhaseComplete {
-		t.Fatalf("a home waiting for placement opened in phase %q, want complete", got)
-	}
-	applyAutomation(t, w.Client(), definition)
+	later := applyAutomation(t, w.Client(), definition)
 	w.restart()
-	if got := read(w.App()); got != protocol.MigrationPhaseComplete {
-		t.Fatalf("later automation reopened migration: %q", got)
+	for _, id := range []string{"1", fmt.Sprint(later.ID)} {
+		if got := readLaunchSetting(w.App(), "automation", id); protocol.Deref(got.Setting.DesktopID) == "" {
+			t.Fatalf("automation %s lost its desktop after a later automation and a restart: %+v", id, got)
+		}
+	}
+	if got := readLaunchSetting(w.App(), "automation", "1"); protocol.Deref(got.Setting.DesktopID) != protocol.Deref(finished.Setting.DesktopID) {
+		t.Fatalf("a restart moved the first automation from %s to %+v", protocol.Deref(finished.Setting.DesktopID), got.Setting)
 	}
 }
 
 func TestAFreshInstanceStartsCrewFoundAtFirstStartOnTheirOwnDesktopsWithoutALaunchReview(t *testing.T) {
 	w := newCrewWorld(t)
 	app := w.App()
-	result := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "migration"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "migration" })
-	if !result.Success || result.State == nil || result.State.Phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("a fresh instance with crew homes asked for the workspace migration: %+v", result)
-	}
 	view := viewProfile(t, w, app.SelectedProfile())
 	for member, name := range map[string]string{"alder": "Alder", "keel": "Keel", "trellis": "Trellis"} {
 		item := readLaunchSetting(app, "crew", member)

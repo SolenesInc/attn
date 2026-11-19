@@ -109,7 +109,6 @@ func (d *Daemon) launchDesktopResult(action, requestID, kind, id string, setting
 	}
 	if err == nil && chosen != nil {
 		d.publishArrangementChanged(result.Item.ProfileID)
-		d.publishMigrationChanged(result.Item.ProfileID)
 		if kind == "crew" {
 			d.publishFact(FactCrewUpdated, id, nil)
 		} else {

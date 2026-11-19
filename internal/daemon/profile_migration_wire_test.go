@@ -42,9 +42,6 @@ func TestAnUpgradedHomeOpensFinishedWithEveryWorkspaceOnItsOwnDesktopAndEveryLau
 	assertFinished := func() {
 		t.Helper()
 		app := w.App()
-		if phase := protocol.Deref(app.Initial.MigrationPhase); phase != protocol.MigrationPhaseComplete {
-			t.Fatalf("an upgraded home opened in migration phase %q, want complete", phase)
-		}
 		view := viewProfile(t, w, app.SelectedProfile())
 		holders := map[string]string{}
 		for i := 1; i <= workspaces; i++ {
@@ -118,9 +115,6 @@ func TestAHomeLeftInPlacementReviewWithACrewMembersOwnLaunchDesktopFinishesAtSta
 	assertFinished := func() {
 		t.Helper()
 		app := w.App()
-		if phase := protocol.Deref(app.Initial.MigrationPhase); phase != protocol.MigrationPhaseComplete {
-			t.Fatalf("the home opened in migration phase %q, want complete", phase)
-		}
 		got := readLaunchSetting(app, "crew", "trellis")
 		if id := protocol.Deref(got.Setting.DesktopID); id != saved.DesktopID || protocol.Deref(got.Setting.Label) != "Trellis (no ⌘ number)" {
 			t.Fatalf("trellis launches on %+v, want the desktop %s it saved", got.Setting, saved.DesktopID)

@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"errors"
-	"slices"
 
 	"github.com/victorarias/attn/internal/profilemigration"
 	"github.com/victorarias/attn/internal/profiles"
@@ -11,24 +10,14 @@ import (
 )
 
 type ProfileMigrationView struct {
-	State          profiles.MigrationState
-	Manifest       profilemigration.Manifest
-	Plan           profilemigration.Plan
-	Live           []profilemigration.GroupState
-	LaunchItems    []LaunchDesktopItem
-	LaunchDesktops []profiles.Desktop
+	State    profiles.MigrationState
+	Manifest profilemigration.Manifest
+	Plan     profilemigration.Plan
+	Live     []profilemigration.GroupState
 }
 
 func (v ProfileMigrationView) PlacementRequired() bool {
 	return v.State.Phase == profilemigration.PhasePlacementRequired
-}
-
-type ProfileMigrationFinish struct {
-	View     ProfileMigrationView
-	Finished bool
-	Profile  profiles.Profile
-	// LaunchProfileIDs gained the desktops the launch review created.
-	LaunchProfileIDs []string
 }
 
 func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
@@ -44,23 +33,6 @@ func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
 	}
 	if view.Manifest, err = profilemigration.DecodeManifest(state.ImportedGroups); err != nil {
 		return view, err
-	}
-	if state.Phase == profilemigration.PhaseLaunchRequired {
-		if view.LaunchItems, err = launchItems(tx); err != nil {
-			return view, err
-		}
-		seen := map[string]bool{}
-		for _, item := range view.LaunchItems {
-			if seen[item.ProfileID] {
-				continue
-			}
-			seen[item.ProfileID] = true
-			desktops, err := listDesktops(tx, item.ProfileID)
-			if err != nil {
-				return view, err
-			}
-			view.LaunchDesktops = append(view.LaunchDesktops, desktops...)
-		}
 	}
 	if !view.PlacementRequired() {
 		return view, nil
@@ -82,29 +54,9 @@ func (s *Store) ProfileMigration() (ProfileMigrationView, error) {
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
 		var err error
 		view, err = loadProfileMigration(tx)
-		if err == nil {
-			err = loadLaunchPreview(tx, &view)
-		}
 		return err
 	})
 	return view, err
-}
-
-// Runtime reads include the later step; the conversion ladder runs before its tables exist.
-func loadLaunchPreview(tx *sql.Tx, view *ProfileMigrationView) error {
-	if !view.PlacementRequired() {
-		return nil
-	}
-	var err error
-	view.LaunchItems, err = launchItems(tx)
-	return err
-}
-
-func requirePlacement(view ProfileMigrationView, expectedRevision int64) error {
-	if !view.PlacementRequired() {
-		return profiles.Errorf(profiles.CodeInvalid, "the workspace migration is already %s", view.State.Phase)
-	}
-	return requireRevision("migration", "draft", expectedRevision, view.State.Revision)
 }
 
 func saveMigrationRow(tx *sql.Tx, view *ProfileMigrationView) error {
@@ -116,84 +68,6 @@ func saveMigrationRow(tx *sql.Tx, view *ProfileMigrationView) error {
 	view.State.Revision++
 	_, err = tx.Exec(`UPDATE profile_migration SET phase = ?, revision = ?, draft = ? WHERE id = 1`, view.State.Phase, view.State.Revision, view.State.Draft)
 	return err
-}
-
-func (s *Store) EditProfileMigration(expectedRevision int64, edit func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error)) (ProfileMigrationView, error) {
-	var view ProfileMigrationView
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var err error
-		if view, err = loadProfileMigration(tx); err != nil {
-			return err
-		}
-		if err := requirePlacement(view, expectedRevision); err != nil {
-			return err
-		}
-		edited, err := edit(view.Plan, view.Live)
-		if err != nil {
-			return err
-		}
-		if err := edited.Check(view.Live); err != nil {
-			return err
-		}
-		view.Plan = edited
-		if err := saveMigrationRow(tx, &view); err != nil {
-			return err
-		}
-		return loadLaunchPreview(tx, &view)
-	})
-	return view, err
-}
-
-func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigrationFinish, error) {
-	var result ProfileMigrationFinish
-	err := s.profilesTx(func(tx *sql.Tx, now string) error {
-		view, err := loadProfileMigration(tx)
-		if err != nil {
-			return err
-		}
-		result.View = view
-		if view.State.Phase == profilemigration.PhaseComplete {
-			return nil
-		}
-		if view.State.Phase == profilemigration.PhaseLaunchRequired {
-			if err := requireRevision("migration", "draft", expectedRevision, view.State.Revision); err != nil {
-				return err
-			}
-			result = ProfileMigrationFinish{View: view, Finished: true}
-			for _, item := range view.LaunchItems {
-				if item.DesktopID == "" && !slices.Contains(result.LaunchProfileIDs, item.ProfileID) {
-					result.LaunchProfileIDs = append(result.LaunchProfileIDs, item.ProfileID)
-				}
-			}
-			if err := finishLaunchMigration(tx, now, &view); err != nil {
-				return err
-			}
-			result.View = view
-			return nil
-		}
-		if err := requirePlacement(view, expectedRevision); err != nil {
-			return err
-		}
-		profile, err := finishPlacement(tx, now, &view)
-		if err != nil {
-			return err
-		}
-		if len(view.LaunchItems) > 0 {
-			view.State.Phase = profilemigration.PhaseLaunchRequired
-		} else if _, err := tx.Exec(`UPDATE profile_migration SET launch_review_complete = 1 WHERE id = 1`); err != nil {
-			return err
-		}
-		if err := saveMigrationRow(tx, &view); err != nil {
-			return err
-		}
-		view, err = loadProfileMigration(tx)
-		if err != nil {
-			return err
-		}
-		result = ProfileMigrationFinish{View: view, Finished: true, Profile: profile}
-		return nil
-	})
-	return result, err
 }
 
 // FinishPendingProfileMigration completes an upgraded home's migration at start, once crew files are
@@ -212,36 +86,28 @@ func (s *Store) FinishPendingProfileMigration() error {
 			return err
 		}
 		if view.PlacementRequired() {
-			if pending := view.Plan.Unconfirmed(view.Live); len(pending) > 0 {
-				if view.Plan, err = view.Plan.Keep(view.Live, pending); err != nil {
-					return err
-				}
-			}
-			if _, err := finishPlacement(tx, now, &view); err != nil {
+			if err := finishPlacement(tx, now, &view); err != nil {
 				return err
 			}
 		} else if err := placeEveryProfilesRemainder(tx, now); err != nil {
-			return err
-		}
-		if view.LaunchItems, err = launchItems(tx); err != nil {
 			return err
 		}
 		return finishLaunchMigration(tx, now, &view)
 	})
 }
 
-func finishPlacement(tx *sql.Tx, now string, view *ProfileMigrationView) (profiles.Profile, error) {
+func finishPlacement(tx *sql.Tx, now string, view *ProfileMigrationView) error {
 	profile, err := loadLiveProfile(tx, view.Manifest.ProfileID)
 	if err != nil {
-		return profile, err
+		return err
 	}
 	current, err := listDesktops(tx, profile.ID)
 	if err != nil {
-		return profile, err
+		return err
 	}
 	destinations, err := queryColumn[string](tx, `SELECT DISTINCT desktop_id FROM launch_desktops`)
 	if err != nil {
-		return profile, err
+		return err
 	}
 	launchDestinations := make(map[string]bool, len(destinations))
 	for _, id := range destinations {
@@ -249,16 +115,13 @@ func finishPlacement(tx *sql.Tx, now string, view *ProfileMigrationView) (profil
 	}
 	outcome, err := profilemigration.Materialize(view.Plan, view.Live, current, launchDestinations, func() string { return newProfileEntityID("split") })
 	if err != nil {
-		return profile, err
+		return err
 	}
 	if err := writeMigrationOutcome(tx, now, &profile, current, &outcome); err != nil {
-		return profile, err
+		return err
 	}
 	view.State.Phase = profilemigration.PhaseComplete
-	if view.LaunchItems, err = launchItems(tx); err != nil {
-		return profile, err
-	}
-	return profile, placeMigrationRemainder(tx, now, profile)
+	return placeMigrationRemainder(tx, now, profile)
 }
 
 func writeMigrationOutcome(tx *sql.Tx, now string, profile *profiles.Profile, current []profiles.Desktop, outcome *profilemigration.Outcome) error {

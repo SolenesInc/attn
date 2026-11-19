@@ -41,7 +41,6 @@ const (
 	FactProfileRenamed            = "profile.renamed"
 	FactProfileDeleted            = "profile.deleted"
 	FactProfileArrangementChanged = "profile.arrangement.changed"
-	FactProfileMigrationChanged   = "profile.migration.changed"
 
 	FactPRAppeared       = "pr.appeared"
 	FactPRUpdated        = "pr.updated"
@@ -269,10 +268,6 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactProfileArrangementChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectProfileArrangementChanged(ev) },
-		},
-		{
-			filter: bus.Filter{FactProfileMigrationChanged, FactProfileArrangementChanged, FactSessionClosed, FactSessionUnregistered},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectMigrationChanged(ev) },
 		},
 		{
 			filter: bus.Filter{factConversationKeptChanged},

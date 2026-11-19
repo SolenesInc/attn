@@ -206,9 +206,6 @@ func TestFirstClientOnAFreshDaemonIsScopedToDefaultAndCanCreateAnother(t *testin
 	if len(initial.Profiles) != 1 || initial.Profiles[0].Name != "Default" || protocol.Deref(initial.SelectedProfileID) != initial.Profiles[0].ID || len(initial.Desktops) != 1 {
 		t.Fatalf("a fresh daemon announced profiles=%v selected=%v desktops=%v, want only Default with one desktop", initial.Profiles, initial.SelectedProfileID, initial.Desktops)
 	}
-	if initial.MigrationPhase == nil || *initial.MigrationPhase != protocol.MigrationPhaseComplete {
-		t.Fatalf("a fresh daemon reported migration phase %v, want complete", initial.MigrationPhase)
-	}
 
 	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
 	if created.Profile == nil || len(created.Desktops) != 1 {

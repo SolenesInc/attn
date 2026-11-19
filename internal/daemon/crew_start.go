@@ -525,7 +525,6 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 		if err == nil {
 			if setting != nil {
 				d.publishArrangementChanged(member.ProfileID)
-				d.publishMigrationChanged(member.ProfileID)
 			}
 			wire := d.crewMemberWire(member, revision)
 			return &wire, false, nil

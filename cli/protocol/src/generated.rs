@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e6083ef76dbb";
+pub const PROTOCOL_VERSION: &str = "df3227f81e38";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5618,8 +5618,6 @@ pub struct InitialStateMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_build: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub migration_phase: Option<MigrationPhase>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outposts: Option<Vec<OutpostInfo>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<Profile>>,
@@ -6532,185 +6530,6 @@ impl MergePRMessage {
     pub fn new() -> Self {
         Self {
             cmd: "merge_pr".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationChangedMessage {
-    pub event: String,
-    pub state: MigrationState,
-}
-
-impl MigrationChangedMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "migration_changed".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationDraftDesktop {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desktop_id: Option<String>,
-    pub key: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub shortcut_slot: Option<i64>,
-    pub tree_json: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationFinishMessage {
-    pub cmd: String,
-    pub expected_revision: i64,
-    pub request_id: String,
-}
-
-impl MigrationFinishMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "migration_finish".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationGetMessage {
-    pub cmd: String,
-    pub request_id: String,
-}
-
-impl MigrationGetMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "migration_get".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationGroup {
-    pub confirmed: bool,
-    pub directory: String,
-    pub group_id: String,
-    #[serde(deserialize_with = "null_as_default")]
-    pub panes: Vec<DesktopPane>,
-    pub source_desktop_id: String,
-    pub title: String,
-    pub tree_json: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationKeepMessage {
-    pub cmd: String,
-    pub expected_revision: i64,
-    #[serde(deserialize_with = "null_as_default")]
-    pub group_ids: Vec<String>,
-    pub request_id: String,
-}
-
-impl MigrationKeepMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "migration_keep".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationMoveMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub anchor_group_id: Option<String>,
-    pub cmd: String,
-    pub edge: LayoutDockEdge,
-    pub expected_revision: i64,
-    pub group_id: String,
-    pub request_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub share: Option<f64>,
-    pub target_key: String,
-}
-
-impl MigrationMoveMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "migration_move".to_string(),
-            ..Self::default()
-        }
-    }
-}
-pub type MigrationPhase = String;
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationResultMessage {
-    pub action: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_code: Option<ProfileErrorCode>,
-    pub event: String,
-    pub request_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<MigrationState>,
-    pub success: bool,
-}
-
-impl MigrationResultMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "migration_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationState {
-    pub can_undo: bool,
-    #[serde(deserialize_with = "null_as_default")]
-    pub desktops: Vec<MigrationDraftDesktop>,
-    #[serde(deserialize_with = "null_as_default")]
-    pub groups: Vec<MigrationGroup>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub launch_desktops: Option<Vec<Desktop>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub launch_items: Option<Vec<LaunchDesktopItem>>,
-    pub phase: MigrationPhase,
-    pub profile_id: String,
-    pub revision: i64,
-    pub suggestion_available: bool,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationSuggestMessage {
-    pub cmd: String,
-    pub expected_revision: i64,
-    pub request_id: String,
-}
-
-impl MigrationSuggestMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "migration_suggest".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MigrationUndoMessage {
-    pub cmd: String,
-    pub expected_revision: i64,
-    pub request_id: String,
-}
-
-impl MigrationUndoMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "migration_undo".to_string(),
             ..Self::default()
         }
     }

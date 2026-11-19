@@ -325,12 +325,6 @@ const (
 const (
 	CmdLaunchDesktopGet = "launch_desktop_get"
 	CmdLaunchDesktopSet = "launch_desktop_set"
-	CmdMigrationGet     = "migration_get"
-	CmdMigrationKeep    = "migration_keep"
-	CmdMigrationMove    = "migration_move"
-	CmdMigrationSuggest = "migration_suggest"
-	CmdMigrationUndo    = "migration_undo"
-	CmdMigrationFinish  = "migration_finish"
 )
 
 const (
@@ -340,8 +334,6 @@ const (
 	EventProfilesChanged           = "profiles_changed"
 	EventProfileArrangementChanged = "profile_arrangement_changed"
 	EventDesktopTileContent        = "desktop_tile_content"
-	EventMigrationResult           = "migration_result"
-	EventMigrationChanged          = "migration_changed"
 )
 
 const (

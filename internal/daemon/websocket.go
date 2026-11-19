@@ -578,7 +578,6 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Outposts:               d.outpostsUpdatedMessage().Outposts,
 		UpdateRun:              d.latestUpdateRunForApp(),
 	}
-	d.fillInitialMigrationPhase(event)
 	pausepoint.At(pausepoint.DaemonInitialStateBuilt)
 	d.sendInitialArrangement(client, event)
 	if reportsChecking && !d.capturingLoginEnv() {
@@ -812,18 +811,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleLaunchDesktopGet(client, msg.(*protocol.LaunchDesktopGetMessage))
 	case protocol.CmdLaunchDesktopSet:
 		d.handleLaunchDesktopSet(client, msg.(*protocol.LaunchDesktopSetMessage))
-	case protocol.CmdMigrationGet:
-		d.handleMigrationGet(client, msg.(*protocol.MigrationGetMessage))
-	case protocol.CmdMigrationKeep:
-		d.handleMigrationKeep(client, msg.(*protocol.MigrationKeepMessage))
-	case protocol.CmdMigrationMove:
-		d.handleMigrationMove(client, msg.(*protocol.MigrationMoveMessage))
-	case protocol.CmdMigrationSuggest:
-		d.handleMigrationSuggest(client, msg.(*protocol.MigrationSuggestMessage))
-	case protocol.CmdMigrationUndo:
-		d.handleMigrationUndo(client, msg.(*protocol.MigrationUndoMessage))
-	case protocol.CmdMigrationFinish:
-		d.handleMigrationFinish(client, msg.(*protocol.MigrationFinishMessage))
 	case protocol.CmdDesktopCreate:
 		d.handleDesktopCreate(client, msg.(*protocol.DesktopCreateMessage))
 	case protocol.CmdDesktopClose:

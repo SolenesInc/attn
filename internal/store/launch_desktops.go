@@ -23,7 +23,7 @@ type LaunchDesktopSetting struct {
 }
 
 // LaunchDesktopItem is a crew member or automation and the desktop it starts on. DesktopID is
-// empty only during the launch review, before Finish creates the suggested desktop.
+// empty only before FinishPendingProfileMigration gives an upgraded home's item its own desktop.
 type LaunchDesktopItem struct {
 	Kind        string
 	ID          string
@@ -169,7 +169,8 @@ func saveLaunchSetting(tx *sql.Tx, now string, kind, id string, setting LaunchDe
 	return err
 }
 
-// startOnOwnDesktop gives a new item a desktop named after it. During the launch review Finish does it instead.
+// startOnOwnDesktop gives a new item a desktop named after it. Before an upgraded home's migration
+// finishes, FinishPendingProfileMigration does it instead.
 func startOnOwnDesktop(tx *sql.Tx, now, kind, id string) error {
 	var reviewed bool
 	if err := tx.QueryRow(`SELECT launch_review_complete FROM profile_migration WHERE id = 1`).Scan(&reviewed); err != nil || !reviewed {
@@ -384,7 +385,11 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 }
 
 func finishLaunchMigration(tx *sql.Tx, now string, view *ProfileMigrationView) error {
-	for _, item := range view.LaunchItems {
+	items, err := launchItems(tx)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
 		if err := createOwnLaunchDesktop(tx, now, item.Kind, item.ID, true); err != nil {
 			return err
 		}

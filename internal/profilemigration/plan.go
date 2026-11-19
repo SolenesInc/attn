@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
@@ -24,25 +23,9 @@ type Desktop struct {
 	Tree         *Node  `json:"tree,omitempty"`
 }
 
-type Arrangement struct {
-	Desktops  []Desktop `json:"desktops"`
-	Confirmed []string  `json:"confirmed"`
-	Suggested bool      `json:"suggested,omitempty"`
-}
-
 type Plan struct {
-	Arrangement
-	History []Arrangement `json:"history,omitempty"`
+	Desktops []Desktop `json:"desktops"`
 }
-
-type Edge string
-
-const (
-	EdgeLeft   Edge = "left"
-	EdgeRight  Edge = "right"
-	EdgeTop    Edge = "top"
-	EdgeBottom Edge = "bottom"
-)
 
 func virtualSlotKey(slot int) string {
 	return fmt.Sprintf("slot-%d", slot)
@@ -59,7 +42,7 @@ func InitialPlan(m Manifest) Plan {
 		}
 		bySlot[group.ShortcutSlot] = desktop
 	}
-	plan := Plan{Arrangement: Arrangement{Confirmed: []string{}}}
+	var plan Plan
 	for slot := profiles.FirstShortcutSlot; slot <= profiles.LastShortcutSlot; slot++ {
 		desktop, ok := bySlot[slot]
 		if !ok {
@@ -141,69 +124,35 @@ func (n *Node) clone() *Node {
 	return &out
 }
 
-func (a Arrangement) clone() Arrangement {
-	out := Arrangement{Confirmed: slices.Clone(a.Confirmed), Suggested: a.Suggested}
-	if out.Confirmed == nil {
-		out.Confirmed = []string{}
-	}
-	for _, desktop := range a.Desktops {
+func (p Plan) clone() Plan {
+	var out Plan
+	for _, desktop := range p.Desktops {
 		desktop.Tree = desktop.Tree.clone()
 		out.Desktops = append(out.Desktops, desktop)
 	}
 	return out
 }
 
-func (a Arrangement) desktopIndex(key string) int {
-	for i, desktop := range a.Desktops {
-		if desktop.Key == key {
-			return i
-		}
+func (p *Plan) remove(groupID string) {
+	for i := range p.Desktops {
+		p.Desktops[i].Tree = p.Desktops[i].Tree.without(groupID)
 	}
-	return -1
-}
-
-func (a *Arrangement) remove(groupID string) {
-	for i := range a.Desktops {
-		a.Desktops[i].Tree = a.Desktops[i].Tree.without(groupID)
-	}
-	a.Desktops = slices.DeleteFunc(a.Desktops, func(desktop Desktop) bool {
+	p.Desktops = slices.DeleteFunc(p.Desktops, func(desktop Desktop) bool {
 		return desktop.ShortcutSlot == 0 && desktop.Tree == nil
 	})
 }
 
-func (a *Arrangement) confirm(groupID string) {
-	if !slices.Contains(a.Confirmed, groupID) {
-		a.Confirmed = append(a.Confirmed, groupID)
-	}
-}
-
-func (a *Arrangement) unconfirm(groupID string) {
-	a.Confirmed = slices.DeleteFunc(a.Confirmed, func(id string) bool { return id == groupID })
-}
-
-func (a Arrangement) retire(live map[string]GroupState) Arrangement {
-	out := a.clone()
+func (p Plan) Retire(live []GroupState) Plan {
+	set := liveSet(live)
+	out := p.clone()
 	var placed []string
 	for _, desktop := range out.Desktops {
 		placed = append(placed, desktop.Tree.groups()...)
 	}
 	for _, id := range placed {
-		if _, ok := live[id]; !ok {
+		if _, ok := set[id]; !ok {
 			out.remove(id)
 		}
-	}
-	out.Confirmed = slices.DeleteFunc(out.Confirmed, func(id string) bool {
-		_, ok := live[id]
-		return !ok
-	})
-	return out
-}
-
-func (p Plan) Retire(live []GroupState) Plan {
-	set := liveSet(live)
-	out := Plan{Arrangement: p.Arrangement.retire(set)}
-	for _, snapshot := range p.History {
-		out.History = append(out.History, snapshot.retire(set))
 	}
 	return out
 }
@@ -218,7 +167,7 @@ func mergeTrees(first, second *Node) *Node {
 	return &Node{Direction: layouttree.DirectionVertical, Ratio: layouttree.DefaultSplitRatio, Children: []Node{*first, *second}}
 }
 
-func (a Arrangement) reconcile(current []profiles.Desktop) Arrangement {
+func (p Plan) Reconcile(current []profiles.Desktop) Plan {
 	byID := desktopsByID(current)
 	bySlot := make(map[int]string)
 	for _, desktop := range current {
@@ -226,7 +175,7 @@ func (a Arrangement) reconcile(current []profiles.Desktop) Arrangement {
 			bySlot[desktop.ShortcutSlot] = desktop.ID
 		}
 	}
-	out := a.clone()
+	out := p.clone()
 	kept := make([]Desktop, 0, len(out.Desktops))
 	position := make(map[string]int)
 	for _, entry := range out.Desktops {
@@ -275,229 +224,6 @@ func withEveryShortcutSlot(desktops []Desktop, heldBy map[int]string) []Desktop 
 		ordered = append(ordered, desktop)
 	}
 	return append(ordered, extras...)
-}
-
-func (p Plan) Reconcile(current []profiles.Desktop) Plan {
-	out := Plan{Arrangement: p.Arrangement.reconcile(current)}
-	for _, snapshot := range p.History {
-		out.History = append(out.History, snapshot.reconcile(current))
-	}
-	return out
-}
-
-func (p Plan) begin() Plan {
-	next := Plan{Arrangement: p.Arrangement.clone(), History: append(slices.Clone(p.History), p.Arrangement.clone())}
-	return next
-}
-
-func requireLive(live map[string]GroupState, groupID string) error {
-	if _, ok := live[groupID]; !ok {
-		return profiles.Errorf(profiles.CodeNotFound, "imported group %q is not waiting for placement; it was closed or never imported", groupID)
-	}
-	return nil
-}
-
-func (p Plan) Keep(live []GroupState, groupIDs []string) (Plan, error) {
-	set := liveSet(live)
-	if len(groupIDs) == 0 {
-		return p, profiles.Errorf(profiles.CodeInvalid, "keep names no imported group")
-	}
-	next := p.begin()
-	for _, id := range groupIDs {
-		if err := requireLive(set, id); err != nil {
-			return p, err
-		}
-		next.confirm(id)
-	}
-	return next, nil
-}
-
-func splitSides(edge Edge) (layouttree.Direction, bool, error) {
-	switch edge {
-	case EdgeLeft:
-		return layouttree.DirectionVertical, true, nil
-	case EdgeRight:
-		return layouttree.DirectionVertical, false, nil
-	case EdgeTop:
-		return layouttree.DirectionHorizontal, true, nil
-	case EdgeBottom:
-		return layouttree.DirectionHorizontal, false, nil
-	}
-	return "", false, profiles.Errorf(profiles.CodeInvalid, "edge %q is not one of left, right, top, bottom", edge)
-}
-
-func join(existing *Node, groupID string, edge Edge, share float64) (*Node, error) {
-	incoming := &Node{Group: groupID}
-	if existing == nil {
-		return incoming, nil
-	}
-	direction, before, err := splitSides(edge)
-	if err != nil {
-		return nil, err
-	}
-	if share == 0 {
-		share = layouttree.DefaultSplitRatio
-	}
-	if !(share > 0 && share < 1) {
-		return nil, profiles.Errorf(profiles.CodeInvalid, "share %v is outside (0,1); both sides of a split need space", share)
-	}
-	if before {
-		return &Node{Direction: direction, Ratio: share, Children: []Node{*incoming, *existing}}, nil
-	}
-	return &Node{Direction: direction, Ratio: 1 - share, Children: []Node{*existing, *incoming}}, nil
-}
-
-func (n *Node) joinBeside(anchor, groupID string, edge Edge, share float64) (*Node, bool, error) {
-	if n == nil {
-		return nil, false, nil
-	}
-	if n.Group != "" {
-		if n.Group != anchor {
-			return n, false, nil
-		}
-		joined, err := join(n, groupID, edge, share)
-		return joined, err == nil, err
-	}
-	out := n.clone()
-	for i := range out.Children {
-		child, found, err := out.Children[i].joinBeside(anchor, groupID, edge, share)
-		if err != nil || found {
-			if found {
-				out.Children[i] = *child
-			}
-			return out, found, err
-		}
-	}
-	return out, false, nil
-}
-
-func (a *Arrangement) insert(groupID, targetKey, anchorGroupID string, edge Edge, share float64) error {
-	index := a.desktopIndex(targetKey)
-	if index < 0 {
-		return profiles.Errorf(profiles.CodeNotFound, "desktop %q is not in the draft; it may have been an extra desktop that only held the group being moved", targetKey)
-	}
-	target := &a.Desktops[index]
-	if anchorGroupID == "" || target.Tree == nil {
-		joined, err := join(target.Tree, groupID, edge, share)
-		if err != nil {
-			return err
-		}
-		target.Tree = joined
-		return nil
-	}
-	joined, found, err := target.Tree.joinBeside(anchorGroupID, groupID, edge, share)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return profiles.Errorf(profiles.CodeNotFound, "group %q is not on desktop %q, so nothing can be placed beside it there", anchorGroupID, targetKey)
-	}
-	target.Tree = joined
-	return nil
-}
-
-func (p Plan) Move(live []GroupState, groupID, targetKey, anchorGroupID string, edge Edge, share float64) (Plan, error) {
-	set := liveSet(live)
-	if err := requireLive(set, groupID); err != nil {
-		return p, err
-	}
-	if anchorGroupID == groupID {
-		return p, profiles.Errorf(profiles.CodeInvalid, "group %q cannot be placed beside itself", groupID)
-	}
-	next := p.begin()
-	next.remove(groupID)
-	if err := next.insert(groupID, strings.TrimSpace(targetKey), strings.TrimSpace(anchorGroupID), edge, share); err != nil {
-		return p, err
-	}
-	// A move only places the group; the user confirms where it went with a keep.
-	next.unconfirm(groupID)
-	return next, nil
-}
-
-func (a Arrangement) weight(desktop Desktop, live map[string]GroupState) int {
-	total := 0
-	for _, id := range desktop.Tree.groups() {
-		total += live[id].LeafCount()
-	}
-	return total
-}
-
-func (a Arrangement) unconfirmedExtras() []string {
-	var ids []string
-	for _, desktop := range a.Desktops {
-		if desktop.ShortcutSlot != 0 {
-			continue
-		}
-		for _, id := range desktop.Tree.groups() {
-			if !slices.Contains(a.Confirmed, id) {
-				ids = append(ids, id)
-			}
-		}
-	}
-	return ids
-}
-
-func (a Arrangement) lightestSlot(live map[string]GroupState) (int, int) {
-	best, bestWeight := -1, 0
-	for i, desktop := range a.Desktops {
-		if desktop.ShortcutSlot == 0 {
-			continue
-		}
-		if weight := a.weight(desktop, live); best < 0 || weight < bestWeight {
-			best, bestWeight = i, weight
-		}
-	}
-	return best, bestWeight
-}
-
-func (p Plan) SuggestionAvailable() bool {
-	return !p.Suggested && len(p.unconfirmedExtras()) > 0
-}
-
-func (p Plan) Suggest(live []GroupState) (Plan, error) {
-	if p.Suggested {
-		return p, profiles.Errorf(profiles.CodeInvalid, "the suggestion was already applied; undo it to suggest again")
-	}
-	extras := p.unconfirmedExtras()
-	if len(extras) == 0 {
-		return p, profiles.Errorf(profiles.CodeInvalid, "every extra desktop is already confirmed, so there is nothing to suggest")
-	}
-	set := liveSet(live)
-	next := p.begin()
-	for _, id := range extras {
-		next.remove(id)
-		index, load := next.lightestSlot(set)
-		size := set[id].LeafCount()
-		share := float64(size) / float64(load+size)
-		if err := next.insert(id, next.Desktops[index].Key, "", EdgeRight, share); err != nil {
-			return p, err
-		}
-		next.confirm(id)
-	}
-	next.Suggested = true
-	return next, nil
-}
-
-func (p Plan) CanUndo() bool {
-	return len(p.History) > 0
-}
-
-func (p Plan) Undo() (Plan, error) {
-	if !p.CanUndo() {
-		return p, profiles.Errorf(profiles.CodeInvalid, "there is nothing to undo")
-	}
-	last := len(p.History) - 1
-	return Plan{Arrangement: p.History[last].clone(), History: slices.Clone(p.History[:last])}, nil
-}
-
-func (p Plan) Unconfirmed(live []GroupState) []string {
-	var ids []string
-	for _, group := range live {
-		if !slices.Contains(p.Confirmed, group.ID) {
-			ids = append(ids, group.ID)
-		}
-	}
-	return ids
 }
 
 func (n *Node) check(path string) error {

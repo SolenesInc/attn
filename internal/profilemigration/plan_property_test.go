@@ -10,8 +10,29 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 )
 
-func drawEdge(t *rapid.T) Edge {
-	return rapid.SampledFrom([]Edge{EdgeLeft, EdgeRight, EdgeTop, EdgeBottom}).Draw(t, "edge")
+func drawSavedDraft(t *rapid.T, plan Plan, live []GroupState) Plan {
+	for _, group := range live {
+		if !rapid.Bool().Draw(t, "moved") {
+			continue
+		}
+		plan.remove(group.ID)
+		target := &plan.Desktops[rapid.IntRange(0, len(plan.Desktops)-1).Draw(t, "target")]
+		moved := Node{Group: group.ID}
+		if target.Tree == nil {
+			target.Tree = &moved
+			continue
+		}
+		children := []Node{*target.Tree, moved}
+		if rapid.Bool().Draw(t, "before") {
+			children[0], children[1] = children[1], children[0]
+		}
+		direction := rapid.SampledFrom([]layouttree.Direction{layouttree.DirectionVertical, layouttree.DirectionHorizontal}).Draw(t, "direction")
+		target.Tree = &Node{Direction: direction, Ratio: rapid.Float64Range(0.05, 0.95).Draw(t, "ratio"), Children: children}
+	}
+	if err := plan.Check(live); err != nil {
+		t.Fatalf("the drawn draft is invalid: %v", err)
+	}
+	return plan
 }
 
 func drawPaneOf(t *rapid.T, w *world, label string) (string, string, bool) {
@@ -28,16 +49,9 @@ func drawPaneOf(t *rapid.T, w *world, label string) (string, string, bool) {
 	return pick[0], pick[1], true
 }
 
-func applyRandomEdit(t *rapid.T, w *world, plan Plan, launched *int) Plan {
-	live := w.live()
-	ids := make([]string, 0, len(live))
-	for _, g := range live {
-		ids = append(ids, g.ID)
-	}
-	var next Plan
-	var err error
-	switch rapid.IntRange(0, 8).Draw(t, "edit") {
-	case 6:
+func applyRandomChange(t *rapid.T, w *world, plan Plan, launched *int) Plan {
+	switch rapid.IntRange(0, 4).Draw(t, "change") {
+	case 0:
 		*launched++
 		paneID := fmt.Sprintf("launched-%d", *launched)
 		slot := rapid.IntRange(0, profiles.LastShortcutSlot).Draw(t, "new desktop slot")
@@ -48,7 +62,7 @@ func applyRandomEdit(t *rapid.T, w *world, plan Plan, launched *int) Plan {
 		}
 		w.desktops = append(w.desktops, profiles.Desktop{ID: fmt.Sprintf("desktop-new-%d", *launched), ShortcutSlot: slot, Tree: layouttree.DefaultLayout(paneID), ActivePaneID: paneID, Panes: []profiles.Pane{agentPane(paneID)}})
 		return plan.Reconcile(w.desktops).Retire(w.live())
-	case 7:
+	case 1:
 		d := &w.desktops[rapid.IntRange(0, len(w.desktops)-1).Draw(t, "reslotted")]
 		slot := rapid.IntRange(0, profiles.LastShortcutSlot).Draw(t, "slot")
 		for _, other := range w.desktops {
@@ -58,34 +72,14 @@ func applyRandomEdit(t *rapid.T, w *world, plan Plan, launched *int) Plan {
 		}
 		d.ShortcutSlot = slot
 		return plan.Reconcile(w.desktops).Retire(w.live())
-	case 8:
+	case 2:
 		if len(w.desktops) < 2 {
 			return plan
 		}
 		gone := rapid.IntRange(0, len(w.desktops)-1).Draw(t, "deleted desktop")
 		w.desktops = append(w.desktops[:gone:gone], w.desktops[gone+1:]...)
 		return plan.Reconcile(w.desktops).Retire(w.live())
-	case 0:
-		if len(ids) == 0 {
-			return plan
-		}
-		next, err = plan.Keep(live, rapid.SliceOfNDistinct(rapid.SampledFrom(ids), 1, len(ids), rapid.ID[string]).Draw(t, "keep"))
-	case 1:
-		if len(ids) == 0 {
-			return plan
-		}
-		group := rapid.SampledFrom(ids).Draw(t, "group")
-		target := rapid.SampledFrom(plan.Desktops).Draw(t, "target").Key
-		anchor := ""
-		if rapid.Bool().Draw(t, "anchored") {
-			anchor = rapid.SampledFrom(ids).Draw(t, "anchor")
-		}
-		next, err = plan.Move(live, group, target, anchor, drawEdge(t), rapid.Float64Range(0.05, 0.95).Draw(t, "share"))
-	case 2:
-		next, err = plan.Suggest(live)
 	case 3:
-		next, err = plan.Undo()
-	case 4:
 		if desktopID, paneID, ok := drawPaneOf(t, w, "close"); ok {
 			w.closePane(desktopID, paneID)
 		}
@@ -97,13 +91,6 @@ func applyRandomEdit(t *rapid.T, w *world, plan Plan, launched *int) Plan {
 		}
 		return plan
 	}
-	if err != nil {
-		return plan
-	}
-	if err := next.Check(live); err != nil {
-		t.Fatalf("an accepted edit left an invalid draft: %v", err)
-	}
-	return next
 }
 
 func TestFinishNeverLosesDuplicatesOrResurrectsALeaf(t *testing.T) {
@@ -118,20 +105,14 @@ func TestFinishNeverLosesDuplicatesOrResurrectsALeaf(t *testing.T) {
 				w.manifest.Groups[i].LeafIDs = append(group.LeafIDs, tileID)
 			}
 		}
-		plan := InitialPlan(w.manifest)
+		plan := drawSavedDraft(t, InitialPlan(w.manifest), w.live())
 		launched := 0
 		steps := rapid.IntRange(0, 25).Draw(t, "steps")
 		for i := 0; i < steps; i++ {
-			plan = applyRandomEdit(t, w, plan, &launched)
+			plan = applyRandomChange(t, w, plan, &launched)
 		}
 		live := w.live()
 		plan = plan.Reconcile(w.desktops).Retire(live)
-		if unconfirmed := plan.Unconfirmed(live); len(unconfirmed) > 0 {
-			var err error
-			if plan, err = plan.Keep(live, unconfirmed); err != nil {
-				t.Fatal(err)
-			}
-		}
 		before := make(map[string]int)
 		for _, d := range w.desktops {
 			for _, id := range layouttree.PaneIDs(d.Tree) {
@@ -140,7 +121,7 @@ func TestFinishNeverLosesDuplicatesOrResurrectsALeaf(t *testing.T) {
 		}
 		outcome, err := Materialize(plan, live, w.desktops, nil, counter())
 		if err != nil {
-			t.Fatalf("finish refused a checked, confirmed draft: %v", err)
+			t.Fatalf("finish refused a reconciled draft: %v", err)
 		}
 		after := make(map[string]int)
 		for _, d := range outcome.Desktops {

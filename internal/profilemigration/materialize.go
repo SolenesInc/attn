@@ -143,9 +143,6 @@ func Materialize(plan Plan, live []GroupState, current []profiles.Desktop, launc
 	if err := plan.Check(live); err != nil {
 		return Outcome{}, err
 	}
-	if pending := plan.Unconfirmed(live); len(pending) > 0 {
-		return Outcome{}, profiles.Errorf(profiles.CodeInvalid, "%d imported group(s) still need a confirmation before finishing: %v", len(pending), pending)
-	}
 	m := newMaterializer(live, current, newSplitID)
 	var outcome Outcome
 	inPlan := make(map[string]bool)
