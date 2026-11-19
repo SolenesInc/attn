@@ -23,7 +23,7 @@ use serde_json::{Map, Value};
 
 pub use host::{
     Alert, AlertKind, BrowserHost, Control, Heard, PageEdit, Placement, claims_key, hear,
-    hosts_pages, page_alert, page_edit, use_host,
+    hosts_pages, page_alert, page_edit, quit, use_host,
 };
 pub(crate) use view::{address_field, page_area, reload_button};
 

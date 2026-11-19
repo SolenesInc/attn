@@ -289,6 +289,10 @@ fn load(web: &WKWebView, url: &str) {
 }
 
 impl BrowserHost for WebKitHost {
+    fn quit(&mut self) {
+        session_cookies::save_before_quit();
+    }
+
     fn open(&mut self, page: &TileKey, url: &str) {
         let mtm = self.mtm;
         let none = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));

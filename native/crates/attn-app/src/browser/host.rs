@@ -29,6 +29,9 @@ pub trait BrowserHost {
     /// Runs an agent's action on the page. The answer comes back through [`hear`] as
     /// [`Heard::Answered`].
     fn control(&mut self, page: &TileKey, request: Control);
+    /// The app quits: before the process ends, the engine keeps what the pages carry to the
+    /// next launch.
+    fn quit(&mut self) {}
 }
 
 /// Where a shown page sits, in window points: in the main window, or in the tile window with
@@ -110,6 +113,11 @@ pub fn hosts_pages() -> bool {
 /// Hands `heard` to the window, which takes it at its next frame. The host wakes the window.
 pub fn hear(heard: Heard) {
     HEARD.with_borrow_mut(|all| all.push(heard));
+}
+
+/// The app quits: the pages keep what they carry to the next launch, such as sign-ins.
+pub fn quit() {
+    with_host(|host| host.quit());
 }
 
 pub(super) fn with_host(f: impl FnOnce(&mut dyn BrowserHost)) {

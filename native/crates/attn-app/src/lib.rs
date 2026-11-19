@@ -508,6 +508,7 @@ impl State {
 
 fn quit(state: &mut State, tx: &mut Tx) {
     frame::save(state, tx);
+    browser::quit();
     instance::remove_app_pid();
     frame_recorder::stop();
 }

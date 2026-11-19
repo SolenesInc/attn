@@ -18,7 +18,7 @@ const exec = promisify(execFile);
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-BROWSER-SESSION-COOKIES', tier: 'tier1-local-shell', prefix: 'native-browser-session-cookies',
-  metadata: { focus: "A browser tile's session cookies outlive the native app: the first launch on a home the Tauri app used sends the Tauri app's session sign-in with the page's first request, a session cookie set in the native app is sent again after a relaunch, and a sign-out the page does in place, with no navigation, stays signed out after a relaunch" },
+  metadata: { focus: "A browser tile's session cookies outlive the native app: the first launch on a home the Tauri app used sends the Tauri app's session sign-in with the page's first request, a session cookie set in the native app is sent again after a relaunch, a sign-out the page does in place, with no navigation, stays signed out after a relaunch, and so does one a busy page does just before Quit" },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -41,15 +41,28 @@ document.getElementById('signout').onclick = async () => {
 };
 </script>`;
 
+const busy = `<button id="signout">Sign out</button><script>
+(async () => { for (;;) await fetch('/tick'); })();
+document.getElementById('signout').onclick = async () => {
+  await fetch('/busy-signout');
+  await fetch('/busy-signed-out');
+};
+</script>`;
+
 const requests = [];
+let signedOut = () => {};
 const server = http.createServer((request, response) => {
+  if (request.url === '/tick') return response.end();
+  if (request.url === '/busy-signed-out') signedOut();
   requests.push({ url: request.url, cookie: request.headers.cookie ?? '' });
   runner.writeJson('requests.json', requests);
   response.setHeader('content-type', 'text/html');
   if (request.url === '/signin') response.setHeader('set-cookie', 'native_sess=from-native; Path=/');
   if (request.url === '/signout') response.setHeader('set-cookie', 'native_sess=; Path=/; Max-Age=0');
+  if (request.url === '/busy-signin') response.setHeader('set-cookie', 'busy_sess=from-busy; Path=/');
+  if (request.url === '/busy-signout') response.setHeader('set-cookie', 'busy_sess=; Path=/; Max-Age=0');
   const page = request.url.slice(1);
-  response.end(`<title>${page}</title><h1 id="${page}">${request.url}</h1>${request.url === '/app' ? signOutInPlace : ''}`);
+  response.end(`<title>${page}</title><h1 id="${page}">${request.url}</h1>${{ '/app': signOutInPlace, '/busy': busy }[request.url] ?? ''}`);
 });
 const firstRequestTo = (page, since) => requests.slice(since).find((request) => request.url === `/${page}`);
 
@@ -164,6 +177,26 @@ try {
     const restored = firstRequestTo('app', since);
     runner.assert(!restored.cookie.includes('native_sess'), "the restored page's first request does not send the session cookie a request deleted", restored);
     runner.assert(!restored.cookie.includes('js_sess'), "the restored page's first request does not send the session cookie a script deleted", restored);
+  });
+
+  await runner.step('a_sign_out_just_before_quit_stays_signed_out_after_a_relaunch', async () => {
+    await browser('open', at('busy-signin'));
+    await waitForPage('busy-signin');
+    await observer.waitFor(() => jarNames().includes('busy_sess'), "the jar keeps the busy page's session cookie");
+    await browser('open', at('busy'));
+    await waitForPage('busy');
+    const signOutDone = new Promise((resolve) => { signedOut = resolve; });
+    await browser('click', '--selector', '#signout');
+    await signOutDone;
+    const since = requests.length;
+    await client.quitApp();
+    runner.writeJson('jar-after-quick-quit.json', jarNames());
+    await client.launchFreshApp();
+    await client.waitForManifest(20_000);
+    await client.waitForReady(20_000);
+    await observer.waitFor(() => firstRequestTo('busy', since), 'the relaunched tile loads its page');
+    const restored = firstRequestTo('busy', since);
+    runner.assert(!restored.cookie.includes('busy_sess'), "the restored page's first request does not send the session cookie deleted just before Quit", restored);
   });
 
   await runner.finishSuccess({ desktopId: desktop.id, shell, jar });

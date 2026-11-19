@@ -8,7 +8,8 @@
 //! store's change notifications cannot drive it: for a data store opened by identifier, WebKit
 //! sends only the first of them. A page's script is heard only where the page has `cookieStore`,
 //! which WebKit gives secure pages: on a plain `http` page the jar hears of a script's change at
-//! the page's next request, load or address change.
+//! the page's next request, load or address change. The app's quit saves the jar once more and
+//! waits for it, so a change heard in the pause between saves still reaches the next launch.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -21,9 +22,10 @@ use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send, sel};
+use objc2_app_kit::NSModalPanelRunLoopMode;
 use objc2_foundation::{
-    NSArray, NSHTTPCookie, NSKeyValueObservingOptions, NSObject,
-    NSObjectNSKeyValueObserverRegistration, NSString, ns_string,
+    NSArray, NSDate, NSHTTPCookie, NSKeyValueObservingOptions, NSObject,
+    NSObjectNSKeyValueObserverRegistration, NSRunLoop, NSString, ns_string,
 };
 use objc2_web_kit::{
     WKContentWorld, WKHTTPCookieStore, WKScriptMessage, WKScriptMessageHandler,
@@ -35,6 +37,9 @@ const COOKIE_SIGNALS: &str = "attnSessionCookies";
 /// How often a page busy with requests has the jar saved. Each save reads the whole store on the
 /// main thread, about 1.4 ms with 300 cookies; the Tauri app saved every 2 s.
 const PAUSE_BETWEEN_SAVES_SECONDS: f64 = 1.0;
+/// The longest a quit waits for the store's cookies. A quit's save took 0.4 to 8.9 ms over 54
+/// quits of the session-cookies scenario in the macOS VM.
+const LONGEST_QUIT_SAVE_SECONDS: f64 = 1.0;
 
 /// Tells the keeper each time a page's cookies may have changed: a response arrived, which can
 /// set or delete any cookie, httpOnly ones included, or a script changed one. A site that signs
@@ -182,6 +187,16 @@ pub(super) fn changed() {
     }
 }
 
+/// Saves the jar and waits until it is written, as the app quits: a change heard in the pause
+/// between saves, or while a save reads the store, would otherwise end with the process, and the
+/// next launch would bring back a cookie the site deleted.
+pub(super) fn save_before_quit() {
+    let keeper = KEEPER.with_borrow(Clone::clone);
+    if let Some(keeper) = keeper {
+        keeper.save_and_wait();
+    }
+}
+
 /// The jar's session cookies. A jar that is missing or unreadable holds none: the cookies it
 /// lost are sign-ins the person redoes, and the next save writes it anew.
 fn read_session_cookies(jar: &Path) -> Vec<Map<String, Value>> {
@@ -293,23 +308,8 @@ impl JarKeeper {
         }
         let this = self.retain();
         let handler = RcBlock::new(move |all: NonNull<NSArray<NSHTTPCookie>>| {
-            let all = unsafe { all.as_ref() };
-            let session: Vec<Value> = all
-                .iter()
-                .filter(|cookie| cookie.isSessionOnly())
-                .map(|cookie| super::stored_cookie(&cookie))
-                .collect();
+            this.write(unsafe { all.as_ref() });
             let keeping = this.ivars();
-            let data = serde_json::to_vec_pretty(&session).unwrap_or_default();
-            if keeping.written.borrow().as_deref() != Some(&data[..]) {
-                match replace_jar(&keeping.jar, &data) {
-                    Ok(()) => *keeping.written.borrow_mut() = Some(data),
-                    Err(error) => eprintln!(
-                        "attn-app: writing browser cookie jar {}: {error}",
-                        keeping.jar.display()
-                    ),
-                }
-            }
             if keeping.changed_while_saving.replace(false) {
                 let _: () = unsafe {
                     msg_send![
@@ -324,6 +324,57 @@ impl JarKeeper {
             }
         });
         unsafe { keeping.store.getAllCookies(&handler) };
+    }
+
+    /// Reads the store and writes the jar before returning. The store answers on the main run
+    /// loop, so it runs until the answer is written, or for at most
+    /// `LONGEST_QUIT_SAVE_SECONDS` when the store never answers. It runs in the modal panel mode,
+    /// as a modal would: WebKit's answers arrive in every common mode, and winit queues its own
+    /// work for the default mode, where it would run the app's handler again inside this one.
+    fn save_and_wait(&self) {
+        if !self.ivars().restored.get() {
+            return;
+        }
+        let written = Rc::new(Cell::new(false));
+        let this = self.retain();
+        let handler = RcBlock::new({
+            let written = written.clone();
+            move |all: NonNull<NSArray<NSHTTPCookie>>| {
+                this.write(unsafe { all.as_ref() });
+                written.set(true);
+            }
+        });
+        unsafe { self.ivars().store.getAllCookies(&handler) };
+        let run_loop = NSRunLoop::currentRunLoop();
+        let deadline = NSDate::dateWithTimeIntervalSinceNow(LONGEST_QUIT_SAVE_SECONDS);
+        while !written.get() && deadline.timeIntervalSinceNow() > 0.0 {
+            unsafe { run_loop.runMode_beforeDate(NSModalPanelRunLoopMode, &deadline) };
+        }
+        if !written.get() {
+            eprintln!(
+                "attn-app: the browser cookie store did not answer within {LONGEST_QUIT_SAVE_SECONDS} s of the quit, so the jar keeps its last save"
+            );
+        }
+    }
+
+    /// Writes `all`'s session cookies to the jar when they differ from what it last wrote.
+    fn write(&self, all: &NSArray<NSHTTPCookie>) {
+        let session: Vec<Value> = all
+            .iter()
+            .filter(|cookie| cookie.isSessionOnly())
+            .map(|cookie| super::stored_cookie(&cookie))
+            .collect();
+        let keeping = self.ivars();
+        let data = serde_json::to_vec_pretty(&session).unwrap_or_default();
+        if keeping.written.borrow().as_deref() != Some(&data[..]) {
+            match replace_jar(&keeping.jar, &data) {
+                Ok(()) => *keeping.written.borrow_mut() = Some(data),
+                Err(error) => eprintln!(
+                    "attn-app: writing browser cookie jar {}: {error}",
+                    keeping.jar.display()
+                ),
+            }
+        }
     }
 }
 
