@@ -313,9 +313,11 @@ endif
 # The app an instance installs: tauri, or native (native/crates/attn-app).
 APP ?= tauri
 
-# LaunchServices only forwards shell overrides named with `open --env`. The
-# native app opens in the background and keeps itself from activating.
-MACOS_OPEN := open$(if $(filter native,$(APP)), -g --env MAC_APP_QUIET=1,)$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
+# LaunchServices only forwards shell overrides named with `open --env`. A named
+# instance's native app opens in the background and keeps itself from
+# activating, so agents' instances never take focus; the production app comes to
+# the front.
+MACOS_OPEN := open$(if $(and $(filter native,$(APP)),$(INSTANCE)), -g --env MAC_APP_QUIET=1,)$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
 
 # Build + install + open the INSTANCE's app (bare `make` = prod). Every path is
 # derived from the single authority so a named instance opens its own bundle.
