@@ -48,6 +48,6 @@ pub(crate) fn corner(e: El, radius: Radius) -> El {
     e.radius(radius.pt())
 }
 
-pub(crate) fn area_inset(area: rune_kit::TextArea, x: Space, y: Space) -> rune_kit::TextArea {
-    area.padding(x.pt(), y.pt())
+pub(crate) fn area(area: rune_kit::TextArea, kind: Type, x: Space, y: Space) -> rune_kit::TextArea {
+    area.font(style(kind)).padding(x.pt(), y.pt())
 }

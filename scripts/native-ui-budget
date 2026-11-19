@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Holds the native app's raw spacing, font and corner calls to their committed counts while
+# views move onto attn_ui's blocks and controls, and keeps the clippy allow that lifts Rune's
+# bans to its short list.
+#
+#   scripts/native-ui-budget          check native/ui-budget.tsv against the tree
+#   scripts/native-ui-budget count    print each directory's count today
+#
+# A directory above its line fails, naming the calls added. A directory below its line fails
+# too, saying to lower the line, so the count only goes down. A file of native/ outside the
+# allow rows that carries allow(clippy::disallowed_methods) fails.
+set -euo pipefail
+
+root="${NATIVE_UI_BUDGET_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+budget="$root/native/ui-budget.tsv"
+crates="$root/native/crates"
+raw='\.(gap|gaps|padding|px|py|pt|pb|pl|pr|mx|my|mt|mb|ml|mr|radius|corners|clip_rounded|font|set_font)\(|TextStyle::new\('
+
+calls_in() {
+  local dir="$1"
+  shift
+  { grep -rnE --include='*.rs' "$raw" "$dir" "$@" 2>/dev/null || true; } |
+    grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' || true
+}
+
+count_of() {
+  { calls_in "$@" | grep -oE "$raw" || true; } | wc -l | tr -d ' '
+}
+
+directories() {
+  local entry
+  printf 'attn-ui/src\n'
+  printf 'attn-app/src/*.rs\n'
+  for entry in "$crates"/attn-app/src/*/; do
+    entry="${entry%/}"
+    printf 'attn-app/src/%s\n' "${entry##*/}"
+  done
+}
+
+count_for() {
+  local dir="$1"
+  if [ "$dir" = "attn-app/src/*.rs" ]; then
+    count_of "$crates"/attn-app/src/*.rs
+  else
+    count_of "$crates/$dir"
+  fi
+}
+
+if [ "${1:-}" = count ]; then
+  directories | while read -r dir; do
+    printf 'budget\t%s\t%s\n' "$dir" "$(count_for "$dir")"
+  done
+  exit 0
+fi
+
+[ -f "$budget" ] || { echo "native-ui-budget: $budget is missing" >&2; exit 1; }
+
+problems=()
+seen=()
+while IFS=$'\t' read -r kind first second; do
+  case "$kind" in
+  '' | '#'*) ;;
+  budget)
+    seen+=("$first")
+    now="$(count_for "$first")"
+    if [ "$now" -gt "$second" ]; then
+      problems+=("$first has $now raw spacing, font and corner calls, above its line of $second: build with attn_ui's tokens and controls instead")
+    elif [ "$now" -lt "$second" ]; then
+      problems+=("$first has $now raw calls, below its line of $second: lower the line in native/ui-budget.tsv to $now")
+    fi
+    ;;
+  allow) ;;
+  *) problems+=("native/ui-budget.tsv: unknown row kind $kind") ;;
+  esac
+done <"$budget"
+
+while read -r dir; do
+  found=0
+  for line in "${seen[@]}"; do [ "$line" = "$dir" ] && found=1; done
+  [ "$found" = 1 ] || problems+=("$dir has no line in native/ui-budget.tsv: add budget<TAB>$dir<TAB>$(count_for "$dir")")
+done < <(directories)
+
+allowed="$(awk -F'\t' '$1 == "allow" { print $2 }' "$budget")"
+while read -r file; do
+  [ -n "$file" ] || continue
+  printf '%s\n' "$allowed" | grep -qxF "$file" ||
+    problems+=("$file carries allow(clippy::disallowed_methods): only the files the allow rows of native/ui-budget.tsv name may lift Rune's bans; use attn_ui's tokens and controls")
+done < <(cd "$root" && grep -rlE --include='*.rs' 'allow\(clippy::disallowed_methods\)' native 2>/dev/null | sort || true)
+
+if [ "${#problems[@]}" -gt 0 ]; then
+  printf 'native-ui-budget: %s\n' "${problems[@]}" >&2
+  exit 1
+fi

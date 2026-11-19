@@ -1,0 +1,31 @@
+# The raw spacing, font and corner calls each directory may still make, and the files that may
+# carry allow(clippy::disallowed_methods). scripts/native-ui-budget checks it in make check-native.
+budget	attn-ui/src	103
+budget	attn-app/src/*.rs	189
+budget	attn-app/src/annotations	0
+budget	attn-app/src/asks	127
+budget	attn-app/src/automations	148
+budget	attn-app/src/browser	7
+budget	attn-app/src/chief	36
+budget	attn-app/src/crew	167
+budget	attn-app/src/desktop	395
+budget	attn-app/src/diagnostic_report	35
+budget	attn-app/src/garden	337
+budget	attn-app/src/home	110
+budget	attn-app/src/launcher	109
+budget	attn-app/src/ledger	95
+budget	attn-app/src/markdown	111
+budget	attn-app/src/notebook	117
+budget	attn-app/src/notifications	39
+budget	attn-app/src/opener	0
+budget	attn-app/src/palette	27
+budget	attn-app/src/picker	119
+budget	attn-app/src/quick_capture	88
+budget	attn-app/src/review	232
+budget	attn-app/src/settings	531
+budget	attn-app/src/sidebar	206
+budget	attn-app/src/terminal	0
+budget	attn-app/src/whats_new	49
+allow	native/crates/attn-ui/src/colors/mod.rs
+allow	native/crates/attn-ui/src/system/door.rs
+allow	native/crates/attn-app/src/terminal/input_trace.rs

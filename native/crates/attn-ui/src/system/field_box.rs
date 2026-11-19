@@ -24,7 +24,7 @@ pub fn number_box(input: TextInput, t: &Tokens) -> Control {
 /// A text field of several lines, filling its column.
 pub fn area_box(area: TextArea, t: &Tokens) -> Control {
     let size = Size::Regular;
-    let area = door::area_inset(area.font(door::style(Type::Body)), size.inset(), Space::S8)
+    let area = door::area(area, Type::Body, size.inset(), Space::S8)
         .placeholder_ink(t.text_dimmed)
         .width(None);
     let area = area.build(super::kit(t)).fill(t.bg_input);
