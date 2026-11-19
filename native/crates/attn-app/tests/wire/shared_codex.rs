@@ -190,7 +190,7 @@ fn banner(world: &World) -> Option<String> {
     world.screen().find(Target::key(BAND))?;
     let said: Vec<String> = world
         .screen()
-        .children(Target::key(BAND))
+        .descendants(Target::key(BAND))
         .into_iter()
         .filter_map(|n| match n.role.as_str() {
             "button" => n.name.map(|name| format!("[{name}]")),
@@ -407,11 +407,11 @@ fn the_band_says_why_each_blocker_holds_the_restart_opens_its_tile_and_relaunche
     let (mut world, _prefs) = start(Some(every_blocker()));
     assert_eq!(
         banner(&world).unwrap(),
-        "Codex 0.163.0 installed. Restarts when agents are idle.  Waiting on \
-         [Go to fix-auth] (working) , \
-         [Go to docs-sweep] (waiting on an approval) , \
-         [Go to nightly-triage] (asking a question) , \
-         [Go to plan-cache] (still starting or asking whether to trust its folder) [Relaunch plan-cache] . \
+        "Codex 0.163.0 installed. Restarts when agents are idle. Waiting on \
+         [Go to fix-auth] (working), \
+         [Go to docs-sweep] (waiting on an approval), \
+         [Go to nightly-triage] (asking a question), \
+         [Go to plan-cache] (still starting or asking whether to trust its folder). [Relaunch plan-cache] \
          [Restart now]"
     );
     click_button(&mut world, "Go to docs-sweep");

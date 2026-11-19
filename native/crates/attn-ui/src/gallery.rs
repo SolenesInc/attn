@@ -627,17 +627,33 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
         if case == BannerCase::InlineControls {
             banner = banner
                 .note(format!("{key}.waiting"), "Waiting on")
-                .link(format!("{key}.go.a"), "fix-auth", "Go to fix-auth", noop)
+                .link(
+                    format!("{key}.go.a"),
+                    "working agent",
+                    "Go to working agent",
+                    noop,
+                )
                 .note(format!("{key}.reason.a"), "(working),")
                 .link(
                     format!("{key}.go.b"),
+                    "docs-sweep",
+                    "Go to docs-sweep",
+                    noop,
+                )
+                .note(format!("{key}.reason.b"), "(waiting on an approval),")
+                .link(
+                    format!("{key}.go.c"),
                     "plan-cache",
                     "Go to plan-cache",
                     noop,
                 )
-                .note(format!("{key}.reason.b"), "(still starting)")
+                .note(
+                    format!("{key}.reason.c"),
+                    "(still starting or asking whether to trust its folder).",
+                )
                 .note_button(
                     format!("{key}.relaunch"),
+                    "Relaunch waiting_input agent",
                     Action::new("Relaunch").on_press_tx(noop),
                 );
         }

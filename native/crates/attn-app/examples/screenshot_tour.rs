@@ -22,16 +22,17 @@ use attn_protocol::{
     GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun,
     GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
     HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
-    LaunchDesktopResultMessage, LaunchDesktopSetting, NotificationListResultMessage, PR, PartyView,
-    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage,
-    RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage,
-    RecordCommandUsageResultMessage, RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile,
-    ReviewNotShown, ReviewNote, ReviewRow, ReviewStop, Seed, SeedDocument,
-    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, SeedReviewResultMessage,
-    Session, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage,
-    SessionLedgerEntry, SessionListResult, SessionListResultMessage, SessionMessage,
-    SessionMessagesGetResultMessage, SessionUsage, SessionUsageModel, SharedCodexBlocker,
-    SharedCodexState, Worktree, WorktreeListResult, WorktreeListResultEvent,
+    InstallCodexUpdateResultMessage, LaunchDesktopResultMessage, LaunchDesktopSetting,
+    NotificationListResultMessage, OutpostInfo, OutpostUpdate, PR, PartyView, PathInspection,
+    PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage, RecentFilesResultMessage,
+    RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage,
+    RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNotShown, ReviewNote,
+    ReviewRow, ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
+    SeedPlotProgress, SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
+    SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateOutpostProgress, UpdateRun,
+    Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{pane, row};
@@ -3389,6 +3390,263 @@ fn shared_codex_restart(dark: bool) {
     snap(&mut world, "shared-codex-restart", dark);
 }
 
+const HOME_BUILD: &str = "0.14.0 (source git:home, protocol current)";
+const OLD_BUILD: &str = "0.13.0 (source git:old, protocol old)";
+
+/// An outpost on `build`, at `phase` of an update that says `outcome` when it ends.
+fn outpost(id: &str, build: &str, phase: Option<&str>, outcome: Option<&str>) -> OutpostInfo {
+    OutpostInfo {
+        id: id.into(),
+        name: id.into(),
+        destination: format!("{id}:7777"),
+        state: "connected".into(),
+        reach: "reachable".into(),
+        state_since: "2026-11-12T08:00:00Z".into(),
+        build: Some(build.into()),
+        update: phase.map(|phase| OutpostUpdate {
+            phase: phase.into(),
+            outcome: outcome.map(Into::into),
+        }),
+        ..OutpostInfo::default()
+    }
+}
+
+/// The outpost updates band over the window, with outposts on and `outposts` listed.
+fn outposts_banner(dark: bool, name: &str, outposts: Vec<OutpostInfo>) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            if let Some(settings) = state.settings.as_mut() {
+                settings.insert("outposts_enabled".into(), "true".into());
+            }
+            state.home_build = Some(HOME_BUILD.into());
+            state.outposts = Some(outposts);
+        },
+        |_| {},
+    );
+    snap(&mut world, name, dark);
+}
+
+fn outposts_banners(dark: bool) {
+    outposts_banner(
+        dark,
+        "banner-outposts-differ",
+        vec![outpost("studio", OLD_BUILD, None, None)],
+    );
+    outposts_banner(
+        dark,
+        "banner-outposts-updating",
+        vec![
+            outpost("studio", OLD_BUILD, Some("building"), None),
+            outpost("ai-sandbox", OLD_BUILD, Some("sending"), None),
+        ],
+    );
+    outposts_banner(
+        dark,
+        "banner-outposts-failed",
+        vec![outpost(
+            "studio",
+            OLD_BUILD,
+            Some("failed"),
+            Some("ssh: connect to host studio port 22: Connection timed out"),
+        )],
+    );
+    outposts_banner(
+        dark,
+        "banner-outposts-done",
+        vec![outpost("studio", HOME_BUILD, Some("done"), None)],
+    );
+}
+
+fn update_outpost(id: &str, state: &str, detail: Option<&str>) -> UpdateOutpostProgress {
+    UpdateOutpostProgress {
+        id: id.into(),
+        name: id.into(),
+        state: state.into(),
+        detail: detail.map(Into::into),
+    }
+}
+
+/// The update run band over the window, following a run at `phase` that says `outcome`.
+fn update_banner(
+    dark: bool,
+    name: &str,
+    phase: &str,
+    outcome: Option<&str>,
+    outposts: Vec<UpdateOutpostProgress>,
+) {
+    let run = UpdateRun {
+        id: "u1".into(),
+        install_kind: "release_app".into(),
+        log_path: "/tmp/u1.log".into(),
+        phase: phase.into(),
+        outcome: outcome.map(Into::into),
+        outposts,
+        ..UpdateRun::default()
+    };
+    let mut world = popover_world(dark, |state| state.update_run = Some(run), |_| {});
+    snap(&mut world, name, dark);
+}
+
+fn update_banners(dark: bool) {
+    update_banner(
+        dark,
+        "banner-update-running",
+        "outposts",
+        None,
+        vec![
+            update_outpost("studio", "staging", Some("building")),
+            update_outpost("ai-sandbox", "switching", None),
+        ],
+    );
+    update_banner(
+        dark,
+        "banner-update-failed",
+        "failed",
+        Some("The update failed: studio could not switch to the new build."),
+        vec![
+            update_outpost("studio", "failed", Some("ssh: Connection timed out")),
+            update_outpost("ai-sandbox", "done", None),
+        ],
+    );
+    update_banner(
+        dark,
+        "banner-update-done",
+        "done",
+        Some("attn is up to date."),
+        vec![update_outpost("studio", "done", None)],
+    );
+    update_banner(
+        dark,
+        "banner-update-skipped",
+        "done",
+        Some("attn is up to date. studio was skipped: it was offline."),
+        vec![update_outpost("studio", "skipped", None)],
+    );
+}
+
+fn codex(restart: &str) -> SharedCodexState {
+    SharedCodexState {
+        running_version: Some("0.162.1".into()),
+        installed_version: Some("0.163.0".into()),
+        latest_version: Some("0.163.0".into()),
+        restart: restart.into(),
+        ..SharedCodexState::default()
+    }
+}
+
+/// The shared Codex band over the window, with Codex at `codex`, after `then` drives it.
+fn codex_banner(
+    dark: bool,
+    name: &str,
+    codex: SharedCodexState,
+    serve: impl FnOnce(&Daemon),
+    then: impl FnOnce(&mut World),
+) {
+    let mut world = popover_world(dark, |state| state.shared_codex = Some(codex), serve);
+    then(&mut world);
+    snap(&mut world, name, dark);
+}
+
+fn codex_banners(dark: bool) {
+    let available = SharedCodexState {
+        installed_version: Some("0.162.1".into()),
+        latest_version: Some("0.164.0".into()),
+        ..codex("none")
+    };
+    let install = |world: &mut World| {
+        world.gesture(|app| app.click(Target::key("codex-updates.install")));
+    };
+    codex_banner(
+        dark,
+        "banner-codex-available",
+        available.clone(),
+        |_| {},
+        |_| {},
+    );
+    codex_banner(
+        dark,
+        "banner-codex-installing",
+        available.clone(),
+        |daemon| {
+            daemon.on("install_codex_update", |_| ());
+        },
+        install,
+    );
+    codex_banner(
+        dark,
+        "banner-codex-install-failed",
+        available,
+        |daemon| {
+            daemon.on("install_codex_update", |r: &Request| {
+                message(InstallCodexUpdateResultMessage {
+                    request_id: Some(request_id(r)),
+                    success: false,
+                    error: Some("codex update exited 1".into()),
+                    ..InstallCodexUpdateResultMessage::new()
+                })
+            });
+        },
+        install,
+    );
+    let blockers = [("s0", "turn"), ("s2", "approval"), ("s1", "starting")]
+        .iter()
+        .map(|(session, reason)| SharedCodexBlocker {
+            session_id: (*session).into(),
+            reason: (*reason).into(),
+        })
+        .collect::<Vec<_>>();
+    codex_banner(
+        dark,
+        "banner-codex-waiting",
+        SharedCodexState {
+            blockers: Some(blockers.clone()),
+            ..codex("pending")
+        },
+        |_| {},
+        |_| {},
+    );
+    codex_banner(
+        dark,
+        "banner-codex-draining",
+        SharedCodexState {
+            blockers: Some(blockers[..2].to_vec()),
+            force_at: Some("2026-11-12T09:01:05Z".into()),
+            ..codex("restarting")
+        },
+        |_| {},
+        |_| {},
+    );
+    codex_banner(
+        dark,
+        "banner-codex-restarting",
+        codex("restarting"),
+        |_| {},
+        |_| {},
+    );
+    codex_banner(
+        dark,
+        "banner-codex-failed",
+        SharedCodexState {
+            error: Some("approval_policy = \"untrusted\" is no longer supported".into()),
+            ..codex("failed")
+        },
+        |_| {},
+        |_| {},
+    );
+    codex_banner(
+        dark,
+        "banner-codex-old-tiles",
+        SharedCodexState {
+            running_version: Some("0.163.0".into()),
+            stale_sessions: Some(vec!["s0".into(), "s2".into()]),
+            ..codex("none")
+        },
+        |_| {},
+        |_| {},
+    );
+}
+
 /// The classic picker's new worktree in the api project that git refused, opened from the corner.
 fn session_not_created(dark: bool) {
     let daemon = launcher_daemon_with(dark, false, false);
@@ -3596,6 +3854,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         desktop_naming(dark);
         shared_codex_restart(dark);
         session_not_created(dark);
+        outposts_banners(dark);
+        update_banners(dark);
+        codex_banners(dark);
     }
     let unmatched: Vec<String> = ONLY.with_borrow(|only| {
         only.iter()

@@ -31,6 +31,7 @@ enum Note {
     },
     Button {
         key: String,
+        label: String,
         button: Button,
     },
 }
@@ -46,7 +47,7 @@ pub struct Banner {
     sentence: Option<(String, String)>,
     notes: Vec<Note>,
     actions: Vec<(String, Button)>,
-    countdown: Option<(String, u64)>,
+    countdown: Option<(String, u32)>,
     dismiss: Option<(String, String, Attach)>,
     hover: Option<Attach>,
 }
@@ -88,6 +89,8 @@ impl Banner {
     }
 
     /// Quieter words after the sentence, ending in an ellipsis before they push an action away.
+    /// Notes that hold a link or a button run on as one sentence instead, onto a second line
+    /// where they need one, so no control is cut.
     pub fn note(mut self, key: impl Into<String>, said: impl Into<String>) -> Self {
         self.notes.push(Note::Words {
             key: key.into(),
@@ -113,10 +116,16 @@ impl Banner {
         self
     }
 
-    /// A button among the notes, for what one of them offers.
-    pub fn note_button(mut self, key: impl Into<String>, button: Button) -> Self {
+    /// A button among the notes, for what one of them offers, announced as `label`.
+    pub fn note_button(
+        mut self,
+        key: impl Into<String>,
+        label: impl Into<String>,
+        button: Button,
+    ) -> Self {
         self.notes.push(Note::Button {
             key: key.into(),
+            label: label.into(),
             button,
         });
         self
@@ -130,7 +139,7 @@ impl Banner {
     }
 
     /// Seconds until the banner closes on its own.
-    pub fn countdown(mut self, key: impl Into<String>, seconds: u64) -> Self {
+    pub fn countdown(mut self, key: impl Into<String>, seconds: u32) -> Self {
         self.countdown = Some((key.into(), seconds));
         self
     }
@@ -168,15 +177,16 @@ impl Banner {
         let notes = (!self.notes.is_empty()).then(|| {
             let words_only = self.notes.iter().all(|n| matches!(n, Note::Words { .. }));
             let notes = self.notes.into_iter().map(|note| paint.note(note));
-            let notes = door::gap(row().items_center(), Space::S8)
+            let notes = row()
                 .key(format!("{}.notes", self.key))
+                .items_center()
                 .grow(1.0)
                 .shrink()
                 .children(notes);
             if words_only {
-                notes.clip_soft(0.0)
+                door::gap(notes, Space::S8).clip_soft(0.0)
             } else {
-                notes
+                door::gap(notes.flex_wrap(), Space::S4)
             }
         });
         let said = door::gap(row().items_center(), Space::S8)
@@ -301,14 +311,17 @@ impl Paint {
                     .role("button")
                     .label(label)
                     .focusable(true)
-                    .h(Size::Compact.height())
-                    .items_center()
-                    .child(words(shown, Type::Name, self.link).single_line());
-                let link = door::corner(door::inset(link, Space::S4, Space::S0), Radius::Control);
+                    .child(
+                        words(shown, Type::Name, self.link)
+                            .single_line()
+                            .a11y_hidden(),
+                    );
+                let link = door::corner(link, Radius::Tag);
                 focus::ring(press(layers::pressable(link, self.fill, t)), t)
             }
-            Note::Button { key, button } => {
-                row().child(El::from(button.size(Size::Compact).build(t).key(key)))
+            Note::Button { key, label, button } => {
+                let button = button.size(Size::Compact).build(t).key(key).label(label);
+                row().child(El::from(button))
             }
         }
     }

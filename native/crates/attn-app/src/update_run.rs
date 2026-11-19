@@ -4,11 +4,10 @@
 //! the band; any other ended run stays until dismissed.
 
 use attn_protocol::{StartUpdateMessage, UpdateOutpostProgress, UpdateRun};
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, glyph};
-use rune::tok::space;
-use rune::{El, Tx, row, text};
-use rune_kit::{Button, ControlSize};
+use attn_ui::Tokens;
+use attn_ui::blocks::{self, BannerTone};
+use attn_ui::system::Button;
+use rune::{El, Tx};
 
 use crate::State;
 use crate::closing::{Closing, Tick};
@@ -156,9 +155,20 @@ pub(crate) fn start(state: &mut State, without: Option<Vec<String>>, tx: &mut Tx
     );
 }
 
+fn tone(run: &UpdateRun) -> BannerTone {
+    if is_open(run) {
+        BannerTone::Calm
+    } else if run.phase == "failed" {
+        BannerTone::Bad
+    } else if closes_by_itself(run) {
+        BannerTone::Good
+    } else {
+        BannerTone::Warn
+    }
+}
+
 pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
     let run = shown(state)?;
-    let kit = attn_ui::kit(t);
     let connected = state.facts.connection == Connection::Connected;
     let open = is_open(run);
     let says = if open {
@@ -166,81 +176,42 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
     } else {
         run.outcome.clone().unwrap_or_default()
     };
-    let outposts = open.then(|| {
-        outpost_notes(&run.outposts).into_iter().map(|(id, note)| {
-            text(note)
-                .key(format!("update-run.outpost.{id}"))
-                .font(type_::BODY)
-                .color(t.text_secondary)
-        })
-    });
-    let retry = (run.phase == "failed").then(|| {
-        Button::new("Retry")
-            .control_size(ControlSize::Small)
-            .disabled(!connected)
-            .on_press_tx(|state: &mut State, tx: &mut Tx| start(state, None, tx))
-            .build(kit)
-            .key("update-run.retry")
-    });
+    let mut banner = blocks::Banner::new("update-run", "attn update", tone(run))
+        .value(run.phase.clone())
+        .says("update-run.text", says)
+        .on_hover(hold);
+    if open {
+        for (id, note) in outpost_notes(&run.outposts) {
+            banner = banner.note(format!("update-run.outpost.{id}"), note);
+        }
+    }
+    if run.phase == "failed" {
+        banner = banner.action(
+            "update-run.retry",
+            Button::new("Retry")
+                .disabled(!connected)
+                .on_press_tx(|state: &mut State, tx: &mut Tx| start(state, None, tx)),
+        );
+    }
     let failed = failed_outposts(run);
-    let without = (!failed.is_empty()).then(|| {
+    if !failed.is_empty() {
         let label = match failed.as_slice() {
             [one] => format!("Update without {}", one.name),
             many => format!("Update without {} outposts", many.len()),
         };
         let ids: Vec<String> = failed.iter().map(|o| o.id.clone()).collect();
-        Button::new(label)
-            .control_size(ControlSize::Small)
-            .disabled(!connected)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| start(state, Some(ids.clone()), tx))
-            .build(kit)
-            .key("update-run.without")
-    });
-    let countdown = state
-        .window
-        .update_run
-        .closing
-        .seconds(&run.id)
-        .map(|seconds| {
-            text(format!("Closing in {seconds}s"))
-                .key("update-run.countdown")
-                .font(type_::BODY)
-                .color(t.text_tertiary)
-        });
-    let dismiss = (!open).then(|| {
-        GlyphButton::new(glyph::TIMES, "Dismiss update")
-            .help("Dismiss")
-            .on_press(close)
-            .build(kit)
-            .key("update-run.dismiss")
-    });
-    Some(
-        row()
-            .key("update-run")
-            .role("region")
-            .label("attn update")
-            .a11y_value(run.phase.clone())
-            .w_full()
-            .px(space::S3)
-            .py(space::S1)
-            .gap(space::S2)
-            .items_center()
-            .fill(t.bg_panel)
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-            .on_hover_change(hold)
-            .child(
-                text(says)
-                    .key("update-run.text")
-                    .font(type_::BODY)
-                    .color(t.text_primary)
-                    .wrap()
-                    .min_w(0.0),
-            )
-            .children(outposts.into_iter().flatten())
-            .child(row().grow(1.0))
-            .children(retry)
-            .children(without)
-            .children(countdown)
-            .children(dismiss),
-    )
+        banner = banner.action(
+            "update-run.without",
+            Button::new(label).disabled(!connected).on_press_tx(
+                move |state: &mut State, tx: &mut Tx| start(state, Some(ids.clone()), tx),
+            ),
+        );
+    }
+    if let Some(seconds) = state.window.update_run.closing.seconds(&run.id) {
+        banner = banner.countdown("update-run.countdown", seconds);
+    }
+    if !open {
+        banner = banner.dismiss("update-run.dismiss", "Dismiss update", close);
+    }
+    Some(banner.build(t))
 }

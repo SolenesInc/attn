@@ -9,11 +9,11 @@ use std::collections::BTreeMap;
 use attn_protocol::{
     InstallCodexUpdateMessage, RestartSharedCodexMessage, SharedCodexBlocker, SharedCodexState,
 };
+use attn_ui::blocks::{Banner, BannerTone};
+use attn_ui::system::Button;
 use attn_ui::type_;
-use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph};
-use rune::tok::space;
-use rune::{El, TextStyle, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize};
+use attn_ui::{Dialog, DialogFrame, Tokens};
+use rune::{El, TextStyle, Tx, col, text};
 use serde::{Deserialize, Serialize};
 
 use crate::State;
@@ -422,90 +422,37 @@ pub(crate) fn commands(state: &State) -> Vec<crate::palette::commands::Command> 
     commands
 }
 
-fn words(said: String, key: &str, t: &Tokens) -> El {
-    text(said)
-        .key(key.to_owned())
-        .font(type_::BODY)
-        .color(t.text_primary)
-        .wrap()
-        .min_w(0.0)
-}
-
-fn small(
-    label: &str,
-    key: String,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    Button::new(label)
-        .control_size(ControlSize::Small)
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key)
-}
-
-fn link(
-    name: String,
-    key: String,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let accent = t.accent;
-    Button::new(format!("Go to {name}"))
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .label_with(move |style, _| text(name).font(style).color(accent).single_line())
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key)
-}
-
-fn dismiss(label: &str, key: &str, t: &Tokens, press: fn(&mut State)) -> El {
-    GlyphButton::new(glyph::TIMES, label)
-        .help("Dismiss")
-        .on_press(press)
-        .build(attn_ui::kit(t))
-        .key(key.to_owned())
-}
-
 /// The blockers the restart waits on, each opening its tile, and a Relaunch for one still
 /// starting.
-fn waiting_on(state: &State, blockers: &[SharedCodexBlocker], t: &Tokens) -> Vec<El> {
-    let mut pieces = vec![words(" Waiting on".into(), &format!("{BAND}.waiting"), t)];
+fn waiting_on(state: &State, blockers: &[SharedCodexBlocker], banner: Banner) -> Banner {
+    let mut banner = banner.note(format!("{BAND}.waiting"), "Waiting on");
     for (i, blocker) in blockers.iter().enumerate() {
         let (name, _) = name_of(state, &blocker.session_id);
         let id = blocker.session_id.clone();
         let key = format!("{BAND}.blocker.{id}");
-        pieces.push(link(
-            name.clone(),
+        banner = banner.link(
             format!("{key}.go"),
-            t,
-            move |state, tx| crate::sidebar::open_agent(state, &id, tx),
-        ));
-        pieces.push(words(
-            format!("({})", blocker_reason(blocker)),
-            &format!("{key}.reason"),
-            t,
-        ));
+            name.clone(),
+            format!("Go to {name}"),
+            move |state: &mut State, tx: &mut Tx| crate::sidebar::open_agent(state, &id, tx),
+        );
+        let end = if i + 1 < blockers.len() { "," } else { "." };
+        banner = banner.note(
+            format!("{key}.reason"),
+            format!("({}){end}", blocker_reason(blocker)),
+        );
         if blocker.reason == "starting" {
             let id = blocker.session_id.clone();
-            pieces.push(
-                Button::new(format!("Relaunch {name}"))
-                    .control_size(ControlSize::Small)
-                    .label_with(|style, color| {
-                        text("Relaunch").font(style).color(color).single_line()
-                    })
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        crate::sidebar::session_menu::reload_session(state, &id, tx)
-                    })
-                    .build(attn_ui::kit(t))
-                    .key(format!("{key}.relaunch")),
+            banner = banner.note_button(
+                format!("{key}.relaunch"),
+                format!("Relaunch {name}"),
+                Button::new("Relaunch").on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    crate::sidebar::session_menu::reload_session(state, &id, tx)
+                }),
             );
         }
-        let end = if i + 1 < blockers.len() { "," } else { "." };
-        pieces.push(words(end.into(), &format!("{key}.end"), t));
     }
-    pieces
+    banner
 }
 
 pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
@@ -518,20 +465,26 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
         version(&codex.running_version),
     );
     let blockers = codex.blockers.clone().unwrap_or_default();
-    let text_key = format!("{BAND}.text");
-    let mut pieces: Vec<El> = Vec::new();
-    match stage {
-        Stage::Failed => {
-            pieces.push(words(
-                format!(
-                    "Codex {installed} didn’t start: {}. Still on {running}, nothing was interrupted.",
-                    without_final_period(codex.error.as_deref().unwrap_or_default())
-                ),
-                &text_key,
-                t,
-            ));
-            pieces.push(small("Retry", format!("{BAND}.retry"), t, retry));
+    let install_error = state.window.shared_codex.install_error.as_deref();
+    let tone = match stage {
+        Stage::Failed => BannerTone::Bad,
+        Stage::Available if install_error.is_some() => BannerTone::Bad,
+        Stage::Available | Stage::OldTiles => BannerTone::Warn,
+        Stage::Draining | Stage::Restarting | Stage::Pending | Stage::Installing => {
+            BannerTone::Calm
         }
+    };
+    let banner = Banner::new(BAND, "Codex updates", tone);
+    let says = |said: String| banner.says(format!("{BAND}.text"), said);
+    let banner = match stage {
+        Stage::Failed => says(format!(
+            "Codex {installed} didn’t start: {}. Still on {running}, nothing was interrupted.",
+            without_final_period(codex.error.as_deref().unwrap_or_default())
+        ))
+        .action(
+            format!("{BAND}.retry"),
+            Button::new("Retry").on_press_tx(retry),
+        ),
         Stage::Draining => {
             let names: Vec<String> = blockers
                 .iter()
@@ -542,64 +495,51 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
             } else {
                 names.join(", ")
             };
-            pieces.push(words(
-                format!(
-                    "Restarting Codex now: waiting for {waiting} to finish. Force stop in {}.",
-                    countdown(
-                        codex.force_at.as_deref().unwrap_or_default(),
-                        state.window.shared_codex.now_ms
-                    )
-                ),
-                &text_key,
-                t,
-            ));
+            says(format!(
+                "Restarting Codex now: waiting for {waiting} to finish. Force stop in {}.",
+                countdown(
+                    codex.force_at.as_deref().unwrap_or_default(),
+                    state.window.shared_codex.now_ms
+                )
+            ))
         }
-        Stage::Restarting => pieces.push(words(
-            format!("Restarting Codex on {installed}. Tiles reconnect on their own."),
-            &text_key,
-            t,
+        Stage::Restarting => says(format!(
+            "Restarting Codex on {installed}. Tiles reconnect on their own."
         )),
         Stage::Pending => {
-            pieces.push(words(
-                format!("Codex {installed} installed. Restarts when agents are idle."),
-                &text_key,
-                t,
+            let banner = says(format!(
+                "Codex {installed} installed. Restarts when agents are idle."
             ));
-            if !blockers.is_empty() {
-                pieces.extend(waiting_on(state, &blockers, t));
-                pieces.push(small(
-                    "Restart now",
+            if blockers.is_empty() {
+                banner
+            } else {
+                waiting_on(state, &blockers, banner).action(
                     format!("{BAND}.restart"),
-                    t,
-                    |state, _| open_confirm(state, Confirm::Restart),
-                ));
+                    Button::new("Restart now")
+                        .on_press(|state: &mut State| open_confirm(state, Confirm::Restart)),
+                )
             }
         }
-        Stage::Installing => pieces.push(words(
-            format!("Installing Codex {latest} in a terminal tile…"),
-            &text_key,
-            t,
-        )),
+        Stage::Installing => says(format!("Installing Codex {latest} in a terminal tile…")),
         Stage::Available => {
-            let failed = state
-                .window
-                .shared_codex
-                .install_error
-                .as_deref()
-                .map(|e| format!(" Install failed: {}.", without_final_period(e)))
-                .unwrap_or_default();
-            pieces.push(words(
-                format!("Codex {latest} is available.{failed}"),
-                &text_key,
-                t,
-            ));
-            pieces.push(small("Install", format!("{BAND}.install"), t, install));
-            pieces.push(dismiss(
-                "Dismiss Codex update",
-                &format!("{BAND}.dismiss-update"),
-                t,
-                dismiss_update,
-            ));
+            let banner = says(format!("Codex {latest} is available."));
+            let banner = match install_error {
+                Some(e) => banner.note(
+                    format!("{BAND}.install-error"),
+                    format!("Install failed: {}.", without_final_period(e)),
+                ),
+                None => banner,
+            };
+            banner
+                .action(
+                    format!("{BAND}.install"),
+                    Button::new("Install").on_press_tx(install),
+                )
+                .dismiss(
+                    format!("{BAND}.dismiss-update"),
+                    "Dismiss Codex update",
+                    dismiss_update,
+                )
         }
         Stage::OldTiles => {
             let count = stale(codex).len();
@@ -608,45 +548,22 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
             } else {
                 format!("{count} tiles still run")
             };
-            pieces.push(words(
-                format!("Codex {running} is running. {tiles} an older Codex."),
-                &text_key,
-                t,
-            ));
-            pieces.push(small(
-                "Reload tiles",
+            says(format!(
+                "Codex {running} is running. {tiles} an older Codex."
+            ))
+            .action(
                 format!("{BAND}.reload"),
-                t,
-                |state, _| open_confirm(state, Confirm::Reload),
-            ));
-            pieces.push(dismiss(
+                Button::new("Reload tiles")
+                    .on_press(|state: &mut State| open_confirm(state, Confirm::Reload)),
+            )
+            .dismiss(
+                format!("{BAND}.dismiss-old-tiles"),
                 "Dismiss old Codex tiles notice",
-                &format!("{BAND}.dismiss-old-tiles"),
-                t,
                 dismiss_old_tiles,
-            ));
+            )
         }
-    }
-    let fill = if stage == Stage::Failed {
-        t.error.alpha(0.12)
-    } else {
-        t.bg_panel
     };
-    Some(
-        row()
-            .key(BAND)
-            .role("region")
-            .label("Codex updates")
-            .w_full()
-            .px(space::S3)
-            .py(space::S1)
-            .gap(space::S1)
-            .items_center()
-            .flex_wrap()
-            .fill(fill)
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-            .children(pieces),
-    )
+    Some(banner.build(t))
 }
 
 /// The confirm before restarting now or reloading the old tiles.

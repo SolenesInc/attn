@@ -755,7 +755,10 @@ fn a_banners_dismiss_ends_at_its_inset() {
 #[test]
 fn a_banner_is_as_tall_in_every_tone_with_or_without_an_action() {
     let mut heights = Vec::new();
-    for variant in BANNER_VARIANTS.into_iter().filter(|v| *v != "Long") {
+    let one_line = BANNER_VARIANTS
+        .into_iter()
+        .filter(|v| !matches!(*v, "Long" | "Inline controls"));
+    for variant in one_line {
         let rt = story(true, "Library/Banner", variant);
         for (tone, _) in BANNERS {
             heights.push((variant, tone, banner_parts(&rt, tone).0.rect[3]));
@@ -766,6 +769,57 @@ fn a_banner_is_as_tall_in_every_tone_with_or_without_an_action() {
         heights.iter().all(|&(_, _, h)| (h - first).abs() < 0.5),
         "banners at several heights: {heights:?}"
     );
+}
+
+#[test]
+fn every_control_of_a_banner_lies_inside_it_clear_of_the_others() {
+    for variant in BANNER_VARIANTS {
+        let rt = story(true, "Library/Banner", variant);
+        for (tone, _) in BANNERS {
+            let (bar, _) = banner_parts(&rt, tone);
+            let [bx, by, bw, bh] = bar.rect;
+            let all = rt.elements();
+            let controls: Vec<&ElementInfo> = all
+                .iter()
+                .filter(|e| {
+                    e.focusable
+                        && std::iter::successors(e.parent, |&p| all[p].parent)
+                            .any(|p| all[p].path == bar.path)
+                })
+                .collect();
+            for control in &controls {
+                let [x, y, w, h] = control.rect;
+                assert!(
+                    x >= bx - 0.5
+                        && y >= by - 0.5
+                        && x + w <= bx + bw + 0.5
+                        && y + h <= by + bh + 0.5,
+                    "{variant}: {tone}'s {:?} at {:?} leaves its bar at {:?}",
+                    control.key,
+                    control.rect,
+                    bar.rect
+                );
+            }
+            for (i, a) in controls.iter().enumerate() {
+                for b in &controls[i + 1..] {
+                    let apart = |a: [f32; 4], b: [f32; 4]| {
+                        a[0] + a[2] <= b[0] + 0.5
+                            || b[0] + b[2] <= a[0] + 0.5
+                            || a[1] + a[3] <= b[1] + 0.5
+                            || b[1] + b[3] <= a[1] + 0.5
+                    };
+                    assert!(
+                        apart(a.rect, b.rect),
+                        "{variant}: {tone}'s {:?} at {:?} lies over {:?} at {:?}",
+                        a.key,
+                        a.rect,
+                        b.key,
+                        b.rect
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// The least contrast hover stands from rest, in dark and in light, as `attn_ui::system`'s

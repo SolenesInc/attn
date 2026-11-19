@@ -5,11 +5,10 @@
 
 use attn_client::Connection;
 use attn_protocol::OutpostInfo;
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, glyph};
-use rune::tok::space;
-use rune::{El, Tx, row, text};
-use rune_kit::{Button, ControlSize};
+use attn_ui::Tokens;
+use attn_ui::blocks::{self, BannerTone};
+use attn_ui::system::Button;
+use rune::{El, Tx};
 
 use crate::State;
 use crate::closing::{Closing, Tick};
@@ -218,84 +217,64 @@ fn notes(updates: &Updates) -> Vec<(String, String)> {
         .collect()
 }
 
+fn tone(updates: &Updates) -> BannerTone {
+    let failed = updates
+        .updated
+        .iter()
+        .any(|o| o.update.as_ref().is_some_and(|u| u.phase == "failed"));
+    if updates.busy() {
+        BannerTone::Calm
+    } else if failed {
+        BannerTone::Bad
+    } else if !updates.different.is_empty() {
+        BannerTone::Warn
+    } else {
+        BannerTone::Good
+    }
+}
+
 pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
     let updates = shown(state)?;
-    let kit = attn_ui::kit(t);
     let connected = state.facts.connection == Connection::Connected;
-    let note = |key: String, said: String| {
-        text(said)
-            .key(key)
-            .font(type_::BODY)
-            .color(t.text_secondary)
-            .wrap()
-            .min_w(0.0)
-            .shrink()
-    };
-    let notes = (!updates.done)
-        .then(|| notes(&updates))
-        .into_iter()
-        .flatten()
-        .map(|(id, said)| note(format!("outpost-updates.note.{id}"), said));
-    let error = crate::settings::outposts::command_error(state)
-        .map(|e| note("outpost-updates.error".into(), e.to_owned()));
-    let busy = updates.busy();
-    let update = (!updates.different.is_empty()).then(|| {
-        Button::new(if busy {
+    let mut banner = blocks::Banner::new("outpost-updates", "Outpost updates", tone(&updates))
+        .says("outpost-updates.text", headline(&updates))
+        .on_hover(|state: &mut State, inside, tx: &mut Tx| {
+            state.window.outpost_updates.closing.hold(inside, tx);
+        });
+    if !updates.done {
+        for (id, said) in notes(&updates) {
+            banner = banner.note(format!("outpost-updates.note.{id}"), said);
+        }
+    }
+    if let Some(error) = crate::settings::outposts::command_error(state) {
+        banner = banner.note("outpost-updates.error", error);
+    }
+    if !updates.different.is_empty() {
+        let busy = updates.busy();
+        let shown = if busy {
             "Updating…"
         } else {
             "Update outposts"
-        })
-        .control_size(ControlSize::Small)
-        .disabled(!connected || busy)
-        .on_press_tx(update_all)
-        .build(kit)
-        .key("outpost-updates.update")
-    });
+        };
+        banner = banner.action(
+            "outpost-updates.update",
+            Button::new(shown)
+                .disabled(!connected || busy)
+                .on_press_tx(update_all),
+        );
+    }
     let countdown = state
         .window
         .outpost_updates
         .closing
         .seconds(&updates.key)
-        .filter(|_| updates.done)
-        .map(|seconds| {
-            text(format!("Closing in {seconds}s"))
-                .key("outpost-updates.countdown")
-                .font(type_::BODY)
-                .color(t.text_tertiary)
-        });
-    let dismiss = GlyphButton::new(glyph::TIMES, "Dismiss outpost updates")
-        .help("Dismiss")
-        .on_press(close)
-        .build(kit)
-        .key("outpost-updates.dismiss");
+        .filter(|_| updates.done);
+    if let Some(seconds) = countdown {
+        banner = banner.countdown("outpost-updates.countdown", seconds);
+    }
     Some(
-        row()
-            .key("outpost-updates")
-            .role("region")
-            .label("Outpost updates")
-            .w_full()
-            .px(space::S3)
-            .py(space::S1)
-            .gap(space::S2)
-            .items_center()
-            .fill(t.bg_panel)
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-            .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
-                state.window.outpost_updates.closing.hold(inside, tx);
-            })
-            .child(
-                text(headline(&updates))
-                    .key("outpost-updates.text")
-                    .font(type_::BODY)
-                    .color(t.text_primary)
-                    .wrap()
-                    .min_w(0.0),
-            )
-            .children(notes)
-            .children(error)
-            .child(row().grow(1.0))
-            .children(update)
-            .children(countdown)
-            .child(dismiss),
+        banner
+            .dismiss("outpost-updates.dismiss", "Dismiss outpost updates", close)
+            .build(t),
     )
 }

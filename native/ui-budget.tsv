@@ -1,7 +1,7 @@
 # The raw spacing, font and corner calls each directory may still make, and the files that may
 # carry allow(clippy::disallowed_methods). scripts/native-ui-budget checks it in make check-native.
 budget	attn-ui/src	75
-budget	attn-app/src/*.rs	189
+budget	attn-app/src/*.rs	171
 budget	attn-app/src/annotations	0
 budget	attn-app/src/asks	127
 budget	attn-app/src/automations	148
