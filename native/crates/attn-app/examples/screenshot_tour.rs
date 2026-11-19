@@ -241,6 +241,7 @@ fn initial(dark: bool, tile: Value, seeds: Vec<Seed>) -> InitialStateMessage {
         icon: Some("code".into()),
         ..Default::default()
     });
+    sessions[3].host = Some("studio".into());
     let mut desktops = vec![desktop(
         DESKTOP,
         "1",

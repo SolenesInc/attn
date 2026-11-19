@@ -953,7 +953,7 @@ pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> 
                     .font(LAUNCHING_EMOJI),
             );
     }
-    if !logos || agent.offline {
+    if !logos {
         return rune::row()
             .key(format!("{row_key}.lead"))
             .w(LEAD)

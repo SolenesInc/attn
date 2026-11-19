@@ -459,3 +459,31 @@ fn closing_the_agent_on_screen_opens_no_turn_on_an_unreachable_outpost() {
         "nothing reachable is owed, so the window stays"
     );
 }
+
+#[test]
+fn an_unreachable_agent_leads_with_its_harness_logo_and_with_the_struck_ring_once_logos_are_off() {
+    let mut world = start(lost());
+    let lead = |world: &World| {
+        let [_, _, w, h] = world
+            .screen()
+            .bounds(Target::key("queue-turn.remote.state"))
+            .unwrap();
+        (w, h)
+    };
+    assert!(offline(&world, "queue-turn.remote"));
+    assert_eq!(lead(&world), (14.0, 14.0), "its harness logo");
+
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(std::collections::BTreeMap::from([
+            ("queue_mode_enabled".to_owned(), "true".to_owned()),
+            (
+                "sidebar_harness_logos_enabled".to_owned(),
+                "false".to_owned(),
+            ),
+        ])),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    assert!(offline(&world, "queue-turn.remote"));
+    assert_eq!(lead(&world), (8.0, 8.0), "the struck ring");
+}
