@@ -1146,7 +1146,7 @@ fn not_created(setup: &repo::Setup, error: &str, t: &Tokens) -> El {
         .child(
             type_::upper(
                 "Action needed",
-                TextStyle::new(10.0, 700.0).mono().tracking(1.4),
+                TextStyle::new(12.0, 700.0).mono().tracking(1.4),
             )
             .color(mix_srgb(t.brand, rune::Color::WHITE, 0.3))
             .mb(7.0),

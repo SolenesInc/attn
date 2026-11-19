@@ -629,7 +629,7 @@ fn instance_marker(state: &State, t: &Tokens) -> Option<El> {
     })
 }
 
-const INSTANCE_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
+const INSTANCE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).mono();
 
 /// `control` in a slot keyed `key` as tall as the title bar, for a popover that hangs a set gap
 /// under the title bar, as the Tauri app's `top: calc(var(--title-bar-height) + …)` does.

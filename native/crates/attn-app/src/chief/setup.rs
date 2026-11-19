@@ -16,7 +16,7 @@ use crate::settings::{EffortMode, Route, RouteHarness, Rules};
 
 pub(crate) const POP: &str = "chief-setup";
 const PRIMARY: &str = "chief-setup.primary";
-const ESC_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
+const ESC_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).mono();
 const RECHECK: &str = "chief-setup.recheck";
 
 /// The setup while it shows: the route it would save, the folder the user chose, and the

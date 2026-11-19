@@ -10,7 +10,7 @@ use crate::State;
 use crate::sidebar::model::display_name;
 
 const KEY: &str = "context-cap";
-const TITLE_TYPE: TextStyle = TextStyle::new(11.0, 600.0).mono().tracking(1.1);
+const TITLE_TYPE: TextStyle = TextStyle::new(12.0, 600.0).mono().tracking(1.1);
 const MESSAGE_TYPE: TextStyle = TextStyle::new(13.0, 400.0).lh(20.0);
 const INPUT_TYPE: TextStyle = TextStyle::new(12.0, 400.0).mono();
 const ERROR_TYPE: TextStyle = TextStyle::new(12.0, 400.0);

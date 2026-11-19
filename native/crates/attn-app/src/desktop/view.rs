@@ -36,7 +36,7 @@ const TILE_HEADER_PX: f32 = TILE_HEADLINE_PX + HEADER_RULE_PX;
 const TILE_HEADER_START: f32 = 12.0;
 const TILE_HEADER_END: f32 = 8.0;
 const TILE_TITLE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
-const SUBLINE_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 400.0);
+const SUBLINE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 const SETTLING_TRACK_PX: f32 = 2.0;
 
 /// What an agent's header says about its turn settling on its own.
@@ -1658,9 +1658,9 @@ fn raise_tint(rest: f32, raised: f32) -> f32 {
     1.0 - (1.0 - raised) / (1.0 - rest)
 }
 
-/// The Tauri app's Focus pill: 11 px, semibold.
+/// The Tauri app's Focus pill, semibold, at attn's least text size.
 const FOCUS_PILL_TYPE: rune::TextStyle = rune::TextStyle {
-    size: 11.0,
+    size: 12.0,
     weight: 600.0,
     ..type_::LABEL
 };
@@ -1779,7 +1779,7 @@ fn settling_widths(settle: &Settle) -> Widths {
         Settle::Kept => "TURN KEPT",
     };
     let font = rune::TextStyle {
-        size: 10.0,
+        size: 12.0,
         weight: 600.0,
         ..type_::LABEL
     };
@@ -1840,7 +1840,7 @@ fn settling_chip(
         Settle::Kept => mark.radius(1.0).opacity(0.7),
     };
     let font = rune::TextStyle {
-        size: 10.0,
+        size: 12.0,
         weight: 600.0,
         ..type_::LABEL
     };

@@ -16,8 +16,8 @@ pub enum Look {
 /// A raised keycap's height, so a row that carries one and a row that does not line up.
 pub const RAISED_H: f32 = 19.0;
 
-const RAISED_TYPE: TextStyle = TextStyle::new(11.0, 600.0).lh(11.0);
-const HINT_TYPE: TextStyle = TextStyle::new(10.0, 400.0).mono().lh(14.0);
+const RAISED_TYPE: TextStyle = TextStyle::new(12.0, 600.0).lh(11.0);
+const HINT_TYPE: TextStyle = TextStyle::new(12.0, 400.0).mono().lh(14.0);
 
 /// Keys drawn as keycaps, one cap per key, named as this platform writes the chord: `⇧⌘K` on
 /// a Mac, `Ctrl+Shift+K` elsewhere.
@@ -152,7 +152,7 @@ pub fn alternatives(groups: Vec<Keys>, t: &Tokens) -> El {
         if i > 0 {
             children.push(
                 text("/")
-                    .font(TextStyle::new(11.0, 400.0))
+                    .font(TextStyle::new(12.0, 400.0))
                     .color(t.text_dimmed)
                     .a11y_hidden(),
             );

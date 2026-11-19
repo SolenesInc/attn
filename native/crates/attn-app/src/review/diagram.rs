@@ -352,12 +352,12 @@ pub(super) fn diagram(
 ) -> El {
     let geometry = layout(flow);
     let label_font = TextStyle {
-        size: 11.0,
+        size: 12.0,
         line_height: LINE_HEIGHT,
         ..type_::LABEL
     };
     let caption_font = TextStyle {
-        size: 10.0,
+        size: 12.0,
         line_height: CAPTION_LINE_HEIGHT,
         ..type_::BODY
     };

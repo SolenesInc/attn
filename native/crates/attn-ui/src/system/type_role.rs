@@ -15,9 +15,9 @@ pub enum Type {
     Body,
     /// What a row or a control says about itself. 12/400.
     Small,
-    /// A field's or a column's name: 11/600 mono, upper case.
+    /// A field's or a column's name: 12/600 mono, upper case.
     Label,
-    /// A tag's word: 10/700 mono, upper case.
+    /// A tag's word: 12/700 mono, upper case.
     Tag,
     /// A value read as data: a model, an id, a path. 12/400 mono.
     Mono,

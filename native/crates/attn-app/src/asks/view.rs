@@ -853,7 +853,7 @@ fn recommended_tag(t: &Tokens) -> El {
         .fill(t.accent.alpha(0.15))
 }
 
-const TAG_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 500.0);
+const TAG_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
 
 /// The system's radio and checkbox, as the Tauri app draws its choices' inputs: a 10 point
 /// ring or box with a thin gray edge, filled with the accent once picked.
@@ -1184,10 +1184,10 @@ fn ask_mark(glyph: String, t: &Tokens) -> El {
 const MARK_W: f32 = 18.0;
 
 /// The Tauri app's `.title-bar-count-badge`: the open asks' count over the button's corner.
-const BADGE_TYPE: rune::TextStyle = rune::TextStyle::new(9.5, 700.0).mono();
+const BADGE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
 
 /// The Tauri app's `.ask-marker`: bold monospace on the accent pill.
-const MARKER_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 700.0).mono();
+const MARKER_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
 
 /// The agent's open-ask chip in its tile header: the oldest ask's subject and how many more, at
 /// the level the tile's width leaves it. Resting the pointer on it previews the asks; a press

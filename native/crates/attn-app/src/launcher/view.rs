@@ -15,23 +15,23 @@ use crate::picker::{
 };
 
 /// `.new-session-launcher .picker-title`, 11 points a line as the Tauri app sets it.
-const TITLE: TextStyle = TextStyle::new(10.0, 500.0).mono().tracking(1.5).lh(11.0);
+const TITLE: TextStyle = TextStyle::new(12.0, 500.0).mono().tracking(1.5).lh(11.0);
 const FIELD: TextStyle = TextStyle::new(14.0, 400.0).mono();
 const CHIP: TextStyle = TextStyle::new(12.0, 400.0).mono();
-const SECTION: TextStyle = TextStyle::new(10.0, 600.0).mono().tracking(1.2);
-const SECTION_WORDS: TextStyle = TextStyle::new(10.0, 400.0).mono();
-const SECTION_NAME: TextStyle = TextStyle::new(10.0, 600.0).mono();
+const SECTION: TextStyle = TextStyle::new(12.0, 600.0).mono().tracking(1.2);
+const SECTION_WORDS: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const SECTION_NAME: TextStyle = TextStyle::new(12.0, 600.0).mono();
 const NAME: TextStyle = TextStyle::new(13.0, 500.0);
-const PATH: TextStyle = TextStyle::new(11.0, 400.0).mono();
-const BADGE: TextStyle = TextStyle::new(10.5, 400.0).mono();
-const OPTION: TextStyle = TextStyle::new(11.5, 400.0).mono();
-const OPTION_CHOSEN: TextStyle = TextStyle::new(11.5, 600.0).mono();
-const SHORTCUT: TextStyle = TextStyle::new(10.0, 400.0).mono();
-const TOGGLE: TextStyle = TextStyle::new(11.0, 400.0).mono();
-const CAP: TextStyle = TextStyle::new(10.5, 400.0).mono();
-const HINT: TextStyle = TextStyle::new(11.5, 400.0);
+const PATH: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const BADGE: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const OPTION: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const OPTION_CHOSEN: TextStyle = TextStyle::new(12.0, 600.0).mono();
+const SHORTCUT: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const TOGGLE: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const CAP: TextStyle = TextStyle::new(12.0, 400.0).mono();
+const HINT: TextStyle = TextStyle::new(12.0, 400.0);
 const MESSAGE: TextStyle = TextStyle::new(12.5, 400.0);
-const STATUS: TextStyle = TextStyle::new(11.0, 400.0).mono();
+const STATUS: TextStyle = TextStyle::new(12.0, 400.0).mono();
 const ICON_SIZE: f32 = 14.0;
 const FIELD_PAD_X: f32 = 12.0;
 /// A harness option's height, which makes the toggle group `.launcher-controls .agent-toggle`'s

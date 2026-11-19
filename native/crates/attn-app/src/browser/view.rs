@@ -7,9 +7,9 @@ use rune_kit::ButtonVariant;
 
 use crate::State;
 
-/// The address field's type: the Tauri app's 11 px monospace.
+/// The address field's type: monospace at attn's least text size.
 const ADDRESS_TYPE: rune::TextStyle = rune::TextStyle {
-    size: 11.0,
+    size: 12.0,
     ..type_::MONO_CAPTION
 };
 const ADDRESS_HEIGHT: f32 = 24.0;

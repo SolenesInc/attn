@@ -215,8 +215,8 @@ fn queue_chip_face(look: Look, selected: bool, has_panes: bool, t: &Tokens) -> E
 
 fn digits(look: Look, selected: bool) -> rune::TextStyle {
     match look {
-        Look::Strip => rune::TextStyle::new(10.5, if selected { 600.0 } else { 400.0 }).mono(),
-        Look::Bar => rune::TextStyle::new(11.5, 600.0).mono(),
+        Look::Strip => rune::TextStyle::new(12.0, if selected { 600.0 } else { 400.0 }).mono(),
+        Look::Bar => rune::TextStyle::new(12.0, 600.0).mono(),
     }
 }
 
@@ -284,7 +284,7 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
                 text(format!("+{count}"))
                     .font(match look {
                         Look::Strip => digits(look, selected),
-                        Look::Bar => rune::TextStyle::new(11.5, 500.0).mono(),
+                        Look::Bar => rune::TextStyle::new(12.0, 500.0).mono(),
                     })
                     .color(if selected {
                         t.text_primary
@@ -367,7 +367,7 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
                 )
                 .children(overview_keys.map(|keys| {
                     text(keys)
-                        .font(rune::TextStyle::new(10.0, 400.0).mono())
+                        .font(rune::TextStyle::new(12.0, 400.0).mono())
                         .color(t.text_dimmed)
                 })),
         )
@@ -787,7 +787,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         .children(trail)
         .child(
             text(attn_ui::glyph::CARET_DOWN)
-                .font(rune::TextStyle::new(9.0, 400.0))
+                .font(rune::TextStyle::new(12.0, 400.0))
                 .color(t.text_dimmed),
         );
     let crowded = super::crowding::crowded(state);
@@ -896,4 +896,4 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
     )
 }
 
-const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(9.5, 600.0).mono();
+const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0).mono();

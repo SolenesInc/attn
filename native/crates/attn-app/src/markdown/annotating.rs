@@ -834,7 +834,7 @@ const SAVE: rune::TextStyle = rune::TextStyle {
     ..type_::LABEL
 };
 const HINT: rune::TextStyle = rune::TextStyle {
-    size: 11.0,
+    size: 12.0,
     ..QUOTE
 };
 

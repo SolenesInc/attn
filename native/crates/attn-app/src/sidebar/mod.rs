@@ -599,7 +599,7 @@ fn rule_face(desktop: &DesktopHeader, keys: Option<String>, key: &str, t: &Token
 const DESKTOP_NAME: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
 
 /// The digits of a desktop's number chip, as the Tauri app's `.desktop-number`.
-pub(crate) const NUMBER_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 600.0).mono();
+pub(crate) const NUMBER_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0).mono();
 
 /// The Tauri app's faint white line, `rgba(255, 255, 255, .07)`.
 pub(crate) fn hairline(t: &Tokens) -> rune::Color {

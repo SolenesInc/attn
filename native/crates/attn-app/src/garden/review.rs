@@ -827,7 +827,7 @@ const COMPOSER_FIELD: FieldLook = FieldLook {
 };
 
 const RAIL_WIDTH: f32 = 248.0;
-const RAIL_NUMBER: TextStyle = TextStyle::new(10.0, 400.0).mono();
+const RAIL_NUMBER: TextStyle = TextStyle::new(12.0, 400.0).mono();
 const RAIL_TITLE: TextStyle = TextStyle::new(13.0, 530.0);
 const DOCK_RAIL_ITEM: f32 = 190.0;
 

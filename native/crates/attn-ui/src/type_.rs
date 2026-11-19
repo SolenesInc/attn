@@ -3,7 +3,13 @@
 
 use rune::{El, TextStyle, text};
 
-pub use rune::tok::type_::{BODY, LABEL, SECTION, TITLE};
+pub use rune::tok::type_::{BODY, LABEL, TITLE};
+
+/// A section's heading: rune's `SECTION` at attn's least text size, 12.
+pub const SECTION: TextStyle = TextStyle {
+    size: 12.0,
+    ..rune::tok::type_::SECTION
+};
 
 /// The Tauri app's small text, `font-size: var(--font-size-sm)`: what a surface says about
 /// itself, such as states, counts, ages and who did what. The native app draws it a point larger.
@@ -32,7 +38,7 @@ pub const BADGE: TextStyle = TextStyle::new(12.0, 700.0).mono().tracking(0.6);
 
 /// The Tauri app's uppercase labels in the interface face, `text-transform: uppercase;
 /// letter-spacing: .04em–.1em` with no monospace: group labels and small titles.
-pub const SANS_CAPS: TextStyle = TextStyle::new(11.5, 400.0).tracking(0.9);
+pub const SANS_CAPS: TextStyle = TextStyle::new(12.0, 400.0).tracking(0.9);
 
 /// The title of a drawer or panel, as the Tauri app's drawer headers: uppercase monospace at
 /// medium weight, widely spaced.

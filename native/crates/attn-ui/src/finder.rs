@@ -16,7 +16,7 @@ pub const MAX_H: f32 = 520.0;
 
 /// A footer's type; its keys are this at 600: `.palette-footer`.
 const HINT_TYPE: TextStyle = TextStyle::new(12.0, 400.0);
-const PATH_TYPE: TextStyle = TextStyle::new(10.0, 400.0).mono().lh(13.0);
+const PATH_TYPE: TextStyle = TextStyle::new(12.0, 400.0).mono().lh(13.0);
 const EMPTY_TYPE: TextStyle = TextStyle::new(12.0, 400.0);
 
 /// A finder over its parent, as the Tauri app's `.palette` lays one out: the finder's wash

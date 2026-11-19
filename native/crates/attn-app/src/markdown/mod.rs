@@ -679,7 +679,7 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, bars: &str, t: &Tokens) 
         .and_then(|_| natural(frame.source, t));
     let label = text("diagram")
         .font(TextStyle {
-            size: 11.0,
+            size: 12.0,
             line_height: 16.0,
             tracking: 0.2,
             ..attn_ui::kit(t).ty.mono
@@ -701,7 +701,7 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, bars: &str, t: &Tokens) 
                 .child(rune::el().size(6.0, 6.0).radius(3.0).fill(t.warning))
                 .child(
                     text("Large diagram · 100%")
-                        .font(TextStyle::new(11.0, 400.0))
+                        .font(TextStyle::new(12.0, 400.0))
                         .color(t.text_tertiary),
                 ),
         )

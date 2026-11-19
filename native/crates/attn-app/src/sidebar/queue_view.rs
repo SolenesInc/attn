@@ -700,7 +700,7 @@ fn rule_tail(keys: Option<String>, t: &Tokens) -> [El; 2] {
     ]
 }
 
-const KEYS_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0).mono();
+const KEYS_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).mono();
 
 /// What the queue owes, as the head and the collapsed bar say it: "2 waiting · 1 unreachable".
 pub(crate) fn owed_label((waiting, unreachable): (usize, usize)) -> Option<String> {
@@ -1083,7 +1083,7 @@ fn badged_lead(key: &str, a: &QueueAgent, logos: bool, t: &Tokens) -> El {
 
 const SLOT_TYPE: rune::TextStyle = rune::TextStyle {
     line_height: 8.0,
-    ..rune::TextStyle::new(8.0, 400.0).mono()
+    ..rune::TextStyle::new(12.0, 400.0).mono()
 };
 
 /// The buttons a queue row shows while it is hovered or holds focus.

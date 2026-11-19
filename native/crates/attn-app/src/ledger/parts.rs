@@ -429,7 +429,7 @@ pub(crate) fn value_with(value: &str, aside: &str, t: &Tokens) -> El {
 }
 
 const STATUS: TextStyle = TextStyle {
-    size: 11.0,
+    size: 12.0,
     ..type_::MONO_CAPTION
 };
 

@@ -4,7 +4,7 @@ use rune::{El, el, text};
 
 use super::fit::{Level, Widths, host_mark, text_w};
 
-const HOST_TYPE: rune::TextStyle = rune::TextStyle::new(10.0, 400.0);
+const HOST_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 const HOST_PAD: f32 = 4.0;
 const HOST_BORDER: f32 = 1.0;
 

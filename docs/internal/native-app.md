@@ -184,7 +184,8 @@ choices once for the whole app:
   32. Only `attn-ui` can name a step: no view can make one or pass one. Text is
   set by what it is, with `words(text, Type::…, ink)`: `PageTitle`, `Heading`,
   `Name`, `Body`, `Small`, `Label`, `Tag`, `Mono` and `Control`; text between
-  backticks is set in `Mono`. Corners are `Radius::{Tag, Control, Card, Panel,
+  backticks is set in `Mono`. No text is drawn under 12 points, the size of
+  `Small`, `Label` and `Tag`. Corners are `Radius::{Tag, Control, Card, Panel,
   Round}`. A control is `Size::Regular` (32 high, its words 12 in from its edge)
   or `Size::Compact` (26 high, 8 in), and it carries its size in its type,
   `Control`, so whatever holds it can line its words up.

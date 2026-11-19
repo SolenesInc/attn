@@ -389,7 +389,7 @@ fn send_button(face: &str, enabled: bool, t: &Tokens) -> El {
         .child(text(face.to_owned()).font(type_::TITLE).color(ink))
         .child(
             text("↵")
-                .font(rune::TextStyle::new(11.0, 400.0).mono())
+                .font(rune::TextStyle::new(12.0, 400.0).mono())
                 .color(ink)
                 .opacity(0.7)
                 .a11y_hidden(),

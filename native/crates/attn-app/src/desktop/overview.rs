@@ -211,7 +211,7 @@ fn mini_node(node: &Node, desktop: &Desktop, t: &Tokens) -> El {
                 .clip_rounded(0.0)
                 .child(
                     text(label)
-                        .font(rune::TextStyle::new(10.0, 400.0))
+                        .font(rune::TextStyle::new(12.0, 400.0))
                         .color(if on { t.text_primary } else { t.text_secondary })
                         .single_line()
                         .truncate(),

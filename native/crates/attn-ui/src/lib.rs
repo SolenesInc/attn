@@ -158,6 +158,14 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     kit.elevation.floating = vec![popover_shadow(t)];
     kit.elevation.md = vec![popover_shadow(t)];
     kit.elevation.overlay = vec![popover_shadow(t)];
+    kit.ty.small = rune::TextStyle {
+        size: 12.0,
+        ..kit.ty.small
+    };
+    kit.ty.small_medium = rune::TextStyle {
+        size: 12.0,
+        ..kit.ty.small_medium
+    };
     kit.standard_menu = standard_menu(&kit, t);
     kit.standard_menu_label = Some(rune_kit::MenuLabel {
         font: rune::TextStyle {

@@ -13,8 +13,8 @@ pub(crate) const fn style(kind: Type) -> TextStyle {
         Type::Name => TextStyle::new(13.0, 600.0),
         Type::Body => TextStyle::new(13.0, 400.0),
         Type::Small => TextStyle::new(12.0, 400.0),
-        Type::Label => TextStyle::new(11.0, 600.0).mono().tracking(1.0),
-        Type::Tag => TextStyle::new(10.0, 700.0).mono().tracking(0.8),
+        Type::Label => TextStyle::new(12.0, 600.0).mono().tracking(1.0),
+        Type::Tag => TextStyle::new(12.0, 700.0).mono().tracking(0.8),
         Type::Mono => TextStyle::new(12.0, 400.0).mono(),
         Type::Control => TextStyle::new(12.0, 600.0),
     }
