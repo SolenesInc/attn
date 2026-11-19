@@ -776,8 +776,9 @@ impl Terminals {
             TerminalEvent::ImageResult(result) => self.image_refused(&result),
             TerminalEvent::Attached(result) => {
                 let id = result.id.clone();
-                self.restoring(&id, tx);
+                let streamed_before = self.panes.get(&id).is_some_and(|t| t.watermark.is_some());
                 self.attached(*result, tx, daemon);
+                self.restored(&id, streamed_before, tx);
                 self.images.unanswered(&id);
                 self.ask_images(&id, daemon);
             }

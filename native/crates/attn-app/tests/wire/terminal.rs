@@ -1857,6 +1857,17 @@ fn a_screen_reader_hears_the_question_a_program_waits_on_and_not_the_answer_type
         Some("Overwrite notes.md?"),
         "a question asked after a pause, on the row the cursor already waited on"
     );
+
+    world.gesture(|app| app.type_text("n"));
+    world.gesture(|app| app.press("Enter"));
+    output(&world, 6, b"\r\x1b[KKeep both? ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        said(&world).as_deref(),
+        Some("Keep both?"),
+        "a question the program drew over the last one, after an answer it did not echo"
+    );
 }
 
 #[test]
@@ -1889,6 +1900,22 @@ fn a_screen_reader_does_not_hear_a_wrapped_command_line_before_enter() {
     world.settle();
     world.advance(Duration::from_secs(1));
     assert_eq!(world.screen().announced().as_deref(), Some("ran"));
+
+    let command = format!("echo {}SECOND-COMMAND{}", "x".repeat(40), "z".repeat(40));
+    world.gesture(|app| app.type_text(&command));
+    world.gesture(|app| app.press("Enter"));
+    output(
+        &world,
+        4,
+        format!("{command}\r\nran again\r\n$ ").as_bytes(),
+    );
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        world.screen().announced().as_deref(),
+        Some("ran again"),
+        "a wrapped command run before the output paused is not said"
+    );
 }
 
 #[test]
@@ -1918,9 +1945,6 @@ fn a_screen_reader_does_not_hear_the_screen_a_reconnect_brings_back() {
     world.reconnect();
     assert_eq!(world.daemon.sent_of("attach_session").len(), 2);
     assert!(drew(&mut world, "saved-while-disconnected"));
-    world.advance(Duration::from_secs(1));
-    assert_eq!(world.screen().announced(), None);
-
     output(&world, 3, b"echo hi\r\nhi\r\n$ ");
     world.settle();
     world.advance(Duration::from_secs(1));

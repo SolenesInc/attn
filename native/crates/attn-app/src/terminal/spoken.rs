@@ -1,6 +1,7 @@
 use std::cmp::Reverse;
 use std::ops::RangeInclusive;
 
+use attn_term::Grid;
 use rune::{LiveRegion, Tx};
 
 use super::{Term, Terminals};
@@ -27,6 +28,7 @@ pub(super) struct Heard {
 #[derive(Clone, Copy)]
 struct Cursor {
     row: usize,
+    col: usize,
     /// The shell marked a command as running, so the cursor sits in that program's output
     /// rather than in the shell's prompt or command line.
     in_program: bool,
@@ -34,8 +36,10 @@ struct Cursor {
 
 impl Heard {
     fn now(terminal: &str, term: &mut Term) -> Heard {
+        let mut screen = Grid::default();
+        term.vt.sync(&mut screen);
         let top = term.vt.view_top();
-        let rows = term.grid.text_lines();
+        let rows = screen.text_lines();
         let continues = (0..rows.len())
             .map(|row| term.vt.row_continues(top + row as u32))
             .collect();
@@ -49,8 +53,9 @@ impl Heard {
             typed: term.typed,
             rows,
             continues,
-            cursor: term.grid.cursor.as_ref().map(|c| Cursor {
+            cursor: screen.cursor.as_ref().map(|c| Cursor {
                 row: usize::from(c.row),
+                col: usize::from(c.col),
                 in_program,
             }),
             due: None,
@@ -58,9 +63,9 @@ impl Heard {
         }
     }
 
-    /// The rows of the line the cursor is on, with the rows it wrapped across.
-    fn cursor_line(&self) -> Option<RangeInclusive<usize>> {
-        let row = self.cursor?.row.min(self.rows.len().checked_sub(1)?);
+    /// The rows of the line on row `row`, with the rows it wrapped across.
+    fn line_at(&self, row: usize) -> Option<RangeInclusive<usize>> {
+        let row = row.min(self.rows.len().checked_sub(1)?);
         let continues = |r: usize| self.continues.get(r).copied().unwrap_or(false);
         let first = (0..=row).rev().find(|&r| !continues(r)).unwrap_or(0);
         let last = (row + 1..self.rows.len())
@@ -68,6 +73,10 @@ impl Heard {
             .last()
             .unwrap_or(row);
         Some(first..=last)
+    }
+
+    fn cursor_line(&self) -> Option<RangeInclusive<usize>> {
+        self.line_at(self.cursor?.row)
     }
 }
 
@@ -103,10 +112,20 @@ impl Terminals {
         }
     }
 
-    /// The screen an attach brings back to `id`, and what follows it before the quiet, is not
-    /// spoken.
-    pub(super) fn restoring(&mut self, id: &str, tx: &mut Tx) {
-        if let Some(heard) = self.heard.as_mut().filter(|h| h.terminal == id) {
+    /// An attach brought back terminal `id`'s screen, which a screen reader does not hear. A
+    /// terminal that streamed before, back from a reconnect, speaks its next output; a first
+    /// attach also keeps quiet the output that follows it before the quiet, the screen it comes
+    /// back with.
+    pub(super) fn restored(&mut self, id: &str, streamed_before: bool, tx: &mut Tx) {
+        let Some(heard) = self.heard.as_mut().filter(|h| h.terminal == id) else {
+            return;
+        };
+        let Some(term) = self.panes.get_mut(id) else {
+            return;
+        };
+        if streamed_before {
+            *heard = Heard::now(id, term);
+        } else {
             let due = tx.clock() + QUIET_SECONDS;
             heard.speaks = false;
             heard.due = Some(due);
@@ -116,9 +135,10 @@ impl Terminals {
 }
 
 /// The rows of `after` that `before` did not show, matching rows across however far output
-/// scrolled the screen. Blank rows are left out, and so is the line being typed on: the cursor's
-/// line before, unless it sat in a running program's output and nothing was typed since, and
-/// the cursor's line after, unless it sits in a program's output on a line nothing was typed on.
+/// scrolled the screen. Blank rows are left out, and so is the line being typed on, with every
+/// row it wraps across: the cursor's line before, unless it sat in a running program's output
+/// that nothing was since typed into, and the cursor's line after, unless it sits in a
+/// program's output apart from the line typed on.
 fn new_rows<'a>(before: &Heard, after: &'a Heard) -> Vec<&'a str> {
     let same = |row: usize, scrolled: usize| {
         before
@@ -134,22 +154,58 @@ fn new_rows<'a>(before: &Heard, after: &'a Heard) -> Vec<&'a str> {
             (matched, Reverse(k))
         })
         .unwrap_or(0);
-    let typed_since = after.typed != before.typed;
-    let typed_before = before
-        .cursor
-        .filter(|c| !c.in_program || typed_since)
-        .and_then(|_| before.cursor_line());
-    let was_typed = |row: usize| {
-        typed_before
-            .as_ref()
-            .is_some_and(|l| l.contains(&(row + scrolled)))
-    };
-    let typed_after = after
-        .cursor_line()
-        .filter(|line| after.cursor.is_some_and(|c| !c.in_program) || line.clone().any(was_typed));
+    let typed_before = typed_line_before(before, after, scrolled);
+    let typed_after = after.cursor_line().filter(|line| {
+        after.cursor.is_some_and(|c| !c.in_program)
+            || line.clone().any(|row| typed_before.contains(&row))
+    });
     (0..after.rows.len())
         .filter(|&row| !after.rows[row].is_empty() && !same(row, scrolled))
-        .filter(|&row| !was_typed(row) && !typed_after.as_ref().is_some_and(|l| l.contains(&row)))
+        .filter(|row| !typed_before.contains(row))
+        .filter(|row| !typed_after.as_ref().is_some_and(|line| line.contains(row)))
         .map(|row| after.rows[row].as_str())
         .collect()
+}
+
+/// The rows of `after` that hold the line `before`'s cursor was typed on, with the rows it
+/// wrapped onto since: none when the cursor sat in a program's output and what changed there
+/// is not typing echoed after the cursor.
+fn typed_line_before(before: &Heard, after: &Heard, scrolled: usize) -> Vec<usize> {
+    let Some(cursor) = before.cursor else {
+        return Vec::new();
+    };
+    let Some(line) = before.cursor_line() else {
+        return Vec::new();
+    };
+    let to_after = |row: usize| row.checked_sub(scrolled).filter(|&r| r < after.rows.len());
+    if cursor.in_program
+        && !(after.typed != before.typed && echoed(before, after, cursor, &to_after))
+    {
+        return Vec::new();
+    }
+    let mut rows: Vec<usize> = line.clone().filter_map(to_after).collect();
+    if let Some(grown) = to_after(cursor.row).and_then(|row| after.line_at(row)) {
+        rows.extend(grown);
+    }
+    rows
+}
+
+/// What `before` showed of the cursor's line, up to the cursor, `after` still shows: only
+/// typing echoed after the cursor changed it.
+fn echoed(
+    before: &Heard,
+    after: &Heard,
+    cursor: Cursor,
+    to_after: &impl Fn(usize) -> Option<usize>,
+) -> bool {
+    let Some(line) = before.cursor_line() else {
+        return false;
+    };
+    line.filter(|&row| row <= cursor.row).all(|row| {
+        let kept: String = match row == cursor.row {
+            true => before.rows[row].chars().take(cursor.col).collect(),
+            false => before.rows[row].clone(),
+        };
+        to_after(row).is_some_and(|r| after.rows[r].starts_with(&kept))
+    })
 }
