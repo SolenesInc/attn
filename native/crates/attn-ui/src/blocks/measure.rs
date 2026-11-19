@@ -13,6 +13,7 @@ pub(crate) const FIELD: f32 = READING + 2.0 * Size::Regular.inset().pt();
 /// take the whole line, however narrow.
 pub(crate) const COPY_FLOOR: f32 = 288.0;
 
-/// The longest a line of a document runs: about 80 characters of document text, a little past
-/// the reading measure since a document is read on its own.
+/// The longest a line of a document runs, wider than the reading measure since a document is
+/// read on its own. Receipt: attn's own docs (glossary, testing, the guide's front page) set in
+/// `Reading::Text` average 6.6 to 7.1 points a character, so a line holds 91 to 97 characters.
 pub const DOCUMENT: f32 = 640.0;
